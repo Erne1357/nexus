@@ -10,9 +10,9 @@ use Illuminate\Foundation\Events\Dispatchable;
 /**
  * Se abrió (o se completó la apertura de) un periodo en una modalidad (OpenTerm; M4). Evento con reporte: se despacha
  * dentro de la transacción de OpenTerm y sus listeners corren en ella, así que abrir es todo o nada. Los módulos de la
- * derecha crean lo suyo para el periodo y la modalidad (AcademicLoad sus cargas, MS15; CatalogValidation sus
- * revisiones; supuestos por confirmar, docs/dominio/reglas-de-negocio.md, Periodo y calendario), solo lo que falte, y
- * lo dicen con report(). No es ShouldDispatchAfterCommit: un listener que oiga después del commit no podría deshacer
+ * derecha crean lo suyo para el periodo y la modalidad (hoy, AcademicLoad sus cargas; MS15, supuesto por confirmar,
+ * docs/dominio/reglas-de-negocio.md, Periodo y calendario), solo lo que falte, y lo dicen con report(). Las revisiones
+ * de catálogo ya no nacen aquí: las abre el admin (CV9). No es ShouldDispatchAfterCommit: un listener que oiga después del commit no podría deshacer
  * la apertura.
  */
 final class TermOpened

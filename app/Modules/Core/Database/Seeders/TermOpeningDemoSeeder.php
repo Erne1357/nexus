@@ -12,8 +12,8 @@ use Illuminate\Support\Facades\Auth;
 use RuntimeException;
 
 /**
- * Aperturas de periodo del demo: abre cada periodo en las modalidades que se piden (M4) con la Action real, así los
- * módulos de la derecha crean sus cargas en borrador y sus revisiones de catálogo. La apertura queda a nombre
+ * Aperturas de periodo del demo: abre cada periodo en las modalidades que se piden (M4) con la Action real, así
+ * AcademicLoad crea sus cargas en borrador (las revisiones de catálogo las abre el admin, CV9). La apertura queda a nombre
  * del usuario `admin`. Se salta el periodo que no existe y la modalidad que no existe o está inactiva o borrada.
  * Abrir otra vez solo completa, no duplica. Requiere el catálogo (para tener qué crear) y AdminUserSeeder. No
  * corre en producción.

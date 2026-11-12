@@ -73,7 +73,8 @@ final class OpenCatalogValidation
         if ($createdBy !== []) {
             NotifyPendingReviewsJob::dispatch(
                 $term->getKey(),
-                // Los campus activos de las modalidades donde se abrió el periodo (M4; puente `campuses.modality_id`).
+                // Los campus activos de las modalidades donde se abrió el periodo (M4; puente `campuses.modality_id`; MS15,
+                // supuesto por confirmar: antes, los campus donde se abrió aunque después se desactivaran).
                 Campus::query()->where('is_active', true)
                     ->whereIn('modality_id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
                     ->pluck('id')->all(),

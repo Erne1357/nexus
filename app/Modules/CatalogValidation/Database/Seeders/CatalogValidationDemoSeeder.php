@@ -484,6 +484,9 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
+     * Los campus activos de las modalidades donde se abrió el periodo (M4, por el puente `campuses.modality_id`; antes,
+     * los campus donde se abrió aunque después se desactivaran; MS15, supuesto por confirmar).
+     *
      * @return Collection<int, Campus>
      */
     private function openedCampuses(Term $term): Collection

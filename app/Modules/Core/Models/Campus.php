@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -63,16 +62,5 @@ class Campus extends Model
     public function catalogModality(): BelongsTo
     {
         return $this->belongsTo(CatalogModality::class, 'modality_id');
-    }
-
-    /**
-     * Etapas del periodo propias de este campus; las de `campus_id` nulo se obtienen con
-     * TermStage::appliesTo().
-     *
-     * @return HasMany<TermStage, $this>
-     */
-    public function termStages(): HasMany
-    {
-        return $this->hasMany(TermStage::class);
     }
 }

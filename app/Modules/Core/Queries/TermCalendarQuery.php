@@ -18,9 +18,11 @@ use Illuminate\Support\Facades\Cache;
  * de su modalidad si la tiene, si no la general, si no ninguna. Sin modalidad, solo las generales. Solo informa (D4).
  *
  * Se guardan en la caché de la aplicación las filas crudas, una entrada por periodo con la clave
- * `core.term-calendar.{term_id}` que trae la ventana general y la de cada modalidad (por `general` o id de modalidad, y
- * por etapa); todas las lecturas salen de ella. El estado respecto a hoy (America/Ciudad_Juarez)
- * se calcula en cada lectura, fuera de la caché. ForgetTermCalendar la borra al cambiar el calendario.
+ * `core.term-calendar.v2.{term_id}` que trae la ventana general y la de cada modalidad (por `general` o id de modalidad,
+ * y por etapa); todas las lecturas salen de ella. El `v2` es por el cambio de forma de M4: la entrada vieja,
+ * `core.term-calendar.{term_id}`, guardaba ids de campus, y con otra clave un despliegue nunca la lee. El estado respecto
+ * a hoy (America/Ciudad_Juarez) se calcula en cada lectura, fuera de la caché. ForgetTermCalendar la borra al cambiar
+ * el calendario.
  */
 final class TermCalendarQuery
 {
@@ -179,7 +181,7 @@ final class TermCalendarQuery
 
     public static function key(string $termId): string
     {
-        return 'core.term-calendar.'.$termId;
+        return 'core.term-calendar.v2.'.$termId;
     }
 
     /**
