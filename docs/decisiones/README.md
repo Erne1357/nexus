@@ -27,5 +27,6 @@ Decisiones de arquitectura y de alcance con su contexto, para que nadie las reab
 | [0021](0021-dompdf-para-los-pdf-publicados.md) | DomPDF directo (sin el envoltorio de Laravel) para los PDF de lo publicado: plantillas Blade con tablas, DejaVu Sans, sin acceso remoto, generados en la cola | Aceptada | 2026-11-10 |
 | [0022](0022-esquemas-de-postgresql-por-modulo.md) | Un esquema de PostgreSQL por módulo (`core`, `academic`, `scheduling`, …) con `search_path`; `public` para la plomería de Laravel; el SII original en `sii_archivo` y la verificación en `sii_verificacion`; las tablas existentes se mueven al cerrar la fase 4 | Aceptada | 2026-11-10 |
 | [0023](0023-sin-dialogos-nativos-del-navegador.md) | Sin diálogos nativos del navegador (`confirm()`, `alert()`, `prompt()`, `wire:confirm`): modal de MaryUI para lo corto, drawer para lo largo (el preferido); solo queda el aviso de `beforeunload`; el reemplazo va en #374 | Aceptada | 2026-11-10 |
+| [0024](0024-mailpit-para-el-correo-en-desarrollo-y-demo.md) | Mailpit, servicio de `compose.override.yaml`, atrapa todo el correo en desarrollo y en la demo (bandeja en `127.0.0.1:8025`); no es dependencia de la app y producción usa su propio SMTP | Aceptada | 2026-11-11 |
 
 Plantilla: Contexto · Decisión · Consecuencias · Alternativas descartadas.

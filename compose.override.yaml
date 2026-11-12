@@ -37,6 +37,15 @@ services:
       # Solo dev: crea nexus_test con el volumen vacío. Producción no necesita base de pruebas.
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
 
+  # Atrapa el correo de desarrollo y de la demo (ADR-0024): recibe por SMTP en mailpit:1025 dentro de la red y no
+  # reenvía nada. La bandeja web, solo en la máquina.
+  mailpit:
+    image: axllent/mailpit:v1.27.0@sha256:fb84cfb1c3a33007cfdee8ba5a77b8c6c894de5b1a368372ddc5c965cf5c0b6d
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+    networks: [backend]
+
   vite:
     image: node:24.22.1-alpine3.24@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d3ecec86c33918b53
     user: "${UID:-1000}:${GID:-1000}"

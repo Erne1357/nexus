@@ -20,9 +20,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Persona que imparte grupos, en cualquier campus o modalidad. Sus departamentos los dan sus adscripciones (puede
  * quedarse sin ninguna y seguir activo); sus horas base, sus plazas. El usuario es opcional: algunos docentes son
- * solo registro para RH.
+ * solo registro para RH. Su correo institucional (AC-06) es al que va la invitación de acceso.
  */
-#[Fillable(['rfc', 'user_id', 'name', 'email', 'degree', 'hired_on', 'is_active'])]
+#[Fillable(['rfc', 'user_id', 'name', 'email', 'institutional_email', 'degree', 'hired_on', 'is_active'])]
 #[UseFactory(TeacherFactory::class)]
 class Teacher extends Model
 {
