@@ -166,3 +166,13 @@ it('no duplica ni pisa lo sembrado al volver a sembrar', function () {
         ->and(User::where('username', 'admin')->count())->toBe(1)
         ->and(Hash::check('Inicial-2026!', User::where('username', 'admin')->sole()->password))->toBeTrue();
 });
+
+it('liga cada campus a su modalidad del catálogo, también uno existente que no la tenía (puente hasta contraer, ADR-0025)', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $c2->forceFill(['modality_id' => null])->saveQuietly();
+
+    $this->seed(CampusSeeder::class);
+
+    expect(Campus::withTrashed()->with('catalogModality')->get()->mapWithKeys(fn (Campus $campus): array => [$campus->code => $campus->catalogModality?->code])->all())
+        ->toEqualCanonicalizing(['C1' => 'PRES', 'C2' => 'PRES', 'EAD' => 'EAD', 'ENL' => 'ENL', 'TNMV' => 'TNMV']);
+});

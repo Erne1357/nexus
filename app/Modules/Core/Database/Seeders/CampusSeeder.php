@@ -5,6 +5,7 @@ namespace App\Modules\Core\Database\Seeders;
 use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality as CatalogModality;
 use Illuminate\Database\Seeder;
 
 /**
@@ -21,6 +22,9 @@ use Illuminate\Database\Seeder;
  *
  * Crea los campus que faltan (también entre los borrados). A uno existente solo le agrega las claves del
  * perfil que no tiene en `settings`: volver a sembrar no pisa un perfil ya editado.
+ *
+ * Cada campus queda ligado a su modalidad del catálogo por el puente `modality_id` (ADR-0025; se quita al contraer),
+ * al crearlo y también si ya existía sin él. El catálogo lo siembra su migración.
  */
 class CampusSeeder extends Seeder
 {
@@ -40,9 +44,12 @@ class CampusSeeder extends Seeder
         foreach (self::CAMPUSES as $campus) {
             $profile = CampusProfile::fromArray($campus['profile'])->toArray();
 
+            $modalityId = CatalogModality::withTrashed()->where('code', $campus['modality']->catalogCode())->value('id');
+
             $record = Campus::withTrashed()->firstOrCreate(['code' => $campus['code']], [
                 'name' => $campus['name'],
                 'modality' => $campus['modality'],
+                'modality_id' => $modalityId,
                 'settings' => $profile,
                 'is_active' => $campus['is_active'],
             ]);
@@ -51,8 +58,14 @@ class CampusSeeder extends Seeder
                 $missing = array_diff_key($profile, $record->settings ?? []);
 
                 if ($missing !== []) {
-                    $record->forceFill(['settings' => [...($record->settings ?? []), ...$missing]])->save();
+                    $record->forceFill(['settings' => [...($record->settings ?? []), ...$missing]]);
                 }
+
+                if ($record->modality_id === null) {
+                    $record->forceFill(['modality_id' => CatalogModality::withTrashed()->where('code', $record->modality->catalogCode())->value('id')]);
+                }
+
+                $record->save();
             }
         }
     }
