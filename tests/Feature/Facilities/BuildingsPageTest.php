@@ -13,7 +13,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | CRUD de Edificios (`/facilities/buildings`, facilities::pages.buildings). Los edificios son de un campus:
-| la pantalla trabaja con el campus activo de la credencial y, sin uno, pide elegirlo. Solo el admin y la
+| la pantalla trabaja con el campus de la página (`?campus=`, #415) y, sin uno, pide elegirlo. Solo el admin y la
 | Subdirección de ese campus (BuildingPolicy). Cada acción del componente vuelve a autorizar.
 */
 
@@ -29,7 +29,7 @@ beforeEach(function () {
 
     $this->admin = User::factory()->admin()->create();
     $this->sub = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])->create();
-    session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
+    onCampusPage($this->c2);
 });
 
 /**
@@ -70,14 +70,14 @@ describe('admin', function () {
     });
 
     it('sin campus activo pide elegirlo y no lista nada', function () {
-        session()->forget(Actor::ACTIVE_CAMPUS);
+        onCampusPage(null);
 
         $this->actingAs($this->admin)->get(route('facilities.buildings'))
             ->assertOk()->assertSee('Elige un campus en tu credencial')->assertDontSee('Edificio A')->assertDontSee('Nuevo edificio');
     });
 
-    it('cambia de campus con la credencial', function () {
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+    it('cambia de campus con el de la página (?campus=)', function () {
+        onCampusPage($this->c1);
 
         Livewire::actingAs($this->admin)->test('facilities::pages.buildings')->assertViewHas('buildings', listsBuildings(['Z']));
     });
@@ -147,7 +147,7 @@ describe('subdirección', function () {
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
 
         actingAsRole($multi, Role::Coordinador);
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+        onCampusPage($this->c1);
 
         Livewire::test('facilities::pages.buildings')->assertForbidden();
 
@@ -159,7 +159,7 @@ describe('subdirección', function () {
     it('de C1 no puede editar ni desactivar un edificio de C2 llamando directo', function () {
         vacate(Role::Subdireccion);
         $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+        onCampusPage($this->c1);
 
         Livewire::actingAs($c1)->test('facilities::pages.buildings')->call('edit', $this->a->id)->assertForbidden();
         Livewire::actingAs($c1)->test('facilities::pages.buildings')->call('toggleActive', $this->a->id)->assertForbidden();

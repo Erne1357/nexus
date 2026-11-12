@@ -116,7 +116,7 @@ describe('admin', function () {
         // La plantilla de prueba por campus no tiene catálogo real que validar: basta ver que se encola.
         Queue::fake();
         Campus::factory()->create(['code' => 'C1']);
-        session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
+        onCampusPage($this->c2);
 
         wizardWithFile($this->admin, 'test-campus-scoped')
             ->assertSet('step', 2)

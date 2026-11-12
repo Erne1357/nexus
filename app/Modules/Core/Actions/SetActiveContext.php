@@ -3,18 +3,16 @@
 namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\RecentPages;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Session\Session;
 
 /**
- * Fija en la sesión el campus y el periodo activos del usuario autenticado (selector de la
- * credencial). El campus debe estar entre los que Actor::campuses() le ofrece; cualquier
- * periodo vale. `null` olvida la elección y deja el de omisión. También olvida las páginas que el
- * menú recuerda por área (RecentPages): una ficha de otro campus ya no se abriría. Solo escribe en la
- * sesión, así que no abre transacción ni deja bitácora.
+ * Fija en la sesión el periodo activo del usuario autenticado (selector de la credencial). Cualquier periodo vale;
+ * `null` olvida la elección y deja el de omisión, el actual. La credencial ya no elige campus (#415): lo elige cada
+ * pantalla en su URL. También olvida las páginas que el menú recuerda por área (RecentPages): una ficha de otro
+ * periodo ya no aplicaría. Solo escribe en la sesión, así que no abre transacción ni deja bitácora.
  */
 final class SetActiveContext
 {
@@ -25,22 +23,15 @@ final class SetActiveContext
     ) {}
 
     /**
-     * @throws AuthorizationException si no hay usuario o el campus no es de su alcance
+     * @throws AuthorizationException si no hay usuario
      */
-    public function handle(?Campus $campus, ?Term $term): void
+    public function handle(?Term $term): void
     {
         if ($this->context->user() === null) {
-            throw new AuthorizationException('Inicia sesión para elegir campus y periodo.');
+            throw new AuthorizationException('Inicia sesión para elegir el periodo.');
         }
 
-        if ($campus !== null && ! $this->context->campuses()->contains($campus)) {
-            throw new AuthorizationException('No trabajas en ese campus.');
-        }
-
-        $this->session->put([
-            Actor::ACTIVE_CAMPUS => $campus?->getKey(),
-            Actor::ACTIVE_TERM => $term?->getKey(),
-        ]);
+        $this->session->put(Actor::ACTIVE_TERM, $term?->getKey());
 
         $this->recentPages->forget();
     }

@@ -13,7 +13,6 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
@@ -181,7 +180,7 @@ describe('tablero', function () {
             ->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id, 'campus_id' => $c1->id, 'valid_from' => today()->toDateString()])
             ->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id, 'campus_id' => $this->campus->id, 'valid_from' => today()->toDateString()])
             ->create();
-        session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+        onCampusPage($this->campus);
 
         reviewPage($jefe, ['department' => $this->sis->id])
             ->assertSee($this->campus->name)
@@ -199,7 +198,7 @@ describe('tablero', function () {
 
         // C2 quedó en la sesión, pero solo lo trae la Coordinación: con Jefatura activa, su campus es C1.
         actingAsRole($jefe, Role::JefeDepartamento);
-        session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+        onCampusPage($this->campus);
 
         reviewPage($jefe)
             ->assertOk()

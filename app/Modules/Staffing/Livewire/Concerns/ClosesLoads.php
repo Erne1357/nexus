@@ -190,8 +190,9 @@ trait ClosesLoads
     }
 
     /**
-     * Lleva a la pantalla donde se arregla un faltante, con la credencial en el campus y el periodo de la carga para
-     * que esa pantalla muestre esta carga. `$screen`: conflicts, editor, assign, change-requests o agreements.
+     * Lleva a la pantalla donde se arregla un faltante, con la credencial en el periodo de la carga y la pantalla en su
+     * campus (`?campus=`, #415: la credencial ya no elige campus), para que muestre esta carga. `$screen`: conflicts,
+     * editor, assign, change-requests o agreements.
      */
     public function goTo(string $screen, LoadClosingQuery $query, SetActiveContext $context): void
     {
@@ -206,7 +207,8 @@ trait ClosesLoads
         };
 
         if (app(Actor::class)->campuses()->contains('id', $load->campus_id)) {
-            $context->handle($load->campus, $load->term);
+            $context->handle($load->term);
+            $route[1]['campus'] = $load->campus->code;
         }
 
         $this->redirectRoute($route[0], $route[1], navigate: true);

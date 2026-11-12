@@ -13,9 +13,11 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -23,9 +25,11 @@ use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
@@ -100,6 +104,25 @@ function validateAllReviewed(CatalogReview $review, User $actor): CatalogReview
     markAllReviewed($review, $actor);
 
     return app(ValidateReview::class)->handle($review, $actor);
+}
+
+/**
+ * Las peticiones que siguen, hasta el final de la prueba, son de una página con `?campus=<código>` (o sin campus, con
+ * null), como las manda el navegador: la primera con la consulta y las de Livewire con la página en Referer. Livewire::test
+ * no manda ni una ni otro en sus llamadas, así que esto fija lo que lee el puente Actor::activeCampus() (#415) para las
+ * pantallas que todavía no pasan a WithCampusFilter, en lugar del campus que antes guardaba la credencial en la sesión.
+ */
+function onCampusPage(?Campus $campus): void
+{
+    app()->scoped(Actor::class, fn (Application $app): Actor => new Actor(
+        fn (): mixed => $app['auth']->user(),
+        $app->make(OrgTree::class),
+        $app->make(AuthorizationSnapshots::class),
+        $app->make(PermissionRegistry::class),
+        $app['session.store'],
+        fn (): Request => Request::create('/', 'GET', $campus === null ? [] : ['campus' => $campus->code]),
+    ));
+    app()->forgetScopedInstances();
 }
 
 /**

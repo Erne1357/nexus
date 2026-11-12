@@ -13,8 +13,9 @@ use Livewire\Component;
  * Página de inicio: saludo y el bloque del perfil activo (Actor::activeRole()), con su nombre y lo que ese puesto hace
  * en Nexus según el glosario, para quien lo ocupa (RoleTitleQuery: el jefe de Servicios Escolares se nombra por su
  * unidad, AZ-02). A quien tiene al menos un rol le muestra además el bloque «Calendario»
- * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo y el campus activos, según
- * TermCalendarQuery; sin periodo activo o sin etapas por ver, no aparece. A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
+ * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo activo, según TermCalendarQuery,
+ * con el periodo al pie; sin periodo activo o sin etapas por ver, no aparece. Con un solo campus (Actor::campuses())
+ * son las de ese campus, que pueden tener ventana propia; con varios, las generales: Inicio no elige campus (#415). A quien puede ver el periodo (TermPolicy) le enlaza su ficha.
  * Al alumno no: su portada es mínima, el bloque de su puesto y «Mis datos» en el menú (AC-15, supuesto por confirmar).
  */
 new #[Title('Inicio')] class extends Component
@@ -27,13 +28,13 @@ new #[Title('Inicio')] class extends Component
         $active = $context->activeRole();
         $roles = $active === null ? [] : [$active];
         $term = $active === null || ! $active->isStaff() ? null : $context->activeTerm();
-        $campus = $context->activeCampus();
-        $windows = $term === null ? [] : $calendar->upcoming($term, $campus);
+        $campuses = $context->campuses();
+        $windows = $term === null ? [] : $calendar->upcoming($term, $campuses->count() === 1 ? $campuses->first() : null);
 
         return [
             'calendar' => $windows === [] ? null : [
                 'timeline' => StageTimeline::build($windows, [], today()->toImmutable()),
-                'caption' => $term->name.($campus === null ? '' : " · {$campus->name}"),
+                'caption' => $term->name,
                 'termUrl' => Gate::allows('view', $term) ? route('core.terms.show', $term) : null,
             ],
             'name' => $context->user()?->name ?? '',
