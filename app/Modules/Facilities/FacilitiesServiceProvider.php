@@ -9,6 +9,7 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
@@ -31,9 +32,9 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Edificios', 'facilities.buildings', 'o-building-office', NavigationArea::Academico,
+            new NavigationItem('Edificios', 'facilities.buildings', 'o-building-office', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [Building::class]),
-            new NavigationItem('Salones', 'facilities.rooms', 'o-rectangle-stack', NavigationArea::Academico,
+            new NavigationItem('Salones', 'facilities.rooms', 'o-rectangle-stack', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [Room::class]),
         ];
     }

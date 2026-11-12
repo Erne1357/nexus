@@ -98,7 +98,7 @@ it('un departamento académico se ve con candado y sus acciones deshabilitadas',
         ->assertSeeIn('@org-unit-SC', 'Jorge Luis Medrano Prieto')
         ->assertSeeIn('@org-unit-EE', 'Sin jefe vigente')
         ->click('@org-unit-SC')
-        ->waitForText('su nombre, su clave y su estado se editan en Académico › Departamentos.')
+        ->waitForText('su nombre, su clave y su estado se editan en Administración › Departamentos.')
         ->assertScript("document.querySelector('[data-testid=org-unit-SC]').classList.contains('ring-2')")
         ->assertScript("document.querySelector('[data-testid=unit-rename]').disabled && document.querySelector('[data-testid=unit-move]').disabled && document.querySelector('[data-testid=unit-deactivate]').disabled")
         ->assertMissing('@unit-add-child')

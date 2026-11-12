@@ -14,7 +14,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Cambia el nombre, la clave o el tipo de una unidad estructural: solo las claves que recibe (spec §6.1). AZ-S13: un
- * departamento académico se edita en Académico (`unit`) y la clave de DIRECCION y SUB-ACADEMICA no cambia (`code`; su
+ * departamento académico se edita en Administración › Departamentos (`unit`) y la clave de DIRECCION y SUB-ACADEMICA no cambia (`code`; su
  * nombre sí). Una clave nueva debe ser libre (`code`) y un tipo nuevo no puede dejar sin lugar los nombramientos de la
  * unidad (`kind`). Quién puede lo decide OrgUnitPolicy.
  *

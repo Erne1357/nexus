@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Navigation\MenuEntry;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
@@ -61,6 +62,14 @@ new class extends Component
         $routeItem = $this->route === null ? null : $navigation->forRoute($this->route);
         $visibleAreas = array_column($groups, 'area');
         $currentArea = in_array($routeItem?->area, $visibleAreas, true) ? $routeItem->area : ($visibleAreas[0] ?? null);
+
+        // Provisional (tarea 1.20): la retícula de la opción B reemplaza este aplanado.
+        foreach ($groups as $index => $group) {
+            $groups[$index]['items'] = array_merge(...array_map(
+                fn (array $inner): array => array_map(fn (MenuEntry $entry): NavigationItem => $entry->item, $inner['entries']),
+                $group['groups'],
+            ));
+        }
 
         $longestOnTop = max([0, ...array_map(fn (array $group): int => count($group['items']), array_slice($groups, 0, self::TABLET_COLUMNS))]);
         $tabletWrapRow = self::FIRST_AREA_ROW + $longestOnTop + 2;

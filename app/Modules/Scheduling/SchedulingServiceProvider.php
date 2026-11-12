@@ -22,6 +22,7 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\ModuleServiceProvider;
@@ -134,11 +135,11 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico,
+            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico, group: NavigationGroup::Horarios,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
-            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico,
+            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico, group: NavigationGroup::Horarios,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
-            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico,
+            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico, group: NavigationGroup::Horarios,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
         ];
     }

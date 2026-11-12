@@ -231,7 +231,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
 
     expect($department->path)->toBe(['Dirección', 'Subdirección Académica'])
         ->and($department->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en la ficha del docente, en «Personas y puestos» o aquí.')
-        ->and($department->lockedReason)->toBe('Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.')
+        ->and($department->lockedReason)->toBe('Es un departamento académico: su nombre, su clave y su estado se editan en Administración › Departamentos.')
         ->and($department->moveBlocker)->toBe('Un departamento académico no se mueve desde el Organigrama.');
 
     expect($this->query->detail($this->services->id))

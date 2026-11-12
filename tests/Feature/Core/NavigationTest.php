@@ -3,9 +3,11 @@
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Navigation\MenuEntry;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
@@ -18,9 +20,12 @@ use Livewire\Livewire;
 
 /*
 | Navegación por rol. Cada módulo declara sus entradas en navigation() de su provider y Core las
-| junta en un registro inmutable al arrancar; el menú las agrupa por área (ADR-0015). DemoCatalog
-| (tests/Fixtures/Modules) declara "Saludo", para coordinadores (por Actor), en Servicios
-| escolares, y "Elementos", por la ability viewAny de su policy (solo admin), en Recursos humanos.
+| junta en un registro inmutable al arrancar; el menú las agrupa por área y, dentro de un área, por grupo
+| (ADR-0015, MN-01). Inicio no es una entrada: el menú lo pinta aparte, para cualquier usuario activo.
+| Una entrada puede depender del periodo activo (MN-02): quien no la puede ver sin estar disponible no la
+| ve, y el admin la ve con su motivo. DemoCatalog (tests/Fixtures/Modules) declara "Saludo", para
+| coordinadores (por Actor), en Servicios escolares, y "Elementos", por la ability viewAny de su policy
+| (solo admin), en Recursos humanos.
 */
 
 beforeEach(function () {
@@ -36,16 +41,16 @@ function withDemoCatalogNavigation(): void
 
 /**
  * Un registro armado a mano, para probar el agrupado sin depender de lo que declaren los módulos:
- * "Cargas" (Datos) la ve cualquiera y va primero; "Propuestas" (Académico) solo el coordinador (y el
- * admin); "Inicio" (Académico) cualquiera; "Plantilla" (Recursos humanos) quien pase viewAny de Campus.
+ * "Cargas" (Administración) la ve cualquiera y va primero; "Propuestas" (Académico) solo el coordinador (y
+ * el admin); "Avisos" (Académico) cualquiera; "Plantilla" (Recursos humanos) quien pase viewAny de Campus.
  */
 function handBuiltNavigation(): Navigation
 {
     return new Navigation([
-        new NavigationItem('Cargas', 'home', 'o-table-cells', NavigationArea::Datos),
+        new NavigationItem('Cargas', 'home', 'o-table-cells', NavigationArea::Administracion),
         new NavigationItem('Propuestas', 'home', 'o-document-text', NavigationArea::Academico,
             visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalCreate)),
-        new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Academico),
+        new NavigationItem('Avisos', 'home', 'o-bell', NavigationArea::Academico),
         new NavigationItem('Plantilla', 'core.campuses', 'o-users', NavigationArea::RecursosHumanos,
             ability: 'viewAny', arguments: [Campus::class]),
     ]);
@@ -62,10 +67,35 @@ function navigationAreasFor(?User $user, ?Navigation $navigation = null): array
         test()->actingAs($user);
     }
 
+    $areas = [];
+
+    foreach (($navigation ?? app(Navigation::class))->visibleByArea(app(Actor::class)) as $area) {
+        foreach ($area['groups'] as $group) {
+            foreach ($group['entries'] as $entry) {
+                $areas[$area['area']->value][] = $entry->item->label;
+            }
+        }
+    }
+
+    return $areas;
+}
+
+/**
+ * Las etiquetas visibles por grupo de un área («—» para las que no van en grupo), en el orden del menú.
+ *
+ * @return array<string, list<string>>
+ */
+function navigationGroupsFor(User $user, NavigationArea $area, ?Navigation $navigation = null): array
+{
+    test()->actingAs($user);
+
+    $found = collect(($navigation ?? app(Navigation::class))->visibleByArea(app(Actor::class)))
+        ->firstWhere('area', $area);
+
     $groups = [];
 
-    foreach (($navigation ?? app(Navigation::class))->visibleByArea(app(Actor::class)) as $group) {
-        $groups[$group['area']->value] = array_map(fn (NavigationItem $item): string => $item->label, $group['items']);
+    foreach ($found['groups'] ?? [] as $group) {
+        $groups[$group['group']?->value ?? '—'] = array_map(fn (MenuEntry $entry): string => $entry->item->label, $group['entries']);
     }
 
     return $groups;
@@ -86,20 +116,29 @@ function navigationLabelsFor(?User $user): array
     );
 }
 
-it('Core declara Inicio, visible para cualquier usuario con sesión', function () {
-    $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+/**
+ * Una entrada de prueba: va a Inicio para no depender de rutas de módulos.
+ */
+function testEntry(string $label, NavigationArea $area = NavigationArea::Academico, ?NavigationGroup $group = null, int $order = 0, ?Closure $whyUnavailable = null): NavigationItem
+{
+    return new NavigationItem($label, 'home', 'o-home', $area, group: $group, order: $order, whyUnavailable: $whyUnavailable);
+}
 
-    expect(navigationLabelsFor($docente))->toContain('Inicio')->not->toContain('Campus')
-        ->and(app(Navigation::class)->items()[0])
-        ->route->toBe('home')
-        ->icon->toBe('o-home')
-        ->area->toBe(NavigationArea::Academico);
+it('Inicio no es una entrada del registro: el menú lo pinta aparte', function () {
+    expect(collect(app(Navigation::class)->items())->pluck('route'))->not->toContain('home')
+        ->and(app(Navigation::class)->forRoute('home'))->toBeNull();
 });
 
 it('toda entrada declara su área como cuarto argumento', function () {
     expect(fn () => new NavigationItem('Inicio', 'home', 'o-home'))->toThrow(ArgumentCountError::class)
         ->and(fn () => new NavigationItem('Inicio', 'home', 'o-home', 'academico'))->toThrow(TypeError::class)
-        ->and(new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Datos))->area->toBe(NavigationArea::Datos);
+        ->and(new NavigationItem('Inicio', 'home', 'o-home', NavigationArea::Administracion))->area->toBe(NavigationArea::Administracion);
+});
+
+it('MN-01: una entrada no puede ir en un grupo de otra área', function () {
+    expect(fn () => testEntry('Campus', NavigationArea::Academico, NavigationGroup::Institucion))
+        ->toThrow(InvalidArgumentException::class, 'El grupo Institución es del área Administración')
+        ->and(testEntry('Campus', NavigationArea::Administracion, NavigationGroup::Institucion))->group->toBe(NavigationGroup::Institucion);
 });
 
 describe('agrupado por área', function () {
@@ -107,9 +146,9 @@ describe('agrupado por área', function () {
         $admin = User::factory()->admin()->create();
 
         expect(navigationAreasFor($admin, handBuiltNavigation()))->toBe([
-            'academico' => ['Propuestas', 'Inicio'],
+            'academico' => ['Propuestas', 'Avisos'],
             'recursos_humanos' => ['Plantilla'],
-            'datos' => ['Cargas'],
+            'administracion' => ['Cargas'],
         ]);
     });
 
@@ -119,12 +158,12 @@ describe('agrupado por área', function () {
 
         // Plantilla, la única de Recursos humanos, pide la ability viewAny de Campus: ninguno de los dos la pasa.
         expect(navigationAreasFor($coordinador, handBuiltNavigation()))->toBe([
-            'academico' => ['Propuestas', 'Inicio'],
-            'datos' => ['Cargas'],
+            'academico' => ['Propuestas', 'Avisos'],
+            'administracion' => ['Cargas'],
         ])
             ->and(navigationAreasFor($docente, handBuiltNavigation()))->toBe([
-                'academico' => ['Inicio'],
-                'datos' => ['Cargas'],
+                'academico' => ['Avisos'],
+                'administracion' => ['Cargas'],
             ]);
     });
 
@@ -141,13 +180,149 @@ describe('agrupado por área', function () {
 
         // Presencia y ausencia, no listas exactas, como arriba.
         expect(navigationAreasFor($admin))
-            ->academico->toContain('Inicio', 'Campus', 'Periodos')
+            ->academico->toContain('Propuesta de carrera', 'Horarios')
             ->servicios_escolares->toContain('Saludo')
             ->recursos_humanos->toContain('Elementos')
-            ->datos->toContain('Importaciones')
+            ->administracion->toContain('Campus', 'Periodos', 'Importaciones')
             ->and(navigationAreasFor($coordinador))
-            ->academico->toContain('Inicio')->not->toContain('Campus')->not->toContain('Periodos')
-            ->servicios_escolares->toContain('Saludo');
+            ->academico->toContain('Propuesta de carrera')
+            ->servicios_escolares->toContain('Saludo')
+            ->not->toHaveKey('administracion');
+    });
+});
+
+describe('MN-01: grupos dentro de un área', function () {
+    it('pone primero las entradas sin grupo y luego los grupos en el orden del enum', function () {
+        $navigation = new Navigation([
+            testEntry('Cierre', group: NavigationGroup::CierrePublicacion),
+            testEntry('Suelta'),
+            testEntry('Propuesta', group: NavigationGroup::Propuesta),
+            testEntry('Validar', group: NavigationGroup::Validacion),
+        ]);
+
+        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::Academico, $navigation))->toBe([
+            '—' => ['Suelta'],
+            'validacion' => ['Validar'],
+            'propuesta' => ['Propuesta'],
+            'cierre_publicacion' => ['Cierre'],
+        ]);
+    });
+
+    it('dentro de un grupo ordena por `order` y, a igual orden, por el registro', function () {
+        $navigation = new Navigation([
+            testEntry('Publicados', group: NavigationGroup::CierrePublicacion, order: 1),
+            testEntry('Cierre', group: NavigationGroup::CierrePublicacion),
+            testEntry('Avance', group: NavigationGroup::CierrePublicacion),
+        ]);
+
+        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::Academico, $navigation))
+            ->toBe(['cierre_publicacion' => ['Cierre', 'Avance', 'Publicados']]);
+    });
+
+    it('no muestra un grupo sin entradas visibles para el rol', function () {
+        $navigation = new Navigation([
+            testEntry('Validar', group: NavigationGroup::Validacion),
+            new NavigationItem('Propuestas', 'home', 'o-home', NavigationArea::Academico, group: NavigationGroup::Propuesta,
+                visible: static fn (): bool => false),
+        ]);
+
+        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::Academico, $navigation))
+            ->toBe(['validacion' => ['Validar']]);
+    });
+
+    it('lleva encabezados solo si el área muestra dos grupos o más y ocho entradas o más', function (array $sizes, bool $headings) {
+        $items = [];
+        $groups = [NavigationGroup::Validacion, NavigationGroup::Propuesta, NavigationGroup::Horarios];
+
+        foreach ($sizes as $index => $size) {
+            foreach (range(1, $size) as $number) {
+                $items[] = testEntry("E{$index}-{$number}", group: $groups[$index]);
+            }
+        }
+
+        $this->actingAs(User::factory()->admin()->create());
+        $area = (new Navigation($items))->visibleByArea(app(Actor::class))[0];
+
+        expect($area['headings'])->toBe($headings);
+    })->with([
+        'dos grupos y ocho entradas' => [[5, 3], true],
+        'tres grupos y nueve entradas' => [[3, 3, 3], true],
+        'dos grupos y siete entradas: lista plana' => [[4, 3], false],
+        'un grupo con diez entradas: lista plana' => [[10], false],
+    ]);
+
+    it('las entradas sin grupo no cuentan como grupo para los encabezados', function () {
+        $items = [testEntry('Suelta'), ...array_map(fn (int $number): NavigationItem => testEntry("V{$number}", group: NavigationGroup::Validacion), range(1, 8))];
+
+        $this->actingAs(User::factory()->admin()->create());
+
+        expect((new Navigation($items))->visibleByArea(app(Actor::class))[0]['headings'])->toBeFalse();
+    });
+});
+
+describe('MN-02: disponibilidad en el periodo activo', function () {
+    beforeEach(function () {
+        $this->navigation = new Navigation([
+            testEntry('Siempre'),
+            testEntry('Sin validación', group: NavigationGroup::Validacion, whyUnavailable: static fn (): string => 'No hay validación abierta'),
+            testEntry('Disponible', group: NavigationGroup::Propuesta, whyUnavailable: static fn (): ?string => null),
+        ]);
+    });
+
+    it('quien no es admin no ve lo que no está disponible en el periodo', function () {
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
+
+        expect(navigationAreasFor($coordinador, $this->navigation))->toBe(['academico' => ['Siempre', 'Disponible']]);
+    });
+
+    it('el admin lo ve, marcado con su motivo; lo disponible va sin motivo', function () {
+        $this->actingAs(User::factory()->admin()->create());
+
+        $entries = collect($this->navigation->visibleByArea(app(Actor::class))[0]['groups'])
+            ->flatMap(fn (array $group): array => $group['entries'])
+            ->mapWithKeys(fn (MenuEntry $entry): array => [$entry->item->label => $entry->hiddenReason]);
+
+        expect($entries->all())->toBe(['Siempre' => null, 'Sin validación' => 'No hay validación abierta', 'Disponible' => null]);
+    });
+
+    it('visibleTo da lo mismo que el menú, aplanado y en su orden', function () {
+        $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
+        $this->actingAs($coordinador);
+
+        expect(array_map(fn (NavigationItem $item): string => $item->label, $this->navigation->visibleTo(app(Actor::class))))
+            ->toBe(['Siempre', 'Disponible']);
+    });
+
+    it('evalúa cada condición una vez por menú, aunque la compartan varias entradas', function () {
+        $calls = 0;
+        $condition = function () use (&$calls): ?string {
+            $calls++;
+
+            return null;
+        };
+
+        $navigation = new Navigation([
+            testEntry('A', group: NavigationGroup::Horarios, whyUnavailable: $condition),
+            testEntry('B', group: NavigationGroup::Horarios, whyUnavailable: $condition),
+            testEntry('C', group: NavigationGroup::Asignacion, whyUnavailable: $condition),
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create());
+        $navigation->visibleByArea(app(Actor::class));
+
+        expect($calls)->toBe(1);
+    });
+
+    it('no evalúa la condición de una entrada que el rol no puede ver', function () {
+        $navigation = new Navigation([
+            new NavigationItem('Oculta', 'home', 'o-home', NavigationArea::Academico,
+                visible: static fn (): bool => false,
+                whyUnavailable: static fn (): never => throw new LogicException('No debió evaluarse')),
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create());
+
+        expect($navigation->visibleByArea(app(Actor::class)))->toBe([]);
     });
 });
 
@@ -157,10 +332,12 @@ describe('entrada de una ruta', function () {
 
         expect($item)
             ->label->toBe('Campus')
-            ->area->toBe(NavigationArea::Academico)
+            ->area->toBe(NavigationArea::Administracion)
+            ->group->toBe(NavigationGroup::Institucion)
             ->and(app(Navigation::class)->forRoute('imports.wizard'))
             ->label->toBe('Importaciones')
-            ->area->toBe(NavigationArea::Datos);
+            ->area->toBe(NavigationArea::Administracion)
+            ->group->toBe(NavigationGroup::Datos);
     });
 
     it('da la primera entrada si dos declaran la misma ruta', function () {
@@ -184,6 +361,25 @@ describe('entrada de una ruta', function () {
     });
 });
 
+it('MN-01: el admin ve Académico por etapas y Administración por propósito', function () {
+    $admin = User::factory()->admin()->create();
+
+    expect(navigationGroupsFor($admin, NavigationArea::Academico))->toBe([
+        'validacion' => ['Validar catálogos', 'Avance de validación'],
+        'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento'],
+        'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
+        'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
+        'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Horarios publicados'],
+    ])
+        ->and(navigationGroupsFor($admin, NavigationArea::Administracion))->toBe([
+            'institucion' => ['Campus', 'Periodos', 'Organigrama', 'Personas y puestos'],
+            'catalogos' => ['Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones'],
+            'datos' => ['Importaciones'],
+        ])
+        ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos']])
+        ->and(navigationGroupsFor($admin, NavigationArea::RecursosHumanos))->toBe(['—' => ['Docentes']]);
+});
+
 it('filtra por rol: admin, coordinador y docente ven menús distintos', function () {
     withDemoCatalogNavigation();
 
@@ -192,9 +388,9 @@ it('filtra por rol: admin, coordinador y docente ven menús distintos', function
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
     // Presencia y ausencia, no listas exactas: cada módulo nuevo agrega entradas sin romper esta prueba.
-    expect(navigationLabelsFor($admin))->toContain('Inicio', 'Campus', 'Periodos', 'Saludo', 'Elementos')
-        ->and(navigationLabelsFor($coordinador))->toContain('Inicio', 'Saludo')->not->toContain('Campus')->not->toContain('Periodos')->not->toContain('Elementos')
-        ->and(navigationLabelsFor($docente))->toContain('Inicio')->not->toContain('Campus')->not->toContain('Periodos')->not->toContain('Saludo')->not->toContain('Elementos');
+    expect(navigationLabelsFor($admin))->toContain('Campus', 'Periodos', 'Saludo', 'Elementos')
+        ->and(navigationLabelsFor($coordinador))->toContain('Saludo')->not->toContain('Campus')->not->toContain('Periodos')->not->toContain('Elementos')
+        ->and(navigationLabelsFor($docente))->not->toContain('Campus')->not->toContain('Periodos')->not->toContain('Saludo')->not->toContain('Elementos');
 });
 
 it('decide por la ability de Gate con la policy del módulo', function () {
@@ -211,10 +407,10 @@ it('no muestra ninguna entrada sin sesión ni a un usuario inactivo', function (
         ->and(navigationLabelsFor(User::factory()->admin()->create(['is_active' => false])))->toBe([]);
 });
 
-it('a quien no tiene un rol vigente le muestra solo Inicio', function () {
+it('a quien no tiene un rol vigente no le muestra ninguna entrada (solo el Inicio del menú)', function () {
     withDemoCatalogNavigation();
 
-    expect(navigationLabelsFor(User::factory()->create()))->toBe(['Inicio']);
+    expect(navigationLabelsFor(User::factory()->create()))->toBe([]);
 });
 
 it('toda entrada declarada apunta a una ruta registrada', function () {

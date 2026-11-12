@@ -14,7 +14,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | CreateOrgUnit da de alta unidades estructurales bajo una madre (spec §6.1, AZ-S13): los departamentos académicos
-| se dan de alta en Académico y la Dirección es la raíz única.
+| se dan de alta en Administración › Departamentos y la Dirección es la raíz única.
 */
 
 beforeEach(function () {
@@ -66,7 +66,7 @@ it('rechaza los tipos que no se crean aquí', function (OrgUnitKind $kind, strin
     expect(OrgUnit::where('code', 'PLANEACION')->exists())->toBeFalse();
 })->with([
     'dirección' => [OrgUnitKind::Direccion, 'Solo hay una Dirección.'],
-    'departamento académico' => [OrgUnitKind::DepartamentoAcademico, 'Los departamentos académicos se dan de alta en Académico.'],
+    'departamento académico' => [OrgUnitKind::DepartamentoAcademico, 'Los departamentos académicos se dan de alta en Administración › Departamentos.'],
 ]);
 
 it('rechaza una madre inactiva, borrada o que es departamento académico', function () {

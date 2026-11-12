@@ -45,7 +45,7 @@ describe('banda', function () {
         $page = domOf($this->actingAs(User::factory()->admin()->create())->get(route('core.campuses'))->assertOk());
         $crumb = $page->querySelector('nav[aria-label="Ruta"]');
 
-        expect(textOf($crumb))->toBe('Académico Campus')
+        expect(textOf($crumb))->toBe('Administración Campus')
             ->and(textOf($crumb->querySelector('[aria-current="page"]')))->toBe('Campus');
     });
 
