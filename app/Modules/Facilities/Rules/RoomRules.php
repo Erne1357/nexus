@@ -120,6 +120,27 @@ final class RoomRules
     }
 
     /**
+     * Un edificio sin borrar, de cualquier campus; el id llega del navegador. Al editar un salón, el de otro campus lo
+     * mueve a ese campus (UpdateRoom, CV-S10).
+     *
+     * @throws ValidationException
+     */
+    public function existingBuilding(string $buildingId): Building
+    {
+        return KeyLookup::find(Building::query(), $buildingId)
+            ?? throw ValidationException::withMessages(['building_id' => 'El edificio no existe.']);
+    }
+
+    /**
+     * El salón ya se usa en su campus (la llave compuesta `(id, campus_id)` de sesiones de grupo, acuerdos entre
+     * departamentos y salones por omisión de las materias): no se mueve a otro campus (CV-S10).
+     */
+    public function roomInUse(): ValidationException
+    {
+        return ValidationException::withMessages(['building_id' => 'El salón ya se usa en su campus (sesiones de grupo, acuerdos o materias que lo tienen por omisión): no se puede mover a un edificio de otro campus.']);
+    }
+
+    /**
      * @throws ValidationException
      */
     public function ensureOwnerExists(?string $departmentId): void

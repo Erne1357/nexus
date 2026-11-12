@@ -23,8 +23,9 @@ use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Support\Collection;
 
 /*
-| Tarea 2.5: lo que lee el tablero de avance de validación. El total sigue la regla de HC-14 (las cuatro generales y
-| los salones de cada campus abierto que usa salones) y cuadra con CatalogReviewQuery::pendingFor.
+| Tarea 2.5: lo que lee el tablero de avance de validación. El total sigue la regla de HC-14 (las cuatro que no son
+| salones y una de salones para todos los campus si alguno abierto usa salones; decisión 6, confirmada el 12 de
+| noviembre de 2026) y cuadra con CatalogReviewQuery::pendingFor.
 */
 
 beforeEach(function () {
@@ -45,13 +46,12 @@ beforeEach(function () {
         ->board($this->term, $campuses ?? app(ValidationProgressQuery::class)->openCampuses($this->term), $search, $status);
 });
 
-function progressValidate(Department $department, Catalog $catalog, ?Campus $campus = null, ReviewStatus $status = ReviewStatus::Validated): void
+function progressValidate(Department $department, Catalog $catalog, ReviewStatus $status = ReviewStatus::Validated): void
 {
     CatalogReview::query()
         ->where('term_id', test()->term->id)
         ->where('department_id', $department->id)
         ->where('catalog', $catalog)
-        ->when($catalog->isGeneral(), fn ($query) => $query->whereNull('campus_id'), fn ($query) => $query->where('campus_id', $campus->id))
         ->update(['status' => $status, 'validated_at' => $status === ReviewStatus::Validated ? now() : null]);
 }
 
@@ -62,36 +62,32 @@ it('lista los campus donde el periodo está abierto, por código', function () {
     expect(app(ValidationProgressQuery::class)->openCampuses($this->term)->pluck('code')->all())->toBe(['C1', 'C2', 'EL']);
 });
 
-it('cuenta el total con HC-14: cuatro generales más salones por cada campus abierto que usa salones', function () {
+it('cuenta el total con HC-14: las cuatro que no son salones más una de salones para todos los campus', function () {
     $board = ($this->progress)();
 
-    expect($board['global']['total'])->toBe(2 * (4 + 2))
+    expect($board['global']['total'])->toBe(2 * 5)
         ->and($board['rows'])->toHaveCount(2)
-        ->and($board['rows'][0]['total'])->toBe(6)
-        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers', 'rooms:'.$this->c1->id, 'rooms:'.$this->c2->id])
-        ->and(array_column($board['general_columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers'])
-        ->and(array_column($board['room_columns'], 'key'))->toBe(['rooms:'.$this->c1->id, 'rooms:'.$this->c2->id]);
+        ->and($board['rows'][0]['total'])->toBe(5)
+        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers', 'rooms']);
 });
 
 it('una revisión que falta cuenta como pendiente y cuadra con pendingFor', function () {
     CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Careers)->delete();
     progressValidate($this->sis, Catalog::Teachers);
-    progressValidate($this->sis, Catalog::Rooms, $this->c2);
+    progressValidate($this->sis, Catalog::Rooms);
 
     $board = ($this->progress)();
     $row = collect($board['rows'])->firstWhere('department.code', 'SIS');
-    $pendingFor = collect([$this->c1, $this->c2])->sum(fn (Campus $campus) => count(app(CatalogReviewQuery::class)->pendingFor($this->term, $campus, $this->sis)));
 
     expect($row['cells']['careers'])->toBeNull()
         ->and($row['validated'])->toBe(2)
-        ->and($row['pending'])->toBe(4)
-        // pendingFor cuenta las generales en cada campus: se descuentan las repetidas.
-        ->and($row['total'] - $row['validated'])->toBe($pendingFor - 3 * 1);
+        ->and($row['pending'])->toBe(3)
+        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->c2, $this->sis)));
 });
 
-it('con un solo campus filtrado cuenta sus salones y cuadra con pendingFor', function () {
+it('con un solo campus filtrado que usa salones cuenta la de salones y cuadra con pendingFor', function () {
     progressValidate($this->sis, Catalog::Teachers);
-    progressValidate($this->sis, Catalog::Rooms, $this->c2);
+    progressValidate($this->sis, Catalog::Rooms);
 
     $board = ($this->progress)(collect([$this->c2]));
     $row = collect($board['rows'])->firstWhere('department.code', 'SIS');
@@ -101,7 +97,7 @@ it('con un solo campus filtrado cuenta sus salones y cuadra con pendingFor', fun
         ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->c2, $this->sis)));
 });
 
-it('los salones solo cuentan en los campus que los usan', function () {
+it('los salones solo cuentan si algún campus del alcance los usa', function () {
     $board = ($this->progress)(collect([$this->online]));
 
     expect($board['global']['total'])->toBe(8)
@@ -111,11 +107,11 @@ it('los salones solo cuentan en los campus que los usan', function () {
 it('suma validadas, en revisión y pendientes por fila, por columna y en lo global', function () {
     progressValidate($this->sis, Catalog::Teachers);
     progressValidate($this->ele, Catalog::Teachers);
-    progressValidate($this->sis, Catalog::Subjects, status: ReviewStatus::InReview);
+    progressValidate($this->sis, Catalog::Subjects, ReviewStatus::InReview);
 
     $board = ($this->progress)();
 
-    expect($board['global'])->toMatchArray(['validated' => 2, 'in_review' => 1, 'pending' => 9, 'total' => 12, 'percent' => 17])
+    expect($board['global'])->toMatchArray(['validated' => 2, 'in_review' => 1, 'pending' => 7, 'total' => 10, 'percent' => 20])
         ->and($board['totals']['teachers'])->toMatchArray(['validated' => 2, 'total' => 2])
         ->and($board['totals']['subjects'])->toMatchArray(['validated' => 0, 'in_review' => 1, 'total' => 2]);
 });
@@ -154,13 +150,8 @@ it('«Recordar» queda bloqueado si no falta nada, y la insignia cuenta jefes di
 
     expect(($this->progress)()['remindable'])->toBe(['departments' => 2, 'heads' => 1]);
 
-    foreach ([$this->c1, $this->c2, null] as $campus) {
-        foreach (Catalog::cases() as $catalog) {
-            if ($campus === null && ! $catalog->isGeneral() || $campus !== null && $catalog->isGeneral()) {
-                continue;
-            }
-            progressValidate($this->sis, $catalog, $campus);
-        }
+    foreach (Catalog::cases() as $catalog) {
+        progressValidate($this->sis, $catalog);
     }
 
     $sis = collect(($this->progress)()['rows'])->firstWhere('department.code', 'SIS');
@@ -189,8 +180,7 @@ it('el último recordatorio solo cuenta los campus del alcance', function () {
 it('filtra por departamento o jefe y por estado', function () {
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
     foreach (Catalog::cases() as $catalog) {
-        progressValidate($this->sis, $catalog, $this->c2);
-        progressValidate($this->sis, $catalog, $this->c1);
+        progressValidate($this->sis, $catalog);
     }
 
     $codes = fn (string $search = '', string $status = '') => array_map(fn (array $row) => $row['department']->code, ($this->progress)(null, $search, $status)['rows']);
@@ -201,7 +191,7 @@ it('filtra por departamento o jefe y por estado', function () {
         ->and($codes('', 'validated'))->toBe(['SIS'])
         ->and($codes('nadie'))->toBe([])
         // El global no cambia con los filtros de la tabla.
-        ->and(($this->progress)(null, 'nadie')['global']['total'])->toBe(12);
+        ->and(($this->progress)(null, 'nadie')['global']['total'])->toBe(10);
 });
 
 it('reporta el estado de la carga de cada departamento y campus mediante el evento con reporte', function () {
@@ -223,7 +213,7 @@ it('entrega por renglón las columnas que aún no están validadas, para el celu
     $board = ($this->progress)();
     $sis = collect($board['rows'])->first(fn (array $row) => $row['department']->is($this->sis));
 
-    expect(array_column($sis['pending_columns'], 'key'))->toBe(['subjects', 'study_plans', 'careers', 'rooms:'.$this->c1->id, 'rooms:'.$this->c2->id]);
+    expect(array_column($sis['pending_columns'], 'key'))->toBe(['subjects', 'study_plans', 'careers', 'rooms']);
 });
 
 it('CV7: dice por celda cuántos registros van revisados de cuántos, y nulo si falta la revisión', function () {

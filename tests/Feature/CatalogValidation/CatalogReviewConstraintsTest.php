@@ -12,19 +12,19 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
 /*
-| Integridad de `catalog_reviews` (docs/dominio/modelo-de-datos.md, "CatalogValidation"): los cuatro
-| catálogos generales se revisan una vez por periodo y departamento para todo el Tec (`campus_id` nulo)
-| y los salones una vez por campus (D2, confirmado el 1 de noviembre de 2026). Un CHECK lo amarra y la
-| unicidad cuenta el campus nulo como un valor.
+| Integridad de `catalog_reviews` (docs/dominio/modelo-de-datos.md, "CatalogValidation"): los cinco
+| catálogos se revisan una vez por periodo y departamento para todo el Tec, también los salones de todos los campus
+| (decisión 6, confirmada el 12 de noviembre de 2026). Un CHECK exige `campus_id` nulo y la unicidad cuenta el campus
+| nulo como un valor.
 */
 
-it('nace pendiente y conoce su periodo, campus, departamento y quién la validó', function () {
+it('nace pendiente y conoce su periodo, departamento y quién la validó', function () {
     $review = CatalogReview::factory()->rooms()->validated()->create()->fresh();
 
     expect($review->catalog)->toBe(Catalog::Rooms)
         ->and($review->status)->toBe(ReviewStatus::Validated)
         ->and($review->term)->toBeInstanceOf(Term::class)
-        ->and($review->campus)->toBeInstanceOf(Campus::class)
+        ->and($review->campus_id)->toBeNull()
         ->and($review->department)->toBeInstanceOf(Department::class)
         ->and($review->validator)->toBeInstanceOf(User::class)
         ->and($review->validated_at)->not->toBeNull();
@@ -39,32 +39,18 @@ it('nace pendiente y conoce su periodo, campus, departamento y quién la validó
         ->and($pending->campus_id)->toBeNull();
 });
 
-it('rechaza una revisión de salones sin campus', function () {
-    expect(fn () => CatalogReview::factory()->create(['catalog' => Catalog::Rooms, 'campus_id' => null]))
+it('rechaza una revisión con campus, también la de salones', function (Catalog $catalog) {
+    expect(fn () => CatalogReview::factory()->create(['catalog' => $catalog, 'campus_id' => Campus::factory()->create()->id]))
         ->toThrow(QueryException::class, 'catalog_reviews_campus_check');
-});
+})->with([Catalog::Rooms, Catalog::Subjects]);
 
-it('rechaza una revisión general con campus', function () {
-    expect(fn () => CatalogReview::factory()->create(['catalog' => Catalog::Subjects, 'campus_id' => Campus::factory()->create()->id]))
-        ->toThrow(QueryException::class, 'catalog_reviews_campus_check');
-});
-
-it('no repite una revisión general del mismo periodo, departamento y catálogo, aunque el campus sea nulo', function () {
-    $review = CatalogReview::factory()->general(Catalog::Careers)->inReview()->create();
+it('no repite una revisión del mismo periodo, departamento y catálogo, aunque el campus sea nulo', function (Catalog $catalog) {
+    $review = CatalogReview::factory()->create(['catalog' => $catalog, 'status' => ReviewStatus::InReview]);
 
     expect($review->fresh()->status)->toBe(ReviewStatus::InReview)
         ->and(fn () => CatalogReview::factory()->create($review->only(['term_id', 'department_id', 'catalog'])))
         ->toThrow(UniqueConstraintViolationException::class);
-});
-
-it('no repite la revisión de salones en el mismo campus; en otro campus sí', function () {
-    $review = CatalogReview::factory()->rooms()->create();
-
-    CatalogReview::factory()->rooms()->create($review->only(['term_id', 'department_id']));
-
-    expect(fn () => CatalogReview::factory()->rooms()->create($review->only(['term_id', 'department_id', 'campus_id'])))
-        ->toThrow(UniqueConstraintViolationException::class);
-});
+})->with([Catalog::Careers, Catalog::Rooms]);
 
 it('rechaza un estado o un catálogo que no existen', function (string $column, string $value, string $constraint) {
     $review = CatalogReview::factory()->create();

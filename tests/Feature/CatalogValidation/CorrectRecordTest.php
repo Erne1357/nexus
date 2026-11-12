@@ -18,9 +18,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | CorrectRecord (reglas-de-negocio.md, "Validación de catálogos"): el jefe corrige materias, carreras y planes
-| de su departamento (CV1) y sus salones en el campus de la revisión (CV2) con la Action del módulo dueño,
-| mientras la revisión no está validada, sin cambiar lo que ata el registro al SII o a su departamento (CV-S3);
-| la primera corrección la pasa a en revisión (CV-S4). Los docentes se corrigen en Faculty.
+| de su departamento y el correo institucional de sus docentes (CV1) y sus salones en cualquier campus (CV2) con la
+| Action del módulo dueño, mientras la revisión no está validada, sin cambiar lo que ata el registro al SII o a su
+| departamento (CV-S3); la primera corrección la pasa a en revisión (CV-S4).
 */
 
 beforeEach(function () {
@@ -94,25 +94,29 @@ it('CV1: corrige un plan sin cambiar su clave ni su carrera', function () {
         ->name->toBe('Plan 2010');
 });
 
-it('CV2: corrige un salón del campus de la revisión sin cambiar su clave, su dueño ni su edificio', function () {
+it('CV2: corrige capacidad, tipo y edificio de un salón, también a uno de otro campus (el campus sigue al edificio), sin cambiar su clave ni su dueño (CV-S3)', function () {
     $review = cvReviewOf(Catalog::Rooms);
-    $building = Building::factory()->create(['campus_id' => $review->campus_id]);
-    $room = Room::factory()->for($building)->create(['code' => 'A-1', 'capacity' => 30, 'department_id' => $this->department->id]);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $room = Room::factory()->for(Building::factory()->create(['campus_id' => $c2->id]))->create(['code' => 'A-1', 'capacity' => 30, 'department_id' => $this->department->id]);
+    $elsewhere = Building::factory()->create(['campus_id' => $c1->id]);
 
     cvCorrect($review, $room, [
         'code' => 'B-1',
         'department_id' => $this->elsewhere->id,
-        'building_id' => Building::factory()->create(['campus_id' => $review->campus_id])->id,
+        'building_id' => $elsewhere->id,
         'campus_id' => Campus::factory()->create()->id,
         'capacity' => 40,
+        'type' => 'laboratorio',
     ]);
 
     expect($room->fresh())
         ->code->toBe('A-1')
         ->department_id->toBe($this->department->id)
-        ->building_id->toBe($building->id)
-        ->campus_id->toBe($review->campus_id)
-        ->capacity->toBe(40);
+        ->building_id->toBe($elsewhere->id)
+        ->campus_id->toBe($c1->id)
+        ->capacity->toBe(40)
+        ->type->value->toBe('laboratorio');
 });
 
 it('sin cambios no escribe ni pasa la revisión a en revisión', function () {
@@ -155,9 +159,9 @@ it('rechaza un registro que no es de la revisión', function (Closure $record) {
     'materia borrada' => fn () => tap(Subject::factory()->create(['department_id' => test()->department->id]))->delete(),
 ]);
 
-it('rechaza un salón del departamento en otro campus', function () {
+it('rechaza un salón de otro departamento', function () {
     $review = cvReviewOf(Catalog::Rooms);
-    $room = Room::factory()->create(['department_id' => $this->department->id]);
+    $room = Room::factory()->create(['department_id' => $this->elsewhere->id]);
 
     expect(cvCorrectErrors($review, $room, ['capacity' => 40]))->toBe(['record' => ['El registro no es de esta revisión.']])
         ->and($room->fresh()->capacity)->toBe(30);
@@ -172,16 +176,18 @@ it('CV-S2: rechaza corregir una revisión validada', function () {
         ->and($career->fresh()->name)->not->toBe('Otro');
 });
 
-it('los docentes no se corrigen aquí: se corrigen en Docentes', function () {
+it('CV1: de un docente solo corrige el correo institucional', function () {
     $review = cvReviewOf(Catalog::Teachers);
-    $teacher = Teacher::factory()->adscribedTo($this->department)->create();
+    $teacher = Teacher::factory()->adscribedTo($this->department)->create(['name' => 'Ana']);
 
-    expect(cvCorrectErrors($review, $teacher, ['name' => 'Otro']))->toBe(['record' => ['Los docentes se corrigen en Docentes.']]);
+    cvCorrect($review, $teacher, ['name' => 'Otro', 'institutional_email' => 'ana@cdjuarez.tecnm.mx', 'rfc' => 'XXXX000000XX0']);
+
+    expect($teacher->fresh())->name->toBe('Ana')->institutional_email->toBe('ana@cdjuarez.tecnm.mx');
 });
 
 it('si el módulo dueño rechaza la corrección, no queda nada', function () {
     $review = cvReviewOf(Catalog::Rooms);
-    $room = Room::factory()->for(Building::factory()->create(['campus_id' => $review->campus_id]))->create(['department_id' => $this->department->id]);
+    $room = Room::factory()->create(['department_id' => $this->department->id]);
 
     expect(cvCorrectErrors($review, $room, ['name' => 'Aula magna', 'capacity' => 0]))->toBe(['capacity' => ['La capacidad debe ser mayor que cero.']])
         ->and($room->fresh()->name)->toBeNull()

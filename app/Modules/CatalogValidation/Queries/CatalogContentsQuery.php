@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  * - Docentes: los que tienen una adscripción sin borrar al departamento, sea o no la principal.
  * - Materias y carreras: las del departamento.
  * - Planes: los de las carreras sin borrar del departamento.
- * - Salones: los del departamento en el campus de la revisión.
+ * - Salones: los del departamento en todos los campus (decisión 6, confirmada el 12 de noviembre de 2026).
  *
  * La clave es el RFC en los docentes y `code` en lo demás. Cuántos de esos registros ya marcó el jefe como revisados
  * (CV7) lo dicen progress() y progressOf(); las marcas de registros que ya no están en la revisión no cuentan (CV-S7).
@@ -77,8 +77,7 @@ final class CatalogContentsQuery
     }
 
     /**
-     * Si el registro es del catálogo, del departamento (y del campus, si son salones) de la revisión y no está
-     * borrado.
+     * Si el registro es del catálogo y del departamento de la revisión y no está borrado.
      */
     public function contains(CatalogReview $review, Model $record): bool
     {
@@ -110,7 +109,7 @@ final class CatalogContentsQuery
      */
     public function unreviewedCount(CatalogReview $review): int
     {
-        $query = $this->scoped($review->catalog, $review->department_id, $review->campus_id);
+        $query = $this->scoped($review->catalog, $review->department_id);
 
         return $query->whereNotIn($query->getModel()->qualifyColumn('id'), $review->marks()->select('record_id'))->count();
     }
@@ -127,7 +126,7 @@ final class CatalogContentsQuery
 
     /**
      * «N de M revisados» de varias revisiones, por id de revisión, con una consulta por catálogo y no una por revisión:
-     * cuenta los registros de cada una con una subconsulta ligada a su departamento (y campus, en salones).
+     * cuenta los registros de cada una con una subconsulta ligada a su departamento.
      *
      * @param  Collection<int, CatalogReview>  $reviews
      * @return array<string, array{reviewed: int, total: int}>
@@ -136,10 +135,9 @@ final class CatalogContentsQuery
     {
         $result = [];
         $department = new Expression('"catalog_reviews"."department_id"');
-        $campus = new Expression('"catalog_reviews"."campus_id"');
 
         foreach ($reviews->groupBy(fn (CatalogReview $review): string => $review->catalog->value) as $catalog => $group) {
-            $records = fn (): Builder => $this->scoped(Catalog::from($catalog), $department, $campus);
+            $records = fn (): Builder => $this->scoped(Catalog::from($catalog), $department);
             $model = $records()->getModel();
             $marks = CatalogReviewMark::query()->select('record_id')->whereColumn('catalog_review_marks.catalog_review_id', 'catalog_reviews.id');
 
@@ -176,25 +174,25 @@ final class CatalogContentsQuery
      */
     public function query(CatalogReview $review): Builder
     {
-        $query = $this->scoped($review->catalog, $review->department_id, $review->campus_id);
+        $query = $this->scoped($review->catalog, $review->department_id);
 
         return $query->orderBy($query->getModel()->qualifyColumn($this->codeColumn($review->catalog)));
     }
 
     /**
-     * Los registros de un catálogo de un departamento (y de un campus, en salones), sin orden. `$department` y `$campus`
-     * son un id o la columna de la revisión de una consulta exterior (progressOf).
+     * Los registros de un catálogo de un departamento, sin orden. `$department` es un id o la columna de la revisión de
+     * una consulta exterior (progressOf).
      *
      * @return Builder<Model>
      */
-    private function scoped(Catalog $catalog, string|Expression $department, string|Expression|null $campus): Builder
+    private function scoped(Catalog $catalog, string|Expression $department): Builder
     {
         return match ($catalog) {
             Catalog::Teachers => Teacher::query()->whereHas('adscriptions', fn (Builder $adscription) => $adscription->where('department_id', $department)),
             Catalog::Subjects => Subject::query()->where('department_id', $department),
             Catalog::Careers => Career::query()->where('department_id', $department),
             Catalog::StudyPlans => StudyPlan::query()->whereIn('career_id', Career::query()->where('department_id', $department)->select('id')),
-            Catalog::Rooms => Room::query()->where('department_id', $department)->where('campus_id', $campus),
+            Catalog::Rooms => Room::query()->where('department_id', $department),
         };
     }
 

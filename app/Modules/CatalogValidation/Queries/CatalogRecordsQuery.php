@@ -8,6 +8,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
+use App\Modules\Faculty\Models\TeacherDepartment;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -36,7 +37,7 @@ final class CatalogRecordsQuery
         $model = $query->getModel();
 
         match ($review->catalog) {
-            Catalog::Rooms => $query->with('building'),
+            Catalog::Rooms => $query->with(['building', 'campus']),
             Catalog::StudyPlans => $query->with('career'),
             default => null,
         };
@@ -91,6 +92,23 @@ final class CatalogRecordsQuery
     public function reviewedIds(CatalogReview $review, array $ids): array
     {
         return array_fill_keys($review->marks()->whereIn('record_id', $ids)->pluck('record_id')->all(), true);
+    }
+
+    /**
+     * Las adscripciones sin borrar de los docentes dados al departamento de la revisión, por id de docente: con ellas
+     * TeacherPolicy::discharge decide quién da de baja a cada uno (CV8, CV-S8) y DischargeReviewTeacher lo da de baja.
+     *
+     * @param  list<string>  $teacherIds
+     * @return array<string, TeacherDepartment>
+     */
+    public function teacherAdscriptions(CatalogReview $review, array $teacherIds): array
+    {
+        return TeacherDepartment::query()
+            ->where('department_id', $review->department_id)
+            ->whereIn('teacher_id', $teacherIds)
+            ->get()
+            ->keyBy('teacher_id')
+            ->all();
     }
 
     /**

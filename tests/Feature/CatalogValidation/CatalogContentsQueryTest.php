@@ -18,8 +18,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 /*
 | CatalogContentsQuery: los registros que revisa el jefe en cada catálogo de su departamento (docs/dominio/
 | modelo-de-datos.md, "CatalogValidation"), sin los borrados: docentes con una adscripción sin borrar al
-| departamento, materias y carreras del departamento, planes de sus carreras y salones del departamento en el
-| campus de la revisión. La foto de una validación son los activos.
+| departamento, materias y carreras del departamento, planes de sus carreras y salones del departamento en todos los
+| campus (decisión 6, confirmada el 12 de noviembre de 2026). La foto de una validación son los activos.
 */
 
 beforeEach(function () {
@@ -27,9 +27,9 @@ beforeEach(function () {
     $this->other = Department::factory()->create();
 });
 
-function contentsReview(Catalog $catalog, Department $department, ?Campus $campus = null): CatalogReview
+function contentsReview(Catalog $catalog, Department $department): CatalogReview
 {
-    $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms($campus) : CatalogReview::factory()->general($catalog);
+    $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog);
 
     return $factory->create(['department_id' => $department->id]);
 }
@@ -88,7 +88,7 @@ it('lista los docentes con una adscripción sin borrar al departamento, aunque n
         ->and($records[1]['name'])->toBe('Ana');
 });
 
-it('lista los salones del departamento en el campus de la revisión', function () {
+it('lista los salones del departamento en todos los campus (decisión 6)', function () {
     $campus = Campus::factory()->create();
     roomIn($campus, ['code' => 'A-2', 'department_id' => $this->department->id]);
     roomIn($campus, ['code' => 'A-1', 'department_id' => $this->department->id, 'is_active' => false]);
@@ -96,7 +96,7 @@ it('lista los salones del departamento en el campus de la revisión', function (
     roomIn($campus, ['code' => 'A-4']);
     roomIn(Campus::factory()->create(), ['code' => 'A-5', 'department_id' => $this->department->id]);
 
-    expect(contentsCodes(contentsReview(Catalog::Rooms, $this->department, $campus)))->toBe(['A-1', 'A-2']);
+    expect(contentsCodes(contentsReview(Catalog::Rooms, $this->department)))->toBe(['A-1', 'A-2', 'A-5']);
 });
 
 it('la foto lleva solo los activos, con id, clave y nombre', function () {
@@ -148,12 +148,12 @@ describe('cuántos van revisados (CV7)', function () {
             ->and($query->unreviewedCount($review))->toBe(1);
     });
 
-    it('cuenta varias revisiones de cada catálogo a la vez, cada una con su departamento y su campus', function () {
+    it('cuenta varias revisiones de cada catálogo a la vez, cada una con su departamento', function () {
         $campus = Campus::factory()->create();
         $teachers = contentsReview(Catalog::Teachers, $this->department);
         $otherTeachers = contentsReview(Catalog::Teachers, $this->other);
         $plans = contentsReview(Catalog::StudyPlans, $this->department);
-        $rooms = contentsReview(Catalog::Rooms, $this->department, $campus);
+        $rooms = contentsReview(Catalog::Rooms, $this->department);
         $teacher = Teacher::factory()->adscribedTo($this->department)->adscribedTo($this->other, primary: false)->create();
         Teacher::factory()->adscribedTo($this->department)->create();
         $plan = StudyPlan::factory()->for(Career::factory()->create(['department_id' => $this->department->id]))->create();
@@ -167,7 +167,7 @@ describe('cuántos van revisados (CV7)', function () {
             $teachers->id => ['reviewed' => 1, 'total' => 2],
             $otherTeachers->id => ['reviewed' => 0, 'total' => 1],
             $plans->id => ['reviewed' => 1, 'total' => 1],
-            $rooms->id => ['reviewed' => 1, 'total' => 1],
+            $rooms->id => ['reviewed' => 1, 'total' => 2],
         ]);
     });
 

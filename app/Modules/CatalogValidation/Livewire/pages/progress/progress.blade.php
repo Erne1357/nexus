@@ -80,20 +80,16 @@
                     <p class="font-semibold">Ningún departamento coincide con el filtro.</p>
                 </div>
             @else
-                @php($generalColumns = $board['general_columns'])
-                @php($roomColumns = $board['room_columns'])
+                @php($columns = $board['columns'])
                 <div class="hidden overflow-x-auto lg:block" data-testid="progress-scroll">
                     <table class="w-full min-w-[56rem] text-sm">
                         <caption class="sr-only">Estado de cada catálogo por departamento</caption>
                         <thead class="bg-base-200 text-start">
                             <tr class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
                                 <th scope="col" class="sticky left-0 z-10 w-52 min-w-52 max-w-52 bg-base-200 px-4 py-2.5 text-start font-medium">Departamento</th>
-                                @foreach ($generalColumns as $column)
-                                    <th scope="col" class="px-2 py-2.5 text-start font-medium">{{ $column['catalog']->label() }}</th>
+                                @foreach ($columns as $column)
+                                    <th scope="col" class="px-2 py-2.5 text-start font-medium" data-testid="column-{{ $column['key'] }}">{{ $column['catalog']->label() }}</th>
                                 @endforeach
-                                @if ($roomColumns !== [])
-                                    <th scope="col" class="whitespace-nowrap px-1.5 py-2.5 text-start font-medium" data-testid="column-rooms">Salones</th>
-                                @endif
                                 <th scope="col" class="whitespace-nowrap px-1.5 py-2.5 text-start font-medium">Validados</th>
                                 <th scope="col" class="px-2 py-2.5 text-start font-medium">Obs.</th>
                                 <th scope="col" class="w-24 px-1.5 py-2.5"><span class="sr-only">Acciones</span></th>
@@ -106,16 +102,9 @@
                                     <td class="sticky left-0 z-10 w-52 min-w-52 max-w-52 bg-base-100 px-4 py-2.5">
                                         @include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses])
                                     </td>
-                                    @foreach ($generalColumns as $column)
+                                    @foreach ($columns as $column)
                                         <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']]])</td>
                                     @endforeach
-                                    @if ($roomColumns !== [])
-                                        <td class="px-2 py-2.5"><div class="flex gap-1">
-                                            @foreach ($roomColumns as $column)
-                                                <span data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']], 'roomCampus' => $column['campus']])</span>
-                                            @endforeach
-                                        </div></td>
-                                    @endif
                                     <td class="px-2 py-2.5 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></td>
                                     <td class="px-2 py-2.5">@include('catalog-validation::progress.flags', ['row' => $row])</td>
                                     <td class="px-2 py-2">
@@ -129,21 +118,13 @@
                         <tfoot class="border-t border-base-300 bg-base-200/60" data-testid="progress-totals">
                             <tr class="align-top">
                                 <th scope="row" class="sticky left-0 z-10 bg-base-200 px-4 py-2.5 text-start font-semibold">Total del Tec<span class="block text-xs font-normal text-neutral">{{ count($board['rows']) }} {{ count($board['rows']) === 1 ? 'departamento' : 'departamentos' }}</span></th>
-                                @foreach ($generalColumns as $column)
+                                @foreach ($columns as $column)
                                     @php($totals = $board['totals'][$column['key']])
                                     <td class="px-2 py-2.5" data-testid="total-{{ $column['key'] }}">
                                         <span class="whitespace-nowrap tabular-nums">{{ $totals['validated'] }} de {{ $totals['total'] }}</span>
                                         <i class="mt-1 block h-1 overflow-hidden rounded-full bg-base-300" aria-hidden="true"><b class="block h-full bg-success" style="width: {{ $totals['total'] === 0 ? 0 : $totals['validated'] / $totals['total'] * 100 }}%"></b></i>
                                     </td>
                                 @endforeach
-                                @if ($roomColumns !== [])
-                                    <td class="px-2 py-2.5">
-                                        @foreach ($roomColumns as $column)
-                                            @php($totals = $board['totals'][$column['key']])
-                                            <p class="whitespace-nowrap tabular-nums" data-testid="total-{{ $column['key'] }}"><span class="font-mono text-xs text-neutral">{{ $column['campus']->code }}</span> {{ $totals['validated'] }} de {{ $totals['total'] }}</p>
-                                        @endforeach
-                                    </td>
-                                @endif
                                 <td class="px-2 py-2.5 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ array_sum(array_column($board['rows'], 'validated')) }} de {{ array_sum(array_column($board['rows'], 'total')) }}</span></td>
                                 <td class="px-2 py-2.5 font-mono font-semibold tabular-nums">{{ array_sum(array_column($board['rows'], 'open_flags')) }}</td>
                                 <td></td>
@@ -165,7 +146,7 @@
                             @else
                                 <dl class="grid grid-cols-[7.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
                                     @foreach ($row['pending_columns'] as $column)
-                                        <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $column['catalog']->label() }}@if ($column['campus']) <span class="font-mono normal-case tracking-normal">{{ $column['campus']->code }}</span>@endif</dt>
+                                        <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $column['catalog']->label() }}</dt>
                                         <dd>@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']], 'showDate' => true])</dd>
                                     @endforeach
                                 </dl>
@@ -186,9 +167,6 @@
                         <span class="inline-flex items-center gap-1"><x-icon name="o-check-circle" class="h-4 w-4" aria-hidden="true" />Validado</span>
                         <span class="inline-flex items-center gap-1"><x-icon name="o-eye" class="h-4 w-4" aria-hidden="true" />En revisión</span>
                         <span class="inline-flex items-center gap-1"><x-icon name="o-clock" class="h-4 w-4" aria-hidden="true" />Pendiente</span>
-                        @if ($roomColumns !== [])
-                            <span>Salones: {{ collect($roomColumns)->map(fn (array $column): string => $column['campus']->code.' '.$column['campus']->name)->implode(' · ') }}</span>
-                        @endif
                     </p>
                 </div>
             @endif

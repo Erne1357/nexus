@@ -129,6 +129,37 @@ final class TeacherPolicy
     }
 
     /**
+     * «Dar de baja de <depto>» al validar el catálogo de docentes (CV8, confirmado el 12 de noviembre de 2026): quien
+     * puede quitarlo de ese departamento (removeAdscription), que con la última adscripción además lo da de baja. A un
+     * docente cuyo usuario ocupa un puesto vigente o por empezar (un jefe, un coordinador, la Subdirección…) solo lo
+     * dan de baja quienes dan de baja docentes, el admin y la Subdirección (CV-S8, supuesto por confirmar). Se pregunta con
+     * `can('discharge', [Teacher::class, $adscription])`.
+     */
+    public function discharge(User $user, TeacherDepartment $adscription): bool
+    {
+        if (! $this->removeAdscription($user, $adscription)) {
+            return false;
+        }
+
+        $teacherUserId = Teacher::withTrashed()->whereKey($adscription->teacher_id)->value('user_id');
+
+        return $teacherUserId === null
+            || ! app(RoleAssignmentRules::class)->holdsStaffRole($teacherUserId)
+            || $this->actor($user)->allows(FacultyPermission::TeacherDeactivate);
+    }
+
+    /**
+     * Agregar a un departamento a un docente que ya existe, activo o dado de baja (que se reactiva), al validar el
+     * catálogo de docentes (CV-S9, supuesto por confirmar): quien da de alta docentes en ese departamento (`create` con
+     * destino). Fuera de la validación, adscribir a uno que ya existe sigue siendo de `adscribe` (S9). Se pregunta con
+     * `can('adscribeToDepartment', [Teacher::class, $department])`.
+     */
+    public function adscribeToDepartment(User $user, Department $department): bool
+    {
+        return $this->create($user, $department);
+    }
+
+    /**
      * «Hacer principal»: la adscripción es de un departamento que cubre (supuesto por confirmar). Se pregunta con
      * `can('setPrimaryAdscription', [Teacher::class, $adscription])`.
      */

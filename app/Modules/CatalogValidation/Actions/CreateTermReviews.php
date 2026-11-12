@@ -10,8 +10,8 @@ use App\Modules\Core\Models\Term;
 
 /**
  * Crea las revisiones de catálogo que falten al abrir un periodo en un campus (ver docs/dominio/reglas-de-negocio.md, Periodo y calendario, supuesto por
- * confirmar): por cada departamento activo y sin borrar, las cuatro generales del periodo, sin campus, y la
- * de salones de ese campus si su perfil usa salones (D2, confirmado el 1 de noviembre de 2026). Nacen
+ * confirmar): por cada departamento activo y sin borrar, las del periodo, todas sin campus; la de salones, una para
+ * todos los campus, si el perfil de este campus usa salones (decisión 6, confirmada el 12 de noviembre de 2026). Nacen
  * pendientes. Devuelve cuántas creó: 0 si no faltaba ninguna.
  *
  * Un solo insert que ignora las que ya existen (la unicidad, con el campus nulo como un valor), así que es
@@ -25,11 +25,7 @@ final class CreateTermReviews
 
     public function handle(Term $term, Campus $campus): int
     {
-        $catalogs = Catalog::general();
-
-        if ($campus->profile->usesRooms) {
-            $catalogs[] = Catalog::Rooms;
-        }
+        $catalogs = Catalog::requiredFor($campus->profile->usesRooms);
 
         $now = now();
         $rows = [];
@@ -38,7 +34,7 @@ final class CreateTermReviews
             foreach ($catalogs as $catalog) {
                 $rows[] = [
                     'term_id' => $term->getKey(),
-                    'campus_id' => $catalog->isGeneral() ? null : $campus->getKey(),
+                    'campus_id' => null,
                     'department_id' => $departmentId,
                     'catalog' => $catalog->value,
                     'created_at' => $now,

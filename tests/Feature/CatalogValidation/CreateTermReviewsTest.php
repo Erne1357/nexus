@@ -12,8 +12,8 @@ use App\Modules\Core\Models\Term;
 
 /*
 | Al abrir un periodo en un campus, CatalogValidation crea las revisiones que falten (S-A6, supuesto por
-| confirmar): las cuatro generales de cada departamento activo, una vez por periodo para todo el Tec, y la
-| de salones de cada departamento activo en ese campus si su perfil usa salones (D2, confirmado el 1 de
+| confirmar): las cinco de cada departamento activo, una vez por periodo para todo el Tec, sin campus; la de salones
+| solo si el perfil del campus que se abre usa salones, y es una para todos los campus (decisión 6, confirmada el 12 de
 | noviembre de 2026). Todas nacen pendientes.
 */
 
@@ -39,7 +39,7 @@ function campusWithoutRooms(string $code): Campus
     return Campus::factory()->create(['code' => $code, 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
 }
 
-it('crea las cuatro generales y la de salones del campus por cada departamento activo, pendientes', function () {
+it('crea las cinco revisiones de cada departamento activo, sin campus, pendientes', function () {
     $term = Term::factory()->create();
     $c2 = Campus::factory()->create(['code' => 'C2']);
     Department::factory()->create(['code' => 'D1']);
@@ -47,8 +47,8 @@ it('crea las cuatro generales y la de salones del campus por cada departamento a
 
     expect(createTermReviews($term, $c2))->toBe(10)
         ->and(reviewKeysOf($term))->toBe([
-            'D1 careers -', 'D1 rooms C2', 'D1 study_plans -', 'D1 subjects -', 'D1 teachers -',
-            'D2 careers -', 'D2 rooms C2', 'D2 study_plans -', 'D2 subjects -', 'D2 teachers -',
+            'D1 careers -', 'D1 rooms -', 'D1 study_plans -', 'D1 subjects -', 'D1 teachers -',
+            'D2 careers -', 'D2 rooms -', 'D2 study_plans -', 'D2 subjects -', 'D2 teachers -',
         ])
         ->and(CatalogReview::query()->pluck('status')->unique()->all())->toBe([ReviewStatus::Pending]);
 });
@@ -77,13 +77,22 @@ it('es idempotente: la segunda vez no crea nada; un departamento nuevo recibe so
         ->and(CatalogReview::count())->toBe(10);
 });
 
-it('en un segundo campus crea solo la de salones de ese campus: las generales ya existen', function () {
+it('en un segundo campus con salones no crea otra de salones: es una por departamento y periodo', function () {
     $term = Term::factory()->create();
     Department::factory()->create(['code' => 'D1']);
     createTermReviews($term, Campus::factory()->create(['code' => 'C2']));
 
-    expect(createTermReviews($term, Campus::factory()->create(['code' => 'C1'])))->toBe(1)
-        ->and(reviewKeysOf($term))->toBe(['D1 careers -', 'D1 rooms C1', 'D1 rooms C2', 'D1 study_plans -', 'D1 subjects -', 'D1 teachers -']);
+    expect(createTermReviews($term, Campus::factory()->create(['code' => 'C1'])))->toBe(0)
+        ->and(reviewKeysOf($term))->toBe(['D1 careers -', 'D1 rooms -', 'D1 study_plans -', 'D1 subjects -', 'D1 teachers -']);
+});
+
+it('la de salones se crea con el primer campus abierto que usa salones', function () {
+    $term = Term::factory()->create();
+    Department::factory()->create(['code' => 'D1']);
+    createTermReviews($term, campusWithoutRooms('EAD'));
+
+    expect(createTermReviews($term, Campus::factory()->create(['code' => 'C2'])))->toBe(1)
+        ->and(reviewKeysOf($term))->toContain('D1 rooms -');
 });
 
 it('en un campus cuyo perfil no usa salones crea solo las generales', function () {

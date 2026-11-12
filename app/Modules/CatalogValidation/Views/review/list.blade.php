@@ -6,6 +6,9 @@
     Validar vive en el renglón); la tabla en una superficie con filete y, debajo de 768 px, renglones apilados que no
     repiten los data-testid. «Editar» abre el drawer (catalog-validation::review.drawer); las bajas, el suyo.
 
+    En docentes, quien corrige agrega por su RFC a un docente que ya existe (CV-S9) y da de baja desde el menú de la fila
+    (CV8).
+
     Marcas de revisado (CV7): el renglón dice cuántos van y por qué Validar no se activa; cada fila lleva su interruptor
     «Revisado» y, a quien marca, una casilla para elegirla; «Marcar como revisados» marca los elegidos juntos. La
     selección vive en el navegador (`wire:model` sin `.live`) hasta ese botón.
@@ -52,6 +55,13 @@
         <x-select wire:model.live="flagFilter" aria-label="Observación" :options="$flagFilters" placeholder="Observación" />
         <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
     </x-core::catalog-toolbar>
+
+    @if ($isTeachers && $current['canEdit'])
+        <form wire:submit="addTeacher" class="mb-2 flex flex-wrap items-start gap-2" data-testid="add-teacher">
+            <x-input wire:model="newTeacherRfc" placeholder="RFC de un docente que ya existe" aria-label="RFC del docente que se agrega" class="font-mono" />
+            <x-button type="submit" label="Agregar a {{ $review->department?->code }}" icon="o-user-plus" class="btn-outline" spinner="addTeacher" />
+        </form>
+    @endif
 
     @if ($current['canMark'])
         <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm" x-data data-testid="mark-bar">
@@ -119,6 +129,10 @@
                 <span class="block text-end font-mono tabular-nums">{{ $record->capacity }}</span>
             @endscope
 
+            @scope('cell_campus', $record)
+                <span class="font-mono" title="{{ $record->campus?->name }}">{{ $record->campus?->code }}</span>
+            @endscope
+
             @scope('cell_building', $record)
                 <span class="font-mono" title="{{ $record->building?->name }}">{{ $record->building?->code }}</span>
             @endscope
@@ -162,8 +176,8 @@
                 <x-core::status-badge :tone="$record->is_active ? 'success' : 'neutral'" :label="$record->is_active ? 'Activo' : 'Inactivo'" />
             @endscope
 
-            @scope('actions', $record, $current)
-                @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => true])
+            @scope('actions', $record, $current, $dischargeReasons)
+                @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => true, 'dischargeReasons' => $dischargeReasons])
             @endscope
 
             <x-slot:empty>
@@ -191,7 +205,7 @@
                                 <span class="font-mono tabular-nums">{{ $record->theory_hours }}-{{ $record->practice_hours }}-{{ $record->credits }}</span>
                                 @break
                             @case (\App\Modules\CatalogValidation\Enums\Catalog::Rooms)
-                                <span class="font-mono">{{ $record->building?->code }}</span> · <span class="font-mono tabular-nums">{{ $record->capacity }}</span> lugares · {{ $record->type->label() }}
+                                <span class="font-mono">{{ $record->campus?->code }} · {{ $record->building?->code }}</span> · <span class="font-mono tabular-nums">{{ $record->capacity }}</span> lugares · {{ $record->type->label() }}
                                 @break
                             @case (\App\Modules\CatalogValidation\Enums\Catalog::Teachers)
                                 @php($ready = $readiness[$record->id] ?? null)
@@ -213,7 +227,7 @@
                     @endif
 
                     @include('catalog-validation::review.reviewed-toggle', ['record' => $record, 'card' => $current, 'reviewedMap' => $reviewedMap, 'inTable' => false])
-                    @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => false])
+                    @include('catalog-validation::review.row-actions', ['record' => $record, 'card' => $current, 'inTable' => false, 'dischargeReasons' => $dischargeReasons])
                 </li>
             @endforeach
 
