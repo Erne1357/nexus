@@ -4,6 +4,7 @@ namespace App\Modules\Students\Database\Seeders;
 
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Students\Actions\RefreshStudentProgress;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -64,6 +65,8 @@ class StudentsDemoSeeder extends Seeder
             throw new RuntimeException('Faltan campus de '.implode(', ', array_keys($studentsPerOffering)).': corre antes CampusSeeder.');
         }
 
+        $presencialId = Modality::query()->where('code', 'PRES')->value('id') ?? throw new RuntimeException('Falta la modalidad PRES: corre las migraciones.');
+
         $random = new Randomizer(new Mt19937($seed));
         $simulator = new TrajectorySimulator($random);
         $catalog = $this->catalog();
@@ -117,6 +120,7 @@ class StudentsDemoSeeder extends Seeder
                             'career_id' => $offering->career_id,
                             'study_plan_id' => $blueprint['plan']->id,
                             'campus_id' => $campuses[$campusCode],
+                            'modality_id' => $presencialId,
                             'current_semester' => $blueprint['semester'],
                             'status' => $blueprint['status'],
                             'admitted_term_id' => isset($blueprint['admitted']) ? ($termIds[$blueprint['admitted']] ?? null) : null,
