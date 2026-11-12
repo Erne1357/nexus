@@ -34,11 +34,26 @@
                     @unless ($person->is_active)
                         <x-core::status-badge tone="neutral" label="Usuario inactivo" />
                     @endunless
+                    <x-core::status-badge :tone="$access->tone()" :label="$access->label()" data-testid="user-access" />
                 </p>
             </div>
         </div>
 
         <div class="flex flex-col items-end gap-1 max-md:w-full max-md:items-stretch">
+            @if ($canGrantAccess && ! $access->hasPassword() && $person->is_active)
+                <x-button
+                    label="Dar acceso"
+                    icon="o-key"
+                    class="btn-outline max-md:h-11"
+                    wire:click="grantAccess"
+                    x-confirm="Entra con la contraseña por defecto y tendrá que cambiarla al entrar."
+                    data-confirm-title="¿Dar acceso a {{ $person->username }}?"
+                    data-confirm-button="Dar acceso"
+                    data-confirm-tone="primary"
+                    spinner="grantAccess"
+                    data-testid="grant-access"
+                />
+            @endif
             @if ($canAppoint)
                 <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" wire:click="openAppoint" spinner="openAppoint" data-testid="appoint" />
             @else

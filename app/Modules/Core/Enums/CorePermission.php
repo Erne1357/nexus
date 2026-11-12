@@ -7,7 +7,8 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
- * Permisos del módulo Core: campus, periodos, nombramientos y organigrama (los de nombramientos y organigrama son solo del admin). La clave es `core.<recurso>.<accion>`.
+ * Permisos del módulo Core: campus, periodos, nombramientos, organigrama y acceso de usuarios (los de nombramientos,
+ * organigrama y acceso son solo del admin). La clave es `core.<recurso>.<accion>`.
  */
 enum CorePermission: string implements Permission
 {
@@ -30,6 +31,7 @@ enum CorePermission: string implements Permission
     case OrgUnitUpdate = 'core.org_unit.update';
     case OrgUnitMove = 'core.org_unit.move';
     case OrgUnitDeactivate = 'core.org_unit.deactivate';
+    case UserGrantAccess = 'core.user.grant_access';
 
     public function label(): string
     {
@@ -53,6 +55,7 @@ enum CorePermission: string implements Permission
             self::OrgUnitUpdate => 'Editar unidades del organigrama',
             self::OrgUnitMove => 'Mover unidades del organigrama',
             self::OrgUnitDeactivate => 'Desactivar y activar unidades del organigrama',
+            self::UserGrantAccess => 'Dar acceso a un usuario sin contraseña',
         };
     }
 
