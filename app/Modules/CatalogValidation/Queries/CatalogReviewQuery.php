@@ -33,12 +33,12 @@ final class CatalogReviewQuery
      * impide que otra sesión des-valide un catálogo entre la lectura y el cambio de estado. Fuera de una
      * transacción no tiene efecto.
      *
-     * Con `$openedOnly`, solo los que tienen revisión abierta en el periodo (CV9): el aviso a los jefes no los manda a
-     * validar lo que el admin no abrió. HC-14, sin él, no cambia.
+     * Solo cuentan los catálogos que el admin abrió en el periodo, es decir, que tienen revisiones en él (CV9, HC-14,
+     * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
      *
      * @return list<Catalog>
      */
-    public function pendingFor(Term|string $term, Campus $campus, Department|string $department, bool $lock = false, bool $openedOnly = false): array
+    public function pendingFor(Term|string $term, Campus $campus, Department|string $department, bool $lock = false): array
     {
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
@@ -54,10 +54,10 @@ final class CatalogReviewQuery
             ->pluck('catalog')
             ->all();
 
-        $opened = $openedOnly ? array_map(fn (Catalog $catalog): string => $catalog->value, $this->openedCatalogs($termId)) : null;
+        $opened = array_map(fn (Catalog $catalog): string => $catalog->value, $this->openedCatalogs($termId));
 
         return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)
-            && ($opened === null || in_array($catalog->value, $opened, true))));
+            && in_array($catalog->value, $opened, true)));
     }
 
     /**

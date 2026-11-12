@@ -355,6 +355,9 @@ it('da la carga del departamento en el campus y bloquea aceptar sin ella', funct
 it('HC-14: avisa de los catálogos del departamento sin validar y bloquea aceptar', function () {
     AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
     CatalogReview::factory()->general(Catalog::Teachers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
+    foreach ([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
+        CatalogReview::factory()->general($catalog)->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
+    }
 
     $inbox = inboxOf();
 
@@ -364,6 +367,7 @@ it('HC-14: avisa de los catálogos del departamento sin validar y bloquea acepta
 
 it('HC-14: en un campus que usa salones también avisa de los salones', function () {
     $this->campus->update(['settings' => CampusProfile::DEFAULTS]);
+    CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
 
     expect(inboxOf()->pendingCatalogs)->toContain(Catalog::Rooms);
 });

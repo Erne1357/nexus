@@ -59,7 +59,7 @@ final class NotifyPendingReviews
         $notified = new Collection;
 
         foreach ($departments as $department) {
-            $pending = $this->reviews->pendingFor($term, $campus, $department, openedOnly: true);
+            $pending = $this->reviews->pendingFor($term, $campus, $department);
 
             if ($pending === []) {
                 continue;

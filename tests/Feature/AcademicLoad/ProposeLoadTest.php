@@ -31,6 +31,19 @@ function loadWith(?Campus $campus = null): AcademicLoad
     ]);
 }
 
+/**
+ * Deja abiertos todos los catálogos del periodo de la carga (con revisiones pendientes de otro departamento): sin esto
+ * ninguno se exige (HC-14, CV9).
+ */
+function openAllCatalogs(AcademicLoad $load): void
+{
+    $other = Department::factory()->create();
+
+    foreach (Catalog::cases() as $catalog) {
+        CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $load->term_id, 'department_id' => $other->id]);
+    }
+}
+
 function validateGenerals(AcademicLoad $load, array $except = []): void
 {
     foreach (Catalog::general() as $catalog) {
@@ -110,8 +123,15 @@ it('HC-14: bloquea y nombra el catálogo general pendiente', function () {
         ->and($load->transitions()->count())->toBe(0);
 });
 
-it('HC-14: bloquea si las revisiones no existen y lista todos los catálogos', function () {
-    expect(blockedReason(loadWith()))->toBe('HC-14: faltan por validar los catálogos de Docentes, Salones, Materias, Planes de estudio y Carreras.');
+it('HC-14 y CV9: sin ningún catálogo abierto en el periodo no bloquea', function () {
+    expect(collect(blockedReasons(loadWith()))->contains(fn (string $reason): bool => str_starts_with($reason, 'HC-14')))->toBeFalse();
+});
+
+it('HC-14: bloquea si las revisiones del departamento no existen en un periodo con los catálogos abiertos y lista todos', function () {
+    $load = loadWith();
+    openAllCatalogs($load);
+
+    expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Docentes, Salones, Materias, Planes de estudio y Carreras.');
 });
 
 it('HC-14: bloquea si los salones están pendientes', function () {
@@ -212,6 +232,7 @@ it('HC-20: cuenta la parte aceptada aunque la propuesta esté regresada por otro
 
 it('HC-14 y HC-20: sin catálogos ni partes aceptadas da los dos motivos', function () {
     $load = loadWith();
+    openAllCatalogs($load);
 
     expect(blockedReasons($load))->toBe([
         'HC-14: faltan por validar los catálogos de Docentes, Salones, Materias, Planes de estudio y Carreras.',
