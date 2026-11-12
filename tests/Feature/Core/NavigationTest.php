@@ -5,6 +5,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -497,11 +498,12 @@ describe('iconos de área', function () {
         expect(areaIconIn($page, 'datos')->getAttribute('href'))->toBe(route('imports.wizard'));
     });
 
-    it('al cambiar el campus o el periodo activo, olvida las páginas que visitaste', function () {
+    it('al cambiar el periodo activo, olvida las páginas que visitaste', function () {
+        $term = Term::factory()->create();
         $this->get(route('core.campuses', ['search' => 'norte']))->assertOk();
 
         Livewire::test('core::components.context-switcher')
-            ->set('campusId', $this->campus->id)
+            ->set('termId', $term->id)
             ->call('apply')
             ->assertHasNoErrors();
 

@@ -41,15 +41,22 @@ final class ArchiveSiiExport
     private const int CHUNK = 5000;
 
     /**
-     * Columnas que nunca se guardan, por archivo. El NIP del alumno es su contraseña del SII; la foto y la firma son la
+     * Columnas que nunca se guardan, por archivo. El NIP del alumno y la `contrasena` de `acceso` (un MD5 sin sal) son contraseñas del SII; la foto y la firma son la
      * imagen de la persona. Ninguna sirve para rastrear un dato de Nexus y no deben copiarse fuera del SII. El lector las
      * descarta en cuanto lee el renglón (`SiiCsvReader::rows()` con columnas).
      *
      * @var array<string, list<string>>
      */
     public const array EXCLUDED = [
-        SiiFile::Docentes->value => ['foto', 'firma'],
+        SiiFile::Docentes->value => [
+            'foto', 'firma',
+            'pigmentacion', 'pelo', 'frente', 'cejas', 'ojos', 'nariz', 'boca', 'estaturamts', 'pesokg', 'senas_visibles',
+            'padre', 'madre', 'conyuge', 'hijos',
+            'num_cartilla_smn', 'ano_clase',
+            'domicilio_empleado', 'colonia_empleado', 'codigo_postal_empleado',
+        ],
         SiiFile::Alumnos->value => ['foto', 'firma', 'nip'],
+        SiiFile::Acceso->value => ['contrasena'],
     ];
 
     /**

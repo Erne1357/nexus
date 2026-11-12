@@ -125,6 +125,18 @@ return [
     */
     'ip_attempts_per_minute' => (int) env('LOGIN_IP_ATTEMPTS_PER_MINUTE', 60),
 
+    /*
+    | Tope de solicitudes por minuto de «¿Olvidaste tu contraseña?» desde una sola IP, sin importar el usuario (AC-17,
+    | supuesto por confirmar). Se suma al límite por usuario del limitador `password-reset-link` (FortifyServiceProvider).
+    */
+    'password_reset_ip_requests_per_minute' => (int) env('PASSWORD_RESET_IP_REQUESTS_PER_MINUTE', 10),
+
+    /*
+    | Tope de intentos de acceso por minuto desde una misma red (/24 en IPv4, /64 en IPv6), sin importar el usuario ni la
+    | IP (AC-14): contra repartir los intentos entre las IP de una red. Supuesto por confirmar.
+    */
+    'network_attempts_per_minute' => (int) env('LOGIN_NETWORK_ATTEMPTS_PER_MINUTE', 120),
+
     'limiters' => [
         'login' => 'login',
     ],

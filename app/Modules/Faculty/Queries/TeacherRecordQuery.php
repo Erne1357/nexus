@@ -5,6 +5,7 @@ namespace App\Modules\Faculty\Queries;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\AssignmentStatus;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -49,6 +50,11 @@ final class TeacherRecordQuery
         $termDay = $term?->starts_on->toDateString();
         $order = ['vigente' => 0, 'por_empezar' => 1, 'vencida' => 2];
         $positions = $teacher->positions()->get();
+        $user = $teacher->user_id === null ? null : $teacher->user()
+            ->select(['id', 'username', 'is_active', 'must_change_password', 'access_invited_at'])
+            ->selectRaw('password is not null as has_password')
+            ->first();
+        $access = $user === null ? null : UserAccess::resolve((bool) $user->has_password, $user->access_invited_at !== null, $user->must_change_password);
         $status = $positions->mapWithKeys(fn (TeacherPosition $position): array => [$position->id => $this->status($position, $today)])->all();
 
         $positions = $positions
@@ -76,7 +82,8 @@ final class TeacherRecordQuery
                 $term->starts_on,
             ),
             term: $term,
-            user: $teacher->user_id === null ? null : $teacher->user()->first(['id', 'username', 'is_active', 'must_change_password']),
+            user: $user,
+            access: $access,
         );
     }
 

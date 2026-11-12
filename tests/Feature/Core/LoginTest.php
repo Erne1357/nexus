@@ -2,11 +2,14 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Http\Controllers\ForgotPasswordPage;
+use App\Modules\Core\Http\Controllers\ResetPasswordPage;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
+use Laravel\Fortify\Features;
 
 /*
 | Login por username con Fortify (ADR-0004). Los usuarios de la factory ya cambiaron su
@@ -100,6 +103,29 @@ it('compara la contraseña aunque el usuario esté inactivo', function () {
     $this->post('/login', ['username' => '19110001', 'password' => 'password']);
 
     expect($compared->getArrayCopy())->toBe([$inactive->password]);
+});
+
+it('AC-01: no deja entrar a un usuario sin contraseña y responde igual que a una credencial incorrecta', function () {
+    User::factory()->create(['username' => '19110001', 'password' => null, 'must_change_password' => true]);
+
+    $this->from('/login')
+        ->post('/login', ['username' => '19110001', 'password' => 'cualquiera'])
+        ->assertRedirect('/login')
+        ->assertSessionHasErrors(['username' => __('auth.failed')]);
+
+    $this->assertGuest();
+});
+
+it('AC-01: a un usuario sin contraseña le compara la contraseña contra el hash señuelo', function () {
+    $existing = User::factory()->create();
+    User::factory()->create(['username' => '19110001', 'password' => null]);
+    $compared = spyPasswordChecks();
+
+    $this->post('/login', ['username' => '19110001', 'password' => 'password']);
+
+    expect($compared)->toHaveCount(1)
+        ->and($compared[0])->not->toBeNull()
+        ->and(password_get_info($compared[0]))->toBe(password_get_info($existing->password));
 });
 
 it('entra con un username con mayúsculas tal como viene del SII', function () {
@@ -203,18 +229,22 @@ it('cierra la sesión', function () {
     $this->assertGuest();
 });
 
-it('no expone registro, recuperación por correo, verificación de correo, perfil ni 2FA de Fortify', function (string $route) {
+it('no expone registro, verificación de correo, perfil ni 2FA de Fortify', function (string $route) {
     expect(Route::has($route))->toBeFalse();
 })->with([
     'register',
     'register.store',
-    'password.request',
-    'password.email',
     'verification.notice',
     'user-profile-information.update',
     'two-factor.login',
     'passkey.login',
 ]);
+
+it('AC-16: la recuperación por correo es la propia de Core, no la de Fortify', function () {
+    expect(Features::enabled(Features::resetPasswords()))->toBeFalse()
+        ->and(Route::getRoutes()->getByName('password.email')->getActionName())->toBe(ForgotPasswordPage::class.'@send')
+        ->and(Route::getRoutes()->getByName('password.update')->getActionName())->toBe(ResetPasswordPage::class.'@update');
+});
 
 it('al iniciar sesión olvida el perfil activo de una sesión anterior', function () {
     User::factory()->create(['username' => '19110002', 'password' => 'password']);
@@ -247,10 +277,10 @@ it('frena muchos usuarios distintos desde la misma IP, sin bloquear otra IP (tar
     $this->assertAuthenticatedAs($user);
 });
 
-it('el mismo usuario desde otra IP no hereda el bloqueo', function () {
+it('el mismo usuario desde otra IP no hereda los intentos de la primera, mientras no llegue a la espera por usuario (AC-14)', function () {
     $user = User::factory()->create(['username' => '19110013']);
 
-    foreach (range(1, 5) as $attempt) {
+    foreach (range(1, 4) as $attempt) {
         $this->from('/login')->post('/login', ['username' => '19110013', 'password' => 'incorrecta']);
     }
 

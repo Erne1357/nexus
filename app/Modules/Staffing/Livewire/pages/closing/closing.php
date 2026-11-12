@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Staffing\Livewire\Concerns\ClosesLoads;
 use App\Modules\Staffing\Queries\LoadClosingQuery;
 use Illuminate\Support\Facades\Gate;
@@ -26,7 +27,8 @@ use Mary\Traits\Toast;
  * Entra quien cierra la carga de algún departamento (`academic_load.load.close`: el jefe y Subdirección, y el admin);
  * el jefe va a su departamento y Subdirección y el admin eligen (`?departamento=<id>`, como llegan los avisos del
  * cierre). Un departamento que no puede cerrar es 403; uno que sí, pero sin carga en el periodo, lo dice. `?campus=`
- * elige la pestaña; sin él, la del campus de la credencial si tiene grupos ahí, o la primera.
+ * elige la pestaña; sin él, la del último campus que eligió en la sesión (Campus::LAST_CHOSEN_KEY, AZ-02) si tiene grupos ahí,
+ * o la primera (#415: la credencial ya no elige campus).
  */
 new #[Title('Cierre de la carga')] class extends Component
 {
@@ -36,7 +38,7 @@ new #[Title('Cierre de la carga')] class extends Component
     #[Url(as: 'departamento')]
     public string $department = '';
 
-    /** El código del campus de la pestaña; '' es el de la credencial o el primero. */
+    /** El código del campus de la pestaña; '' es el único donde trabaja o el primero. */
     #[Url(as: 'campus')]
     public string $campus = '';
 
@@ -77,6 +79,11 @@ new #[Title('Cierre de la carga')] class extends Component
     public function selectCampus(string $code, Actor $context, LoadClosingQuery $query): void
     {
         $this->campus = $code;
+
+        if ($context->campuses()->contains('code', $code)) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $code);
+        }
+
         $this->resolve($context, $query);
     }
 
@@ -189,7 +196,7 @@ new #[Title('Cierre de la carga')] class extends Component
         $this->department = $department->getKey();
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
         $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === $this->campus)
-            ?? $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus_id === $context->activeCampus()?->getKey())
+            ?? $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === session(Campus::LAST_CHOSEN_KEY))
             ?? $loads->first();
 
         if ($load === null) {

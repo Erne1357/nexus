@@ -5,11 +5,14 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\RecentPages;
 use Illuminate\Auth\Access\AuthorizationException;
+
+/*
+| Periodo de la credencial (#415: la credencial ya no elige campus; el campus lo elige cada pantalla).
+*/
 
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
@@ -23,70 +26,44 @@ beforeEach(function () {
         ->create();
 });
 
-it('fija el campus y el periodo activos del usuario', function () {
+it('fija el periodo activo del usuario', function () {
     $this->actingAs($this->user);
 
-    app(SetActiveContext::class)->handle($this->c2, $this->previous);
+    app(SetActiveContext::class)->handle($this->previous);
 
-    $context = app(Actor::class);
-
-    expect($context->activeCampus()?->is($this->c2))->toBeTrue()
-        ->and($context->activeTerm()?->is($this->previous))->toBeTrue();
+    expect(app(Actor::class)->activeTerm()?->is($this->previous))->toBeTrue()
+        ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id);
 });
 
-it('con null olvida la elección y vuelve al campus y periodo por omisión', function () {
-    $this->actingAs(User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create());
-    app(SetActiveContext::class)->handle($this->c2, $this->previous);
+it('con null olvida la elección y vuelve al periodo actual', function () {
+    $this->actingAs($this->user);
+    app(SetActiveContext::class)->handle($this->previous);
 
-    app(SetActiveContext::class)->handle(null, null);
+    app(SetActiveContext::class)->handle(null);
 
-    $context = app(Actor::class);
-
-    expect($context->activeCampus()?->is($this->c2))->toBeTrue()
-        ->and($context->activeTerm()?->is($this->current))->toBeTrue();
+    expect(app(Actor::class)->activeTerm()?->is($this->current))->toBeTrue()
+        ->and(session(Actor::ACTIVE_TERM))->toBeNull();
 });
 
-it('olvida las páginas del menú que el usuario visitó: una ficha de otro campus ya no se abriría', function () {
+it('no guarda ningún campus en la sesión', function () {
+    $this->actingAs($this->user);
+
+    app(SetActiveContext::class)->handle($this->previous);
+
+    expect(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([])
+        ->and(app(Actor::class)->activeCampus())->toBeNull();
+});
+
+it('olvida las páginas del menú que el usuario visitó: una ficha de otro periodo ya no aplicaría', function () {
     $this->actingAs(User::factory()->admin()->create());
     app(RecentPages::class)->remember('core.campuses', '/campus?search=norte');
 
-    app(SetActiveContext::class)->handle($this->c2, null);
+    app(SetActiveContext::class)->handle($this->previous);
 
     expect(app(RecentPages::class)->last(NavigationArea::Academico))->toBeNull();
 });
 
-it('rechaza un campus fuera del alcance del usuario y no cambia el contexto', function () {
-    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
-    $other = Campus::factory()->create(['code' => 'C9']);
-
-    expect(fn () => app(SetActiveContext::class)->handle($other, $this->previous))
+it('rechaza fijar el periodo sin usuario autenticado', function () {
+    expect(fn () => app(SetActiveContext::class)->handle($this->previous))
         ->toThrow(AuthorizationException::class);
-
-    $context = app(Actor::class);
-
-    expect($context->activeCampus()?->is($this->c2))->toBeTrue()
-        ->and($context->activeTerm()?->is($this->current))->toBeTrue();
-});
-
-it('rechaza un campus inactivo, también para el admin', function () {
-    $this->actingAs(User::factory()->admin()->create());
-    $inactive = Campus::factory()->create(['code' => 'EAD', 'is_active' => false]);
-
-    expect(fn () => app(SetActiveContext::class)->handle($inactive, null))
-        ->toThrow(AuthorizationException::class);
-});
-
-it('rechaza fijar contexto sin usuario autenticado', function () {
-    expect(fn () => app(SetActiveContext::class)->handle($this->c2, null))
-        ->toThrow(AuthorizationException::class);
-});
-
-it('deja de usar el campus elegido cuando el alcance sobre él vence', function () {
-    $this->actingAs($this->user);
-    app(SetActiveContext::class)->handle($this->c1, null);
-
-    RoleAssignment::where('user_id', $this->user->id)->where('campus_id', $this->c1->id)->update(['valid_to' => today()->subDay()]);
-    app()->forgetScopedInstances();
-
-    expect(app(Actor::class)->activeCampus()?->is($this->c2))->toBeTrue();
 });

@@ -17,7 +17,6 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -29,9 +28,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   tocar su contraseña (S15, supuesto por confirmar), solo si está activo, no es de otro docente (aunque esté
  *   borrado) y no tiene más puesto que `docente` (supuesto por confirmar): si no, devuelve `conflict` y no toca
  *   nada, porque quien da de alta un docente no debe poder reactivar ni, con la baja, desactivar una cuenta de
- *   personal; eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser con la contraseña por defecto (o
- *   `$passwordHash`, para reutilizar el hash de una corrida) y cambio obligatorio, con el correo del docente si
- *   ningún otro usuario lo usa (supuesto por confirmar). Luego activa el usuario ya ligado (reactivar al docente
+ *   personal; eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser **sin acceso** (sin contraseña, AC-02,
+ *   confirmado el 11 de noviembre de 2026) y con cambio obligatorio, con el correo del docente si ningún otro usuario
+ *   lo usa (supuesto por confirmar). Un usuario ya existente conserva lo que tenga. Luego activa el usuario ya ligado (reactivar al docente
  *   lo devuelve) y le da su nombramiento de `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
  *   ahí sale que su alcance de `docente` sea uno solo, sin campus, y que no dependa de sus adscripciones: un docente
  *   sin departamento conserva usuario y nombramiento. Uno sin campus que todavía no empieza cuenta como el suyo y no
@@ -58,16 +57,15 @@ final class SyncTeacherAccess
     ) {}
 
     /**
-     * @throws RuntimeException si hay que crear el usuario, no llega `$passwordHash` y falta NEXUS_DEFAULT_PASSWORD
      * @throws ValidationException si otra sesión crea el username entre la revisión y el alta
      */
-    public function handle(Teacher $teacher, ?string $passwordHash = null): AccessSync
+    public function handle(Teacher $teacher): AccessSync
     {
-        return DB::transaction(function () use ($teacher, $passwordHash): AccessSync {
+        return DB::transaction(function () use ($teacher): AccessSync {
             $locked = Teacher::withTrashed()->lockForUpdate()->findOrFail($teacher->getKey());
 
             $result = $locked->is_active && ! $locked->trashed()
-                ? $this->grant($locked, $passwordHash)
+                ? $this->grant($locked)
                 : $this->revoke($locked);
 
             $teacher->setRawAttributes($locked->getAttributes(), sync: true);
@@ -81,7 +79,7 @@ final class SyncTeacherAccess
         });
     }
 
-    private function grant(Teacher $teacher, ?string $passwordHash): AccessSync
+    private function grant(Teacher $teacher): AccessSync
     {
         $result = AccessSync::Unchanged;
         $user = $teacher->user_id === null ? null : User::query()->lockForUpdate()->findOrFail($teacher->user_id);
@@ -94,7 +92,7 @@ final class SyncTeacherAccess
             }
 
             $result = $user === null ? AccessSync::Created : AccessSync::Linked;
-            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, $this->freeEmail($teacher->email), $passwordHash);
+            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, withAccess: false, email: $this->freeEmail($teacher->email));
 
             $this->link($teacher, $user);
         }

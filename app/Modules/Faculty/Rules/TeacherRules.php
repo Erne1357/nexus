@@ -18,6 +18,8 @@ use Illuminate\Validation\ValidationException;
  *   (reglas-de-negocio.md, "Reglas de datos").
  * - `name`: sin espacios a los lados y no vacío.
  * - `email`, `degree` y `hired_on`: opcionales; vacío es null. El grado, un valor de TeacherDegree.
+ * - `institutional_email` (AC-06): opcional, en minúsculas, un correo del dominio `nexus.institutional_email_domain` y
+ *   único sin importar mayúsculas entre todos los docentes, también los borrados.
  * - La adscripción: un departamento que existe y no está borrado (sin campus: el docente no es de un campus).
  */
 final class TeacherRules
@@ -85,6 +87,49 @@ final class TeacherRules
         $value = trim((string) $value);
 
         return $value === '' ? null : $value;
+    }
+
+    /**
+     * El correo institucional sin espacios y en minúsculas; vacío es null. Debe ser del dominio institucional (AC-06).
+     *
+     * @throws ValidationException
+     */
+    public function institutionalEmail(?string $email): ?string
+    {
+        $email = $this->optional($email);
+
+        if ($email === null) {
+            return null;
+        }
+
+        $email = mb_strtolower($email);
+        $domain = mb_strtolower((string) config('nexus.institutional_email_domain'));
+
+        if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || ! str_ends_with($email, "@{$domain}")) {
+            throw ValidationException::withMessages(['institutional_email' => "El correo institucional debe terminar en @{$domain}."]);
+        }
+
+        return $email;
+    }
+
+    /**
+     * Que ningún otro docente, aunque esté borrado, tenga ya ese correo institucional.
+     *
+     * @throws ValidationException
+     */
+    public function ensureInstitutionalEmailIsFree(string $email, Teacher $teacher): void
+    {
+        if (Teacher::withTrashed()->whereRaw('lower(institutional_email) = ?', [$email])->whereKeyNot($teacher->getKey())->exists()) {
+            throw $this->institutionalEmailTaken($email);
+        }
+    }
+
+    /**
+     * El error de correo repetido, también para cuando la restricción única de la base gana la carrera.
+     */
+    public function institutionalEmailTaken(string $email): ValidationException
+    {
+        return ValidationException::withMessages(['institutional_email' => "Otro docente ya tiene el correo institucional {$email}."]);
     }
 
     /**

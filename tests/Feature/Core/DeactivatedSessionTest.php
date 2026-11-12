@@ -47,6 +47,21 @@ it('cierra la sesión del usuario desactivado aunque tenga pendiente el cambio d
     $this->assertGuest();
 });
 
+it('AC-01: cierra la sesión de un usuario al que le quitan el acceso (contraseña nula) en su siguiente petición', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->get('/')->assertOk();
+
+    $user->forceFill(['password' => null])->save();
+
+    $this->from('/')
+        ->get('/')
+        ->assertRedirect('/login')
+        ->assertSessionHasErrors(['username' => 'Tu sesión terminó. Vuelve a iniciar sesión.']);
+
+    $this->assertGuest();
+});
+
 it('no cierra la sesión de un usuario activo', function () {
     $user = User::factory()->create();
 

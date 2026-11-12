@@ -2,7 +2,6 @@
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Models\Group;
@@ -44,7 +43,7 @@ beforeEach(function () {
  */
 function assignPage(User $user, array $query = []): Testable
 {
-    test()->withSession([Actor::ACTIVE_CAMPUS => test()->world->campus->id]);
+    onCampusPage(test()->world->campus);
 
     return Livewire::withQueryParams($query)->actingAs($user)->test('staffing::pages.assign');
 }
@@ -275,7 +274,7 @@ it('lee la pantalla con las mismas consultas sin importar cuántos grupos tenga'
     $count = function (): int {
         DB::flushQueryLog();
         DB::enableQueryLog();
-        $this->withSession([Actor::ACTIVE_CAMPUS => $this->world->campus->id])->actingAs($this->jefe)->get(route('staffing.assign'))->assertOk();
+        $this->actingAs($this->jefe)->get(route('staffing.assign', ['campus' => $this->world->campus->code]))->assertOk();
 
         return count(DB::getQueryLog());
     };

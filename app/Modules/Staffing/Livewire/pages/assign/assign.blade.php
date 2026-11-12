@@ -61,6 +61,7 @@
     x-on:assign-group-opened.window="target = { title: true }; $nextTick(() => flush())">
     @if ($board === null)
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Asignación docente</h1>
+        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" />
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="assign-empty">{{ $message }}</div>
     @else
         @include('staffing::assign.header')

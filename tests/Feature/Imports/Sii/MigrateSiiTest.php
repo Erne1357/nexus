@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Sii\RunSiiMigration;
 use App\Modules\Imports\Sii\SiiBatch;
 use App\Modules\Imports\Sii\SiiFile;
 use App\Modules\Imports\Sii\SiiMigration;
@@ -389,3 +390,25 @@ it('sube el límite de memoria a 1 GB si era menor y respeta uno mayor o sin lí
     'mayor' => ['2G', '2G'],
     'sin límite' => ['-1', '-1'],
 ]);
+
+it('una corrida parcial escribe incidencias y CSV intermedios con el sufijo de sus pasos y no pisa los de la completa', function () {
+    File::put("{$this->dir}/_incidencias.csv", "corrida completa\n");
+    File::ensureDirectoryExists("{$this->dir}/_nexus");
+    File::put("{$this->dir}/_nexus/departamentos.csv", "corrida completa\n");
+
+    $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--only' => ['departamentos']])
+        ->expectsOutputToContain('_incidencias.departamentos.csv')
+        ->assertSuccessful();
+
+    expect(file_get_contents("{$this->dir}/_incidencias.csv"))->toBe("corrida completa\n")
+        ->and(file_get_contents("{$this->dir}/_nexus/departamentos.csv"))->toBe("corrida completa\n")
+        ->and(file_get_contents("{$this->dir}/_incidencias.departamentos.csv"))->toContain('Aviso del paso.')
+        ->and(file_get_contents("{$this->dir}/_nexus.departamentos/departamentos.csv"))->toStartWith("clave,nombre,activo\n");
+});
+
+it('el sufijo de una corrida parcial ordena y no repite los pasos', function () {
+    expect(RunSiiMigration::incidentsFileName([]))->toBe('_incidencias.csv')
+        ->and(RunSiiMigration::incidentsFileName(['carreras', 'archivo', 'carreras']))->toBe('_incidencias.archivo+carreras.csv')
+        ->and(RunSiiMigration::stagingFolderName([]))->toBe('_nexus')
+        ->and(RunSiiMigration::stagingFolderName(['kardex', 'alumnos']))->toBe('_nexus.alumnos+kardex');
+});

@@ -145,7 +145,6 @@
                 <x-toggle label="Usa bloques de horario" wire:model="settings.uses_time_blocks" />
                 <x-toggle label="Admite docentes externos" wire:model="settings.allow_external_teachers" />
                 <x-toggle label="Requiere visto bueno de Subdirección" hint="Antes de publicar la carga." wire:model="settings.requires_subdireccion_approval" />
-                <x-toggle label="Los jefes corrigen sus salones al validar" hint="Solo si usa salones." wire:model="settings.heads_edit_rooms" />
             </div>
 
             <div class="grid gap-4 md:grid-cols-4">

@@ -13,6 +13,7 @@
             <span>{{ $board->campus->name }}</span>
             <span>{{ $board->term->name }}</span>
         </p>
+        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-3" />
         @if (count($departments) > 1)
             <div class="mt-3 w-full md:w-80">
                 <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm max-md:h-11" data-testid="assign-department" />

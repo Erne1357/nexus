@@ -12,6 +12,8 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -232,6 +234,10 @@ describe('coordinador', function () {
     });
 
     it('avisa de los catálogos sin validar de un departamento pero deja enviar', function () {
+        foreach (Department::all() as $department) {
+            CatalogReview::factory()->general(Catalog::Teachers)->create(['term_id' => $this->proposal->term_id, 'department_id' => $department->id]);
+        }
+
         proposalPageAs($this->coordinator)
             ->call('confirmSubmit')
             ->assertSee('Ciencias Básicas aún no valida')
@@ -348,10 +354,17 @@ describe('alcance', function () {
         expect(CareerProposal::query()->where('career_id', $other->id)->exists())->toBeFalse();
     });
 
-    it('subdirección elige campus cuando tiene varios', function () {
+    it('AZ-02: subdirección elige el campus en la página cuando tiene varios; sin ?campus= abre el primero', function () {
         Campus::factory()->create(['code' => 'C1']);
 
-        proposalPageAs($this->subdirection)->assertSee('Elige un campus en tu credencial');
+        proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="campus-filter-C1"')->assertSee('no está abierto en este campus');
+        proposalPageAs($this->subdirection, ['campus' => 'C2', 'carrera' => $this->career->id])->assertSee('ISC')->assertSeeHtml('data-testid="campus-filter-C2"');
+    });
+
+    it('AZ-02: el coordinador de un campus no abre el de otro aunque la URL lo pida', function () {
+        Campus::factory()->create(['code' => 'C1']);
+
+        proposalPageAs($this->coordinator, ['campus' => 'C1'])->assertSee('ISC')->assertDontSeeHtml('data-testid="campus-filter-C1"');
     });
 });
 
@@ -424,6 +437,12 @@ describe('solo lectura, propuesta fija y rechazos', function () {
     });
 
     it('calcula los catálogos pendientes solo al abrir la confirmación de envío', function () {
+        foreach (Department::all() as $department) {
+            foreach (Catalog::cases() as $catalog) {
+                CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $this->proposal->term_id, 'department_id' => $department->id]);
+            }
+        }
+
         proposalPageAs($this->coordinator)
             ->assertViewHas('overview', fn ($overview): bool => $overview->pendingCatalogs === [])
             ->call('confirmSubmit')

@@ -37,7 +37,8 @@ services:
 
   queue:
     <<: *app
-    command: ["php", "artisan", "queue:work", "redis", "--tries=3", "--backoff=10", "--max-time=3600", "--sleep=1"]
+    # Atiende `default` antes que `bulk`: los bloques masivos (las cuentas de alumnos del SII) no retrasan los correos.
+    command: ["php", "artisan", "queue:work", "redis", "--queue=default,bulk", "--tries=3", "--backoff=10", "--max-time=3600", "--sleep=1"]
     # queue:work termina el job en curso al recibir SIGTERM (requiere pcntl)
     stop_grace_period: 60s
     healthcheck:

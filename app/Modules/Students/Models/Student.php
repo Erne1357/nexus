@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Students\Database\Factories\StudentFactory;
 use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Enums\StudentStatus;
@@ -22,7 +23,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Alumno, como lo trae el SII. `control_number` es la clave natural. `status` queda vacío si el SII trae un
  * estatus que Nexus no conoce. `status_reason` guarda el
- * motivo del SII (BD1, BT1, TIT…) y `modality`, si estudia presencial, a distancia o mixto.
+ * motivo del SII (BD1, BT1, TIT…) y `modality`, si estudia presencial, a distancia o mixto. `user_id` es su usuario
+ * (AC-10), que crea la migración del SII.
  */
 #[Fillable(['control_number', 'name', 'career_id', 'study_plan_id', 'campus_id', 'current_semester', 'status', 'status_reason', 'modality', 'admitted_term_id', 'is_active'])]
 #[UseFactory(StudentFactory::class)]
@@ -74,6 +76,14 @@ class Student extends Model
     public function admittedTerm(): BelongsTo
     {
         return $this->belongsTo(Term::class, 'admitted_term_id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
     }
 
     /**

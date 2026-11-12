@@ -12,7 +12,7 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use Illuminate\Database\Eloquent\Builder;
+use App\Modules\Core\Models\TermOpening;
 use Illuminate\Support\Collection;
 
 /**
@@ -24,14 +24,17 @@ final class CatalogReviewQuery
 
     /**
      * Los catálogos que todavía bloquean la salida de borrador de la carga de un departamento en un campus
-     * (HC-14, como la reescribe D2): cada catálogo general cuya revisión del periodo y el departamento (sin
-     * campus) falta o no está validada, y los salones si el perfil del campus usa salones y la revisión del
-     * periodo, el campus y el departamento falta o no está validada. En el orden del enum Catalog.
+     * (HC-14): cada catálogo que exige el campus (todos, y los salones solo si su perfil usa salones) cuya revisión del
+     * periodo y el departamento falta o no está validada. Todas las revisiones son del departamento para todo el Tec,
+     * también la de salones (decisión 6, confirmada el 12 de noviembre de 2026). En el orden del enum Catalog.
      *
      * Con `$lock` las revisiones que lee quedan con bloqueo compartido (FOR SHARE) hasta el fin de la
      * transacción: quien valida HC-14 dentro de una transacción (CatalogsValidated, desde TransitionLoad)
      * impide que otra sesión des-valide un catálogo entre la lectura y el cambio de estado. Fuera de una
      * transacción no tiene efecto.
+     *
+     * Solo cuentan los catálogos que el admin abrió en el periodo, es decir, que tienen revisiones en él (CV9, HC-14,
+     * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
      *
      * @return list<Catalog>
      */
@@ -40,24 +43,70 @@ final class CatalogReviewQuery
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
 
-        $required = array_values(array_filter(
-            Catalog::cases(),
-            fn (Catalog $catalog): bool => $catalog->isGeneral() || $campus->profile->usesRooms,
-        ));
+        $required = Catalog::requiredFor($campus->profile->usesRooms);
 
         $validated = CatalogReview::query()
             ->where('term_id', $termId)
             ->where('department_id', $departmentId)
             ->where('status', ReviewStatus::Validated)
             ->whereIn('catalog', $required)
-            ->where(fn ($query) => $query
-                ->where(fn ($general) => $general->whereNull('campus_id')->whereIn('catalog', Catalog::general()))
-                ->orWhere(fn ($rooms) => $rooms->where('campus_id', $campus->getKey())->where('catalog', Catalog::Rooms)))
             ->when($lock, fn ($query) => $query->sharedLock())
             ->pluck('catalog')
             ->all();
 
-        return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)));
+        $opened = array_map(fn (Catalog $catalog): string => $catalog->value, $this->openedCatalogs($termId));
+
+        return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)
+            && in_array($catalog->value, $opened, true)));
+    }
+
+    /**
+     * Los catálogos con revisiones abiertas en el periodo (CV9), en el orden del enum Catalog. Sin ninguno, la validación
+     * del periodo no está abierta.
+     *
+     * @return list<Catalog>
+     */
+    public function openedCatalogs(Term|string $term): array
+    {
+        $opened = CatalogReview::query()
+            ->where('term_id', $term instanceof Term ? $term->getKey() : $term)
+            ->distinct()
+            ->pluck('catalog')
+            ->all();
+
+        return array_values(array_filter(Catalog::cases(), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
+    }
+
+    /**
+     * Si la revisión de salones aplica al periodo: algún campus activo donde está abierto usa salones (CV9, decisión 6).
+     */
+    public function roomsApply(Term|string $term): bool
+    {
+        return Campus::query()
+            ->where('is_active', true)
+            ->whereIn('id', TermOpening::query()->where('term_id', $term instanceof Term ? $term->getKey() : $term)->select('campus_id'))
+            ->get()
+            ->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
+    }
+
+    /**
+     * Los catálogos del periodo para el drawer «Abrir validación»: cada uno con si ya está abierto y, si no se puede
+     * abrir, el motivo (los salones sin un campus abierto que use salones).
+     *
+     * @return list<array{catalog: Catalog, open: bool, blocked: ?string}>
+     */
+    public function openingOptions(Term $term): array
+    {
+        $opened = $this->openedCatalogs($term);
+        $roomsApply = $this->roomsApply($term);
+
+        return array_map(fn (Catalog $catalog): array => [
+            'catalog' => $catalog,
+            'open' => in_array($catalog, $opened, true),
+            'blocked' => $catalog === Catalog::Rooms && ! $roomsApply && ! in_array($catalog, $opened, true)
+                ? 'Ningún campus abierto en este periodo usa salones.'
+                : null,
+        ], Catalog::cases());
     }
 
     /**
@@ -76,8 +125,8 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Si `$permission` vale sobre el departamento en el campus de la revisión o, sin campus (las revisiones generales
-     * no son de uno), en alguno de los campus del usuario. Es la regla única de CatalogReviewPolicy y de las pantallas.
+     * Si `$permission` vale sobre el departamento en el campus dado o, sin campus (las revisiones no son de uno), en
+     * alguno de los campus del usuario. Es la regla única de CatalogReviewPolicy y de las pantallas.
      */
     public static function allowsOnDepartment(Actor $context, CatalogValidationPermission $permission, ?string $campus, string $department): bool
     {
@@ -85,30 +134,26 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Las revisiones que ve un departamento en un periodo y un campus: las cuatro generales del periodo y la de
-     * salones de ese campus, si existe (D2), en el orden del enum Catalog.
+     * Las revisiones de un departamento en un periodo, para todo el Tec (la de salones, si existe, cubre todos los
+     * campus; decisión 6), en el orden del enum Catalog.
      *
      * @return Collection<int, CatalogReview>
      */
-    public function forDepartment(Term|string $term, Campus|string $campus, Department|string $department): Collection
+    public function forDepartment(Term|string $term, Department|string $department): Collection
     {
         $order = array_flip(array_map(fn (Catalog $catalog): string => $catalog->value, Catalog::cases()));
 
         return CatalogReview::query()
             ->where('term_id', $term instanceof Term ? $term->getKey() : $term)
             ->where('department_id', $department instanceof Department ? $department->getKey() : $department)
-            ->where(fn (Builder $query) => $query
-                ->whereNull('campus_id')
-                ->orWhere('campus_id', $campus instanceof Campus ? $campus->getKey() : $campus))
             ->get()
             ->sortBy(fn (CatalogReview $review): int => $order[$review->catalog->value])
             ->values();
     }
 
     /**
-     * La última revisión validada, con foto, del mismo departamento, catálogo y campus en un periodo que empieza
-     * antes que el de `$review` (CV3, confirmado el 2 de noviembre de 2026): contra su foto se cuentan las altas y las
-     * bajas. Una reabierta no cuenta aunque conserve su foto (CV-S6, supuesto por confirmar). Nula en el primer periodo.
+     * La última revisión validada, con foto, del mismo departamento y catálogo en un periodo que empieza antes que el
+     * de `$review` (CV3, confirmado el 2 de noviembre de 2026): contra su foto se cuentan las altas y las bajas. Una reabierta no cuenta aunque conserve su foto (CV-S6, supuesto por confirmar). Nula en el primer periodo.
      */
     public function previousValidation(CatalogReview $review): ?CatalogReview
     {
@@ -119,11 +164,6 @@ final class CatalogReviewQuery
             ->join('terms', 'terms.id', '=', 'catalog_reviews.term_id')
             ->where('catalog_reviews.department_id', $review->department_id)
             ->where('catalog_reviews.catalog', $review->catalog)
-            ->when(
-                $review->campus_id === null,
-                fn (Builder $query) => $query->whereNull('catalog_reviews.campus_id'),
-                fn (Builder $query) => $query->where('catalog_reviews.campus_id', $review->campus_id),
-            )
             ->where('catalog_reviews.status', ReviewStatus::Validated)
             ->whereNotNull('catalog_reviews.snapshot')
             ->where('terms.starts_on', '<', $review->term->starts_on->toDateString())

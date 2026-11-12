@@ -45,6 +45,7 @@
     @if ($overview === null)
         <div>
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Propuesta de carrera</h1>
+            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="proposal-empty">{{ $message }}</div>
     @else
@@ -59,6 +60,7 @@
                     <span>{{ $overview->proposal->campus->name }}</span>
                     <span>{{ $overview->proposal->term->name }}</span>
                 </p>
+                <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
             </div>
 
             <div class="flex flex-wrap items-end gap-3">

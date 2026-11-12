@@ -6,6 +6,7 @@ use App\Modules\Facilities\Events\RoomUpdated;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Rules\RoomRules;
 use BackedEnum;
+use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -14,9 +15,13 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Cambia los datos de un salón (clave, nombre, edificio, tipo, capacidad, dueño, características) o su
- * estado (activar o desactivar): solo las claves que recibe; el campus no cambia. Quién puede lo decide
- * RoomPolicy antes de llamarla. Hace cumplir las mismas reglas que CreateRoom; conservar la clave, el
- * edificio o el dueño propios vale aunque hayan quedado desactivados o borrados.
+ * estado (activar o desactivar): solo las claves que recibe. El campus no se recibe: sigue al edificio, así que un
+ * edificio de otro campus mueve el salón a ese campus (CV-S10, supuesto por confirmar; decisión 5, confirmada el 12 de
+ * noviembre de 2026), si su clave está libre allá y el salón no se usa en su campus (la llave compuesta
+ * `rooms (id, campus_id)` de sesiones de grupo, acuerdos y salones por omisión lo impide; sale como error del edificio).
+ * Quién puede lo decide RoomPolicy, o CatalogReviewPolicy al validar los catálogos, antes de llamarla. Hace cumplir las
+ * mismas reglas que CreateRoom; conservar la clave, el edificio o el dueño propios vale aunque hayan quedado
+ * desactivados o borrados.
  *
  * En una transacción vuelve a leer el salón con bloqueo (`lockForUpdate`), así el valor anterior de la
  * bitácora es el confirmado aunque `$room` llegue viejo, y lo deja en `$room`. Si nada cambió, no
@@ -66,19 +71,21 @@ final class UpdateRoom
             $room->setRawAttributes($room->newQuery()->lockForUpdate()->findOrFail($room->getKey())->getAttributes(), sync: true);
             $old = $room->only(self::COLUMNS);
 
-            if (array_key_exists('code', $data)) {
-                $this->rules->ensureCodeIsFree($room->campus_id, $data['code'], $room);
-            }
+            $campusId = $room->campus_id;
 
             if (array_key_exists('building_id', $data) && $data['building_id'] !== $room->building_id) {
-                $this->rules->ensureBuildingBelongsToCampus($room->campus_id, $data['building_id']);
+                $campusId = $this->rules->existingBuilding($data['building_id'])->campus_id;
+            }
+
+            if (array_key_exists('code', $data) || $campusId !== $room->campus_id) {
+                $this->rules->ensureCodeIsFree($campusId, $data['code'] ?? $room->code, $room);
             }
 
             if (array_key_exists('department_id', $data) && $data['department_id'] !== $room->department_id) {
                 $this->rules->ensureOwnerExists($data['department_id']);
             }
 
-            $room->fill($data);
+            $room->fill($data)->forceFill(['campus_id' => $campusId]);
             $changed = array_keys($room->getDirty());
 
             if ($changed === []) {
@@ -89,6 +96,8 @@ final class UpdateRoom
                 $room->save();
             } catch (UniqueConstraintViolationException) {
                 throw $this->rules->codeTaken($room->code);
+            } catch (QueryException $exception) {
+                throw $exception->getCode() === '23503' && in_array('campus_id', $changed, true) ? $this->rules->roomInUse() : $exception;
             }
 
             activity()

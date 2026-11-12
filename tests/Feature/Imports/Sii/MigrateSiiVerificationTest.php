@@ -24,11 +24,12 @@ use Tests\Unit\Imports\Sii\SiiFixtures;
 /**
  * Las filas de `_incidencias.csv` del paso `verificacion`, sin el encabezado.
  *
+ * @param  list<string>  $only  los pasos de la corrida: el reporte de una corrida parcial lleva su sufijo
  * @return list<list<string>>
  */
-function verificationIncidentRows(string $dir): array
+function verificationIncidentRows(string $dir, array $only = ['archivo', 'organigrama', 'carreras', 'materias', 'alumnos', 'kardex', 'verificacion']): array
 {
-    $rows = array_map(str_getcsv(...), array_slice(file("{$dir}/_incidencias.csv", FILE_IGNORE_NEW_LINES), 1));
+    $rows = array_map(str_getcsv(...), array_slice(file($dir.'/'.RunSiiMigration::incidentsFileName($only), FILE_IGNORE_NEW_LINES), 1));
 
     return array_values(array_filter($rows, fn (array $row): bool => $row[0] === 'verificacion'));
 }
@@ -125,7 +126,7 @@ it('compara la corrida con Nexus, avisa de lo que no cuadra y marca la corrida �
         ->not->toContain('S2')
         ->and(DB::table('sii_verificacion._corrida')->value('estado'))->toBe('con diferencias');
 
-    $allRows = array_map(str_getcsv(...), array_slice(file("{$this->dir}/_incidencias.csv", FILE_IGNORE_NEW_LINES), 1));
+    $allRows = array_map(str_getcsv(...), array_slice(file($this->dir.'/'.RunSiiMigration::incidentsFileName(['archivo', 'organigrama', 'carreras', 'materias', 'alumnos', 'kardex', 'verificacion']), FILE_IGNORE_NEW_LINES), 1));
     preg_match('/Incidencias: (\d+)/', $output, $count);
 
     expect((int) $count[1])->toBe(count(array_filter($allRows, fn (array $row): bool => $row[4] !== 'info')))
@@ -157,8 +158,8 @@ it('en seco no verifica y lo dice', function () {
 it('sin el paso archivo en la corrida no verifica y lo dice', function () {
     expect(Artisan::call('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador', '--only' => ['verificacion']]))->toBe(0);
 
-    expect(verificationIncidentRows($this->dir))->toHaveCount(1)
-        ->and(verificationIncidentRows($this->dir)[0][5])->toContain('el paso archivo no corrió en esta corrida')
+    expect(verificationIncidentRows($this->dir, ['verificacion']))->toHaveCount(1)
+        ->and(verificationIncidentRows($this->dir, ['verificacion'])[0][5])->toContain('el paso archivo no corrió en esta corrida')
         ->and(Artisan::output())->toContain('No se verificó la migración contra el SII')
         ->and(DB::table('sii_verificacion._corrida')->value('estado'))->toBe('no verificada')
         ->and(DB::table('sii_verificacion.materias')->count())->toBe(0);

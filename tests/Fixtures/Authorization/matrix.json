@@ -1,5 +1,8 @@
 {
     "grants": {
+        "alumno": [
+            "students.my_record.view"
+        ],
         "coordinador": [
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
@@ -44,8 +47,10 @@
             "faculty.teacher.update",
             "faculty.teacher.view",
             "faculty.teacher_department.remove",
+            "faculty.teacher_department.remove_last",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
+            "faculty.teacher_user.invite",
             "scheduling.group.manage",
             "scheduling.quota.manage",
             "scheduling.room.assign",
@@ -119,6 +124,7 @@
             "faculty.teacher.view",
             "faculty.teacher.view_all",
             "faculty.teacher_department.remove",
+            "faculty.teacher_department.remove_last",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
             "scheduling.schedule.view",
@@ -134,7 +140,8 @@
         "catalog_validation.review.reopen",
         "catalog_validation.review.validate",
         "staffing.my_load.view",
-        "staffing.offer.view"
+        "staffing.offer.view",
+        "students.my_record.view"
     ],
     "applies_to": {
         "codes=SERVICIOS-ESCOLARES": [
@@ -197,10 +204,13 @@
             "faculty.teacher.view",
             "faculty.teacher.view_all",
             "faculty.teacher_department.remove",
+            "faculty.teacher_department.remove_last",
             "faculty.teacher_department.set_primary",
             "faculty.teacher_qualification.manage",
+            "faculty.teacher_user.invite",
             "faculty.teacher_user.provision",
             "faculty.teacher_user.reset_password",
+            "faculty.teacher_user.update_staff_email",
             "scheduling.group.manage",
             "scheduling.quota.manage",
             "scheduling.room.assign",

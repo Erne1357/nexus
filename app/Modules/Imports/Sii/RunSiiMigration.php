@@ -40,7 +40,8 @@ use Throwable;
  * Un campus o plantilla desconocidos se detectan al llegar a su lote, antes de guardarlo: los lotes anteriores
  * ya se aplicaron en una corrida real (son altas por clave natural, repetirlas no cambia nada) y se revierten en
  * un ensayo. Cualquier fallo se reporta como SiiMigrationStopped, sin valores. `_incidencias.csv` se reescribe
- * siempre al terminar. Al log va solo la clase, el lugar y el SQLSTATE de la falla (SiiFailureLog), nunca su mensaje.
+ * siempre al terminar; una corrida parcial (`--only`) escribe `_incidencias.<pasos>.csv` y `_nexus.<pasos>/` para no pisar
+ * los de la completa. Al log va solo la clase, el lugar y el SQLSTATE de la falla (SiiFailureLog), nunca su mensaje.
  *
  * Los catálogos curados se leen de `Sii/Curated/`; las pruebas pasan otra carpeta como `$curatedDir`.
  *
@@ -56,6 +57,41 @@ final class RunSiiMigration
         private readonly TemplateRegistry $templates,
         private readonly string $curatedDir = __DIR__.'/Curated',
     ) {}
+
+    /**
+     * El sufijo de los archivos de una corrida parcial: los pasos de `--only`, sin repetir y en orden alfabético,
+     * unidos con `+`. Una corrida completa no lleva sufijo.
+     *
+     * @param  list<string>  $only
+     */
+    private static function suffix(array $only): string
+    {
+        $steps = array_values(array_unique($only));
+        sort($steps);
+
+        return $steps === [] ? '' : '.'.implode('+', $steps);
+    }
+
+    /**
+     * Nombre del reporte de incidencias: `_incidencias.csv` en una corrida completa y `_incidencias.<pasos>.csv` en
+     * una parcial, para que esta no pise el reporte de la completa.
+     *
+     * @param  list<string>  $only
+     */
+    public static function incidentsFileName(array $only): string
+    {
+        return '_incidencias'.self::suffix($only).'.csv';
+    }
+
+    /**
+     * Carpeta de los CSV intermedios: `_nexus` en una corrida completa y `_nexus.<pasos>` en una parcial.
+     *
+     * @param  list<string>  $only
+     */
+    public static function stagingFolderName(array $only): string
+    {
+        return '_nexus'.self::suffix($only);
+    }
 
     /**
      * @param  list<string>  $only  nombres de pasos; vacío corre todos
@@ -75,7 +111,7 @@ final class RunSiiMigration
             throw new InvalidArgumentException('Paso desconocido: '.implode(', ', $unknown).'. Pasos válidos: '.implode(', ', $names).'.');
         }
 
-        $migration = new SiiMigration($export, $this->curatedDir, $dryRun);
+        $migration = new SiiMigration($export, $this->curatedDir, $dryRun, $user);
         $incidents = new Incidents;
         $unreadable = 0;
         $reports = [];
@@ -101,7 +137,7 @@ final class RunSiiMigration
 
                 foreach ($step->batches($migration) as $batch) {
                     $current[1] = $batch->file;
-                    $reports[] = $batch instanceof SiiBatchReport ? $this->report($step, $batch, $incidents) : $this->run($dir, $user, $step, $batch, $incidents, $stored);
+                    $reports[] = $batch instanceof SiiBatchReport ? $this->report($step, $batch, $incidents) : $this->run($dir, $user, $step, $batch, $incidents, $stored, $only);
                 }
 
                 $unreadable += $this->collectReads($step->name(), $export, $incidents);
@@ -114,7 +150,7 @@ final class RunSiiMigration
         }
 
         $unreadable += $this->collectReads($current[0] ?? '-', $export, $incidents);
-        $cleanup = $this->cleanUp($dir, $dryRun, $queue, $level, $stored, $incidents);
+        $cleanup = $this->cleanUp($dir, $dryRun, $queue, $level, $stored, $incidents, $only);
 
         if ($pending !== null) {
             throw $pending;
@@ -151,8 +187,9 @@ final class RunSiiMigration
      * fallo va al log (SiiFailureLog: sin mensaje ni valores) y se devuelve el primero, sin tapar un error pendiente.
      *
      * @param  list<string>  $stored
+     * @param  list<string>  $only
      */
-    private function cleanUp(string $dir, bool $dryRun, mixed $queue, int $level, array $stored, Incidents $incidents): ?Throwable
+    private function cleanUp(string $dir, bool $dryRun, mixed $queue, int $level, array $stored, Incidents $incidents, array $only): ?Throwable
     {
         $first = null;
         $steps = [
@@ -163,7 +200,7 @@ final class RunSiiMigration
                     Storage::disk('imports')->delete($path);
                 }
             },
-            fn () => $incidents->write(rtrim($dir, '/').'/_incidencias.csv'),
+            fn () => $incidents->write(rtrim($dir, '/').'/'.self::incidentsFileName($only)),
         ];
 
         foreach ($steps as $step) {
@@ -203,11 +240,12 @@ final class RunSiiMigration
 
     /**
      * @param  list<string>  $stored  rutas subidas al disco `imports`, para borrarlas en un ensayo
+     * @param  list<string>  $only
      */
-    private function run(string $dir, User $user, SiiStep $step, SiiBatch $batch, Incidents $incidents, array &$stored): SiiBatchReport
+    private function run(string $dir, User $user, SiiStep $step, SiiBatch $batch, Incidents $incidents, array &$stored, array $only): SiiBatchReport
     {
         $campus = $this->campus($batch);
-        $path = $this->writeCsv($dir, $batch);
+        $path = $this->writeCsv($dir, $batch, $only);
 
         $upload = new UploadedFile($path, $batch->file, 'text/csv', null, true);
         $model = $this->store->handle($user, $batch->template, $upload, $campus);
@@ -260,12 +298,15 @@ final class RunSiiMigration
             ?? throw new InvalidArgumentException("No existe el campus {$batch->campus}.");
     }
 
-    private function writeCsv(string $dir, SiiBatch $batch): string
+    /**
+     * @param  list<string>  $only
+     */
+    private function writeCsv(string $dir, SiiBatch $batch, array $only): string
     {
-        $folder = rtrim($dir, '/').'/_nexus';
+        $folder = rtrim($dir, '/').'/'.self::stagingFolderName($only);
 
         if (! is_dir($folder) && ! mkdir($folder, 0775, true) && ! is_dir($folder)) {
-            throw new RuntimeException('No se pudo crear la carpeta _nexus.');
+            throw new RuntimeException('No se pudo crear la carpeta '.basename($folder).'.');
         }
 
         $fields = $this->templates->get($batch->template)->fields();

@@ -40,7 +40,17 @@
 		lb_try_interval 500ms
 	}
 
+	# El registro de peticiones no guarda el parámetro `token` de la consulta: el enlace para restablecer la
+	# contraseña lo lleva (`/reset-password?token=…`, AC-17) y sirve 60 minutos.
 	log {
 		output stdout
+		format filter {
+			wrap json
+			fields {
+				request>uri query {
+					delete token
+				}
+			}
+		}
 	}
 }

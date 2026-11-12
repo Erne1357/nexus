@@ -156,14 +156,41 @@ describe('adscripciones', function () {
             ->and(lastToastOf($page))->type->toBe('success')->description->toContain('principal pasa a SC');
     });
 
-    it('quitar la única adscripción deja al docente activo y sin departamento', function () {
+    it('CV8: quitar la única adscripción da de baja al docente, y el aviso lo dice', function () {
         $page = teacherRecord($this->admin, $this->beto)->call('confirmRemoveAdscription', $this->beto->adscriptions()->sole()->id)
-            ->assertSee('Se queda sin departamento, pero sigue activo.')
+            ->assertSee('No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.')
             ->call('removeAdscription');
 
-        expect($this->beto->fresh()->is_active)->toBeTrue()
+        expect($this->beto->fresh()->is_active)->toBeFalse()
             ->and($this->beto->adscriptions()->count())->toBe(0)
-            ->and(lastToastOf($page))->description->toContain('queda sin departamento');
+            ->and(lastToastOf($page))->description->toContain('queda dado de baja y su cuenta se inhabilita');
+    });
+
+    it('al jefe de proyecto docente la última adscripción se le ve deshabilitada con su motivo, y llamarla es 403 (confirmado)', function () {
+        $beto = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => '1000009', 'name' => 'Beto Solo']);
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => Campus::factory()->create()->id, 'department_id' => $this->sc->id])->create();
+        $adscription = $beto->adscriptions()->sole();
+
+        teacherRecord($jpd, $beto)
+            ->assertSee('Es su último departamento: lo quita el jefe de departamento.')
+            ->call('confirmRemoveAdscription', $adscription->id)
+            ->assertForbidden();
+
+        expect($adscription->fresh()->trashed())->toBeFalse()
+            ->and($beto->fresh()->is_active)->toBeTrue();
+
+        teacherRecord($this->jefe, $beto)->call('confirmRemoveAdscription', $adscription->id)->assertSet('showRemoveAdscriptionModal', true);
+    });
+
+    it('CV-S8: a quien ocupa un puesto solo lo quitan el admin o la Subdirección', function () {
+        $this->ana->update(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ii->id])->create()->id]);
+        $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
+
+        teacherRecord($this->jefe, $this->ana)
+            ->assertSee('Ocupa un puesto: lo quitan el administrador o la Subdirección.')
+            ->call('confirmRemoveAdscription', $sc->id)
+            ->assertForbidden();
+        teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $sc->id)->assertSet('showRemoveAdscriptionModal', true);
     });
 
     it('nadie se quita a sí mismo de un departamento (supuesto por confirmar)', function () {
@@ -275,6 +302,64 @@ describe('restablecer contraseña', function () {
         expect($item)->not->toBeNull()->and($item->getAttribute('aria-disabled'))->toBe('true');
 
         teacherRecord($this->jefe, $this->ana)->call('resetPassword')->assertForbidden();
+    });
+});
+
+describe('acceso (AC-03 y AC-04)', function () {
+    it('AC-04: la sección Datos muestra el estado del acceso del usuario del docente', function (?string $password, bool $mustChange, string $label) {
+        $this->docente->forceFill(['password' => $password, 'must_change_password' => $mustChange])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="user-access"]')))->toBe($label);
+    })->with([
+        'sin contraseña' => [null, true, 'Sin acceso'],
+        'con la de defecto' => ['clave-por-defecto-1', true, 'Debe cambiar su contraseña'],
+        'con la suya' => ['otra-clave-123', false, 'Con acceso'],
+    ]);
+
+    it('AC-03: a un docente sin acceso el admin le ve «Dar acceso» y se lo da con la contraseña por defecto y cambio obligatorio', function () {
+        $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="reset-password"]');
+
+        expect(textOf($item))->toBe('Dar acceso')
+            ->and($item->getAttribute('aria-disabled'))->toBeNull()
+            ->and($item->getAttribute('data-confirm-title'))->toBe('¿Dar acceso a 1000001?');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+
+        expect($this->docente->fresh())->must_change_password->toBeTrue()
+            ->and(Hash::check(config('auth.default_password'), $this->docente->fresh()->password))->toBeTrue()
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Acceso dado');
+    });
+
+    it('AC-03: a un usuario inactivo sin contraseña no se le da acceso: deshabilitado con su motivo y un toast si se llama', function () {
+        $this->docente->forceFill(['password' => null, 'is_active' => false])->save();
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="reset-password"]')))->toBe('Dar acceso Su usuario está inactivo: reactiva al docente antes.');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+
+        expect(lastToastOf($page))->type->toBe('error')->title->toBe('No se pudo dar acceso')
+            ->and($this->docente->fresh()->password)->toBeNull();
+    });
+
+    it('AC-03: el jefe ve «Dar acceso» deshabilitado con su motivo, recibe 403 al llamarlo y el docente sigue sin acceso', function () {
+        $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
+
+        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="reset-password"]');
+
+        expect(textOf($item))->toBe('Dar acceso Solo el administrador da acceso.')
+            ->and($item->getAttribute('aria-disabled'))->toBe('true');
+
+        teacherRecord($this->jefe, $this->ana)->call('resetPassword')->assertForbidden();
+
+        expect($this->docente->fresh()->password)->toBeNull();
     });
 });
 

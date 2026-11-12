@@ -19,13 +19,14 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * Abre una notificación desde la campana (tarea 2.9): la marca leída y da a dónde lleva. Si su destino ya no
  * está disponible para el usuario (lo decide su clase, NexusNotification::unavailableReason, o la ruta ya no
  * acepta sus parámetros), da el motivo en lugar de la dirección, para que la campana lo avise. Si el aviso es
- * de un periodo y un campus, deja la credencial en ellos (SetActiveContext), para que la pantalla muestre lo que
- * dice el aviso; si el usuario ya no trabaja en ese campus, tampoco lo lleva. Solo abre notificaciones del
- * usuario, que es el de la sesión: la credencial que cambia es la suya.
+ * de un campus, la pantalla se abre en ese campus (`?campus=<código>`, #415: la credencial ya no lo elige) y la
+ * credencial queda en el periodo del aviso (SetActiveContext), para que la pantalla muestre lo que dice el aviso; si
+ * el usuario ya no trabaja en ese campus, tampoco lo lleva. Solo abre notificaciones del usuario, que es el de la
+ * sesión: la credencial que cambia es la suya.
  *
  * Si el aviso es de un puesto (`data.role`; sin él o con uno que ya no existe, se abre con el perfil activo) que el usuario tiene y no es el activo, todo lo anterior se decide
  * con ese puesto (Actor::asRole(), sin tocar la sesión) y, solo si se puede abrir, cambia a ese perfil
- * (SwitchRole) antes de mover la credencial, para que el destino se vea con su alcance; si no se puede, la sesión
+ * (SwitchRole) antes de mover el periodo, para que el destino se vea con su alcance; si no se puede, la sesión
  * se queda como estaba. Si ya no tiene el puesto, se decide con ese puesto igual (AZ-S8): sin roles, el aviso
  * no está disponible, aunque el perfil activo sea otro (el de Administración cubre todo).
  */
@@ -66,12 +67,6 @@ final class OpenNotification
             return NotificationTarget::unavailable($problem);
         }
 
-        try {
-            $url = route($message->route, $message->parameters);
-        } catch (UrlGenerationException) {
-            return NotificationTarget::unavailable('Esa pantalla no está disponible.');
-        }
-
         $campus = null;
         $term = null;
 
@@ -89,12 +84,19 @@ final class OpenNotification
             }
         }
 
+        try {
+            // Un parámetro `campus` guardado en el aviso (el de una ruta que lo lleva en su camino) gana.
+            $url = route($message->route, $campus === null ? $message->parameters : $message->parameters + ['campus' => $campus->code]);
+        } catch (UrlGenerationException) {
+            return NotificationTarget::unavailable('Esa pantalla no está disponible.');
+        }
+
         if ($role !== null) {
             $this->switchRole->handle($role);
         }
 
-        if ($campus !== null && $term !== null) {
-            $this->moveCredential($campus, $term);
+        if ($term !== null) {
+            $this->moveTerm($term);
         }
 
         return NotificationTarget::to($url, switchedRole: $role !== null);
@@ -114,14 +116,13 @@ final class OpenNotification
     }
 
     /**
-     * Deja la credencial en el periodo y el campus del aviso. El periodo actual se deja como el de omisión, igual
-     * que en el selector de la credencial. Si ya está ahí, no la toca (cambiarla olvida las últimas pantallas del
-     * menú).
+     * Deja la credencial en el periodo del aviso. El periodo actual se deja como el de omisión, igual que en el
+     * selector de la credencial. Si ya está ahí, no la toca (cambiarla olvida las últimas pantallas del menú).
      */
-    private function moveCredential(Campus $campus, Term $term): void
+    private function moveTerm(Term $term): void
     {
-        if (! $campus->is($this->context->activeCampus()) || ! $term->is($this->context->activeTerm())) {
-            $this->setActiveContext->handle($campus, $term->is_current ? null : $term);
+        if (! $term->is($this->context->activeTerm())) {
+            $this->setActiveContext->handle($term->is_current ? null : $term);
         }
     }
 }

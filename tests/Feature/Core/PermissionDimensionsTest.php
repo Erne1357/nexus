@@ -43,6 +43,7 @@ function dimensionTables(): array
         'core.term.manage_calendar' => 'term_stages',
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
+        'core.user' => 'users',
         'academic.department' => 'departments',
         'academic.career' => 'careers',
         'academic.subject' => 'subjects',
@@ -94,6 +95,7 @@ function dimensionExceptions(): array
         'core.term.manage_calendar' => $tec,
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
+        'catalog_validation.review.open' => $admin,
     ];
 }
 

@@ -375,17 +375,17 @@ describe('admin', function () {
         expect(lastToastOf($page))->type->toBe('success')->title->toBe('Alta de usuarios en cola');
     });
 
-    it('sin NEXUS_DEFAULT_PASSWORD, «Dar de alta usuarios» avisa con el motivo y no encola nada', function () {
+    it('AC-02: sin NEXUS_DEFAULT_PASSWORD, «Dar de alta usuarios» encola igual: los usuarios nacen sin acceso', function () {
         Queue::fake();
         config(['auth.default_password' => null]);
 
         $page = Livewire::actingAs($this->admin)->test('faculty::pages.teachers')->call('provisionUsers');
 
-        Queue::assertNothingPushed();
-        expect(lastToastOf($page))->type->toBe('error')->description->toContain('NEXUS_DEFAULT_PASSWORD');
+        Queue::assertPushed(ProvisionTeacherUsersJob::class);
+        expect(lastToastOf($page))->type->toBe('success');
     });
 
-    it('sin NEXUS_DEFAULT_PASSWORD, el alta avisa y no deja nada a medias', function () {
+    it('AC-02: sin NEXUS_DEFAULT_PASSWORD, el alta da de alta al docente con su usuario sin acceso', function () {
         config(['auth.default_password' => null]);
 
         $page = Livewire::actingAs($this->admin)
@@ -396,8 +396,10 @@ describe('admin', function () {
             ->set('department_id', $this->sc->id)
             ->call('save');
 
-        expect(Teacher::where('rfc', 'NUEV000002AB1')->exists())->toBeFalse()
-            ->and(lastToastOf($page))->type->toBe('error')->description->toContain('NEXUS_DEFAULT_PASSWORD');
+        $teacher = Teacher::where('rfc', 'NUEV000002AB1')->sole();
+
+        expect($teacher->user->password)->toBeNull()
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente creado');
     });
 
     it('un id que no es uuid es un docente que no existe', function () {
@@ -543,16 +545,29 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->and($deactivate->hasAttribute('wire:click'))->toBeFalse();
     });
 
-    it('quita a un docente de su departamento; el docente sigue activo y sale de su lista', function () {
+    it('CV8: quitar a un docente de su última adscripción lo da de baja con su cuenta, y sale de la lista', function () {
         $page = Livewire::actingAs($this->jefe)
             ->test('faculty::pages.teachers')
             ->call('removeAdscription', $this->dario->adscriptions()->sole()->id)
             ->assertDontSee('Darío Soto');
 
         expect($this->dario->adscriptions()->count())->toBe(0)
-            ->and($this->dario->fresh()->is_active)->toBeTrue()
-            ->and($this->dario->fresh()->user->is_active)->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('PRUE000004AB1 · Darío Soto; queda sin departamento');
+            ->and($this->dario->fresh()->is_active)->toBeFalse()
+            ->and($this->dario->fresh()->user->is_active)->toBeFalse()
+            ->and(lastToastOf($page))->title->toBe('Docente dado de baja de SC')->description->toBe('PRUE000004AB1 · Darío Soto; queda sin departamento');
+    });
+
+    it('CV-S8: a un docente que ocupa un puesto, «Quitar» se ve deshabilitado con su motivo y llamarlo es 403', function () {
+        $this->dario->update(['user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => Department::factory()->create()->id])->create()->id]);
+        $adscription = $this->dario->adscriptions()->sole();
+
+        Livewire::actingAs($this->jefe)->test('faculty::pages.teachers')
+            ->assertSee('Ocupa un puesto: lo quitan el administrador o la Subdirección.')
+            ->call('removeAdscription', $adscription->id)
+            ->assertForbidden();
+
+        expect($adscription->fresh()->trashed())->toBeFalse()
+            ->and($this->dario->fresh()->is_active)->toBeTrue();
     });
 
     it('recibe 403 al dar de baja, aun a uno de su departamento', function () {

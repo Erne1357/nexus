@@ -10,7 +10,6 @@ use App\Modules\Faculty\Rules\TeacherRules;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -22,9 +21,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * En una transacción revisa el número, escribe y deja bitácora; si otra sesión guarda el mismo número entre la
  * revisión y el insert, la restricción única de la base responde con el mismo error. Luego AddAdscription pone la
- * adscripción principal y SyncTeacherAccess le da usuario (username = número, contraseña por defecto y cambio
- * obligatorio) con el rol `docente`. Sin NEXUS_DEFAULT_PASSWORD falla y no deja nada a medias. Después del commit
- * avisa con TeacherCreated.
+ * adscripción principal y SyncTeacherAccess le da usuario (username = número, sin acceso hasta que se le dé, AC-02,
+ * y cambio obligatorio) con el rol `docente`. Después del commit avisa con TeacherCreated.
  */
 final class CreateTeacher
 {
@@ -41,7 +39,6 @@ final class CreateTeacher
      * @param  array{rfc: string, name: string, email?: ?string, degree?: TeacherDegree|string|null, hired_on?: ?string}  $data
      *
      * @throws ValidationException
-     * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
     public function handle(array $data, Department $department): Teacher
     {

@@ -4,6 +4,7 @@ use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Spatie\Activitylog\Models\Activity;
@@ -44,19 +45,15 @@ it('rechaza un puesto que no tiene', function () {
         ->and(app(Actor::class)->activeRole())->toBe(Role::JefeDepartamento);
 });
 
-it('olvida el campus si el nuevo perfil no trabaja en él', function () {
+it('conserva el periodo de la credencial y no guarda campus: la credencial ya no lo elige (AZ-S6 sin efecto)', function () {
+    $term = Term::factory()->create();
     actingAsRole($this->user, Role::JefeDepartamento);
-    session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
+    session([Actor::ACTIVE_TERM => $term->id]);
 
     app(SwitchRole::class)->handle(Role::Coordinador);
 
-    expect(session()->has(Actor::ACTIVE_CAMPUS))->toBeFalse();
-
-    actingAsRole($this->user, Role::Coordinador);
-    session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
-    app(SwitchRole::class)->handle(Role::JefeDepartamento);
-
-    expect(session(Actor::ACTIVE_CAMPUS))->toBe($this->c2->id);
+    expect(session(Actor::ACTIVE_TERM))->toBe($term->id)
+        ->and(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
 });
 
 it('olvida las páginas recientes', function () {

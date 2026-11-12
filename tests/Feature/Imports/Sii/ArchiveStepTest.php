@@ -60,6 +60,7 @@ function siiArchiveDump(): string
 }
 
 beforeEach(function () {
+    $this->staffExcluded = ['foto', 'firma', 'pigmentacion', 'pelo', 'frente', 'cejas', 'ojos', 'nariz', 'boca', 'estaturamts', 'pesokg', 'senas_visibles', 'padre', 'madre', 'conyuge', 'hijos', 'num_cartilla_smn', 'ano_clase', 'domicilio_empleado', 'colonia_empleado', 'codigo_postal_empleado'];
     Storage::fake('imports');
     User::factory()->admin()->create(['username' => 'migrador']);
 
@@ -74,7 +75,7 @@ beforeEach(function () {
     };
     ($this->students)(3);
     SiiFixtures::writeStaff($this->dir, [
-        ['rfc' => 'PRUE800101AB1', 'foto' => 'FOTO-DOCENTE-1', 'firma' => 'FIRMA-DOCENTE-1'],
+        ['rfc' => 'PRUE800101AB1', 'foto' => 'FOTO-DOCENTE-1', 'firma' => 'FIRMA-DOCENTE-1', 'domicilio_empleado' => 'CALLE-PRIVADA-1', 'padre' => 'PADRE-DOCENTE-1', 'pigmentacion' => 'PIEL-DOCENTE-1', 'num_cartilla_smn' => 'CARTILLA-1'],
         ['rfc' => 'PRUE800101AB2', 'foto' => 'FOTO-DOCENTE-2', 'firma' => 'FIRMA-DOCENTE-2'],
     ]);
 
@@ -95,7 +96,7 @@ it('guarda una tabla por archivo presente, con _linea y las columnas del contrat
         $file = SiiFile::from($value);
         $excluded = match ($file) {
             SiiFile::Alumnos => ['nip', 'foto', 'firma'],
-            SiiFile::Docentes => ['foto', 'firma'],
+            SiiFile::Docentes => $this->staffExcluded,
             default => [],
         };
 
@@ -192,7 +193,7 @@ it('_cargas dice qué archivo se cargó, con cuántos renglones, qué columnas s
         ->and($loads['alumnos_todos']->carpeta)->toBe($this->dir)
         ->and($loads['alumnos_todos']->cargado_en)->not->toBeNull()
         ->and((int) $loads['docentes']->renglones)->toBe(2)
-        ->and($loads['docentes']->columnas_excluidas)->toBe('{foto,firma}')
+        ->and($loads['docentes']->columnas_excluidas)->toBe('{foto,firma,pigmentacion,pelo,frente,cejas,ojos,nariz,boca,estaturamts,pesokg,senas_visibles,padre,madre,conyuge,hijos,num_cartilla_smn,ano_clase,domicilio_empleado,colonia_empleado,codigo_postal_empleado}')
         ->and($loads['aulas']->nombre_en_carpeta)->toBe('Aulas.CSV')
         ->and($loads['aulas']->columnas_excluidas)->toBe('{}')
         ->and((int) $loads['aulas']->ilegibles)->toBe(0);
@@ -248,4 +249,64 @@ it('va primero en la corrida: el original queda guardado aunque el paso siguient
         ->and(Artisan::output())->toContain('en el paso organigrama')
         ->and(siiArchiveTables())->toBe(['_cargas', ...$this->present])
         ->and(DB::table('sii_archivo.alumnos_todos')->count())->toBe(3);
+});
+
+it('acceso no guarda la contraseña (hash MD5) ni como columna ni como valor, y permisos se guarda completo', function () {
+    $hash = 'd41d8cd98f00b204e9800998ecf8427e';
+    file_put_contents("{$this->dir}/acceso.csv", mb_convert_encoding(
+        "usuario,nombre_usuario,contrasena,tipo_usuario,status\r\n"
+        ."'DOCE800101AB1  ','MAR\u{00CD}A P\u{00C9}REZ INVENTADA  ','{$hash}  ','D ','A'\r\n"
+        ."'usuario1        ','USUARIO UNO  ','{$hash}  ','J ','B'\r\n",
+        'ISO-8859-1', 'UTF-8',
+    ));
+    SiiFixtures::write("{$this->dir}/permisos.csv", SiiFile::Permisos, [
+        "'DOCE800101AB1  ','110401  ','ISC','SII'",
+        "'usuario1  ','110402  ',1,'SII'",
+    ]);
+
+    expect(($this->archive)())->toBe(0);
+
+    expect(siiArchiveTables())->toBe(['_cargas', 'acceso', ...$this->present, 'permisos'])
+        ->and(siiArchiveColumns('acceso'))->toBe(['_linea', 'usuario', 'nombre_usuario', 'tipo_usuario', 'status'])
+        ->and(siiArchiveDump())->not->toContain($hash)
+        ->and(siiArchiveRows('acceso'))->toBe([
+            ['_linea' => 2, 'usuario' => 'DOCE800101AB1', 'nombre_usuario' => 'MARÍA PÉREZ INVENTADA', 'tipo_usuario' => 'D', 'status' => 'A'],
+            ['_linea' => 3, 'usuario' => 'usuario1', 'nombre_usuario' => 'USUARIO UNO', 'tipo_usuario' => 'J', 'status' => 'B'],
+        ])
+        ->and(siiArchiveColumns('permisos'))->toBe(['_linea', ...SiiFile::Permisos->headers()])
+        ->and(siiArchiveRows('permisos'))->toBe([
+            ['_linea' => 2, 'usuario' => 'DOCE800101AB1', 'clave_area' => '110401', 'carrera' => 'ISC', 'aplicacion' => 'SII'],
+            ['_linea' => 3, 'usuario' => 'usuario1', 'clave_area' => '110402', 'carrera' => '1', 'aplicacion' => 'SII'],
+        ]);
+
+    $loads = DB::table('sii_archivo._cargas')->get()->keyBy('archivo');
+
+    expect($loads['acceso']->columnas_excluidas)->toBe('{contrasena}')
+        ->and((int) $loads['acceso']->renglones)->toBe(2)
+        ->and($loads['permisos']->columnas_excluidas)->toBe('{}');
+});
+
+it('sin acceso ni permisos la carga funciona y no crea sus tablas', function () {
+    expect(($this->archive)())->toBe(0)
+        ->and(siiArchiveTables())->not->toContain('acceso')->not->toContain('permisos');
+});
+
+it('--dry-run cuenta acceso y permisos sin escribirlos', function () {
+    SiiFixtures::write("{$this->dir}/acceso.csv", SiiFile::Acceso, [SiiFixtures::line(SiiFile::Acceso, ['contrasena' => "'d41d8cd98f00b204e9800998ecf8427e'"])]);
+    SiiFixtures::write("{$this->dir}/permisos.csv", SiiFile::Permisos, [SiiFixtures::line(SiiFile::Permisos), SiiFixtures::line(SiiFile::Permisos)]);
+
+    $counts = app(ArchiveSiiExport::class)->handle(SiiExport::open($this->dir), dryRun: true);
+
+    expect($counts['acceso'])->toBe(1)
+        ->and($counts['permisos'])->toBe(2)
+        ->and(siiArchiveTables())->not->toContain('acceso')->not->toContain('permisos');
+});
+
+it('docentes no guarda la descripción física, la familia, la cartilla militar ni el domicilio, ni como columna ni como valor', function () {
+    ($this->archive)();
+
+    expect(siiArchiveColumns('docentes'))->not->toContain(...$this->staffExcluded)
+        ->toContain('rfc', 'curp_empleado', 'correo_electronico')
+        ->and(siiArchiveDump())->toContain('PRUE800101AB1')
+        ->not->toContain('CALLE-PRIVADA')->not->toContain('PADRE-DOCENTE')->not->toContain('PIEL-DOCENTE')->not->toContain('CARTILLA-1');
 });

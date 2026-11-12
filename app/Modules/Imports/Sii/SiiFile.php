@@ -23,6 +23,8 @@ enum SiiFile: string
     case HistoriaAlumno = 'historia_alumno';
     case SeleccionMaterias = 'seleccion_materias';
     case RequisitosMateria = 'requisitos_materia';
+    case Acceso = 'acceso';
+    case Permisos = 'permisos';
 
     /**
      * Encabezados exactos (normalizados) que trae la exportación real. Si cambian, la migración se detiene.
@@ -317,6 +319,19 @@ enum SiiFile: string
                 'materia_relacion',
                 'tipo_requisito',
             ],
+            self::Acceso => [
+                'usuario',
+                'nombre_usuario',
+                'contrasena',
+                'tipo_usuario',
+                'status',
+            ],
+            self::Permisos => [
+                'usuario',
+                'clave_area',
+                'carrera',
+                'aplicacion',
+            ],
         };
     }
 
@@ -341,11 +356,12 @@ enum SiiFile: string
     /**
      * Si la exportación debe traer el archivo. Los de la parte 1 son obligatorios; los del kárdex (historia y
      * selección) y la seriación (`requisitos_materia`), que llegaron después, no: sin ellos los pasos `kardex` y
-     * `seriacion` avisan y no los migran.
+     * `seriacion` avisan y no los migran. Las cuentas del SII (`acceso`) y lo que cada una ve (`permisos`) tampoco: solo
+     * se archivan en `sii_archivo` (ArchiveSiiExport), ningún paso los migra todavía.
      */
     public function required(): bool
     {
-        return ! in_array($this, [self::HistoriaAlumno, self::SeleccionMaterias, self::RequisitosMateria], true);
+        return ! in_array($this, [self::HistoriaAlumno, self::SeleccionMaterias, self::RequisitosMateria, self::Acceso, self::Permisos], true);
     }
 
     /**

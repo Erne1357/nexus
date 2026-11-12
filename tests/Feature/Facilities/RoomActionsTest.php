@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\UpdateRoom;
@@ -10,6 +11,7 @@ use App\Modules\Facilities\Events\RoomCreated;
 use App\Modules\Facilities\Events\RoomUpdated;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Facilities\Rules\RoomRules;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -17,7 +19,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Actions de Salón. Clave normalizada y única por campus (también contra borrados), capacidad mayor
-| que cero, edificio del mismo campus, dueño opcional y existente, características como lista limpia.
+| que cero, edificio del mismo campus al darlo de alta, dueño opcional y existente, características como lista limpia.
+| Al editarlo, un edificio de otro campus lo mueve a ese campus (CV-S10, supuesto por confirmar).
 */
 
 beforeEach(function () {
@@ -144,7 +147,7 @@ it('activa y desactiva con bitácora', function () {
         ->and(Activity::query()->orderByDesc('id')->firstOrFail()->attribute_changes->toArray())->toBe(['attributes' => ['is_active' => false], 'old' => ['is_active' => true]]);
 });
 
-it('acepta su propia clave y rechaza la de otro salón, la capacidad inválida y el edificio de otro campus al editar', function () {
+it('acepta su propia clave y rechaza la de otro salón, la capacidad inválida y un edificio que no existe al editar', function () {
     $room = newRoom($this->c2, $this->edificioA);
     newRoom($this->c2, $this->edificioA, ['code' => 'A-102']);
 
@@ -153,7 +156,57 @@ it('acepta su propia clave y rechaza la de otro salón, la capacidad inválida y
 
     expect(fn () => app(UpdateRoom::class)->handle($room, ['code' => 'a-102']))->toThrow(ValidationException::class, 'Ya existe un salón con la clave A-102')
         ->and(fn () => app(UpdateRoom::class)->handle($room, ['capacity' => 0]))->toThrow(ValidationException::class, 'La capacidad debe ser mayor que cero')
-        ->and(fn () => app(UpdateRoom::class)->handle($room, ['building_id' => $this->edificioC1->id]))->toThrow(ValidationException::class, 'El edificio no es de este campus');
+        ->and(fn () => app(UpdateRoom::class)->handle($room, ['building_id' => fakeKey(9)]))->toThrow(ValidationException::class, 'El edificio no existe');
+});
+
+describe('mover a otro campus (CV-S10)', function () {
+    it('un edificio de otro campus lo mueve: el campus sigue al edificio, con bitácora', function () {
+        $room = newRoom($this->c2, $this->edificioA);
+
+        app(UpdateRoom::class)->handle($room, ['building_id' => $this->edificioC1->id]);
+
+        expect($room->fresh())
+            ->building_id->toBe($this->edificioC1->id)
+            ->campus_id->toBe($this->c1->id)
+            ->and(Activity::query()->orderByDesc('id')->firstOrFail()->attribute_changes['attributes'])->toMatchArray(['building_id' => $this->edificioC1->id, 'campus_id' => $this->c1->id]);
+    });
+
+    it('rechaza moverlo si su clave ya existe en el campus destino, también entre los borrados', function () {
+        $room = newRoom($this->c2, $this->edificioA);
+        newRoom($this->c1, $this->edificioC1)->delete();
+
+        expect(fn () => app(UpdateRoom::class)->handle($room, ['building_id' => $this->edificioC1->id]))->toThrow(ValidationException::class, 'Ya existe un salón con la clave A-101')
+            ->and($room->fresh()->campus_id)->toBe($this->c2->id);
+    });
+
+    it('con otra clave libre en el destino, lo mueve', function () {
+        $room = newRoom($this->c2, $this->edificioA);
+        newRoom($this->c1, $this->edificioC1);
+
+        app(UpdateRoom::class)->handle($room, ['building_id' => $this->edificioC1->id, 'code' => 'A-201']);
+
+        expect($room->fresh())->campus_id->toBe($this->c1->id)->code->toBe('A-201');
+    });
+
+    it('rechaza un edificio de un campus inactivo o que no usa salones', function (Closure $campus) {
+        $room = newRoom($this->c2, $this->edificioA);
+        $building = Building::factory()->for($campus())->create();
+
+        expect(fn () => app(UpdateRoom::class)->handle($room, ['building_id' => $building->id]))->toThrow(ValidationException::class, 'campus inactivo o que no usa salones')
+            ->and($room->fresh()->campus_id)->toBe($this->c2->id);
+    })->with([
+        'inactivo' => fn () => Campus::factory()->inactive()->create(),
+        'sin salones' => fn () => Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]),
+    ]);
+
+    it('rechaza moverlo si ya se usa en su campus (sesiones, acuerdos o materias que lo tienen por omisión)', function () {
+        $room = newRoom($this->c2, $this->edificioA);
+        SubjectRoomDefault::factory()->create(['room_id' => $room->id]);
+
+        expect(fn () => app(UpdateRoom::class)->handle($room, ['building_id' => $this->edificioC1->id, 'capacity' => 50]))
+            ->toThrow(ValidationException::class, 'ya se usa en su campus')
+            ->and($room->fresh())->campus_id->toBe($this->c2->id)->capacity->toBe(30);
+    });
 });
 
 it('sin cambios no escribe, no registra ni avisa', function () {

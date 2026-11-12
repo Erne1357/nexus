@@ -64,6 +64,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->make(AuthorizationSnapshots::class),
             $app->make(PermissionRegistry::class),
             $app['session.store'],
+            fn (): mixed => $app['request'],
         ));
 
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.

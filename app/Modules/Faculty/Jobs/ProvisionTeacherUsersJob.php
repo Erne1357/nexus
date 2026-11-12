@@ -18,8 +18,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
  * varias veces, con un candado que vence en una hora por si nunca llega a correr. Si lo piden mientras corre, se
  * encola de nuevo, porque pudo llegar un docente nuevo, pero no se encima con la corrida en curso: espera a que
  * termine y se reintenta cada 30 segundos durante una hora. Sincronizar es idempotente, así que reintentar es
- * seguro; un error de verdad (como la falta de NEXUS_DEFAULT_PASSWORD) lo deja fallido a la primera
- * (`maxExceptions`). Media hora de tiempo máximo, por debajo del `retry_after` de la conexión.
+ * seguro; un error de verdad lo deja fallido a la primera (`maxExceptions`). Media hora de tiempo máximo, por debajo del `retry_after` de la conexión.
  */
 final class ProvisionTeacherUsersJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {

@@ -17,8 +17,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
 
 /**
- * Lecturas de alumnos para las pantallas (tarea 1.6). El listado es de un campus, el activo de la credencial, y
- * deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de Actor y la misma regla que
+ * Lecturas de alumnos para las pantallas (tarea 1.6). El listado es de un campus o, sin uno (`null`, «Todos»), de
+ * todos los campus activos del usuario (#415: la credencial ya no elige campus), y deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de Actor y la misma regla que
  * Actor::covers(): al admin, todo el campus; a la subdirección, las carreras de los departamentos de
  * Subdirección Académica; al jefe de departamento, las carreras de su departamento; al coordinador, su carrera
  * (reglas-de-negocio.md, "Consultar alumnos"). Incluye a los alumnos inactivos, como todo catálogo; los borrados no.
@@ -37,13 +37,14 @@ final class StudentQuery
      * @param  array{career?: string, plan?: string, semester?: int|string, status?: string}  $filters
      * @return LengthAwarePaginator<int, Student>
      */
-    public function forTable(Actor $context, Campus $campus, array $filters = [], string $search = '', int $perPage = 25): LengthAwarePaginator
+    public function forTable(Actor $context, ?Campus $campus, array $filters = [], string $search = '', int $perPage = 25): LengthAwarePaginator
     {
         return $this->visible($context, $campus)
             ->with([
                 'career' => fn (BelongsTo $career) => $career->withTrashed(),
                 'studyPlan' => fn (BelongsTo $plan) => $plan->withTrashed(),
                 'progress',
+                'campus:id,code,name',
             ])
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['control_number', 'name'], $search))
             ->when($filters['career'] ?? null, fn (Builder $query, string $career) => $this->whereKeyFromClient($query, 'career_id', $career))
@@ -75,7 +76,7 @@ final class StudentQuery
      *
      * @return array{careers: list<array{id: string, name: string}>, plans: list<array{id: string, name: string}>, semesters: list<array{id: int, name: string}>}
      */
-    public function filterOptions(Actor $context, Campus $campus): array
+    public function filterOptions(Actor $context, ?Campus $campus): array
     {
         $visible = fn (): Builder => $this->visible($context, $campus);
 
@@ -96,9 +97,13 @@ final class StudentQuery
      *
      * @return Builder<Student>
      */
-    private function visible(Actor $context, Campus $campus): Builder
+    private function visible(Actor $context, ?Campus $campus): Builder
     {
-        $query = Student::query()->where('students.campus_id', $campus->id);
+        $query = Student::query()->when(
+            $campus === null,
+            fn (Builder $students) => $students->whereIn('students.campus_id', $context->campuses()->pluck('id')->all()),
+            fn (Builder $students) => $students->where('students.campus_id', $campus->id),
+        );
 
         return $context->constrain($query, StudentsPermission::StudentView, [
             'campus' => 'students.campus_id',
