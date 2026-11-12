@@ -133,10 +133,12 @@ it('busca un registro de la revisión por su id; uno ajeno o que no es uuid no e
 });
 
 describe('cuántos van revisados (CV7)', function () {
-    it('cuenta los registros de la revisión y los que tienen marca, sin las marcas de los que ya no están', function () {
+    it('cuenta los activos de la revisión y los que tienen marca, sin los inactivos ni las marcas de los que ya no están', function () {
         $review = contentsReview(Catalog::Subjects, $this->department);
         $marked = Subject::factory()->create(['department_id' => $this->department->id]);
-        Subject::factory()->inactive()->create(['department_id' => $this->department->id]);
+        Subject::factory()->create(['department_id' => $this->department->id]);
+        $inactive = Subject::factory()->inactive()->create(['department_id' => $this->department->id]);
+        CatalogReviewMark::factory()->for($review, 'review')->on($inactive)->create();
         $gone = Subject::factory()->create(['department_id' => $this->department->id]);
         CatalogReviewMark::factory()->for($review, 'review')->on($marked)->create();
         CatalogReviewMark::factory()->for($review, 'review')->on($gone)->create();

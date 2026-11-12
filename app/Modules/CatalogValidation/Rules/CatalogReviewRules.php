@@ -53,7 +53,8 @@ final class CatalogReviewRules
     }
 
     /**
-     * Ningún registro de la revisión queda sin marcar como revisado (CV7); una revisión sin registros cumple.
+     * Ningún registro activo de la revisión queda sin marcar como revisado (CV7); los inactivos no hace falta, y una
+     * revisión sin registros activos cumple.
      *
      * @throws ValidationException
      */

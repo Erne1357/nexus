@@ -835,16 +835,17 @@ describe('marcas de revisado (CV7)', function () {
         expect(CatalogReviewMark::count())->toBe(0);
     });
 
-    it('cuenta los revisados en la tarjeta, en la pestaña y en el renglón de la lista', function () {
+    it('cuenta los activos revisados en la tarjeta, en la pestaña y en el renglón de la lista; los inactivos no cuentan', function () {
+        Subject::factory()->create(['code' => 'SCD-1099', 'department_id' => $this->sis->id]);
         CatalogReviewMark::factory()->for(reviewOf(Catalog::Subjects), 'review')->on($this->subject)->create();
 
         reviewPage()->assertSeeHtml('data-testid="reviewed-count-subjects"')->assertSee('1 de 2 revisados');
         reviewPage($this->jefe, ['catalogo' => 'subjects'])->assertSee('1 de 2 revisados')->assertSeeHtml('data-testid="tab-reviewed-subjects"');
     });
 
-    it('CV7: Validar queda deshabilitado con su motivo mientras falte revisar, y no valida llamando el método', function () {
+    it('CV7: Validar queda deshabilitado con su motivo mientras falte revisar un activo, y no valida llamando el método', function () {
         reviewPage()
-            ->assertSee('Faltan 2 registros por revisar.')
+            ->assertSee('Falta 1 registro por revisar.')
             ->assertDontSeeHtml("wire:click=\"confirm('validate', 'subjects')\"")
             ->call('confirm', 'validate', 'subjects')
             ->assertHasErrors('status')

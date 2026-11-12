@@ -27,8 +27,9 @@ use Illuminate\Support\Str;
  * - Planes: los de las carreras sin borrar del departamento.
  * - Salones: los del departamento en el campus de la revisión.
  *
- * La clave es el RFC en los docentes y `code` en lo demás. Cuántos de esos registros ya marcó el jefe como revisados
- * (CV7) lo dicen progress() y progressOf(); las marcas de registros que ya no están en la revisión no cuentan (CV-S7).
+ * La clave es el RFC en los docentes y `code` en lo demás. Cuántos de los activos ya marcó el jefe como revisados (CV7:
+ * solo los activos hay que revisarlos) lo dicen progress() y progressOf(); las marcas de registros que ya no están en la
+ * revisión no cuentan (CV-S7).
  */
 final class CatalogContentsQuery
 {
@@ -106,17 +107,18 @@ final class CatalogContentsQuery
     }
 
     /**
-     * Cuántos registros de la revisión quedan sin revisar (CV7): los que están en ella y no tienen marca.
+     * Cuántos registros activos de la revisión quedan sin revisar (CV7): los que están en ella, activos y sin marca. Los
+     * inactivos no hace falta revisarlos (confirmado el 12 de noviembre de 2026).
      */
     public function unreviewedCount(CatalogReview $review): int
     {
-        $query = $this->scoped($review->catalog, $review->department_id, $review->campus_id);
+        $query = $this->active($this->scoped($review->catalog, $review->department_id, $review->campus_id));
 
         return $query->whereNotIn($query->getModel()->qualifyColumn('id'), $review->marks()->select('record_id'))->count();
     }
 
     /**
-     * «N de M revisados» de una revisión (CV7).
+     * «N de M revisados» de una revisión, solo de los registros activos (CV7).
      *
      * @return array{reviewed: int, total: int}
      */
@@ -127,7 +129,7 @@ final class CatalogContentsQuery
 
     /**
      * «N de M revisados» de varias revisiones, por id de revisión, con una consulta por catálogo y no una por revisión:
-     * cuenta los registros de cada una con una subconsulta ligada a su departamento (y campus, en salones).
+     * cuenta los registros activos de cada una con una subconsulta ligada a su departamento (y campus, en salones).
      *
      * @param  Collection<int, CatalogReview>  $reviews
      * @return array<string, array{reviewed: int, total: int}>
@@ -139,7 +141,7 @@ final class CatalogContentsQuery
         $campus = new Expression('"catalog_reviews"."campus_id"');
 
         foreach ($reviews->groupBy(fn (CatalogReview $review): string => $review->catalog->value) as $catalog => $group) {
-            $records = fn (): Builder => $this->scoped(Catalog::from($catalog), $department, $campus);
+            $records = fn (): Builder => $this->active($this->scoped(Catalog::from($catalog), $department, $campus));
             $model = $records()->getModel();
             $marks = CatalogReviewMark::query()->select('record_id')->whereColumn('catalog_review_marks.catalog_review_id', 'catalog_reviews.id');
 
@@ -179,6 +181,17 @@ final class CatalogContentsQuery
         $query = $this->scoped($review->catalog, $review->department_id, $review->campus_id);
 
         return $query->orderBy($query->getModel()->qualifyColumn($this->codeColumn($review->catalog)));
+    }
+
+    /**
+     * Solo los activos de la consulta.
+     *
+     * @param  Builder<Model>  $query
+     * @return Builder<Model>
+     */
+    private function active(Builder $query): Builder
+    {
+        return $query->where($query->getModel()->qualifyColumn('is_active'), true);
     }
 
     /**

@@ -16,8 +16,8 @@ use Illuminate\Validation\ValidationException;
  * cuándo, y la foto de los registros activos del catálogo (CatalogContentsQuery::snapshot), contra la que el
  * periodo siguiente cuenta altas y bajas (CV3). Las observaciones abiertas no lo impiden (CV4). Con las
  * revisiones validadas, la carga del departamento puede salir de borrador (HC-14). Quién puede lo decide
- * CatalogReviewPolicy::validate antes de llamarla. Solo se valida con todos sus registros marcados como revisados (CV7,
- * confirmado el 12 de noviembre de 2026); una revisión sin registros se valida.
+ * CatalogReviewPolicy::validate antes de llamarla. Solo se valida con todos sus registros activos marcados como revisados
+ * (CV7, confirmado el 12 de noviembre de 2026); los inactivos no hace falta, y una revisión sin activos se valida.
  *
  * En una transacción relee la revisión con bloqueo (así no se cruza con CorrectRecord ni con FlagRecord), deja
  * en la bitácora el estado anterior y el nuevo, con cuántos registros tiene la foto, y después del commit
