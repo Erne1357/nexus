@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -31,7 +30,7 @@ beforeEach(function () {
 
 function startStaffingPage(User $user): Testable
 {
-    test()->withSession([Actor::ACTIVE_CAMPUS => test()->world->campus->id]);
+    onCampusPage(test()->world->campus);
 
     return Livewire::actingAs($user)->test('staffing::pages.assign');
 }

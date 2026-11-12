@@ -180,14 +180,14 @@ describe('pestañas por campus', function () {
             ->assertSee('La carga ya pasó el cierre.');
     });
 
-    it('sin ?campus= abre la pestaña del campus de la credencial', function () {
+    it('sin pestaña elegida abre la del campus que da Actor::activeCampus() (puente de #415), no la primera', function () {
         $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
         $this->world->group(load: $this->world->loadIn($c1));
         $this->world->group();
 
-        $this->withSession([Actor::ACTIVE_CAMPUS => $c1->id]);
+        onCampusPage($this->world->campus);
 
-        closingPage($this->jefe)->assertSet('campus', 'C1');
+        closingPage($this->jefe)->assertSet('campus', 'C2');
     });
 
     it('un departamento sin grupos en ningún campus dice que su carga se queda en borrador', function () {
@@ -310,16 +310,34 @@ describe('reabrir y volver a asignación', function () {
     });
 });
 
-it('«Ir a …» deja la credencial en el campus de la carga y lleva a la pantalla donde se arregla', function () {
+it('«Ir a …» deja la credencial en el periodo de la carga y lleva a la pantalla donde se arregla, en el campus de la carga (?campus=, #415)', function () {
     $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->world->group(teacher: false, load: $this->world->loadIn($c1));
     $this->world->group();
 
+    // La credencial está en el periodo actual por omisión (sin elección en la sesión); «Ir a …» fija el de la carga.
+    expect(session(Actor::ACTIVE_TERM))->toBeNull();
+
     closingPage($this->jefe, ['campus' => 'C1'])
+        ->call('goTo', 'assign')
+        ->assertRedirect(route('staffing.assign', ['depto' => 'SC', 'campus' => 'C1']));
+
+    expect(session(Actor::ACTIVE_TERM))->toBe($this->world->term->id);
+});
+
+it('«Ir a …» de una carga en un campus donde no trabaja no agrega ?campus= ni mueve el periodo', function () {
+    // El admin ve la carga de un campus que se desactivó, pero ya no trabaja en él (Actor::campuses()).
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+    $this->world->group();
+    $c1->update(['is_active' => false]);
+
+    closingPage(User::factory()->admin()->create(), ['departamento' => $this->world->department->id, 'campus' => 'C1'])
+        ->assertSet('campus', 'C1')
         ->call('goTo', 'assign')
         ->assertRedirect(route('staffing.assign', ['depto' => 'SC']));
 
-    expect(session(Actor::ACTIVE_CAMPUS))->toBe($c1->id);
+    expect(session(Actor::ACTIVE_TERM))->toBeNull();
 });
 
 it('el aviso del cierre abre la pantalla con el departamento', function () {

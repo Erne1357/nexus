@@ -8,7 +8,8 @@ use App\Modules\Core\Enums\Role;
  * Lo que la campana muestra de una notificación: título, una línea de detalle, el icono (heroicon de
  * MaryUI) con su tono (`info`, `warning`, `success` o `neutral`) y a dónde lleva, como nombre de ruta y parámetros para que el destino pueda llegar después que el
  * aviso (si la ruta no existe, la campana avisa que no está disponible y no lleva). `termId` y `campusId` son el periodo y el campus
- * del aviso: al abrirlo, la credencial cambia a ellos si el usuario trabaja ahí. `role` es el puesto al que va el aviso
+ * del aviso: al abrirlo, si el usuario trabaja en ese campus, la credencial cambia al periodo y la pantalla se abre en
+ * el campus (`?campus=<código>`; OpenNotification). `role` es el puesto al que va el aviso
  * (`data.role`), o null si no va a uno: al abrirlo, la sesión actúa con ese puesto (OpenNotification).
  */
 final readonly class NotificationMessage

@@ -8,17 +8,18 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use Illuminate\Testing\TestResponse;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 /*
-| Selector de campus y periodo de la credencial (core::components.context-switcher). Ofrece los campus
-| de Actor::campuses() y los periodos existentes, y fija la elección con SetActiveContext.
+| Selector de periodo de la credencial (core::components.context-switcher, #415): ofrece todos los periodos y fija la
+| elección con SetActiveContext. La credencial ya no elige campus: lo elige cada pantalla (`?campus=`).
 */
 
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $this->foreign = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus ajeno']);
 
     $this->current = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
     $this->previous = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
@@ -29,145 +30,104 @@ beforeEach(function () {
         ->create();
 });
 
-it('ofrece solo los campus del alcance y todos los periodos, del más reciente al más antiguo', function () {
-    $this->actingAs($this->jefe);
+/**
+ * Manda `apply` como lo manda el navegador, con la página en Referer (Livewire::test no la manda), y da la respuesta.
+ */
+function applyFromPage(Testable $component, string $page): TestResponse
+{
+    return test()->withHeaders(['X-Livewire' => 'true', 'Referer' => $page])->postJson(app('livewire')->getUpdateUri(), ['components' => [[
+        'snapshot' => json_encode($component->snapshot),
+        'updates' => [],
+        'calls' => [['path' => '', 'method' => 'apply', 'params' => []]],
+    ]]]);
+}
+
+it('ofrece todos los periodos, del más reciente al más antiguo, y ningún campus', function (string $user) {
+    $this->actingAs($user === 'jefe' ? $this->jefe : User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
 
     Livewire::test('core::components.context-switcher')
-        ->assertSee('Campus I')
-        ->assertSee('Campus II')
-        ->assertDontSee('Campus ajeno')
-        ->assertSeeInOrder(['Ene-Jun 2027', 'Ago-Dic 2026'])
-        ->assertSet('campusId', null)
-        ->assertSet('termId', $this->current->id);
-});
-
-it('con un solo campus lo muestra fijo, sin selector de campus', function () {
-    $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
-
-    Livewire::test('core::components.context-switcher')
-        ->assertSee('Campus II')
-        ->assertViewHas('campuses', fn ($campuses): bool => $campuses->pluck('code')->all() === ['C2'])
-        ->assertDontSeeHtml('wire:model="campusId"')
+        ->assertSeeInOrder(['Periodo', 'Ene-Jun 2027', 'Ago-Dic 2026'])
         ->assertSeeHtml('wire:model="termId"')
-        ->assertSet('campusId', $this->c2->id);
-});
+        ->assertDontSee('Campus I')
+        ->assertDontSee('Campus II')
+        ->assertDontSeeHtml('name="campus"')
+        ->assertSet('termId', $this->current->id);
+})->with(['de dos campus' => 'jefe', 'de un campus' => 'coordinador']);
 
-it('cambia el campus y el periodo activos con SetActiveContext', function () {
+it('cambia el periodo activo con SetActiveContext y recarga la página', function () {
     $this->actingAs($this->jefe);
 
     Livewire::test('core::components.context-switcher')
-        ->set('campusId', $this->c2->id)
         ->set('termId', $this->previous->id)
         ->call('apply')
         ->assertHasNoErrors()
-        ->assertRedirect();
+        ->assertRedirect(Livewire::originalUrl());
 
-    $context = app(Actor::class);
-
-    expect($context->activeCampus()?->is($this->c2))->toBeTrue()
-        ->and($context->activeTerm()?->is($this->previous))->toBeTrue();
+    expect(app(Actor::class)->activeTerm()?->is($this->previous))->toBeTrue();
 });
 
-it('confirma con un toast que escapa los nombres, porque MaryUI lo pinta como HTML', function () {
-    $this->c2->update(['name' => '<img src=x onerror=alert(1)>']);
+it('al recargar conserva el campus que la página eligió, y nada más de su consulta', function () {
+    $this->actingAs($this->jefe);
+    $component = Livewire::test('core::components.context-switcher')->set('termId', $this->previous->id);
+
+    $redirect = applyFromPage($component, url('/scheduling/editor?grupo=abc&campus=C2'))->assertOk()->json('components.0.effects.redirect');
+
+    expect($redirect)->toEndWith('?campus=C2')
+        ->not->toContain('grupo');
+});
+
+it('sin campus en la página recarga la misma ruta sin consulta', function () {
+    $this->actingAs($this->jefe);
+    $component = Livewire::test('core::components.context-switcher')->set('termId', $this->previous->id);
+
+    $redirect = applyFromPage($component, url('/scheduling/editor?grupo=abc'))->assertOk()->json('components.0.effects.redirect');
+
+    expect($redirect)->not->toContain('?');
+});
+
+it('confirma con un toast que escapa el nombre del periodo, porque MaryUI lo pinta como HTML', function () {
+    $this->previous->update(['name' => '<img src=x onerror=alert(1)>']);
     $this->actingAs($this->jefe);
 
     Livewire::test('core::components.context-switcher')
-        ->set('campusId', $this->c2->id)
+        ->set('termId', $this->previous->id)
         ->call('apply');
 
-    expect(session('mary.toast.title'))->toBe('Contexto actualizado')
-        ->and(session('mary.toast.description'))->toBe('&lt;img src=x onerror=alert(1)&gt; · Ene-Jun 2027');
+    expect(session('mary.toast.title'))->toBe('Periodo actualizado')
+        ->and(session('mary.toast.description'))->toBe('&lt;img src=x onerror=alert(1)&gt;');
 });
 
 it('al elegir el periodo actual deja el de omisión, para seguirlo cuando cambie', function () {
     $this->actingAs($this->jefe);
+    session([Actor::ACTIVE_TERM => $this->previous->id]);
 
     Livewire::test('core::components.context-switcher')
-        ->set('campusId', $this->c1->id)
         ->set('termId', $this->current->id)
         ->call('apply');
 
-    expect(session(Actor::ACTIVE_CAMPUS))->toBe($this->c1->id)
-        ->and(session(Actor::ACTIVE_TERM))->toBeNull();
-});
-
-it('al volver a "Elige un campus" olvida el campus elegido', function () {
-    $this->actingAs($this->jefe);
-    session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
-
-    Livewire::test('core::components.context-switcher')
-        ->assertSet('campusId', $this->c2->id)
-        ->set('campusId', '')
-        ->call('apply')
-        ->assertHasNoErrors();
-
-    expect(session(Actor::ACTIVE_CAMPUS))->toBeNull()
-        ->and(app(Actor::class)->activeCampus())->toBeNull();
-});
-
-it('ofrece los campus del perfil activo y rechaza el de otro de sus puestos', function () {
-    // Por omisión su perfil sería Jefatura de proyecto docente (C1), el primero en el orden del enum.
-    $user = User::factory()
-        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
-        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
-        ->create();
-    actingAsRole($user, Role::Coordinador);
-
-    $component = Livewire::test('core::components.context-switcher')
-        ->assertViewHas('campuses', fn ($campuses): bool => $campuses->pluck('code')->all() === ['C2'])
-        ->assertSet('campusId', $this->c2->id)
-        ->set('campusId', $this->c1->id)
-        ->call('apply')
-        ->assertNoRedirect()
-        ->assertSet('campusId', $this->c2->id);
-
-    expect(lastToastOf($component))
-        ->type->toBe('error')
-        ->description->toBe('No trabajas en ese campus.')
-        ->and(session(Actor::ACTIVE_CAMPUS))->toBeNull();
+    expect(session(Actor::ACTIVE_TERM))->toBeNull();
 });
 
 describe('elección rechazada', function () {
     beforeEach(function () {
         $this->actingAs($this->jefe);
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id, Actor::ACTIVE_TERM => $this->previous->id]);
+        session([Actor::ACTIVE_TERM => $this->previous->id]);
     });
 
-    it('con un campus fuera del alcance avisa con un toast, regresa la selección y no cambia el contexto', function () {
+    it('con un periodo que no existe avisa con un toast, regresa la selección y no cambia el periodo', function (string $id) {
         $component = Livewire::test('core::components.context-switcher')
-            ->set('campusId', $this->foreign->id)
-            ->set('termId', $this->current->id)
+            ->set('termId', $id)
             ->call('apply')
             ->assertOk()
             ->assertNoRedirect()
-            ->assertSet('campusId', $this->c1->id)
             ->assertSet('termId', $this->previous->id);
 
         expect(lastToastOf($component))
             ->type->toBe('error')
-            ->title->toBe('No se cambió el campus ni el periodo')
-            ->description->toBe('No trabajas en ese campus.')
-            ->and(session(Actor::ACTIVE_CAMPUS))->toBe($this->c1->id)
+            ->title->toBe('No se cambió el periodo')
+            ->description->toBe('El periodo elegido ya no existe.')
             ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id);
-    });
-
-    it('con un campus o un periodo que no existen avisa con un toast, regresa la selección y no cambia el contexto', function (string $property, string $id) {
-        $component = Livewire::test('core::components.context-switcher')
-            ->set($property, $id)
-            ->call('apply')
-            ->assertOk()
-            ->assertNoRedirect()
-            ->assertSet('campusId', $this->c1->id)
-            ->assertSet('termId', $this->previous->id);
-
-        expect(lastToastOf($component))
-            ->type->toBe('error')
-            ->title->toBe('No se cambió el campus ni el periodo')
-            ->description->toBe('El campus o el periodo elegido ya no existe.')
-            ->and(session(Actor::ACTIVE_CAMPUS))->toBe($this->c1->id)
-            ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id);
-    })->with(['campusId', 'termId'])->with([
+    })->with([
         'uuid sin registro' => '0190a8c2-3d4e-7f00-8a00-000000000000',
         'id que no es uuid' => '999999',
     ]);
@@ -189,7 +149,7 @@ describe('sin periodo activo', function () {
         Livewire::test('core::components.context-switcher')
             ->set('termId', $this->{$term}->id)
             ->call('apply')
-            ->assertRedirect();
+            ->assertRedirect(Livewire::originalUrl());
 
         expect(app(Actor::class)->activeTerm()?->is($this->{$term}))->toBeTrue();
     })->with(['current', 'previous']);
@@ -203,14 +163,13 @@ describe('sin periodo activo', function () {
     });
 });
 
-it('sin sesión no ofrece campus ni periodos', function () {
+it('sin sesión no ofrece periodos', function () {
     Livewire::test('core::components.context-switcher')
-        ->assertDontSee('Campus I')
         ->assertDontSee('Ene-Jun 2027');
 });
 
 /*
-| Perfil activo (spec 8.1, AZ-S4): «Actuando como», un renglón por puesto con su alcance, arriba de campus y periodo.
+| Perfil activo (spec 8.1, AZ-S4): «Actuando como», un renglón por puesto con su alcance, arriba del periodo.
 */
 
 function multiRoleUser(Campus $campus): User
@@ -279,22 +238,21 @@ it('rechaza un puesto que no tiene y deja el perfil como estaba', function () {
     expect(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
 });
 
-it('cambiar el campus nunca cambia el perfil, aunque el perfil elegido en el selector sea otro', function () {
+it('cambiar el periodo nunca cambia el perfil, aunque el perfil elegido en el selector sea otro', function () {
     $user = User::factory()
         ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
-        ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
         ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
         ->create();
     actingAsRole($user, Role::JefeProyectoDocente);
 
     Livewire::test('core::components.context-switcher')
         ->set('roleValue', 'coordinador')
-        ->set('campusId', $this->c1->id)
+        ->set('termId', $this->previous->id)
         ->call('apply')
         ->assertRedirect(Livewire::originalUrl());
 
     expect(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeProyectoDocente->value)
-        ->and(session(Actor::ACTIVE_CAMPUS))->toBe($this->c1->id)
+        ->and(session(Actor::ACTIVE_TERM))->toBe($this->previous->id)
         ->and($user->fresh()->last_role)->toBeNull();
 });
 

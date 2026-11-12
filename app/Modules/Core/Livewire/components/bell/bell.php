@@ -40,16 +40,14 @@ new class extends Component
     public function with(Actor $context, NotificationQuery $notifications): array
     {
         $user = $context->user();
-        $showCampus = $context->campuses()->count() > 1;
         ['total' => $total, 'unread' => $unread] = $user === null ? ['total' => 0, 'unread' => 0] : $notifications->counts($user);
 
         return [
             'unread' => $unread,
             'badge' => $unread > 99 ? '99+' : (string) $unread,
             'total' => $total,
-            'showCampus' => $showCampus,
             'showRole' => count($context->heldRoles()) > 1,
-            'items' => $user === null ? collect() : $notifications->recent($user, withCampus: $showCampus),
+            'items' => $user === null ? collect() : $notifications->recent($user),
             'label' => match (true) {
                 $unread === 0 => 'Notificaciones: sin notificaciones nuevas',
                 $unread === 1 => 'Notificaciones: 1 sin leer',
