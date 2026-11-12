@@ -29,7 +29,7 @@ use Illuminate\Support\Facades\Cache;
  * A un grupo le falta algo si tiene un choque duro vigente en `schedule_conflicts`, si no tiene sesiones (solo en un
  * campus con bloques de tiempo), si no tiene docente o su docente está dado de baja (P10), o si alguna sesión presencial no tiene salón (solo en un campus
  * que usa salones). Solo cuenta lo que el usuario puede ver (`scheduling.schedule.view` con su alcance: el jefe, su
- * departamento; el coordinador, su carrera en su campus), filtrado en SQL con `Actor::constrain()`. Lee el estado de
+ * departamento; el coordinador, su carrera; en toda la modalidad aunque el puesto tenga un campus, MS6), filtrado en SQL con `Actor::constrain()`. Lee el estado de
  * todos los grupos del alcance en una consulta y cuenta en memoria: una carga de un campus son cientos de grupos.
  *
  * Un grupo compartido (con cupo de otra carrera) cuenta también en esa carrera, en cada retícula suya donde está la
@@ -239,7 +239,7 @@ final class ConflictBoardQuery
             ->where('groups.status', '<>', GroupStatus::Cancelled->value);
 
         return $actor->constrain($query, SchedulingPermission::ScheduleView, [
-            'campus' => 'groups.campus_id',
+            'modality' => 'groups.modality_id',
             'unit' => 'groups.department_id',
             'career' => fn (Builder $careers, array $ids) => $careers->whereIn('groups.owner_career_id', $ids)
                 ->orWhereExists(GroupQuota::query()->toBase()->whereColumn('group_quotas.group_id', 'groups.id')->whereIn('group_quotas.career_id', $ids)),

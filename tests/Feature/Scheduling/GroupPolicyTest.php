@@ -59,18 +59,18 @@ it('el grupo es del departamento de la materia, no del de la carrera dueña', fu
     expect(groupAbilitiesOf($jefe, $this->group))->toBe([]);
 });
 
-it('niega al coordinador de otra carrera y al de la carrera dueña en otro campus', function () {
+it('AZ-S17: niega al coordinador de otra carrera; al de la carrera dueña en otro campus de la modalidad solo le deja ver', function () {
     $otherCareer = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create();
     $otherCampus = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->group->owner_career_id])->create();
 
     expect(groupAbilitiesOf($otherCareer, $this->group))->toBe([])
-        ->and(groupAbilitiesOf($otherCampus, $this->group))->toBe([]);
+        ->and(groupAbilitiesOf($otherCampus, $this->group))->toBe(['view']);
 });
 
-it('niega al jefe de proyecto docente de otro campus', function () {
+it('AZ-S17: el jefe de proyecto docente de otro campus de la modalidad solo ve el grupo', function () {
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->otherCampus->id, 'department_id' => departmentKey(11)])->create();
 
-    expect(groupAbilitiesOf($jpd, $this->group))->toBe([]);
+    expect(groupAbilitiesOf($jpd, $this->group))->toBe(['view']);
 });
 
 it('niega todo a un admin desactivado', function () {
