@@ -47,7 +47,7 @@
     @if ($overview === null)
         <div>
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Propuesta de carrera</h1>
-            <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
+            <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2 max-md:w-full md:w-56" />
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="proposal-empty">{{ $message }}</div>
     @else
@@ -89,10 +89,10 @@
                         @endif
                     </p>
                 @endif
-                <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
             </div>
 
             <div class="flex flex-wrap items-end gap-3">
+                <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="max-md:w-full md:w-56" />
                 @if (count($careers) > 1)
                     <x-select label="Carrera" wire:model.live="careerId" :options="$careers" option-value="id" option-label="name" class="select-sm" data-testid="proposal-career" />
                 @endif

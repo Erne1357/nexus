@@ -1,6 +1,7 @@
 {{--
     La lista de carreras de la bandeja (academic-load::pages.inbox): pendientes primero, cada una con su estado
-    (la insignia; sin borde de color), sus totales para el departamento y cuántas filas tienen anomalías. Elegir una
+    (la insignia; sin borde de color), sus totales para el departamento (con «Todos» y varios campus, los grupos de cada
+    uno con su etiqueta; con el filtro, los de ese campus) y cuántas filas tienen anomalías. Elegir una
     la abre a la derecha.
 --}}
 <ul class="divide-y divide-base-300" data-testid="inbox-careers">
@@ -20,7 +21,19 @@
                     @if ($row['review'] === null)
                         {{ $row['proposal'] === null || $row['proposal']->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Draft ? 'Sin propuesta' : 'Sin materias de este departamento' }}
                     @else
-                        {{ $row['groups'] }} grupos · {{ $row['subjects'] }} {{ $row['subjects'] === 1 ? 'materia' : 'materias' }}
+                        @php($figure = $figures[$career->getKey()])
+                        @if (count($figure['byCampus']) > 1)
+                            <span class="inline-flex flex-wrap items-center gap-x-1.5" data-testid="career-by-campus">
+                                @foreach ($figure['byCampus'] as $code => $groups)
+                                    <span class="inline-flex items-center gap-1"><x-core::campus-tag :campus="$campusOptions->firstWhere('code', $code) ?? (object) ['code' => $code, 'name' => $code]" /><span class="font-mono font-semibold text-base-content">{{ $groups }}</span></span>@if (! $loop->last)<span aria-hidden="true">·</span>@endif
+                                @endforeach
+                                <span>grupos · {{ $figure['subjects'] }} {{ $figure['subjects'] === 1 ? 'materia' : 'materias' }}</span>
+                            </span>
+                        @elseif ($figure['groups'] === 0 && $shownCampus !== null)
+                            Nada en {{ $shownCampus->code }}
+                        @else
+                            {{ $figure['groups'] }} grupos · {{ $figure['subjects'] }} {{ $figure['subjects'] === 1 ? 'materia' : 'materias' }}
+                        @endif
                     @endif
                 </span>
                 @if ($row['correctionBy'] !== [])

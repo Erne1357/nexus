@@ -110,3 +110,54 @@ it('M6: el detalle de la bandeja pinta cada fila con su campus y el total de gru
     expect($html)->toContain('data-campus="C1"')->toContain('data-campus="C2"')
         ->and(textOf(domOf($html)->querySelector('[data-testid="inbox-total-by-campus"]')))->toBe('C1 2 · C2 1');
 });
+
+describe('alcance de la bandeja (maqueta U2, opción A)', function () {
+    beforeEach(function () {
+        $this->term = Term::factory()->current()->create();
+        TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
+        $this->isc = inboxCareerIn('ISC', $this->c1, $this->c2);
+        $proposal = inboxPerModalityProposal($this->isc);
+        inboxPerModalityRow($proposal, $this->c1, 60, 2);
+        inboxPerModalityRow($proposal, $this->c2, 30, 1);
+        $this->ige = inboxCareerIn('IGE', $this->c1);
+        inboxPerModalityRow(inboxPerModalityProposal($this->ige), $this->c1, 20, 1);
+        $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+    });
+
+    it('el filtro de campus cuenta las carreras que piden algo en cada campus, y la lista dice los grupos de cada uno', function () {
+        $dom = domOf(Livewire::actingAs($this->jefe)->test('academic-load::pages.inbox')->html());
+
+        expect(textOf($dom->querySelector('[data-testid="campus-count-todos"]')))->toBe('2')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C1"]')))->toBe('2')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C2"]')))->toBe('1')
+            ->and(textOf($dom->querySelector('[data-career="ISC"] [data-testid="career-by-campus"]')))->toContain('2', '1', 'grupos · 1 materia')
+            ->and(textOf($dom->querySelector('[data-testid="inbox-campus"]')))->toContain('La parte de CB se acepta o se regresa una vez, para todos sus campus.');
+    });
+
+    it('con ?campus=C2 el detalle solo tiene las filas de C2 y las cifras de ese campus, y la parte se sigue decidiendo una vez', function () {
+        $page = Livewire::actingAs($this->jefe)->withQueryParams(['carrera' => $this->isc->id, 'campus' => 'C2'])->test('academic-load::pages.inbox');
+        $html = $page->html();
+
+        expect($html)->toContain('data-campus="C2"')->not->toContain('data-campus="C1"')
+            ->and(textOf(domOf($html)->querySelector('[data-testid="inbox-detail-total"]')))->toContain('1 grupo en C2')
+            ->and(textOf(domOf($html)->querySelector('[data-career="IGE"]')))->toContain('Nada en C2')
+            ->and(domOf($html)->querySelector('[data-testid="accept-part"]'))->not->toBeNull();
+    });
+
+    it('MS6: un jefe de proyecto docente con nombramiento en C2 ve las filas de C1 de toda la modalidad', function () {
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->cb->id])->create();
+
+        $html = Livewire::actingAs($jpd)->withQueryParams(['carrera' => $this->isc->id, 'campus' => 'C1'])->test('academic-load::pages.inbox')->html();
+
+        expect($html)->toContain('data-campus="C1"');
+    });
+
+    it('otra modalidad: el jefe de proyecto docente de EAD no ve la bandeja presencial aunque pida ?modalidad=PRES', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id])->create();
+
+        Livewire::actingAs($jpd)->withQueryParams(['modalidad' => 'PRES'])->test('academic-load::pages.inbox')
+            ->assertSee('El periodo '.$this->term->code.' no está abierto en EAD.')
+            ->assertDontSeeHtml('data-campus="C1"');
+    });
+});

@@ -115,6 +115,47 @@ final readonly class DepartmentInbox
     }
 
     /**
+     * Las cifras de lo que la carrera le pide al departamento, de todos sus campus o, con `$campusId`, de ese campus (el
+     * filtro de la bandeja, maqueta U2): grupos y materias distintas.
+     *
+     * @return array{groups: int, subjects: int}
+     */
+    public function figuresFor(string $careerId, ?string $campusId = null): array
+    {
+        $rows = array_values(array_filter($this->career($careerId)['rows'] ?? [], fn (ProposalItem $item): bool => $campusId === null || $item->campus_id === $campusId));
+
+        return [
+            'groups' => array_sum(array_map(fn (ProposalItem $item): int => $item->requested_groups, $rows)),
+            'subjects' => count(array_unique(array_map(fn (ProposalItem $item): string => $item->subject_id, $rows))),
+        ];
+    }
+
+    /**
+     * Cuántas carreras le piden algo al departamento en cada campus, por clave del campus, y cuántas en total (sin las
+     * filas sin campus en la cuenta de cada campus): las cifras del filtro de campus de la bandeja (maqueta U2).
+     *
+     * @return array{byCampus: array<string, int>, total: int}
+     */
+    public function careerCounts(): array
+    {
+        $byCampus = [];
+        $total = 0;
+
+        foreach ($this->careers as $row) {
+            $codes = array_unique(array_filter(array_map(fn (ProposalItem $item): ?string => $item->campus?->code, $row['rows'])));
+            $total += $row['rows'] === [] ? 0 : 1;
+
+            foreach ($codes as $code) {
+                $byCampus[$code] = ($byCampus[$code] ?? 0) + 1;
+            }
+        }
+
+        ksort($byCampus);
+
+        return ['byCampus' => $byCampus, 'total' => $total];
+    }
+
+    /**
      * Lo que piden de una materia en un campus las partes que cuentan para los paralelos: cuántas carreras, cuántos
      * grupos y cuántos alumnos esperados.
      *

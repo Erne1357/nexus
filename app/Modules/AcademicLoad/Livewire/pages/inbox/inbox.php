@@ -14,7 +14,7 @@ use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithModalityScope;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Rules\SelfApproval;
@@ -31,7 +31,9 @@ use Mary\Traits\Toast;
 /**
  * Bandeja del departamento (tarea 2.8, reglas-de-negocio.md, "Propuesta de carrera"): lo que piden las carreras
  * a un departamento en el periodo activo de la credencial y la modalidad de la pantalla (`?modalidad=`,
- * WithModalityScope; M1, M6): una propuesta por carrera, con las filas de cada campus. A la izquierda las carreras
+ * WithModalityCampusFilter; M1, M6): una propuesta por carrera, con las filas de cada campus. El campus es un filtro
+ * (`?campus=`, «Todos» sin él; maqueta U2, opción A): deja en la lista y el detalle las cifras y las filas de ese campus,
+ * pero la parte se acepta o se regresa una sola vez, con todos sus campus. A la izquierda las carreras
  * con el estado de su parte; a la derecha lo que pide la elegida, materia por materia y campus contra el total de la
  * materia en ese campus, con la sugerencia de paralelos y los botones Aceptar y Regresar (maqueta C).
  *
@@ -44,7 +46,7 @@ use Mary\Traits\Toast;
 new #[Title('Bandeja del departamento')] class extends Component
 {
     use Toast;
-    use WithModalityScope;
+    use WithModalityCampusFilter;
 
     private const array FILTERS = ['todas', 'pendientes'];
 
@@ -118,11 +120,21 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * Otra modalidad: la página se abre de nuevo en ella.
+     * Otra modalidad: la página se abre de nuevo en ella, en el mismo campus del filtro si la otra lo tiene.
      */
     public function updatedModalidad(): void
     {
-        $this->redirectRoute('academic-load.inbox', ['modalidad' => $this->requiredModality()->code], navigate: true);
+        $this->redirectRoute('academic-load.inbox', array_filter(['modalidad' => $this->requiredModality()->code, 'campus' => $this->campusFilter()?->code]), navigate: true);
+    }
+
+    /**
+     * Otro campus en el filtro: solo cambian las cifras y las filas que se ven; la parte que estaba por decidir se suelta.
+     */
+    public function updatedCampus(): void
+    {
+        $this->showAccept = $this->showReturn = $this->showParallels = false;
+        $this->reviewId = null;
+        $this->onlyAnomalies = false;
     }
 
     /**
@@ -276,7 +288,11 @@ new #[Title('Bandeja del departamento')] class extends Component
         $rows = $inbox->careers;
         $selected = $this->selected($inbox);
         $canDecide = $selected !== null && $selected['decidable'] && Gate::allows('decide', $selected['review']);
-        $allItems = $selected === null ? [] : $inbox->rowsFor($selected['career']->getKey());
+        $campus = $this->campusFilter();
+        $allItems = $selected === null ? [] : array_values(array_filter(
+            $inbox->rowsFor($selected['career']->getKey()),
+            fn (array $entry): bool => $campus === null || $entry['item']->campus_id === $campus->getKey(),
+        ));
         $anomalous = $this->anomalousRows($allItems);
 
         if ($anomalous === []) {
@@ -288,8 +304,18 @@ new #[Title('Bandeja del departamento')] class extends Component
         $target = $this->reviewId === null ? null : $this->targetOf($rows, $this->reviewId);
         $catalogsUrl = Route::has('catalog-validation.review') ? route('catalog-validation.review', ['department' => $inbox->department->getKey()]) : null;
 
+        $careerCounts = $inbox->careerCounts();
+
         return [
             ...$this->modalityViewData(),
+            'campusOptions' => $this->campusOptions(),
+            'shownCampus' => $campus,
+            'campusCounts' => $careerCounts['byCampus'],
+            'campusTotal' => $careerCounts['total'],
+            'figures' => array_combine(
+                array_map(fn (array $row): string => $row['career']->getKey(), $rows),
+                array_map(fn (array $row): array => [...$inbox->figuresFor($row['career']->getKey(), $campus?->getKey()), 'byCampus' => $campus === null ? $inbox->groupsByCampus($row['career']->getKey()) : []], $rows),
+            ),
             'inbox' => $inbox,
             'rows' => $rows,
             'visible' => $this->filter === 'pendientes'
