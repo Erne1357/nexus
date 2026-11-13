@@ -1,5 +1,5 @@
 {{--
-    Bandeja del departamento (tarea 2.8, maqueta C de dos paneles): encabezado con el departamento, el campus, el
+    Bandeja del departamento (tarea 2.8, maqueta C de dos paneles): encabezado con el departamento, la modalidad, el
     periodo y el estado de la carga; el aviso de HC-14; a la izquierda las carreras con el estado de su parte y, a
     la derecha, lo que pide la elegida con la sugerencia de paralelos y sus botones. Desde lg los dos paneles van
     juntos; debajo, la lista y el detalle van por separado. Todo lo que se pinta viene de DepartmentInboxQuery.
@@ -40,7 +40,6 @@
         <div>
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
             <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
-            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="inbox-empty">{{ $message }}</div>
     @else
@@ -49,11 +48,10 @@
                 <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
                 <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                     <span class="font-medium text-base-content" data-testid="inbox-department-name">{{ $inbox->department->name }}</span>
-                    <span>{{ $inbox->campus->name }}</span>
+                    <span data-testid="inbox-modality">{{ $inbox->modality?->name }}</span>
                     <span data-testid="inbox-term">{{ $inbox->term->name }}</span>
                 </p>
                 <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
-                <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
             </div>
 
             <div class="flex flex-wrap items-end gap-3">

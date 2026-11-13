@@ -6,7 +6,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
@@ -27,9 +27,9 @@ final class ProposalReviewPolicy
 {
     use AuthorizesActor;
 
-    public function viewAny(User $user, Campus $campus, Department $department): bool
+    public function viewAny(User $user, Modality $modality, Department $department): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(modality: $campus->modality_id, unit: $department->getKey()));
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalReviewView, Target::of(modality: $modality->getKey(), unit: $department->getKey()));
     }
 
     public function decide(User $user, ProposalReview $review): bool

@@ -68,10 +68,9 @@ function validateRooms(AcademicLoad $load): void
 function partFor(AcademicLoad $load, string $state = 'accepted', array $proposal = []): ProposalReview
 {
     $factory = ProposalReview::factory();
-    $campus = Campus::factory()->create(['modality_id' => $load->modality_id]);
 
     return ($state === 'pending' ? $factory : $factory->{$state}())->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'campus_id' => $campus->id, 'modality_id' => $load->modality_id, ...$proposal])->id,
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'modality_id' => $load->modality_id, ...$proposal])->id,
         'department_id' => $load->department_id,
     ]);
 }
@@ -226,20 +225,19 @@ it('HC-20: no cuenta la parte aceptada de otro departamento, de otra modalidad n
     ProposalReview::factory()->accepted()->create([
         'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'modality_id' => $load->modality_id])->id,
     ]);
-    $ead = Campus::factory()->create(['modality_id' => modalityOf('EAD')->id]);
-    partFor($load, proposal: ['campus_id' => $ead->id, 'modality_id' => $ead->modality_id]);
+    partFor($load, proposal: ['modality_id' => modalityOf('EAD')->id]);
     partFor($load, proposal: ['term_id' => Term::factory()->create()->id]);
 
     expect(blockedReason($load))->toStartWith('HC-20:');
 });
 
-it('HC-20 (M1): cuenta la parte aceptada en una propuesta de C1 para la carga presencial que también tiene a C2', function () {
+it('HC-20 (M1, M6): cuenta la parte aceptada en la propuesta presencial de la carrera, con filas de C1 y C2', function () {
     $load = loadWith();
     validateGenerals($load);
     validateRooms($load);
-    $c1 = Campus::factory()->create(['code' => 'C1']);
+    Campus::factory()->create(['code' => 'C1']);
     Campus::factory()->create(['code' => 'C2']);
-    partFor($load, proposal: ['campus_id' => $c1->id]);
+    partFor($load);
 
     expect(blockedReasons($load))->toBe([])
         ->and($load->fresh()->status)->toBe(LoadStatus::Proposed);

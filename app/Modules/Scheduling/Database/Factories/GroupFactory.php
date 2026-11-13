@@ -61,8 +61,8 @@ class GroupFactory extends Factory
     }
 
     /**
-     * El grupo que se crea desde una fila de la propuesta: su materia, plan, semestre, y el periodo, campus, modalidad
-     * y carrera de la propuesta.
+     * El grupo que se crea desde una fila de la propuesta: su materia, plan, semestre y campus (M8), y el periodo,
+     * modalidad y carrera de la propuesta.
      */
     public function forProposalItem(ProposalItem $item): static
     {
@@ -71,7 +71,7 @@ class GroupFactory extends Factory
         return $this->state([
             'proposal_item_id' => $item->id,
             'term_id' => $proposal->term_id,
-            'campus_id' => $proposal->campus_id,
+            'campus_id' => $item->campus_id,
             'modality_id' => $proposal->modality_id,
             'subject_id' => $item->subject_id,
             'owner_career_id' => $proposal->career_id,

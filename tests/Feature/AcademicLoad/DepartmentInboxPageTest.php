@@ -28,9 +28,9 @@ use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| «Bandeja del departamento» (tarea 2.8): el jefe ve lo que piden las carreras de su campus al departamento en el
-| periodo activo, acepta o regresa cada parte y ve su carga pasar a Propuesta (reglas-de-negocio.md, "Propuesta de
-| carrera", HC-14).
+| «Bandeja del departamento» (tarea 2.8): el jefe ve lo que piden las carreras al departamento en el periodo activo y
+| la modalidad de la pantalla (una propuesta por carrera, con las filas de cada campus, M6), acepta o regresa cada parte
+| y ve su carga pasar a Propuesta (reglas-de-negocio.md, "Propuesta de carrera", HC-14).
 */
 
 beforeEach(function () {
@@ -63,9 +63,10 @@ function inboxPageCareer(string $code, string $name): Career
 
 function inboxPageProposal(Career $career, int $expected, int $groups): CareerProposal
 {
-    $proposal = CareerProposal::factory()->submitted()->create(['term_id' => test()->term->id, 'campus_id' => test()->campus->id, 'career_id' => $career->id]);
+    $proposal = CareerProposal::factory()->submitted()->create(['term_id' => test()->term->id, 'career_id' => $career->id]);
     ProposalItem::factory()->create([
         'career_proposal_id' => $proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => test()->calculus->id,
         'semester' => 1,
         'eligible_students' => $expected,
@@ -152,10 +153,11 @@ describe('autoaprobación (AZ-01)', function () {
 });
 
 describe('jefe de departamento', function () {
-    it('ve su departamento, el campus, el periodo por su nombre y el estado de su carga', function () {
+    it('ve su departamento, la modalidad, el periodo por su nombre y el estado de su carga', function () {
         inboxPageAs($this->jefe)
             ->assertOk()
             ->assertSee('Ciencias Básicas')
+            ->assertSeeHtml('data-testid="inbox-modality">Presencial')
             ->assertSee('Ene-Jun 2027')
             ->assertDontSee('20271')
             ->assertSee('Borrador')
@@ -216,7 +218,7 @@ describe('jefe de departamento', function () {
             ->assertDontSee('−1 grupo')
             ->assertDontSee('Piden 4')
             ->assertSet('showParallels', false)
-            ->call('openParallels', $this->calculus->id)
+            ->call('openParallels', $this->calculus->id, $this->campus->id)
             ->assertSet('showParallels', true)
             ->assertSeeHtml('data-testid="parallels-drawer"')
             ->assertSee('Cálculo Diferencial')
@@ -235,10 +237,11 @@ describe('jefe de departamento', function () {
         inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->assertDontSeeHtml('data-testid="parallels-chip"');
     });
 
-    it('no abre los paralelos de una materia que no está en la bandeja', function () {
+    it('no abre los paralelos de una materia que no está en la bandeja, ni los de otro campus', function () {
         $other = Subject::factory()->create(['department_id' => $this->sc->id]);
 
-        inboxPageAs($this->jefe)->call('openParallels', $other->id)->assertNotFound();
+        inboxPageAs($this->jefe)->call('openParallels', $other->id, $this->campus->id)->assertNotFound();
+        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id, Campus::factory()->create()->id)->assertNotFound();
     });
 
     it('al aceptar pasa a la siguiente carrera por decidir', function () {
@@ -492,12 +495,11 @@ describe('lo que se decide y se cuenta', function () {
             ->assertDontSeeHtml('data-testid="proposal-in-correction"');
     });
 
-    it('no decide una parte de otro campus ni de otro periodo aunque llegue su id', function () {
-        $otherCampus = Campus::factory()->create(['code' => 'C1']);
+    it('no decide una parte de otra modalidad ni de otro periodo aunque llegue su id', function () {
         $otherTerm = Term::factory()->create(['code' => '20272']);
         $career = inboxPageCareer('IGEM', 'Gestión');
-        $elsewhere = CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'campus_id' => $otherCampus->id, 'career_id' => $career->id]);
-        $later = CareerProposal::factory()->submitted()->create(['term_id' => $otherTerm->id, 'campus_id' => $this->campus->id, 'career_id' => $career->id]);
+        $elsewhere = CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id, 'career_id' => $career->id]);
+        $later = CareerProposal::factory()->submitted()->create(['term_id' => $otherTerm->id, 'career_id' => $career->id]);
         $foreign = [
             ProposalReview::factory()->create(['career_proposal_id' => $elsewhere->id, 'department_id' => $this->cb->id]),
             ProposalReview::factory()->create(['career_proposal_id' => $later->id, 'department_id' => $this->cb->id]),
@@ -510,7 +512,7 @@ describe('lo que se decide y se cuenta', function () {
         }
     });
 
-    it('conserva la bandeja de un departamento desactivado que tiene partes en el periodo y campus', function () {
+    it('conserva la bandeja de un departamento desactivado que tiene partes en el periodo y la modalidad', function () {
         $this->cb->update(['is_active' => false]);
 
         inboxPageAs($this->jefe)->assertOk()->assertSee('Ciencias Básicas')->assertSee('ISC')->assertViewHas('canDecide', true);
@@ -521,20 +523,20 @@ describe('textos de la sugerencia de paralelos y del detalle', function () {
     it('dice de qué carrera es cada resto cuando un grupo es de una sola carrera', function () {
         ProposalItem::query()->where('career_proposal_id', $this->iindProposal->id)->update(['expected_students' => 70]);
 
-        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id)->assertSee('1 más de ISC (25)')->assertDontSee('1 mixto');
+        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id, $this->campus->id)->assertSee('1 más de ISC (25)')->assertDontSee('1 mixto');
     });
 
     it('sin alumnos esperados no deja el texto cortado', function () {
         ProposalItem::query()->update(['expected_students' => 0]);
 
-        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id)->assertSee('Piden 4 · sin alumnos esperados')->assertDontSee('bastan 0');
+        inboxPageAs($this->jefe)->call('openParallels', $this->calculus->id, $this->campus->id)->assertSee('Piden 4 · sin alumnos esperados')->assertDontSee('bastan 0');
     });
 
     it('distingue la carrera sin propuesta de la que no le pide materias al departamento', function () {
         $sent = inboxPageCareer('IGEM', 'Gestión');
-        CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'career_id' => $sent->id]);
+        CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'career_id' => $sent->id]);
         $draft = inboxPageCareer('ILOG', 'Logística');
-        CareerProposal::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'career_id' => $draft->id]);
+        CareerProposal::factory()->create(['term_id' => $this->term->id, 'career_id' => $draft->id]);
         $none = inboxPageCareer('IEM', 'Electromecánica');
 
         inboxPageAs($this->jefe, ['carrera' => $sent->id])->assertSee('No le pide materias a Ciencias Básicas.')->assertDontSee('Todavía no envía');
@@ -589,10 +591,10 @@ describe('estados vacíos', function () {
         inboxPageAs($this->jefe)->assertSeeHtml('data-testid="inbox-empty"')->assertSee('No hay un periodo activo');
     });
 
-    it('sin periodo abierto en el campus lo dice', function () {
+    it('sin periodo abierto en la modalidad lo dice', function () {
         TermOpening::query()->delete();
 
-        inboxPageAs($this->jefe)->assertSee('no está abierto en este campus');
+        inboxPageAs($this->jefe)->assertSee('El periodo 20271 no está abierto en Presencial.');
     });
 
     it('sin carreras con propuesta enviada lo dice', function () {
@@ -622,12 +624,21 @@ describe('alcance', function () {
         expect($this->iscPart->fresh()->status)->toBe(ProposalReviewStatus::Pending);
     });
 
-    it('un jefe de otro campus no ve la bandeja', function () {
+    it('MS6: un jefe con otro campus ve la bandeja de toda la modalidad', function () {
         $otroCampus = Campus::factory()->create();
         vacate(Role::JefeDepartamento, $this->cb->id);
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $otroCampus->id, 'department_id' => $this->cb->id, 'valid_from' => today()->toDateString()])->create();
 
-        inboxPageAs($jefe)->assertDontSee('Nota de ISC');
+        inboxPageAs($jefe)->assertSee('Nota de IIND');
+    });
+
+    it('un jefe del departamento en otra modalidad no ve la bandeja de Presencial', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        vacate(Role::JefeDepartamento, $this->cb->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id, 'valid_from' => today()->toDateString()])->create();
+
+        inboxPageAs($jefe)->assertDontSee('Nota de IIND');
+        inboxPageAs($jefe, ['modalidad' => 'PRES'])->assertDontSee('Nota de IIND');
     });
 
     it('un coordinador y un docente reciben 403', function () {
@@ -787,7 +798,7 @@ describe('segunda crítica con volumen', function () {
     });
 
     it('el drawer de paralelos titula «Al mixto (alumnos)» y resalta la carrera elegida', function () {
-        $page = inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->call('openParallels', $this->calculus->id);
+        $page = inboxPageAs($this->jefe, ['carrera' => $this->isc->id])->call('openParallels', $this->calculus->id, $this->campus->id);
 
         $page->assertSee('Al mixto (alumnos)');
         expect(substr_count($page->html(), 'data-current="true"'))->toBe(1)

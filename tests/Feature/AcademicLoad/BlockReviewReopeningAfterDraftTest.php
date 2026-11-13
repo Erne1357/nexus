@@ -109,7 +109,7 @@ describe('en secuencia con ProposeLoad', function () {
             ->push(reopeningReview(Catalog::Rooms));
         // HC-20: la carga sale de borrador con al menos una parte de propuesta aceptada del departamento.
         ProposalReview::factory()->accepted()->create([
-            'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus($this->load)->id])->id,
+            'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->load->term_id, 'modality_id' => $this->load->modality_id])->id,
             'department_id' => $this->load->department_id,
         ]);
     });

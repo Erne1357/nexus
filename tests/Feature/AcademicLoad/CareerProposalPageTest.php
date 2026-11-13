@@ -17,7 +17,6 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -40,7 +39,7 @@ beforeEach(function () {
     CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->campus->id]);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-    $this->proposal = CareerProposal::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'career_id' => $this->career->id]);
+    $this->proposal = CareerProposal::factory()->create(['term_id' => $this->term->id, 'career_id' => $this->career->id]);
     $this->calculus = proposalPageRow($this->proposal, $this->cb, 'ACF-0901', 'Cálculo Diferencial', 1, 2, 70);
     $this->networks = proposalPageRow($this->proposal, $this->sc, 'SCD-1015', 'Redes de Computadoras', 5, 1, 30);
 
@@ -52,6 +51,7 @@ function proposalPageRow(CareerProposal $proposal, Department $department, strin
 {
     return ProposalItem::factory()->create([
         'career_proposal_id' => $proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => Subject::factory()->create(['code' => $code, 'name' => $name, 'department_id' => $department->id])->id,
         'semester' => $semester,
         'eligible_students' => $expected,
@@ -69,14 +69,22 @@ function proposalPageAs(User $user, array $query = []): Testable
 }
 
 describe('coordinador', function () {
-    it('ve la propuesta de su carrera y campus con su estado y sus totales', function () {
+    it('ve la propuesta de su carrera con su estado y sus totales', function () {
         proposalPageAs($this->coordinator)
             ->assertOk()
             ->assertSee('ISC')
             ->assertSee('Borrador')
             ->assertSee('Cálculo Diferencial')
             ->assertSee('Redes de Computadoras')
-            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === ['subjects' => 2, 'subjects_total' => 2, 'groups' => 3, 'eligible_students' => 0]);
+            ->assertViewHas('overview', fn ($overview): bool => $overview->totals === [
+                'subjects' => 2,
+                'subjects_total' => 2,
+                'subjects_by_campus' => [$this->campus->id => 2],
+                'groups' => 3,
+                'groups_by_campus' => [$this->campus->id => 3],
+                'eligible_students' => 0,
+                'eligible_by_campus' => [$this->campus->id => 0],
+            ]);
     });
 
     it('no suma alumnos esperados entre materias en los totales ni en la confirmación de envío', function () {
@@ -133,12 +141,12 @@ describe('coordinador', function () {
 
     it('abre una materia en el panel con sus valores y guarda los cambios por la Action', function () {
         proposalPageAs($this->coordinator)
-            ->call('edit', $this->calculus->id)
+            ->call('edit', $this->calculus->subject_id)
             ->assertSet('showDrawer', true)
-            ->assertSet('expected_students', 70)
-            ->assertSet('requested_groups', 2)
-            ->set('requested_groups', 3)
-            ->set('notes', 'Dos grupos de más.')
+            ->assertSet("form.{$this->calculus->id}.expected_students", 70)
+            ->assertSet("form.{$this->calculus->id}.requested_groups", 2)
+            ->set("form.{$this->calculus->id}.requested_groups", 3)
+            ->set("form.{$this->calculus->id}.notes", 'Dos grupos de más.')
             ->call('save')
             ->assertSet('showDrawer', false);
 
@@ -148,18 +156,18 @@ describe('coordinador', function () {
 
     it('«Usar sugerido» llena los grupos con los que sugiere la regla de los 35 alumnos', function () {
         proposalPageAs($this->coordinator)
-            ->call('edit', $this->calculus->id)
-            ->set('expected_students', 71)
-            ->call('useSuggested')
-            ->assertSet('requested_groups', 3);
+            ->call('edit', $this->calculus->subject_id)
+            ->set("form.{$this->calculus->id}.expected_students", 71)
+            ->call('useSuggested', $this->calculus->id)
+            ->assertSet("form.{$this->calculus->id}.requested_groups", 3);
     });
 
     it('muestra el error en español de un valor fuera de rango y no guarda', function () {
         proposalPageAs($this->coordinator)
-            ->call('edit', $this->calculus->id)
-            ->set('requested_groups', 99)
+            ->call('edit', $this->calculus->subject_id)
+            ->set("form.{$this->calculus->id}.requested_groups", 99)
             ->call('save')
-            ->assertHasErrors('requested_groups')
+            ->assertHasErrors("form.{$this->calculus->id}.requested_groups")
             ->assertSee('Los grupos solicitados van de 0 a 30.');
 
         expect($this->calculus->fresh()->requested_groups)->toBe(2);
@@ -216,7 +224,7 @@ describe('coordinador', function () {
     it('no edita una propuesta enviada', function () {
         $this->proposal->update(['status' => ProposalStatus::Submitted]);
 
-        $page = proposalPageAs($this->coordinator)->call('edit', $this->calculus->id)->call('save');
+        $page = proposalPageAs($this->coordinator)->call('edit', $this->calculus->subject_id)->call('save');
 
         expect($this->calculus->fresh()->requested_groups)->toBe(2);
         $page->assertSee('Enviada');
@@ -276,10 +284,10 @@ describe('coordinador', function () {
         proposalPageAs($both, ['carrera' => 'no-es-uuid'])->assertForbidden();
     });
 
-    it('sin periodo abierto en el campus dice que no hay propuesta', function () {
+    it('sin periodo abierto en la modalidad dice que no hay propuesta', function () {
         TermOpening::query()->delete();
 
-        proposalPageAs($this->coordinator)->assertSee('no está abierto en este campus')->assertDontSee('Cálculo Diferencial');
+        proposalPageAs($this->coordinator)->assertSee('El periodo 20271 no está abierto en Presencial.')->assertDontSee('Cálculo Diferencial');
     });
 
     it('sin periodo activo lo dice', function () {
@@ -299,13 +307,23 @@ describe('alcance', function () {
         proposalPageAs($coordinator, ['carrera' => $this->career->id])->assertForbidden();
     });
 
-    it('un coordinador de otro campus no la ve', function () {
+    it('M7: un coordinador de otro campus la ve, pero no cambia las filas de C2', function () {
         // El periodo ya está abierto en C1: es de Presencial, como C2 (M4).
         $c1 = Campus::factory()->create(['code' => 'C1']);
         $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $c1->id, 'career_id' => $this->career->id])->create();
 
+        proposalPageAs($coordinator, ['vista' => 'tabla'])->assertSee('Cálculo Diferencial')->assertSeeHtml('data-readonly-column="C2"');
+        proposalPageAs($coordinator, ['vista' => 'tabla'])->call('saveCell', $this->calculus->id, 'requested_groups', '9')->assertForbidden();
+
+        expect($this->calculus->fresh()->requested_groups)->toBe(2);
+    });
+
+    it('un coordinador de la carrera en otra modalidad no la ve', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $coordinator = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->career->id])->create();
+
         proposalPageAs($coordinator)->assertDontSee('Cálculo Diferencial');
-        proposalPageAs($coordinator, ['carrera' => $this->career->id])->assertForbidden();
+        proposalPageAs($coordinator, ['modalidad' => 'PRES'])->assertDontSee('Cálculo Diferencial');
     });
 
     it('un jefe de departamento y un docente reciben 403', function () {
@@ -340,7 +358,9 @@ describe('alcance', function () {
             ->assertForbidden();
 
         proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('confirmSubmit')->assertForbidden();
-        proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('edit', $this->calculus->id)->set('requested_groups', 5)->call('save')->assertForbidden();
+        proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('edit', $this->calculus->subject_id)->assertSet('form', [])
+            ->set("form.{$this->calculus->id}", ['expected_students' => 70, 'requested_groups' => 5, 'notes' => ''])->call('save')->assertForbidden();
+        proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('useSuggested', $this->calculus->id)->assertForbidden();
 
         expect($this->calculus->fresh()->requested_groups)->toBe(2)
             ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft);
@@ -355,18 +375,17 @@ describe('alcance', function () {
         expect(CareerProposal::query()->where('career_id', $other->id)->exists())->toBeFalse();
     });
 
-    it('AZ-02: subdirección elige el campus en la página cuando tiene varios; sin ?campus= abre el primero', function () {
-        // C1, de otra modalidad, donde el periodo no se abrió (M4): así se nota que la página muestra C1.
-        Campus::factory()->create(['code' => 'C1', 'modality_id' => Modality::factory()->create()->id]);
+    it('MS16: subdirección elige la modalidad en la página cuando hay varias; sin ?modalidad= abre la primera', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
 
-        proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="campus-filter-C1"')->assertSee('no está abierto en este campus');
-        proposalPageAs($this->subdirection, ['campus' => 'C2', 'carrera' => $this->career->id])->assertSee('ISC')->assertSeeHtml('data-testid="campus-filter-C2"');
+        proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="modality-scope-EAD"')->assertSee('El periodo 20271 no está abierto en EAD.');
+        proposalPageAs($this->subdirection, ['modalidad' => 'PRES', 'carrera' => $this->career->id])->assertSee('ISC')->assertSee('Cálculo Diferencial');
     });
 
-    it('AZ-02: el coordinador de un campus no abre el de otro aunque la URL lo pida', function () {
+    it('la página ya no elige campus: ?campus= no cambia nada y no hay filtro de campus (M6)', function () {
         Campus::factory()->create(['code' => 'C1']);
 
-        proposalPageAs($this->coordinator, ['campus' => 'C1'])->assertSee('ISC')->assertDontSeeHtml('data-testid="campus-filter-C1"');
+        proposalPageAs($this->coordinator, ['campus' => 'C1'])->assertSee('ISC')->assertSee('Cálculo Diferencial')->assertDontSeeHtml('data-testid="campus-filter');
     });
 });
 
@@ -427,7 +446,7 @@ describe('solo lectura, propuesta fija y rechazos', function () {
     });
 
     it('tras un rechazo repinta la fila para que el campo vuelva al valor guardado', function () {
-        $key = fn (int $rejections): string => "row-{$this->calculus->id}-{$rejections}-";
+        $key = fn (int $rejections): string => "row-{$this->calculus->subject_id}-{$rejections}-";
         $page = proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSeeHtml($key(0));
 
         $page->call('saveCell', $this->calculus->id, 'requested_groups', '99')
@@ -488,8 +507,8 @@ describe('volumen: lo que dice y cómo se pinta', function () {
         $this->proposal->update(['status' => ProposalStatus::Returned]);
         ProposalReview::factory()->returned('Falta un grupo.')->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
 
-        proposalPageAs($this->coordinator)->call('edit', $this->networks->id)->assertSeeHtml('data-testid="panel-returned"');
-        proposalPageAs($this->coordinator)->call('edit', $this->calculus->id)->assertDontSeeHtml('data-testid="panel-returned"');
+        proposalPageAs($this->coordinator)->call('edit', $this->networks->subject_id)->assertSeeHtml('data-testid="panel-returned"');
+        proposalPageAs($this->coordinator)->call('edit', $this->calculus->subject_id)->assertDontSeeHtml('data-testid="panel-returned"');
     });
 
     it('pinta cada mosaico y cada fila por el estado de la parte de su departamento', function () {
@@ -534,7 +553,8 @@ describe('volumen: lo que dice y cómo se pinta', function () {
 
         $html = proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertDontSeeHtml('data-testid="table-lock"')->html();
 
-        expect(substr_count($html, 'CB ya aceptó su parte'))->toBe(1);
+        // Una vez en el renglón de la tabla y otra en su ficha, la forma angosta de la tabla.
+        expect(substr_count($html, 'CB ya aceptó su parte'))->toBe(2);
     });
 
     it('marca las filas raras con texto accesible en el mosaico, la tabla y el panel, y deja enviar', function () {
@@ -542,7 +562,7 @@ describe('volumen: lo que dice y cómo se pinta', function () {
 
         proposalPageAs($this->coordinator)->assertSeeHtml('data-testid="anomaly-ACF-0901"')->assertSee('105 esperados con 98 elegibles');
         proposalPageAs($this->coordinator, ['vista' => 'tabla'])->assertSeeHtml('data-testid="anomaly-ACF-0901"')->assertSee('105 esperados con 98 elegibles');
-        proposalPageAs($this->coordinator)->call('edit', $this->calculus->id)->assertSeeHtml('data-testid="panel-anomalies"')->assertSee('105 esperados con 98 elegibles');
+        proposalPageAs($this->coordinator)->call('edit', $this->calculus->subject_id)->assertSeeHtml('data-testid="panel-anomalies"')->assertSee('105 esperados con 98 elegibles');
         proposalPageAs($this->coordinator)->assertDontSeeHtml('data-testid="anomaly-SCD-1015"');
 
         proposalPageAs($this->coordinator)->call('confirmSubmit')->call('submit');
@@ -560,8 +580,8 @@ describe('volumen: lo que dice y cómo se pinta', function () {
 
     it('«Usar sugerido» muestra el número que sugiere', function () {
         proposalPageAs($this->coordinator)
-            ->call('edit', $this->calculus->id)
-            ->set('expected_students', 71)
+            ->call('edit', $this->calculus->subject_id)
+            ->set("form.{$this->calculus->id}.expected_students", 71)
             ->assertSee('Usar sugerido: 3');
     });
 
@@ -608,21 +628,21 @@ describe('segunda crítica con volumen', function () {
         proposalPageAs($this->coordinator)
             ->call('showDepartment', 'SC')
             ->assertSet('department', 'SC')
-            ->assertDispatched('proposal-focus', id: $this->early->id);
+            ->assertDispatched('proposal-focus', id: $this->early->subject_id);
     });
 
     it('«Ver» en la tabla activa «Mostrar solo» y con varias materias va a la siguiente: «1 de 3 ›»', function () {
         $page = proposalPageAs($this->coordinator, ['vista' => 'tabla'])
             ->call('showDepartment', 'SC')
             ->assertSet('onlyDepartment', true)
-            ->assertDispatched('proposal-focus', id: $this->early->id)
+            ->assertDispatched('proposal-focus', id: $this->early->subject_id)
             ->assertSee('1 de 3')
             ->call('showDepartment', 'SC')
-            ->assertDispatched('proposal-focus', id: $this->networks->id)
+            ->assertDispatched('proposal-focus', id: $this->networks->subject_id)
             ->assertSee('2 de 3')
             ->call('showDepartment', 'SC')
             ->call('showDepartment', 'SC')
-            ->assertDispatched('proposal-focus', id: $this->early->id)
+            ->assertDispatched('proposal-focus', id: $this->early->subject_id)
             ->assertSee('1 de 3');
 
         expect($page->get('returnedAt'))->toBe(0);
@@ -635,8 +655,8 @@ describe('segunda crítica con volumen', function () {
     it('en la tabla cada fila tiene una acción que abre el mismo panel, también en solo lectura', function () {
         proposalPageAs($this->coordinator, ['vista' => 'tabla'])
             ->assertSeeHtml('data-testid="open-ACF-0901"')
-            ->assertSeeHtml('data-item="'.$this->calculus->id.'"')
-            ->call('edit', $this->calculus->id)
+            ->assertSeeHtml('data-item="'.$this->calculus->subject_id.'"')
+            ->call('edit', $this->calculus->subject_id)
             ->assertSet('showDrawer', true);
 
         proposalPageAs($this->subdirection, ['carrera' => $this->career->id, 'vista' => 'tabla'])->assertSeeHtml('data-testid="open-ACF-0901"');
@@ -651,7 +671,7 @@ describe('segunda crítica con volumen', function () {
     it('el panel de solo lectura dice los valores como texto, no como campos deshabilitados', function () {
         $this->calculus->update(['notes' => 'Dos grupos de más.']);
 
-        $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('edit', $this->calculus->id)->html();
+        $html = proposalPageAs($this->subdirection, ['carrera' => $this->career->id])->call('edit', $this->calculus->subject_id)->html();
 
         expect($html)->toContain('data-readonly-value="expected_students"')
             ->toContain('data-readonly-value="requested_groups"')
@@ -660,7 +680,7 @@ describe('segunda crítica con volumen', function () {
             ->not->toContain('data-testid="field-groups"')
             ->not->toContain('data-testid="save-item"');
 
-        $editable = proposalPageAs($this->coordinator)->call('edit', $this->calculus->id)->html();
+        $editable = proposalPageAs($this->coordinator)->call('edit', $this->calculus->subject_id)->html();
 
         expect($editable)->toContain('data-testid="field-groups"')->not->toContain('data-readonly-value');
     });
@@ -721,13 +741,13 @@ describe('segunda crítica con volumen', function () {
 
     it('«Usar sugerido» dice con qué base', function () {
         proposalPageAs($this->coordinator)
-            ->call('edit', $this->calculus->id)
-            ->set('expected_students', 71)
+            ->call('edit', $this->calculus->subject_id)
+            ->set("form.{$this->calculus->id}.expected_students", 71)
             ->assertSee('Usar sugerido: 3 (35 por grupo)');
     });
 
     it('el panel dice el semestre de la materia junto a su departamento', function () {
-        proposalPageAs($this->coordinator)->call('edit', $this->networks->id)->assertSee('Semestre 5');
+        proposalPageAs($this->coordinator)->call('edit', $this->networks->subject_id)->assertSee('Semestre 5');
     });
 
     it('guardar una celda avisa a la fila con un evento', function () {
@@ -864,7 +884,7 @@ describe('retícula con estados, filtro de grupos y marcas (maqueta C)', functio
 
         $page->call('filterGroups', 'con')->assertDontSeeHtml('data-testid="row-SCD-1015"');
 
-        $page->call('edit', $this->calculus->id)->set('requested_groups', 0)->call('save')
+        $page->call('edit', $this->calculus->subject_id)->set("form.{$this->calculus->id}.requested_groups", 0)->call('save')
             ->assertSeeHtml('data-testid="row-ACF-0901"')
             ->call('pickDepartment', 'CB')
             ->assertDontSeeHtml('data-testid="row-ACF-0901"');
@@ -918,7 +938,7 @@ describe('retícula con estados, filtro de grupos y marcas (maqueta C)', functio
             ->call('showDepartment', 'SC')
             ->assertSet('department', 'SC')
             ->assertSet('groupsFilter', '')
-            ->assertDispatched('proposal-focus', id: $this->networks->id)
+            ->assertDispatched('proposal-focus', id: $this->networks->subject_id)
             ->assertSee('Sistemas y Computación (SC): 2 materias · 1 grupo.');
     });
 
@@ -998,8 +1018,12 @@ it('AZ-S17: un coordinador con campus no guarda ni usa lo sugerido en una fila d
         ->call('saveCell', $this->calculus->id, 'requested_groups', '9')->assertForbidden();
 
     proposalPageAs($this->coordinator)
-        ->call('edit', $this->calculus->id)
+        ->call('edit', $this->calculus->subject_id)
+        ->assertSet('form', [])
+        ->set("form.{$this->calculus->id}", ['expected_students' => 70, 'requested_groups' => 9, 'notes' => ''])
         ->call('save')->assertForbidden();
+
+    proposalPageAs($this->coordinator)->call('useSuggested', $this->calculus->id)->assertForbidden();
 
     expect($this->calculus->fresh()->requested_groups)->toBe(2);
 

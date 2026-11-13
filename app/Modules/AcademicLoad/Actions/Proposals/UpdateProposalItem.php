@@ -16,8 +16,9 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Corrige una fila de la propuesta de carrera: alumnos esperados, grupos solicitados y notas, en los rangos de
- * ProposalItemRules (reglas-de-negocio.md, "Propuesta de carrera"). Los elegibles no se tocan.
+ * Corrige una fila de la propuesta de carrera, que es una materia en un campus (M6): alumnos esperados, grupos
+ * solicitados y notas, en los rangos de ProposalItemRules (reglas-de-negocio.md, "Propuesta de carrera"). Los alumnos
+ * posibles no se tocan.
  *
  * En una transacción bloquea la propuesta (el estado que vale es el de la base) y exige que esté en borrador o
  * regresada: enviada queda de solo lectura y aceptada ya no cambia; si no, una ValidationException sobre
@@ -28,7 +29,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * ValidationException sobre `item`. Al final relee la fila con bloqueo para que el valor anterior de la bitácora
  * sea el de la base. Sin cambios no escribe, no registra ni avisa; con cambios guarda, deja en la bitácora de la
  * fila el valor anterior y el nuevo de lo que cambió y, después del commit, avisa con ProposalItemUpdated. Quién
- * puede lo decide CareerProposalPolicy::update antes de llamarla; quien corrige se recibe como parámetro.
+ * puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla: un coordinador con campus solo corrige las
+ * de su campus (M7); quien corrige se recibe como parámetro.
  */
 final class UpdateProposalItem
 {
@@ -43,7 +45,7 @@ final class UpdateProposalItem
 
         return DB::transaction(function () use ($item, $data, $actor): ProposalItem {
             $proposal = CareerProposal::query()
-                ->with(['career' => fn ($query) => $query->withTrashed(), 'campus' => fn ($query) => $query->withTrashed()])
+                ->with(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()])
                 ->lockForUpdate()
                 ->findOrFail($item->career_proposal_id);
 
@@ -53,7 +55,10 @@ final class UpdateProposalItem
                     : 'La propuesta ya se envió: solo se cambia si un departamento la regresa.']);
             }
 
-            $item->load(['subject' => fn ($query) => $query->withTrashed()->with(['department' => fn ($department) => $department->withTrashed()])]);
+            $item->load([
+                'subject' => fn ($query) => $query->withTrashed()->with(['department' => fn ($department) => $department->withTrashed()]),
+                'campus' => fn ($query) => $query->withTrashed(),
+            ]);
             $subject = $item->subject;
 
             $part = ProposalReview::query()
@@ -83,8 +88,8 @@ final class UpdateProposalItem
                 ->causedBy($actor)
                 ->event(ActivityEvent::Updated)
                 ->withChanges(['attributes' => $item->only($changed), 'old' => Arr::only($old, $changed)])
-                ->withProperties(['career_proposal_id' => $proposal->getKey(), 'subject_id' => $item->subject_id])
-                ->log("Cambió {$subject->code} en la propuesta de {$proposal->career->code} en {$proposal->campus->code}");
+                ->withProperties(['career_proposal_id' => $proposal->getKey(), 'subject_id' => $item->subject_id, 'campus_id' => $item->campus_id])
+                ->log("Cambió {$subject->code}".($item->campus === null ? '' : " de {$item->campus->code}")." en la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
 
             ProposalItemUpdated::dispatch($item, $changed);
 

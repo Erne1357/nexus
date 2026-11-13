@@ -21,7 +21,9 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
-    // La carga por departamento y modalidad (posterior) quita academic_loads.campus_id: se deshace primero.
+    // La carga y la propuesta por modalidad (posteriores) quitan academic_loads.campus_id y career_proposals.campus_id: se
+    // deshacen primero.
+    (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210501_make_academic_loads_per_modality.php'))->down();
     $this->migration = require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210401_add_modality_to_load_tables.php');
     $this->migration->down();

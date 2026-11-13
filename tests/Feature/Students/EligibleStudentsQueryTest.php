@@ -47,7 +47,7 @@ function eligibilityStudent(StudyPlan $plan, Campus $campus, array $attributes =
  */
 function eligibleCounts(StudyPlan $plan, Campus $campus): array
 {
-    return sortedCounts(app(EligibleStudentsQuery::class)->countsFor($plan->career, $campus));
+    return sortedCounts(app(EligibleStudentsQuery::class)->countsFor($plan->career, modalityOf('PRES'), $campus));
 }
 
 /**
@@ -186,7 +186,25 @@ it('distinctFor cuenta una vez al alumno elegible para varias materias de la lis
 
     $query = app(EligibleStudentsQuery::class);
 
-    expect($query->distinctFor($this->plan->career, $this->campus, [$this->a->id, $this->f->id]))->toBe(2)
-        ->and($query->distinctFor($this->plan->career, $this->campus, [$this->a->id]))->toBe(1)
-        ->and($query->distinctFor($this->plan->career, $this->campus, []))->toBe(0);
+    $pres = modalityOf('PRES');
+
+    expect($query->distinctFor($this->plan->career, $pres, $this->campus, [$this->a->id, $this->f->id]))->toBe(2)
+        ->and($query->distinctFor($this->plan->career, $pres, $this->campus, [$this->a->id]))->toBe(1)
+        ->and($query->distinctFor($this->plan->career, $pres, $this->campus, []))->toBe(0);
+});
+
+it('M6: cuenta solo los alumnos de la modalidad; sin campus, los de todos los campus (MS5)', function () {
+    $here = eligibilityStudent($this->plan, $this->campus);
+    $elsewhere = eligibilityStudent($this->plan, Campus::factory()->create());
+    $ead = eligibilityStudent($this->plan, $this->campus, ['modality_id' => modalityOf('EAD')->id]);
+    foreach ([$here, $elsewhere, $ead] as $student) {
+        StudentProgress::factory()->for($student)->create(['subjects_available' => [$this->a->id]]);
+    }
+
+    $query = app(EligibleStudentsQuery::class);
+
+    expect($query->countsFor($this->plan->career, modalityOf('PRES'), $this->campus))->toBe([$this->a->id => 1])
+        ->and($query->countsFor($this->plan->career, modalityOf('PRES'), null))->toBe([$this->a->id => 2])
+        ->and($query->countsFor($this->plan->career, modalityOf('EAD'), null))->toBe([$this->a->id => 1])
+        ->and($query->distinctFor($this->plan->career, modalityOf('PRES'), null, [$this->a->id]))->toBe(2);
 });

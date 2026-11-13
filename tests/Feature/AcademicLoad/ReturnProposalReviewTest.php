@@ -33,7 +33,7 @@ beforeEach(function () {
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->proposal = CareerProposal::factory()->submitted()->create([
         'term_id' => $this->term->id,
-        'campus_id' => $this->campus->id,
+        'modality_id' => $this->campus->modality_id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
@@ -87,7 +87,7 @@ it('deja bitácora de la parte con el comentario y el cambio de la propuesta', f
             'career_proposal_id' => $this->proposal->id,
             'proposal_status' => ['old' => 'submitted', 'attributes' => 'returned'],
         ])
-        ->and($activity->description)->toBe('Regresó la parte de CB en la propuesta de ISC en C2 para el periodo 20271');
+        ->and($activity->description)->toBe('Regresó la parte de CB en la propuesta de ISC en Presencial para el periodo 20271');
 });
 
 it('no toca las otras partes ni la carga del departamento', function () {

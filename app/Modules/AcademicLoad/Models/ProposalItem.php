@@ -16,10 +16,10 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Una materia de la propuesta de carrera: el plan y el semestre de la retícula de donde se tomó, los elegibles
- * al armarla y lo que corrige el coordinador (alumnos esperados, grupos solicitados y notas). Su departamento
- * es el de la materia. `campus_id` es el campus de su propuesta (ampliación de la ronda 2, ADR-0025; aún no lo lee
- * nadie): al contraer, la propuesta es por carrera y modalidad y lleva una fila por materia y campus (M6).
+ * Una materia de la propuesta de carrera en un campus (M6): el plan y el semestre de la retícula de donde se tomó, los
+ * alumnos posibles de ese campus al armarla y lo que corrige el coordinador (alumnos esperados, grupos solicitados y
+ * notas). Su departamento es el de la materia. Los grupos que nacen de ella son de su campus (M8). `campus_id` es nulo
+ * solo en una modalidad sin salones, que lleva una sola columna (MS5).
  */
 #[Fillable(['career_proposal_id', 'campus_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes'])]
 #[UseFactory(ProposalItemFactory::class)]
@@ -50,7 +50,7 @@ class ProposalItem extends Model
     }
 
     /**
-     * El campus de la fila: hoy, el de su propuesta (ampliación de la ronda 2, ADR-0025).
+     * El campus de la fila (su columna en la propuesta); null en una modalidad sin salones (MS5).
      *
      * @return BelongsTo<Campus, $this>
      */
