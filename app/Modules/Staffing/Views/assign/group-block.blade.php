@@ -5,9 +5,13 @@
     (staffing::assign.assigned) y, a la derecha, sus acciones con «Siguiente sin docente» solo como icono, para que los
     asignados no tapen a los que faltan.
     «Ver el ranking completo» o «Cambiar» abre debajo el ranking completo con el historial, a todo el ancho, y al pie
-    «Ocultar ranking» y «Siguiente sin docente».
+    «Ocultar ranking» y «Siguiente sin docente». Con más de un campus en la modalidad, la etiqueta del campus del grupo
+    va junto a su clave; un grupo de un campus donde el usuario no asigna (MS6) es de consulta, con su motivo.
 --}}
 @php($group = $row->group)
+@php($groupWritable = $canAssign && in_array((string) $group->campus_id, $assignableCampuses, true))
+@php($readOnlyReason = $groupWritable || ! $canAssign ? $readOnlyReason : ($campusReadOnly ?? $readOnlyReason))
+@php($canAssign = $groupWritable)
 @php($open = in_array($group->id, $expanded, true))
 @php($pendingHere = $pending !== null && $pending['group'] === $group->id)
 @php($compact = $row->hasTeacher())
@@ -21,6 +25,9 @@
         <span class="flex items-center gap-2">
             <span @class(['font-mono font-bold leading-none', 'text-[15px]' => $compact, 'text-xl' => ! $compact])>{{ $group->code }}</span>
             <span class="badge badge-sm badge-neutral badge-soft font-mono font-semibold" title="{{ $group->ownerCareer?->name }}">{{ $group->ownerCareer?->code }}</span>
+            @if ($multiCampus && $group->campus !== null)
+                <x-core::campus-tag :campus="$group->campus" data-testid="group-campus-{{ $group->id }}" />
+            @endif
         </span>
         <span class="flex flex-wrap gap-x-2 font-mono text-[12.5px] font-semibold md:grid">
             @foreach (explode(' · ', $row->schedule) as $block)

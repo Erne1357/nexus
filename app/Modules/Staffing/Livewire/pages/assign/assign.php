@@ -4,9 +4,12 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Transitions\StartStaffing;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\CampusGroupCountsQuery;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Enums\RankingState;
 use App\Modules\Staffing\Enums\StaffingPermission;
@@ -29,13 +32,16 @@ use Mary\Traits\Toast;
 
 /**
  * Asignación docente (tarea 3.9; reglas-de-negocio.md, «Ranking docente (desempate)», HC-16): el jefe asigna el
- * docente de cada grupo de su departamento, en el periodo y el campus activos de la credencial, con el ranking a la
- * vista. La carga es la del departamento en la modalidad del campus (M1, por el puente `campuses.modality_id` mientras
- * la pantalla sea por campus) y el campus filtra sus grupos. Dos vistas que el usuario alterna y que se recuerdan
- * (`?vista=materia|paneles`, y en la sesión para cuando entra sin ella): por materia, con los tres primeros lugares de
- * cada grupo sin docente en su renglón y el ranking completo en su lugar (maqueta C), y dos paneles, la lista de grupos
- * y el ranking y el historial del elegido (maqueta A). `?grupo=<id>` abre ese grupo; `?depto=<código>` elige el
- * departamento a quien ve varios.
+ * docente de cada grupo de su departamento, en el periodo activo de la credencial, con el ranking a la vista. La carga
+ * es la del departamento en la modalidad de la página (`?modalidad=`, WithModalityCampusFilter; M1: con los grupos de
+ * todos sus campus), que se elige con el select «Modalidad» (maqueta U2, opción A; sin select con una sola, MS16). El
+ * campus es un filtro de sus grupos (`?campus=`, «Todos» por omisión), con los grupos de la carga en cada campus. Se lee
+ * la modalidad entera y se asigna con el campus del grupo (MS6): un jefe de proyecto docente limitado a C2 ve los grupos
+ * de C1 de solo consulta, con su motivo, y asignar uno es 403 de GroupTeacherAssignmentPolicy. Dos vistas que el
+ * usuario alterna y que se recuerdan (`?vista=materia|paneles`, y en la sesión para cuando entra sin ella): por
+ * materia, con los tres primeros lugares de cada grupo sin docente en su renglón y el ranking completo en su lugar
+ * (maqueta C), y dos paneles, la lista de grupos y el ranking y el historial del elegido (maqueta A). `?grupo=<id>` abre
+ * ese grupo; `?depto=<código>` elige el departamento a quien ve varios.
  *
  * Asignar al primer lugar es un clic; fuera de él (o fuera del ranking) pide el motivo en el renglón con el lugar que
  * ocupa. Lo que rechaza AssignTeacher se ve en su lugar. Si la carga está en propuesta, quien puede la pasa a
@@ -48,7 +54,7 @@ use Mary\Traits\Toast;
 new #[Title('Asignación docente')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityCampusFilter;
 
     private const array VIEWS = ['materia', 'paneles'];
 
@@ -99,7 +105,10 @@ new #[Title('Asignación docente')] class extends Component
     /** El motivo de asignar fuera del primer lugar (HC-16). */
     public string $reason = '';
 
-    /** El periodo, la modalidad, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
+    /**
+     * El periodo, la modalidad, el campus del filtro (null, «Todos») y el departamento con los que pinta y escribe. El
+     * navegador no los puede cambiar: cambian al elegir otra modalidad, campus o departamento, que se resuelven de nuevo.
+     */
     #[Locked]
     public ?string $termId = null;
 
@@ -194,9 +203,37 @@ new #[Title('Asignación docente')] class extends Component
         $this->checkBlockers($query, $blockers);
     }
 
-    public function updatedCampus(): void
+    /**
+     * Otro campus en el filtro: los grupos de ese campus en la misma carga (se recuerda para la siguiente pantalla,
+     * AZ-02); suelta el grupo elegido si ya no se ve.
+     */
+    public function updatedCampus(Actor $context, AssignmentBoardQuery $query): void
     {
-        $this->reopenOnCampus('staffing.assign');
+        $chosen = $this->campusFilter();
+
+        if ($chosen !== null) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $chosen->code);
+        }
+
+        $this->reset('expanded', 'finalTierOpen', 'scrollTo', 'pending', 'failure', 'sheet', 'reason');
+        $this->resolve($context, $query);
+
+        if ($this->groupId !== '' && $query->findGroup((string) $this->termId, (string) $this->modalityId, (string) $this->departmentId, $this->groupId, $this->campusId) === null) {
+            $this->groupId = '';
+        }
+    }
+
+    /**
+     * Otra modalidad en el select: la carga del departamento en ella (M1), con lo elegido de la anterior suelto; si el
+     * usuario no ve ese departamento en la otra modalidad, el primero que ve.
+     */
+    public function updatedModalidad(Actor $context, AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
+    {
+        if (! $query->departmentsFor($context, $this->requiredModality()->getKey())->contains('code', $this->department)) {
+            $this->department = '';
+        }
+
+        $this->updatedDepartment($context, $query, $blockers);
     }
 
     /**
@@ -357,10 +394,18 @@ new #[Title('Asignación docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(AssignmentBoardQuery $query, GroupRankingQuery $rankings): array
+    public function with(AssignmentBoardQuery $query, GroupRankingQuery $rankings, CampusGroupCountsQuery $counts): array
     {
+        $modality = $this->modalityId === null ? null : $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $this->modalityId);
+        $scope = [
+            'modalityOptions' => $this->modalityOptions(),
+            'shownModality' => $modality,
+            'campusOptions' => $modality === null ? collect() : $this->campusesOf($modality),
+            'shownCampus' => $this->campusId === null || $modality === null ? null : $this->campusesOf($modality)->firstWhere('id', $this->campusId),
+        ];
+
         if ($this->departmentId === null) {
-            return ['board' => null, ...$this->campusViewData()];
+            return ['board' => null, ...$scope];
         }
 
         $board = $this->board($query);
@@ -372,11 +417,19 @@ new #[Title('Asignación docente')] class extends Component
             : array_values(array_intersect($this->expanded, $visibleIds));
         $load = $board->load;
         $assignable = $load !== null && in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true);
-        $canAssign = $assignable && Gate::allows('create', [GroupTeacherAssignment::class, $this->scopeGroup()]);
+        $campusCounts = $counts->of((string) $this->termId, (string) $this->modalityId, $this->departmentId);
+        $writable = $assignable ? $this->assignableCampuses($scope['campusOptions']) : [];
+        $canAssign = $writable !== [];
         $stateMessage = $this->stateMessage($board);
+        $limitedTo = $canAssign ? $this->limitedTo($scope['campusOptions'], $writable, $campusCounts) : null;
 
         return [
-            ...$this->campusViewData(),
+            ...$scope,
+            'campusCounts' => $campusCounts,
+            'multiCampus' => $scope['campusOptions']->count() > 1,
+            'assignableCampuses' => $writable,
+            'limitedTo' => $limitedTo,
+            'campusReadOnly' => $limitedTo === null ? null : "Solo consulta: asignas los grupos de {$limitedTo['own']}.",
             'board' => $board,
             'visible' => $visible,
             'sections' => $this->view === 'materia' ? $this->sections($board, $visible) : [],
@@ -396,19 +449,22 @@ new #[Title('Asignación docente')] class extends Component
     }
 
     /**
-     * Resuelve con la credencial el periodo, el campus y el departamento, y deja en propiedades bloqueadas con qué
-     * pinta y escribe la página (o por qué no hay tablero). Un departamento pedido por la URL que el usuario no ve es
-     * 403.
+     * Resuelve con la credencial el periodo, la modalidad (la elegida, o la del grupo de `?grupo=`, o la de omisión,
+     * MS30; queda fija en `?modalidad=`), el campus del filtro (uno que no es de la modalidad es «Todos») y el
+     * departamento, y deja en propiedades bloqueadas con qué pinta y escribe la página (o por qué no hay tablero). Un
+     * departamento pedido por la URL que el usuario no ve es 403; sin ninguna modalidad donde trabaje, 403.
      */
     private function resolve(Actor $context, AssignmentBoardQuery $query): void
     {
         $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $campus = $this->requiredCampus();
-        $modalityId = $campus->modality_id;
-
         $term = $context->activeTerm();
+        $this->followRequestedGroup($query, $term?->getKey());
+        $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
+        $campus = $this->campusFilter();
+        $this->campus = $campus?->code;
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
@@ -416,9 +472,10 @@ new #[Title('Asignación docente')] class extends Component
             return;
         }
 
-        $departments = $modalityId === null ? collect() : $query->departmentsFor($context, $modalityId);
+        $this->modalityId = $modality->getKey();
+        $departments = $query->departmentsFor($context, $modality->getKey());
         $department = $this->department === ''
-            ? $this->departmentOfRequestedGroup($departments, $query, (string) $term->getKey(), (string) $modalityId, (string) $campus->getKey()) ?? $departments->first()
+            ? $this->departmentOfRequestedGroup($departments, $query, (string) $term->getKey(), $modality->getKey()) ?? $departments->first()
             : $departments->first(fn (Department $department): bool => $department->code === $this->department);
 
         abort_if($this->department !== '' && $department === null, 403);
@@ -426,17 +483,31 @@ new #[Title('Asignación docente')] class extends Component
         $this->departments = $departments->map(fn (Department $department): array => ['code' => $department->code, 'name' => "{$department->code} · {$department->name}"])->all();
 
         if ($department === null) {
-            $this->message = 'No tienes un departamento con asignación docente en este campus.';
+            $this->message = "No tienes un departamento con asignación docente en {$modality->name}.";
 
             return;
         }
 
         $this->department = $department->code;
         $this->termId = $term->getKey();
-        $this->modalityId = $modalityId;
-        $this->campusId = $campus->getKey();
+        $this->modalityId = $modality->getKey();
+        $this->campusId = $campus?->getKey();
         $this->departmentId = $department->getKey();
         $this->message = null;
+    }
+
+    /**
+     * Con `?grupo=` y sin `?modalidad=` (un aviso o un enlace viejo), la modalidad del grupo si es una de las que el
+     * usuario trabaja; si no, la página toma la de omisión.
+     */
+    private function followRequestedGroup(AssignmentBoardQuery $query, ?string $termId): void
+    {
+        if ($this->groupId === '' || $termId === null || ! blank($this->modalidad)) {
+            return;
+        }
+
+        $modalityId = $query->modalityIdOfGroup($termId, $this->groupId);
+        $this->modalidad = $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $modalityId)?->code;
     }
 
     /**
@@ -445,20 +516,21 @@ new #[Title('Asignación docente')] class extends Component
      *
      * @param  Collection<int, Department>  $departments
      */
-    private function departmentOfRequestedGroup(Collection $departments, AssignmentBoardQuery $query, string $termId, string $modalityId, string $campusId): ?Department
+    private function departmentOfRequestedGroup(Collection $departments, AssignmentBoardQuery $query, string $termId, string $modalityId): ?Department
     {
         if ($this->groupId === '') {
             return null;
         }
 
-        $departmentId = $query->departmentIdOfGroup($termId, $modalityId, $this->groupId, $campusId);
+        $departmentId = $query->departmentIdOfGroup($termId, $modalityId, $this->groupId);
 
         return $departmentId === null ? null : $departments->first(fn (Department $department): bool => $department->getKey() === $departmentId);
     }
 
     /**
      * `?grupo=` al entrar: en la vista por materia abre su ranking y lleva la página a él; en los dos paneles lo elige
-     * y, en pantallas angostas, lo abre como hoja. Un grupo que no es del tablero se ignora.
+     * y, en pantallas angostas, lo abre como hoja. Si el filtro de campus lo esconde, el filtro pasa a «Todos». Un grupo
+     * que no es del tablero se ignora.
      */
     private function openRequestedGroup(AssignmentBoardQuery $query): void
     {
@@ -466,12 +538,16 @@ new #[Title('Asignación docente')] class extends Component
             return;
         }
 
-        $group = $this->departmentId === null ? null : $query->findGroup((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->groupId, $this->campusId);
+        $group = $this->departmentId === null ? null : $query->findGroup((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->groupId);
 
         if ($group === null) {
             $this->groupId = '';
 
             return;
+        }
+
+        if ($this->campusId !== null && $group->campus_id !== $this->campusId) {
+            $this->campus = $this->campusId = null;
         }
 
         if ($this->view === 'materia') {
@@ -551,7 +627,44 @@ new #[Title('Asignación docente')] class extends Component
     }
 
     /**
-     * El alcance de la página como un grupo sin guardar (su modalidad, campus y departamento), para las policies de Staffing.
+     * Los campus de la modalidad donde el usuario asigna en el departamento (GroupTeacherAssignmentPolicy con un grupo
+     * de cada campus, MS6), por id: todos para el jefe, el suyo para un jefe de proyecto docente con campus. En una
+     * modalidad sin salones, el grupo va sin campus (MS4) y la llave es ''.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @return list<string>
+     */
+    private function assignableCampuses(Collection $campuses): array
+    {
+        $ids = $campuses->isEmpty() ? [null] : $campuses->modelKeys();
+
+        return array_values(array_map(fn (?string $id): string => (string) $id, array_filter($ids, fn (?string $id): bool => Gate::allows('create', [GroupTeacherAssignment::class, new Group([
+            'modality_id' => $this->modalityId,
+            'campus_id' => $id,
+            'department_id' => $this->departmentId,
+        ])]))));
+    }
+
+    /**
+     * Quien asigna en unos campus y no en otros que tienen grupos de la carga (un jefe de proyecto docente con campus):
+     * los suyos y los demás, por clave («C2», «C1»), para decirlo en la página y en cada grupo; null si asigna en todos.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @param  list<string>  $writable
+     * @param  array<string, int>  $counts
+     * @return array{own: string, others: string}|null
+     */
+    private function limitedTo(Collection $campuses, array $writable, array $counts): ?array
+    {
+        $own = $campuses->filter(fn (Campus $campus): bool => in_array($campus->getKey(), $writable, true));
+        $others = $campuses->reject(fn (Campus $campus): bool => in_array($campus->getKey(), $writable, true) || ($counts[$campus->code] ?? 0) === 0);
+
+        return $own->isEmpty() || $others->isEmpty() ? null : ['own' => $own->pluck('code')->join(', ', ' y '), 'others' => $others->pluck('code')->join(', ', ' y ')];
+    }
+
+    /**
+     * El alcance de la página como un grupo sin guardar (su modalidad, el campus del filtro y su departamento), para ver el
+     * ranking (StaffingRankingPolicy, que no pide el campus); asignar se pregunta con cada grupo.
      */
     private function scopeGroup(): Group
     {

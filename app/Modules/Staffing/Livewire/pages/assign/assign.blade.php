@@ -1,7 +1,7 @@
 {{--
-    Asignación docente (tarea 3.9; maquetas C «Por materia» y A «Dos paneles» de .impeccable/mocks/staffing/jefe/):
-    encabezado con el departamento, el campus, el periodo y la carga con su avance; el aviso del estado de la carga; el
-    renglón de la vista y los filtros, y la vista elegida. Todo lo que se pinta viene de AssignmentBoardQuery y
+    Asignación docente (tarea 3.9; maquetas C «Por materia» y A «Dos paneles» de .impeccable/mocks/staffing/jefe/; el
+    alcance, maqueta U2, opción A): encabezado con el departamento, la modalidad, el periodo y la carga con su avance, y
+    el filtro de campus; el aviso del estado de la carga; el renglón de la vista y los filtros, y la vista elegida. Todo lo que se pinta viene de AssignmentBoardQuery y
     GroupRankingQuery. Mientras algún grupo a la vista espera su ranking, la página consulta cada 5 s.
 
     Alpine solo mueve la vista y el foco: lleva la página al grupo de `?grupo=` (`data-scroll-to`) o al que pide
@@ -61,7 +61,7 @@
     x-on:assign-group-opened.window="target = { title: true }; $nextTick(() => flush())">
     @if ($board === null)
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Asignación docente</h1>
-        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" />
+        <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality?->code ?? $modalidad" class="w-full md:w-56" />
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="assign-empty">{{ $message }}</div>
     @else
         @include('staffing::assign.header')

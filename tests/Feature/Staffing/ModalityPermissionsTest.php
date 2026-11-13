@@ -59,14 +59,15 @@ it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve el tablero con 
         ->and($this->groupC1->fresh()->teacher_id)->toBeNull();
 });
 
-it('AZ-S17: el jefe de proyecto docente de PRES limitado a C2 no asigna docente a un grupo de C1 aunque lo pida por su id', function () {
+it('AZ-S17, MS6: el jefe de proyecto docente de PRES limitado a C2 ve el grupo de C1 y asignarle docente es 403 de la policy', function () {
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => $this->pres->id, 'campus_id' => $this->c2->id, 'department_id' => $this->department->id])->create();
 
     onCampusPage($this->c2);
     Livewire::withQueryParams(['depto' => 'SC'])->actingAs($jpd)->test('staffing::pages.assign')
         ->assertOk()
+        ->assertSeeHtml('data-group="'.$this->groupC1->id.'"')
         ->call('assign', $this->groupC1->id, $this->teacher->id, 'tarjetas')
-        ->assertNotFound();
+        ->assertForbidden();
 
     expect($this->groupC1->fresh()->teacher_id)->toBeNull()
         ->and(GroupTeacherAssignment::query()->where('group_id', $this->groupC1->id)->exists())->toBeFalse();
@@ -77,7 +78,8 @@ it('AZ-S17: un jefe de proyecto docente de EAD no ve nada de PRES', function () 
 
     expect($jpd->can('viewAny', [StaffingRanking::class, $this->groupC2]))->toBeFalse()
         ->and($jpd->can('create', [GroupTeacherAssignment::class, $this->groupC2]))->toBeFalse()
-        ->and($jpd->can('viewAny', [TeacherTermLoad::class, $this->department, $this->c2]))->toBeFalse();
+        ->and($jpd->can('viewAny', [TeacherTermLoad::class, $this->department, $this->pres]))->toBeFalse()
+        ->and($jpd->can('viewAny', [TeacherTermLoad::class, $this->department, $this->ead]))->toBeTrue();
 });
 
 it('AZ-S17: un jefe de departamento sin modalidad conserva el acceso a PRES', function () {
