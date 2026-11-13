@@ -239,6 +239,7 @@ new #[Title('Cierre de la carga')] class extends Component
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
         $modality = $this->modalityOf($loads);
         $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->modality_id === $modality->getKey());
+        $this->modalidad = $modality->code;
 
         if ($load === null) {
             $this->message = "{$department->name} no tiene grupos en {$modality->name} en {$term->name}: su carga se queda en borrador.";
@@ -246,7 +247,6 @@ new #[Title('Cierre de la carga')] class extends Component
             return;
         }
 
-        $this->modalidad = $modality->code;
         $this->message = null;
         $this->showLoad($load, $query);
     }

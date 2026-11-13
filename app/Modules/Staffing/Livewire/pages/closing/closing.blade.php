@@ -30,7 +30,7 @@
                 @if ($closing)
                     <x-core::status-badge :tone="$closing->load->status->tone()" :label="\App\Modules\Staffing\Queries\LoadClosing::statusLabel($closing->load)" :icon="\App\Modules\Staffing\Queries\LoadClosing::statusIcon($closing->load)" @class(["mb-2.5" => ! $single]) data-testid="load-status" />
                 @endif
-                <x-core::modality-scope :options="$modalityOptions" :selected="$closing?->load->modality->code ?? $modalidad" class="w-full md:w-56" />
+                <x-core::modality-scope :options="$modalityOptions" :selected="$modalidad" class="w-full md:w-56" />
             </div>
         </x-slot:actions>
     </x-header>
