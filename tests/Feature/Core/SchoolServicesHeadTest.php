@@ -3,6 +3,8 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
@@ -33,7 +35,10 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto.
+    CatalogReview::factory()->for($term)->create();
+    AcademicLoad::factory()->for($term)->create(['campus_id' => $this->c2->id]);
     $this->services = OrgUnit::factory()->create([
         'code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento,
         'parent_id' => app(OrgTree::class)->idOf(OrgTree::ACADEMIC),
@@ -56,19 +61,21 @@ function menuOf(User $user): array
 }
 
 describe('AZ-02: menú', function () {
-    it('AZ-02: el jefe de Servicios Escolares no ve lo académico: solo Inicio y Planes de estudio', function () {
-        expect(menuOf($this->servicesHead))->toBe(['Inicio', 'Planes de estudio']);
+    it('AZ-02: el jefe de Servicios Escolares no ve lo académico: solo Planes de estudio', function () {
+        expect(menuOf($this->servicesHead))->toBe(['Planes de estudio']);
     });
 
-    it('AZ-S16: los demás puestos ven el mismo menú que antes', function (Closure $user, array $menu) {
+    // Las listas van en el orden del menú (MN-01): Mi espacio, Académico por etapas, Servicios escolares,
+    // Recursos humanos y Administración. Inicio no es una entrada: el menú lo pinta aparte.
+    it('AZ-S16: cada puesto ve su menú, en el orden de MN-01', function (Closure $user, array $menu) {
         expect(menuOf($user($this)))->toBe($menu);
     })->with([
-        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Inicio', 'Docentes', 'Alumnos', 'Validar catálogos', 'Bandeja del departamento', 'Horarios publicados', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga']],
-        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Inicio', 'Campus', 'Periodos', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios publicados', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre']],
-        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Inicio', 'Docentes', 'Bandeja del departamento', 'Horarios publicados', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio']],
-        'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Inicio', 'Alumnos', 'Propuesta de carrera', 'Horarios publicados', 'Horarios', 'Choques y avance', 'Solicitudes de cambio']],
-        'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Inicio', 'Mi carga', 'Oferta']],
-        'admin' => [fn () => User::factory()->admin()->create(), ['Inicio', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Docentes', 'Alumnos', 'Importaciones', 'Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios publicados', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre']],
+        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Validar catálogos', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Horarios publicados', 'Alumnos', 'Docentes']],
+        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Periodos', 'Edificios', 'Salones']],
+        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Horarios publicados', 'Docentes']],
+        'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Horarios publicados', 'Alumnos']],
+        'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Mi carga', 'Oferta']],
+        'admin' => [fn () => User::factory()->admin()->create(), ['Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']],
     ]);
 });
 

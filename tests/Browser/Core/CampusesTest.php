@@ -7,8 +7,8 @@ use App\Modules\Core\Models\User;
 
 /*
 | CRUD de Campus en el navegador: el admin da de alta un campus y lo edita desde la UI; un
-| coordinador no ve la opción en el menú (criterio 2 de la fase 0). Campus es del área Académico, la
-| del inicio, así que se ve en el menú cerrado.
+| coordinador no ve la opción en el menú (criterio 2 de la fase 0). Campus es de Administración ›
+| Institución: se llega abriendo el menú con la liebre.
 */
 
 beforeEach(function () {
@@ -32,6 +32,7 @@ function signInToCampuses(string $username)
 
 it('el admin da de alta un campus y luego lo edita desde la UI', function () {
     $page = signInToCampuses('admin')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Campus"]')
         ->assertPathIs('/campus')
         ->assertSee('Campus II')
@@ -59,7 +60,7 @@ it('el admin da de alta un campus y luego lo edita desde la UI', function () {
 
 it('un coordinador no ve la opción Campus en el menú', function () {
     signInToCampuses('19110001')
-        ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertVisible('#nexus-menu [data-menu-home]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Campus')
         ->click('@hare')
         ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"]')

@@ -10,7 +10,7 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 /**
  * Quién ve y corrige el organigrama: solo el admin (spec §6.1). Cada ability se resuelve con un permiso
  * `core.org_unit.*` (CorePermission) que ningún puesto concede. Qué unidades admiten cada operación (AZ-S13: los
- * departamentos académicos se manejan en Académico) lo deciden OrgUnitRules y las Actions.
+ * departamentos académicos se manejan en Administración › Departamentos) lo deciden OrgUnitRules y las Actions.
  */
 final class OrgUnitPolicy
 {

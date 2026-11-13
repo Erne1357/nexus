@@ -24,6 +24,7 @@ it('el admin ofrece una carrera en C2 y luego deja de ofrecerla desde la UI', fu
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Carreras"]')
         ->assertPathIs('/academic/careers')
         ->assertSee('Ingeniería en Sistemas')

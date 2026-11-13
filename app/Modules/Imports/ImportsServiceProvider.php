@@ -3,6 +3,7 @@
 namespace App\Modules\Imports;
 
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Console\ExportDemoFiles;
@@ -107,7 +108,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', NavigationArea::Datos,
+            new NavigationItem('Importaciones', 'imports.wizard', 'o-arrow-up-tray', NavigationArea::Administracion, group: NavigationGroup::Datos,
                 ability: 'viewAny', arguments: [ImportBatch::class]),
         ];
     }

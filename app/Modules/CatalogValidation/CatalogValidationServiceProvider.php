@@ -14,6 +14,7 @@ use App\Modules\CatalogValidation\Listeners\InviteTeacherAfterValidation;
 use App\Modules\CatalogValidation\Listeners\InviteTeachersOnReviewValidated;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -21,6 +22,7 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\ModuleServiceProvider;
@@ -68,10 +70,13 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
      */
     public function navigation(): array
     {
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $validationOpen = OpenValidationQuery::menuCondition();
+
         return [
-            new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico,
+            new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
-            new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico,
+            new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
         ];
     }
