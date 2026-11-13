@@ -59,7 +59,7 @@ final class TermPolicy
 
     /**
      * Abrir el periodo en una modalidad o completar una apertura (M4; fila "Abrir periodo, calendario, perfil de
-     * campus": la Subdirección). El permiso declara la dimensión modalidad, así que se decide sobre el par (periodo,
+     * modalidad": la Subdirección). El permiso declara la dimensión modalidad, así que se decide sobre el par (periodo,
      * modalidad). Nadie abre una modalidad inactiva (OpenTerm la rechaza): un nombramiento sin modalidad cubre solo las activas, y las inactivas solo se alcanzan para ver alumnos (M10). Sin modalidad pregunta si abre en alguna: es el `canOpen` de la página.
      */
     public function open(User $user, Term $term, ?Modality $modality = null): bool

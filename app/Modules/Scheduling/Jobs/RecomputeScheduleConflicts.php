@@ -13,10 +13,12 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 
 /**
  * Recalcula en la cola los choques de la carga de una modalidad en un periodo, con los grupos de todos sus campus
- * (SyncScheduleConflicts; tarea 3.2, M1): lo despacha QueueConflictRecompute al guardar una sesión, un docente o un
- * salón. Uno solo espera en la cola por periodo y modalidad aunque lleguen varios cambios seguidos; si llega otro
- * mientras corre, se encola de nuevo y no se encima con la corrida en curso. Recalcular es idempotente, así que
- * reintentar es seguro.
+ * (SyncScheduleConflicts; tarea 3.2, M1): lo despacha QueueConflictRecompute al guardar una sesión, un docente, un
+ * salón o el perfil de la modalidad. Uno solo espera en la cola por periodo y modalidad aunque lleguen varios cambios
+ * seguidos; si llega otro mientras corre, se encola de nuevo y no se encima con la corrida en curso. Recalcular es
+ * idempotente, así que reintentar es seguro. El tiempo límite (300 s) deja mucho margen sobre el recálculo más grande
+ * del masivo (Presencial de Ene-Jun 2027, 3 611 grupos y 9 744 sesiones: 1.5 s el 13 de noviembre de 2026) y vence
+ * antes del `retry_after` de Redis.
  */
 final class RecomputeScheduleConflicts implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {

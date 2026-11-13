@@ -44,13 +44,13 @@ trait WithModalityCampusFilter
 
     /**
      * La modalidad de omisión (MS30); en una pantalla de un campus a la vez, entre las que usan salones si hay alguna, para
-     * que no abra en una sin campus.
+     * que no abra en una sin campus. Una con perfil guardado inválido cuenta como sin salones (Modality::valid_profile).
      *
      * @param  Collection<int, Modality>  $options
      */
     protected function defaultModality(Collection $options): ?Modality
     {
-        $withCampuses = $this->needsCampus() ? $options->filter(fn (Modality $modality): bool => $modality->profile->usesRooms) : $options;
+        $withCampuses = $this->needsCampus() ? $options->filter(fn (Modality $modality): bool => $modality->valid_profile?->usesRooms === true) : $options;
 
         return $this->firstOpenModality($withCampuses->isNotEmpty() ? $withCampuses : $options);
     }

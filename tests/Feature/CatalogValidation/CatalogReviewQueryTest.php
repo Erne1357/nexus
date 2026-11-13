@@ -66,6 +66,14 @@ it('no pide salones si el perfil de la modalidad no los usa; sin modalidad (el a
         ->and(app(CatalogReviewQuery::class)->pendingFor($this->term, null, $this->department))->toContain(Catalog::Rooms);
 });
 
+it('una modalidad con perfil guardado inválido cuenta como sin salones y no falla', function () {
+    $broken = Modality::factory()->create();
+    $broken->forceFill(['settings' => ['block_minutes' => 45]])->save();
+    CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
+
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $broken, $this->department))->not->toContain(Catalog::Rooms);
+});
+
 it('no cuenta las revisiones de otro periodo ni de otro departamento; la de salones vale para todos los campus', function () {
     foreach (Catalog::cases() as $catalog) {
         CatalogReview::factory()->create(['catalog' => $catalog, 'status' => 'validated', 'term_id' => Term::factory()->create()->id, 'department_id' => $this->department->id]);

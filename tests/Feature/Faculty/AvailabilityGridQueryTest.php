@@ -158,6 +158,13 @@ describe('perfil (S12)', function () {
         expect($this->grids->profile()->toArray())->toBe(ModalityProfile::DEFAULTS);
     });
 
+    it('una modalidad activa con perfil guardado inválido no cuenta y no rompe la cuadrícula', function () {
+        $broken = Modality::factory()->create();
+        $broken->forceFill(['settings' => ['days' => [1, 2, 3, 4, 5, 6], 'block_minutes' => 45]])->save();
+
+        expect($this->grids->profile()->toArray())->toBe(ModalityProfile::DEFAULTS);
+    });
+
     it('no cuenta las modalidades inactivas ni las borradas', function () {
         Modality::factory()->inactive()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
         Modality::factory()->create(['settings' => ['days' => [1, 2, 3, 4, 5, 6]]])->delete();

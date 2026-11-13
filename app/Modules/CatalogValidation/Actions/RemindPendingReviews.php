@@ -10,13 +10,16 @@ use Illuminate\Support\Collection;
 
 /**
  * El recordatorio del tablero de avance de validación (tarea 2.5): avisa a los jefes con catálogos por validar
- * (NotifyPendingReviews::notify) en cada campus dado, de los departamentos activos de `$departmentIds` o, sin lista,
- * de todos. Quién puede lo decide CatalogReviewPolicy::remind antes de llamarla (supuesto por confirmar).
+ * (NotifyPendingReviews::notify) de los departamentos activos de `$departmentIds` o, sin lista, de todos. Lo pendiente
+ * y los jefes no dependen del campus (la revisión es del departamento en todo el Tec), así que avisa una sola vez por
+ * departamento aunque el tablero muestre varios campus («Todos»), con el primero, como el aviso de apertura
+ * (NotifyPendingReviews::notifyOpened). Quién puede lo decide CatalogReviewPolicy::remind antes de llamarla (supuesto
+ * por confirmar).
  *
  * Va departamento por departamento, sin una transacción que envuelva el ciclo: en cada uno que avisó deja una
- * entrada de bitácora (evento `reminded`) con quién recordó, a quién, en qué campus y cuántos jefes; de ahí sale el
- * «último recordatorio» del tablero. Da a cuántos usuarios distintos avisó (un jefe con avisos en varios campus o
- * departamentos cuenta una vez).
+ * entrada de bitácora (evento `reminded`) con quién recordó, a quién, los campus del tablero y cuántos jefes; de ahí sale
+ * el «último recordatorio» del tablero en cualquiera de esos campus. Da a cuántos usuarios distintos avisó (un jefe de
+ * varios departamentos cuenta una vez).
  */
 final class RemindPendingReviews
 {
@@ -36,20 +39,16 @@ final class RemindPendingReviews
 
         $notifiedUsers = [];
 
+        $campus = $campuses->first();
+
+        if ($campus === null) {
+            return 0;
+        }
+
+        $codes = $campuses->pluck('code')->values()->all();
+
         foreach ($departments as $department) {
-            $heads = collect();
-            $codes = [];
-
-            foreach ($campuses as $campus) {
-                $notified = $this->notify->notify($term, $campus, $department->getKey());
-
-                if ($notified->isNotEmpty()) {
-                    $heads = $heads->concat($notified);
-                    $codes[] = $campus->code;
-                }
-            }
-
-            $heads = $heads->unique('id')->values();
+            $heads = $this->notify->notify($term, $campus, $department->getKey())->unique('id')->values();
 
             if ($heads->isEmpty()) {
                 continue;

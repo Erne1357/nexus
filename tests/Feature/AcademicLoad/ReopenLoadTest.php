@@ -73,6 +73,8 @@ it('MS36: no reabre una carga publicada de una modalidad desactivada o borrada, 
     $load = AcademicLoad::factory()->inStatus(LoadStatus::Published)->create(['modality_id' => $ead->id]);
 
     if ($trashed) {
+        // Activa y luego borrada: así solo trashed() la detiene, no is_active.
+        $ead->update(['is_active' => true]);
         $ead->delete();
     }
 

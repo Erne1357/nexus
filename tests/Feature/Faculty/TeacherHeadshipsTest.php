@@ -88,6 +88,19 @@ describe('nombrar', function () {
             ->user_id->toBe($user->id)->modality_id->toBe(modalityOf('PRES')->id)->campus_id->toBe($this->c2->id)->valid_to->toDateString()->toBe(today()->addMonths(6)->toDateString());
     });
 
+    it('MS4: en una modalidad sin salones la jefatura de proyecto docente no ofrece campus y suelta el elegido', function () {
+        $online = tap(modalityOf('ENL'))->update(['is_active' => true]);
+
+        headshipRecord($this->admin, $this->ana)
+            ->call('createHeadship')
+            ->set('headKind', 'jefe_proyecto_docente')
+            ->assertSee('Campus (opcional)')
+            ->set('headCampusId', $this->c2->id)
+            ->set('headModalityId', $online->id)
+            ->assertDontSee('Campus (opcional)')
+            ->assertSet('headCampusId', '');
+    });
+
     it('AZ-S17: el jefe de proyecto docente exige modalidad y su campus es opcional: el error sale en el campo', function () {
         $page = headshipRecord($this->admin, $this->ana)
             ->call('createHeadship')

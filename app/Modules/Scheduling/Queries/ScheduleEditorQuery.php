@@ -395,12 +395,36 @@ final class ScheduleEditorQuery
 
     /**
      * Por qué el grupo no puede cambiar de campus aunque quien mira pueda moverlo, para decirlo en el cajón antes del clic;
-     * null si nada lo detiene de antemano. Hoy es MS25 (confirmado el 12 de noviembre de 2026): un acuerdo de grupo
-     * compartido propuesto o aceptado. MoveGroupToCampus lo vuelve a revisar al cambiarlo.
+     * null si nada lo detiene de antemano, sea cual sea el campus nuevo. Es MS25 (confirmado el 12 de noviembre de 2026):
+     * un acuerdo de grupo compartido propuesto o aceptado. Lo que depende del campus nuevo lo da campusMoveBlocks().
+     * MoveGroupToCampus lo vuelve a revisar al cambiarlo.
      */
     public function campusMoveBlockedReason(Group $group): ?string
     {
         return $this->quotas->hasLiveSharedGroup($group) ? 'Tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo en Acuerdos antes de cambiarlo de campus.' : null;
+    }
+
+    /**
+     * Por qué el grupo no puede cambiar a cada uno de `$campuses`, por id de campus, para decirlo en el cajón antes del
+     * clic: M15 (confirmado el 13 de noviembre de 2026), un cupo de una carrera que ese campus no ofrece. Los campus que
+     * no lo detienen no aparecen. MoveGroupToCampus lo vuelve a revisar al cambiarlo.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @return array<string, string>
+     */
+    public function campusMoveBlocks(Group $group, Collection $campuses): array
+    {
+        $blocks = [];
+
+        foreach ($campuses as $campus) {
+            $careers = $this->quotas->careersNotOfferedIn($group, $campus->getKey());
+
+            if ($careers !== []) {
+                $blocks[$campus->getKey()] = GroupQuotasQuery::notOfferedReason($careers, $campus->name).'.';
+            }
+        }
+
+        return $blocks;
     }
 
     /**

@@ -12,6 +12,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Core\Queries\ModalityQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
@@ -211,6 +212,18 @@ describe('admin', function () {
             ->assertSee('El perfil de flujo guardado no es válido');
     });
 
+    it('al reparar un perfil guardado inválido, la bitácora guarda el anterior tal como estaba', function () {
+        $this->ead->forceFill(['settings' => ['block_minutes' => 45]])->save();
+
+        $this->actingAs($this->admin);
+        app(UpdateModality::class)->handle($this->ead, ['settings' => ModalityProfile::DEFAULTS]);
+
+        $log = Activity::query()->where('subject_id', $this->ead->id)->latest('id')->first();
+
+        expect($log->attribute_changes['old']['settings'])->toBe(['block_minutes' => 45])
+            ->and($log->attribute_changes['attributes']['settings'])->toEqual(ModalityProfile::DEFAULTS);
+    });
+
     it('MS22: la clave no cambia una vez creada: el panel la deshabilita con su motivo y la Action la rechaza', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.modalities')
@@ -329,6 +342,18 @@ describe('admin', function () {
         expect(substr_count($html, 'data-confirm-title="¿Desactivar la modalidad Presencial?"'))->toBeGreaterThanOrEqual(2)
             ->and($html)->toContain('data-testid="drawer-toggle-active"')
             ->toContain('Está abierta en 20271')->toContain('1 nombramiento vigente');
+    });
+
+    it('M13: el impacto de desactivar lista solo los periodos vigentes y futuros abiertos en ella', function () {
+        // Hoy es el 12 de noviembre de 2026 a las 23:30 en Ciudad Juárez (ya 13 en UTC): el día es el de la zona del Tec.
+        $this->travelTo(CarbonImmutable::parse('2026-11-12 23:30', 'America/Ciudad_Juarez'));
+
+        foreach ([['20261', '2026-01-19', '2026-06-12'], ['20263', '2026-08-01', '2026-11-12'], ['20271', '2027-01-18', '2027-06-11']] as [$code, $starts, $ends]) {
+            $term = Term::factory()->create(['code' => $code, 'starts_on' => $starts, 'ends_on' => $ends]);
+            TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
+        }
+
+        expect(app(ModalityQuery::class)->deactivationImpact([$this->pres->id])[$this->pres->id]['terms'])->toBe(['20263', '20271']);
     });
 
     it('MS3: guardar el perfil de Presencial no toca los campus, que no tienen perfil', function () {

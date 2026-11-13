@@ -13,7 +13,8 @@ use App\Modules\Core\Queries\TermQuery;
  * periodo abierto en ella (M4) donde el admin ya abrió el catálogo de salones (CV9): una por departamento y periodo,
  * para todos los campus (decisión 6, confirmada el 12 de noviembre de 2026; CreateTermReviews, que es idempotente). Los
  * periodos que no se abrieron en ella o donde los salones no se abrieron no se tocan. Sale después del commit de
- * UpdateModality (ModalityUpdated). El perfil es de la modalidad, no del campus (MS1, MS3).
+ * UpdateModality (ModalityUpdated). El perfil es de la modalidad, no del campus (MS1, MS3); uno guardado inválido cuenta
+ * como sin salones (Modality::valid_profile).
  */
 final class CreateRoomsReviewsOnModalityUpdated
 {
@@ -25,7 +26,7 @@ final class CreateRoomsReviewsOnModalityUpdated
 
     public function handle(ModalityUpdated $event): void
     {
-        if (! in_array('settings', $event->changed, true) || ! $event->modality->profile->usesRooms) {
+        if (! in_array('settings', $event->changed, true) || $event->modality->valid_profile?->usesRooms !== true) {
             return;
         }
 

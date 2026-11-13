@@ -134,6 +134,20 @@ it('MS16: la modalidad solo se elige si hay más de una activa', function () {
         ->assertDontSeeHtml('data-testid="modality-fixed"');
 });
 
+it('MS4: en una modalidad sin salones el cajón no ofrece campus y suelta el elegido', function (string $role) {
+    $online = tap(modalityOf('ENL'))->update(['is_active' => true]);
+
+    drawerPage($this->beto)->call('openAppoint')
+        ->set('role', $role)
+        ->assertSeeHtml('data-testid="field-campus"')
+        ->set('campus', $this->c2->id)
+        ->set('modality', $online->id)
+        ->assertDontSeeHtml('data-testid="field-campus"')
+        ->assertSet('campus', '')
+        ->set('modality', $this->pres->id)
+        ->assertSeeHtml('data-testid="field-campus"');
+})->with(['coordinador', 'jefe_proyecto_docente']);
+
 it('un jefe de proyecto docente se nombra en el mismo cajón con modalidad, departamento y campus opcional', function () {
     drawerPage($this->beto)->call('openAppoint')
         ->set('role', 'jefe_proyecto_docente')

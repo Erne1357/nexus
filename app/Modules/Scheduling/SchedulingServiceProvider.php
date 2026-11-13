@@ -24,6 +24,7 @@ use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
@@ -74,7 +75,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 {
     /**
      * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
-     * Facilities, y disponibilidad, horas externas y plazas de Faculty.
+     * Facilities, disponibilidad, horas externas y plazas de Faculty, y el perfil de una modalidad de Core.
      */
     private const array RECOMPUTE_ON = [
         GroupsCreated::class,
@@ -87,6 +88,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         AvailabilityChanged::class,
         ExternalLoadChanged::class,
         PositionChanged::class,
+        ModalityUpdated::class,
     ];
 
     /**

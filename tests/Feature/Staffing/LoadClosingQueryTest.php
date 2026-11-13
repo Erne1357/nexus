@@ -136,7 +136,7 @@ it('P10: un grupo con docente dado de baja cuenta aparte, con su nombre, y no se
         ->and($closing->items)->toBe([]);
 });
 
-it('cuenta las solicitudes de cambio pendientes y aprobadas sin aplicar del departamento en el campus', function () {
+it('cuenta las solicitudes de cambio pendientes y aprobadas sin aplicar del departamento en la modalidad', function () {
     $group = $this->world->group();
     ChangeRequest::factory()->forGroup($group)->pending()->count(2)->create();
     ChangeRequest::factory()->forGroup($group)->approved()->create();

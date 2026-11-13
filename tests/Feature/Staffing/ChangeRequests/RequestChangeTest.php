@@ -83,7 +83,7 @@ it('avisa a los jefes del departamento del grupo y a nadie más', function () {
 
     $request = askChange($s);
 
-    Notification::assertSentTo($s['jefe'], ChangeRequested::class, fn ($n) => $n->message($s['jefe'])->parameters === ['solicitud' => $request->id]);
+    Notification::assertSentTo($s['jefe'], ChangeRequested::class, fn ($n) => $n->message($s['jefe'])->parameters === ['solicitud' => $request->id, 'campus' => $s['group']->campus->code]);
     Notification::assertNotSentTo($otro['jefe'], ChangeRequested::class);
     Notification::assertNotSentTo($s['coordinador'], ChangeRequested::class);
 });

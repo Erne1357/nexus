@@ -28,11 +28,11 @@
     <div class="grid gap-4 sm:grid-cols-2">
         @if (in_array('modality_id', $columns, true))
             <div data-testid="field-modality">
-                <x-select label="Modalidad" name="modality" wire:model="modality" :options="$options['modalities']" placeholder="Elige la modalidad" />
+                <x-select label="Modalidad" name="modality" wire:model.live="modality" :options="$options['modalities']" placeholder="Elige la modalidad" />
             </div>
         @endif
 
-        @if (in_array('campus_id', $columns, true))
+        @if (in_array('campus_id', $columns, true) && $options['campuses'] !== [])
             <div data-testid="field-campus">
                 @if (in_array('campus_id', $optionalColumns, true))
                     <x-select label="Campus (opcional)" name="campus" wire:model.live="campus" :options="$options['campuses']" placeholder="Todos los campus" />

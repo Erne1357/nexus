@@ -62,7 +62,6 @@
                         Ningún campus activo.
                     @else
                         {{ \Illuminate\Support\Arr::join($campuses, ', ', ' y ') }}.
-                        Mientras la carga sea por campus, se crea una por departamento en cada uno.
                     @endif
                 </dd>
 

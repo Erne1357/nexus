@@ -11,7 +11,6 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -153,10 +152,6 @@ final class UpdateModality
      */
     private function storedProfile(Modality $modality): array
     {
-        try {
-            return $modality->profile->toArray();
-        } catch (InvalidArgumentException) {
-            return $modality->settings ?? [];
-        }
+        return $modality->valid_profile?->toArray() ?? $modality->settings ?? [];
     }
 }

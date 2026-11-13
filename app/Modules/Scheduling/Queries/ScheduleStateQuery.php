@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Room;
@@ -50,8 +51,10 @@ use Illuminate\Database\Eloquent\Builder;
  *   sesiones, y los bloqueos vigentes;
  * - los docentes de esos grupos: nombre, horas base (TeacherBaseHoursQuery), horas externas del periodo, bloques no
  *   disponibles y si es de honorarios;
- * - los perfiles de las modalidades, las claves de los campus, las carreras ofrecidas, los planes activos y los
- *   parámetros `staffing.*` y `scheduling.*`;
+ * - los perfiles de las modalidades (todas, borradas incluidas; una con perfil guardado inválido toma el perfil por
+ *   omisión, ModalityProfile::DEFAULTS, para que un perfil roto no tumbe la foto de todas las modalidades:
+ *   Modality::valid_profile), las claves de los campus, las carreras ofrecidas, los planes activos y los parámetros
+ *   `staffing.*` y `scheduling.*`;
  * - los préstamos de salón vivos (aceptados o propuestos) de esos campus, de RoomLoansQuery de AcademicLoad (HC-10).
  */
 final class ScheduleStateQuery
@@ -123,7 +126,7 @@ final class ScheduleStateQuery
         $this->addTeachers($builder, $term, $groups->pluck('teacher_id')->filter()->unique()->values()->all());
 
         foreach (Modality::query()->withTrashed()->get(['id', 'settings']) as $each) {
-            $builder->profile($each->id, $each->profile);
+            $builder->profile($each->id, $each->valid_profile ?? ModalityProfile::fromArray([]));
         }
 
         foreach (Campus::query()->withTrashed()->get(['id', 'code']) as $each) {

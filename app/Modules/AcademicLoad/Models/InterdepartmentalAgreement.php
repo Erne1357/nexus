@@ -80,7 +80,8 @@ class InterdepartmentalAgreement extends Model
     }
 
     /**
-     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la de su campus al pedirlo; aún no la lee nadie.
+     * Su modalidad del catálogo (ADR-0025): la del grupo al pedirlo. Es el alcance del acuerdo: la leen la policy (ver y
+     * decidir declaran la modalidad y el departamento, sin el campus, M12), los avisos y la bandeja de acuerdos.
      *
      * @return BelongsTo<Modality, $this>
      */

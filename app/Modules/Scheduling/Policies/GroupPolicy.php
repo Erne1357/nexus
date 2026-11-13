@@ -24,7 +24,13 @@ use App\Modules\Scheduling\Models\Group;
  * - Asignan salón y reparten cupos el jefe de su departamento.
  * - Al escribir, el puesto con campus solo lo hace en ese campus (MS6).
  * - Lo cambia de campus (M8) quien lo gestiona en el campus de ahora y en el nuevo (MS6): un puesto limitado a un campus
- *   no se lleva ni se trae grupos de otro.
+ *   no se lleva ni se trae grupos de otro. Lo cancela quien lo gestiona.
+ * - Un grupo de un campus inactivo (M16, confirmado el 13 de noviembre de 2026): nadie con un nombramiento lo gestiona en
+ *   ese campus (Actor solo cubre campus activos), así que su jefe de departamento lo cambia a otro campus activo o lo
+ *   cancela sin la dimensión campus; nada más (sesiones, salón, cupos y docente siguen negados). Es quien gestiona los
+ *   grupos de todo el departamento en la modalidad: GroupManage sobre la modalidad y el departamento sin carrera ni
+ *   campus, que solo cubre un nombramiento que no fija ninguno de los dos, el de jefe de departamento. El coordinador
+ *   (fija su carrera) no.
  * - Justifica que se quede sin docente o sin salón al cerrar (HC-15) quien cierra la carga de su departamento
  *   (`academic_load.load.close`: el jefe y Subdirección; P2, confirmado el 10 de noviembre de 2026).
  *
@@ -45,12 +51,27 @@ final class GroupPolicy
     }
 
     /**
-     * Cambiar el grupo de campus (M8): GroupManage en el campus de ahora y en el nuevo.
+     * Cambiar el grupo de campus (M8): GroupManage en el campus de ahora y en el nuevo. Si el de ahora está inactivo, el
+     * jefe de su departamento sin la dimensión campus en el de ahora (M16).
      */
     public function moveToCampus(User $user, Group $group, Campus $campus): bool
     {
-        return $this->can($user, SchedulingPermission::GroupManage, $group)
-            && $this->can($user, SchedulingPermission::GroupManage, $group, $campus->getKey());
+        $here = $this->inInactiveCampus($group)
+            ? $this->managesWholeDepartment($user, $group)
+            : $this->can($user, SchedulingPermission::GroupManage, $group);
+
+        return $here && $this->can($user, SchedulingPermission::GroupManage, $group, $campus->getKey());
+    }
+
+    /**
+     * Cancelar el grupo: GroupManage. Si su campus está inactivo, el jefe de su departamento sin la dimensión campus
+     * (M16).
+     */
+    public function cancel(User $user, Group $group): bool
+    {
+        return $this->inInactiveCampus($group)
+            ? $this->managesWholeDepartment($user, $group)
+            : $this->can($user, SchedulingPermission::GroupManage, $group);
     }
 
     public function editSessions(User $user, Group $group): bool
@@ -71,6 +92,23 @@ final class GroupPolicy
     public function justify(User $user, Group $group): bool
     {
         return $this->actor($user)->allows(AcademicLoadPermission::LoadClose, Target::of(modality: $group->modality_id, unit: $group->department_id));
+    }
+
+    /**
+     * Si el campus del grupo está inactivo o borrado (M16). Un grupo sin campus (modalidad sin salones, MS4) no lo está.
+     */
+    private function inInactiveCampus(Group $group): bool
+    {
+        return $group->campus_id !== null && ! Campus::query()->whereKey($group->campus_id)->where('is_active', true)->exists();
+    }
+
+    /**
+     * M16: GroupManage sobre la modalidad y el departamento del grupo, sin carrera ni campus. Solo lo cubre un
+     * nombramiento que no fija carrera ni campus: el del jefe de departamento (Role::scopeColumns), no el del coordinador.
+     */
+    private function managesWholeDepartment(User $user, Group $group): bool
+    {
+        return $this->actor($user)->allows(SchedulingPermission::GroupManage, Target::of(modality: $group->modality_id, unit: $group->department_id));
     }
 
     /**

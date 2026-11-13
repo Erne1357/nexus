@@ -87,6 +87,21 @@ it('trae del docente sus horas base, externas, bloques no disponibles y si es de
         ->isHonorarios->toBeTrue();
 });
 
+it('un perfil guardado inválido de otra modalidad, aun borrada, no rompe la foto: esa modalidad toma el perfil por omisión', function () {
+    $this->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+    $broken = Modality::factory()->create();
+    $broken->forceFill(['settings' => ['block_minutes' => 45]])->save();
+    $trashed = Modality::factory()->create();
+    $trashed->forceFill(['settings' => ['day_end' => '06:00']])->save();
+    $trashed->delete();
+
+    $state = app(ScheduleStateQuery::class)->forModality($this->term, $this->modality->id);
+
+    expect($state->profile($this->modality->id)->days)->toBe([1, 2, 3, 4, 5, 6])
+        ->and($state->profile($broken->id)->toArray())->toBe(ModalityProfile::DEFAULTS)
+        ->and($state->profile($trashed->id)->toArray())->toBe(ModalityProfile::DEFAULTS);
+});
+
 it('trae los salones de los campus donde la modalidad tiene grupos, con sus bloqueos del periodo o de todos los periodos', function () {
     Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
     $room = Room::factory()->ofType(RoomType::Laboratorio)->create(['building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id]);

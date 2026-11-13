@@ -136,13 +136,9 @@ new #[Title('Modalidades')] class extends Component
         $this->name = $modality->name;
         $this->showDrawer = true;
 
-        try {
-            $this->settings = $modality->profile->toArray();
-            $this->profileWasReset = false;
-        } catch (InvalidArgumentException) {
-            $this->settings = ModalityProfile::DEFAULTS;
-            $this->profileWasReset = true;
-        }
+        $stored = $modality->valid_profile;
+        $this->settings = $stored?->toArray() ?? ModalityProfile::DEFAULTS;
+        $this->profileWasReset = $stored === null;
     }
 
     public function save(CreateModality $createModality, UpdateModality $updateModality, ModalityQuery $modalities): void
@@ -331,11 +327,7 @@ new #[Title('Modalidades')] class extends Component
         $summaries = [];
 
         foreach ($modalities as $modality) {
-            try {
-                $summaries[$modality->id] = $modality->profile->summary();
-            } catch (InvalidArgumentException) {
-                $summaries[$modality->id] = null;
-            }
+            $summaries[$modality->id] = $modality->valid_profile?->summary();
         }
 
         return $summaries;

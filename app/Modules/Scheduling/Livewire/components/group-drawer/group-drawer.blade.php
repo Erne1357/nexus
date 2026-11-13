@@ -46,8 +46,8 @@
                             <h3 id="group-campus-title" class="text-base font-semibold">Campus</h3>
                             <p class="text-sm text-neutral">Es de {{ $currentCampus->name }}. Para cambiarlo, la carga debe estar abierta y sus sesiones sin salón.</p>
                             <div class="flex flex-wrap items-end gap-2">
-                                <x-select wire:model="targetCampus" :options="$campusOptions" placeholder="Elige el campus" placeholder-value="" aria-label="Campus nuevo" class="min-w-40 flex-1" data-testid="group-campus-select" :disabled="$moveBlocked !== null" />
-                                @if ($moveBlocked !== null)
+                                <x-select wire:model="targetCampus" :options="$campusOptions" placeholder="Elige el campus" placeholder-value="" aria-label="Campus nuevo" class="min-w-40 flex-1" data-testid="group-campus-select" :disabled="$moveBlocked" />
+                                @if ($moveBlocked)
                                     <button type="button" class="btn btn-outline max-sm:h-11" disabled aria-describedby="group-campus-blocked" data-testid="group-campus-move-disabled">Cambiar de campus</button>
                                 @else
                                     <x-button class="btn-outline max-sm:h-11" wire:click="moveToCampus" spinner="moveToCampus"
@@ -56,8 +56,8 @@
                                         data-testid="group-campus-move">Cambiar de campus</x-button>
                                 @endif
                             </div>
-                            @if ($moveBlocked !== null)
-                                <p id="group-campus-blocked" class="flex items-start gap-1.5 text-sm text-neutral" data-testid="group-campus-blocked"><x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{{ $moveBlocked }}</p>
+                            @if ($moveReasons !== [])
+                                <p id="group-campus-blocked" class="flex items-start gap-1.5 text-sm text-neutral" data-testid="group-campus-blocked"><x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />{{ implode(' ', $moveReasons) }}</p>
                             @endif
                             @error('campus')<p class="text-sm text-error" role="alert">{{ $message }}</p>@enderror
                         </section>

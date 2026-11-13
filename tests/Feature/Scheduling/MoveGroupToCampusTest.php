@@ -19,6 +19,7 @@ use App\Modules\Scheduling\Actions\MoveGroupToCampus;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
@@ -198,6 +199,85 @@ it('MS25: el cajón dice por qué no se cambia de campus antes del clic, con el 
     'aceptado' => [AgreementStatus::Accepted, true],
     'rechazado' => [AgreementStatus::Rejected, false],
 ]);
+
+it('M15: no cambia de campus mientras tenga cupo de otra carrera que el campus nuevo no ofrece, y nombra las carreras', function (?bool $offerActive) {
+    $itic = Career::factory()->create(['code' => 'ITIC', 'department_id' => $this->department->id]);
+    $iind = Career::factory()->create(['code' => 'IIND', 'department_id' => $this->department->id]);
+    CareerCampus::factory()->create(['career_id' => $itic->id, 'campus_id' => $this->c2->id]);
+    CareerCampus::factory()->create(['career_id' => $iind->id, 'campus_id' => $this->c2->id]);
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $itic->id]);
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $iind->id]);
+
+    if ($offerActive !== null) {
+        CareerCampus::factory()->create(['career_id' => $iind->id, 'campus_id' => $this->c1->id, 'is_active' => $offerActive]);
+    }
+
+    $careers = $offerActive === true ? 'el cupo de ITIC: Campus I no ofrece esa carrera' : 'los cupos de IIND y ITIC: Campus I no ofrece esas carreras';
+
+    expect(fn () => moveGroup())->toThrow(ValidationException::class, "Quita primero {$careers} (M15).")
+        ->and($this->group->fresh()->campus_id)->toBe($this->c2->id);
+})->with([
+    'sin oferta en el campus nuevo' => [null],
+    'con la oferta inactiva' => [false],
+    'una de las dos ofrecida' => [true],
+]);
+
+it('M15: con las carreras de sus cupos ofrecidas en el campus nuevo sí cambia', function () {
+    $itic = Career::factory()->create(['code' => 'ITIC', 'department_id' => $this->department->id]);
+    CareerCampus::factory()->create(['career_id' => $itic->id, 'campus_id' => $this->c1->id]);
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $itic->id]);
+
+    expect(moveGroup()->campus_id)->toBe($this->c1->id);
+});
+
+it('M15: el cajón dice antes del clic qué cupo quitar, con el botón deshabilitado', function () {
+    $itic = Career::factory()->create(['code' => 'ITIC', 'department_id' => $this->department->id]);
+    CareerCampus::factory()->create(['career_id' => $itic->id, 'campus_id' => $this->c2->id]);
+    $quota = GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $itic->id]);
+
+    Livewire::test('scheduling::components.group-drawer', ['termId' => $this->term->id, 'campusId' => $this->c2->id])
+        ->call('open', $this->group->id)
+        ->assertSeeHtml('data-testid="group-campus-blocked"')
+        ->assertSee('Quita primero el cupo de ITIC: Campus I no ofrece esa carrera.')
+        ->assertDontSee('(M15)')
+        ->assertSeeHtml('aria-describedby="group-campus-blocked"')
+        ->assertDontSeeHtml('data-testid="group-campus-move"')
+        ->set('targetCampus', $this->c1->code)
+        ->call('moveToCampus')
+        ->assertHasErrors('campus');
+
+    expect($this->group->fresh()->campus_id)->toBe($this->c2->id);
+
+    $quota->delete();
+
+    Livewire::test('scheduling::components.group-drawer', ['termId' => $this->term->id, 'campusId' => $this->c2->id])
+        ->call('open', $this->group->id)
+        ->assertDontSeeHtml('data-testid="group-campus-blocked"')
+        ->assertSeeHtml('data-testid="group-campus-move"');
+});
+
+it('M15: con varios campus, solo se deshabilita el que no ofrece la carrera del cupo y el motivo lo nombra', function () {
+    $c3 = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+    CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $c3->id]);
+    $itic = Career::factory()->create(['code' => 'ITIC', 'department_id' => $this->department->id]);
+    CareerCampus::factory()->create(['career_id' => $itic->id, 'campus_id' => $this->c2->id]);
+    CareerCampus::factory()->create(['career_id' => $itic->id, 'campus_id' => $c3->id]);
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $itic->id]);
+
+    Livewire::test('scheduling::components.group-drawer', ['termId' => $this->term->id, 'campusId' => $this->c2->id])
+        ->call('open', $this->group->id)
+        ->assertSee('Quita primero el cupo de ITIC: Campus I no ofrece esa carrera.')
+        ->assertViewHas('campusOptions', [
+            ['id' => 'C1', 'name' => 'Campus I', 'disabled' => true],
+            ['id' => 'C3', 'name' => 'Campus III', 'disabled' => false],
+        ])
+        ->assertSeeHtml('data-testid="group-campus-move"')
+        ->set('targetCampus', $c3->code)
+        ->call('moveToCampus')
+        ->assertHasNoErrors();
+
+    expect($this->group->fresh()->campus_id)->toBe($c3->id);
+});
 
 it('MS25: un préstamo de salón vivo de otro grupo no detiene el cambio', function () {
     InterdepartmentalAgreement::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id]);

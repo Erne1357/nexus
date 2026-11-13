@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -732,6 +733,14 @@ describe('modalidad', function () {
             ->assertSeeHtml('data-testid="modality-scope"')
             ->set('modalidad', 'PRES')
             ->assertRedirect(route('scheduling.editor', ['modalidad' => 'PRES']));
+    });
+
+    it('MS30: una modalidad activa con perfil guardado inválido cuenta como sin salones y no rompe la de omisión', function () {
+        $broken = Modality::factory()->create(['code' => 'A01', 'name' => 'Rota']);
+        $broken->forceFill(['settings' => ['block_minutes' => 45]])->save();
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        editorAs($subdireccion)->assertOk()->assertSet('modalidad', 'PRES');
     });
 
     it('fija la modalidad que resolvió: si después se abre otra antes por clave, la página no cambia de modalidad', function () {

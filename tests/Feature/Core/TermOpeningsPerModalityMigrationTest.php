@@ -15,7 +15,8 @@ use Illuminate\Support\Str;
 | noviembre de 2026: Presencial se abre una vez para C1 y C2, con un solo calendario). Las aperturas de los campus de
 | una misma modalidad (por el puente `campuses.modality_id`) se funden en una, la más antigua, que conserva quién y
 | cuándo; las ventanas propias de un campus pasan a su modalidad, y si dos campus de la misma modalidad tienen la misma
-| etapa con fechas distintas se detiene, las lista y no deja nada. Quita `campus_id` de las dos tablas. Se prueba
+| etapa con fechas distintas, o si un campus tiene ventana propia en una etapa y otro de la misma modalidad usa la general,
+| se detiene, las lista y no deja nada. Quita `campus_id` de las dos tablas. Se prueba
 | sobre la forma vieja: `down()`, filas con `DB::table()` y `up()`.
 */
 
@@ -104,6 +105,7 @@ it('M4: cada periodo conserva su apertura, y una apertura de un solo campus pasa
 it('M4: las ventanas propias de un campus pasan a su modalidad; la general sigue sin modalidad', function () {
     stageBeforeModality($this->term->id, null, 'proposal', '2026-11-02', '2026-11-13');
     stageBeforeModality($this->term->id, $this->c1->id, 'scheduling', '2026-11-23', '2026-12-11');
+    DB::table('campuses')->where('id', $this->c2->id)->update(['deleted_at' => now()]);
 
     $this->migration->up();
 
@@ -142,6 +144,19 @@ it('M4: la misma etapa con fechas distintas en C1 y C2 detiene la migración, li
         ->and(Schema::hasColumn('term_openings', 'campus_id'))->toBeTrue()
         ->and(DB::table('term_openings')->count())->toBe(2)
         ->and(DB::table('term_stages')->count())->toBe(2);
+});
+
+it('M4: una etapa con ventana propia en un campus y la general en otro campus de la misma modalidad detiene la migración, la lista y no deja nada', function () {
+    $own = stageBeforeModality($this->term->id, $this->c1->id, 'scheduling', '2026-11-23', '2026-12-11');
+    stageBeforeModality($this->term->id, null, 'scheduling', '2026-11-16', '2026-12-04');
+    stageBeforeModality($this->term->id, $this->c1->id, 'closing', '2026-12-07', '2026-12-16');
+    stageBeforeModality($this->term->id, $this->c2->id, 'closing', '2026-12-07', '2026-12-16');
+
+    expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, "20271 PRES scheduling: {$own} (C1: 2026-11-23 a 2026-12-11); con la general: C2.");
+
+    expect(Schema::hasColumn('term_stages', 'campus_id'))->toBeTrue()
+        ->and(Schema::hasColumn('term_stages', 'modality_id'))->toBeFalse()
+        ->and(DB::table('term_stages')->count())->toBe(4);
 });
 
 it('una apertura o ventana de un campus sin modalidad del catálogo detiene la migración y lo nombra', function () {
