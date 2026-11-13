@@ -23,8 +23,8 @@ use Illuminate\Support\Str;
 
 /**
  * Lo que lee «Avance del cierre» (tarea 4.2), el tablero de Subdirección: el cierre de todas las cargas del Tec en un
- * periodo, un renglón por departamento con una entrada por carga con grupos (por campus) y lo que le falta a cada una,
- * contado por grupo como el veto de HC-15.
+ * periodo, un renglón por departamento con una entrada por carga con grupos (por modalidad, M1, con los grupos de todos
+ * sus campus) y lo que le falta a cada una, contado por grupo como el veto de HC-15.
  *
  * Lee todo en unas cuantas consultas, sin importar cuántas cargas haya: las cargas, las banderas de HC-15 de los grupos
  * del periodo (GroupClosingFlagsQuery, contadas con la regla por grupo del veto), las solicitudes de cambio y los
@@ -32,7 +32,7 @@ use Illuminate\Support\Str;
  * ConflictBoardQuery), no los del validador, que tardaría segundos por carga; por eso el tablero dice cuándo se
  * recalcularon y el veto sigue decidiendo al cerrar.
  *
- * Una carga sin grupos se queda en borrador y no aparece por campus; un departamento sin grupos en ningún campus va al
+ * Una carga sin grupos se queda en borrador y no aparece; un departamento sin grupos en ninguna modalidad va al
  * final. A una carga publicada no se le cuentan faltantes: ya pasó el cierre (se reabre para corregirla).
  */
 final class ClosingBoardQuery
@@ -63,15 +63,16 @@ final class ClosingBoardQuery
      */
     public function board(Term $term, string $search = '', string $state = ''): array
     {
-        $loads = AcademicLoad::query()->where('term_id', $term->getKey())->with(['campus', 'department' => fn ($query) => $query->withTrashed()])->get();
-        $progress = $this->progress($term, $loads);
+        $loads = AcademicLoad::query()->where('term_id', $term->getKey())->with(['modality', 'department' => fn ($query) => $query->withTrashed()])->get();
+        $flags = $this->flags->ofTerm($term->getKey());
+        $progress = $this->progress($term, $loads, $flags);
         $withGroups = $progress->filter(fn (LoadProgress $load): bool => $load->groups > 0);
 
         $rows = $loads->pluck('department')->unique('id')
             ->map(fn (Department $department): array => [
                 'department' => $department,
                 'loads' => $withGroups->filter(fn (LoadProgress $load): bool => $load->load->department_id === $department->id)
-                    ->sortBy(fn (LoadProgress $load): string => $load->load->campus->code)->values()->all(),
+                    ->sortBy(fn (LoadProgress $load): string => $load->load->modality->code)->values()->all(),
             ])
             ->map(fn (array $row): array => [...$row, ...self::sums(collect($row['loads']))])
             ->sort(fn (array $a, array $b): int => [$a['loads'] === [], Str::lower(Str::ascii($a['department']->name))] <=> [$b['loads'] === [], Str::lower(Str::ascii($b['department']->name))])
@@ -83,7 +84,7 @@ final class ClosingBoardQuery
             && ($state === '' || array_any($row['loads'], fn (LoadProgress $load): bool => $load->bucket() === $state)))->values();
         $visibleLoads = $visible->flatMap(fn (array $row): array => $row['loads']);
 
-        $campuses = $withGroups->map(fn (LoadProgress $load): Campus => $load->load->campus)->unique('id')->sortBy('code')->values();
+        $campuses = Campus::query()->whereIn('id', $flags->pluck('campusId')->unique()->values()->all())->orderBy('code')->get();
         $stamps = $campuses->mapWithKeys(fn (Campus $campus): array => [$campus->code => $this->conflicts->lastSyncedAt($term, $campus)]);
 
         return [
@@ -145,28 +146,29 @@ final class ClosingBoardQuery
     /**
      * Las cifras de cada carga del periodo, con una consulta para las banderas de los grupos (GroupClosingFlagsQuery),
      * una para las solicitudes y una para los acuerdos. Cada carga se cuenta con la regla por grupo del veto
-     * (ClosingBlockers::tally) y el perfil de su campus, pero con los choques duros vigentes de `schedule_conflicts`.
+     * (ClosingBlockers::tally) y el perfil de su modalidad, pero con los choques duros vigentes de `schedule_conflicts`.
      *
      * @param  \Illuminate\Database\Eloquent\Collection<int, AcademicLoad>  $loads
+     * @param  Collection<int, GroupClosingFlags>  $flags  las de los grupos activos del periodo
      * @return Collection<int, LoadProgress>
      */
-    private function progress(Term $term, Collection $loads): Collection
+    private function progress(Term $term, Collection $loads, Collection $flags): Collection
     {
-        $groups = $this->flags->ofTerm($term->getKey())->groupBy(fn (GroupClosingFlags $group): string => "{$group->campusId}|{$group->departmentId}");
+        $groups = $flags->groupBy(fn (GroupClosingFlags $group): string => "{$group->modalityId}|{$group->departmentId}");
 
         $requests = ChangeRequest::query()->toBase()
             ->where('term_id', $term->getKey())
             ->whereIn('status', [ChangeRequestStatus::Pending->value, ChangeRequestStatus::Approved->value])
-            ->groupBy('campus_id', 'department_id')
-            ->selectRaw("campus_id || '|' || department_id as load_key, count(*) as total")
+            ->groupBy('modality_id', 'department_id')
+            ->selectRaw("modality_id || '|' || department_id as load_key, count(*) as total")
             ->pluck('total', 'load_key');
 
         $agreements = $this->agreements->countsByLoad($term->getKey());
 
         return $loads->map(function (AcademicLoad $load) use ($groups, $requests, $agreements): LoadProgress {
-            $key = "{$load->campus_id}|{$load->department_id}";
+            $key = "{$load->modality_id}|{$load->department_id}";
             $ofLoad = $groups[$key] ?? collect();
-            $blockers = ClosingBlockers::tally($ofLoad, $load->campus->profile);
+            $blockers = ClosingBlockers::tally($ofLoad, $load->modality->profile);
 
             // Una carga publicada ya pasó el cierre: no se le cuentan faltantes, como en «Cierre de la carga».
             if (in_array($load->status, [LoadStatus::Published, LoadStatus::Reanalysis], true)) {

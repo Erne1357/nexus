@@ -432,7 +432,7 @@ final class StaffingDemoSeeder extends Seeder
     private function startAll(Term $term, Campus $campus): void
     {
         $loads = AcademicLoad::query()->with('department')
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Proposed)
+            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Proposed)
             ->get()->sortBy('department.code');
 
         foreach ($loads as $load) {
@@ -463,7 +463,7 @@ final class StaffingDemoSeeder extends Seeder
 
         $groups = Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->whereNull('groups.teacher_id')
-            ->whereIn('groups.department_id', AcademicLoad::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Staffing)->select('department_id'))
+            ->whereIn('groups.department_id', AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Staffing)->select('department_id'))
             ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*')->get();
         $rankings = $this->rankingsOf($term, $groups->modelKeys());
         $departments = Department::query()->withTrashed()->whereIn('id', $groups->pluck('department_id')->unique()->all())->get()->keyBy('id');
@@ -635,7 +635,7 @@ final class StaffingDemoSeeder extends Seeder
     private function startStaffing(Term $term, Campus $campus): void
     {
         $loads = AcademicLoad::query()->with('department')
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Proposed)
+            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Proposed)
             ->get()->sortBy('department.code');
         $entered = [];
 
@@ -653,7 +653,7 @@ final class StaffingDemoSeeder extends Seeder
             isset($this->vetoed[$campus->code]) ? implode('; ', array_map(fn (string $code, string $reason): string => "{$code} («{$reason}»)", array_keys($this->vetoed[$campus->code]), $this->vetoed[$campus->code])) : 'ninguno'));
 
         $staffing = AcademicLoad::query()->with('department')
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', LoadStatus::Staffing)->get();
+            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Staffing)->get();
         $groups = Group::query()->active()->where('term_id', $term->id)->where('campus_id', $campus->id)
             ->selectRaw('department_id, count(*) as total')->groupBy('department_id')->pluck('total', 'department_id')->all();
         $ordered = $staffing->sort(fn (AcademicLoad $a, AcademicLoad $b): int => [$groups[$b->department_id] ?? 0, $a->department->code] <=> [$groups[$a->department_id] ?? 0, $b->department->code])->values();
@@ -1183,7 +1183,7 @@ final class StaffingDemoSeeder extends Seeder
                 $query->whereRaw('false');
 
                 foreach ($adjusting as $load) {
-                    $query->orWhere(fn ($each) => $each->where('campus_id', $load->campus_id)->where('department_id', $load->department_id));
+                    $query->orWhere(fn ($each) => $each->where('modality_id', $load->modality_id)->where('department_id', $load->department_id));
                 }
             })
             ->distinct()->pluck('teacher_id')->all();
@@ -1284,7 +1284,7 @@ final class StaffingDemoSeeder extends Seeder
             implode(', ', array_map(fn (string $step, float $time): string => sprintf('%s %.1f s', $step, $time), array_keys($this->timings), $this->timings))));
 
         foreach ($campuses as $campus) {
-            $loads = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('campus_id', $campus->id)->get()
+            $loads = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->get()
                 ->groupBy(fn (AcademicLoad $load): string => $load->status->value)
                 ->map(fn (Collection $loads): string => $loads->pluck('department.code')->sort()->implode(', '));
             $vetoed = $this->vetoed[$campus->code] ?? [];

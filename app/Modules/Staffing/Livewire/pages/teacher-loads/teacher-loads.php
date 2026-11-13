@@ -178,9 +178,10 @@ new #[Title('Carga por docente')] class extends Component
         }
 
         $totals = $board->totals();
+        // La carga del departamento en cada modalidad (M1: una por departamento y modalidad, con todos sus campus).
         $loads = AcademicLoad::query()->where('term_id', $this->termId)->where('department_id', $this->departmentId)
-            ->join('campuses', 'campuses.id', '=', 'academic_loads.campus_id')->orderBy('campuses.code')
-            ->get(['academic_loads.status', 'campuses.code as campus']);
+            ->join('modalities', 'modalities.id', '=', 'academic_loads.modality_id')->orderBy('modalities.code')
+            ->get(['academic_loads.status', 'modalities.code as modality_code']);
 
         return [
             'board' => $board,

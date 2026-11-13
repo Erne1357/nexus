@@ -5,25 +5,28 @@ namespace App\Modules\Staffing\Queries;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 
 /**
- * Lo publicado de un periodo para las vistas del docente (P8), por campus: la última versión de cada carga que tiene
- * snapshot, también si se reabrió. «Mi carga» y la oferta deciden con esto, carga por carga (periodo, campus y
- * departamento), si un grupo sale del snapshot o de las tablas vivas. Lo arma PublishedLoadsQuery; es puro.
+ * Lo publicado de un periodo para las vistas del docente (P8), por modalidad (M1): la última versión de cada carga que
+ * tiene snapshot, también si se reabrió. «Mi carga» y la oferta deciden con esto, carga por carga (periodo, modalidad y
+ * departamento), si un grupo sale del snapshot o de las tablas vivas; cada grupo publicado lleva su campus. Lo arma
+ * PublishedLoadsQuery; es puro.
  */
 final readonly class PublishedLoads
 {
     /**
-     * @param  array<string, array{campus: Campus, schedule: PublishedSchedule}>  $campuses  por id de campus, solo los que publicaron algo
+     * @param  array<string, array{modality: Modality, schedule: PublishedSchedule}>  $modalities  por id de modalidad, solo las que publicaron algo
+     * @param  array<string, Campus>  $campuses  los campus de los grupos publicados, por id
      */
-    public function __construct(private array $campuses) {}
+    public function __construct(private array $modalities, private array $campuses = []) {}
 
     /**
-     * Si la carga del departamento en el campus tiene una versión publicada.
+     * Si la carga del departamento en la modalidad tiene una versión publicada.
      */
-    public function isPublished(string $campusId, string $departmentId): bool
+    public function isPublished(string $modalityId, string $departmentId): bool
     {
-        return isset($this->campuses[$campusId]) && $this->campuses[$campusId]['schedule']->isPublished($departmentId);
+        return isset($this->modalities[$modalityId]) && $this->modalities[$modalityId]['schedule']->isPublished($departmentId);
     }
 
     /**
@@ -35,7 +38,7 @@ final readonly class PublishedLoads
     {
         $ids = [];
 
-        foreach ($this->campuses as $entry) {
+        foreach ($this->modalities as $entry) {
             foreach ($entry['schedule']->loads as $load) {
                 $ids[] = $load['load_id'];
             }
@@ -45,9 +48,10 @@ final readonly class PublishedLoads
     }
 
     /**
-     * Los grupos publicados del docente en todos los campus, cada uno con su campus y el departamento de su carga.
+     * Los grupos publicados del docente en todas las modalidades, cada uno con su campus (null en una modalidad sin
+     * salones) y el departamento de su carga.
      *
-     * @return list<array{campus: Campus, department: array{id: string, code: string, name: string}, group: PublishedGroup}>
+     * @return list<array{campus: ?Campus, department: array{id: string, code: string, name: string}, group: PublishedGroup}>
      */
     public function teacher(string $teacherId): array
     {
@@ -55,10 +59,10 @@ final readonly class PublishedLoads
     }
 
     /**
-     * Los grupos publicados de las cargas de estos departamentos, en todos los campus.
+     * Los grupos publicados de las cargas de estos departamentos, en todas las modalidades y campus.
      *
      * @param  list<string>  $departmentIds
-     * @return list<array{campus: Campus, department: array{id: string, code: string, name: string}, group: PublishedGroup}>
+     * @return list<array{campus: ?Campus, department: array{id: string, code: string, name: string}, group: PublishedGroup}>
      */
     public function departments(array $departmentIds): array
     {
@@ -67,15 +71,15 @@ final readonly class PublishedLoads
 
     /**
      * @param  callable(PublishedSchedule): list<PublishedGroup>  $groupsOf
-     * @return list<array{campus: Campus, department: array{id: string, code: string, name: string}, group: PublishedGroup}>
+     * @return list<array{campus: ?Campus, department: array{id: string, code: string, name: string}, group: PublishedGroup}>
      */
     private function entries(callable $groupsOf): array
     {
         $entries = [];
 
-        foreach ($this->campuses as ['campus' => $campus, 'schedule' => $schedule]) {
+        foreach ($this->modalities as ['schedule' => $schedule]) {
             foreach ($groupsOf($schedule) as $group) {
-                $entries[] = ['campus' => $campus, 'department' => $schedule->loads[$group->departmentId]['department'], 'group' => $group];
+                $entries[] = ['campus' => $this->campuses[$group->campus['id'] ?? ''] ?? null, 'department' => $schedule->loads[$group->departmentId]['department'], 'group' => $group];
             }
         }
 

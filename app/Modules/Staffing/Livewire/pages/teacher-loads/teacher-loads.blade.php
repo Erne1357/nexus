@@ -32,7 +32,9 @@
                     <span class="flex flex-wrap items-center gap-2">
                         @forelse ($loads as $load)
                             <x-core::status-badge :tone="$load->status->tone()" :label="$load->status->label()">
-                                <span class="font-mono text-xs opacity-70">{{ $load->campus }}</span>
+                                @if ($loads->count() > 1)
+                                    <span class="font-mono text-xs opacity-70">{{ $load->modality_code }}</span>
+                                @endif
                             </x-core::status-badge>
                         @empty
                             <x-core::status-badge tone="draft" label="Sin carga" />

@@ -1,6 +1,6 @@
 {{--
     La línea de estados de una carga (DESIGN.md, «Cierre de la carga»): Borrador, Propuesta, Asignación, Ajustes (una
-    vuelta: lleva su icono), Cerrada, Aprobada si el campus exige el visto bueno, y Publicada, cada uno con la fecha en
+    vuelta: lleva su icono), Cerrada, Aprobada si la modalidad exige el visto bueno, y Publicada, cada uno con la fecha en
     que la carga llegó a él por última vez. Los pasados en primary, el actual en info con anillo y `aria-current`, uno
     que se visitó después del actual (Ajustes antes de volver a asignación) en gris lleno, Ajustes cuando la carga no
     pasó por ahí con filete primary (es una vuelta, no un paso) y los que siguen con filete gris. Si no cabe, se

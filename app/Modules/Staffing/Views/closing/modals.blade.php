@@ -3,14 +3,14 @@
     cierre» (sobre su drawer):
     - Cerrar: el aviso de lo que pasa al cerrar con la cifra de grupos que se confirman, los que pasan con justificación
       y un comentario opcional.
-    - Reabrir (o «Regresar con comentarios» en un campus con visto bueno): el motivo, obligatorio; el botón se habilita al
+    - Reabrir (o «Regresar con comentarios» en una modalidad con visto bueno): el motivo, obligatorio; el botón se habilita al
       escribirlo.
-    - Dar visto bueno: comentario opcional; solo en un campus que lo exige.
+    - Dar visto bueno: comentario opcional; solo en una modalidad que lo exige.
     `$closing` es la carga a la vista (o null).
 --}}
 @php($load = $closing?->load)
-@php($where = $load === null ? '' : "{$load->department->name} en {$load->campus->name}")
-@php($returning = $load !== null && $load->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Closed && $load->campus->profile->requiresSubdireccionApproval)
+@php($where = $load === null ? '' : "{$load->department->name} en {$load->modality->name}")
+@php($returning = $load !== null && $load->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Closed && $load->modality->profile->requiresSubdireccionApproval)
 
 <x-modal wire:model="showClose" :title="'Cerrar la carga de '.$where" box-class="max-w-xl" data-testid="close-modal">
     @if ($closing)

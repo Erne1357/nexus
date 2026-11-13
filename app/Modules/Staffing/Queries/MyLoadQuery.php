@@ -25,7 +25,7 @@ use Carbon\CarbonImmutable;
  * (lunes a viernes; el sábado solo si tiene sesiones ese día) con los huecos y los traslados entre campus de una
  * sesión a la siguiente, y la cuenta de sus horas (la de HC-08, TeacherHourLimit).
  *
- * Lo publicado o lo vivo se decide por carga (periodo, campus y departamento; P8, confirmado el 10 de noviembre de
+ * Lo publicado o lo vivo se decide por carga (periodo, modalidad y departamento, M1; P8, confirmado el 10 de noviembre de
  * 2026): de una carga con versión publicada salen sus grupos de la última versión, también si se reabrió (supuesto
  * por confirmar); de las demás, de las tablas vivas. Así, el grupo que se le asignó después de publicar no se ve hasta
  * la siguiente versión, y el publicado que después se reasignó o se canceló sí. Las horas asignadas suman los grupos
@@ -157,7 +157,7 @@ final class MyLoadQuery
             ->where('teacher_id', $teacher->id)
             ->with(['subject:id,code,name,theory_hours,practice_hours', 'campus:id,code,name', 'department:id,name', 'sessions' => fn ($sessions) => $sessions->with('room:id,code')])
             ->get()
-            ->reject(fn (Group $group): bool => $published->isPublished($group->campus_id, $group->department_id));
+            ->reject(fn (Group $group): bool => $published->isPublished($group->modality_id, $group->department_id));
 
         $groups = [
             ...$live->map(self::fromLive(...))->values()->all(),
@@ -195,15 +195,15 @@ final class MyLoadQuery
     /**
      * @return array<string, mixed>
      */
-    private static function fromPublished(PublishedGroup $group, Campus $campus, string $department): array
+    private static function fromPublished(PublishedGroup $group, ?Campus $campus, string $department): array
     {
         return [
             'id' => $group->id,
             'code' => $group->code,
             'subject_code' => $group->subject['code'],
             'subject_name' => $group->subject['name'],
-            'campus_code' => $campus->code,
-            'campus_name' => $campus->name,
+            'campus_code' => $campus?->code ?? ($group->campus['code'] ?? ''),
+            'campus_name' => $campus?->name ?? ($group->campus['name'] ?? ''),
             'department' => $department,
             'hours' => $group->subject['theory_hours'] + $group->subject['practice_hours'],
             'schedule' => SessionLabels::published($group->sessions),

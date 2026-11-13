@@ -93,7 +93,7 @@
                                     <tr wire:key="board-row-{{ $department->id }}" class="text-neutral" data-testid="board-row-{{ $department->code }}">
                                         <th scope="row" class="sticky left-0 z-10 bg-base-100 px-4 py-2.5 text-start font-normal">
                                             <span class="me-2 font-mono font-semibold">{{ $department->code }}</span><span class="font-medium">{{ $department->name }}</span>
-                                            <span class="block text-xs">Sin grupos en ningún campus</span>
+                                            <span class="block text-xs">Sin grupos en ninguna modalidad</span>
                                         </th>
                                         <td colspan="7"></td>
                                     </tr>
@@ -137,7 +137,7 @@
                         <li wire:key="board-card-{{ $department->id }}" @class(['space-y-2 px-4 py-3', 'text-neutral' => $row['loads'] === []])>
                             @if ($row['loads'] === [])
                                 <p><span class="me-1.5 font-mono font-semibold">{{ $department->code }}</span>{{ $department->name }}</p>
-                                <p class="text-xs">Sin grupos en ningún campus</p>
+                                <p class="text-xs">Sin grupos en ninguna modalidad</p>
                             @else
                                 {{-- Las insignias de campus siempre bajo el nombre en celular, junto a él desde 640 px. --}}
                                 <div class="flex flex-col items-start gap-x-3 gap-y-1 sm:flex-row sm:flex-wrap sm:justify-between">

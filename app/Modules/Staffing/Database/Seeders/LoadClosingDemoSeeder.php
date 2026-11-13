@@ -149,6 +149,9 @@ final class LoadClosingDemoSeeder extends Seeder
 
     private User $admin;
 
+    /** El campus que se siembra ahora (campusOf()). */
+    private ?Campus $campus = null;
+
     /** @var array<string, ?User> «permiso|campus|departamento» => primer titular */
     private array $holders = [];
 
@@ -187,6 +190,7 @@ final class LoadClosingDemoSeeder extends Seeder
 
         try {
             foreach ($found as $campus) {
+                $this->campus = $campus;
                 $touched = Event::fakeFor(fn (): bool => match ($mode) {
                     'clean' => $this->cleanCampus($termModel, $campus),
                     'justified' => $this->justifyCampus($termModel, $campus),
@@ -294,7 +298,7 @@ final class LoadClosingDemoSeeder extends Seeder
             $closed[] = $load->department->code;
         }
 
-        $draft = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('campus_id', $campus->id)
+        $draft = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('modality_id', $campus->modality_id)
             ->where('status', LoadStatus::Draft)->get()->pluck('department.code')->sort()->values()->all();
 
         $this->command?->info(sprintf('Cierre en %s: cerradas %s; en borrador, sin grupos, %s.', $campus->code,
@@ -311,7 +315,7 @@ final class LoadClosingDemoSeeder extends Seeder
      */
     private function mixCampus(Term $term, Campus $campus, array $profile, array $keepOpen): bool
     {
-        $already = AcademicLoad::query()->where('term_id', $term->id)->where('campus_id', $campus->id)
+        $already = AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $campus->modality_id)
             ->where(fn ($query) => $query->whereIn('status', [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published])
                 ->orWhereNotNull('closed_at'))
             ->exists();
@@ -335,7 +339,7 @@ final class LoadClosingDemoSeeder extends Seeder
                     $this->clean($load);
                     $this->clearTeacherConflicts($load);
                     $this->justifyMissing($load);
-                    app(CloseLoad::class)->handle($load, $this->head($load->campus, $load->department_id), self::CLOSE_COMMENT);
+                    app(CloseLoad::class)->handle($load, $this->head($this->campusOf($load), $load->department_id), self::CLOSE_COMMENT);
                 });
                 $closed[] = $load;
             } catch (ValidationException|RuntimeException $exception) {
@@ -370,7 +374,7 @@ final class LoadClosingDemoSeeder extends Seeder
     {
         return $this->loadsWithGroups($term, $campus, LoadStatus::Staffing)
             ->reject(fn (AcademicLoad $load): bool => in_array($load->department->code, $keepOpen, true))
-            ->reject(fn (AcademicLoad $load): bool => ChangeRequest::query()->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)
+            ->reject(fn (AcademicLoad $load): bool => ChangeRequest::query()->where('term_id', $load->term_id)->where('campus_id', $this->campusOf($load)->id)
                 ->where('department_id', $load->department_id)->where('status', ChangeRequestStatus::Approved)->exists())
             ->filter(fn (AcademicLoad $load): bool => $this->groupsOf($load)->whereNotNull('groups.teacher_id')->exists())
             ->sortBy(fn (AcademicLoad $load): array => [$this->lacking($load)->reorder()->count(), $load->department->code])
@@ -385,10 +389,10 @@ final class LoadClosingDemoSeeder extends Seeder
      */
     private function clean(AcademicLoad $load): void
     {
-        $head = $this->head($load->campus, $load->department_id);
+        $head = $this->head($this->campusOf($load), $load->department_id);
 
         ChangeRequest::query()->join('groups', 'groups.id', '=', 'change_requests.group_id')->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->where('change_requests.term_id', $load->term_id)->where('change_requests.campus_id', $load->campus_id)
+            ->where('change_requests.term_id', $load->term_id)->where('change_requests.campus_id', $this->campusOf($load)->id)
             ->where('change_requests.department_id', $load->department_id)->where('change_requests.status', ChangeRequestStatus::Pending)
             ->orderBy('subjects.code')->orderBy('groups.code')->orderBy('change_requests.kind')->select('change_requests.*')->get()
             ->each(function (ChangeRequest $request) use ($head): void {
@@ -398,14 +402,14 @@ final class LoadClosingDemoSeeder extends Seeder
 
         InterdepartmentalAgreement::query()->leftJoin('groups', 'groups.id', '=', 'interdepartmental_agreements.group_id')
             ->leftJoin('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->where('interdepartmental_agreements.term_id', $load->term_id)->where('interdepartmental_agreements.campus_id', $load->campus_id)
+            ->where('interdepartmental_agreements.term_id', $load->term_id)->where('interdepartmental_agreements.campus_id', $this->campusOf($load)->id)
             ->where('interdepartmental_agreements.status', AgreementStatus::Proposed)
             ->where(fn ($query) => $query->where('interdepartmental_agreements.from_department_id', $load->department_id)
                 ->orWhere('interdepartmental_agreements.to_department_id', $load->department_id))
             ->orderBy('interdepartmental_agreements.kind')->orderBy('subjects.code')->orderBy('groups.code')
             ->orderBy('interdepartmental_agreements.day')->orderBy('interdepartmental_agreements.starts_at')
             ->select('interdepartmental_agreements.*')->get()
-            ->each(fn (InterdepartmentalAgreement $agreement) => $this->answer($agreement, $load->campus));
+            ->each(fn (InterdepartmentalAgreement $agreement) => $this->answer($agreement, $this->campusOf($load)));
     }
 
     /**
@@ -452,14 +456,14 @@ final class LoadClosingDemoSeeder extends Seeder
      */
     private function clearTeacherConflicts(AcademicLoad $load): void
     {
-        $head = $this->head($load->campus, $load->department_id);
+        $head = $this->head($this->campusOf($load), $load->department_id);
         $groupIds = $this->groupsOf($load)->pluck('groups.id')->flip();
 
         for ($round = 0; $round < self::CONFLICT_ROUNDS; $round++) {
             $validator = app(ScheduleValidator::class);
             $validator->forget();
             $hard = array_values(array_filter(
-                $validator->validateLoad($load->term, $load->campus, $load->department)->violations(),
+                $validator->validateLoad($load->term, $this->campusOf($load), $load->department)->violations(),
                 fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard && $violation->groupId !== null && $groupIds->has($violation->groupId),
             ));
 
@@ -497,7 +501,7 @@ final class LoadClosingDemoSeeder extends Seeder
      */
     private function justifyMissing(AcademicLoad $load): void
     {
-        $head = $this->head($load->campus, $load->department_id);
+        $head = $this->head($this->campusOf($load), $load->department_id);
 
         foreach ($this->lacking($load)->get() as $group) {
             $text = match (true) {
@@ -520,7 +524,7 @@ final class LoadClosingDemoSeeder extends Seeder
     private function lacking(AcademicLoad $load): Builder
     {
         $missingRoom = 'exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active and s.room_id is null and s.kind <> ?)';
-        $usesRooms = $load->campus->profile->usesRooms;
+        $usesRooms = $load->modality->profile->usesRooms;
 
         return $this->groupsOf($load)->whereNull('groups.close_justification')
             ->selectRaw(($usesRooms ? $missingRoom : 'false').' as missing_room', $usesRooms ? [SessionKind::Virtual->value] : [])
@@ -542,7 +546,7 @@ final class LoadClosingDemoSeeder extends Seeder
             ->join('departments', 'departments.id', '=', 'groups.department_id')
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->join('rooms', 'rooms.id', '=', 'group_sessions.room_id')
-            ->where('groups.term_id', $loads[0]->term_id)->where('groups.campus_id', $loads[0]->campus_id)
+            ->where('groups.term_id', $loads[0]->term_id)->where('groups.campus_id', $this->campusOf($loads[0])->id)
             ->whereIn('groups.department_id', array_map(fn (AcademicLoad $load): string => $load->department_id, $loads))
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
             ->where('group_sessions.is_active', true)->where('group_sessions.kind', '<>', SessionKind::Virtual->value)
@@ -554,18 +558,20 @@ final class LoadClosingDemoSeeder extends Seeder
     }
 
     /**
-     * Las cargas del campus en `$status` con grupos activos, con su departamento y campus, en orden de departamento.
+     * Las cargas de la modalidad del campus en `$status` con grupos activos en el campus (la carga es por departamento y
+     * modalidad, M1), con su departamento y modalidad, en orden de departamento.
      *
      * @return Collection<int, AcademicLoad>
      */
     private function loadsWithGroups(Term $term, Campus $campus, LoadStatus $status): Collection
     {
-        return AcademicLoad::query()->with(['department', 'campus', 'term'])
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('status', $status)
+        return AcademicLoad::query()->with(['department', 'modality', 'term'])
+            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', $status)
             ->whereExists(Group::query()->active()->selectRaw('1')
                 ->whereColumn('groups.term_id', 'academic_loads.term_id')
-                ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+                ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
                 ->whereColumn('groups.department_id', 'academic_loads.department_id')
+                ->where('groups.campus_id', $campus->id)
                 ->toBase())
             ->get()->sortBy('department.code')->values();
     }
@@ -578,8 +584,17 @@ final class LoadClosingDemoSeeder extends Seeder
     private function groupsOf(AcademicLoad $load): Builder
     {
         return Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->where('groups.term_id', $load->term_id)->where('groups.campus_id', $load->campus_id)->where('groups.department_id', $load->department_id)
+            ->where('groups.term_id', $load->term_id)->where('groups.campus_id', $this->campusOf($load)->id)->where('groups.department_id', $load->department_id)
             ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*');
+    }
+
+    /**
+     * El campus que se siembra ahora: la carga es por departamento y modalidad (M1), y la demo trabaja los grupos de un
+     * campus a la vez.
+     */
+    private function campusOf(AcademicLoad $load): Campus
+    {
+        return $this->campus ?? throw new RuntimeException("No hay campus en curso para la carga de {$load->department_id}.");
     }
 
     private function head(Campus $campus, string $departmentId): User
