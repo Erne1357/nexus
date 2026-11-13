@@ -632,6 +632,17 @@ describe('otros puestos', function () {
         expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
     });
 
+    it('MS6: el jefe con nombramiento en otro campus no cancela el grupo compartido de un grupo de otro campus: el lugar es el del grupo', function () {
+        $other = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        vacate(Role::JefeDepartamento, $this->ii->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $other->id, 'department_id' => $this->ii->id, 'valid_from' => today()->toDateString()])->create();
+
+        agreementsAs($jefe, ['acuerdo' => $this->share->id])->assertOk()->assertSee('SCC-1013 3A')->assertDontSeeHtml('data-testid="agreement-cancel"');
+        agreementsAs($jefe)->call('cancel', $this->share->id)->assertForbidden();
+
+        expect($this->share->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
     it('M12: el jefe decide los acuerdos de toda la modalidad, de cualquier campus', function () {
         $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
         $inC1 = Group::factory()->withQuota(20)->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'capacity' => 40, 'subject_id' => $this->group->subject_id]);

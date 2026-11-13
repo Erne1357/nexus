@@ -24,7 +24,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Activity;
 
 /**
@@ -51,6 +50,7 @@ final class AgreementsInboxQuery
     public function __construct(
         private readonly RoomScheduleQuery $rooms,
         private readonly RoomLoanFree $free,
+        private readonly AgreementPlaceQuery $place,
     ) {}
 
     /**
@@ -150,8 +150,7 @@ final class AgreementsInboxQuery
     public function campusCounts(Actor $actor, Term $term, Modality $modality): array
     {
         return $this->visible($actor, $term, $modality, null)
-            ->leftJoin('groups', 'groups.id', '=', 'interdepartmental_agreements.group_id')
-            ->join('campuses', 'campuses.id', '=', DB::raw('coalesce(interdepartmental_agreements.campus_id, groups.campus_id)'))
+            ->join('campuses', 'campuses.id', '=', $this->place->campusIdColumn())
             ->groupBy('campuses.code')
             ->selectRaw('campuses.code, count(*) as total')
             ->toBase()
@@ -192,10 +191,10 @@ final class AgreementsInboxQuery
     }
 
     /**
-     * Los acuerdos del periodo y la modalidad (y del campus del filtro, si hay: el del salón en un préstamo y el del grupo
-     * en un grupo compartido, que no guarda campus) que el actor ve: `agreement.view` sobre la
-     * modalidad y el departamento que lo pide o el que lo decide, sin el campus. El jefe ve y decide los de toda la
-     * modalidad de su departamento, de cualquier campus: ningún jefe de departamento está limitado a un campus (M12).
+     * Los acuerdos del periodo y la modalidad (y del campus del filtro, si hay: el lugar de AgreementPlaceQuery, el del
+     * salón en un préstamo y el del grupo en un grupo compartido) que el actor ve: `agreement.view` sobre la modalidad y
+     * el departamento que lo pide o el que lo decide, sin el campus. El jefe ve y decide los de toda la modalidad de su
+     * departamento, de cualquier campus: ningún jefe de departamento está limitado a un campus (M12).
      *
      * @return Builder<InterdepartmentalAgreement>
      */
@@ -204,10 +203,7 @@ final class AgreementsInboxQuery
         $query = InterdepartmentalAgreement::query()
             ->where('interdepartmental_agreements.term_id', $term->getKey())
             ->where('interdepartmental_agreements.modality_id', $modality->getKey())
-            ->when($campus !== null, fn (Builder $inCampus) => $inCampus->where(fn (Builder $place) => $place
-                ->where('interdepartmental_agreements.campus_id', $campus?->getKey())
-                ->orWhere(fn (Builder $shared) => $shared->whereNull('interdepartmental_agreements.campus_id')
-                    ->whereIn('interdepartmental_agreements.group_id', Group::query()->select('groups.id')->where('groups.campus_id', $campus?->getKey())))));
+            ->when($campus !== null, fn (Builder $inCampus) => $this->place->in($inCampus, $campus));
 
         return $actor->constrain($query, AcademicLoadPermission::AgreementView, [
             'modality' => 'interdepartmental_agreements.modality_id',
@@ -277,8 +273,7 @@ final class AgreementsInboxQuery
                 'room' => $agreement->room?->code,
                 'room_id' => $agreement->room_id,
                 'term_id' => $agreement->term_id,
-                // El lugar: el campus del salón en un préstamo; el del grupo en un grupo compartido (sin campus en una modalidad sin salones, MS4).
-                'campus' => ($place = $agreement->campus ?? $group?->campus) === null ? null : ['id' => $place->getKey(), 'code' => $place->code, 'name' => $place->name],
+                'campus' => ($place = $this->place->campusOf($agreement, $group)) === null ? null : ['id' => $place->getKey(), 'code' => $place->code, 'name' => $place->name],
                 'day' => $agreement->day,
                 'starts_at' => $agreement->starts_at === null ? null : substr($agreement->starts_at, 0, 5),
                 'ends_at' => $agreement->ends_at === null ? null : substr($agreement->ends_at, 0, 5),
