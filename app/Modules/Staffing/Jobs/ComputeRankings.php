@@ -23,6 +23,11 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
  * a que termine y se reintenta cada 10 segundos durante una hora. Recalcular es idempotente; un error de verdad lo
  * deja fallido a la primera (`maxExceptions`). Si el periodo, la modalidad o el departamento ya no existen (borrados),
  * no hace nada.
+ *
+ * Tiempo límite: 900 s, más del doble de lo que tardó el departamento × modalidad más grande del masivo como un solo job
+ * (CEA presencial, 1 139 grupos de C1 y C2: 403 s, 12 de noviembre de 2026), y menos que el `retry_after` de Redis
+ * (1 860 s, config/queue.php), para que la cola no entregue otra vez un job que sigue corriendo. El candado de
+ * WithoutOverlapping vence a la par.
  */
 final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -30,7 +35,7 @@ final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueu
 
     public int $maxExceptions = 1;
 
-    public int $timeout = 600;
+    public int $timeout = 900;
 
     public bool $failOnTimeout = true;
 
