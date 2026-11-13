@@ -34,11 +34,13 @@ use Illuminate\Database\Query\JoinClause;
  * Por grupo: su materia (con el departamento que la imparte), su docente (id y nombre), capacidad, cupos (el dueño
  * primero), sesiones (por día y hora, con su salón y el departamento dueño del salón), las horas que pide su materia y
  * las que tiene colocadas, y lo que el actor que recibe puede hacer con su puesto activo, con los permisos y el
- * objetivo de GroupPolicy (`editSessions`, `assignRoom`, `manageQuotas`). Nadie puede nada de eso con un grupo de
+ * objetivo de GroupPolicy (`editSessions`, `assignRoom`, `manageQuotas`), y si no lo acomoda solo porque su puesto es
+ * de otro campus (`campus_bound`, MS6). Nadie puede nada de eso con un grupo de
  * contexto, ni si el grupo está cancelado o su carga no está en propuesta, asignación o ajustes: `editBlockedReason` dice
  * por qué, con el mensaje de LoadEditability::blockedReasons(), la misma regla que aplican las Actions. Además, las
- * violaciones del validador por grupo y, las que nombran una sesión, por sesión (una sola validación de todos los
- * grupos con la foto del periodo y campus); solo los grupos y sesiones que tienen alguna.
+ * violaciones del validador por grupo y, las que nombran una sesión, por sesión (una validación de todos los grupos de
+ * cada modalidad con la foto del periodo y esa modalidad, M1); solo los grupos y sesiones que tienen alguna. Cada
+ * grupo lleva su modalidad (`modality_id`), de la que sale su perfil.
  *
  * No decide si el actor entra al semestre: eso es de la pantalla con PlanSemestersQuery::careerOrFail().
  */
@@ -54,6 +56,7 @@ final class SemesterBoardQuery
      *     groups: list<array{
      *         id: string,
      *         code: string,
+     *         modality_id: string,
      *         status: GroupStatus,
      *         shared: bool,
      *         context: bool,
@@ -66,6 +69,7 @@ final class SemesterBoardQuery
      *         required_hours: int,
      *         placed_hours: int|float,
      *         can: array{editSessions: bool, assignRoom: bool, manageQuotas: bool},
+     *         campus_bound: bool,
      *         editBlockedReason: ?string,
      *     }>,
      *     violations: array{groups: array<string, list<Violation>>, sessions: array<string, list<Violation>>},
@@ -108,10 +112,10 @@ final class SemesterBoardQuery
         $byGroup = [];
         $bySession = [];
 
-        if ($groups->isNotEmpty()) {
-            $result = $this->validator->validate($this->validator->stateFor($term->id, $campus->id), ValidationScope::groups(...$groups->modelKeys()));
+        foreach ($groups->groupBy('modality_id') as $modalityId => $ofModality) {
+            $result = $this->validator->validate($this->validator->stateFor($term->id, (string) $modalityId), ValidationScope::groups(...$ofModality->modelKeys()));
 
-            foreach ($groups as $group) {
+            foreach ($ofModality as $group) {
                 foreach ($result->forGroup($group->id) as $violation) {
                     $byGroup[$group->id][] = $violation;
                     $sessionId = $violation->related['session_id'] ?? null;
@@ -129,6 +133,7 @@ final class SemesterBoardQuery
             'groups' => $groups->map(fn (Group $group): array => [
                 'id' => $group->id,
                 'code' => $group->code,
+                'modality_id' => $group->modality_id,
                 'status' => $group->status,
                 'shared' => $group->owner_career_id !== $career->id,
                 'context' => $abilities[$group->id]['context'],
@@ -169,10 +174,24 @@ final class SemesterBoardQuery
                 'required_hours' => $group->subject->theory_hours + $group->subject->practice_hours,
                 'placed_hours' => $group->sessions->sum(fn (GroupSession $session): int => (int) $session->minutes) / 60,
                 'can' => $abilities[$group->id]['can'],
+                'campus_bound' => ! $abilities[$group->id]['context'] && ! $abilities[$group->id]['can']['editSessions'] && self::editsOnlyElsewhere($actor, $group),
                 'editBlockedReason' => $blocked[$group->id],
             ])->all(),
             'violations' => ['groups' => $byGroup, 'sessions' => $bySession],
         ];
+    }
+
+    /**
+     * Si el actor acomodaría las sesiones del grupo en alguno de sus campus, pero no en el del grupo: su puesto es de
+     * otro campus (MS6). Sirve para decir el campus en el motivo de solo lectura.
+     */
+    public static function editsOnlyElsewhere(Actor $actor, Group $group): bool
+    {
+        $target = fn (string|array $campus): Target => Target::of(modality: $group->modality_id, campus: $campus, unit: $group->department_id, career: $group->owner_career_id);
+        $campuses = $actor->campuses()->modelKeys();
+
+        return $campuses !== [] && ! $actor->allows(SchedulingPermission::SessionEdit, $target($group->campus_id))
+            && $actor->allows(SchedulingPermission::SessionEdit, $target($campuses));
     }
 
     /**

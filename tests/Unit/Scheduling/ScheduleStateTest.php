@@ -12,11 +12,12 @@ use Tests\Support\Scheduling\States;
 | La foto en memoria que leen las reglas del validador (tarea 3.2) y el resultado que devuelve.
 */
 
-it('indexa las sesiones de los grupos activos por docente, por salón y por plan y semestre', function () {
+it('indexa las sesiones de los grupos activos por docente, por salón y por modalidad, campus, plan y semestre', function () {
     $state = States::builder()
         ->group(States::group('A', teacher: 'T1', semester: 3))
         ->group(States::group('B', teacher: 'T1', active: false, semester: 3))
         ->group(States::group('C', campus: 'C1', semester: 3))
+        ->group(States::group('D', modality: 'EAD', semester: 3))
         ->session('A', 1, '07:00', '09:00', 'R1')
         ->session('B', 1, '07:00', '09:00', 'R1')
         ->build();
@@ -24,8 +25,9 @@ it('indexa las sesiones de los grupos activos por docente, por salón y por plan
     expect($state->teacherSessions('T1'))->toHaveCount(1)
         ->and($state->roomSessions('R1'))->toHaveCount(1)
         ->and($state->sessionsOf('B'))->toHaveCount(1)
-        ->and(array_map(fn ($group) => $group->id, $state->groupsOfSemester('C2', 'P1', 3)))->toBe(['A'])
-        ->and($state->semestersOf('C2'))->toBe([['P1', 3]]);
+        ->and(array_map(fn ($group) => $group->id, $state->groupsOfSemester('PRES', 'C2', 'P1', 3)))->toBe(['A'])
+        ->and(array_map(fn ($group) => $group->id, $state->groupsOfSemester('EAD', 'C2', 'P1', 3)))->toBe(['D'])
+        ->and($state->semestersOf('PRES', 'C2'))->toBe([['P1', 3]]);
 });
 
 it('withSession agrega una candidata o mueve la sesión que reemplaza, sin tocar la foto original', function () {

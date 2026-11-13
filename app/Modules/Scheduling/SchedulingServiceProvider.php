@@ -25,6 +25,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Events\RoomBlockAdded;
@@ -182,9 +183,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: aceptar cada parte crea grupos y GroupsCreated recalcularía los choques del campus en cada
+     * Demo por puntos: aceptar cada parte crea grupos y GroupsCreated recalcularía los choques de la modalidad en cada
      * aceptación (21.9 s contra 4.1 s con el volumen demo); se descarta mientras se siembra y los choques se
-     * recalculan una vez por campus al llegar a «horarios».
+     * recalculan una vez por modalidad al llegar a «horarios».
      *
      * @return list<class-string>
      */
@@ -196,9 +197,12 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
-            new DemoStep(DemoCheckpoint::Scheduling, 'Choques recalculados una vez por campus', function (DemoContext $demo): void {
-                foreach (Campus::query()->whereIn('code', $demo->campuses)->orderBy('code')->get() as $campus) {
-                    app(SyncScheduleConflicts::class)->handle($demo->term(), $campus);
+            new DemoStep(DemoCheckpoint::Scheduling, 'Choques recalculados una vez por modalidad', function (DemoContext $demo): void {
+                $modalities = Modality::query()->withTrashed()->whereIn('id', Group::query()->where('term_id', $demo->term()->getKey())
+                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))->select('modality_id'));
+
+                foreach ($modalities->orderBy('code')->get() as $modality) {
+                    app(SyncScheduleConflicts::class)->handle($demo->term(), $modality);
                 }
             }),
             // Los cupos terminan la etapa 4, como el horario limpio que sigue.
@@ -276,7 +280,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
             new DemoCheck([DemoCheckpoint::Staffing], 'La oferta de salones alcanza para el horario', function (DemoContext $demo): true|string {
                 $seeder = app(SchedulingAgreementsDemoSeeder::class);
                 $missing = Campus::query()->whereIn('code', $demo->campuses)->orderBy('code')->get()
-                    ->flatMap(fn (Campus $campus): array => $campus->profile->usesRooms ? $seeder->missingRooms($demo->term(), $campus) : [])->all();
+                    ->flatMap(fn (Campus $campus): array => $seeder->missingRooms($demo->term(), $campus))->all();
 
                 return $missing === [] ? true : count($missing).' sesiones no tendrían salón sin choque, por ejemplo: '.implode('; ', array_slice($missing, 0, 3)).'.';
             }),

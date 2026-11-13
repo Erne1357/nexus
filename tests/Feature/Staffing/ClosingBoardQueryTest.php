@@ -181,15 +181,17 @@ it('filtra por clave o nombre sin importar acentos y por la cubeta de alguna car
         ->and(closingBoardOf('electrica')['kpis']['total'])->toBe(2);
 });
 
-it('dice cuándo se recalcularon los choques: el más viejo de los campus, y cuáles no se han recalculado', function () {
+it('dice cuándo se recalcularon los choques: el más viejo de las modalidades con cargas, y cuáles no se han recalculado', function () {
+    $ead = modalityOf('EAD');
     $this->world->group();
     $this->world->group(load: $this->world->loadIn($this->c1));
-    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->world->campus->id), now()->setTime(9, 15)->toIso8601String());
+    $this->world->group(load: $this->world->loadIn(Campus::factory()->create(['modality_id' => $ead->id])));
+    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->world->load->modality_id), now()->setTime(9, 15)->toIso8601String());
 
     $board = closingBoardOf();
 
     expect($board['syncedAt']->format('H:i'))->toBe('09:15')
-        ->and($board['unsynced'])->toBe(['C1']);
+        ->and($board['unsynced'])->toBe([$ead->name]);
 });
 
 it('da el jefe de cada departamento: quien tiene vigente pasar la carga a asignación, no Subdirección', function () {

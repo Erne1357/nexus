@@ -3,7 +3,7 @@
 namespace App\Modules\Scheduling\Rules;
 
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
@@ -21,11 +21,11 @@ use Illuminate\Validation\ValidationException;
  * Reglas que comparten las Actions del editor de horarios (tarea 3.5: PlaceGroupSession, UpdateGroupSession y
  * RemoveGroupSession). Cada regla rota es una ValidationException sobre `session`, en español.
  *
- * - Se editan las sesiones de un grupo sin cancelar cuya carga (la de su departamento en su campus y periodo) está en
- *   propuesta, asignación o ajustes (reglas-de-negocio.md, "Aprobaciones y permisos", «Crear grupos y editar
+ * - Se editan las sesiones de un grupo sin cancelar cuya carga (la de su departamento en su modalidad y periodo, M1)
+ *   está en propuesta, asignación o ajustes (reglas-de-negocio.md, "Aprobaciones y permisos", «Crear grupos y editar
  *   sesiones»).
- * - HC-04: el día es del perfil del campus, las horas caen entre `day_start` y `day_end` y se alinean a
- *   `block_minutes` desde `day_start`; un campus sin bloques de tiempo no tiene ventana, como en el validador.
+ * - HC-04: el día es del perfil de la modalidad del grupo, las horas caen entre `day_start` y `day_end` y se alinean a
+ *   `block_minutes` desde `day_start`; una modalidad sin bloques de tiempo no tiene ventana, como en el validador.
  * - Una sesión no se encima con otra del mismo grupo.
  * - El salón de una sesión es del campus de su grupo y está activo (tarea 3.7).
  * - HC-01 y HC-02, los empalmes que la base no deja guardar, detienen la escritura con el mensaje del validador; las
@@ -57,7 +57,7 @@ final class SessionRules
     }
 
     /**
-     * El grupo no está cancelado y la carga de su departamento en su campus y periodo se puede editar.
+     * El grupo no está cancelado y la carga de su departamento en su modalidad y periodo se puede editar.
      *
      * @throws ValidationException
      */
@@ -80,11 +80,11 @@ final class SessionRules
             throw self::invalid('La sesión debe terminar después de empezar.');
         }
 
-        $campus = $this->campusOf($group);
-        $profile = $campus->profile;
+        $modality = $this->modalityOf($group);
+        $profile = $modality->profile;
 
         if (! in_array($day, $profile->days, true)) {
-            throw self::invalid("HC-04: {$campus->name} no da clases el ".Minutes::dayName($day)." ({$profile->schedule()}).");
+            throw self::invalid("HC-04: {$modality->name} no da clases el ".Minutes::dayName($day)." ({$profile->schedule()}).");
         }
 
         if (! $profile->usesTimeBlocks) {
@@ -94,7 +94,7 @@ final class SessionRules
         $dayStart = Minutes::of($profile->dayStart);
 
         if ($start < $dayStart || $end > Minutes::of($profile->dayEnd)) {
-            throw self::invalid("HC-04: la sesión debe caer dentro del horario de {$campus->name} ({$profile->schedule()}).");
+            throw self::invalid("HC-04: la sesión debe caer dentro del horario de {$modality->name} ({$profile->schedule()}).");
         }
 
         if (($start - $dayStart) % $profile->blockMinutes !== 0 || ($end - $dayStart) % $profile->blockMinutes !== 0) {
@@ -248,9 +248,9 @@ final class SessionRules
         ));
     }
 
-    private function campusOf(Group $group): Campus
+    private function modalityOf(Group $group): Modality
     {
-        return $group->campus()->withTrashed()->firstOrFail();
+        return Modality::query()->withTrashed()->findOrFail($group->modality_id);
     }
 
     private static function invalid(string $message): ValidationException

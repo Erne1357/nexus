@@ -3,7 +3,8 @@
     «CLAVE · grupo», el departamento que imparte, la capacidad, el docente de solo lectura («Lo asigna Asignación
     docente»), sus sesiones (cada una abre su cajón, sin regresar el foco: `data-drawer-switch`) y «Cupos por carrera»
     (scheduling::components.group-quotas), que llena el resto del cajón y lleva «Guardar cupos» en el pie fijo, como el
-    cajón de la sesión.
+    cajón de la sesión. «Campus» (M8, MS9) solo aparece si quien lo abre puede cambiarlo a otro campus: un select y
+    «Cambiar de campus» con confirmación (ADR-0023).
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="group-drawer-title" data-testid="group-drawer">
@@ -39,6 +40,21 @@
                             </dd>
                         </div>
                     </dl>
+
+                    @if ($campusOptions !== [])
+                        <section class="grid gap-2" aria-labelledby="group-campus-title" data-testid="group-campus">
+                            <h3 id="group-campus-title" class="text-base font-semibold">Campus</h3>
+                            <p class="text-sm text-neutral">Es de {{ $currentCampus->name }}. Para cambiarlo, la carga debe estar abierta y sus sesiones sin salón.</p>
+                            <div class="flex flex-wrap items-end gap-2">
+                                <x-select wire:model="targetCampus" :options="$campusOptions" placeholder="Elige el campus" placeholder-value="" aria-label="Campus nuevo" class="min-w-40 flex-1" data-testid="group-campus-select" />
+                                <x-button class="btn-outline max-sm:h-11" wire:click="moveToCampus" spinner="moveToCampus"
+                                    x-confirm="El grupo deja {{ $currentCampus->name }} con sus sesiones; el salón se asigna en el campus nuevo."
+                                    data-confirm-title="¿Cambiar {{ $panel['code'] }} de campus?" data-confirm-button="Cambiar" data-confirm-tone="warning"
+                                    data-testid="group-campus-move">Cambiar de campus</x-button>
+                            </div>
+                            @error('campus')<p class="text-sm text-error" role="alert">{{ $message }}</p>@enderror
+                        </section>
+                    @endif
 
                     <section class="grid gap-2" aria-labelledby="group-sessions-title">
                         <h3 id="group-sessions-title" class="flex flex-wrap items-baseline justify-between gap-2 text-base font-semibold">

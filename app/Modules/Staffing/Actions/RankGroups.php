@@ -34,7 +34,8 @@ use Illuminate\Support\Facades\DB;
  * RankingScorer y los pesos de `staffing.weights`.
  *
  * En una sola transacción borra las filas de `staffing_rankings` de todos los grupos del departamento en ese periodo
- * y campus (también las de los cancelados, que se quedan sin ranking) y escribe las nuevas, así que quien lee ve el
+ * y campus (también las de los cancelados, que se quedan sin ranking), por sus ids y no por la copia del campus de la
+ * fila (un grupo que cambió de campus no deja filas que choquen con las nuevas), y escribe las nuevas, así que quien lee ve el
  * ranking anterior completo o el nuevo. Es una tabla derivada (decisión de modelado 5): no deja bitácora. Después del
  * commit avisa con RankingsComputed. La corre el job ComputeRankings y el comando `staffing:rank`.
  */
@@ -60,8 +61,6 @@ final class RankGroups
 
         DB::transaction(function () use ($term, $campus, $department, $rows): void {
             StaffingRanking::query()
-                ->where('term_id', $term->id)
-                ->where('campus_id', $campus->id)
                 ->whereIn('group_id', Group::query()
                     ->where('term_id', $term->id)
                     ->where('campus_id', $campus->id)

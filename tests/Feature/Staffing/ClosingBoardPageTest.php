@@ -40,8 +40,8 @@ function closingBoardPage(User $user): Testable
 }
 
 it('muestra las cifras de todo el Tec, un renglón por departamento con una insignia por carga y el departamento sin grupos al final', function () {
-    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->world->campus->id), now()->setTime(9, 15)->toIso8601String());
-    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->c1->id), now()->setTime(9, 40)->toIso8601String());
+    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, modalityOf('PRES')->id), now()->setTime(9, 15)->toIso8601String());
+    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, modalityOf('EAD')->id), now()->setTime(9, 40)->toIso8601String());
 
     $page = closingBoardPage($this->subdireccion)
         ->assertSee('Avance del cierre')

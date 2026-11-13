@@ -123,7 +123,7 @@ new class extends Component
             return;
         }
 
-        $grid = WeekGrid::of($campus->profile);
+        $grid = WeekGrid::of($session->group->modality()->withTrashed()->firstOrFail()->profile);
         $this->validate([
             'day' => ['required', Rule::in(array_map('strval', array_column($grid->days, 'day')))],
             'startsAt' => ['required', Rule::in([...array_column($grid->blocks, 'starts_at'), Clock::of($session->starts_at)])],

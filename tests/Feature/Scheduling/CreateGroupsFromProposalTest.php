@@ -240,7 +240,7 @@ it('deja una entrada de bitácora por grupo, con quien aceptó como autor', func
         ]);
 });
 
-it('avisa con GroupsCreated una sola vez, después del commit, y solo si creó algo', function () {
+it('avisa con GroupsCreated una sola vez, después del commit, con la modalidad de la carga, y solo si creó algo', function () {
     createGroupsItem(createGroupsSubject($this->cb), 2);
     Event::fake([GroupsCreated::class]);
 
@@ -253,7 +253,7 @@ it('avisa con GroupsCreated una sola vez, después del commit, y solo si creó a
 
     Event::assertDispatchedTimes(GroupsCreated::class, 1);
     Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event) => $event->termId === $this->term->id
-        && $event->campusId === $this->campus->id
+        && $event->modalityId === $this->proposal->modality_id
         && collect($event->groupIds)->sort()->values()->all() === $this->ids);
 
     createGroupsFor();

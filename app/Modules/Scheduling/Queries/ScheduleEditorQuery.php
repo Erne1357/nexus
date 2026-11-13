@@ -3,10 +3,13 @@
 namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\WeekGrid;
@@ -21,6 +24,7 @@ use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\Clock;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
 
@@ -177,9 +181,10 @@ final class ScheduleEditorQuery
      * grupo elegido) y la lista del celular de cada día.
      *
      * @param  array{career: string, plan: string, semester: string, group: string, view: string, teacher: string, room: string}  $selection
+     * @param  Modality|null  $modality  la de la página: da la semana de un semestre sin grupos
      * @return array<string, mixed>
      */
-    public function editor(Actor $actor, Term $term, Campus $campus, array $selection): array
+    public function editor(Actor $actor, Term $term, Campus $campus, array $selection, ?Modality $modality = null): array
     {
         $careers = $this->careers($actor, $term, $campus);
         $semester = $this->semester($actor, $term, $campus, ['career' => $selection['career'], 'plan' => $selection['plan'], 'semester' => $selection['semester']]);
@@ -202,7 +207,7 @@ final class ScheduleEditorQuery
             default => [$this->semesterWeek($board, $chains, $selected), [], null],
         };
 
-        $grid = WeekGrid::of($campus->profile)->covering([...$items, ...array_merge(...array_values($bands))]);
+        $grid = WeekGrid::of($this->profileOf($term, $board['groups'], $selected, $modality))->covering([...$items, ...array_merge(...array_values($bands))]);
         $laid = $grid->lay($items);
         $cells = $grid->cells($selected === null ? null : $this->fit($term, $campus, $selected['id']), self::UNSAVEABLE);
         $canPlace = $selected !== null && $selected['can']['editSessions'];
@@ -226,7 +231,7 @@ final class ScheduleEditorQuery
             'busy' => array_combine($days, array_map(fn (int $day): int|float => $grid->busyHours($items, $day), $days)),
             'selected' => $selected,
             'selectedChain' => $selected === null ? null : $chains[$selected['subject']['id']],
-            'editReason' => $selected === null ? null : $this->editReason($selected, $semester['career']),
+            'editReason' => $selected === null ? null : $this->editReason($selected, $semester['career'], $campus),
             'cells' => $cells,
             'canPlace' => $canPlace,
             'tabStop' => $grid->tabStop($laid, $cells, $canPlace),
@@ -288,8 +293,9 @@ final class ScheduleEditorQuery
         $mine = array_values(array_filter($violations, fn (Violation $violation): bool => ($violation->related['session_id'] ?? null) === $session->id));
         $groupWide = array_values(array_filter($violations, fn (Violation $violation): bool => ! isset($violation->related['session_id'])));
         $blocked = $this->editability->blockedReasons([$group])[$group->id];
-        $grid = WeekGrid::of($campus->profile);
+        $grid = WeekGrid::of($this->validator->stateFor($group->term_id, $group->modality_id)->profile($group->modality_id));
         $department = $group->subject->department?->name ?? $group->subject->department?->code;
+        $campusBound = SemesterBoardQuery::editsOnlyElsewhere($actor, $group);
 
         return [
             'id' => $session->id,
@@ -302,7 +308,7 @@ final class ScheduleEditorQuery
             'group' => ['id' => $group->id, 'label' => "{$group->subject->code} · {$group->code}", 'subject' => $group->subject->name, 'teacher' => $group->teacher?->name],
             'hard' => array_map(self::plain(...), array_values(array_filter($mine, self::isHard(...)))),
             'soft' => array_map(self::plain(...), array_values(array_filter([...$mine, ...$groupWide], fn (Violation $violation): bool => ! self::isHard($violation)))),
-            'editReason' => $blocked ?? ($gate->allows('editSessions', $group) ? null : $this->readOnlyReason($group->ownerCareer?->code ?? 'su carrera', $department)),
+            'editReason' => $blocked ?? ($gate->allows('editSessions', $group) ? null : $this->readOnlyReason($group->ownerCareer?->code ?? 'su carrera', $department, $campusBound ? $campus : null)),
             'roomReason' => $blocked === null && $gate->allows('assignRoom', $group) ? null : "Lo asigna el jefe de {$department}",
             'days' => array_map(fn (array $day): array => ['id' => (string) $day['day'], 'name' => $day['name']], $grid->days),
             'starts' => $this->timeOptions(array_column($grid->blocks, 'starts_at'), Clock::of($session->starts_at)),
@@ -315,11 +321,11 @@ final class ScheduleEditorQuery
      *
      * @return array<string, mixed>
      */
-    public function groupPanel(Group $group, Campus $campus): array
+    public function groupPanel(Group $group): array
     {
         $withTrashed = fn (Relation $query) => $query->withTrashed();
-        $group->load(['subject' => $withTrashed, 'subject.department' => $withTrashed, 'teacher' => $withTrashed, 'sessions' => fn (Relation $query) => $query->orderBy('day')->orderBy('starts_at'), 'sessions.room' => $withTrashed]);
-        $short = array_column(WeekGrid::of($campus->profile)->days, 'short', 'day');
+        $group->load(['modality' => $withTrashed, 'subject' => $withTrashed, 'subject.department' => $withTrashed, 'teacher' => $withTrashed, 'sessions' => fn (Relation $query) => $query->orderBy('day')->orderBy('starts_at'), 'sessions.room' => $withTrashed]);
+        $short = array_column(WeekGrid::of($group->modality->profile)->days, 'short', 'day');
 
         return [
             'id' => $group->id,
@@ -338,6 +344,26 @@ final class ScheduleEditorQuery
                 'room' => $session->room?->code,
             ])->all(),
         ];
+    }
+
+    /**
+     * Los campus a los que el actor puede cambiar el grupo (M8): los activos, otros que el suyo, que ofrecen su carrera
+     * dueña (`career_campus` activa, HC-13) y donde lo gestiona, como aquí (GroupPolicy::moveToCampus). Por clave.
+     *
+     * @return Collection<int, Campus>
+     */
+    public function campusOptions(Actor $actor, Group $group): Collection
+    {
+        $gate = Gate::forUser($actor->user());
+
+        return Campus::query()
+            ->where('is_active', true)
+            ->whereKeyNot($group->campus_id)
+            ->whereIn('id', CareerCampus::query()->where('career_id', $group->owner_career_id)->where('is_active', true)->select('campus_id'))
+            ->orderBy('code')
+            ->get()
+            ->filter(fn (Campus $campus): bool => $gate->allows('moveToCampus', [$group, $campus]))
+            ->values();
     }
 
     /**
@@ -655,12 +681,34 @@ final class ScheduleEditorQuery
     }
 
     /**
+     * El perfil de la semana del editor: el de la modalidad del grupo elegido; sin grupo, el de la modalidad de los grupos
+     * del semestre, o la ventana que cubre a todas si son de varias (ModalityProfile::covering); sin grupos, el de la
+     * modalidad de la página (y sin ella, el de omisión). Sale de las fotos del validador que el semestre ya leyó, sin
+     * otra consulta.
+     *
+     * @param  list<array<string, mixed>>  $groups
+     * @param  array<string, mixed>|null  $selected
+     */
+    private function profileOf(Term $term, array $groups, ?array $selected, ?Modality $modality): ModalityProfile
+    {
+        $ids = $selected === null ? array_values(array_unique(array_column($groups, 'modality_id'))) : [$selected['modality_id']];
+
+        if ($ids === []) {
+            return $modality?->profile ?? ModalityProfile::fromArray([]);
+        }
+
+        $profiles = array_map(fn (string $id): ModalityProfile => $this->validator->stateFor($term->id, $id)->profile($id), $ids);
+
+        return count($profiles) === 1 ? $profiles[0] : ModalityProfile::covering($profiles);
+    }
+
+    /**
      * Por qué no se acomoda un grupo, una vez en la barra: lo que dice la Query (grupo cancelado, carga fuera de etapa)
-     * o quién lo acomoda; null si se puede.
+     * o quién lo acomoda, con el campus si el usuario lo acomodaría en otro campus (MS6); null si se puede.
      *
      * @param  array<string, mixed>  $group
      */
-    private function editReason(array $group, ?Career $career): ?string
+    private function editReason(array $group, ?Career $career, Campus $campus): ?string
     {
         if ($group['can']['editSessions']) {
             return null;
@@ -672,12 +720,18 @@ final class ScheduleEditorQuery
 
         $owner = $group['shared'] ? (collect($group['quotas'])->firstWhere('owner', true)['career_code'] ?? 'su carrera') : ($career?->code ?? 'su carrera');
 
-        return $this->readOnlyReason($owner, $group['subject']['department_name'] ?? $group['subject']['department_code'] ?? null);
+        return $this->readOnlyReason($owner, $group['subject']['department_name'] ?? $group['subject']['department_code'] ?? null, $group['campus_bound'] ? $campus : null);
     }
 
-    private function readOnlyReason(string $career, ?string $department): string
+    /**
+     * Quién acomoda un grupo que el usuario solo ve. Con `$campus` (el del grupo), porque el usuario lo acomodaría si
+     * fuera de su campus: lo dice, para que no parezca un permiso que le falta (MS6).
+     */
+    private function readOnlyReason(string $career, ?string $department, ?Campus $campus = null): string
     {
-        return "Solo lectura: acomodan sus sesiones el coordinador de {$career} y el jefe de ".($department ?? 'su departamento').'.';
+        $where = $campus === null ? '' : " en {$campus->name}";
+
+        return "Solo lectura: acomodan sus sesiones el coordinador de {$career}{$where} y el jefe de ".($department ?? 'su departamento').'.';
     }
 
     /**

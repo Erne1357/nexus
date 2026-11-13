@@ -5,7 +5,8 @@ namespace App\Modules\Scheduling\Database\Seeders;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -39,13 +40,13 @@ use RuntimeException;
 /**
  * Horarios, docentes y salones de prueba para los grupos que ya creó la aceptación de las propuestas (tarea 3.4).
  * Corre después de AcademicLoadDemoSeeder. Escribe las sesiones directo con el modelo (las Actions del editor de
- * horarios todavía no existen); el docente se escribe directo contra una foto del campus que se va actualizando (ver
+ * horarios todavía no existen); el docente se escribe directo contra una foto de la modalidad que se va actualizando (ver
  * assignTeacher()) y la clave pasa por AssignGroupCode. Mientras
  * siembra, los eventos que encolarían un recálculo por cada cambio (GroupScheduleChanged, GroupTeacherChanged,
- * GroupCancelled, GroupsCreated) se descartan; al final corre SyncScheduleConflicts una vez por campus.
+ * GroupCancelled, GroupsCreated) se descartan; al final corre SyncScheduleConflicts una vez por modalidad (M1).
  *
- * Por cada campus de `$campuses`, con los días y la jornada de su perfil y bloques de una hora, reparte los grupos
- * del periodo `$term` (con `ceil`, así cada caso tiene al menos un grupo si su proporción es mayor que cero):
+ * Por cada campus de `$campuses` y cada modalidad con grupos en él, con los días y la jornada del perfil de la
+ * modalidad y bloques de una hora, reparte los grupos del periodo `$term` (con `ceil`, así cada caso tiene al menos un grupo si su proporción es mayor que cero):
  *
  * - 3 % cancelados (`cancelled_groups`) y 30 % confirmados (`confirmed_groups`, con docente); el resto, planeados;
  * - 10 % sin horario (`unscheduled_groups`) y 5 % con una hora de menos (`short_groups`, HC-12);
@@ -146,14 +147,20 @@ final class SchedulingDemoSeeder extends Seeder
 
         $found = Campus::query()->whereIn('code', $campuses)->orderBy('code')->get();
 
-        Event::fakeFor(function () use ($found, $termModel, $user): void {
+        $modalities = Modality::query()->withTrashed()
+            ->whereIn('id', Group::query()->where('term_id', $termModel->id)->whereIn('campus_id', $found->modelKeys())->select('modality_id'))
+            ->orderBy('code')->get();
+
+        Event::fakeFor(function () use ($found, $modalities, $termModel, $user): void {
             foreach ($found as $campus) {
-                $this->seedCampus($termModel, $campus, $user);
+                foreach ($modalities as $modality) {
+                    $this->seedCampus($termModel, $campus, $modality, $user);
+                }
             }
         }, [GroupScheduleChanged::class, GroupTeacherChanged::class, GroupCancelled::class, GroupsCreated::class]);
 
-        foreach ($found as $campus) {
-            app(SyncScheduleConflicts::class)->handle($termModel, $campus);
+        foreach ($modalities as $modality) {
+            app(SyncScheduleConflicts::class)->handle($termModel, $modality);
         }
     }
 
@@ -184,10 +191,10 @@ final class SchedulingDemoSeeder extends Seeder
         return array_slice(array_keys($counts), 0, max(0, $wanted));
     }
 
-    private function seedCampus(Term $term, Campus $campus, User $user): void
+    private function seedCampus(Term $term, Campus $campus, Modality $modality, User $user): void
     {
         $groups = Group::query()->with('subject')
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)
+            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('modality_id', $modality->id)
             ->orderBy('id')->get();
 
         if ($groups->isEmpty()) {
@@ -205,7 +212,7 @@ final class SchedulingDemoSeeder extends Seeder
         $this->cleanCohorts = $groups->filter(fn (Group $group): bool => isset($this->cleanIds[$group->department_id]))
             ->mapWithKeys(fn (Group $group): array => ["{$group->study_plan_id}|{$group->semester}" => true])->all();
         $plan = $this->plan($groups->reject(fn (Group $group): bool => isset($this->cleanIds[$group->department_id]))->values());
-        $profile = $campus->profile;
+        $profile = $modality->profile;
         $touched = [];
         $placements = [];
         $occupied = [];
@@ -253,7 +260,7 @@ final class SchedulingDemoSeeder extends Seeder
 
         $validator = app(ScheduleValidator::class);
         $validator->forget();
-        $state = $validator->stateFor($term->id, $campus->id);
+        $state = $validator->stateFor($term->id, $modality->id);
         $state = $state->withTeachers(app(ScheduleStateQuery::class)->teachers($term, array_values(array_unique(array_merge(...array_values($this->teachersByDepartment ?: [[]]))))));
 
         foreach ($groups as $group) {
@@ -283,7 +290,7 @@ final class SchedulingDemoSeeder extends Seeder
      * @param  array<string, array{0: string, 1: int, 2: int}>  $slots
      * @param  array<string, array<string, true>>  $occupied
      */
-    private function placeFollowers(array $followers, $groups, array &$placements, CampusProfile $profile, array &$touched, array $slots, array &$occupied): void
+    private function placeFollowers(array $followers, $groups, array &$placements, ModalityProfile $profile, array &$touched, array $slots, array &$occupied): void
     {
         foreach ($followers as $followerId => $leaderId) {
             $follower = $groups->firstWhere('id', $followerId);
@@ -743,7 +750,7 @@ final class SchedulingDemoSeeder extends Seeder
      * Le da a un grupo un docente adscrito a su departamento que no rompa HC-08 ni HC-09; solo una parte pequeña
      * (`teacher_conflict_groups`) puede romperlos a propósito. Si ninguno sirve, el grupo se queda sin docente.
      *
-     * Pregunta contra la foto del campus que se leyó una sola vez y que va actualizando con cada asignación
+     * Pregunta contra la foto de la modalidad que se leyó una sola vez y que va actualizando con cada asignación
      * (`withTeacher()`), y escribe `teacher_id` directo, sin SetGroupTeacher: con cientos de grupos, la Action relee la
      * foto completa en cada asignación (correcto para una persona, demasiado lento para sembrar el masivo). HC-01 lo
      * sigue cuidando la exclusión de la base; los eventos de Scheduling están apagados durante la siembra.

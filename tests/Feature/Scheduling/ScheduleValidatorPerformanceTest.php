@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /*
-| Rendimiento del validador (fase 3, «Pruebas de la fase»): validar la carga de un campus completo (estimado 400
+| Rendimiento del validador (fase 3, «Pruebas de la fase»): validar la carga de una modalidad completa (estimado 400
 | grupos) en menos de 5 segundos, y que el editor responda en menos de 300 ms por movimiento.
 */
 
@@ -57,10 +57,10 @@ beforeEach(function () {
     DB::table('group_sessions')->insert($sessions);
 });
 
-it('valida la carga de un campus de 400 grupos en menos de 5 segundos', function () {
+it('valida la carga de una modalidad de 400 grupos en menos de 5 segundos', function () {
     $started = hrtime(true);
 
-    $result = app(ScheduleValidator::class)->validateLoad($this->term, $this->campus);
+    $result = app(ScheduleValidator::class)->validateLoad($this->term, modalityOf('PRES'));
 
     $seconds = (hrtime(true) - $started) / 1e9;
 

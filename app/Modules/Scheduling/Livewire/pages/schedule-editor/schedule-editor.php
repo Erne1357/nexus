@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekGrid;
@@ -34,12 +35,14 @@ use Mary\Traits\Toast;
  * La URL guarda la vista: `?carrera=`, `?reticula=`, `?semestre=`, `?grupo=` (el elegido; al entrar abre la carrera,
  * retícula y semestre desde donde el usuario lo ve, como lo usan el tablero de choques y las solicitudes de cambio; se
  * conserva al ver por docente o por salón), `?vista=semestre|docente|salon`, `?docente=`, `?salon=` y `?dia=` (el día
- * de la lista en celular).
+ * de la lista en celular). `?modalidad=` (WithModalityScope, sin selector con una sola) da el perfil de la semana de un
+ * semestre sin grupos; con grupos manda la modalidad de ellos (el selector completo es de la pantalla U2).
  */
 new #[Title('Horarios')] class extends Component
 {
     use Toast;
     use WithCampusFilter;
+    use WithModalityScope;
 
     private const array VIEWS = ['semestre', 'docente', 'salon'];
 
@@ -174,11 +177,11 @@ new #[Title('Horarios')] class extends Component
         $group = $editor->groupOrFail($term, $campus, $groupId);
         $this->authorize('editSessions', $group);
 
-        $grid = WeekGrid::of($campus->profile);
+        $grid = WeekGrid::of($group->modality()->withTrashed()->firstOrFail()->profile);
         $block = collect($grid->blocks)->firstWhere('starts_at', $startsAt);
 
         if ($block === null || ! in_array($day, array_column($grid->days, 'day'), true)) {
-            $this->error('No se colocó', e('Esa hora no está en el horario del campus.'));
+            $this->error('No se colocó', e('Esa hora no está en el horario de la modalidad.'));
 
             return;
         }
@@ -228,7 +231,7 @@ new #[Title('Horarios')] class extends Component
         }
 
         [$term, $campus, $editor, $context] = $this->context();
-        $data = $editor->editor($context, $term, $campus, [...$this->selection(), 'group' => $this->groupId, 'view' => $this->view, 'teacher' => $this->teacherId, 'room' => $this->roomId]);
+        $data = $editor->editor($context, $term, $campus, [...$this->selection(), 'group' => $this->groupId, 'view' => $this->view, 'teacher' => $this->teacherId, 'room' => $this->roomId], $this->requiredModality());
 
         if ($data['board'] !== null) {
             $this->groupId = $this->view === 'semestre' && $data['selected'] === null ? '' : $this->groupId;

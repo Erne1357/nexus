@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Events\RoomUpdated;
@@ -22,7 +23,7 @@ use Illuminate\Support\Facades\Queue;
 
 /*
 | QueueConflictRecompute: «el job recalcula al guardar sesión, docente o salón» (tarea 3.2). Cada evento encola el
-| recálculo de las cargas (periodo y campus) que cambió.
+| recálculo de las cargas (periodo y modalidad, M1) que cambió.
 */
 
 beforeEach(function () {
@@ -30,27 +31,27 @@ beforeEach(function () {
     $this->term = Term::factory()->create(['starts_on' => today()->subMonth()->toDateString(), 'ends_on' => today()->addMonth()->toDateString()]);
     $this->teacher = Teacher::factory()->create();
     $this->group = Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => $this->teacher->id]);
-    $this->elsewhere = Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => $this->teacher->id]);
+    $this->elsewhere = Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => $this->teacher->id, 'modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
 });
 
 /**
- * Los [periodo, campus] encolados, ordenados.
+ * Los [periodo, modalidad] encolados, ordenados.
  *
  * @return list<array{string, string}>
  */
 function queuedRecomputes(): array
 {
     return Queue::pushed(RecomputeScheduleConflicts::class)
-        ->map(fn (RecomputeScheduleConflicts $job): array => [$job->termId, $job->campusId])
+        ->map(fn (RecomputeScheduleConflicts $job): array => [$job->termId, $job->modalityId])
         ->sort()->values()->all();
 }
 
 function pairOf(Group $group): array
 {
-    return [$group->term_id, $group->campus_id];
+    return [$group->term_id, $group->modality_id];
 }
 
-it('cambiar sesiones, cancelar o cambiar de docente recalcula el campus del grupo y los del docente', function (string $event) {
+it('cambiar sesiones, cancelar o cambiar de docente recalcula la modalidad del grupo y las del docente', function (string $event) {
     event(match ($event) {
         'sesiones' => new GroupScheduleChanged($this->group),
         'cancelar' => new GroupCancelled($this->group),
@@ -60,13 +61,26 @@ it('cambiar sesiones, cancelar o cambiar de docente recalcula el campus del grup
     expect(queuedRecomputes())->toEqualCanonicalizing([pairOf($this->group), pairOf($this->elsewhere)]);
 })->with(['sesiones', 'cancelar', 'docente']);
 
-it('crear grupos recalcula su campus', function () {
-    event(new GroupsCreated($this->term->id, $this->group->campus_id, [$this->group->id]));
+it('crear grupos recalcula su modalidad', function () {
+    event(new GroupsCreated($this->term->id, $this->group->modality_id, [$this->group->id]));
 
     expect(queuedRecomputes())->toBe([pairOf($this->group)]);
 });
 
-it('cambiar un salón o sus bloqueos recalcula su campus en los periodos que siguen abiertos, una sola vez por carga', function () {
+it('los grupos de C1 y C2 de una modalidad se recalculan juntos, una sola vez', function () {
+    $c1 = Group::factory()->create(['term_id' => $this->term->id, 'teacher_id' => $this->teacher->id]);
+
+    event(new GroupScheduleChanged($c1));
+
+    expect($c1->campus_id)->not->toBe($this->group->campus_id)
+        ->and(queuedRecomputes())->toEqualCanonicalizing([pairOf($this->group), pairOf($this->elsewhere)]);
+});
+
+it('el recálculo es único por periodo y modalidad', function () {
+    expect((new RecomputeScheduleConflicts($this->term->id, $this->group->modality_id))->uniqueId())->toBe("{$this->term->id}:{$this->group->modality_id}");
+});
+
+it('cambiar un salón o sus bloqueos recalcula las modalidades con grupos en su campus en los periodos que siguen abiertos, una sola vez por carga', function () {
     $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->group->campus_id])->id]);
     Group::factory()->create(['campus_id' => $this->group->campus_id, 'term_id' => Term::factory()->create(['starts_on' => '2020-01-18', 'ends_on' => '2020-06-01'])->id]);
 
@@ -76,7 +90,7 @@ it('cambiar un salón o sus bloqueos recalcula su campus en los periodos que sig
     expect(queuedRecomputes())->toBe([pairOf($this->group)]);
 });
 
-it('cambiar la disponibilidad, las horas externas o las plazas de un docente recalcula sus campus, una vez por carga', function () {
+it('cambiar la disponibilidad, las horas externas o las plazas de un docente recalcula sus modalidades, una vez por carga', function () {
     event(new AvailabilityChanged($this->teacher, $this->term));
     event(new ExternalLoadChanged(TeacherExternalLoad::factory()->for($this->teacher)->create(['term_id' => $this->term->id])));
     event(new PositionChanged(TeacherPosition::factory()->for($this->teacher)->create()));

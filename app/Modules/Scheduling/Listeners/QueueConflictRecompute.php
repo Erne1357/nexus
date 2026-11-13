@@ -16,8 +16,8 @@ use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Queries\ConflictRecomputeTargetsQuery;
 
 /**
- * Encola el recálculo de choques (RecomputeScheduleConflicts) de cada carga que cambió (tarea 3.2: «el job recalcula
- * al guardar sesión, docente o salón»): los eventos de Scheduling, los de salones de Facilities y los de docentes de
+ * Encola el recálculo de choques (RecomputeScheduleConflicts) de cada carga (periodo y modalidad, M1) que cambió
+ * (tarea 3.2: «el job recalcula al guardar sesión, docente o salón»): los eventos de Scheduling, los de salones de Facilities y los de docentes de
  * Faculty, que están a la izquierda en el mapa. Todos salen después del commit, así que el job lee lo guardado.
  */
 final class QueueConflictRecompute
@@ -27,7 +27,7 @@ final class QueueConflictRecompute
     public function handle(object $event): void
     {
         $targets = match (true) {
-            $event instanceof GroupsCreated => [[$event->termId, $event->campusId]],
+            $event instanceof GroupsCreated => [[$event->termId, $event->modalityId]],
             $event instanceof GroupScheduleChanged, $event instanceof GroupCancelled => $this->targets->forGroup($event->group, [$event->group->teacher_id]),
             $event instanceof GroupTeacherChanged => $this->targets->forGroup($event->group, [$event->oldTeacherId, $event->newTeacherId]),
             $event instanceof RoomUpdated => $this->targets->forRoom($event->room),
@@ -38,8 +38,8 @@ final class QueueConflictRecompute
             default => [],
         };
 
-        foreach ($targets as [$termId, $campusId]) {
-            RecomputeScheduleConflicts::dispatch($termId, $campusId);
+        foreach ($targets as [$termId, $modalityId]) {
+            RecomputeScheduleConflicts::dispatch($termId, $modalityId);
         }
     }
 }

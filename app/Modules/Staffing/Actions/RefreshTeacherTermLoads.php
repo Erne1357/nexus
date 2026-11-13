@@ -38,7 +38,7 @@ final class RefreshTeacherTermLoads
             ->pluck('id')
             ->all();
 
-        $state = $this->states->forCampus($term);
+        $state = $this->states->forModality($term);
         $missing = array_values(array_filter($qualifying, fn (string $id): bool => $state->teacher($id) === null));
 
         if ($missing !== []) {

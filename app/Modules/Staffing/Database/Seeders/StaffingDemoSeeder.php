@@ -11,6 +11,7 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -94,7 +95,7 @@ use RuntimeException;
  *    queden justos. Antes de asignar crea `staffing.honorarios_max_hours` = 20 si no existe, para que los de
  *    honorarios reciban grupos.
  * 6. Recalcula el ranking (las horas restantes ya cuentan lo asignado), `teacher_term_loads` (RefreshTeacherTermLoads)
- *    y los choques de cada campus (SyncScheduleConflicts), e imprime el resumen con los usuarios para revisar.
+ *    y los choques de cada modalidad (SyncScheduleConflicts, M1), e imprime el resumen con los usuarios para revisar.
  *
  * Mientras siembra, los eventos de Scheduling y de Faculty que encolarían rankings, choques y cargas por docente en
  * cada escritura se descartan, y la cola va en `sync`; los recálculos corren una vez, en los pasos de arriba.
@@ -359,8 +360,8 @@ final class StaffingDemoSeeder extends Seeder
             Event::fakeFor(fn () => $this->seed($termModel, $found), self::FAKED_EVENTS);
 
             $this->timed('choques', function () use ($termModel, $found): void {
-                foreach ($found as $campus) {
-                    app(SyncScheduleConflicts::class)->handle($termModel, $campus);
+                foreach ($this->modalitiesWithGroups($termModel, $found) as $modality) {
+                    app(SyncScheduleConflicts::class)->handle($termModel, $modality);
                 }
             });
         } finally {
@@ -410,8 +411,8 @@ final class StaffingDemoSeeder extends Seeder
 
             if ($mode === 'staffed') {
                 $this->timed('choques', function () use ($term, $campuses): void {
-                    foreach ($campuses as $campus) {
-                        app(SyncScheduleConflicts::class)->handle($term, $campus);
+                    foreach ($this->modalitiesWithGroups($term, $campuses) as $modality) {
+                        app(SyncScheduleConflicts::class)->handle($term, $modality);
                     }
                 });
             }
@@ -470,7 +471,7 @@ final class StaffingDemoSeeder extends Seeder
     {
         $this->validator = app(ScheduleValidator::class);
         $this->validator->forget();
-        $this->state = $this->validator->stateFor($term->id, $campus->id);
+        $this->state = $this->validator->stateFor($term->id, $campus->modality_id);
 
         $groups = Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->whereNull('groups.teacher_id')
@@ -784,13 +785,14 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * Asigna los grupos de los departamentos del campus que no quedan intactos, contra una foto del campus.
+     * Asigna los grupos de los departamentos del campus que no quedan intactos, contra una foto de su modalidad (la del
+     * campus por el puente, mientras Staffing siembre por campus).
      */
     private function assignCampus(Term $term, Campus $campus): void
     {
         $this->validator = app(ScheduleValidator::class);
         $this->validator->forget();
-        $this->state = $this->validator->stateFor($term->id, $campus->id);
+        $this->state = $this->validator->stateFor($term->id, $campus->modality_id);
 
         foreach ($this->roles[$campus->code] ?? [] as $departmentId => $role) {
             if ($role !== self::UNTOUCHED) {
@@ -1426,5 +1428,20 @@ final class StaffingDemoSeeder extends Seeder
         }
 
         return $logins;
+    }
+
+    /**
+     * Las modalidades con grupos del periodo en esos campus, por clave: los choques se recalculan por modalidad (M1).
+     *
+     * @param  iterable<Campus>  $campuses
+     * @return Collection<int, Modality>
+     */
+    private function modalitiesWithGroups(Term $term, iterable $campuses): Collection
+    {
+        $ids = collect($campuses)->map(fn (Campus $campus): string => $campus->id)->all();
+
+        return Modality::query()->withTrashed()
+            ->whereIn('id', Group::query()->where('term_id', $term->id)->whereIn('campus_id', $ids)->select('modality_id'))
+            ->orderBy('code')->get();
     }
 }

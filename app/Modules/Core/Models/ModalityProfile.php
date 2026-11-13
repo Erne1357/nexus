@@ -17,6 +17,9 @@ use InvalidArgumentException;
  * - Un valor presente pero inválido lanza InvalidArgumentException: una configuración rota falla
  *   en voz alta en lugar de reemplazarse en silencio.
  * - Las claves que el perfil no conoce se ignoran.
+ * - `weekly_hours_tolerance` (minutos, entero de 0 en adelante) es opcional y no está en DEFAULTS: es la tolerancia de
+ *   HC-12 de la modalidad (MS17, supuesto por confirmar); sin ella, el validador usa la configuración global
+ *   `scheduling.weekly_hours_tolerance`. toArray() solo la incluye si la modalidad la tiene.
  */
 final readonly class ModalityProfile
 {
@@ -57,6 +60,7 @@ final readonly class ModalityProfile
         public array $days,
         public bool $allowExternalTeachers,
         public bool $requiresSubdireccionApproval,
+        public ?int $weeklyHoursTolerance,
     ) {}
 
     /**
@@ -91,6 +95,7 @@ final readonly class ModalityProfile
             days: self::days($settings['days']),
             allowExternalTeachers: self::bool($settings, 'allow_external_teachers'),
             requiresSubdireccionApproval: self::bool($settings, 'requires_subdireccion_approval'),
+            weeklyHoursTolerance: self::tolerance($settings['weekly_hours_tolerance'] ?? null),
         );
     }
 
@@ -142,9 +147,9 @@ final readonly class ModalityProfile
     }
 
     /**
-     * El arreglo que se guarda en `modalities.settings`.
+     * El arreglo que se guarda en `modalities.settings`, con `weekly_hours_tolerance` solo si la modalidad la tiene.
      *
-     * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}
+     * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool, weekly_hours_tolerance?: int}
      */
     public function toArray(): array
     {
@@ -158,6 +163,7 @@ final readonly class ModalityProfile
             'days' => $this->days,
             'allow_external_teachers' => $this->allowExternalTeachers,
             'requires_subdireccion_approval' => $this->requiresSubdireccionApproval,
+            ...($this->weeklyHoursTolerance === null ? [] : ['weekly_hours_tolerance' => $this->weeklyHoursTolerance]),
         ];
     }
 
@@ -231,6 +237,15 @@ final readonly class ModalityProfile
 
         return (is_string($value) ? StaffingMode::tryFrom($value) : null)
             ?? throw self::invalid('staffing_mode', 'debe ser '.implode(' o ', array_column(StaffingMode::cases(), 'value')));
+    }
+
+    private static function tolerance(mixed $value): ?int
+    {
+        if ($value !== null && (! is_int($value) || $value < 0)) {
+            throw self::invalid('weekly_hours_tolerance', 'debe ser un entero de 0 en adelante');
+        }
+
+        return $value;
     }
 
     private static function blockMinutes(mixed $value): int
