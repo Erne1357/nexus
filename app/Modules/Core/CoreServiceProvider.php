@@ -157,7 +157,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
     /**
      * Demo por puntos: lo base, el admin con la contraseña demo y los periodos 20261, 20263 y 20271 llevan a
-     * «catálogos»; abrir 20271 en las modalidades del volumen (M4; DemoVolume::modalities(): Presencial; en el masivo también 20263, la foto anterior de la validación) lleva a «validación». En el masivo, el historial de periodos desde 2014 va justo antes de abrir,
+     * «catálogos»; abrir 20271 en las modalidades del volumen (M4; DemoVolume::modalities(): Presencial; en el masivo
+     * también 20263, la foto anterior de la validación) lleva a «validación». En el masivo, el historial de periodos desde
+     * 2014 va justo antes de abrir,
      * después de los alumnos, como en MassiveSeeder (StudentsDemoSeeder liga el periodo de ingreso solo a los que ya
      * existen). Sin TermCalendarDemoSeeder: el calendario de 20271 lo escribe DemoRunner, sin ventanas propias de
      * Presencial, y 20263 queda sin calendario.
