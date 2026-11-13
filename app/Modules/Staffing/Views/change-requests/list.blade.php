@@ -1,7 +1,8 @@
 {{--
     La lista de la pantalla de solicitudes de cambio (staffing::pages.change-requests): en tres grupos, en ese orden,
     pendientes, aprobadas por aplicar y resueltas (rechazadas y aplicadas), las más recientes primero. Cada renglón dice
-    quién la pide, el grupo, el estado, el tipo y lo que propone; elegirla la abre a la derecha. La que se abre sola (la
+    quién la pide, el grupo (con la etiqueta de su campus de hoy si la modalidad tiene más de uno), el estado, el tipo y lo
+    que propone; elegirla la abre a la derecha. La que se abre sola (la
     primera, sin elegirla) solo se marca desde lg, donde se ve su detalle; la elegida va en `bg-secondary`, como la lista de
     la asignación.
 --}}
@@ -38,6 +39,9 @@
                             {{ $request->group->subject->name }} · <span class="font-mono font-semibold text-base-content group-aria-[current=true]:text-secondary-content">{{ $request->group->code }}</span> {{ $request->group->ownerCareer?->code }}
                         </span>
                         <span class="col-span-2 flex flex-wrap items-center gap-1.5">
+                            @if ($multiCampus && $request->group->campus !== null)
+                                <x-core::campus-tag :campus="$request->group->campus" data-testid="request-campus-{{ $request->id }}" />
+                            @endif
                             <x-core::status-badge :tone="$request->status->tone()" :label="$request->status->label()" :icon="$request->status->icon()" />
                             <span class="badge badge-neutral badge-soft h-6.5 gap-1.5 font-medium">
                                 <x-icon :name="$request->kind === \App\Modules\Staffing\Enums\ChangeRequestKind::Schedule ? 'o-calendar-days' : 'o-map-pin'" class="h-3.5 w-3.5" aria-hidden="true" />{{ $request->kind->label() }}

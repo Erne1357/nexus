@@ -124,12 +124,11 @@ it('solo se aplica una solicitud aprobada', function (string $state) {
         ->toThrow(ValidationException::class, 'no está aprobada');
 })->with(['pending', 'rejected', 'applied']);
 
-it('la carga de un campus sin modalidad en el puente es ninguna, sin error (pantallas por campus)', function () {
+it('M1: la carga de las solicitudes es la del departamento en la modalidad; en otra modalidad, ninguna', function () {
     $s = changeScenario(LoadStatus::Adjusting);
-    $orphan = Campus::factory()->create(['code' => 'C9']);
-    $orphan->forceFill(['modality_id' => null])->save();
+    $ead = modalityOf('EAD');
 
-    expect(app(ChangeRequestsQuery::class)->loadOf($s['group']->term_id, $orphan->id, $s['group']->department_id))->toBe(['load' => null, 'approved' => 0])
-        ->and(app(AssignmentBoardQuery::class)->load($s['group']->term_id, $orphan->id, $s['group']->department_id))->toBeNull()
-        ->and(app(ChangeRequestsQuery::class)->loadOf($s['group']->term_id, $s['group']->campus_id, $s['group']->department_id)['load']?->is($s['load']))->toBeTrue();
+    expect(app(ChangeRequestsQuery::class)->loadOf($s['group']->term_id, $ead->id, $s['group']->department_id))->toBe(['load' => null, 'approved' => 0])
+        ->and(app(AssignmentBoardQuery::class)->load($s['group']->term_id, $ead->id, $s['group']->department_id))->toBeNull()
+        ->and(app(ChangeRequestsQuery::class)->loadOf($s['group']->term_id, $s['group']->modality_id, $s['group']->department_id)['load']?->is($s['load']))->toBeTrue();
 });

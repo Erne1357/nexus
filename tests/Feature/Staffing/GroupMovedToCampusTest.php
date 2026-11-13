@@ -90,7 +90,7 @@ it('M8, MS6: la solicitud del grupo se lista en el campus nuevo, y la aplica el 
 
     moveToC1();
     $admin = app(Actor::class)->forUser(User::factory()->admin()->create());
-    $list = fn (Campus $campus) => app(ChangeRequestsQuery::class)->listFor($admin, $this->term->id, $campus->id, $this->department->id)->modelKeys();
+    $list = fn (Campus $campus) => app(ChangeRequestsQuery::class)->listFor($admin, $this->term->id, $this->pres->id, $campus->id, $this->department->id)->modelKeys();
     $request = $request->fresh();
 
     expect($list($this->c1))->toBe([$request->id])

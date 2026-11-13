@@ -1,7 +1,8 @@
 {{--
-    Solicitudes de cambio (tarea 3.11, maqueta A «Lista y detalle»): encabezado con el departamento y, a la derecha, su
-    selector (si hay varios, del tamaño y en el lugar del de la asignación) y «Nueva solicitud» para el coordinador; el
-    aviso con el estado de la carga del departamento, los filtros (estado con sus cifras, tipo y texto) y los dos
+    Solicitudes de cambio (tarea 3.11, maqueta A «Lista y detalle»; el alcance, maqueta U2, opción A): encabezado con el
+    departamento y, a la derecha, su selector (si hay varios, del tamaño y en el lugar del de la asignación), el select
+    «Modalidad» (con más de una) y «Nueva solicitud» para el coordinador; el filtro de campus con las solicitudes de cada
+    uno; el aviso con el estado de la carga del departamento, los filtros (estado con sus cifras, tipo y texto) y los dos
     paneles: la lista a la izquierda y el detalle fijo a la derecha. Desde lg van juntos; debajo, la lista y el detalle
     van por separado (el detalle ocupa la pantalla, con «Solicitudes» para regresar). Todo lo que se pinta viene de
     ChangeRequestsQuery.
@@ -16,15 +17,15 @@
         <div class="min-w-0">
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Solicitudes de cambio</h1>
             @if ($requests !== null)
-                <p class="mt-1.5 text-sm text-neutral">Cambios de horario y de salón que piden los docentes y la coordinación en los grupos de {{ $departmentName }}.</p>
+                <p class="mt-1.5 text-sm text-neutral">Cambios de horario y de salón que piden los docentes y la coordinación en los grupos de {{ $departmentName }}{{ $modalityOptions->count() <= 1 && $shownModality ? ' · '.$shownModality->name : '' }}.</p>
             @endif
-            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-3" />
         </div>
-        @if (($requests !== null && count($departments) > 1) || $canRequest)
+        @if (($requests !== null && count($departments) > 1) || $canRequest || $modalityOptions->count() > 1)
             <div class="flex flex-wrap items-end gap-3 max-md:w-full">
                 @if ($requests !== null && count($departments) > 1)
                     <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm" data-testid="department-select" />
                 @endif
+                <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality?->code" class="w-full md:w-56" />
                 @if ($canRequest)
                     @if ($requestBlocked !== null)
                         <span class="tooltip tooltip-left max-md:w-full" data-tip="{{ $requestBlocked }}">
@@ -40,6 +41,14 @@
             </div>
         @endif
     </div>
+
+    @if ($requests !== null && $campusOptions->count() > 1)
+        <div @class(['flex flex-wrap items-center gap-x-3 gap-y-2', 'max-lg:hidden' => $mobileDetail]) data-testid="requests-campus">
+            <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
+            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" :counts="$campusCounts" all />
+            <span class="text-sm text-neutral">Filtra las solicitudes por el campus de su grupo; la carga es de toda la modalidad.</span>
+        </div>
+    @endif
 
     @if ($requests === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="requests-empty">

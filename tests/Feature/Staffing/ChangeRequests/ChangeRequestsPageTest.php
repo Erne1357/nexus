@@ -128,7 +128,7 @@ describe('lista', function () {
         $count = function (): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
-            app(ChangeRequestsQuery::class)->listFor(app(Actor::class), $this->w->term->id, $this->w->campus->id, $this->w->sc->id);
+            app(ChangeRequestsQuery::class)->listFor(app(Actor::class), $this->w->term->id, $this->w->campus->modality_id, null, $this->w->sc->id);
             DB::disableQueryLog();
 
             return count(DB::getQueryLog());
@@ -144,7 +144,8 @@ describe('lista', function () {
             crRequest($group, $n % 2 === 0 ? $this->w->otherTeacherUser : $this->w->coordIsc, ['pending', 'approved', 'rejected', 'applied'][$n % 4]);
         }
 
-        expect($count())->toBe($few)->toBeLessThanOrEqual(8);
+        // Con el campus de hoy del grupo de cada solicitud (M8), para su etiqueta y el editor.
+        expect($count())->toBe($few)->toBeLessThanOrEqual(9);
     });
 
     it('la página completa hace un número constante de consultas', function () {
@@ -214,7 +215,7 @@ describe('detalle', function () {
     it('muestra el estado de la carga del departamento en el aviso', function () {
         crPage($this->w->jefeSc)
             ->assertSeeHtml('data-testid="load-banner"')
-            ->assertSeeInOrder(['Sistemas y Computación', 'Campus II', 'Asignación']);
+            ->assertSeeInOrder(['Sistemas y Computación', 'Presencial', 'Asignación']);
 
         $this->w->scLoad->update(['status' => LoadStatus::Adjusting]);
         crRequest($this->g1, $this->w->teacherUser, 'approved');
@@ -371,7 +372,7 @@ describe('aplicar', function () {
 
         crPage($this->w->coordIsc, ['solicitud' => $request->id])
             ->assertSeeHtml('data-testid="open-editor"')
-            ->assertSeeHtml('href="'.e(route('scheduling.editor', ['campus' => $this->w->campus->code, 'grupo' => $this->g1->id])).'"');
+            ->assertSeeHtml('href="'.e(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => $this->w->campus->code, 'grupo' => $this->g1->id])).'"');
 
         crPage($this->w->jefeSc, ['solicitud' => $request->id])->assertDontSeeHtml('data-testid="open-editor"');
     });
