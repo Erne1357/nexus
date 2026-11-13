@@ -40,6 +40,39 @@ final class GroupQuotasQuery
     }
 
     /**
+     * Las claves de las carreras con cupo en el grupo, sin la dueña, que `$campusId` no ofrece (`career_campus` activa),
+     * por clave: con alguna el grupo no se cambia a ese campus (M15, confirmado el 13 de noviembre de 2026). La dueña la
+     * revisa HC-13. Lo leen el cajón del grupo antes del clic (ScheduleEditorQuery) y MoveGroupToCampus al cambiarlo.
+     *
+     * @return list<string>
+     */
+    public function careersNotOfferedIn(Group $group, string $campusId): array
+    {
+        return Career::query()->withTrashed()
+            ->whereIn('id', GroupQuota::query()->where('group_id', $group->getKey())->where('is_owner', false)->select('career_id'))
+            ->whereDoesntHave('offerings', fn ($query) => $query->where('campus_id', $campusId)->where('is_active', true))
+            ->orderBy('code')
+            ->pluck('code')
+            ->all();
+    }
+
+    /**
+     * El motivo de M15 en español, sin el id de la regla: «Quita primero el cupo de ITIC: Campus I no ofrece esa carrera»
+     * (o «los cupos de IIND y ITIC … esas carreras»).
+     *
+     * @param  non-empty-list<string>  $careers
+     */
+    public static function notOfferedReason(array $careers, string $campusName): string
+    {
+        $last = array_pop($careers);
+        $list = $careers === [] ? $last : implode(', ', $careers).' y '.$last;
+
+        return $careers === []
+            ? "Quita primero el cupo de {$list}: {$campusName} no ofrece esa carrera"
+            : "Quita primero los cupos de {$list}: {$campusName} no ofrece esas carreras";
+    }
+
+    /**
      * @return array{capacity: int, counted: int, proposed: int, department: Dept, rows: list<Row>, addable: list<Addable>}
      */
     public function for(Group $group): array

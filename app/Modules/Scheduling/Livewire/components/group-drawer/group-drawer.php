@@ -18,7 +18,9 @@ use Mary\Traits\Toast;
  * «Campus» (M8, MS9; mínimo, la pantalla final es de U2): quien gestiona el grupo aquí y en otro campus que ofrece su
  * carrera (GroupPolicy::moveToCampus) lo cambia de campus con confirmación (MoveGroupToCampus). El grupo deja el campus
  * de la página: el cajón se cierra y la semana se vuelve a pintar (`schedule-changed`). Si de antemano se sabe que no se
- * puede (un acuerdo de grupo compartido vivo, MS25), el botón va deshabilitado con el motivo escrito al lado.
+ * puede (un acuerdo de grupo compartido vivo, MS25), el botón va deshabilitado con el motivo escrito al lado; un campus que
+ * no ofrece la carrera de un cupo del grupo (M15) va deshabilitado en la lista con su motivo, y si son todos, también el
+ * botón.
  */
 new class extends Component
 {
@@ -104,12 +106,15 @@ new class extends Component
         $campus = $editor->campus($this->campusId);
         $group = $editor->groupOrFail($editor->term($this->termId), $campus, $this->groupId);
         $campuses = $editor->campusOptions(app(Actor::class), $group);
+        $shared = $campuses->isEmpty() ? null : $editor->campusMoveBlockedReason($group);
+        $blocks = $campuses->isEmpty() || $shared !== null ? [] : $editor->campusMoveBlocks($group, $campuses);
 
         return [
             'panel' => $editor->groupPanel($group),
-            'campusOptions' => $campuses->map(fn ($option): array => ['id' => $option->code, 'name' => $option->name])->values()->all(),
+            'campusOptions' => $campuses->map(fn ($option): array => ['id' => $option->code, 'name' => $option->name, 'disabled' => isset($blocks[$option->id])])->values()->all(),
             'currentCampus' => $campus,
-            'moveBlocked' => $campuses->isEmpty() ? null : $editor->campusMoveBlockedReason($group),
+            'moveReasons' => $shared !== null ? [$shared] : array_values($blocks),
+            'moveBlocked' => $shared !== null || ($blocks !== [] && count($blocks) === $campuses->count()),
         ];
     }
 };

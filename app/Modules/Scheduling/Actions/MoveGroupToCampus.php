@@ -24,7 +24,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * - ninguna sesión con salón: el salón es del campus del grupo, así que primero se quitan (MS9);
  * - ningún acuerdo de grupo compartido propuesto o aceptado (MS25): el acuerdo guarda el campus del grupo y lo decidió
  *   el otro departamento para ese campus;
- * - el campus nuevo activo y sin borrar, y que ofrezca la carrera dueña del grupo (`career_campus` activa, HC-13).
+ * - el campus nuevo activo y sin borrar, y que ofrezca la carrera dueña del grupo (`career_campus` activa, HC-13) y
+ *   cada carrera con cupo en el grupo (M15, confirmado el 13 de noviembre de 2026): si no, primero se quita ese cupo.
  *
  * Al mismo campus no escribe ni avisa. Si cambia, las sesiones toman el campus nuevo por el trigger de `groups`, deja la
  * bitácora con el campus anterior y el nuevo, y avisa dentro de la transacción con GroupMovedToCampus, para que las
@@ -114,6 +115,12 @@ final class MoveGroupToCampus
             $career = Career::query()->withTrashed()->whereKey($group->owner_career_id)->value('code') ?? 'la carrera del grupo';
 
             throw ValidationException::withMessages(['campus' => "{$campus->name} no ofrece {$career}: el grupo no se cambia ahí (HC-13)."]);
+        }
+
+        $careers = $this->quotas->careersNotOfferedIn($group, $campus->getKey());
+
+        if ($careers !== []) {
+            throw ValidationException::withMessages(['campus' => GroupQuotasQuery::notOfferedReason($careers, $campus->name).' (M15).']);
         }
     }
 }
