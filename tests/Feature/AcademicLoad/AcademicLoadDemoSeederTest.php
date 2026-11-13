@@ -38,6 +38,7 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Event;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Propuestas y bandejas de prueba (tareas 2.7 a 2.9): el demo con el periodo 20271 abierto en Presencial (M4) y los catálogos
@@ -94,6 +95,19 @@ it('arma una propuesta por carrera ofrecida en C2, con borrador y propuestas env
         ->and(array_intersect($statuses, [ProposalStatus::Submitted->value, ProposalStatus::Returned->value, ProposalStatus::Accepted->value]))->not->toBeEmpty()
         ->and(ProposalReview::query()->where('status', 'accepted')->exists())->toBeTrue()
         ->and(ProposalReview::query()->where('status', 'returned')->exists())->toBeTrue();
+});
+
+it('M7: cada fila la corrige un coordinador que cubre su campus', function () {
+    seedProposals();
+
+    $edits = Activity::query()->where('subject_type', (new ProposalItem)->getMorphClass())->where('event', 'updated')->get();
+
+    expect($edits)->not->toBeEmpty()
+        ->and($edits->reject(function (Activity $edit): bool {
+            $item = ProposalItem::query()->with('proposal')->findOrFail($edit->subject_id);
+
+            return User::query()->findOrFail($edit->causer_id)->can('update', [$item->proposal, $item]);
+        }))->toBeEmpty();
 });
 
 it('solo acepta partes de departamentos con sus catálogos validados, y su carga sale de borrador', function () {

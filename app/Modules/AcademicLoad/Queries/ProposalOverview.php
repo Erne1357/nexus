@@ -65,7 +65,7 @@ final readonly class ProposalOverview
     {
         $returned = collect($this->reviews)
             ->filter(fn (ProposalReview $review): bool => $review->status === ProposalReviewStatus::Returned && $review->decided_at !== null)
-            ->sortByDesc(fn (ProposalReview $review): string => $review->decided_at->toIso8601String())
+            ->sortByDesc(fn (ProposalReview $review): int => $review->decided_at->getTimestamp())
             ->first();
 
         return new ProposalHeader(

@@ -16,12 +16,14 @@ use Illuminate\Support\Str;
 /*
 | Contraer la propuesta a una por carrera y modalidad (M6, confirmado el 12 de noviembre de 2026; MS12, supuesto por
 | confirmar): por periodo, modalidad y carrera, las propuestas de C1 y C2 se funden en una y sus filas conservan su
-| campus. Tiene historia la propuesta enviada (`submitted_at`) o con alguna parte decidida (aceptada o regresada). Se
-| queda la que tiene historia o, si ninguna, la más antigua; la otra se borra con su entrada en la bitácora, y sus
-| filas y sus partes sin decidir pasan a la que se queda. Si las dos tienen historia, se detiene con los ids y no
-| cambia nada (HC-18). Después la llave única es (periodo, modalidad, carrera), `career_proposals.campus_id` se quita y
-| las filas son únicas por (propuesta, materia, campus), también sin campus. Se prueba sobre la forma vieja: `down()`,
-| filas con `DB::table()` y `up()`.
+| campus. Tiene historia la propuesta que ya no está en borrador, la enviada (`submitted_at`) o la que tiene alguna
+| parte decidida (aceptada o regresada). Se queda la que tiene historia o, si ninguna, la más antigua; la otra se borra
+| con su entrada en la bitácora, y sus filas, sus alumnos posibles (también los de cada campus) y sus partes sin
+| decidir pasan a la que se queda. Se detiene, con la carrera, el periodo y los ids, y no cambia nada, si las dos tienen
+| historia (HC-18) o si la que tiene historia absorbería otra que pide grupos (MS12). Después la llave única es
+| (periodo, modalidad, carrera), `career_proposals.campus_id` se quita y las filas son únicas por (propuesta, materia,
+| campus), también sin campus. `down()` se niega con una propuesta de filas de varios campus o sin campus, y con una que
+| queda sin campus. Se prueba sobre la forma vieja: `down()`, filas con `DB::table()` y `up()`.
 */
 
 beforeEach(function () {
@@ -219,12 +221,14 @@ it('down() se niega con una propuesta de filas de varios campus o sin campus, y 
     proposalBeforePerModality($this, $this->c1, '2026-11-02 10:00:00');
     $this->migration->up();
 
-    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, $merged);
+    $refusal = 'Estas propuestas tienen filas de varios campus o sin campus y no se pueden regresar a una por campus: ';
+
+    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, "{$refusal}{$merged}.");
 
     DB::table('proposal_items')->where('campus_id', $this->c1->id)->delete();
     DB::table('proposal_items')->where('career_proposal_id', $merged)->update(['campus_id' => null]);
 
-    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, $merged);
+    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, "{$refusal}{$merged}.");
 
     DB::table('proposal_items')->where('career_proposal_id', $merged)->update(['campus_id' => $this->c2->id]);
     $this->migration->down();
@@ -236,4 +240,16 @@ it('down() se niega con una propuesta de filas de varios campus o sin campus, y 
 
     expect(DB::table('career_proposals')->pluck('id')->all())->toBe([$merged])
         ->and(Schema::hasColumn('career_proposals', 'campus_id'))->toBeFalse();
+});
+
+it('down() se niega con una propuesta sin filas de una modalidad sin campus, y no cambia nada', function () {
+    $this->migration->up();
+    $withoutCampuses = Modality::factory()->create(['code' => 'M902']);
+    $orphan = (string) Str::uuid7();
+    DB::table('career_proposals')->insert(['id' => $orphan, 'term_id' => $this->term->id, 'modality_id' => $withoutCampuses->id, 'career_id' => $this->career->id, 'status' => 'draft', 'created_at' => now(), 'updated_at' => now()]);
+
+    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, "Estas propuestas son de una modalidad sin campus y no se pueden regresar a una por campus: {$orphan}.");
+
+    expect(Schema::hasColumn('career_proposals', 'campus_id'))->toBeFalse()
+        ->and(Schema::hasColumn('career_proposals', 'eligible_students_by_campus'))->toBeTrue();
 });

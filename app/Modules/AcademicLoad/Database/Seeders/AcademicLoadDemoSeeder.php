@@ -147,7 +147,7 @@ final class AcademicLoadDemoSeeder extends Seeder
             }
 
             $this->outsideTheDemo($proposal, $campuses);
-            $this->adjustRows($proposal, $coordinator, $campuses);
+            $this->adjustRows($proposal, $campuses);
 
             if ($index === 0) {
                 continue;
@@ -188,7 +188,7 @@ final class AcademicLoadDemoSeeder extends Seeder
             $proposal->refresh();
 
             if ($proposal->status === ProposalStatus::Returned && $index % 2 === 0) {
-                $this->adjustRows($proposal, $coordinator, $campuses);
+                $this->adjustRows($proposal, $campuses);
                 $this->submit($proposal, $coordinator);
             }
         }
@@ -211,7 +211,7 @@ final class AcademicLoadDemoSeeder extends Seeder
 
             if (in_array($proposal->status, [ProposalStatus::Draft, ProposalStatus::Returned], true)) {
                 $this->outsideTheDemo($proposal, $campuses, complete: true);
-                $this->adjustRows($proposal, $coordinator, $campuses);
+                $this->adjustRows($proposal, $campuses);
                 $proposal = $this->orFail(fn (): CareerProposal => app(SubmitCareerProposal::class)->handle($proposal, $coordinator), "La propuesta de {$where} no se pudo enviar");
             }
 
@@ -278,9 +278,9 @@ final class AcademicLoadDemoSeeder extends Seeder
             ->get();
 
         foreach ($items as $item) {
-            $holder = app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $item->campus_id, career: $proposal->career_id))[0]['user'] ?? null;
+            $holder = $this->rowHolder($proposal, $item);
 
-            if ($holder === null) {
+            if ($holder === false) {
                 $what = "La fila de {$item->subject->code} en {$item->campus->code} de la propuesta {$proposal->id} pide grupos fuera de la demo y nadie la puede corregir";
 
                 if ($complete) {
@@ -301,12 +301,14 @@ final class AcademicLoadDemoSeeder extends Seeder
     }
 
     /**
-     * Corrige unas cuantas filas de los campus de la demo como lo haría el coordinador: más o menos esperados, un grupo
-     * de más o de menos y, a veces, una nota. Las filas bloqueadas (de un departamento que ya aceptó) se saltan.
+     * Corrige unas cuantas filas de los campus de la demo como lo haría el coordinador de cada campus: más o menos
+     * esperados, un grupo de más o de menos y, a veces, una nota. Cada fila la corrige un coordinador que cubre su campus
+     * (M7): el de ese campus o uno sin campus; si nadie la cubre, se deja como está. Las filas bloqueadas (de un
+     * departamento que ya aceptó) se saltan.
      *
      * @param  Collection<int, Campus>  $campuses
      */
-    private function adjustRows(CareerProposal $proposal, User $coordinator, Collection $campuses): void
+    private function adjustRows(CareerProposal $proposal, Collection $campuses): void
     {
         $items = ProposalItem::query()
             ->where('career_proposal_id', $proposal->id)
@@ -314,6 +316,7 @@ final class AcademicLoadDemoSeeder extends Seeder
             ->where('expected_students', '>', 0)
             ->orderBy('id')
             ->get();
+        $holders = [];
 
         foreach ($items as $item) {
             if ($this->random->getInt(1, 100) > 30) {
@@ -323,13 +326,26 @@ final class AcademicLoadDemoSeeder extends Seeder
             $expected = min(ProposalItemRules::MAX_EXPECTED_STUDENTS, max(0, $item->expected_students + $this->random->getInt(-8, 12)));
             $groups = min(ProposalItemRules::MAX_REQUESTED_GROUPS, max(0, $item->requested_groups + $this->random->getInt(-1, 1)));
             $notes = $this->random->getInt(1, 100) <= 25 ? self::NOTES[$this->random->getInt(0, count(self::NOTES) - 1)] : $item->notes;
+            $holder = $holders[$item->campus_id ?? ''] ??= $this->rowHolder($proposal, $item);
+
+            if ($holder === false) {
+                continue;
+            }
 
             try {
-                app(UpdateProposalItem::class)->handle($item, $expected, $groups, $notes, $coordinator);
+                app(UpdateProposalItem::class)->handle($item, $expected, $groups, $notes, $holder);
             } catch (ValidationException) {
                 // Fila bloqueada o fuera de rango: el coordinador no la puede corregir; se deja como está.
             }
         }
+    }
+
+    /**
+     * El primer coordinador que corrige la fila (ProposalUpdate sobre su campus, M7), o false si nadie la cubre.
+     */
+    private function rowHolder(CareerProposal $proposal, ProposalItem $item): User|false
+    {
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $item->campus_id, career: $proposal->career_id))[0]['user'] ?? false;
     }
 
     private function submit(CareerProposal $proposal, User $coordinator): ?CareerProposal

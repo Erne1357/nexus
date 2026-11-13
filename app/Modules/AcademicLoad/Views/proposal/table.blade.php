@@ -106,8 +106,8 @@
                         @endforeach
                         @if ($multi)
                             <div class="-my-2 grid grid-cols-2 items-center gap-x-2 self-stretch border-s border-base-300 py-2 ps-2" data-row-total>
-                                <span class="text-right font-mono text-sm tabular-nums">{{ $row->eligible() }}</span>
-                                <span class="text-right font-mono text-sm font-semibold tabular-nums">{{ $row->groups() }}</span>
+                                <span class="text-right font-mono text-sm tabular-nums"><span class="sr-only">Alumnos posibles en total: </span>{{ $row->eligible() }}</span>
+                                <span class="text-right font-mono text-sm font-semibold tabular-nums"><span class="sr-only">Grupos en total: </span>{{ $row->groups() }}</span>
                             </div>
                         @endif
                         @include('academic-load::proposal.open-button', ['row' => $row])

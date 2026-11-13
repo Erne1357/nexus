@@ -149,12 +149,16 @@ it('M6: el coordinador de C1 ve la propuesta que armó la de C2: no hay otra par
 it('M6: los totales y la confirmación de envío dicen los alumnos posibles y los grupos de cada campus', function () {
     $this->proposal->update(['eligible_students' => 786, 'eligible_students_by_campus' => [$this->c1->id => 612, $this->c2->id => 174]]);
 
-    $page = perModalityPageAs($this->ofC2, ['vista' => 'tabla']);
-    $bar = textOf(domOf($page)->querySelector('[data-testid="proposal-totals"]'));
+    $bar = domOf(perModalityPageAs($this->ofC2, ['vista' => 'tabla']));
 
-    expect($bar)->toContain('786')->toContain('612')->toContain('174');
+    expect(textOf($bar->querySelector('[data-testid="proposal-totals"]')))->toContain('786')
+        ->and(textOf($bar->querySelector('[data-testid="totals-eligible-by-campus"]')))->toContain('612')->toContain('174')->toContain('Campus I')
+        ->and(textOf($bar->querySelector('[data-testid="totals-groups-by-campus"]')))->toContain('5')->toContain('Campus II');
 
-    perModalityPageAs($this->ofC2)->assertSee('C1 612 · C2 174');
+    $inline = domOf(perModalityPageAs($this->ofC2));
+
+    expect(textOf($inline->querySelector('[data-testid="inline-eligible-by-campus"]')))->toBe('C1 612 · C2 174')
+        ->and(textOf($inline->querySelector('[data-testid="inline-groups-by-campus"]')))->toBe('C1 5 · C2 1');
 
     $modal = perModalityPageAs($this->ofC2)->call('confirmSubmit');
     $table = textOf(domOf($modal)->querySelector('[data-testid="submit-totals"]'));
@@ -167,7 +171,9 @@ it('las cifras de solo lectura y los alumnos posibles dicen su campus a los lect
     perModalityPageAs($this->ofC2, ['vista' => 'tabla'])
         ->assertSeeHtml('<span class="sr-only">Alumnos posibles en C1: </span>')
         ->assertSeeHtml('<span class="sr-only">Esperados en C1: </span>')
-        ->assertSeeHtml('<span class="sr-only">Grupos en C1: </span>');
+        ->assertSeeHtml('<span class="sr-only">Grupos en C1: </span>')
+        ->assertSeeHtml('<span class="sr-only">Alumnos posibles en total: </span>')
+        ->assertSeeHtml('<span class="sr-only">Grupos en total: </span>');
 });
 
 it('una nota que no es texto es un error de validación, no un error del servidor', function () {
