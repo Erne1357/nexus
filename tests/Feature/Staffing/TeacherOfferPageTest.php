@@ -45,8 +45,8 @@ function offerGroup(Department $department, Campus $campus, array $attrs = [], ?
 
     if ($load !== null) {
         AcademicLoad::query()->firstOrCreate(
-            ['term_id' => test()->term->id, 'campus_id' => $campus->id, 'department_id' => $department->id],
-            ['modality_id' => $campus->modality_id, 'status' => $load],
+            ['term_id' => test()->term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id],
+            ['status' => $load],
         );
     }
 

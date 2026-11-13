@@ -1,7 +1,5 @@
 <?php
 
-use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -30,7 +28,7 @@ beforeEach(function () {
     $this->poo = $this->world->subject('SCC-1013', 'Programación Orientada a Objetos');
     $this->groupC2 = $this->world->group($this->poo, $this->isc, 'D', 2, [[1, '10:00', '11:00']]);
     $this->groupC1 = $this->world->group($this->poo, $this->isc, 'E', 2, [[2, '10:00', '11:00']], ['campus_id' => $this->c1->id]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->world->term->id, 'campus_id' => $this->c1->id, 'department_id' => $this->world->department->id]);
+    // M1: el grupo de C1 es de la misma carga presencial del departamento que los de C2.
     $this->teacher = $this->world->teacher('Ana Ruiz');
     $this->world->rank($this->groupC2, [$this->teacher]);
     $this->world->rank($this->groupC1, [$this->teacher]);

@@ -36,7 +36,7 @@ final class AssignmentWorld
         $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
         $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
         $department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-        $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $department->id]);
+        $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id]);
 
         return new self($campus, $term, $department, $load);
     }

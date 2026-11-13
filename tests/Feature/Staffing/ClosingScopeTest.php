@@ -173,5 +173,5 @@ it('en el tablero, cada método da 403 al jefe sobre un tablero que abrió Subdi
     'abrir el detalle' => ['open', [fn () => test()->world->department->id]],
     'cerrar' => ['close', []],
     'reabrir' => ['reopen', []],
-    'cambiar de campus' => ['selectCampus', ['C2']],
+    'cambiar de modalidad' => ['selectModality', ['PRES']],
 ]);

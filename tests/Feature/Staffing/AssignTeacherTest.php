@@ -25,7 +25,7 @@ beforeEach(function () {
     GroupSession::factory()->for($this->group)->on(1, '10:00', '12:00')->create();
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
         'term_id' => $this->group->term_id,
-        'campus_id' => $this->group->campus_id,
+        'modality_id' => $this->group->modality_id,
         'department_id' => $this->group->department_id,
     ]);
     $this->teachers = collect(range(1, 3))->map(function (int $rank): Teacher {
@@ -75,7 +75,10 @@ it('asigna al primer lugar sin motivo, deja el historial y la bitácora', functi
 });
 
 it('la asignación copia la modalidad de su grupo (ampliación de la ronda 2)', function () {
-    $this->group->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    $ead = Modality::query()->where('code', 'EAD')->sole();
+    $ead->update(['is_active' => true]);
+    $this->group->update(['modality_id' => $ead->id]);
+    $this->load->update(['modality_id' => $ead->id]);
 
     $assignment = assignTeacher($this->group, $this->teachers[0], $this->actor);
 

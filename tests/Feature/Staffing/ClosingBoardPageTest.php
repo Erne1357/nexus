@@ -20,7 +20,9 @@ use Tests\Support\Staffing\ClosingWorld;
 
 beforeEach(function () {
     $this->world = ClosingWorld::create();
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    // Campus I es de otra modalidad para tener dos cargas del mismo departamento (M1: una por departamento y modalidad).
+    modalityOf('EAD')->update(['is_active' => true]);
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]);
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion)->create(['name' => 'Héctor Salinas']);
     $this->world->group();
     $this->world->group(teacher: false);
@@ -44,10 +46,10 @@ it('muestra las cifras de todo el Tec, un renglón por departamento con una insi
     $page = closingBoardPage($this->subdireccion)
         ->assertSee('Avance del cierre')
         ->assertSee('Choques recalculados hoy a las 9:15')
-        ->assertSeeHtml('aria-label="Campus II: Asignación, falta 1 grupo"')
-        ->assertSeeHtml('aria-label="Campus I: publicada"')
-        ->assertSeeHtml('aria-label="Campus II: lista para cerrar"')
-        ->assertSee('Sin grupos en ningún campus');
+        ->assertSeeHtml('aria-label="Presencial: Asignación, falta 1 grupo"')
+        ->assertSeeHtml('aria-label="EAD: publicada"')
+        ->assertSeeHtml('aria-label="Presencial: lista para cerrar"')
+        ->assertSee('Sin grupos en ninguna modalidad');
 
     $html = $page->html();
     expect(textOf(domOf($page)->querySelector('[data-testid="board-meta"]')))->toContain('3 departamentos · 3 cargas en C1 y C2')
@@ -96,17 +98,17 @@ it('cada renglón dice quién es el jefe del departamento, o que no tiene', func
 
 it('abre el detalle de una carga: el selector de campus, lo que falta, las justificaciones, el historial y «Abrir en Cierre de la carga»', function () {
     closingBoardPage($this->subdireccion)
-        ->call('open', $this->world->department->id, 'C2')
+        ->call('open', $this->world->department->id, 'PRES')
         ->assertSet('showDrawer', true)
-        ->assertSeeHtml('data-testid="drawer-campus-C1"')
-        ->assertSeeHtml('data-testid="drawer-campus-C2"')
+        ->assertSeeHtml('data-testid="drawer-modality-EAD"')
+        ->assertSeeHtml('data-testid="drawer-modality-PRES"')
         ->assertSee('Falta 1 grupo para cerrar')
         ->assertSeeHtml('data-testid="condition-row-teacher"')
         ->assertSee('Para cerrar')
         ->assertSee('Justificaciones')
         ->assertSee('Historial')
-        ->assertSeeHtml('href="'.e(route('staffing.closing', ['departamento' => $this->world->department->id, 'campus' => 'C2'])).'"')
-        ->call('selectCampus', 'C1')
+        ->assertSeeHtml('href="'.e(route('staffing.closing', ['departamento' => $this->world->department->id, 'modalidad' => 'PRES'])).'"')
+        ->call('selectModality', 'EAD')
         ->assertSee('Publicada · v2')
         ->assertSee('Reabrir carga');
 });
@@ -115,7 +117,7 @@ it('Subdirección cierra desde el detalle, con la confirmación de los grupos ac
     $this->world->justify(Group::query()->whereNull('teacher_id')->sole(), 'Contratación en trámite', $this->subdireccion);
 
     closingBoardPage($this->subdireccion)
-        ->call('open', $this->world->department->id, 'C2')
+        ->call('open', $this->world->department->id, 'PRES')
         ->assertSee('Lista para cerrar')
         ->call('askClose')
         ->assertSee('Al cerrar, los 2 grupos activos quedan confirmados')
@@ -127,10 +129,10 @@ it('Subdirección cierra desde el detalle, con la confirmación de los grupos ac
 });
 
 it('Subdirección reabre una carga publicada con motivo desde el detalle', function () {
-    $c1Load = $this->world->load->newQuery()->where('campus_id', $this->c1->id)->sole();
+    $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
 
     $page = closingBoardPage($this->subdireccion)
-        ->call('open', $this->world->department->id, 'C1')
+        ->call('open', $this->world->department->id, 'EAD')
         ->call('askReopen')
         ->assertSee('Mientras tanto se sigue viendo la versión publicada (v2).')
         ->set('reopenReason', 'Cambió el docente de un grupo')
@@ -147,7 +149,7 @@ it('tocar el renglón abre la primera carga que sigue sin cerrar; si todas pasar
         ->assertSet('loadId', $this->world->load->id);
 
     $this->world->load->update(['status' => LoadStatus::Closed]);
-    $c1Load = $this->world->load->newQuery()->where('campus_id', $this->c1->id)->sole();
+    $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
 
     closingBoardPage($this->subdireccion)
         ->call('open', $this->world->department->id)
@@ -156,7 +158,7 @@ it('tocar el renglón abre la primera carga que sigue sin cerrar; si todas pasar
 
 it('cerrar el drawer con Esc o con el velo olvida la carga y los modales', function () {
     closingBoardPage($this->subdireccion)
-        ->call('open', $this->world->department->id, 'C2')
+        ->call('open', $this->world->department->id, 'PRES')
         ->call('askReopen')
         ->set('showDrawer', false)
         ->assertSet('loadId', null)
@@ -169,7 +171,7 @@ it('el detalle monta la publicación de la carga debajo de la línea de estados 
     $this->world->load->update(['status' => LoadStatus::Closed]);
 
     $page = closingBoardPage($this->subdireccion)
-        ->call('open', $this->world->department->id, 'C2')
+        ->call('open', $this->world->department->id, 'PRES')
         ->assertSeeLivewire('academic-load::components.publish-load')
         ->assertDontSeeHtml('data-testid="action-publish"');
 

@@ -77,11 +77,12 @@ it('no bloquea con solicitudes rechazadas o aplicadas', function () {
     expect(closingRequestsReasons($s))->toBe([]);
 });
 
-it('no bloquea con solicitudes de otro departamento, campus o periodo', function () {
+it('no bloquea con solicitudes de otro departamento, modalidad o periodo', function () {
     $s = changeScenario();
+    $ead = Campus::factory()->create(['modality_id' => modalityOf('EAD')->id]);
     $others = [
         ['department_id' => Department::factory()->create()->id],
-        ['campus_id' => Campus::factory()->create()->id],
+        ['campus_id' => $ead->id, 'modality_id' => $ead->modality_id],
         ['term_id' => Term::factory()->create()->id],
     ];
 

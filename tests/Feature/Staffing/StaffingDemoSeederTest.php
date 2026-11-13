@@ -149,7 +149,7 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
         ->and($removed)->not->toBeEmpty();
 
     $openLoads = AcademicLoad::query()->where('term_id', $this->term->id)->whereIn('status', [LoadStatus::Staffing, LoadStatus::Adjusting])->get();
-    $groupsOf = fn (AcademicLoad $load) => Group::query()->active()->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id);
+    $groupsOf = fn (AcademicLoad $load) => Group::query()->active()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id);
 
     foreach ($openLoads as $load) {
         expect($groupsOf($load)->whereNull('teacher_id')->count())->toBeGreaterThan(0, "Todos los grupos de la carga {$load->department_id} tienen docente.");
@@ -169,9 +169,8 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
         ->and($requests->whereNotNull('teacher_id')->count())->toBe($requests->count())
         ->and($requests->pluck('department_id')->unique()->count())->toBeGreaterThanOrEqual(2);
 
-    // La carga de la solicitud es la de su campus y departamento: abrir Presencial crea las de C1 y C2 a la vez (M4).
-    $loadOf = fn (ChangeRequest $request): AcademicLoad => AcademicLoad::query()->where('term_id', $this->term->id)
-        ->where('campus_id', $request->campus_id)->where('department_id', $request->department_id)->sole();
+    // La carga de la solicitud es la de su departamento en su modalidad (M1).
+    $loadOf = fn (ChangeRequest $request): AcademicLoad => AcademicLoad::query()->ofDepartment($this->term->id, $request->modality_id, $request->department_id)->sole();
     $appliedLoad = $loadOf($applied->first());
     $approvedLoad = $loadOf($requests->firstWhere('status', ChangeRequestStatus::Approved));
 
@@ -181,7 +180,7 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
 
     // Casos de cierre (tarea 4.1, LoadClosingDemoSeeder en modo mixed): una carga cerrada por su jefe, sin pendientes de
     // cierre, con sus grupos confirmados y justificaciones; sin solicitudes pendientes. SC se queda en asignación.
-    $closed = AcademicLoad::query()->where('term_id', $this->term->id)->where('status', LoadStatus::Closed)->with(['department', 'campus', 'term'])->get();
+    $closed = AcademicLoad::query()->where('term_id', $this->term->id)->where('status', LoadStatus::Closed)->with(['department', 'modality', 'term'])->get();
 
     expect($closed)->not->toBeEmpty()
         ->and($closed->pluck('department.code')->all())->not->toContain('SC')
