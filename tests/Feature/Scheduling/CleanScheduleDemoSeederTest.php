@@ -113,6 +113,25 @@ it('no toca los cancelados ni los que ya tenían horario, y repetirlo no duplica
         ->and(GroupSession::query()->count())->toBe($count);
 });
 
+it('el horario sale de las claves y no de los UUID: el mismo plan con otro UUID da las mismas horas, como otra corrida de la demo', function () {
+    $hours = fn (): array => GroupSession::query()->join('groups', 'groups.id', '=', 'group_sessions.group_id')->join('subjects', 'subjects.id', '=', 'groups.subject_id')
+        ->where('groups.id', '!=', $this->scheduled->id)
+        ->orderBy('subjects.code')->orderBy('group_sessions.day')->orderBy('group_sessions.starts_at')
+        ->get(['subjects.code', 'group_sessions.day', 'group_sessions.starts_at', 'group_sessions.ends_at'])
+        ->map(fn (GroupSession $session): string => "{$session->code} {$session->day} {$session->starts_at}-{$session->ends_at}")->all();
+    seedCleanSchedule();
+    $first = $hours();
+
+    GroupSession::query()->where('group_id', '!=', $this->scheduled->id)->delete();
+    $code = $this->plan->code;
+    $this->plan->update(['code' => "{$code}-X"]);
+    $copy = StudyPlan::factory()->create(['career_id' => $this->plan->career_id, 'code' => $code]);
+    Group::query()->update(['study_plan_id' => $copy->id]);
+    seedCleanSchedule();
+
+    expect($first)->not->toBe([])->and($hours())->toBe($first);
+});
+
 it('se detiene con el grupo y el motivo si no cabe sin choque', function () {
     $subject = Subject::factory()->create(['department_id' => $this->other->id, 'code' => 'XYZ-9999', 'theory_hours' => 2, 'practice_hours' => 0]);
     Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $subject->id, 'owner_career_id' => $this->plan->career_id, 'study_plan_id' => $this->plan->id, 'semester' => 4, 'capacity' => 90]);
