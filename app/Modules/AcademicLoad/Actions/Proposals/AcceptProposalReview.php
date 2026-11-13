@@ -25,9 +25,9 @@ use Throwable;
  * En una transacción bloquea la propuesta y luego la parte (el estado que vale es el de la base, como en
  * SubmitCareerProposal y UpdateProposalItem) y exige la parte pendiente con la propuesta enviada o regresada por
  * otro departamento (ProposalReviewRules; confirmado el 2 de noviembre de 2026). Exige HC-14, los catálogos del
- * departamento validados en el periodo y el campus de la propuesta (CatalogsValidated, con bloqueo compartido),
- * como ValidationException sobre `catalogs`; y la carga del departamento en ese periodo y campus, que bloquea,
- * sobre `load` (supuesto por confirmar: completar la apertura del periodo en la modalidad del campus la crea, M4). Marca la parte aceptada
+ * departamento validados en el periodo y la modalidad de la propuesta (CatalogsValidated, con bloqueo compartido),
+ * como ValidationException sobre `catalogs`; y la carga del departamento en ese periodo y modalidad (M1), que bloquea,
+ * sobre `load` (supuesto por confirmar: completar la apertura del periodo en la modalidad la crea, M4). Marca la parte aceptada
  * con quién y cuándo: desde ahí el coordinador ya no cambia sus materias, aunque la propuesta siga regresada. Si la
  * propuesta está enviada y ya no queda ninguna parte sin aceptar, queda aceptada; regresada, sigue regresada,
  * porque tiene una parte regresada. Si la carga sigue en borrador, la propone con ProposeLoad en la misma transacción
@@ -64,7 +64,7 @@ final class AcceptProposalReview
     {
         return DB::transaction(function () use ($review, $actor): ProposalReview {
             $proposal = CareerProposal::query()
-                ->with(['term', 'campus' => fn ($query) => $query->withTrashed(), 'career' => fn ($query) => $query->withTrashed()])
+                ->with(['term', 'campus' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed(), 'career' => fn ($query) => $query->withTrashed()])
                 ->lockForUpdate()
                 ->findOrFail($review->career_proposal_id);
 
@@ -74,23 +74,19 @@ final class AcceptProposalReview
 
             $this->rules->ensureDecidable($proposal, $review, $department);
 
-            $reasons = $this->catalogsValidated->reasonsFor($proposal->term_id, $proposal->campus, $review->department_id);
+            $reasons = $this->catalogsValidated->reasonsFor($proposal->term_id, $proposal->modality, $review->department_id);
 
             if ($reasons !== []) {
                 throw ValidationException::withMessages(['catalogs' => $reasons]);
             }
 
             $load = AcademicLoad::query()
-                ->where('term_id', $proposal->term_id)
-                ->where('campus_id', $proposal->campus_id)
-                ->where('department_id', $review->department_id)
+                ->ofDepartment($proposal->term_id, $proposal->modality_id, $review->department_id)
                 ->lockForUpdate()
                 ->first();
 
             if ($load === null) {
-                $modality = $proposal->campus->catalogModality?->name ?? 'la modalidad del campus';
-
-                throw ValidationException::withMessages(['load' => "{$department->code} no tiene carga en {$proposal->campus->code} para el periodo {$proposal->term->code}: completa la apertura del periodo en {$modality} para crearla."]);
+                throw ValidationException::withMessages(['load' => "{$department->code} no tiene carga en {$proposal->modality->name} para el periodo {$proposal->term->code}: completa la apertura del periodo en {$proposal->modality->name} para crearla."]);
             }
 
             $review->update(['status' => ProposalReviewStatus::Accepted, 'decided_by' => $actor->getKey(), 'decided_at' => now()]);

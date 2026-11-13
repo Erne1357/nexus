@@ -4,19 +4,17 @@ namespace App\Modules\AcademicLoad\Actions;
 
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 
 /**
  * Crea en borrador las cargas que falten al abrir un periodo en una modalidad (M4; MS15, supuesto por confirmar; ver
- * docs/dominio/reglas-de-negocio.md, Periodo y calendario). Puente mientras la carga sea por campus (pasará a una por
- * departamento y modalidad, M1): una por cada departamento activo y sin borrar en cada campus activo y sin borrar cuya
- * modalidad del catálogo (`campuses.modality_id`) es la que se abre, si todavía no la tiene en ese periodo y campus.
- * Abrir Presencial crea las de C1 y C2, como antes abrir cada campus. Devuelve cuántas creó: 0 si no faltaba ninguna.
- * No toca las que ya existen, estén en el estado que estén. Cada una lleva la modalidad que se abre.
+ * docs/dominio/reglas-de-negocio.md, Periodo y calendario): una por cada departamento activo y sin borrar que todavía
+ * no la tenga en ese periodo y modalidad (M1, la carga es por departamento y modalidad). Abrir Presencial crea una por
+ * departamento, con los grupos de C1 y C2 juntos. Devuelve cuántas creó: 0 si no faltaba ninguna. No toca las que ya
+ * existen, estén en el estado que estén.
  *
- * Un solo insert que ignora las que ya existen (la unicidad por periodo, campus y departamento), así que es
+ * Un solo insert que ignora las que ya existen (la unicidad por periodo, modalidad y departamento), así que es
  * idempotente y otra sesión que abra a la vez no la hace fallar. No deja bitácora por carga ni avisa: la
  * llama CreateLoadsOnTermOpened dentro de la transacción de OpenTerm, que deja una entrada en la bitácora
  * del periodo con el reporte.
@@ -28,20 +26,14 @@ final class CreateTermLoads
     public function handle(Term $term, Modality $modality): int
     {
         $now = now();
-        $departments = $this->departments->activeIds();
-        $campuses = Campus::query()->where('modality_id', $modality->getKey())->where('is_active', true)->orderBy('code')->pluck('id');
 
-        $rows = $campuses
-            ->crossJoin($departments)
-            ->map(fn (array $pair): array => [
-                'term_id' => $term->getKey(),
-                'campus_id' => $pair[0],
-                'modality_id' => $modality->getKey(),
-                'department_id' => $pair[1],
-                'created_at' => $now,
-                'updated_at' => $now,
-            ])
-            ->all();
+        $rows = array_map(fn (string $department): array => [
+            'term_id' => $term->getKey(),
+            'modality_id' => $modality->getKey(),
+            'department_id' => $department,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ], $this->departments->activeIds());
 
         return $rows === [] ? 0 : AcademicLoad::query()->insertOrIgnore($rows);
     }

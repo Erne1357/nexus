@@ -35,12 +35,12 @@ final class PublicationDemoSeeder extends Seeder
         $admin = User::query()->where('username', 'admin')->firstOrFail();
 
         $loads = AcademicLoad::query()
-            ->with(['department', 'campus'])
+            ->with(['department', 'modality'])
             ->where('term_id', $termModel->id)
-            ->whereIn('campus_id', Campus::query()->whereIn('code', $campuses)->select('id'))
+            ->whereIn('modality_id', Campus::query()->whereIn('code', $campuses)->select('modality_id'))
             ->where('status', LoadStatus::Closed->value)
             ->get()
-            ->sortBy(fn (AcademicLoad $load): string => $load->campus->code.$load->department->code);
+            ->sortBy(fn (AcademicLoad $load): string => $load->modality->code.$load->department->code);
 
         foreach ($loads as $load) {
             $publisher = User::query()->where('username', 'jefe.'.Str::lower($load->department->code))->first() ?? $admin;

@@ -4,16 +4,14 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\CreateTermLoads;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Enums\Modality as CampusModality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 
 /*
 | Al abrir un periodo en una modalidad (M4), AcademicLoad crea en borrador la carga de cada departamento activo que
-| todavía no la tenga (MS15, supuesto por confirmar). Mientras la carga sea por campus (hasta que pase a departamento ×
-| modalidad, M1), crea una por departamento en cada campus activo de esa modalidad, por el puente `campuses.modality_id`:
-| abrir Presencial crea las de C1 y C2, como abrir antes cada campus.
+| todavía no la tenga en esa modalidad (MS15, supuesto por confirmar). La carga es por departamento y modalidad (M1):
+| abrir Presencial crea una por departamento, con los grupos de C1 y C2 juntos, sin importar cuántos campus tenga.
 */
 
 function createTermLoads(Term $term, Modality $modality): int
@@ -22,14 +20,14 @@ function createTermLoads(Term $term, Modality $modality): int
 }
 
 /**
- * Las cargas del periodo como «departamento campus», ordenadas.
+ * Las cargas del periodo como «departamento modalidad», ordenadas.
  *
  * @return list<string>
  */
 function loadKeysOf(Term $term): array
 {
-    return AcademicLoad::query()->where('term_id', $term->id)->with(['department', 'campus'])->get()
-        ->map(fn (AcademicLoad $load): string => "{$load->department->code} {$load->campus->code}")
+    return AcademicLoad::query()->where('term_id', $term->id)->with(['department', 'modality'])->get()
+        ->map(fn (AcademicLoad $load): string => "{$load->department->code} {$load->modality->code}")
         ->sort()->values()->all();
 }
 
@@ -37,17 +35,15 @@ beforeEach(function () {
     $this->presencial = modalityOf('PRES');
 });
 
-it('M4: crea en borrador la carga de cada departamento activo en cada campus activo de la modalidad', function () {
+it('M1 y M4: crea en borrador una carga por departamento activo en la modalidad, aunque tenga dos campus', function () {
     $term = Term::factory()->create();
     Department::factory()->create(['code' => 'D1']);
     Department::factory()->create(['code' => 'D2']);
     Campus::factory()->create(['code' => 'C1']);
     Campus::factory()->create(['code' => 'C2']);
-    Campus::factory()->inactive()->create(['code' => 'C3']);
-    Campus::factory()->create(['code' => 'C8', 'modality_id' => Modality::factory()->create()->id]);
 
-    expect(createTermLoads($term, $this->presencial))->toBe(4)
-        ->and(loadKeysOf($term))->toBe(['D1 C1', 'D1 C2', 'D2 C1', 'D2 C2'])
+    expect(createTermLoads($term, $this->presencial))->toBe(2)
+        ->and(loadKeysOf($term))->toBe(['D1 PRES', 'D2 PRES'])
         ->and(AcademicLoad::query()->pluck('status')->unique()->all())->toBe([LoadStatus::Draft]);
 });
 
@@ -56,60 +52,53 @@ it('cada carga nace con la modalidad que se abre', function () {
     Department::factory()->count(2)->create();
     $ead = modalityOf('EAD');
     $ead->update(['is_active' => true]);
-    Campus::factory()->create(['code' => 'EAD', 'modality' => CampusModality::Mixta]);
 
     createTermLoads($term, $ead);
 
     expect(AcademicLoad::query()->with('modality')->get()->map(fn (AcademicLoad $load): string => $load->modality->code)->all())->toBe(['EAD', 'EAD']);
 });
 
-it('una modalidad sin campus activos no crea cargas', function () {
-    Department::factory()->create();
-
-    expect(createTermLoads(Term::factory()->create(), Modality::factory()->create()))->toBe(0)
-        ->and(AcademicLoad::count())->toBe(0);
-});
-
 it('no crea cargas de departamentos inactivos ni borrados', function () {
     $term = Term::factory()->create();
-    Campus::factory()->create(['code' => 'C2']);
     Department::factory()->create(['code' => 'D1']);
     Department::factory()->inactive()->create();
     Department::factory()->create()->delete();
 
     expect(createTermLoads($term, $this->presencial))->toBe(1)
-        ->and(loadKeysOf($term))->toBe(['D1 C2']);
+        ->and(loadKeysOf($term))->toBe(['D1 PRES']);
 });
 
-it('es idempotente: la segunda vez no crea nada; un departamento nuevo recibe solo las suyas', function () {
+it('abrir dos veces el periodo en la modalidad deja una carga por departamento; un departamento nuevo recibe solo la suya', function () {
     $term = Term::factory()->create();
+    Campus::factory()->create(['code' => 'C1']);
     Campus::factory()->create(['code' => 'C2']);
     Department::factory()->create(['code' => 'D1']);
     createTermLoads($term, $this->presencial);
 
-    expect(createTermLoads($term, $this->presencial))->toBe(0);
+    expect(createTermLoads($term, $this->presencial))->toBe(0)
+        ->and(loadKeysOf($term))->toBe(['D1 PRES']);
 
     Department::factory()->create(['code' => 'D2']);
 
     expect(createTermLoads($term, $this->presencial))->toBe(1)
-        ->and(loadKeysOf($term))->toBe(['D1 C2', 'D2 C2']);
+        ->and(loadKeysOf($term))->toBe(['D1 PRES', 'D2 PRES']);
 });
 
-it('un campus nuevo de la modalidad recibe sus cargas al completar la apertura', function () {
+it('la misma modalidad en otro periodo, u otra modalidad en el mismo, tiene sus propias cargas', function () {
     $term = Term::factory()->create();
     Department::factory()->create(['code' => 'D1']);
-    Campus::factory()->create(['code' => 'C2']);
+    $ead = modalityOf('EAD');
+    $ead->update(['is_active' => true]);
     createTermLoads($term, $this->presencial);
-    Campus::factory()->create(['code' => 'C1']);
 
-    expect(createTermLoads($term, $this->presencial))->toBe(1)
-        ->and(loadKeysOf($term))->toBe(['D1 C1', 'D1 C2']);
+    expect(createTermLoads($term, $ead))->toBe(1)
+        ->and(createTermLoads(Term::factory()->create(), $this->presencial))->toBe(1)
+        ->and(loadKeysOf($term))->toBe(['D1 EAD', 'D1 PRES']);
 });
 
 it('no toca la carga que ya avanzó', function () {
     $term = Term::factory()->create();
-    $campus = Campus::factory()->create();
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $term->id, 'modality_id' => $this->presencial->id]);
 
     createTermLoads($term, $this->presencial);
 

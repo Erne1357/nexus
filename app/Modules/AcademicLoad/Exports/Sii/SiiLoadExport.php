@@ -5,7 +5,8 @@ namespace App\Modules\AcademicLoad\Exports\Sii;
 use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
-use App\Modules\Core\Models\Campus;
+use App\Modules\AcademicLoad\Rules\SnapshotPayload;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Imports\Sii\SiiFile;
 use Illuminate\Database\Eloquent\Collection;
@@ -19,8 +20,9 @@ use Illuminate\Database\Eloquent\Collection;
  * comillas simples con relleno de espacios al ancho del CHAR (`'3KB       '`), números y fecha-hora sin comillas, nulo
  * como campo vacío.
  *
- * Qué se exporta: la última versión publicada de cada carga del periodo y el campus que tenga alguna, aunque después se
- * haya reabierto, igual que la consulta pública (supuesto por confirmar). Sin versiones publicadas salen los dos archivos
+ * Qué se exporta: la última versión publicada de cada carga del periodo y la modalidad que tenga alguna (M1: con los
+ * grupos de todos sus campus), aunque después se haya reabierto, igual que la consulta pública (supuesto por confirmar).
+ * Cada payload se lee normalizado (SnapshotPayload::normalize, MS13). Sin versiones publicadas salen los dos archivos
  * solo con el encabezado.
  *
  * Mapeo (cada elección propia es un supuesto por confirmar):
@@ -48,22 +50,22 @@ final class SiiLoadExport
     /**
      * @return array{'grupos.csv': string, 'horarios.csv': string} bytes en Latin-1
      */
-    public function files(Term $term, Campus $campus): array
+    public function files(Term $term, Modality $modality): array
     {
-        return $this->filesOf($term->code, $this->latestSnapshots($term, $campus));
+        return $this->filesOf($term->code, $this->latestSnapshots($term, $modality));
     }
 
     /**
-     * La última versión publicada de cada carga del periodo y el campus que tenga alguna.
+     * La última versión publicada de cada carga del periodo y la modalidad que tenga alguna.
      *
      * @return Collection<int, LoadSnapshot>
      */
-    public function latestSnapshots(Term $term, Campus $campus): Collection
+    public function latestSnapshots(Term $term, Modality $modality): Collection
     {
         return LoadSnapshot::query()->latestVersion()
             ->whereIn('academic_load_id', AcademicLoad::query()
                 ->where('term_id', $term->getKey())
-                ->where('campus_id', $campus->getKey())
+                ->where('modality_id', $modality->getKey())
                 ->where('current_version', '>', 0)
                 ->select('id'))
             ->orderBy('id')
@@ -113,8 +115,10 @@ final class SiiLoadExport
     {
         $entries = [];
         foreach ($snapshots as $snapshot) {
-            foreach ($snapshot->payload['groups'] as $group) {
-                $entries[] = ['department' => (string) $snapshot->payload['department']['code'], 'group' => $group];
+            $payload = SnapshotPayload::normalize($snapshot->payload);
+
+            foreach ($payload['groups'] as $group) {
+                $entries[] = ['department' => (string) $payload['department']['code'], 'group' => $group];
             }
         }
 

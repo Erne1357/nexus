@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Lo que la carga de un departamento deja pendiente con otros departamentos al cerrarse (HC-15, tarea 4.1), en el
- * periodo y el campus de la carga:
+ * periodo y la modalidad de la carga (M1: de todos sus campus):
  *
  * - un grupo compartido que el departamento propuso y sigue sin respuesta, porque aparta lugares del grupo
  *   (P6, confirmado el 10 de noviembre de 2026);
@@ -62,7 +62,7 @@ final class AgreementsAnswered
 
     /**
      * Las mismas cuentas para todas las cargas de un periodo, en una consulta (el tablero «Avance del cierre»): por
-     * `campus_id|department_id`, cuántos grupos compartidos propuso el departamento sin respuesta y cuántos acuerdos
+     * `modality_id|department_id`, cuántos grupos compartidos propuso el departamento sin respuesta y cuántos acuerdos
      * esperan su respuesta. Una carga sin ninguno no aparece.
      *
      * @return array<string, array{proposed: int, awaiting: int}>
@@ -71,14 +71,14 @@ final class AgreementsAnswered
     {
         $counts = [];
 
-        foreach ($this->open($termId)->toBase()->get(['campus_id', 'kind', 'from_department_id', 'to_department_id']) as $agreement) {
+        foreach ($this->open($termId)->toBase()->get(['modality_id', 'kind', 'from_department_id', 'to_department_id']) as $agreement) {
             if ($agreement->kind === AgreementKind::SharedGroup->value) {
-                $key = "{$agreement->campus_id}|{$agreement->from_department_id}";
+                $key = "{$agreement->modality_id}|{$agreement->from_department_id}";
                 $counts[$key] ??= ['proposed' => 0, 'awaiting' => 0];
                 $counts[$key]['proposed']++;
             }
 
-            $key = "{$agreement->campus_id}|{$agreement->to_department_id}";
+            $key = "{$agreement->modality_id}|{$agreement->to_department_id}";
             $counts[$key] ??= ['proposed' => 0, 'awaiting' => 0];
             $counts[$key]['awaiting']++;
         }
@@ -94,7 +94,7 @@ final class AgreementsAnswered
     private function proposedBy(AcademicLoad $load): Builder
     {
         return $this->open($load->term_id)
-            ->where('campus_id', $load->campus_id)
+            ->where('modality_id', $load->modality_id)
             ->where('kind', AgreementKind::SharedGroup)
             ->where('from_department_id', $load->department_id);
     }
@@ -107,7 +107,7 @@ final class AgreementsAnswered
     private function awaitedBy(AcademicLoad $load): Builder
     {
         return $this->open($load->term_id)
-            ->where('campus_id', $load->campus_id)
+            ->where('modality_id', $load->modality_id)
             ->where('to_department_id', $load->department_id);
     }
 

@@ -5,13 +5,13 @@ namespace App\Modules\AcademicLoad\Database\Factories;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Carga en borrador de un departamento en un campus y un periodo.
+ * Carga en borrador de un departamento en una modalidad y un periodo (M1); por omisión, en Presencial.
  *
  * @extends Factory<AcademicLoad>
  */
@@ -25,8 +25,7 @@ class AcademicLoadFactory extends Factory
     {
         return [
             'term_id' => Term::factory(),
-            'campus_id' => Campus::factory(),
-            'modality_id' => fn (array $attributes): ?string => Campus::withTrashed()->whereKey($attributes['campus_id'])->value('modality_id'),
+            'modality_id' => fn (): string => Modality::withTrashed()->where('code', 'PRES')->value('id') ?? Modality::factory()->create()->id,
             'department_id' => Department::factory(),
             'status' => LoadStatus::Draft,
             'current_version' => 0,

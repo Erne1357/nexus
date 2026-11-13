@@ -31,7 +31,7 @@
                     </tr>
                     @foreach ($subject['groups'] as $group)
                         <tr style="page-break-inside: avoid;">
-                            <td style="border-left: 4px solid {{ $subject['color'] }};" class="mono"><b>{{ $subject['code'] }} · {{ $group['code'] }}</b></td>
+                            <td style="border-left: 4px solid {{ $subject['color'] }};" class="mono"><b>{{ $subject['code'] }} · {{ $group['code'] }}</b>@if (($group['campus'] ?? null) !== null)<br><span class="dim">{{ $group['campus'] }}</span>@endif</td>
                             <td @class(['dim' => $group['teacher'] === 'Por asignar'])>{{ $group['teacher'] }}</td>
                             @if ($staff ?? false)
                                 <td class="mono">{{ $group['capacity'] }}</td>

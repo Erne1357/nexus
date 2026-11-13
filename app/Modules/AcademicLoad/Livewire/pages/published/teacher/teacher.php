@@ -12,18 +12,24 @@ use Livewire\Attributes\Url;
 use Livewire\Component;
 
 /**
- * La semana publicada de un docente en el campus (tarea 4.4, DESIGN.md, «Consulta publicada»): título con su nombre,
+ * La semana publicada de un docente en la modalidad (M1; `?campus=` la filtra) (tarea 4.4, DESIGN.md, «Consulta publicada»): título con su nombre,
  * «N grupos · N horas a la semana» y la fecha de actualización; desde 768 px la semana con sus bloques (los que se
  * empalman, en carriles) y desde 1200 px la lista de sus grupos; en celular los días en botones y la lista de horas
  * del día (`?dia=`). El docente es el uuid del payload de lo publicado: uno mal formado o que no tiene grupos
- * publicados en el campus es 404. Solo lee de PublishedScheduleQuery.
+ * publicados en la modalidad (o en el campus del filtro) es 404. Solo lee de PublishedScheduleQuery.
  */
 new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
 {
     #[Locked]
     public string $periodo = '';
 
+    /** La clave de la modalidad en la URL (`pres`, M1). */
     #[Locked]
+    public string $modalidad = '';
+
+    /** El campus del filtro (`?campus=`, clave); '' son todos. */
+    #[Locked]
+    #[Url(as: 'campus')]
     public string $campus = '';
 
     #[Locked]
@@ -34,12 +40,12 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     #[Url(as: 'dia')]
     public string $day = '';
 
-    public function mount(string $periodo, string $campus, string $docente, PublishedContextQuery $contexts): void
+    public function mount(string $periodo, string $modalidad, string $docente, PublishedContextQuery $contexts): void
     {
         abort_unless(Str::isUuid($docente), 404);
 
         $this->periodo = $periodo;
-        $this->campus = $campus;
+        $this->modalidad = $modalidad;
         $this->docente = $docente;
         $this->context($contexts);
         $this->with($contexts);
@@ -55,7 +61,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     private function context(PublishedContextQuery $contexts): PublishedContext
     {
-        return $this->context ??= $contexts->resolve($this->periodo, $this->campus);
+        return $this->context ??= $contexts->resolve($this->periodo, $this->modalidad, $this->campus);
     }
 
     /**
@@ -86,8 +92,18 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'hours' => PublishedWeek::weeklyHours($groups),
             'selectedDay' => $day,
             'updated' => PublishedWeek::updatedOn($schedule->updatedAt($groups)),
-            'backUrl' => route('published.index', ['periodo' => $this->periodo, 'campus' => $this->campus]),
-            'pdfUrl' => route('published.teacher.pdf', ['periodo' => $this->periodo, 'campus' => $this->campus, 'docente' => $this->docente]),
+            'backUrl' => route('published.index', $this->routeParameters()),
+            'pdfUrl' => route('published.teacher.pdf', [...$this->routeParameters(), 'docente' => $this->docente]),
         ];
+    }
+
+    /**
+     * El periodo, la modalidad y, si hay, el campus del filtro, para las rutas de la consulta.
+     *
+     * @return array<string, string>
+     */
+    private function routeParameters(): array
+    {
+        return ['periodo' => $this->periodo, 'modalidad' => $this->modalidad, ...($this->campus === '' ? [] : ['campus' => $this->campus])];
     }
 };

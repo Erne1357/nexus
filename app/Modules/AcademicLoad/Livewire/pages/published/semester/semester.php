@@ -14,8 +14,9 @@ use Livewire\Component;
 /**
  * Un semestre de una carrera publicado (tarea 4.4, DESIGN.md, «Consulta publicada», variante A «Fichas por
  * materia»): una sección por materia, en orden de clave, con las fichas de sus grupos y la mini-semana de cada uno.
- * Carrera, retícula y semestre son el estado de la URL (`/horarios/{periodo}/{campus}/carrera/{carrera}?reticula=&semestre=`);
- * cambiar uno navega a la URL nueva. Una carrera que no tiene nada publicado en el campus es 404. Solo lee de
+ * Carrera, retícula y semestre son el estado de la URL (`/horarios/{periodo}/{modalidad}/carrera/{carrera}?campus=&reticula=&semestre=`;
+ * M1: lo publicado es por modalidad y el campus es un filtro); cambiar uno navega a la URL nueva. Una carrera que no tiene
+ * nada publicado en la modalidad (o en el campus del filtro) es 404. Solo lee de
  * PublishedScheduleQuery.
  */
 new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
@@ -23,7 +24,13 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
     #[Locked]
     public string $periodo = '';
 
+    /** La clave de la modalidad en la URL (`pres`, M1). */
     #[Locked]
+    public string $modalidad = '';
+
+    /** El campus del filtro (`?campus=`, clave); '' son todos. */
+    #[Locked]
+    #[Url(as: 'campus')]
     public string $campus = '';
 
     /** Código de la carrera de la URL; cambiarlo navega. */
@@ -42,10 +49,10 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     private ?array $resolved = null;
 
-    public function mount(string $periodo, string $campus, string $carrera, PublishedContextQuery $contexts): void
+    public function mount(string $periodo, string $modalidad, string $carrera, PublishedContextQuery $contexts): void
     {
         $this->periodo = $periodo;
-        $this->campus = $campus;
+        $this->modalidad = $modalidad;
         $this->carrera = $carrera;
         $this->resolve($contexts, coerce: false);
     }
@@ -99,7 +106,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             return $this->resolved;
         }
 
-        $context = $contexts->resolve($this->periodo, $this->campus);
+        $context = $contexts->resolve($this->periodo, $this->modalidad, $this->campus);
         $entry = array_find($context->schedule->careers(), fn (array $row): bool => $row['career']['code'] === $this->carrera);
         abort_if($entry === null, 404);
 
@@ -118,7 +125,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
 
     private function url(): string
     {
-        return route('published.semester', ['periodo' => $this->periodo, 'campus' => $this->campus, 'carrera' => $this->carrera, 'reticula' => $this->plan, 'semestre' => $this->semester]);
+        return route('published.semester', [...$this->routeParameters(), 'carrera' => $this->carrera, 'reticula' => $this->plan, 'semestre' => $this->semester]);
     }
 
     /**
@@ -154,8 +161,18 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'careerOptions' => array_map(fn (array $row): array => ['id' => $row['career']['code'], 'name' => $row['career']['name']], $schedule->careers()),
             'planOptions' => array_map(fn (array $row): array => ['id' => $row['plan']['code'], 'name' => $row['plan']['code']], array_reverse($entry['plans'])),
             'semesterOptions' => array_map(fn (int $semester): array => ['id' => $semester, 'name' => 'Semestre '.$semester], $plan['semesters']),
-            'backUrl' => route('published.index', ['periodo' => $this->periodo, 'campus' => $this->campus]),
-            'pdfUrl' => $groups === [] ? null : route('published.semester.pdf', ['periodo' => $this->periodo, 'campus' => $this->campus, 'carrera' => $this->carrera, 'reticula' => $this->plan, 'semestre' => $this->semester]),
+            'backUrl' => route('published.index', $this->routeParameters()),
+            'pdfUrl' => $groups === [] ? null : route('published.semester.pdf', [...$this->routeParameters(), 'carrera' => $this->carrera, 'reticula' => $this->plan, 'semestre' => $this->semester]),
         ];
+    }
+
+    /**
+     * El periodo, la modalidad y, si hay, el campus del filtro, para las rutas de la consulta.
+     *
+     * @return array<string, string>
+     */
+    private function routeParameters(): array
+    {
+        return ['periodo' => $this->periodo, 'modalidad' => $this->modalidad, ...($this->campus === '' ? [] : ['campus' => $this->campus])];
     }
 };

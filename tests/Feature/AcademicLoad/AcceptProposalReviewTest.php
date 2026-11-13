@@ -266,7 +266,7 @@ it('usa el estado de la base y no el de los modelos que llegaron', function () {
 it('M4: sin la carga del departamento en el campus no acepta y dice que se complete la apertura en su modalidad', function () {
     $this->load->delete();
 
-    expect(acceptErrors())->toBe(['load' => ['CB no tiene carga en C2 para el periodo 20271: completa la apertura del periodo en Presencial para crearla.']])
+    expect(acceptErrors())->toBe(['load' => ['CB no tiene carga en Presencial para el periodo 20271: completa la apertura del periodo en Presencial para crearla.']])
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
 });
 

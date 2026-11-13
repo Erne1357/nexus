@@ -20,14 +20,19 @@ use Livewire\Component;
  * Inicio de la consulta pública de horarios publicados (tarea 4.4, DESIGN.md, «Consulta publicada», variante A
  * «Fichas por materia»): lo principal es «Por carrera» (cada carrera con su retícula y los botones de semestre que
  * tienen grupos); a un lado, el buscador de docentes y el de salones. Solo lee de PublishedScheduleQuery. El
- * periodo y el campus son `?periodo=&campus=`; sin ellos, el primer campus del primer periodo publicado. Quien tiene
- * sesión y puede ver las cargas del campus ve, además, qué departamentos faltan por publicar (P7).
+ * periodo y la modalidad son `?periodo=&modalidad=` (M1); sin ellos, la primera modalidad del primer periodo publicado.
+ * `?campus=` filtra los grupos de ese campus; sin él, los de todos. Quien tiene sesión y puede ver las cargas de la
+ * modalidad ve, además, qué departamentos faltan por publicar (P7).
  */
 new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
 {
     #[Url(as: 'periodo')]
     public string $periodo = '';
 
+    #[Url(as: 'modalidad')]
+    public string $modalidad = '';
+
+    /** El campus del filtro (clave); '' son todos. */
     #[Url(as: 'campus')]
     public string $campus = '';
 
@@ -49,7 +54,7 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
      */
     public function with(PublishedContextQuery $contexts, PublishedScheduleQuery $published, Actor $actor): array
     {
-        $context = $contexts->initial($this->periodo, $this->campus);
+        $context = $contexts->initial($this->periodo, $this->modalidad, $this->campus);
 
         if ($context === null) {
             return ['context' => null];
@@ -71,9 +76,11 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'department' => $load->department->code.' · '.$load->department->name,
             'status' => $load->status->label(),
         ], array_values(array_filter(
-            $actor->user() === null ? [] : $published->unpublished($context->term, $context->campus),
+            $actor->user() === null ? [] : $published->unpublished($context->term, $context->modality),
             fn (AcademicLoad $load): bool => $actor->allows(AcademicLoadPermission::LoadView, Target::of(modality: $load->modality_id, unit: $load->department_id)),
         )));
+
+        $staffParameters = ['periodo' => $context->term->code, 'modalidad' => PublishedContextQuery::modalityKey($context->modality)];
 
         return [
             'context' => $context,
@@ -83,12 +90,13 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'teachers' => $teacherNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->teachers(), fn (array $teacher): bool => str_contains(PublishedWeek::fold($teacher['name']), $teacherNeedle))), 0, 8),
             'rooms' => ! $profile->usesRooms || $roomNeedle === '' ? [] : array_slice(array_values(array_filter($schedule->rooms(), fn (array $room): bool => str_contains(PublishedWeek::fold($room['code'].' '.$room['name'].' '.$room['building']), $roomNeedle))), 0, 8),
             'unpublished' => $unpublished,
-            'staffExports' => $actor->user() !== null && $actor->allowsAny(CampusWorkbook::requiredPermission()) && ($workbook = CampusWorkbook::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $workbook) ? [
-                'excel' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'excel']),
-                'department' => route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'departamento']),
+            'routeParameters' => $context->routeParameters(),
+            'staffExports' => $actor->user() !== null && $actor->allowsAny(CampusWorkbook::requiredPermission()) && ($workbook = CampusWorkbook::fromRequest($published, $context->term, $context->modality, request())) !== null && Gate::allows('download', $workbook) ? [
+                'excel' => route('published.export', [...$staffParameters, 'tipo' => 'excel']),
+                'department' => route('published.export', [...$staffParameters, 'tipo' => 'departamento']),
                 'departments' => collect($schedule->loads)->map(fn (array $load): array => $load['department'])->sortBy('code')->values()->all(),
-                'sii' => ($sii = SiiFilesExport::fromRequest($published, $context->term, $context->campus, request())) !== null && Gate::allows('download', $sii)
-                    ? route('published.export', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'tipo' => 'sii'])
+                'sii' => ($sii = SiiFilesExport::fromRequest($published, $context->term, $context->modality, request())) !== null && Gate::allows('download', $sii)
+                    ? route('published.export', [...$staffParameters, 'tipo' => 'sii'])
                     : null,
             ] : null,
         ];

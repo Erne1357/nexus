@@ -459,3 +459,26 @@ describe('datos de la vista', function () {
         'docente' => ['academic-load::pages.published.teacher', fn ($test): array => ['periodo' => '20271', 'campus' => 'C2', 'docente' => $test->laura['id']]],
     ]);
 });
+
+describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
+    it('la liga vieja por campus redirige a la de su modalidad con el campus como filtro', function () {
+        $this->get('/horarios/20271/C2/carrera/ISC?reticula=ISIC-2010-224&semestre=3')
+            ->assertRedirect(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC', 'campus' => 'C2', 'reticula' => 'ISIC-2010-224', 'semestre' => '3']));
+        $this->get('/horarios/20271/C1/docente/'.$this->laura['id'])
+            ->assertRedirect(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $this->laura['id'], 'campus' => 'C1']));
+    });
+
+    it('MS13: una foto vieja, con el campus en la raíz, se lee como presencial con ese campus en cada grupo', function () {
+        $load = AcademicLoad::factory()->for($this->term)->for(modalityOf('PRES'))
+            ->for(Department::factory()->create(['code' => 'VIE', 'name' => 'Departamento viejo']))->inStatus(LoadStatus::Published)->create();
+        $payload = LoadSnapshotFactory::payload($load, 1, User::factory()->create(), [
+            publishedPagesGroup('VIE-0001', 'Materia de la foto vieja', 'A', ['placements' => [($this->placement)()]]),
+        ], CarbonImmutable::parse('2026-12-01 09:00'));
+        LoadSnapshot::factory()->for($load)->create(['payload' => legacySnapshotPayload($payload, $this->c1)]);
+
+        $semester = fn (string $campus) => route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC', 'campus' => $campus, 'reticula' => 'ISIC-2010-224', 'semestre' => 3]);
+
+        $this->get($semester('C1'))->assertOk()->assertSee('Materia de la foto vieja');
+        $this->get($semester('C2'))->assertOk()->assertDontSee('Materia de la foto vieja')->assertSee('Cálculo Vectorial');
+    });
+});

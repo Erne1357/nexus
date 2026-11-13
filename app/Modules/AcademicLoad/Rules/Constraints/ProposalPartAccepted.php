@@ -8,8 +8,8 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 
 /**
- * HC-20 (supuesto por confirmar): la carga de un departamento en un campus no sale de borrador sin al menos una
- * parte aceptada del departamento en una propuesta de carrera del mismo periodo y campus. Es la condición
+ * HC-20 (supuesto por confirmar): la carga de un departamento en una modalidad (M1) no sale de borrador sin al menos una
+ * parte aceptada del departamento en una propuesta de carrera del mismo periodo y modalidad, de cualquiera de sus campus. Es la condición
  * «propuestas de carrera aceptadas» del diagrama de docs/proceso/proceso-propuesto.md. Una parte aceptada cuenta
  * aunque su propuesta esté regresada por otro departamento: lo aceptado ya no cambia.
  */
@@ -30,7 +30,7 @@ final class ProposalPartAccepted
             ->whereIn('career_proposal_id', CareerProposal::query()
                 ->select('id')
                 ->where('term_id', $load->term_id)
-                ->where('campus_id', $load->campus_id))
+                ->where('modality_id', $load->modality_id))
             ->sharedLock()
             ->exists();
 

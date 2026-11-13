@@ -3,7 +3,6 @@
 namespace App\Modules\AcademicLoad\Exports;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
-use App\Modules\AcademicLoad\Exports\Concerns\ResolvesCampusModality;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
@@ -11,6 +10,7 @@ use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekTime;
 use Carbon\CarbonImmutable;
@@ -19,7 +19,8 @@ use Dompdf\Options;
 
 /**
  * Lo común de los PDF públicos de lo publicado (tarea 4.5; ADR-0021): uno por carrera y semestre, docente o salón,
- * descargable sin sesión desde la consulta. Guarda solo ids, claves y los ids de las versiones publicadas que lee
+ * descargable sin sesión desde la consulta. Lo publicado es por modalidad (M1); con el campus de la consulta (`?campus=`)
+ * el PDF lleva solo los grupos de ese campus, y su nombre dice el campus en lugar de la modalidad. Guarda solo ids, claves y los ids de las versiones publicadas que lee
  * (PublishedScheduleQuery::snapshotIds()): la cola lo serializa ligero, su llave cambia con cada versión nueva y el
  * archivo se arma con esas versiones exactas aunque otra se publique mientras espera en la cola.
  * Arma el HTML con una vista Blade de `academic-load::pdf` y lo pasa por DomPDF en carta, sin acceso remoto y con
@@ -27,18 +28,18 @@ use Dompdf\Options;
  */
 abstract class PublishedPdf implements PublishedExport
 {
-    use ResolvesCampusModality;
-
     /** Los tokens `chain-N` del tema claro de DESIGN.md: el PDF no carga `app.css`. */
     public const array CHAINS = ['#6d4fc2', '#0f7c8c', '#b0457f', '#c2661a', '#3b56b8', '#6b7a1f', '#1f86c7', '#8a5a3c', '#4d6b7a', '#9c4fd1', '#2f8f5b', '#c24f9b'];
 
     public function __construct(
         public readonly string $termId,
-        public readonly string $campusId,
+        public readonly string $modalityId,
         public readonly string $termCode,
-        public readonly string $campusCode,
+        public readonly string $modalityCode,
         /** @var list<string> */
         public readonly array $snapshotIds,
+        /** El campus del filtro (clave), o null para todos los de la modalidad. */
+        public readonly ?string $campusCode = null,
     ) {}
 
     /**
@@ -55,11 +56,19 @@ abstract class PublishedPdf implements PublishedExport
      *
      * @return array{0: string, 1: array<string, mixed>, 2: string} vista, datos y orientación
      */
-    abstract protected function document(PublishedSchedule $schedule, Term $term, Campus $campus): array;
+    abstract protected function document(PublishedSchedule $schedule, Term $term, Modality $modality): array;
 
     public function key(): string
     {
-        return $this->kind().'-'.hash('xxh128', implode('|', [$this->termId, $this->campusId, ...$this->subject(), ...$this->snapshotIds]));
+        return $this->kind().'-'.hash('xxh128', implode('|', [$this->termId, $this->modalityId, $this->campusCode ?? '*', ...$this->subject(), ...$this->snapshotIds]));
+    }
+
+    /**
+     * Dónde, para el nombre del archivo: el campus del filtro o, sin él, la clave de la modalidad.
+     */
+    protected function place(): string
+    {
+        return $this->campusCode ?? $this->modalityCode;
     }
 
     public function mimeType(): string
@@ -74,17 +83,19 @@ abstract class PublishedPdf implements PublishedExport
 
     public function scope(): Target
     {
-        return Target::of(modality: $this->modalityId($this->campusId));
+        return Target::of(modality: $this->modalityId);
     }
 
     public function build(): string
     {
         $term = Term::query()->findOrFail($this->termId);
-        $campus = Campus::query()->findOrFail($this->campusId);
-        [$view, $data, $orientation] = $this->document(app(PublishedScheduleQuery::class)->scheduleOf($term, $campus, $this->snapshotIds), $term, $campus);
+        $modality = Modality::withTrashed()->findOrFail($this->modalityId);
+        $campus = $this->campusCode === null ? null : Campus::withTrashed()->where('code', $this->campusCode)->first();
+        $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $modality, $this->snapshotIds)->onlyCampus($this->campusCode);
+        [$view, $data, $orientation] = $this->document($schedule, $term, $modality);
 
         $pdf = new Dompdf(self::options());
-        $pdf->loadHtml(view($view, [...$data, 'term' => $term, 'campus' => $campus])->render(), 'UTF-8');
+        $pdf->loadHtml(view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus])->render(), 'UTF-8');
         $pdf->setPaper('letter', $orientation);
         $pdf->render();
 

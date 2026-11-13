@@ -157,7 +157,7 @@ it('dice por qué no se puede publicar', function (Closure $arrange, string $rea
         test()->campus->update(['settings' => ['requires_subdireccion_approval' => true]]);
 
         return User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
-    }, 'En este campus publica Subdirección, después de su visto bueno.'],
+    }, 'En esta modalidad publica Subdirección, después de su visto bueno.'],
 ]);
 
 it('quien no puede publicar no abre la confirmación', function () {
@@ -222,7 +222,7 @@ it('con visto bueno, el jefe no publica la carga aprobada', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
 
     Livewire::actingAs($jefe)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
-        ->assertSee('En este campus publica Subdirección, después de su visto bueno.')
+        ->assertSee('En esta modalidad publica Subdirección, después de su visto bueno.')
         ->call('confirm')
         ->assertForbidden();
 });

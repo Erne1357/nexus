@@ -39,6 +39,7 @@
     @if ($inbox === null)
         <div>
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
+            <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
             <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="inbox-empty">{{ $message }}</div>
@@ -51,6 +52,7 @@
                     <span>{{ $inbox->campus->name }}</span>
                     <span data-testid="inbox-term">{{ $inbox->term->name }}</span>
                 </p>
+                <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
                 <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
             </div>
 

@@ -16,8 +16,8 @@
     $chainOf = fn (string $code): string => PublishedWeek::chainClass($chains, $code);
     $tint = 'bg-[color-mix(in_oklab,var(--chain)_9%,var(--color-base-100))] shadow-[inset_4px_0_0_var(--chain)]';
     $plural = fn (int $n, string $one, string $many): string => $n.' '.($n === 1 ? $one : $many);
-    $roomUrl = fn (string $id): string => route('published.room', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'salon' => $id]);
-    $teacherUrl = fn (string $id): string => route('published.teacher', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'docente' => $id]);
+    $roomUrl = fn (string $id): string => route('published.room', [...$context->routeParameters(), 'salon' => $id]);
+    $teacherUrl = fn (string $id): string => route('published.teacher', [...$context->routeParameters(), 'docente' => $id]);
     $dayName = fn (int $day): string => array_find($grid->days, fn (array $row): bool => $row['day'] === $day)['name'] ?? '';
     $placeOf = function ($group): ?array {
         $placement = array_find($group->placements, fn (array $row): bool => $row['is_owner']) ?? ($group->placements[0] ?? null);
@@ -40,7 +40,7 @@
                     <span class="font-medium text-base-content">{{ $subtitle }}</span>
                 @endif
                 <span data-testid="published-facts"><span class="font-medium text-base-content">{{ $plural(count($groups), 'grupo', 'grupos') }}</span> · <span class="font-mono">{{ $hours }}</span> {{ $hours === 1 ? 'hora' : 'horas' }} a la semana</span>
-                <span>{{ $context->campus->name }}</span>
+                <span>{{ $context->campus?->name ?? $context->modality->name }}</span>
             </p>
             @if ($updated !== '')
                 <p class="flex items-center gap-1.5 text-sm text-neutral" data-testid="published-updated"><x-icon name="o-clock" class="h-4 w-4" aria-hidden="true" />Actualizado el {{ $updated }}</p>

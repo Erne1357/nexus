@@ -193,6 +193,29 @@ function modalityOf(string $code): Modality
 }
 
 /**
+ * Una foto con la forma v1 (MS13): el campus en la raíz y los grupos sin campus, como las que se publicaron antes de la
+ * carga por modalidad. Sale de una v2 (la de LoadSnapshotFactory) quitándole la modalidad y el campus de cada grupo.
+ *
+ * @param  array<string, mixed>  $payload
+ * @return array<string, mixed>
+ */
+function legacySnapshotPayload(array $payload, Campus $campus): array
+{
+    $legacy = ['schema_version' => 1];
+
+    foreach ($payload as $key => $value) {
+        match ($key) {
+            'schema_version' => null,
+            'modality' => $legacy['campus'] = ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name],
+            'groups' => $legacy['groups'] = array_map(fn (array $group): array => array_diff_key($group, ['campus' => true]), $value),
+            default => $legacy[$key] = $value,
+        };
+    }
+
+    return $legacy;
+}
+
+/**
  * Deja libre un puesto exclusivo (AZ-S7: una Subdirección y un jefe por unidad en cada fecha) para nombrar a otra
  * persona desde hoy: los nombramientos de `$role` en la unidad que empezaron antes de hoy terminan ayer, como un
  * relevo, y los que empiezan hoy o después se borran. La Subdirección va, sin `$orgUnitId`, en Subdirección

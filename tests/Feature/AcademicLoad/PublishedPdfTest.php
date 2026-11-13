@@ -17,6 +17,7 @@ use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
@@ -61,7 +62,7 @@ beforeEach(function () {
 
 function publishedPdfUrl(string $name, array $parameters): string
 {
-    return route($name, ['periodo' => '20271', 'campus' => 'C2', ...$parameters]);
+    return route($name, ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', ...$parameters]);
 }
 
 it('descarga sin sesión el PDF de un semestre publicado, con su nombre', function () {
@@ -228,4 +229,22 @@ it('DomPDF corre sin acceso remoto, sin PHP ni JavaScript y solo lee resources/i
 
 it('un periodo o campus con caracteres raros es 404 en la descarga, sin llegar a la base', function () {
     $this->get('/horarios/20271%27/C2/docente/'.$this->teacher['id'].'/pdf')->assertNotFound();
+});
+
+it('MS13: arma el PDF del semestre con una foto vieja, con el campus en la raíz', function () {
+    $load = AcademicLoad::factory()->for($this->term)->for(modalityOf('PRES'))->for(Department::factory())->inStatus(LoadStatus::Published)->create();
+    $payload = LoadSnapshotFactory::payload($load, 1, User::factory()->create(), [LoadSnapshotFactory::group([
+        'code' => 'V', 'subject' => ['id' => (string) Str::uuid7(), 'code' => 'VIE-0001', 'name' => 'Materia de la foto vieja', 'credits' => 4, 'theory_hours' => 2, 'practice_hours' => 2, 'department_id' => (string) Str::uuid7()],
+        'teacher' => $this->teacher, 'placements' => [LoadSnapshotFactory::placement(['career' => $this->career, 'study_plan' => $this->plan, 'semester' => 3])],
+    ])], CarbonImmutable::parse('2026-12-01 09:00'));
+    LoadSnapshot::factory()->for($load)->create(['payload' => legacySnapshotPayload($payload, $this->campus)]);
+
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
+    $subjects = SemesterPdf::subjects($schedule->semester($this->career['id'], $this->plan['id'], 3), $schedule);
+
+    expect(array_column($subjects, 'code'))->toContain('VIE-0001')
+        ->and(collect($schedule->groups())->firstWhere('code', 'V')->campus['code'])->toBe('C2');
+
+    $this->get(publishedPdfUrl('published.semester.pdf', ['carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3]))
+        ->assertOk()->assertHeader('Content-Type', 'application/pdf');
 });

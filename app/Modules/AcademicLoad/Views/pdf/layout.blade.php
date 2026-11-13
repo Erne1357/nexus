@@ -1,5 +1,5 @@
 {{-- Marco común de los PDF de lo publicado (ADR-0021): carta, DejaVu Sans, los colores de DESIGN.md escritos aquí porque
-     DomPDF no carga app.css. Encabezado con la institución, el título y el campus y periodo; pie con la fecha de
+     DomPDF no carga app.css. Encabezado con la institución, el título y la modalidad (o el campus del filtro) y el periodo; pie con la fecha de
      actualización y el número de página. --}}
 <!DOCTYPE html>
 <html lang="es">
@@ -29,7 +29,7 @@
     <header>
         <table><tr>
             <td style="border: 0; padding: 0;"><span class="brand">Nexus · Horarios</span><br><span class="org">Instituto Tecnológico de Ciudad Juárez</span></td>
-            <td style="border: 0; padding: 0; text-align: right;" class="org">{{ $campus->name }} · {{ $term->name }}</td>
+            <td style="border: 0; padding: 0; text-align: right;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}</td>
         </tr></table>
     </header>
     <footer>

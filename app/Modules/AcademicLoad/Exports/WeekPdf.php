@@ -5,14 +5,14 @@ namespace App\Modules\AcademicLoad\Exports;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Core\Support\WeekTime;
 
 /**
  * El PDF de una semana (tarea 4.5): el de un docente o el de un salón, que eligió el usuario el 10 de noviembre de 2026
- * para que quepa en una sola hoja. Una tabla con una columna por día y un renglón por bloque del perfil del campus
+ * para que quepa en una sola hoja. Una tabla con una columna por día y un renglón por bloque del perfil de la modalidad
  * (WeekGrid), donde cada sesión es una celda que abarca sus bloques (`rowspan`), con el color de su materia. Un
  * docente o un salón no tienen dos sesiones a la vez en un campus (HC-01, HC-02); si llegaran a tenerlas, la que
  * empieza dentro de otra se lista en la misma celda, que se alarga hasta la última.
@@ -35,7 +35,7 @@ abstract class WeekPdf extends PublishedPdf
      */
     abstract protected function detailOf(PublishedGroup $group, array $session): array;
 
-    protected function document(PublishedSchedule $schedule, Term $term, Campus $campus): array
+    protected function document(PublishedSchedule $schedule, Term $term, Modality $modality): array
     {
         $groups = $this->groupsOf($schedule);
 

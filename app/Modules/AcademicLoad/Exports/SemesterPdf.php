@@ -7,47 +7,50 @@ use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Queries\PublishedSession;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekGrid;
 
 /**
  * El PDF de una carrera, retícula y semestre (tarea 4.5): la tabla tipo SII que eligió el usuario el 10 de noviembre de
  * 2026, en carta horizontal. Un renglón por materia y, debajo, uno por grupo con su docente y una columna por día del
- * perfil del campus con sus horas, su salón y si es práctica o virtual. Público.
+ * perfil de la modalidad con sus horas, su salón y si es práctica o virtual; el campus de cada grupo va junto a su clave
+ * (M1). Público.
  */
 final class SemesterPdf extends PublishedPdf
 {
     public function __construct(
         string $termId,
-        string $campusId,
+        string $modalityId,
         string $termCode,
-        string $campusCode,
+        string $modalityCode,
         array $snapshotIds,
         public readonly string $careerId,
         public readonly string $careerCode,
         public readonly string $planId,
         public readonly string $planCode,
         public readonly int $semester,
+        ?string $campusCode = null,
     ) {
-        parent::__construct($termId, $campusId, $termCode, $campusCode, $snapshotIds);
+        parent::__construct($termId, $modalityId, $termCode, $modalityCode, $snapshotIds, $campusCode);
     }
 
     /**
-     * El PDF de esa carrera, retícula (por clave) y semestre si están publicados; null si no, para responder 404 sin
-     * encolar nada.
+     * El PDF de esa carrera, retícula (por clave) y semestre si están publicados en la modalidad (y en el campus del
+     * filtro, si hay); null si no, para responder 404 sin encolar nada.
      */
-    public static function find(PublishedScheduleQuery $query, Term $term, Campus $campus, string $careerCode, string $planCode, int $semester): ?self
+    public static function find(PublishedScheduleQuery $query, Term $term, Modality $modality, ?Campus $campus, string $careerCode, string $planCode, int $semester): ?self
     {
-        $ids = $query->snapshotIds($term, $campus);
+        $ids = $query->snapshotIds($term, $modality);
 
-        foreach ($ids === [] ? [] : $query->scheduleOf($term, $campus, $ids)->careers() as $career) {
+        foreach ($ids === [] ? [] : $query->scheduleOf($term, $modality, $ids)->onlyCampus($campus?->code)->careers() as $career) {
             if ($career['career']['code'] !== $careerCode) {
                 continue;
             }
 
             foreach ($career['plans'] as $plan) {
                 if ($plan['plan']['code'] === $planCode && in_array($semester, $plan['semesters'], true)) {
-                    return new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, $career['career']['id'], $careerCode, $plan['plan']['id'], $planCode, $semester);
+                    return new self($term->getKey(), $modality->getKey(), $term->code, $modality->code, $ids, $career['career']['id'], $careerCode, $plan['plan']['id'], $planCode, $semester, $campus?->code);
                 }
             }
         }
@@ -57,7 +60,7 @@ final class SemesterPdf extends PublishedPdf
 
     public function filename(): string
     {
-        return self::clean("Horario {$this->careerCode} semestre {$this->semester} - {$this->termCode} {$this->campusCode}").'.pdf';
+        return self::clean("Horario {$this->careerCode} semestre {$this->semester} - {$this->termCode} {$this->place()}").'.pdf';
     }
 
     protected function kind(): string
@@ -70,7 +73,7 @@ final class SemesterPdf extends PublishedPdf
         return [$this->careerId, $this->planId, $this->semester];
     }
 
-    protected function document(PublishedSchedule $schedule, Term $term, Campus $campus): array
+    protected function document(PublishedSchedule $schedule, Term $term, Modality $modality): array
     {
         $groups = $schedule->semester($this->careerId, $this->planId, $this->semester);
         $career = collect($schedule->careers())->firstWhere('career.id', $this->careerId)['career'] ?? ['name' => $this->careerCode];
@@ -85,7 +88,7 @@ final class SemesterPdf extends PublishedPdf
     }
 
     /**
-     * Los días del perfil del campus más los de las sesiones que caen fuera (un sábado), como las páginas.
+     * Los días del perfil de la modalidad más los de las sesiones que caen fuera (un sábado), como las páginas.
      *
      * @param  list<PublishedGroup>  $groups
      * @return list<array{day: int, name: string}>
@@ -108,7 +111,7 @@ final class SemesterPdf extends PublishedPdf
      *
      * @param  list<PublishedGroup>  $groups
      *                                        La capacidad y la marca de préstamo solo las pinta el PDF del personal (DepartmentPdf).
-     * @return list<array{code: string, name: string, credits: int, color: string, groups: list<array{code: string, teacher: string, capacity: int, cells: array<int, list<array{hours: string, place: string, kind: ?string, loan: bool}>>}>}>
+     * @return list<array{code: string, name: string, credits: int, color: string, groups: list<array{code: string, campus: ?string, teacher: string, capacity: int, cells: array<int, list<array{hours: string, place: string, kind: ?string, loan: bool}>>}>}>
      */
     public static function subjects(array $groups, PublishedSchedule $schedule): array
     {
@@ -133,7 +136,7 @@ final class SemesterPdf extends PublishedPdf
                 $cells[$session->day][] = [...self::session($session), 'loan' => $session->isLoanedTo($group->departmentId)];
             }
 
-            $subjects[$code]['groups'][] = ['code' => $group->code, 'teacher' => self::teacherOf($group), 'capacity' => $group->capacity, 'cells' => $cells];
+            $subjects[$code]['groups'][] = ['code' => $group->code, 'campus' => $group->campus['code'] ?? null, 'teacher' => self::teacherOf($group), 'capacity' => $group->capacity, 'cells' => $cells];
         }
 
         return array_values($subjects);

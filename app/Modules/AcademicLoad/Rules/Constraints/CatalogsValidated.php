@@ -6,14 +6,14 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Illuminate\Support\Arr;
 
 /**
- * HC-14 (como la reescribe D2): la carga de un departamento no sale de borrador hasta que estén validados
- * los cuatro catálogos generales del departamento en el periodo y, si el perfil del campus usa salones, los
- * salones del departamento en el campus. La misma condición la exige el departamento para aceptar su parte de
+ * HC-14 (como la reescribe D2): la carga de un departamento en una modalidad (M1) no sale de borrador hasta que estén
+ * validados los cuatro catálogos generales del departamento en el periodo y, si el perfil de la modalidad usa salones,
+ * los salones del departamento (una revisión para todos los campus, decisión 6). La misma condición la exige el departamento para aceptar su parte de
  * una propuesta de carrera (AcceptProposalReview; confirmado el 2 de noviembre de 2026).
  */
 final class CatalogsValidated
@@ -27,22 +27,22 @@ final class CatalogsValidated
      */
     public function reasons(AcademicLoad $load): array
     {
-        $load->loadMissing('campus');
+        $load->loadMissing('modality');
 
-        return $this->reasonsFor($load->term_id, $load->campus, $load->department_id);
+        return $this->reasonsFor($load->term_id, $load->modality, $load->department_id);
     }
 
     /**
-     * El motivo de bloqueo de un departamento en un campus y un periodo, o nada si no falta ningún catálogo. Lee
+     * El motivo de bloqueo de un departamento en una modalidad y un periodo, o nada si no falta ningún catálogo. Lee
      * las revisiones con bloqueo compartido: quien llama ya bloqueó lo que va a cambiar (la carga, en
      * TransitionLoad; la parte, en AcceptProposalReview) y sin esto una revisión des-validada en paralelo podría
      * colarse entre la lectura y la escritura.
      *
      * @return list<string>
      */
-    public function reasonsFor(Term|string $term, Campus $campus, Department|string $department): array
+    public function reasonsFor(Term|string $term, Modality $modality, Department|string $department): array
     {
-        $pending = $this->reviews->pendingFor($term, $campus, $department, lock: true);
+        $pending = $this->reviews->pendingFor($term, $modality, $department, lock: true);
 
         if ($pending === []) {
             return [];
