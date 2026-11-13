@@ -301,3 +301,15 @@ it('M8, HC-13: el grupo creado desde la fila de C2 es de C2, y el de la fila de 
     Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event): bool => $event->campusId === $c1->id && count($event->groupIds) === 2);
     Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event): bool => $event->campusId === $c2->id && count($event->groupIds) === 1);
 });
+
+it('MS4: una fila sin campus todavía no da grupos; la de su campus sí', function () {
+    $subject = createGroupsSubject($this->cb, ['code' => 'ACF-0901']);
+    $withoutCampus = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => null, 'subject_id' => $subject->id, 'study_plan_id' => $this->plan->id, 'requested_groups' => 2]);
+    $inCampus = createGroupsItem(createGroupsSubject($this->cb, ['code' => 'ACF-0902']), 1);
+
+    $groups = createGroupsFor();
+
+    expect($groups)->toHaveCount(1)
+        ->and(Group::query()->where('proposal_item_id', $withoutCampus->id)->exists())->toBeFalse()
+        ->and(Group::query()->where('proposal_item_id', $inCampus->id)->count())->toBe(1);
+});
