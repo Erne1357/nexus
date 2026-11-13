@@ -5,31 +5,33 @@ use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\OpenTerm;
-use App\Modules\Core\Actions\UpdateCampus;
+use App\Modules\Core\Actions\UpdateModality;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 
 /*
-| Si un campus empieza a usar salones, se completan las revisiones de salones que falten en los periodos abiertos en su
-| modalidad (M4; puente `campuses.modality_id`) donde el admin ya abrió el catálogo de salones (CV9): una por
-| departamento y periodo, sin campus (decisión 6, confirmada el 12 de noviembre de 2026). Donde los salones no se
-| abrieron, o el periodo no se abrió en esa modalidad, no se crea nada, y repetirlo no duplica.
+| Si una modalidad empieza a usar salones, se completan las revisiones de salones que falten en los periodos abiertos en
+| ella (M4) donde el admin ya abrió el catálogo de salones (CV9): una por departamento y periodo, sin campus (decisión 6,
+| confirmada el 12 de noviembre de 2026). Donde los salones no se abrieron, o el periodo no se abrió en esa modalidad, no
+| se crea nada, y repetirlo no duplica. El perfil es de la modalidad, no del campus (MS1, MS3).
 */
 
 beforeEach(function () {
     $this->admin = User::factory()->admin()->create();
     $this->actingAs($this->admin);
 
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    Campus::factory()->create(['code' => 'C2']);
+    $this->online = Modality::factory()->create(['code' => 'M01', 'settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
     $this->opened = Term::factory()->create(['code' => '20271']);
     $this->notOpened = Term::factory()->create(['code' => '20272']);
     Department::factory()->create(['code' => 'D1']);
 
-    // C1 y C2 son de Presencial: el periodo se abre una vez para los dos (M4).
+    // Presencial, con salones, deja abrir el catálogo de salones; la otra modalidad se abre en el mismo periodo.
     app(OpenTerm::class)->handle($this->opened, modalityOf('PRES'));
+    app(OpenTerm::class)->handle($this->opened, $this->online);
 });
 
 function roomsReviews(Term $term): int
@@ -37,16 +39,16 @@ function roomsReviews(Term $term): int
     return CatalogReview::query()->where('term_id', $term->id)->where('catalog', Catalog::Rooms->value)->count();
 }
 
-function campusUsesRooms(Campus $campus): void
+function modalityUsesRooms(Modality $modality, array $extra = []): void
 {
-    app(UpdateCampus::class)->handle($campus, ['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => true]]);
+    app(UpdateModality::class)->handle($modality, ['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => true, ...$extra]]);
 }
 
-it('CV9: completa las de salones del periodo donde se abrieron cuando otro campus empieza a usar salones', function () {
+it('CV9: completa las de salones del periodo donde se abrieron cuando otra modalidad empieza a usar salones', function () {
     app(OpenCatalogValidation::class)->handle($this->opened, [Catalog::Rooms], $this->admin);
     Department::factory()->create(['code' => 'D2']);
 
-    campusUsesRooms($this->c1);
+    modalityUsesRooms($this->online);
 
     expect(roomsReviews($this->opened))->toBe(2)
         ->and(roomsReviews($this->notOpened))->toBe(0)
@@ -56,20 +58,21 @@ it('CV9: completa las de salones del periodo donde se abrieron cuando otro campu
 it('CV9: si el admin no abrió los salones en el periodo, el cambio de perfil no los crea', function () {
     app(OpenCatalogValidation::class)->handle($this->opened, [Catalog::Teachers], $this->admin);
 
-    campusUsesRooms($this->c1);
+    modalityUsesRooms($this->online);
 
     expect(roomsReviews($this->opened))->toBe(0);
 });
 
-it('no duplica si se vuelve a guardar el perfil, y no crea nada si el campus no usa salones', function () {
+it('no duplica si se vuelve a guardar el perfil, y no crea nada si la modalidad no usa salones', function () {
     app(OpenCatalogValidation::class)->handle($this->opened, [Catalog::Rooms], $this->admin);
     Department::factory()->create(['code' => 'D2']);
 
-    app(UpdateCampus::class)->handle($this->c1, ['name' => 'Otro nombre']);
+    app(UpdateModality::class)->handle($this->online, ['name' => 'Otro nombre']);
+    app(UpdateModality::class)->handle($this->online, ['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false, 'days' => [1, 2, 3]]]);
     expect(roomsReviews($this->opened))->toBe(1);
 
-    campusUsesRooms($this->c1);
-    app(UpdateCampus::class)->handle($this->c1, ['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => true, 'requires_subdireccion_approval' => true]]);
+    modalityUsesRooms($this->online);
+    modalityUsesRooms($this->online, ['requires_subdireccion_approval' => true]);
 
     expect(roomsReviews($this->opened))->toBe(2);
 });

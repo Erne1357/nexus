@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\ImportsServiceProvider;
@@ -31,7 +30,7 @@ class CampusesWithActiveTemplate extends CampusesTemplate
  * Campus cuya clave natural no es asignable en masa: así suele quedar `campus_id` en un catálogo de
  * un campus, que lo pone el sistema y no el formulario.
  */
-#[Fillable(['name', 'modality', 'settings', 'is_active'])]
+#[Fillable(['name', 'is_active'])]
 class CampusWithGuardedCode extends Campus
 {
     protected $table = 'campuses';
@@ -55,7 +54,7 @@ function campusImportRow(array $overrides = []): array
     return [
         'code' => 'C9',
         'name' => 'Campus Nueve',
-        'modality' => Modality::Presencial->value,
+        'modality' => 'presencial',
         ...$overrides,
     ];
 }
@@ -131,12 +130,11 @@ describe('apply', function () {
             ->and($campus->fresh())
             ->code->toBe('C9')
             ->name->toBe('Campus Nueve')
-            ->is_active->toBeTrue()
-            ->settings->not->toBeEmpty();
+            ->is_active->toBeTrue();
     });
 
     it('cambia el registro existente por su clave natural sin duplicarlo ni pisar lo que no viene', function () {
-        $existing = Campus::factory()->create(['code' => 'C9', 'name' => 'Viejo', 'settings' => ['days' => [1, 2, 3, 4, 5, 6]]]);
+        $existing = Campus::factory()->inactive()->create(['code' => 'C9', 'name' => 'Viejo']);
 
         $campus = (new CampusesTemplate)->apply(campusImportRow(['name' => 'Nuevo']), campusImportContext());
 
@@ -145,17 +143,16 @@ describe('apply', function () {
             ->and($campus->wasChanged('name'))->toBeTrue()
             ->and(Campus::count())->toBe(1)
             ->and($existing->fresh()->name)->toBe('Nuevo')
-            ->and($existing->fresh()->settings)->toBe(['days' => [1, 2, 3, 4, 5, 6]]);
+            ->and($existing->fresh()->is_active)->toBeFalse();
     });
 
     it('un cambio no pisa con null lo que el archivo trae vacío', function () {
         $existing = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus Nueve']);
 
-        (new CampusesTemplate)->apply(campusImportRow(['name' => null, 'modality' => Modality::Mixta->value]), campusImportContext());
+        (new CampusesTemplate)->apply(campusImportRow(['name' => null, 'modality' => 'mixta']), campusImportContext());
 
         expect($existing->fresh())
-            ->name->toBe('Campus Nueve')
-            ->modality->toBe(Modality::Mixta);
+            ->name->toBe('Campus Nueve');
     });
 
     it('fija la clave natural en un alta aunque el modelo no la deje asignar en masa', function () {

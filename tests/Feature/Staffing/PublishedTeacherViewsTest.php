@@ -32,15 +32,16 @@ beforeEach(function () {
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     modalityOf('EAD')->update(['is_active' => true]);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]);
+    // Los grupos de Campus I son de EAD en estas pruebas (publishedViewGroup): el campus es solo el lugar (MS3).
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->me = Teacher::factory()->adscribedTo($this->sc)->create(['name' => 'Marisol Quiñones']);
     $this->user = User::factory()->withRole(Role::Docente)->create();
     $this->me->update(['user_id' => $this->user->id]);
     $this->colleague = Teacher::factory()->adscribedTo($this->sc)->create(['name' => 'Óscar Nájera']);
 
-    $this->scC2 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->c2->modality_id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
-    $this->scC1 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->c1->modality_id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
+    $this->scC2 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
+    $this->scC1 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
 
     $buildingC2 = Building::factory()->create(['campus_id' => $this->c2->id]);
     $buildingC1 = Building::factory()->create(['campus_id' => $this->c1->id]);
@@ -61,6 +62,7 @@ function publishedViewGroup(Campus $campus, string $code, string $subject, ?Teac
     $group = Group::factory()->create([
         'term_id' => test()->term->id,
         'campus_id' => $campus->id,
+        'modality_id' => modalityOf($campus->is(test()->c1) ? 'EAD' : 'PRES')->id,
         'subject_id' => Subject::factory()->create(['department_id' => test()->sc->id, 'name' => $subject, 'theory_hours' => 4, 'practice_hours' => 0])->id,
         'code' => $code,
         'teacher_id' => $teacher?->id,

@@ -1,8 +1,8 @@
 {{--
     Los bloqueos de un salón en el panel lateral (facilities::pages.rooms; x-drawer a la derecha, a pantalla
     completa en celular): cada bloqueo con su día, su rango de horas, su periodo («Todos los periodos» si no
-    tiene) y su motivo, con «Quitar»; debajo, el formulario para agregar otro. Los días del select son los del
-    perfil del campus y las horas deben caer en su jornada (RoomRules). Sus campos se llaman como las claves de
+    tiene) y su motivo, con «Quitar»; debajo, el formulario para agregar otro. Los días del select y la jornada son los
+    de los salones, la de las modalidades activas con salones (ModalityQuery::roomsWindow, MS34; RoomRules). Sus campos se llaman como las claves de
     AddRoomBlock, así sus errores caen en su campo. `close()` es del x-drawer; el título lleva el id que nombra
     al diálogo (aria-labelledby).
 --}}
@@ -13,7 +13,7 @@
             <h2 id="blocks-drawer-title" class="text-xl font-bold leading-tight">Bloqueos de <span class="font-mono">{{ $blocksRoom->code }}</span></h2>
             <p class="mt-1 text-neutral">
                 @if ($blocksRoom->name) {{ $blocksRoom->name }} · @endif
-                Jornada de {{ $blocksRoom->campus->profile->dayStart }} a {{ $blocksRoom->campus->profile->dayEnd }}. Un bloqueo aparta el salón: el motor no lo asignará en ese rango.
+                Jornada de {{ $roomsWindow->dayStart }} a {{ $roomsWindow->dayEnd }}. Un bloqueo aparta el salón: el motor no lo asignará en ese rango.
             </p>
         </div>
         <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />

@@ -38,7 +38,7 @@ function crScopePage(User $user, array $query = []): Testable
     return Livewire::withQueryParams($query)->actingAs($user)->test('staffing::pages.change-requests');
 }
 
-it('MS6: el jefe de proyecto docente limitado a C2 lee las solicitudes de C1 y C2, cada una con su campus, sin decidir ni aplicar', function () {
+it('MS6: el jefe de proyecto docente limitado a C2 lee las solicitudes de C1 y C2, cada una con su campus; no decide ni aplica, que no es de su puesto', function () {
     crScopePage($this->jpdC2)
         ->assertSet('campus', null)
         ->assertSet('modalidad', 'PRES')

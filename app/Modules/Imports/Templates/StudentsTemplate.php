@@ -11,7 +11,6 @@ use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 /**
  * Alumnos del SII (tarea 1.4): número de control, nombre, carrera, plan, campus, semestre y estatus. El número
@@ -61,6 +60,20 @@ class StudentsTemplate extends ImportTemplate
         'a_distancia' => 'EAD',
         'ead' => 'EAD',
         'mixta' => 'EAD',
+    ];
+
+    /** La modalidad de un alumno nuevo sin modalidad en el archivo (MS7). */
+    private const string DEFAULT_MODALITY = 'PRES';
+
+    /**
+     * Clave del catálogo → el texto del SII con que se exporta (la vuelta de MODALITY_CODES; MS7). En línea y TecNM
+     * Virtual no tienen valor en el SII.
+     *
+     * @var array<string, string>
+     */
+    public const array SII_MODALITIES = [
+        'PRES' => 'presencial',
+        'EAD' => 'distancia',
     ];
 
     public function key(): string
@@ -114,7 +127,7 @@ class StudentsTemplate extends ImportTemplate
             'campus' => ['required', 'string'],
             'semester' => ['nullable', 'integer', 'min:1', 'max:20'],
             'status' => ['nullable', 'string'],
-            'modality' => ['nullable', Rule::in(array_keys(self::MODALITY_CODES))],
+            'modality' => ['nullable', 'string'],
             'status_reason' => ['nullable', 'string', 'max:10'],
             'active' => ['nullable', 'boolean'],
         ];
@@ -195,7 +208,25 @@ class StudentsTemplate extends ImportTemplate
             $issues = $issues->withWarning('status', "El estatus «{$row['status']}» no está en Nexus: el alumno queda sin estatus.");
         }
 
-        return $issues;
+        return $this->checkModality($row, $issues);
+    }
+
+    /**
+     * La modalidad del archivo debe ser una que Nexus reconoce (MS7) y existir en el catálogo: un texto desconocido o una
+     * modalidad borrada es error de la fila, también la Presencial que toma un alta sin modalidad (sin ella el alumno no
+     * se podría guardar). Una inactiva vale: sus alumnos se siguen viendo (M10).
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function checkModality(array $row, RowIssues $issues): RowIssues
+    {
+        if ($row['modality'] !== null && ! array_key_exists($row['modality'], self::MODALITY_CODES)) {
+            return $issues->withError('modality', "La modalidad «{$row['modality']}» no está en Nexus: usa presencial, a distancia, EAD o mixta.");
+        }
+
+        $code = $row['modality'] !== null ? self::MODALITY_CODES[$row['modality']] : ($this->studentIsActive($row['control_number']) === null ? self::DEFAULT_MODALITY : null);
+
+        return $code !== null && $this->modalityId($code) === null ? $issues->withError('modality', "La modalidad {$code} está borrada en Nexus.") : $issues;
     }
 
     protected function attributes(array $row, ImportContext $context): array
@@ -241,7 +272,7 @@ class StudentsTemplate extends ImportTemplate
      */
     protected function defaults(ImportContext $context): array
     {
-        return ['modality_id' => $this->modalityId('PRES')];
+        return ['modality_id' => $this->modalityId(self::DEFAULT_MODALITY)];
     }
 
     private function modalityId(string $code): ?string

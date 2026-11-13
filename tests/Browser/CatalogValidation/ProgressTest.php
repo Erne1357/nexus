@@ -18,7 +18,7 @@ use Illuminate\Notifications\DatabaseNotification;
 it('Subdirección abre el tablero, el drawer de un departamento y le recuerda al jefe', function () {
     $term = Term::factory()->current()->create();
     $campus = Campus::factory()->create(['name' => 'Campus II']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     app(CreateTermReviews::class)->handle($term, Catalog::cases());
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['name' => 'Dra. Ana Soto']);
@@ -50,7 +50,7 @@ it('Subdirección abre el tablero, el drawer de un departamento y le recuerda al
 it('CV9: el admin ve que la validación no está abierta, abre dos catálogos en el drawer y aparecen en el tablero', function () {
     $term = Term::factory()->current()->create();
     $campus = Campus::factory()->create(['name' => 'Campus II']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     User::factory()->admin()->create(['username' => 'admin']);
 

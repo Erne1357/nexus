@@ -2,6 +2,7 @@
 
 namespace App\Modules\Facilities\Actions;
 
+use App\Modules\Core\Queries\ModalityQuery;
 use App\Modules\Core\Support\WeekTime;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Models\Room;
@@ -13,13 +14,16 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Bloquea un salón (mantenimiento, reservado) un día y un rango de horas, para un periodo o para todos.
- * Recibe datos ya validados en forma. RoomRules exige que el día sea uno de los del perfil del campus
- * del salón y que las horas caigan en su jornada, la de fin posterior a la de inicio. Deja bitácora y,
+ * Recibe datos ya validados en forma. RoomRules exige que el día y las horas caigan en la jornada de los salones (la
+ * de las modalidades activas con salones, ModalityQuery::roomsWindow; MS34), la de fin posterior a la de inicio. Deja bitácora y,
  * después del commit, avisa con RoomBlockAdded. Vuelve a leer el salón con bloqueo: uno borrado no se encuentra. Quién puede lo decide RoomPolicy::update.
  */
 final class AddRoomBlock
 {
-    public function __construct(private readonly RoomRules $rules) {}
+    public function __construct(
+        private readonly RoomRules $rules,
+        private readonly ModalityQuery $modalities,
+    ) {}
 
     /**
      * @param  array{term_id?: ?string, day: int, starts_at: string, ends_at: string, reason: string}  $data
@@ -35,7 +39,7 @@ final class AddRoomBlock
 
         return DB::transaction(function () use ($room, $data, $startsAt, $endsAt, $reason, $termId): RoomBlock {
             $room = Room::query()->lockForUpdate()->findOrFail($room->getKey());
-            $this->rules->ensureBlockFitsCampus($room->campus->profile, $data['day'], $startsAt, $endsAt);
+            $this->rules->ensureBlockFitsWindow($this->modalities->roomsWindow(), $data['day'], $startsAt, $endsAt);
             $this->rules->ensureTermExists($termId);
 
             $block = RoomBlock::create([

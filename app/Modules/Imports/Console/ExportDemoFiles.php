@@ -5,6 +5,7 @@ namespace App\Modules\Imports\Console;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Imports\Templates\ImportTemplate;
+use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Closure;
 use Illuminate\Console\Command;
@@ -183,17 +184,7 @@ final class ExportDemoFiles extends Command
                     $r->valid_to === null ? null : date('d/m/Y', strtotime($r->valid_to)),
                 ]),
 
-            'students' => fn (): iterable => $this->chunked(
-                DB::table('students as st')
-                    ->join('careers as c', 'c.id', '=', 'st.career_id')
-                    ->join('study_plans as p', 'p.id', '=', 'st.study_plan_id')
-                    ->join('campuses as k', 'k.id', '=', 'st.campus_id')
-                    ->join('modalities as m', 'm.id', '=', 'st.modality_id')
-                    ->whereNull('st.deleted_at')->whereNull('c.deleted_at')->whereNull('p.deleted_at')
-                    ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status', 'm.code as modality', 'st.status_reason']),
-                'st.id',
-                fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status, $r->modality === 'PRES' ? 'presencial' : 'EAD', $r->status_reason],
-            ),
+            'students' => fn (): iterable => $this->students(),
 
             'kardex' => fn (): iterable => $this->chunked(
                 DB::table('kardex_records as kr')
@@ -224,6 +215,35 @@ final class ExportDemoFiles extends Command
                 ->get(['t.rfc', 'e.term_code', 'e.kind', 'e.score'])
                 ->map(fn (object $r): array => [$r->rfc, $r->term_code, $r->kind, (string) (float) $r->score]),
         ];
+    }
+
+    /**
+     * Los alumnos con su modalidad como la escribe el SII (StudentsTemplate::SII_MODALITIES: presencial o distancia, MS7).
+     * Los de una modalidad sin valor en el SII (En línea, TecNM Virtual) no se exportan: se avisa cuántos (MS35, supuesto
+     * por confirmar).
+     *
+     * @return LazyCollection<int, list<scalar|null>>
+     */
+    private function students(): LazyCollection
+    {
+        $students = fn (): Builder => DB::table('students as st')
+            ->join('careers as c', 'c.id', '=', 'st.career_id')
+            ->join('study_plans as p', 'p.id', '=', 'st.study_plan_id')
+            ->join('campuses as k', 'k.id', '=', 'st.campus_id')
+            ->join('modalities as m', 'm.id', '=', 'st.modality_id')
+            ->whereNull('st.deleted_at')->whereNull('c.deleted_at')->whereNull('p.deleted_at');
+        $skipped = $students()->whereNotIn('m.code', array_keys(StudentsTemplate::SII_MODALITIES))->count();
+
+        if ($skipped > 0) {
+            $this->warn("{$skipped} alumnos de una modalidad sin valor en el SII (En línea o TecNM Virtual) no se exportan.");
+        }
+
+        return $this->chunked(
+            $students()->whereIn('m.code', array_keys(StudentsTemplate::SII_MODALITIES))
+                ->select(['st.id', 'st.control_number', 'st.name', 'c.code as career', 'p.code as plan', 'k.code as campus', 'st.current_semester', 'st.status', 'm.code as modality', 'st.status_reason']),
+            'st.id',
+            fn (object $r): array => [$r->control_number, $r->name, $r->career, $r->plan, $r->campus, $r->current_semester, $r->status, StudentsTemplate::SII_MODALITIES[$r->modality], $r->status_reason],
+        );
     }
 
     /**

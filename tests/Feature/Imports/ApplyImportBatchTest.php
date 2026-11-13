@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Actions\ApplyImportBatch;
@@ -100,7 +99,7 @@ it('sube, valida y aplica un CSV: escribe las válidas y con advertencia, y salt
         ->and($batch->fresh()->applier->is($this->admin))->toBeTrue()
         ->and(Campus::where('code', 'C9')->sole())
         ->name->toBe('Campus Nueve')
-        ->modality->toBe(Modality::Presencial)
+        ->is_active->toBeTrue()
         ->and($c1->fresh())
         ->name->toBe('Campus Uno')
         ->is_active->toBeFalse()
@@ -113,7 +112,7 @@ it('sube, valida y aplica un CSV: escribe las válidas y con advertencia, y salt
 
 it('deja una sola entrada de bitácora por lote aplicado, con altas, cambios y filas saltadas', function () {
     Campus::factory()->create(['code' => 'C1', 'name' => 'Viejo']);
-    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus Dos', 'modality' => Modality::Presencial]);
+    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus Dos']);
 
     $batch = validatedCampusBatch($this->admin, "code,name,modality\nC9,Campus Nueve,presencial\nC1,Campus Uno,presencial\nC2,Campus Dos,presencial\nC8,,presencial\n");
     applyCampusBatch($batch, $this->admin);

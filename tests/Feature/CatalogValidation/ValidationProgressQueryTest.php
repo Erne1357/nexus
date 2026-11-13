@@ -14,8 +14,8 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -33,12 +33,12 @@ beforeEach(function () {
     $this->term = Term::factory()->current()->create(['code' => '20271']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
-    $this->online = Campus::factory()->create(['code' => 'EL', 'name' => 'EnLínea', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $this->c3 = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica']);
     Department::factory()->inactive()->create(['code' => 'OLD']);
 
-    // El periodo abierto en Presencial (M4): los tres campus son de ella por el puente `campuses.modality_id`.
+    // El periodo abierto en Presencial (M4), que usa salones: sus grupos se dan en cualquiera de los tres campus (MS4).
     TermOpening::factory()->create(['term_id' => $this->term->id]);
     app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
@@ -55,11 +55,18 @@ function progressValidate(Department $department, Catalog $catalog, ReviewStatus
         ->update(['status' => $status, 'validated_at' => $status === ReviewStatus::Validated ? now() : null]);
 }
 
-it('M4: lista los campus activos de las modalidades donde el periodo está abierto, por código', function () {
+it('M4, MS4: lista los campus activos donde se dan los grupos de las modalidades donde el periodo está abierto, por código', function () {
     Campus::factory()->inactive()->create(['code' => 'AA']);
-    Campus::factory()->create(['code' => 'ZZ', 'modality_id' => Modality::factory()->create()->id]);
 
-    expect(app(ValidationProgressQuery::class)->openCampuses($this->term)->pluck('code')->all())->toBe(['C1', 'C2', 'EL']);
+    expect(app(ValidationProgressQuery::class)->openCampuses($this->term)->pluck('code')->all())->toBe(['C1', 'C2', 'C3']);
+});
+
+it('MS4: un periodo abierto solo en modalidades sin salones no tiene campus abiertos', function () {
+    $online = Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $term = Term::factory()->create(['code' => '20272']);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $online->id]);
+
+    expect(app(ValidationProgressQuery::class)->openCampuses($term))->toBeEmpty();
 });
 
 it('cuenta el total con HC-14: las cuatro que no son salones más una de salones para todos los campus', function () {
@@ -82,7 +89,7 @@ it('una revisión que falta cuenta como pendiente y cuadra con pendingFor', func
     expect($row['cells']['careers'])->toBeNull()
         ->and($row['validated'])->toBe(2)
         ->and($row['pending'])->toBe(3)
-        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->c2, $this->sis)));
+        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis)));
 });
 
 it('con un solo campus filtrado que usa salones cuenta la de salones y cuadra con pendingFor', function () {
@@ -94,13 +101,13 @@ it('con un solo campus filtrado que usa salones cuenta la de salones y cuadra co
 
     expect($board['global']['total'])->toBe(10)
         ->and($row['total'])->toBe(5)
-        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->c2, $this->sis)));
+        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis)));
 });
 
 it('CV9: las columnas y el total son los catálogos abiertos en el periodo, sin importar el campus del filtro', function () {
     CatalogReview::query()->whereIn('catalog', [Catalog::Rooms->value, Catalog::Careers->value])->delete();
 
-    $board = ($this->progress)(collect([$this->online]));
+    $board = ($this->progress)(collect([$this->c3]));
 
     expect($board['global']['total'])->toBe(6)
         ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans']);

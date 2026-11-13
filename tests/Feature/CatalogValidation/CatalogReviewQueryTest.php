@@ -7,7 +7,8 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use Illuminate\Support\Facades\DB;
 
@@ -25,7 +26,7 @@ beforeEach(function () {
 });
 
 it('HC-14 y CV9: sin revisiones en el periodo (ningún catálogo abierto) no falta nada', function () {
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toBe([]);
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->department))->toBe([]);
 });
 
 it('HC-14 y CV9: con todos los catálogos abiertos y sin validar lista todos, en el orden del enum; uno abierto sin la revisión de este departamento también cuenta', function () {
@@ -35,7 +36,7 @@ it('HC-14 y CV9: con todos los catálogos abiertos y sin validar lista todos, en
         CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $this->term->id, 'department_id' => $other->id]);
     }
 
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->department))
         ->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
 });
 
@@ -43,7 +44,7 @@ it('HC-14 y CV9: los catálogos que no se abrieron no bloquean y los abiertos si
     CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
     CatalogReview::factory()->general(Catalog::Careers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toBe([Catalog::Subjects]);
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->department))->toBe([Catalog::Subjects]);
 });
 
 it('acepta los ids en lugar de los modelos y quita los validados', function () {
@@ -51,30 +52,31 @@ it('acepta los ids en lugar de los modelos y quita los validados', function () {
     CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
     CatalogReview::factory()->general(Catalog::Careers)->inReview()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term->id, $this->campus, $this->department->id))
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term->id, modalityOf('PRES'), $this->department->id))
         ->toBe([Catalog::Careers]);
 });
 
-it('no pide salones si el perfil del campus no los usa', function () {
-    $campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+it('no pide salones si el perfil de la modalidad no los usa; sin modalidad (el aviso a los jefes) cuenta todo lo abierto', function () {
+    $online = Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 
     CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $campus, $this->department))
-        ->not->toContain(Catalog::Rooms);
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $online, $this->department))
+        ->not->toContain(Catalog::Rooms)
+        ->and(app(CatalogReviewQuery::class)->pendingFor($this->term, null, $this->department))->toContain(Catalog::Rooms);
 });
 
-it('no cuenta las revisiones de otro periodo ni de otro departamento; la de salones vale en cualquier campus', function () {
+it('no cuenta las revisiones de otro periodo ni de otro departamento; la de salones vale para todos los campus', function () {
     foreach (Catalog::cases() as $catalog) {
         CatalogReview::factory()->create(['catalog' => $catalog, 'status' => 'validated', 'term_id' => Term::factory()->create()->id, 'department_id' => $this->department->id]);
         CatalogReview::factory()->create(['catalog' => $catalog, 'status' => 'validated', 'term_id' => $this->term->id, 'department_id' => Department::factory()->create()->id]);
     }
 
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department))->toHaveCount(5);
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->department))->toHaveCount(5);
 
     CatalogReview::factory()->rooms()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->department->id]);
 
-    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, Campus::factory()->create(), $this->department))->not->toContain(Catalog::Rooms);
+    expect(app(CatalogReviewQuery::class)->pendingFor($this->term, null, $this->department))->not->toContain(Catalog::Rooms);
 });
 
 it('con lock lee las revisiones con FOR SHARE y sin él no', function () {
@@ -83,11 +85,11 @@ it('con lock lee las revisiones con FOR SHARE y sin él no', function () {
         $queries[] = $query->sql;
     });
 
-    app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department);
+    app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->department);
     expect(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'for share')))->toBeEmpty();
 
     $queries = [];
-    app(CatalogReviewQuery::class)->pendingFor($this->term, $this->campus, $this->department, lock: true);
+    app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->department, lock: true);
     expect(collect($queries)->filter(fn (string $sql) => str_contains($sql, 'catalog_reviews') && str_contains($sql, 'for share')))->toHaveCount(1);
 });
 

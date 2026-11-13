@@ -21,6 +21,7 @@ use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
+use App\Modules\Students\Models\Student;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Http\UploadedFile;
@@ -281,4 +282,22 @@ it('exporta el historial docente y las evaluaciones, y esos archivos validan con
 
         expect([$template, $batch->status->value, $batch->error_rows, $batch->total_rows])->toBe([$template, 'validated', 0, count($template === 'evaluations' ? $evaluations : $history)]);
     }
+});
+
+it('MS7 y MS35: exporta la modalidad del alumno como la escribe el SII y omite, con aviso, las que no tiene', function () {
+    $students = Student::query()->orderBy('control_number')->take(3)->get();
+    $students[0]->update(['modality_id' => modalityOf('PRES')->id]);
+    $students[1]->update(['modality_id' => modalityOf('EAD')->id]);
+    $students[2]->update(['modality_id' => modalityOf('ENL')->id]);
+
+    $this->artisan('imports:export-demo')
+        ->expectsOutputToContain('1 alumnos de una modalidad sin valor en el SII (En línea o TecNM Virtual) no se exportan.')
+        ->assertSuccessful();
+
+    $rows = collect(array_slice(demoCsv('students'), 1))->keyBy(0);
+
+    expect($rows->get($students[0]->control_number)[7])->toBe('presencial')
+        ->and($rows->get($students[1]->control_number)[7])->toBe('distancia')
+        ->and($rows->has($students[2]->control_number))->toBeFalse()
+        ->and($rows->pluck(7)->unique()->diff(['presencial', 'distancia'])->all())->toBe([]);
 });

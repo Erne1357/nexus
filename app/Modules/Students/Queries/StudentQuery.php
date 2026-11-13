@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 /**
  * Lecturas de alumnos para las pantallas (tarea 1.6). El listado es de un campus o, sin uno (`null`, «Todos»), de
  * todos los campus activos del usuario (#415: la credencial ya no elige campus), y deja ver lo mismo que StudentPolicy, filtrado en SQL con los alcances de Actor y la misma regla que
- * Actor::covers(): al admin, todo el campus; a la subdirección, las carreras de los departamentos de
+ * Actor::allows() (Actor::constrain()): al admin, todo el campus; a la subdirección, las carreras de los departamentos de
  * Subdirección Académica; al jefe de departamento, las carreras de su departamento; al coordinador, su carrera. Los
  * alumnos son de su campus y de su modalidad (AZ-S17, MS7): un nombramiento con modalidad solo ve los de esa
  * modalidad (activa, MS8) y uno sin modalidad ve los de todas, también las inactivas (M10)

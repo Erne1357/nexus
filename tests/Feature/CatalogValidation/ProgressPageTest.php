@@ -15,7 +15,7 @@ use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
@@ -235,8 +235,6 @@ describe('conteos', function () {
 
 describe('filtros', function () {
     it('el filtro de campus no cambia los catálogos: son los que el admin abrió en el periodo (CV9)', function () {
-        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-
         progressPage()->set('campus', $this->c1->id)->assertSee('0 de 10');
     });
 
@@ -425,16 +423,15 @@ describe('abrir la validación (CV9)', function () {
         expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(2);
     });
 
-    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin campus que los use', function () {
+    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin modalidad abierta que los use', function () {
         $page = progressPage($this->admin)->set('toOpen', [Catalog::Teachers->value])->call('openValidation');
         expect(lastToastOf($page)['description'])->toBe('Esos catálogos ya estaban abiertos.');
 
         CatalogReview::query()->where('catalog', Catalog::Rooms->value)->delete();
-        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 
         $page = progressPage($this->admin)->set('toOpen', [Catalog::Rooms->value])->call('openValidation');
-        expect(lastToastOf($page)['description'])->toBe('Ningún campus abierto en este periodo usa salones.');
+        expect(lastToastOf($page)['description'])->toBe('Ninguna modalidad abierta en este periodo usa salones.');
     });
 
     it('sin marcar ningún catálogo no abre nada y lo dice', function () {

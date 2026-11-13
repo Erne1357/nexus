@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Enums\Modality as CampusModality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
@@ -19,13 +18,14 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210801_drop_campus_from_staffing_tables.php'))->down();
     $this->migration = require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210403_add_modality_to_staffing_tables.php');
     $this->migration->down();
     $this->user = User::factory()->create();
-    $this->inC1 = Group::factory()->create(['campus_id' => Campus::factory()->create(['code' => 'C1'])->id]);
-    $this->inC2 = Group::factory()->create(['campus_id' => Campus::factory()->create(['code' => 'C2'])->id]);
-    $this->inEad = Group::factory()->create(['campus_id' => Campus::factory()->inactive()->create(['code' => 'EAD', 'modality' => CampusModality::Mixta])->id]);
+    $this->inC1 = Group::factory()->create(['campus_id' => campusBeforeContraction('C1')->id]);
+    $this->inC2 = Group::factory()->create(['campus_id' => campusBeforeContraction('C2')->id]);
+    $this->inEad = Group::factory()->create(['campus_id' => campusBeforeContraction('EAD', 'mixta', active: false)->id, 'modality_id' => modalityOf('EAD')->id]);
 });
 
 /**

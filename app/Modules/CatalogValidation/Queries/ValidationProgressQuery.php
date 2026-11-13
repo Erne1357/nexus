@@ -14,6 +14,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\RecipientsQuery;
 use Carbon\CarbonImmutable;
@@ -35,21 +36,34 @@ final class ValidationProgressQuery
         private readonly RecipientsQuery $recipients,
         private readonly CatalogContentsQuery $contents,
         private readonly CatalogReviewQuery $catalogReviews,
+        private readonly CampusQuery $campuses,
     ) {}
 
     /**
-     * Los campus donde el periodo está abierto, activos y sin borrar, por código: los de las modalidades donde se abrió
-     * (M4; por el puente `campuses.modality_id` mientras el tablero sea por campus).
+     * Los campus donde el periodo está abierto, activos y sin borrar, por código: donde se dan los grupos de las
+     * modalidades donde se abrió (M4, MS4; CampusQuery::openIn).
      *
      * @return Collection<int, Campus>
      */
     public function openCampuses(Term $term): Collection
     {
-        return Campus::query()
-            ->where('is_active', true)
-            ->whereIn('modality_id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
+        return $this->campuses->openIn($term);
+    }
+
+    /**
+     * Las modalidades donde se abrió el periodo cuyos grupos se dan en sus campus (M4): las que usan salones (MS4), por
+     * clave.
+     *
+     * @return Collection<int, Modality>
+     */
+    public function openModalities(Term $term): Collection
+    {
+        return Modality::query()
+            ->whereIn('id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
             ->orderBy('code')
-            ->get();
+            ->get()
+            ->filter(fn (Modality $modality): bool => $modality->profile->usesRooms)
+            ->values();
     }
 
     /**
@@ -58,8 +72,8 @@ final class ValidationProgressQuery
      * `columns`: los catálogos abiertos en el periodo, con Salones al final (ninguno si no se abrió la validación). `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, cuántos registros lleva revisados de cuántos en cada una (`reviewed`, nulo si falta; CV7),
-     * las observaciones abiertas, el jefe vigente, el estado de su carga en cada modalidad de esos campus (por el puente
-     * `campuses.modality_id`; la carga es por departamento y modalidad, M1; evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
+     * las observaciones abiertas, el jefe vigente, el estado de su carga en cada modalidad donde se abrió el periodo (la
+     * carga es por departamento y modalidad, M1; evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
      * recibe el aviso (RecipientsQuery::holders: permiso de validar la revisión sobre el departamento, usuario activo), `heads` y `head` (el primero), y de
      * ahí `remind_blocked_reason`, el motivo por el que «Recordar» no aplica (nada pendiente o sin jefe), nulo si
      * aplica; `remindable` cuenta los departamentos visibles a los que sí y sus jefes distintos. `totals`: por columna. `global` y `flags` cuentan
@@ -110,7 +124,7 @@ final class ValidationProgressQuery
             $department->getKey() => $campus === null ? collect() : collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey())))->pluck('user'),
         ]);
 
-        $modalities = Modality::query()->whereIn('id', $campuses->pluck('modality_id')->filter()->unique()->values())->orderBy('code')->get();
+        $modalities = $campuses->isEmpty() ? collect() : $this->openModalities($term);
         $statuses = new LoadStatusesRequested($term, $modalities->modelKeys());
         event($statuses);
 

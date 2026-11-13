@@ -19,7 +19,8 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * Avisa a los jefes que tienen catálogos por validar (tarea 2.9; reglas-de-negocio.md, «Periodo y
  * calendario»): a cada jefe de departamento vigente, el único que valida, de cada departamento activo con
- * revisiones pendientes del periodo en el campus, contadas igual que HC-14 (CatalogReviewQuery::pendingFor) pero solo las que el admin abrió en el periodo (CV9).
+ * revisiones pendientes del periodo, contadas igual que HC-14 (CatalogReviewQuery::pendingFor, sin modalidad: todo lo
+ * que el admin abrió en el periodo, CV9). El aviso lleva el campus para abrir la pantalla en él.
  * Con `$departmentId`, solo a los de ese departamento: el recordatorio del tablero de avance (tarea 2.5); un id
  * que no es de un departamento activo no avisa a nadie.
  * Lo llama NotifyPendingReviewsJob al abrir la validación (OpenCatalogValidation). `handle()` da a cuántos usuarios avisó y `notify()`, cuáles.
@@ -58,7 +59,7 @@ final class NotifyPendingReviews
 
             foreach ($campuses as $campus) {
                 $pending = array_values(array_filter(
-                    $this->reviews->pendingFor($term, $campus, $department),
+                    $this->reviews->pendingFor($term, null, $department),
                     fn (Catalog $catalog): bool => in_array($catalog, $catalogs, true),
                 ));
 
@@ -102,7 +103,7 @@ final class NotifyPendingReviews
         $notified = new Collection;
 
         foreach ($departments as $department) {
-            $pending = $this->reviews->pendingFor($term, $campus, $department);
+            $pending = $this->reviews->pendingFor($term, null, $department);
 
             if ($pending === []) {
                 continue;

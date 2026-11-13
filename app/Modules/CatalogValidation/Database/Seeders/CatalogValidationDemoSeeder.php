@@ -26,6 +26,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\UpdateRoom;
@@ -484,14 +485,14 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
-     * Los campus activos de las modalidades donde se abrió el periodo (M4, por el puente `campuses.modality_id`; antes,
-     * los campus donde se abrió aunque después se desactivaran; MS15, supuesto por confirmar).
+     * Los campus activos donde se dan los grupos de las modalidades donde se abrió el periodo (M4, MS4; CampusQuery::openIn;
+     * antes, los campus donde se abrió aunque después se desactivaran; MS15, supuesto por confirmar).
      *
      * @return Collection<int, Campus>
      */
     private function openedCampuses(Term $term): Collection
     {
-        return Campus::query()->where('is_active', true)->whereIn('modality_id', DB::table('term_openings')->where('term_id', $term->getKey())->select('modality_id'))->orderBy('code')->get();
+        return app(CampusQuery::class)->openIn($term);
     }
 
     /**

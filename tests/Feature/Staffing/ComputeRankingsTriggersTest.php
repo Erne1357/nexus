@@ -48,16 +48,16 @@ beforeEach(function () {
     $this->closedTerm = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
     $this->campus = Campus::factory()->create();
     $this->otherCampus = Campus::factory()->create();
-    $this->modalityId = $this->campus->modality_id;
+    $this->modalityId = modalityOf('PRES')->id;
     $this->department = Department::factory()->create();
     $this->otherDepartment = Department::factory()->create();
     $this->subject = Subject::factory()->create(['department_id' => $this->department->id]);
     $this->otherSubject = Subject::factory()->create(['department_id' => $this->otherDepartment->id]);
     AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     AcademicLoad::factory()->inStatus(LoadStatus::Published)->create([
-        'term_id' => $this->closedTerm->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
+        'term_id' => $this->closedTerm->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     $this->group = fn (Term $term, Campus $campus, Subject $subject, array $attributes = []): Group => Group::factory()->create($attributes + [
         'term_id' => $term->id, 'campus_id' => $campus->id, 'subject_id' => $subject->id,
@@ -228,7 +228,7 @@ it('el job corre RankGroups sin encimar dos corridas del mismo alcance', functio
 
 it('el tiempo límite del job deja el doble del departamento más grande y vence antes de que Redis lo entregue otra vez', function () {
     // El departamento × modalidad más grande del masivo (CEA presencial, 1 139 grupos de C1 y C2) tardó 403 s como un
-    // solo job, sin otros corriendo (12 de noviembre de 2026; docs/arquitectura/testing.md).
+    // solo job, sin otros corriendo (12 de noviembre de 2026; docs/arquitectura/arquitectura.md, el tiempo de ComputeRankings).
     $largestSeconds = 403;
     $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);
     $overlap = $job->middleware()[0];

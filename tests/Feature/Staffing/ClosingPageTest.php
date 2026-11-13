@@ -142,7 +142,7 @@ describe('lo que se ve en cada estado', function () {
     });
 
     it('en un campus que exige el visto bueno, la carga cerrada lo espera y Subdirección la aprueba', function () {
-        $this->world->campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
         $this->world->load->update(['status' => LoadStatus::Closed]);
         $this->world->group();
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
@@ -162,8 +162,8 @@ describe('lo que se ve en cada estado', function () {
 describe('modalidad y filtro de campus (M1; maqueta U2, opción A)', function () {
     it('MS16: con dos modalidades, el select «Modalidad» cambia de carga, sin pestañas', function () {
         modalityOf('EAD')->update(['is_active' => true]);
-        $ead = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]);
-        $published = $this->world->loadIn($ead, LoadStatus::Published);
+        $ead = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $published = $this->world->loadIn($ead, LoadStatus::Published, modality: modalityOf('EAD'));
         $published->update(['current_version' => 1]);
         $this->world->group();
         $this->world->group(load: $published);

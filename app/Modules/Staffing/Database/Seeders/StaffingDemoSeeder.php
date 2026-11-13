@@ -311,6 +311,12 @@ final class StaffingDemoSeeder extends Seeder
     /** @var array<string, array<string, int>> campus => departamento => grupos sin candidato que pase (modo `staffed`) */
     private array $unstaffed = [];
 
+    /** La clave de la modalidad de la carga de la demo (Presencial): el campus es solo el lugar (MS3) y no la dice. */
+    private string $modalityCode = 'PRES';
+
+    /** Su id, leído una vez (modalityId()). */
+    private ?string $modalityId = null;
+
     /**
      * @param  list<string>  $campuses  claves de campus
      * @param  array<string, int|float|bool>  $overrides  sobrescribe valores del perfil (`campus_travel`, `assigned`…)
@@ -319,9 +325,11 @@ final class StaffingDemoSeeder extends Seeder
      * @throws RuntimeException en producción, con un modo que no existe, si el periodo no existe, si falla un ranking en
      *                          paralelo o si Scheduling veta pasar una carga a asignación en el modo `start`
      */
-    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $overrides = [], string $mode = 'mixed'): void
+    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $overrides = [], string $mode = 'mixed', string $modality = 'PRES'): void
     {
         $this->refuseProduction();
+        $this->modalityCode = $modality;
+        $this->modalityId = null;
 
         if (! in_array($mode, self::MODES, true)) {
             throw new RuntimeException("Modo desconocido: {$mode}.");
@@ -446,7 +454,7 @@ final class StaffingDemoSeeder extends Seeder
         }
 
         $loads = AcademicLoad::query()->with('department')
-            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Proposed)
+            ->where('term_id', $term->id)->where('modality_id', $this->modalityId())->where('status', LoadStatus::Proposed)
             ->get()->sortBy('department.code');
 
         foreach ($loads as $load) {
@@ -473,11 +481,11 @@ final class StaffingDemoSeeder extends Seeder
     {
         $this->validator = app(ScheduleValidator::class);
         $this->validator->forget();
-        $this->state = $this->validator->stateFor($term->id, $campus->modality_id);
+        $this->state = $this->validator->stateFor($term->id, $this->modalityId());
 
         $groups = Group::query()->active()->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->whereNull('groups.teacher_id')
-            ->whereIn('groups.department_id', AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Staffing)->select('department_id'))
+            ->whereIn('groups.department_id', AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $this->modalityId())->where('status', LoadStatus::Staffing)->select('department_id'))
             ->orderBy('subjects.code')->orderBy('groups.code')->select('groups.*')->get();
         $rankings = $this->rankingsOf($term, $groups->modelKeys());
         $departments = Department::query()->withTrashed()->whereIn('id', $groups->pluck('department_id')->unique()->all())->get()->keyBy('id');
@@ -636,12 +644,12 @@ final class StaffingDemoSeeder extends Seeder
 
             foreach ($campuses as $campus) {
                 foreach ($this->roles[$campus->code] ?? [] as $departmentId => $role) {
-                    if (isset($requested["{$campus->modality_id}|{$departmentId}"])) {
+                    if (isset($requested["{$this->modalityId()}|{$departmentId}"])) {
                         continue;
                     }
 
-                    $requested["{$campus->modality_id}|{$departmentId}"] = true;
-                    $this->requestChanges($term, $campus, Department::query()->findOrFail($departmentId), $role, $campuses->where('modality_id', $campus->modality_id)->pluck('id')->all());
+                    $requested["{$this->modalityId()}|{$departmentId}"] = true;
+                    $this->requestChanges($term, $campus, Department::query()->findOrFail($departmentId), $role, $campuses->pluck('id')->all());
                 }
             }
         });
@@ -659,13 +667,13 @@ final class StaffingDemoSeeder extends Seeder
         // M1: la carga es de la modalidad: se pasa a asignación y se reparten sus papeles una vez, con el primer campus de
         // la demo en ella; los demás campus de la modalidad toman los mismos papeles.
         if (! $this->startOnce($campus)) {
-            $this->roles[$campus->code] = $this->modalityRoles[$campus->modality_id] ?? [];
+            $this->roles[$campus->code] = $this->modalityRoles[$this->modalityId()] ?? [];
 
             return;
         }
 
         $loads = AcademicLoad::query()->with('department')
-            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Proposed)
+            ->where('term_id', $term->id)->where('modality_id', $this->modalityId())->where('status', LoadStatus::Proposed)
             ->get()->sortBy('department.code');
         $entered = [];
 
@@ -683,8 +691,8 @@ final class StaffingDemoSeeder extends Seeder
             isset($this->vetoed[$campus->code]) ? implode('; ', array_map(fn (string $code, string $reason): string => "{$code} («{$reason}»)", array_keys($this->vetoed[$campus->code]), $this->vetoed[$campus->code])) : 'ninguno'));
 
         $staffing = AcademicLoad::query()->with('department')
-            ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Staffing)->get();
-        $groups = Group::query()->active()->where('term_id', $term->id)->where('modality_id', $campus->modality_id)
+            ->where('term_id', $term->id)->where('modality_id', $this->modalityId())->where('status', LoadStatus::Staffing)->get();
+        $groups = Group::query()->active()->where('term_id', $term->id)->where('modality_id', $this->modalityId())
             ->selectRaw('department_id, count(*) as total')->groupBy('department_id')->pluck('total', 'department_id')->all();
         $ordered = $staffing->sort(fn (AcademicLoad $a, AcademicLoad $b): int => [$groups[$b->department_id] ?? 0, $a->department->code] <=> [$groups[$a->department_id] ?? 0, $b->department->code])->values();
         $count = $ordered->count();
@@ -693,10 +701,10 @@ final class StaffingDemoSeeder extends Seeder
             : array_slice([self::ADJUSTING, self::APPLIED], 0, $count);
 
         foreach ($ordered as $index => $load) {
-            $this->modalityRoles[$campus->modality_id][$load->department_id] = $sequence[$index];
+            $this->modalityRoles[$this->modalityId()][$load->department_id] = $sequence[$index];
         }
 
-        $this->roles[$campus->code] = $this->modalityRoles[$campus->modality_id] ?? [];
+        $this->roles[$campus->code] = $this->modalityRoles[$this->modalityId()] ?? [];
     }
 
     /**
@@ -705,11 +713,11 @@ final class StaffingDemoSeeder extends Seeder
      */
     private function startOnce(Campus $campus): bool
     {
-        if (in_array($campus->modality_id, $this->startedModalities, true)) {
+        if (in_array($this->modalityId(), $this->startedModalities, true)) {
             return false;
         }
 
-        $this->startedModalities[] = $campus->modality_id;
+        $this->startedModalities[] = $this->modalityId();
 
         return true;
     }
@@ -789,14 +797,14 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * Asigna los grupos de los departamentos del campus que no quedan intactos, contra una foto de su modalidad (la del
-     * campus por el puente, mientras Staffing siembre por campus).
+     * Asigna los grupos de los departamentos del campus que no quedan intactos, contra una foto de la modalidad de la demo
+     * (`$modality` de run()).
      */
     private function assignCampus(Term $term, Campus $campus): void
     {
         $this->validator = app(ScheduleValidator::class);
         $this->validator->forget();
-        $this->state = $this->validator->stateFor($term->id, $campus->modality_id);
+        $this->state = $this->validator->stateFor($term->id, $this->modalityId());
 
         foreach ($this->roles[$campus->code] ?? [] as $departmentId => $role) {
             if ($role !== self::UNTOUCHED) {
@@ -1291,7 +1299,7 @@ final class StaffingDemoSeeder extends Seeder
         $key = "{$permission->value}|{$campusId}|{$unit}|{$career}";
 
         if (! array_key_exists($key, $this->holders)) {
-            $this->holders[$key] = app(RecipientsQuery::class)->holders($permission, Target::of(modality: Campus::withTrashed()->whereKey($campusId)->value('modality_id'), campus: in_array(Dimension::Campus, $permission->dimensions(), true) ? $campusId : null, unit: $unit, career: $career))[0]['user'] ?? null;
+            $this->holders[$key] = app(RecipientsQuery::class)->holders($permission, Target::of(modality: $this->modalityId(), campus: in_array(Dimension::Campus, $permission->dimensions(), true) ? $campusId : null, unit: $unit, career: $career))[0]['user'] ?? null;
         }
 
         return $this->holders[$key];
@@ -1350,7 +1358,7 @@ final class StaffingDemoSeeder extends Seeder
             implode(', ', array_map(fn (string $step, float $time): string => sprintf('%s %.1f s', $step, $time), array_keys($this->timings), $this->timings))));
 
         foreach ($campuses as $campus) {
-            $loads = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->get()
+            $loads = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('modality_id', $this->modalityId())->get()
                 ->groupBy(fn (AcademicLoad $load): string => $load->status->value)
                 ->map(fn (Collection $loads): string => $loads->pluck('department.code')->sort()->implode(', '));
             $vetoed = $this->vetoed[$campus->code] ?? [];
@@ -1461,5 +1469,13 @@ final class StaffingDemoSeeder extends Seeder
         return Modality::query()->withTrashed()
             ->whereIn('id', Group::query()->where('term_id', $term->id)->whereIn('campus_id', $ids)->select('modality_id'))
             ->orderBy('code')->get();
+    }
+
+    /**
+     * El id de la modalidad de la carga de la demo (`$modality` de run(); Presencial si se llama sin run()).
+     */
+    private function modalityId(): string
+    {
+        return $this->modalityId ??= Modality::query()->where('code', $this->modalityCode)->firstOrFail()->id;
     }
 }

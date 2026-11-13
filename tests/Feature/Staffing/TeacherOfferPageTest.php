@@ -45,7 +45,7 @@ function offerGroup(Department $department, Campus $campus, array $attrs = [], ?
 
     if ($load !== null) {
         AcademicLoad::query()->firstOrCreate(
-            ['term_id' => test()->term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id],
+            ['term_id' => test()->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id],
             ['status' => $load],
         );
     }

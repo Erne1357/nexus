@@ -10,10 +10,9 @@ use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Queries\CampusQuery;
 use Illuminate\Support\Collection;
 
 /**
@@ -21,7 +20,10 @@ use Illuminate\Support\Collection;
  */
 final class CatalogReviewQuery
 {
-    public function __construct(private readonly CatalogContentsQuery $contents) {}
+    public function __construct(
+        private readonly CatalogContentsQuery $contents,
+        private readonly CampusQuery $campuses,
+    ) {}
 
     /**
      * Los catálogos que todavía bloquean la salida de borrador de la carga de un departamento en una modalidad (HC-14,
@@ -37,17 +39,18 @@ final class CatalogReviewQuery
      * Solo cuentan los catálogos que el admin abrió en el periodo, es decir, que tienen revisiones en él (CV9, HC-14,
      * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
      *
-     * `$where` es la modalidad de la carga; el aviso a los jefes (NotifyPendingReviews), que todavía va por campus, da el
-     * campus y cuenta con su perfil mientras exista el puente.
+     * `$modality` es la modalidad de la carga: sin salones, no exige la revisión de salones. El aviso a los jefes
+     * (NotifyPendingReviews), que no es de una carga, no da modalidad y cuenta todo lo abierto: la revisión es del
+     * departamento en todo el Tec y la de salones solo se abre si alguna modalidad abierta usa salones (roomsApply()).
      *
      * @return list<Catalog>
      */
-    public function pendingFor(Term|string $term, Modality|Campus $where, Department|string $department, bool $lock = false): array
+    public function pendingFor(Term|string $term, ?Modality $modality, Department|string $department, bool $lock = false): array
     {
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
 
-        $required = Catalog::requiredFor($where->profile->usesRooms);
+        $required = Catalog::requiredFor($modality === null || $modality->profile->usesRooms);
 
         $validated = CatalogReview::query()
             ->where('term_id', $termId)
@@ -82,16 +85,12 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Si la revisión de salones aplica al periodo: algún campus activo donde está abierto usa salones (CV9, decisión 6). El
-     * periodo está abierto en un campus si lo está en su modalidad (M4; puente `campuses.modality_id`).
+     * Si la revisión de salones aplica al periodo: alguna modalidad donde está abierto usa salones y hay un campus activo
+     * donde se dan sus grupos (CV9, decisión 6; M4; CampusQuery::openIn).
      */
     public function roomsApply(Term|string $term): bool
     {
-        return Campus::query()
-            ->where('is_active', true)
-            ->whereIn('modality_id', TermOpening::query()->where('term_id', $term instanceof Term ? $term->getKey() : $term)->select('modality_id'))
-            ->get()
-            ->contains(fn (Campus $campus): bool => $campus->profile->usesRooms);
+        return $this->campuses->openIn($term)->isNotEmpty();
     }
 
     /**
@@ -109,7 +108,7 @@ final class CatalogReviewQuery
             'catalog' => $catalog,
             'open' => in_array($catalog, $opened, true),
             'blocked' => $catalog === Catalog::Rooms && ! $roomsApply && ! in_array($catalog, $opened, true)
-                ? 'Ningún campus abierto en este periodo usa salones.'
+                ? 'Ninguna modalidad abierta en este periodo usa salones.'
                 : null,
         ], Catalog::cases());
     }

@@ -10,7 +10,6 @@ use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
@@ -71,9 +70,8 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
     Notification::assertNotSentTo($this->jefeBasicas, CatalogReviewsPending::class);
 });
 
-it('sin salones en el perfil del campus, no los cuenta como pendientes', function () {
+it('MS34: el aviso cuenta lo que el admin abrió, sin un perfil de campus: con los salones validados, solo docentes', function () {
     Notification::fake();
-    $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
     CatalogReview::query()->where('department_id', $this->basicas->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
 

@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -287,12 +288,12 @@ describe('bloqueos del salón en el panel', function () {
         expect($this->a101->blocks()->where('day', 2)->sole()->term_id)->toBeNull();
     });
 
-    it('muestra en español que el día o la hora no caben en el perfil del campus', function () {
+    it('muestra en español que el día o la hora no caben en la jornada de los salones (MS34)', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
             ->call('openBlocks', $this->a101->id)
             ->set('day', '6')->set('starts_at', '09:00')->set('ends_at', '10:00')->set('reason', 'x')->call('addBlock')
-            ->assertHasErrors('day')->assertSee('El campus no tiene clases ese día')
-            ->set('day', '1')->set('starts_at', '06:00')->call('addBlock')->assertHasErrors('starts_at')->assertSee('dentro del horario del campus')
+            ->assertHasErrors('day')->assertSee('No hay clases con salón ese día')
+            ->set('day', '1')->set('starts_at', '06:00')->call('addBlock')->assertHasErrors('starts_at')->assertSee('dentro de la jornada de los salones')
             ->set('starts_at', '11:00')->call('addBlock')->assertHasErrors('ends_at')->assertSee('La hora de fin debe ser posterior')
             ->set('starts_at', '09:00')->set('reason', '')->call('addBlock')->assertHasErrors('reason');
     });
@@ -304,8 +305,8 @@ describe('bloqueos del salón en el panel', function () {
         expect(RoomBlock::count())->toBe(0)->and(RoomBlock::withTrashed()->count())->toBe(1);
     });
 
-    it('los días del select son los del perfil del campus', function () {
-        $this->c2->update(['settings' => [...$this->c2->settings, 'days' => [1, 6]]]);
+    it('MS34: los días del select son los de la jornada de los salones', function () {
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 6]]]);
 
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
             ->call('openBlocks', $this->a101->id)
@@ -381,24 +382,12 @@ describe('robustez y perfil del campus', function () {
             ->set('features', 'Proyector, '.str_repeat('x', 40))->call('save')->assertHasNoErrors();
     });
 
-    it('un campus que no usa salones no lista salones ni deja crearlos allí (por perfil, no por código)', function () {
-        $this->c2->update(['settings' => [...$this->c2->settings, 'uses_rooms' => false]]);
-
-        $this->actingAs($this->admin)->get(route('facilities.rooms'))->assertOk()->assertSee('Z-900')->assertDontSee('Auditorio Mayor');
+    it('MS34: todo campus activo tiene salones (no hay perfil de campus): lista y deja crear en cada uno', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
-            ->assertViewHas('rooms', listsRooms(['Z-900']))
-            ->set('campus', 'C2')->assertViewHas('rooms', null)->assertSee('no usa salones')
-            ->call('create')->set('building_id', $this->edA->id)->set('code', 'N-9')->set('type', 'aula')->set('capacity', '10')->call('save')->assertHasErrors('building_id');
+            ->set('campus', 'C2')->assertDontSeeHtml('data-testid="rooms-not-used"')
+            ->call('create')->set('building_id', $this->edA->id)->set('code', 'N-9')->set('type', 'aula')->set('capacity', '10')->call('save')->assertHasNoErrors();
 
-        expect(Room::where('code', 'N-9')->exists())->toBeFalse();
-        $this->actingAs($this->admin)->get(route('facilities.buildings'))->assertOk()->assertSee('Edificio A');
-    });
-
-    it('si ningún campus del usuario usa salones, lo dice y no deja crear (403)', function () {
-        $this->c2->update(['settings' => [...$this->c2->settings, 'uses_rooms' => false]]);
-        $this->c1->update(['settings' => [...$this->c1->settings, 'uses_rooms' => false]]);
-
-        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->assertViewHas('rooms', null)->assertSee('Ninguno de tus campus usa salones')->call('create')->assertForbidden();
+        expect(Room::where('code', 'N-9')->exists())->toBeTrue();
     });
 });
 

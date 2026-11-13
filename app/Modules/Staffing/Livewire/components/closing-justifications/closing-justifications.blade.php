@@ -1,6 +1,6 @@
 {{--
     «Justificaciones» (DESIGN.md, «Cierre de la carga»): pestañas «Por justificar» (primero), «Justificados» y «Todos»
-    con sus cifras, la búsqueda «Grupo o materia» y, si el campus usa salones, «Todos · Sin docente · Sin salón» con lo
+    con sus cifras, la búsqueda «Grupo o materia» y, si la modalidad de la carga usa salones, «Todos · Sin docente · Sin salón» con lo
     que cada uno muestra; todo se filtra en el servidor y se muestra de 50 en 50 («Mostrar 50 más»). Cada grupo: la
     clave en Mono con carrera y semestre, la materia y el horario un bloque por renglón, lo que le falta (insignia en
     warning mientras no se justifica, neutra ya justificado) y la justificación con quién y cuándo. La lista es un

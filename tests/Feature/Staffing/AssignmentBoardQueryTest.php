@@ -31,7 +31,7 @@ beforeEach(function () {
 
 function boardOf(AssignmentWorld $world, ?Campus $campus = null): AssignmentBoard
 {
-    return app(AssignmentBoardQuery::class)->board($world->term->id, $world->campus->modality_id, $world->department->id, $campus?->id);
+    return app(AssignmentBoardQuery::class)->board($world->term->id, $world->load->modality_id, $world->department->id, $campus?->id);
 }
 
 it('lista los grupos del departamento en el periodo y la modalidad, por semestre, materia, carrera y clave', function () {

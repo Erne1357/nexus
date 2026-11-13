@@ -24,9 +24,9 @@ use Tests\Support\Staffing\ClosingWorld;
 
 beforeEach(function () {
     $this->world = ClosingWorld::create();
-    // Campus I es de otra modalidad para tener dos cargas del mismo departamento (M1: una por departamento y modalidad).
+    // Una carga de otra modalidad (EAD) con sus grupos en Campus I, para tener dos cargas del mismo departamento (M1).
     modalityOf('EAD')->update(['is_active' => true]);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]);
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
 });
 
 /**
@@ -50,7 +50,7 @@ function closingBoardLoads(array $board, string $code): array
 
 it('un renglón por departamento con una entrada por modalidad con grupos y lo que le falta a cada carga', function () {
     $jefe = $this->world->head();
-    $c1Load = $this->world->loadIn($this->c1, LoadStatus::Published);
+    $c1Load = $this->world->loadIn($this->c1, LoadStatus::Published, modality: modalityOf('EAD'));
     $c1Load->update(['current_version' => 2]);
     $this->world->group(load: $c1Load);
     $this->world->group();
@@ -121,7 +121,7 @@ it('cuenta los acuerdos que detienen el cierre con la regla de AgreementsAnswere
     $other = Department::factory()->create();
     $this->world->group();
     $base = ['term_id' => $this->world->term->id, 'campus_id' => $this->world->campus->id];
-    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
+    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'campus_id' => null, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
     InterdepartmentalAgreement::factory()->create([...$base, 'from_department_id' => $other->id, 'to_department_id' => $this->world->department->id]);
     InterdepartmentalAgreement::factory()->create([...$base, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
 
@@ -135,9 +135,9 @@ it('cuenta las cubetas de todo el Tec: con faltantes, listas, cerradas y publica
     $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $ee = Department::factory()->create(['code' => 'EE', 'name' => 'Eléctrica y Electrónica']);
     $this->world->group(teacher: false);
-    $this->world->group(load: $this->world->loadIn($this->c1));
+    $this->world->group(load: $this->world->loadIn($this->c1, modality: modalityOf('EAD')));
     $this->world->group(load: $this->world->loadIn($this->world->campus, LoadStatus::Closed, $cb));
-    $this->world->group(load: $this->world->loadIn($this->c1, LoadStatus::Published, $cb));
+    $this->world->group(load: $this->world->loadIn($this->c1, LoadStatus::Published, $cb, modality: modalityOf('EAD')));
     $this->world->group(load: $this->world->loadIn($this->world->campus, LoadStatus::Adjusting, $ee));
 
     $board = closingBoardOf();
@@ -147,7 +147,7 @@ it('cuenta las cubetas de todo el Tec: con faltantes, listas, cerradas y publica
 });
 
 it('a una carga publicada no le cuenta faltantes: ya pasó el cierre', function () {
-    $published = $this->world->loadIn($this->c1, LoadStatus::Published);
+    $published = $this->world->loadIn($this->c1, LoadStatus::Published, modality: modalityOf('EAD'));
     $this->world->group(teacher: false, load: $published);
     $this->world->group(load: $published);
 
@@ -184,8 +184,8 @@ it('filtra por clave o nombre sin importar acentos y por la cubeta de alguna car
 it('dice cuándo se recalcularon los choques: el más viejo de las modalidades con cargas, y cuáles no se han recalculado', function () {
     $ead = modalityOf('EAD');
     $this->world->group();
-    $this->world->group(load: $this->world->loadIn($this->c1));
-    $this->world->group(load: $this->world->loadIn(Campus::factory()->create(['modality_id' => $ead->id])));
+    $this->world->group(load: $this->world->loadIn($this->c1, modality: modalityOf('EAD')));
+    $this->world->group(load: $this->world->loadIn(Campus::factory()->create(), modality: $ead));
     Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->world->load->modality_id), now()->setTime(9, 15)->toIso8601String());
 
     $board = closingBoardOf();
@@ -231,7 +231,7 @@ it('lee todo el Tec en pocas consultas, sin importar cuántas cargas haya', func
     foreach (range(1, 6) as $index) {
         $department = Department::factory()->create();
         $this->world->group(load: $this->world->loadIn($this->world->campus, department: $department));
-        $this->world->group(load: $this->world->loadIn($this->c1, department: $department));
+        $this->world->group(load: $this->world->loadIn($this->c1, department: $department, modality: modalityOf('EAD')));
     }
 
     DB::enableQueryLog();

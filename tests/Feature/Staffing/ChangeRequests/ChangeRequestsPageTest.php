@@ -73,7 +73,7 @@ function crGroupOptions(Testable $page): array
 function crWorldDepartmentGroup(object $world, LoadStatus $status): Group
 {
     $department = Department::factory()->create(['code' => 'IND', 'name' => 'Industrial']);
-    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'modality_id' => $world->campus->modality_id, 'department_id' => $department->id, 'status' => $status]);
+    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id, 'status' => $status]);
 
     return crGroup($world, '9Z', 'Materia en propuesta', $department, $world->isc, null);
 }
@@ -125,10 +125,11 @@ describe('lista', function () {
     });
 
     it('la consulta de la lista hace un número constante de consultas', function () {
-        $count = function (): int {
+        $presencial = modalityOf('PRES')->id;
+        $count = function () use ($presencial): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
-            app(ChangeRequestsQuery::class)->listFor(app(Actor::class), $this->w->term->id, $this->w->campus->modality_id, null, $this->w->sc->id);
+            app(ChangeRequestsQuery::class)->listFor(app(Actor::class), $this->w->term->id, $presencial, null, $this->w->sc->id);
             DB::disableQueryLog();
 
             return count(DB::getQueryLog());

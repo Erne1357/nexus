@@ -66,7 +66,7 @@ function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = tr
             'starts_on' => $year.($code[4] === '3' ? '-08-17' : '-01-25'),
             'ends_on' => $year.($code[4] === '3' ? '-12-11' : '-06-11'),
         ]);
-        $models->map(fn (Campus $campus) => $campus->catalogModality)->unique('id')->each(fn ($modality) => app(OpenTerm::class)->handle($term, $modality));
+        app(OpenTerm::class)->handle($term, modalityOf('PRES'));
     }
 }
 
@@ -105,7 +105,7 @@ it('deja el periodo actual con los estados fijos por departamento (HC-14)', func
     $term = Term::query()->where('code', '20271')->firstOrFail();
     $pending = fn (string $department, string $campus): array => array_map(
         fn (Catalog $catalog): string => $catalog->value,
-        $query->pendingFor($term, Campus::query()->where('code', $campus)->firstOrFail(), Department::query()->where('code', $department)->firstOrFail()),
+        $query->pendingFor($term, modalityOf('PRES'), Department::query()->where('code', $department)->firstOrFail()),
     );
 
     runCatalogDemoSeeder('massive');
@@ -129,7 +129,7 @@ it('con el perfil demo deja CEA y EE validados y MM reabierto con salones en rev
     seedCatalogScenario();
     $query = app(CatalogReviewQuery::class);
     $term = Term::query()->where('code', '20271')->firstOrFail();
-    $pending = fn (string $department): array => $query->pendingFor($term, Campus::query()->where('code', 'C2')->firstOrFail(), Department::query()->where('code', $department)->firstOrFail());
+    $pending = fn (string $department): array => $query->pendingFor($term, modalityOf('PRES'), Department::query()->where('code', $department)->firstOrFail());
 
     runCatalogDemoSeeder('demo');
 
@@ -152,12 +152,12 @@ it('con el perfil demo en un solo campus deja los mismos estados en C2', functio
     runCatalogDemoSeeder('demo');
 
     $query = app(CatalogReviewQuery::class);
-    $campus = Campus::query()->where('code', 'C2')->firstOrFail();
+    $presencial = modalityOf('PRES');
     $term = Term::query()->where('code', '20271')->firstOrFail();
 
-    expect($query->pendingFor($term, $campus, Department::query()->where('code', 'CB')->firstOrFail()))->toBe([])
-        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([])
-        ->and($query->pendingFor($term, $campus, Department::query()->where('code', 'MM')->firstOrFail()))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
+    expect($query->pendingFor($term, $presencial, Department::query()->where('code', 'CB')->firstOrFail()))->toBe([])
+        ->and($query->pendingFor($term, $presencial, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([])
+        ->and($query->pendingFor($term, $presencial, Department::query()->where('code', 'MM')->firstOrFail()))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
         ->and(CatalogReview::query()->whereNotNull('snapshot')->count())->toBe(CatalogReview::query()->where('status', ReviewStatus::Validated)->count() + Activity::query()->where('event', 'reopened')->count());
 });
 
