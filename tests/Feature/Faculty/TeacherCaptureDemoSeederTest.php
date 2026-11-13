@@ -27,13 +27,18 @@ function seedCaptureScenario(bool $open = true): Term
         app(OpenTerm::class)->handle($term, modalityOf('PRES'));
     }
 
+    seedCaptureTeachers($term);
+
+    return $term;
+}
+
+function seedCaptureTeachers(Term $term): void
+{
     foreach (range(1, 200) as $n) {
         $teacher = Teacher::factory()->create(['rfc' => sprintf('T%04d', $n)]);
         TeacherAvailability::factory()->create(['teacher_id' => $teacher->id, 'term_id' => $term->id]);
         TeacherSubjectQualification::factory()->create(['teacher_id' => $teacher->id]);
     }
-
-    return $term;
 }
 
 function runCaptureSeeder(string $profile = 'massive', bool $complete = false): void
@@ -67,6 +72,25 @@ it('deja docentes con y sin disponibilidad, perfil y horas fuera del ITCJ en las
     expect($withAvailability)->toBeBetween(130, 170)
         ->and($withProfile)->toBeBetween(150, 190)
         ->and($withExternal)->toBeBetween(40, 80);
+});
+
+it('las horas fuera del ITCJ que agrega salen del RFC y no del UUID del docente: otra corrida de la demo da la misma plantilla', function () {
+    $term = seedCaptureScenario();
+    $hoursByRfc = fn (): array => DB::table('teacher_external_loads')->join('teachers', 'teachers.id', '=', 'teacher_external_loads.teacher_id')
+        ->where('teacher_external_loads.term_id', $term->id)->whereNull('teacher_external_loads.deleted_at')
+        ->orderBy('teachers.rfc')->pluck('teacher_external_loads.hours', 'teachers.rfc')->all();
+    runCaptureSeeder('massive');
+    $first = $hoursByRfc();
+
+    // Los mismos docentes con otros UUID, como en otra corrida de la demo.
+    foreach (['teacher_external_loads', 'teacher_availability', 'teacher_subject_qualifications', 'teachers'] as $table) {
+        DB::table($table)->delete();
+    }
+
+    seedCaptureTeachers($term);
+    runCaptureSeeder('massive');
+
+    expect($first)->not->toBe([])->and($hoursByRfc())->toBe($first);
 });
 
 it('es idempotente', function () {

@@ -34,7 +34,9 @@ use RuntimeException;
  * lugares tienen. El tope de grupos simultáneos de cada departamento es el 70 % de sus docentes activos de
  * adscripción primaria (al menos uno, también para un departamento sin docentes) y se cuenta en todos los campus, que
  * se colocan en orden de clave; en cada campus, cada modalidad con grupos en él, con la ventana del perfil de la
- * modalidad. Los grupos que ya tienen sesiones no se mueven, pero cuentan. Primero calcula todo y solo si todo cabe
+ * modalidad. Los grupos que ya tienen sesiones no se mueven, pero cuentan. El orden y el plan y semestre de cada grupo
+ * (de donde el planificador reparte las horas de inicio) van por claves (modalidad, campus, plan), no por los UUIDv7,
+ * que traen bits al azar: así la misma demo da el mismo horario en cada corrida. Primero calcula todo y solo si todo cabe
  * escribe, en una transacción, las sesiones en bloque, sin los eventos que encolarían un recálculo por grupo; luego
  * pone la clave a cada grupo nuevo y recalcula los choques una vez por modalidad (M1). Si un grupo no cabe, se detiene
  * con el grupo y el motivo, sin escribir nada. Idempotente. No corre en producción.
@@ -87,14 +89,14 @@ final class CleanScheduleDemoSeeder extends Seeder
     private function planCampus(Term $term, Campus $campus, Modality $modality, CleanSchedulePlanner $planner): array
     {
         $profile = $modality->profile;
-        $groups = Group::query()->with(['subject', 'sessions'])
+        $groups = Group::query()->with(['subject', 'sessions', 'studyPlan' => fn ($query) => $query->withTrashed()])
             ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('modality_id', $modality->id)
             ->where('status', '!=', GroupStatus::Cancelled)
             ->get()
             ->sortBy(fn (Group $group): array => [
                 $group->subject->needs_lab && $group->subject->practice_hours > 0 ? 0 : 1,
                 -$group->capacity,
-                "{$group->study_plan_id}|{$group->semester}",
+                "{$group->studyPlan->code}|{$group->semester}",
                 $group->subject->code,
                 $group->code ?? '',
                 $group->id,
@@ -115,7 +117,7 @@ final class CleanScheduleDemoSeeder extends Seeder
             $groups->map(fn (Group $group): array => [
                 'id' => $group->id,
                 'label' => "el grupo de {$group->subject->code} {$group->subject->name} ({$campus->code}, semestre {$group->semester}, {$group->capacity} lugares)",
-                'cohort' => "{$modality->id}|{$campus->id}|{$group->study_plan_id}|{$group->semester}",
+                'cohort' => "{$modality->code}|{$campus->code}|{$group->studyPlan->code}|{$group->semester}",
                 'subject' => $group->subject_id,
                 'department' => $group->department_id,
                 'capacity' => (int) $group->capacity,
