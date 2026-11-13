@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Events\AgreementRejected;
 use App\Modules\AcademicLoad\Events\AgreementRequested;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Actions\OpenNotification;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -76,8 +77,8 @@ it('al pedirse un préstamo, avisa al jefe del departamento dueño y no a quien 
         return $message->title === 'Ingeniería Industrial te pide LC-201'
             && $message->body === 'LC-201 · Lun 9:00–11:00'
             && $message->route === 'scheduling.agreements'
-            && $message->parameters === ['acuerdo' => $loan->id]
-            && $message->campusId === $this->campus->id
+            && $message->parameters === ['acuerdo' => $loan->id, 'campus' => 'C2']
+            && $message->campusId === null
             && $message->termId === $this->term->id;
     });
     Notification::assertNotSentTo([$this->jefeIi, $this->subdireccion], AgreementReceived::class);
@@ -97,6 +98,7 @@ it('al proponerse un grupo compartido, avisa al jefe del departamento de la carr
         && $notification->message($this->jefeSc)->body === '6 lugares de ISC'
         // MS14: el aviso de un grupo compartido abre la pantalla en la modalidad, sin filtrar un campus.
         && $notification->message($this->jefeSc)->campusId === null
+        && $notification->message($this->jefeSc)->parameters === ['acuerdo' => $share->id]
         && $notification->message($this->jefeSc)->modalityId === $share->modality_id);
 });
 
@@ -123,7 +125,7 @@ it('al aceptarse un préstamo, avisa al departamento que lo pidió', function ()
         return $message->title === 'Sistemas y Computación aceptó tu préstamo'
             && $message->body === 'LC-201 · Lun 9:00–11:00'
             && $message->tone === 'success'
-            && $message->parameters === ['acuerdo' => $loan->id];
+            && $message->parameters === ['acuerdo' => $loan->id, 'campus' => 'C2'];
     });
     Notification::assertNotSentTo([$this->jefeSc, $this->subdireccion], AgreementAnswered::class);
 });
@@ -223,8 +225,8 @@ it('al cancelar quien lo pidió un préstamo propuesto, avisa al jefe del depart
         return $message->title === 'Ingeniería Industrial canceló el préstamo de LC-201 del lunes de 9:00 a 11:00'
             && $message->body === 'Ya no tienes que decidirlo.'
             && $message->route === 'scheduling.agreements'
-            && $message->parameters === ['acuerdo' => $loan->id]
-            && $message->campusId === $this->campus->id
+            && $message->parameters === ['acuerdo' => $loan->id, 'campus' => 'C2']
+            && $message->campusId === null
             && $message->termId === $this->term->id;
     });
     Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 1);
@@ -242,7 +244,7 @@ it('al cancelarse solos los préstamos de una sesión que se movió (SyncSession
     expect($first->fresh()->status)->toBe(AgreementStatus::Cancelled)
         ->and($second->fresh()->status)->toBe(AgreementStatus::Cancelled);
     Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 2);
-    Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $first->id]
+    Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $first->id, 'campus' => 'C2']
         && $notification->message($this->jefeSc)->title === 'Ingeniería Industrial canceló el préstamo de LC-201 del lunes de 7:00 a 9:00'
         && $notification->message($this->jefeSc)->body === 'Estaba aceptado: el salón ya no queda prestado a esa hora.');
     Notification::assertNotSentTo($this->jefeIi, LoanCancelled::class);
@@ -336,7 +338,7 @@ describe('préstamos que cancela la sesión al cambiar', function () {
         app(UpdateGroupSession::class)->handle($this->session, 1, '11:00', '13:00', $this->session->kind, $this->jefeIi);
 
         expect($this->pending->fresh()->status)->toBe(AgreementStatus::Cancelled);
-        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id, 'campus' => 'C2']
             && $notification->message($this->jefeSc)->body === 'Estaba aceptado: el salón ya no queda prestado a esa hora.');
         Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->body === 'LC-201 · Lun 11:00–13:00');
     });
@@ -347,7 +349,7 @@ describe('préstamos que cancela la sesión al cambiar', function () {
 
         app(RemoveGroupSession::class)->handle($this->session, $this->jefeIi);
 
-        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]);
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id, 'campus' => 'C2']);
         Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->body === 'LC-201 · Lun 14:00–16:00');
     });
 
@@ -361,7 +363,7 @@ describe('préstamos que cancela la sesión al cambiar', function () {
 
         app(UpdateGroupSession::class)->handle($this->session, 1, '09:00', '12:00', $this->session->kind, $this->jefeIi);
 
-        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]);
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id, 'campus' => 'C2']);
         Notification::assertNotSentTo($this->jefeSc, AgreementReceived::class);
     });
 
@@ -374,7 +376,7 @@ describe('préstamos que cancela la sesión al cambiar', function () {
         app(AssignSessionRoom::class)->handle($this->session, $other, $this->jefeIi);
 
         Notification::assertSentToTimes($this->jefeSc, LoanCancelled::class, 1);
-        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id]);
+        Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->parameters === ['acuerdo' => $this->pending->id, 'campus' => 'C2']);
         Notification::assertSentTo($jefeCb, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($jefeCb)->title === 'Ingeniería Industrial te pide CB-101');
         Notification::assertNotSentTo($jefeCb, LoanCancelled::class);
     });
@@ -399,4 +401,24 @@ it('el aviso de cancelado dice las horas sin cero a la izquierda, también antes
 
     Notification::assertSentTo($this->jefeSc, LoanCancelled::class, fn (LoanCancelled $notification): bool => $notification->message($this->jefeSc)->title === 'Ingeniería Industrial canceló el préstamo de LC-201 del lunes de 0:30 a 1:00'
         && $notification->message($this->jefeSc)->icon === 'o-building-office');
+});
+
+it('MS14 y M12: el aviso de un préstamo de otro campus abre Acuerdos en la modalidad con el campus como filtro, aunque el nombramiento de quien lo recibe sea de otro campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $c1->id])->id, 'department_id' => $this->sc->id, 'code' => 'LC-101']);
+    $group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'subject_id' => $this->group->subject_id]);
+    $loan = InterdepartmentalAgreement::factory()->create([
+        'term_id' => $this->term->id, 'campus_id' => $c1->id, 'group_id' => $group->id, 'room_id' => $room->id,
+        'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+        'requested_by' => $this->jefeIi->id,
+    ]);
+
+    event(new AgreementRequested($loan));
+    $this->actingAs($this->jefeSc);
+    $target = app(OpenNotification::class)->handle($this->jefeSc, $this->jefeSc->notifications()->where('type', AgreementReceived::class)->value('id'));
+    parse_str((string) parse_url((string) $target->url, PHP_URL_QUERY), $query);
+
+    expect($target->problem)->toBeNull()
+        ->and(parse_url((string) $target->url, PHP_URL_PATH))->toBe(parse_url(route('scheduling.agreements'), PHP_URL_PATH))
+        ->and($query)->toEqual(['acuerdo' => $loan->id, 'campus' => 'C1', 'modalidad' => 'PRES']);
 });

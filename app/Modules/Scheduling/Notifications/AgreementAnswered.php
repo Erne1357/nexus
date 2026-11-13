@@ -51,9 +51,8 @@ final class AgreementAnswered extends NexusNotification
             body: $body,
             icon: $rejected ? 'o-x-circle' : 'o-check-circle',
             route: 'scheduling.agreements',
-            parameters: ['acuerdo' => $agreement->getKey()],
+            parameters: AgreementText::parameters($agreement),
             termId: $agreement->term_id,
-            campusId: $agreement->kind === AgreementKind::RoomLoan ? $agreement->campus_id : null,
             modalityId: $agreement->modality_id,
             tone: $rejected ? 'warning' : 'success',
         );
