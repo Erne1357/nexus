@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Rules\Constraints\AgreementsAnswered;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Scheduling\Queries\ClosingBlockers;
@@ -30,7 +31,8 @@ use Illuminate\Support\Str;
  * del periodo (GroupClosingFlagsQuery, contadas con la regla por grupo del veto), las solicitudes de cambio y los
  * acuerdos (AgreementsAnswered::countsByLoad). Los choques duros son los vigentes de `schedule_conflicts` (como
  * ConflictBoardQuery), no los del validador, que tardaría segundos por carga; por eso el tablero dice cuándo se
- * recalcularon y el veto sigue decidiendo al cerrar.
+ * recalcularon (el recálculo es por modalidad: `unsynced` nombra las modalidades con cargas que no se han recalculado)
+ * y el veto sigue decidiendo al cerrar.
  *
  * Una carga sin grupos se queda en borrador y no aparece; un departamento sin grupos en ninguna modalidad va al
  * final. A una carga publicada no se le cuentan faltantes: ya pasó el cierre (se reabre para corregirla).
@@ -85,7 +87,8 @@ final class ClosingBoardQuery
         $visibleLoads = $visible->flatMap(fn (array $row): array => $row['loads']);
 
         $campuses = Campus::query()->whereIn('id', $flags->pluck('campusId')->unique()->values()->all())->orderBy('code')->get();
-        $stamps = $campuses->mapWithKeys(fn (Campus $campus): array => [$campus->code => $this->conflicts->lastSyncedAt($term, $campus)]);
+        $stamps = $withGroups->map(fn (LoadProgress $load): Modality => $load->load->modality)->unique('id')->sortBy('code')
+            ->mapWithKeys(fn (Modality $modality): array => [$modality->name => $this->conflicts->lastSyncedAt($term, $modality)]);
 
         return [
             'rows' => $visible->all(),

@@ -114,7 +114,7 @@ it('Ranking docente: al nacer grupos encola uno por cada departamento de esos gr
     $sibling = ($this->group)($this->term, $this->campus, $this->subject);
     $foreign = ($this->group)($this->term, $this->campus, $this->otherSubject);
 
-    GroupsCreated::dispatch($this->term->id, $this->campus->id, [$this->ownGroup->id, $sibling->id, $foreign->id]);
+    GroupsCreated::dispatch($this->term->id, $this->ownGroup->modality_id, [$this->ownGroup->id, $sibling->id, $foreign->id]);
 
     expect(queuedRankingScopes())->toBe(sortedRankingScopes([
         [$this->term->id, $this->campus->id, $this->department->id],

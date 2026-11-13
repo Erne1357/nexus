@@ -4,7 +4,6 @@ namespace App\Modules\Staffing\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -17,7 +16,8 @@ use Illuminate\Database\Eloquent\Builder;
  * Lo que hoy impediría pasar la carga de un departamento a asignación docente, para que la asignación deshabilite
  * «Pasar a asignación docente» con su motivo en lugar de dejar que el jefe choque con el veto (tarea 3.9). Hace la
  * misma cuenta que el veto de Scheduling (BlockStaffingWithHardConflicts, docs/proceso/proceso-propuesto.md): los grupos
- * del departamento con choques duros, con el validador sobre la foto de ahora (olvida la que tuviera, es scoped), y,
+ * del departamento con choques duros, con el validador sobre la foto de ahora de la modalidad de la carga (una sola
+ * validación con los grupos de todos sus campus; olvida la que tuviera, es scoped), y,
  * en una modalidad con bloques de tiempo, los grupos no cancelados sin sesiones (de todos los campus de la carga, M1). El
  * veto sigue siendo quien decide al
  * pasarla.
@@ -35,17 +35,12 @@ final class StaffingBlockersQuery
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $load->department_id);
 
         $this->validator->forget();
-        $hard = [];
-
-        foreach (Campus::query()->whereIn('id', $this->groups($load)->select('campus_id'))->orderBy('code')->get() as $campus) {
-            array_push($hard, ...array_filter(
-                $this->validator->validateLoad($load->term, $campus, $department)->violations(),
-                fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
-            ));
-        }
+        $hard = array_filter(
+            $this->validator->validateLoad($load->term, $load->modality, $department)->violations(),
+            fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
+        );
 
         return [
-            // Solo los grupos de esta carga: el validador de un campus también ve grupos de otra modalidad en él.
             'conflicted' => count(array_intersect(
                 array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))),
                 $this->groups($load)->pluck('id')->all(),

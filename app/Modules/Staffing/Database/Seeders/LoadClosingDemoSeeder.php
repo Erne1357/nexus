@@ -14,6 +14,7 @@ use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
@@ -208,8 +209,8 @@ final class LoadClosingDemoSeeder extends Seeder
                 }, self::FAKED_EVENTS);
 
                 if ($touched) {
-                    foreach ($campuses as $touchedCampus) {
-                        app(SyncScheduleConflicts::class)->handle($termModel, $touchedCampus);
+                    foreach (Modality::query()->withTrashed()->whereIn('id', $campuses->pluck('modality_id')->filter()->unique()->all())->orderBy('code')->get() as $modality) {
+                        app(SyncScheduleConflicts::class)->handle($termModel, $modality);
                     }
 
                     $anyTouched = true;
@@ -261,7 +262,7 @@ final class LoadClosingDemoSeeder extends Seeder
         usort($picked, fn (AcademicLoad $a, AcademicLoad $b): int => $a->department->code <=> $b->department->code);
         $touched = [];
         $lines = [];
-        $session = $campus->profile->usesRooms && $picked !== [] ? $this->roomToFree($picked) : null;
+        $session = $picked !== [] && $picked[0]->modality->profile->usesRooms ? $this->roomToFree($picked) : null;
 
         if ($session !== null) {
             $group = Group::query()->with('department')->findOrFail($session->group_id);
@@ -475,7 +476,7 @@ final class LoadClosingDemoSeeder extends Seeder
             $validator = app(ScheduleValidator::class);
             $validator->forget();
             $hard = array_values(array_filter(
-                $this->campuses->flatMap(fn (Campus $campus): array => $validator->validateLoad($load->term, $campus, $load->department)->violations())->all(),
+                $validator->validateLoad($load->term, $load->modality, $load->department)->violations(),
                 fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard && $violation->groupId !== null && $groupIds->has($violation->groupId),
             ));
 
