@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -30,7 +31,7 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'department_id' => departmentKey(10)]);
     $this->publisher = User::factory()->create(['name' => 'Laura Méndez']);
-    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => $this->load->campus_id])->id, 'department_id' => departmentKey(10)]);
+    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id, 'department_id' => departmentKey(10)]);
     $this->teacher = publishTeacher();
 
     $this->taught = publishGroup(['code' => 'A', 'teacher_id' => $this->teacher->id]);
@@ -47,7 +48,7 @@ function publishGroup(array $attributes): Group
 {
     $group = Group::factory()->withQuota()->create([
         'term_id' => test()->load->term_id,
-        'campus_id' => test()->load->campus_id,
+        'campus_id' => loadCampus(test()->load)->id,
         'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10), 'theory_hours' => 2, 'practice_hours' => 0])->id,
         'capacity' => 30,
         ...$attributes,
@@ -116,7 +117,7 @@ it('lleva al historial docente cada grupo con docente, con fuente nexus', functi
         'teacher_id' => $this->teacher->id,
         'subject_id' => $this->taught->subject_id,
         'term_code' => $this->load->term->code,
-        'campus_id' => $this->load->campus_id,
+        'campus_id' => loadCampus($this->load)->id,
         'group_code' => 'A',
         'source' => HistorySource::Nexus->value,
     ]]);
@@ -170,7 +171,7 @@ it('no publica una carga que no está cerrada ni aprobada', function () {
 });
 
 it('con visto bueno, publica la carga aprobada pero no la cerrada', function () {
-    $this->load->campus->update(['settings' => ['requires_subdireccion_approval' => true]]);
+    $this->load->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
 
     expect(fn () => publish($this->load->fresh()))->toThrow(ValidationException::class);
 

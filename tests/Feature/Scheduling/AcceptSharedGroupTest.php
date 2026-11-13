@@ -33,7 +33,7 @@ beforeEach(function () {
         'capacity' => 40,
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 function proposedFor(int $seats = 8, AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement

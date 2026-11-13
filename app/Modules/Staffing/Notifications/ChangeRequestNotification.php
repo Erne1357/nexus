@@ -34,6 +34,7 @@ abstract class ChangeRequestNotification extends NexusNotification
             termId: $this->request->term_id,
             campusId: $this->request->campus_id,
             tone: $tone,
+            modalityId: $this->request->modality_id,
         );
     }
 

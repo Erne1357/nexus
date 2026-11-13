@@ -31,7 +31,7 @@ beforeEach(function () {
     User::factory()->create(['username' => 'subdir']);
     $this->department = Department::factory()->create(['code' => 'CEA']);
     User::factory()->create(['username' => 'jefe.cea']);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id, 'status' => LoadStatus::Closed]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id, 'status' => LoadStatus::Closed]);
 
     $building = Building::factory()->create(['campus_id' => $this->campus->id]);
     $rooms = Room::factory()->capacity(40)->count(3)->create(['building_id' => $building->id, 'department_id' => $this->department->id]);

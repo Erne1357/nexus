@@ -73,7 +73,7 @@ function crGroupOptions(Testable $page): array
 function crWorldDepartmentGroup(object $world, LoadStatus $status): Group
 {
     $department = Department::factory()->create(['code' => 'IND', 'name' => 'Industrial']);
-    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'campus_id' => $world->campus->id, 'department_id' => $department->id, 'status' => $status]);
+    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'modality_id' => $world->campus->modality_id, 'department_id' => $department->id, 'status' => $status]);
 
     return crGroup($world, '9Z', 'Materia en propuesta', $department, $world->isc, null);
 }

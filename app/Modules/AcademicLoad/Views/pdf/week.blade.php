@@ -1,4 +1,4 @@
-{{-- PDF de la semana de un docente o de un salón (TeacherPdf, RoomPdf): días por bloques del perfil del campus, elegido
+{{-- PDF de la semana de un docente o de un salón (TeacherPdf, RoomPdf): días por bloques del perfil de la modalidad, elegido
      por el usuario el 10 de noviembre de 2026. Cada sesión abarca sus bloques con el color de su materia. --}}
 @extends('academic-load::pdf.layout')
 

@@ -16,8 +16,8 @@ use InvalidArgumentException;
 use LogicException;
 
 /**
- * Publica la carga de un departamento en un campus (tarea 4.3, docs/proceso/proceso-propuesto.md, etapa 8): de
- * `closed` (campus sin visto bueno) o `approved` a `published`, y en R2 también desde `reanalysis`. Todo en una
+ * Publica la carga de un departamento en una modalidad (tarea 4.3, docs/proceso/proceso-propuesto.md, etapa 8; M1): de
+ * `closed` (modalidad sin visto bueno) o `approved` a `published`, y en R2 también desde `reanalysis`. Todo en una
  * transacción, para que no haya carga publicada sin su foto ni foto sin carga publicada:
  *
  * 1. `TransitionLoad` bloquea la carga, revisa el diagrama y junta los vetos de LoadTransitioning (Scheduling vuelve a
@@ -27,7 +27,8 @@ use LogicException;
  * 3. Guarda la versión siguiente (`current_version + 1`; la anterior se conserva, HC-18) y anota en la carga quién y
  *    cuándo publicó.
  * 4. Lleva el historial docente a lo que dice esta versión (`SyncPublishedTeaching`, Faculty, `source = nexus`): una
- *    fila por grupo con docente; las de la versión anterior que ya no están se borran lógicamente.
+ *    fila por grupo con docente, en el campus de su grupo; las de la versión anterior que ya no están se borran
+ *    lógicamente. La versión anterior se lee normalizada (SnapshotPayload::normalize, MS13).
  *
  * Quién puede lo decide `AcademicLoadPolicy::publish` antes de llamarla.
  */
@@ -57,6 +58,7 @@ final class PublishLoad
             SnapshotPayload::assertValid($payload);
 
             $previous = $load->snapshots()->where('version', $load->current_version)->first()?->payload;
+            $previous = $previous === null ? [] : SnapshotPayload::normalize($previous)['groups'];
 
             $snapshot = $load->snapshots()->create([
                 'version' => $version,
@@ -67,12 +69,12 @@ final class PublishLoad
 
             $load->update(['current_version' => $version, 'published_by' => $actor->getKey(), 'published_at' => $publishedAt]);
 
-            $this->teaching->handle(
-                $load->term->code,
-                $load->campus_id,
-                self::taught($groups),
-                $previous === null ? [] : self::taught($previous['groups']),
-            );
+            $taught = self::taughtByCampus($groups);
+            $before = self::taughtByCampus($previous);
+
+            foreach (array_unique([...array_keys($taught), ...array_keys($before)]) as $campus) {
+                $this->teaching->handle($load->term->code, $campus === '' ? null : (string) $campus, $taught[$campus] ?? [], $before[$campus] ?? []);
+            }
 
             $sessions = array_sum(array_map(fn (array $group): int => count($group['sessions']), $groups));
 
@@ -81,23 +83,28 @@ final class PublishLoad
                 ->causedBy($actor)
                 ->event('published')
                 ->withProperties(['version' => $version, 'groups' => count($groups), 'sessions' => $sessions])
-                ->log("Publicó la versión {$version} de la carga de {$load->department->code} en {$load->campus->code}: ".count($groups).' grupos');
+                ->log("Publicó la versión {$version} de la carga de {$load->department->code} en {$load->modality->name}: ".count($groups).' grupos');
 
             return $snapshot;
         });
     }
 
     /**
-     * Las materias impartidas que dice una foto: una por grupo con docente.
+     * Las materias impartidas que dice una foto, por campus del grupo ('' sin campus): una por grupo con docente.
      *
      * @param  list<array<string, mixed>>  $groups
-     * @return list<array{teacher_id: string, subject_id: string, group_code: string}>
+     * @return array<string, list<array{teacher_id: string, subject_id: string, group_code: string}>>
      */
-    private static function taught(array $groups): array
+    private static function taughtByCampus(array $groups): array
     {
-        return array_values(array_map(
-            fn (array $group): array => ['teacher_id' => $group['teacher']['id'], 'subject_id' => $group['subject']['id'], 'group_code' => $group['code']],
-            array_filter($groups, fn (array $group): bool => $group['teacher'] !== null),
-        ));
+        $taught = [];
+
+        foreach ($groups as $group) {
+            if ($group['teacher'] !== null) {
+                $taught[$group['campus']['id'] ?? ''][] = ['teacher_id' => $group['teacher']['id'], 'subject_id' => $group['subject']['id'], 'group_code' => $group['code']];
+            }
+        }
+
+        return $taught;
     }
 }

@@ -14,13 +14,14 @@ use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 
 /**
  * Lo que muestra la bandeja de un departamento en un campus y un periodo (DepartmentInboxQuery::inbox;
  * reglas-de-negocio.md, "Propuesta de carrera"):
  *
- * - la carga del departamento en el campus, o null si no existe, y sus catálogos sin validar (HC-14), que
+ * - la carga del departamento en la modalidad del campus (M1), o null si no existe, y sus catálogos sin validar (HC-14), que
  *   bloquean aceptar (canAccept());
  * - cada carrera ofrecida en el campus, y la que ya no se ofrece pero tiene una parte del departamento, con el
  *   estado de lo que le pide (InboxStatus), si la parte se puede decidir (pendiente, con la propuesta enviada o
@@ -45,6 +46,8 @@ final readonly class DepartmentInbox
         public array $careers,
         public array $subjects,
         public ProposalAnomalies $anomalies = new ProposalAnomalies,
+        /** La modalidad de la carga (M1); null solo en bandejas armadas a mano en pruebas. */
+        public ?Modality $modality = null,
     ) {}
 
     /**

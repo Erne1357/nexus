@@ -31,7 +31,7 @@ beforeEach(function () {
     $this->from = Department::factory()->create();
     $this->to = Department::factory()->create();
     $this->group = Group::factory()->create(['code' => 'D', 'subject_id' => Subject::factory()->create(['department_id' => $this->from->id])->id]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->from->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->from->id]);
     $this->room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->group->campus_id])->id, 'department_id' => $this->to->id]);
     $this->loan = InterdepartmentalAgreement::factory()->create([
         'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id, 'room_id' => $this->room->id,

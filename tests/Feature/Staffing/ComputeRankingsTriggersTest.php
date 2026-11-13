@@ -50,10 +50,10 @@ beforeEach(function () {
     $this->subject = Subject::factory()->create(['department_id' => $this->department->id]);
     $this->otherSubject = Subject::factory()->create(['department_id' => $this->otherDepartment->id]);
     AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
     ]);
     AcademicLoad::factory()->inStatus(LoadStatus::Published)->create([
-        'term_id' => $this->closedTerm->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->closedTerm->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
     ]);
     $this->group = fn (Term $term, Campus $campus, Subject $subject, array $attributes = []): Group => Group::factory()->create($attributes + [
         'term_id' => $term->id, 'campus_id' => $campus->id, 'subject_id' => $subject->id,

@@ -2,27 +2,29 @@
 
 namespace App\Modules\AcademicLoad\Queries;
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
- * Lo publicado de un campus en un periodo (tarea 4.4): la última versión de cada carga que tiene snapshot, junta y
- * ordenada para la consulta pública y los exportes. Lee solo el payload (AcademicLoad no ve las tablas vivas de
+ * Lo publicado de una modalidad en un periodo (tarea 4.4; M1): la última versión de cada carga que tiene snapshot, junta y
+ * ordenada para la consulta pública y los exportes, con el campus de cada grupo; onlyCampus() deja solo los de un campus
+ * (el filtro de la consulta). Lee solo el payload (AcademicLoad no ve las tablas vivas de
  * Scheduling) y no dice qué falta por publicar: el público ve lo que cada departamento ya publicó, sin aviso de
  * semestre incompleto, y la fecha de actualización es la de la publicación más reciente de lo que se ve (decisiones del
- * usuario del 10 de noviembre de 2026). Es puro: lo arma PublishedScheduleQuery y se guarda en caché tal cual.
+ * usuario del 10 de noviembre de 2026). Es puro: lo arma PublishedScheduleQuery con los payloads ya normalizados
+ * (SnapshotPayload::normalize, MS13) y se guarda en caché tal cual.
  */
 final readonly class PublishedSchedule
 {
-    /** @var list<int> */
-    public const array SCHEMA_VERSIONS = [1];
+    /** @var list<int> las formas que lee: la actual; las anteriores llegan normalizadas */
+    public const array SCHEMA_VERSIONS = [2];
 
     /**
      * @param  array<string, array{load_id: string, department: array{id: string, code: string, name: string}, version: int, published_at: CarbonImmutable}>  $loads  por departamento
      * @param  list<PublishedGroup>  $groups  por clave de materia y de grupo
-     * @param  array<string, mixed>|null  $profile  el perfil del campus de la publicación más reciente
+     * @param  array<string, mixed>|null  $profile  el perfil de la modalidad de la publicación más reciente
      */
     private function __construct(
         public array $loads,
@@ -31,9 +33,9 @@ final readonly class PublishedSchedule
     ) {}
 
     /**
-     * @param  list<array<string, mixed>>  $payloads  la última versión de cada carga, del mismo campus y periodo
+     * @param  list<array<string, mixed>>  $payloads  la última versión de cada carga, de la misma modalidad y periodo, normalizada
      *
-     * @throws InvalidArgumentException si mezclan campus o periodos, o traen una versión de esquema que no se conoce
+     * @throws InvalidArgumentException si mezclan modalidades o periodos, o traen una versión de esquema que no se conoce
      */
     public static function fromPayloads(array $payloads): self
     {
@@ -46,8 +48,8 @@ final readonly class PublishedSchedule
                 throw new InvalidArgumentException('Versión de esquema del snapshot no soportada: '.json_encode($payload['schema_version'] ?? null));
             }
 
-            if ($latest !== null && ($payload['term']['id'] !== $latest['term']['id'] || $payload['campus']['id'] !== $latest['campus']['id'])) {
-                throw new InvalidArgumentException('Los snapshots deben ser del mismo campus y periodo.');
+            if ($latest !== null && ($payload['term']['id'] !== $latest['term']['id'] || $payload['modality']['id'] !== $latest['modality']['id'])) {
+                throw new InvalidArgumentException('Los snapshots deben ser de la misma modalidad y periodo.');
             }
 
             $publishedAt = CarbonImmutable::parse($payload['published_at']);
@@ -100,6 +102,39 @@ final readonly class PublishedSchedule
     }
 
     /**
+     * Lo mismo con solo los grupos que se dan en ese campus (por clave); null deja todos. Las cargas no cambian: un
+     * departamento que publicó sigue publicado aunque no tenga grupos en ese campus.
+     */
+    public function onlyCampus(?string $campusCode): self
+    {
+        if ($campusCode === null) {
+            return $this;
+        }
+
+        return new self($this->loads, array_values(array_filter($this->groups, fn (PublishedGroup $group): bool => ($group->campus['code'] ?? null) === $campusCode)), $this->profile);
+    }
+
+    /**
+     * Los campus donde se dan los grupos publicados, por clave.
+     *
+     * @return list<array{id: string, code: string, name: string}>
+     */
+    public function campuses(): array
+    {
+        $campuses = [];
+
+        foreach ($this->groups as $group) {
+            if ($group->campus !== null) {
+                $campuses[$group->campus['code']] = $group->campus;
+            }
+        }
+
+        ksort($campuses, SORT_NATURAL);
+
+        return array_values($campuses);
+    }
+
+    /**
      * @return list<PublishedGroup>
      */
     public function groups(): array
@@ -108,16 +143,16 @@ final readonly class PublishedSchedule
     }
 
     /**
-     * El perfil del campus con el que se publicó lo más reciente (días, horario y bloque de la semana; si usa salones y
-     * bloques); sin publicaciones, el perfil por omisión.
+     * El perfil de la modalidad con el que se publicó lo más reciente (días, horario y bloque de la semana; si usa salones
+     * y bloques); sin publicaciones, el perfil por omisión.
      */
-    public function profile(): CampusProfile
+    public function profile(): ModalityProfile
     {
-        return CampusProfile::fromArray($this->profile ?? []);
+        return ModalityProfile::fromArray($this->profile ?? []);
     }
 
     /**
-     * Si el departamento ya tiene una versión publicada en el campus y periodo.
+     * Si el departamento ya tiene una versión publicada en la modalidad y periodo.
      */
     public function isPublished(string $departmentId): bool
     {
@@ -197,7 +232,7 @@ final readonly class PublishedSchedule
     }
 
     /**
-     * Los grupos de un docente en el campus, de todos los departamentos.
+     * Los grupos de un docente en la modalidad, de todos los departamentos.
      *
      * @return list<PublishedGroup>
      */

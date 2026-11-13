@@ -200,15 +200,16 @@ it('filtra por departamento o jefe y por estado', function () {
         ->and(($this->progress)(null, 'nadie')['global']['total'])->toBe(10);
 });
 
-it('reporta el estado de la carga de cada departamento y campus mediante el evento con reporte', function () {
+it('reporta el estado de la carga de cada departamento en la modalidad de los campus mediante el evento con reporte (M1)', function () {
     app(CreateTermLoads::class)->handle($this->term, modalityOf('PRES'));
 
-    AcademicLoad::query()->where('department_id', $this->sis->id)->where('campus_id', $this->c2->id)->update(['status' => LoadStatus::Proposed]);
+    AcademicLoad::query()->where('department_id', $this->sis->id)->update(['status' => LoadStatus::Proposed]);
 
     $row = collect(($this->progress)()['rows'])->firstWhere('department.code', 'SIS');
 
-    expect($row['loads'][$this->c2->id]['label'])->toBe('Propuesta')
-        ->and($row['loads'][$this->c1->id]['label'])->toBe('Borrador');
+    expect($row['loads'])->toHaveCount(1)
+        ->and($row['loads'][0]['modality']->code)->toBe('PRES')
+        ->and($row['loads'][0]['load']['label'])->toBe('Propuesta');
 });
 
 it('entrega por renglón las columnas que aún no están validadas, para el celular', function () {

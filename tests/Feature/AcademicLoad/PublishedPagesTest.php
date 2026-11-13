@@ -9,7 +9,7 @@ use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
@@ -27,13 +27,17 @@ use Livewire\Livewire;
 */
 
 /**
+ * La carga publicada de un departamento en la modalidad del campus (M1), con sus grupos en ese campus.
+ *
  * @param  list<array<string, mixed>>  $groups
  */
 function publishedPagesSnapshot(Term $term, Campus $campus, string $department, array $groups, string $at = '2026-12-12 10:30', LoadStatus $status = LoadStatus::Published): AcademicLoad
 {
+    $groups = array_map(fn (array $group): array => [...$group, 'campus' => ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name]], $groups);
+
     $load = AcademicLoad::factory()
         ->for($term)
-        ->for($campus)
+        ->state(['modality_id' => $campus->modality_id])
         ->for(Department::query()->firstWhere('code', $department) ?? Department::factory()->create(['code' => $department, 'name' => 'Departamento '.$department]))
         ->inStatus($status)
         ->create();
@@ -88,9 +92,9 @@ beforeEach(function () {
         'sessions' => [LoadSnapshotFactory::session(['day' => 2, 'starts_at' => '10:00', 'ends_at' => '12:00', 'kind' => 'virtual', 'kind_label' => 'Virtual', 'room' => null])],
     ]);
     $this->basic = publishedPagesSnapshot($this->term, $this->c2, 'CB', [$this->groupB, $this->groupD]);
-    publishedPagesSnapshot($this->term, $this->c1, 'CB', [publishedPagesGroup('ACF-0000', 'Solo del Campus I', 'Z', ['placements' => [LoadSnapshotFactory::placement()]])], '2026-12-09 08:00');
+    publishedPagesSnapshot($this->term, $this->c1, 'CBI', [publishedPagesGroup('ACF-0000', 'Solo del Campus I', 'Z', ['placements' => [LoadSnapshotFactory::placement()]])], '2026-12-09 08:00');
 
-    $this->semesterUrl = fn (array $query = []) => route('published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'ISC', ...$query]);
+    $this->semesterUrl = fn (array $query = []) => route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'carrera' => 'ISC', ...$query]);
     $this->indexUrl = route('published.index', ['periodo' => '20271', 'campus' => 'C2']);
 });
 
@@ -127,7 +131,7 @@ describe('inicio', function () {
         publishedPagesIndex()
             ->set('teacherSearch', 'rios')
             ->assertSee('Laura Ríos Medina')
-            ->assertSeeHtml(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))
+            ->assertSeeHtml(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]))
             ->set('teacherSearch', 'zzz')
             ->assertSee('Ningún docente coincide');
     });
@@ -136,7 +140,7 @@ describe('inicio', function () {
         publishedPagesIndex()
             ->set('roomSearch', 'b-12')
             ->assertSee('Edificio B')
-            ->assertSeeHtml(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]));
+            ->assertSeeHtml(route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => $this->room['id']]));
     });
 
     it('ofrece una select de retícula cuando la carrera tiene varias, la de código mayor primero', function () {
@@ -150,7 +154,7 @@ describe('inicio', function () {
     });
 
     it('sin salones en el perfil no ofrece la búsqueda por salón', function () {
-        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
         publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['placements' => [($this->placement)()]])], '2026-12-13 10:00');
 
         $this->get($this->indexUrl)->assertOk()->assertDontSee('Por salón');
@@ -181,8 +185,8 @@ describe('semestre', function () {
     it('pinta la mini-semana con las horas, el salón y el enlace del docente y del salón', function () {
         $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 3]))
             ->assertSeeInOrder(['7:00', '9:00', 'B-12'])
-            ->assertSeeHtml(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))
-            ->assertSeeHtml(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]))
+            ->assertSeeHtml(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]))
+            ->assertSeeHtml(route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => $this->room['id']]))
             ->assertSee('Sin icono: teoría');
     });
 
@@ -205,22 +209,22 @@ describe('semestre', function () {
 
     it('un semestre sin grupos lo dice y una carrera no publicada es 404', function () {
         $this->get(($this->semesterUrl)(['semestre' => 9]))->assertOk()->assertSee('No hay grupos publicados para este semestre.');
-        $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'XXX']))->assertNotFound();
-        $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C1', 'carrera' => 'ISC']))->assertOk(); // C1 sí la publicó (placement de ejemplo)
+        $this->get(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'carrera' => 'XXX']))->assertNotFound();
+        $this->get(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C1', 'carrera' => 'ISC']))->assertOk(); // C1 sí la publicó (placement de ejemplo)
     });
 
     it('cambiar la carrera lleva a su URL y cambiar el semestre actualiza el estado de la URL', function () {
         publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['placements' => [LoadSnapshotFactory::placement(['career' => ['id' => (string) Str::uuid7(), 'code' => 'IEL', 'name' => 'Ingeniería Eléctrica'], 'study_plan' => ['id' => (string) Str::uuid7(), 'code' => 'IELE-2010-211'], 'semester' => 2])]])]);
 
-        Livewire::test('academic-load::pages.published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'ISC'])
+        Livewire::test('academic-load::pages.published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'carrera' => 'ISC'])
             ->assertSet('plan', 'ISIC-2010-224')
             ->assertSet('semester', 3)
             ->set('carrera', 'IEL')
-            ->assertRedirect(route('published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'IEL', 'reticula' => 'IELE-2010-211', 'semestre' => 2]));
+            ->assertRedirect(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'carrera' => 'IEL', 'reticula' => 'IELE-2010-211', 'semestre' => 2]));
     });
 
     it('sin uses_time_blocks la mini-semana dice sin horario fijo', function () {
-        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_time_blocks' => false]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_time_blocks' => false]]);
         publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['placements' => [($this->placement)()], 'sessions' => []])], '2026-12-13 10:00');
 
         $this->get(($this->semesterUrl)(['semestre' => 3]))->assertOk()->assertSee('Sin horario fijo');
@@ -229,7 +233,7 @@ describe('semestre', function () {
 
 describe('docente y salón', function () {
     it('el docente muestra sus grupos, las horas a la semana y su semana sin sesión', function () {
-        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))
+        $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]))
             ->assertOk()
             ->assertSee('Laura Ríos Medina')
             ->assertSee('1 grupo')
@@ -242,7 +246,7 @@ describe('docente y salón', function () {
     });
 
     it('el salón muestra sus grupos con el docente y el edificio', function () {
-        $this->get(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]))
+        $this->get(route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => $this->room['id']]))
             ->assertOk()
             ->assertSee('B-12 · Aula B-12')
             ->assertSee('Edificio B')
@@ -252,7 +256,7 @@ describe('docente y salón', function () {
     });
 
     it('en celular elige el día con ?dia= y lista sus horas', function () {
-        Livewire::withQueryParams(['dia' => 3])->test('academic-load::pages.published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']])
+        Livewire::withQueryParams(['dia' => 3])->test('academic-load::pages.published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']])
             ->assertSee('8:00')
             ->assertSeeHtml('aria-pressed="true" aria-label="Miércoles"')
             ->call('$set', 'day', 5)
@@ -262,24 +266,25 @@ describe('docente y salón', function () {
     it('lleva las sesiones que se empalman en carriles', function () {
         publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['teacher' => $this->laura, 'placements' => [($this->placement)()], 'sessions' => [LoadSnapshotFactory::session(['day' => 1, 'starts_at' => '08:00', 'ends_at' => '10:00', 'room' => null])]])], '2026-12-13 10:00');
 
-        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))->assertOk()->assertSeeHtml('--lanes: 2');
+        $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]))->assertOk()->assertSeeHtml('--lanes: 2');
     });
 
     it('da 404 con un uuid mal formado, uno que no es de lo publicado o la vista de salón sin salones', function () {
-        $this->get('/horarios/20271/C2/docente/no-es-uuid')->assertNotFound();
-        $this->get('/horarios/20271/C2/salon/123')->assertNotFound();
-        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => (string) Str::uuid7()]))->assertNotFound();
-        $this->get(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => (string) Str::uuid7()]))->assertNotFound();
+        $this->get('/horarios/20271/pres/docente/no-es-uuid')->assertNotFound();
+        $this->get('/horarios/20271/pres/salon/123')->assertNotFound();
+        $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => (string) Str::uuid7()]))->assertNotFound();
+        $this->get(route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => (string) Str::uuid7()]))->assertNotFound();
 
-        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
         publishedPagesSnapshot($this->term, $this->c2, 'EE', [publishedPagesGroup('EEX-0001', 'Circuitos', 'A', ['placements' => [($this->placement)()]])], '2026-12-13 10:00');
-        $this->get(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]))->assertNotFound();
+        $this->get(route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => $this->room['id']]))->assertNotFound();
     });
 
-    it('da 404 con un periodo o un campus que no existen', function () {
-        $this->get('/horarios/29999/C2/docente/'.$this->laura['id'])->assertNotFound();
+    it('da 404 con un periodo, una modalidad o un campus que no existen', function () {
+        $this->get('/horarios/29999/pres/docente/'.$this->laura['id'])->assertNotFound();
         $this->get('/horarios/20271/XX/docente/'.$this->laura['id'])->assertNotFound();
-        $this->get('/horarios/29999/C2/carrera/ISC')->assertNotFound();
+        $this->get('/horarios/29999/pres/carrera/ISC')->assertNotFound();
+        $this->get('/horarios/20271/pres/docente/'.$this->laura['id'].'?campus=XX')->assertNotFound();
     });
 });
 
@@ -288,8 +293,8 @@ describe('lo que el público no ve', function () {
         $urls = [
             $this->indexUrl,
             ($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 3]),
-            route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]),
-            route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]),
+            route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]),
+            route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => $this->room['id']]),
         ];
 
         foreach ($urls as $url) {
@@ -302,13 +307,13 @@ describe('lo que el público no ve', function () {
     });
 
     it('no avisa lo que falta por publicar aunque haya cargas sin publicar', function () {
-        AcademicLoad::factory()->for($this->term)->for($this->c2)->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
+        AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->c2->modality_id])->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
 
         $this->get($this->indexUrl)->assertOk()->assertDontSee('Sin publicar')->assertDontSee('Industrial');
     });
 
     it('al personal con permiso en el campus le dice qué cargas faltan por publicar y a otro rol no', function () {
-        AcademicLoad::factory()->for($this->term)->for($this->c2)->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
+        AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->c2->modality_id])->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
 
         $head = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => Department::query()->firstWhere('code', 'II')->id])->create();
         $this->actingAs($head)->get($this->indexUrl)->assertOk()->assertSee('Sin publicar')->assertSee('II · Industrial · Asignación');
@@ -350,20 +355,21 @@ describe('banda y límite', function () {
         $old = Term::factory()->create(['code' => '20263', 'name' => 'Agosto–Diciembre 2026', 'starts_on' => '2026-08-17']);
         publishedPagesSnapshot($old, $this->c1, 'CB', [publishedPagesGroup('OLD-0001', 'Materia vieja', 'A', ['placements' => [($this->placement)(1)]])], '2026-06-01 08:00');
 
-        Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'campusCode' => 'C2'])
+        Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => 'pres', 'campusCode' => 'C2'])
             ->assertSet('campus', 'C2')
+            ->assertSet('modalidad', 'pres')
             ->set('campus', 'C1')
-            ->assertRedirect(route('published.index', ['periodo' => '20271', 'campus' => 'C1']))
+            ->assertRedirect(route('published.index', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C1']))
             ->set('periodo', '20263')
             ->assertSet('campus', 'C1')
-            ->assertRedirect(route('published.index', ['periodo' => '20263', 'campus' => 'C1']));
+            ->assertRedirect(route('published.index', ['periodo' => '20263', 'modalidad' => 'pres', 'campus' => 'C1']));
     });
 
     it('un campus desactivado da 404 y no sale en la banda', function () {
         $this->c1->update(['is_active' => false]);
 
         $this->get(route('published.index', ['periodo' => '20271', 'campus' => 'C1']))->assertNotFound();
-        $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C1', 'carrera' => 'ISC']))->assertNotFound();
+        $this->get(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C1', 'carrera' => 'ISC']))->assertNotFound();
         $this->get($this->indexUrl)->assertOk()->assertDontSeeHtml('value="C1"');
     });
 
@@ -407,23 +413,24 @@ describe('banda y límite', function () {
 describe('entradas raras de la URL', function () {
     it('un semestre o un día que no son número no truenan: toman el primero', function () {
         $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 'abc']))->assertOk()->assertSee('ACF-0904');
-        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id'], 'dia' => 'abc']))->assertOk();
+        $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id'], 'dia' => 'abc']))->assertOk();
     });
 
     it('un periodo o campus con caracteres raros es 404 sin llegar a la base, nunca un error', function (string $periodo, string $campus) {
         $this->get('/horarios/'.$periodo.'/'.$campus.'/docente/'.$this->laura['id'])->assertNotFound();
+        $this->get('/horarios/'.$periodo.'/pres/docente/'.$this->laura['id'].'?campus='.$campus)->assertNotFound();
         // En la consulta, TrimStrings ya le quita el byte nulo a la orilla: o se lee como «20271» o es 404, nunca 500.
         expect($this->get('/horarios?periodo='.$periodo.'&campus='.$campus)->status())->toBeIn([200, 404]);
     })->with([
-        'byte nulo' => ['20271%00', 'C2'],
+        'byte nulo' => ['20271%00', 'pres'],
         'comilla' => ['20271', "C2'"],
-        'muy largo' => [str_repeat('9', 20), 'C2'],
+        'muy largo' => [str_repeat('9', 20), 'pres'],
     ]);
 
     it('un campus inactivo es 404 también en la vista de docente', function () {
         $this->c2->update(['is_active' => false]);
 
-        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))->assertNotFound();
+        $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]))->assertNotFound();
     });
 });
 
@@ -431,7 +438,7 @@ describe('personal con sesión', function () {
     it('ve la página pública de un docente y de un semestre igual que el público', function () {
         $this->actingAs(User::factory()->withRole(Role::Subdireccion)->create());
 
-        $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->laura['id']]))
+        $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->laura['id']]))
             ->assertOk()->assertSee('Laura Ríos Medina')->assertDontSee('RIML800101AB1')->assertSee('Ir a Nexus');
         $this->get(($this->semesterUrl)(['reticula' => 'ISIC-2010-224', 'semestre' => 3]))
             ->assertOk()->assertSee('ACF-0904')->assertDontSee('Sin salón por causa de fuerza mayor');
@@ -455,7 +462,43 @@ describe('datos de la vista', function () {
             ->toThrow(MethodNotFoundException::class);
     })->with([
         'inicio' => ['academic-load::pages.published.index', fn (): array => []],
-        'semestre' => ['academic-load::pages.published.semester', fn ($test): array => ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'ISC']],
-        'docente' => ['academic-load::pages.published.teacher', fn ($test): array => ['periodo' => '20271', 'campus' => 'C2', 'docente' => $test->laura['id']]],
+        'semestre' => ['academic-load::pages.published.semester', fn ($test): array => ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC']],
+        'docente' => ['academic-load::pages.published.teacher', fn ($test): array => ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $test->laura['id']]],
     ]);
+});
+
+describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
+    it('la liga vieja por campus redirige a la de su modalidad con el campus como filtro', function () {
+        $this->get('/horarios/20271/C2/carrera/ISC?reticula=ISIC-2010-224&semestre=3')
+            ->assertRedirect(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC', 'campus' => 'C2', 'reticula' => 'ISIC-2010-224', 'semestre' => '3']));
+        $this->get('/horarios/20271/C1/docente/'.$this->laura['id'])
+            ->assertRedirect(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $this->laura['id'], 'campus' => 'C1']));
+    });
+
+    it('una consulta con arreglos en lugar de texto (?campus[]=) no truena: se ignora', function () {
+        foreach (['campus', 'periodo', 'modalidad'] as $key) {
+            expect($this->get('/horarios?'.$key.'[]=x')->status())->toBeIn([200, 404])
+                ->and($this->get('/horarios/20271/pres/carrera/ISC?'.$key.'[]=x')->status())->toBeIn([200, 404]);
+        }
+    });
+
+    it('la redirección no deja que la consulta pise un parámetro del camino', function () {
+        $this->get('/horarios/20271/C2/docente/'.$this->laura['id'].'?docente=x&periodo=29999&modalidad=ead&dia=3')
+            ->assertRedirect(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $this->laura['id'], 'campus' => 'C2', 'dia' => '3']));
+    });
+
+    it('MS13: una foto vieja, con el campus en la raíz, se lee como presencial con ese campus en cada grupo', function () {
+        $load = AcademicLoad::factory()->for($this->term)->for(modalityOf('PRES'))
+            ->for(Department::factory()->create(['code' => 'VIE', 'name' => 'Departamento viejo']))->inStatus(LoadStatus::Published)->create();
+        $payload = LoadSnapshotFactory::payload($load, 1, User::factory()->create(), [
+            publishedPagesGroup('VIE-0001', 'Materia de la foto vieja', 'A', ['placements' => [($this->placement)()]]),
+        ], CarbonImmutable::parse('2026-12-01 09:00'));
+        $c3 = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+        LoadSnapshot::factory()->for($load)->create(['payload' => legacySnapshotPayload($payload, $c3)]);
+
+        $semester = fn (string $campus) => route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC', 'campus' => $campus, 'reticula' => 'ISIC-2010-224', 'semestre' => 3]);
+
+        $this->get($semester('C3'))->assertOk()->assertSee('Materia de la foto vieja')->assertSee('Campus III');
+        $this->get($semester('C2'))->assertOk()->assertDontSee('Materia de la foto vieja')->assertSee('Cálculo Vectorial');
+    });
 });

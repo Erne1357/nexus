@@ -32,34 +32,34 @@ beforeEach(function () {
 
 function siiVersion(?AcademicLoad $load = null, int $version = 1, string $code = 'A'): LoadSnapshot
 {
-    $load ??= AcademicLoad::factory()->inStatus(LoadStatus::Published)->create(['term_id' => test()->term->id, 'campus_id' => test()->campus->id, 'department_id' => departmentKey(10)]);
+    $load ??= AcademicLoad::factory()->inStatus(LoadStatus::Published)->create(['term_id' => test()->term->id, 'modality_id' => test()->campus->modality_id, 'department_id' => departmentKey(10)]);
 
     return LoadSnapshot::factory()->for($load)->withGroups([LoadSnapshotFactory::group(['code' => $code])])->create(['version' => $version]);
 }
 
 it('sin nada publicado no hay exporte', function () {
-    expect(SiiFilesExport::for($this->term, $this->campus))->toBeNull();
+    expect(SiiFilesExport::for($this->term, modalityOf('PRES')))->toBeNull();
 });
 
-it('nombra el archivo y la llave con el periodo, el campus y las versiones que lee', function () {
+it('nombra el archivo y la llave con el periodo, la modalidad y las versiones que lee', function () {
     $first = siiVersion();
-    $export = SiiFilesExport::for($this->term, $this->campus);
+    $export = SiiFilesExport::for($this->term, modalityOf('PRES'));
 
-    expect($export->filename())->toBe('SII 20271 C2.zip')
+    expect($export->filename())->toBe('SII 20271 PRES.zip')
         ->and($export->mimeType())->toBe('application/zip')
-        ->and($export->key())->toStartWith('sii_20271_C2_')
+        ->and($export->key())->toStartWith('sii_20271_PRES_')
         ->and($export->key())->toMatch('/^[A-Za-z0-9_-]+$/')
-        ->and(SiiFilesExport::for($this->term, $this->campus)->key())->toBe($export->key());
+        ->and(SiiFilesExport::for($this->term, modalityOf('PRES'))->key())->toBe($export->key());
 
     siiVersion($first->academicLoad, 2, 'B');
 
-    expect(SiiFilesExport::for($this->term, $this->campus)->key())->not->toBe($export->key());
+    expect(SiiFilesExport::for($this->term, modalityOf('PRES'))->key())->not->toBe($export->key());
 });
 
 it('arma un zip con los dos archivos de las versiones que fijó al pedirse', function () {
     $first = siiVersion();
-    $export = SiiFilesExport::for($this->term, $this->campus);
-    $expected = app(SiiLoadExport::class)->files($this->term, $this->campus);
+    $export = SiiFilesExport::for($this->term, modalityOf('PRES'));
+    $expected = app(SiiLoadExport::class)->files($this->term, modalityOf('PRES'));
     siiVersion($first->academicLoad, 2, 'Z');
 
     $path = tempnam(sys_get_temp_dir(), 'test');
@@ -78,7 +78,7 @@ it('arma un zip con los dos archivos de las versiones que fijó al pedirse', fun
 
 it('se genera y descarga con PublishedExports', function () {
     siiVersion();
-    $export = SiiFilesExport::for($this->term, $this->campus);
+    $export = SiiFilesExport::for($this->term, modalityOf('PRES'));
 
     expect(app(PublishedExports::class)->request($export))->toBe(ExportState::Ready);
 
@@ -87,11 +87,11 @@ it('se genera y descarga con PublishedExports', function () {
 
 it('lo descargan Servicios Escolares, Subdirección y el admin, no el jefe de un departamento académico ni el coordinador', function (Closure $user, bool $allowed) {
     siiVersion();
-    $url = route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'sii']);
+    $url = route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'sii']);
 
     $user = $user();
 
-    expect($user->can('download', SiiFilesExport::for($this->term, $this->campus)))->toBe($allowed);
+    expect($user->can('download', SiiFilesExport::for($this->term, modalityOf('PRES'))))->toBe($allowed);
 
     $this->actingAs($user)->get($url)->assertStatus($allowed ? 200 : 403);
 })->with([

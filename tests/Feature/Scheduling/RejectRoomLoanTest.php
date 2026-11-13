@@ -115,7 +115,7 @@ it('si el departamento al que va dirigido ya no es dueño del salón, no rechaza
 });
 
 it('HC-10: rechazar la parte nueva de una sesión alargada no deja vivo el aceptado de la parte vieja sin sesión que lo use', function () {
-    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->from->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->from->id]);
     $this->loan->update(['starts_at' => '07:00', 'ends_at' => '08:00', 'status' => AgreementStatus::Accepted, 'decided_by' => $this->actor->id, 'decided_at' => now()]);
     $session = GroupSession::factory()->for($this->group)->on(1, '07:00', '08:00')->inRoom($this->room)->create();
 

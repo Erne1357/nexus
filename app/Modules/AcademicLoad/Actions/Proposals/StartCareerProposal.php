@@ -101,6 +101,7 @@ final class StartCareerProposal
                 ->withChanges(['attributes' => [
                     'term_id' => $proposal->term_id,
                     'campus_id' => $proposal->campus_id,
+                    'modality_id' => $proposal->modality_id,
                     'career_id' => $proposal->career_id,
                     'status' => $proposal->status->value,
                     'eligible_students' => $proposal->eligible_students,

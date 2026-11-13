@@ -181,28 +181,28 @@ describe('con el módulo que lo escucha (AcademicLoad)', function () {
         Department::factory()->create(['code' => 'D9'])->delete();
     });
 
-    it('M4: abrir Presencial crea la carga en borrador de cada departamento activo en cada campus presencial y, desde CV9, ninguna revisión', function () {
+    it('M1 y M4: abrir Presencial crea en borrador una carga por departamento activo, con C1 y C2 juntos, y, desde CV9, ninguna revisión', function () {
         Campus::factory()->create(['code' => 'C1']);
 
-        expect(openTerm($this->term, $this->presencial))->toBe(['6 cargas académicas nuevas']);
+        expect(openTerm($this->term, $this->presencial))->toBe(['3 cargas académicas nuevas']);
 
-        $loads = AcademicLoad::query()->with(['department', 'campus'])->get();
+        $loads = AcademicLoad::query()->with(['department', 'modality'])->get();
 
-        expect($loads->map(fn (AcademicLoad $load): string => "{$load->campus->code}-{$load->department->code}")->sort()->values()->all())
-            ->toBe(['C1-D1', 'C1-D2', 'C1-D3', 'C2-D1', 'C2-D2', 'C2-D3'])
-            ->and($loads->every(fn (AcademicLoad $load): bool => $load->modality_id === $this->presencial->id && $load->status === LoadStatus::Draft))->toBeTrue()
+        expect($loads->map(fn (AcademicLoad $load): string => "{$load->modality->code}-{$load->department->code}")->sort()->values()->all())
+            ->toBe(['PRES-D1', 'PRES-D2', 'PRES-D3'])
+            ->and($loads->every(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Draft))->toBeTrue()
             ->and(CatalogReview::count())->toBe(0)
-            ->and(Activity::sole()->properties['report'])->toBe(['6 cargas académicas nuevas']);
+            ->and(Activity::sole()->properties['report'])->toBe(['3 cargas académicas nuevas']);
     });
 
-    it('foco 5: abrir dos veces no duplica: una apertura y una carga por departamento y campus', function () {
+    it('foco 5: abrir dos veces no duplica: una apertura y una carga por departamento y modalidad', function () {
         Campus::factory()->create(['code' => 'C1']);
         openTerm($this->term, $this->presencial);
 
         expect(openTerm($this->term, $this->presencial))->toBe([])
             ->and(TermOpening::count())->toBe(1)
-            ->and(AcademicLoad::count())->toBe(6)
-            ->and(AcademicLoad::query()->select('campus_id', 'department_id')->distinct()->get())->toHaveCount(6)
+            ->and(AcademicLoad::count())->toBe(3)
+            ->and(AcademicLoad::query()->select('modality_id', 'department_id')->distinct()->get())->toHaveCount(3)
             ->and(CatalogReview::count())->toBe(0);
     });
 
@@ -213,20 +213,19 @@ describe('con el módulo que lo escucha (AcademicLoad)', function () {
         expect(openTerm($this->term, $this->presencial))->toBe(['1 carga académica nueva']);
     });
 
-    it('no crea cargas en los campus de otra modalidad ni en los inactivos', function () {
+    it('las cargas son de la modalidad que se abre, no de otra', function () {
         $other = Modality::factory()->create();
         Campus::factory()->create(['code' => 'C8', 'modality_id' => $other->id]);
-        Campus::factory()->inactive()->create(['code' => 'C7']);
 
         openTerm($this->term, $this->presencial);
 
-        expect(AcademicLoad::query()->with('campus')->get()->pluck('campus.code')->unique()->values()->all())->toBe(['C2']);
+        expect(AcademicLoad::query()->distinct()->pluck('modality_id')->all())->toBe([$this->presencial->id]);
     });
 
-    it('una modalidad sin campus activos se abre sin cargas que crear', function () {
-        expect(openTerm($this->term, Modality::factory()->create()))->toBe([])
+    it('una modalidad sin campus activos también tiene una carga por departamento (M1, MS15)', function () {
+        expect(openTerm($this->term, Modality::factory()->create()))->toBe(['3 cargas académicas nuevas'])
             ->and(TermOpening::count())->toBe(1)
-            ->and(AcademicLoad::count())->toBe(0);
+            ->and(AcademicLoad::count())->toBe(3);
     });
 
     it('es todo o nada: si un listener falla después, no quedan apertura, cargas ni revisiones', function () {

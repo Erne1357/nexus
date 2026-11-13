@@ -29,13 +29,13 @@ beforeEach(function () {
 
 it('rechaza un grupo sin carga, con el mismo mensaje para horarios y cupos', function () {
     expect(fn () => $this->rule->ensure($this->group))
-        ->toThrow(ValidationException::class, 'Sistemas y Computación no tiene carga en Campus II en este periodo: no se editan horarios.')
+        ->toThrow(ValidationException::class, 'Sistemas y Computación no tiene carga en Presencial en este periodo: no se editan horarios.')
         ->and(fn () => $this->rule->ensure($this->group, 'cupos', 'quotas'))
-        ->toThrow(fn (ValidationException $e) => expect($e->errors()['quotas'])->toBe(['Sistemas y Computación no tiene carga en Campus II en este periodo: no se editan cupos.']));
+        ->toThrow(fn (ValidationException $e) => expect($e->errors()['quotas'])->toBe(['Sistemas y Computación no tiene carga en Presencial en este periodo: no se editan cupos.']));
 });
 
 it('deja pasar un grupo con la carga en propuesta, asignación o ajustes', function (LoadStatus $status) {
-    AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id]);
+    AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id]);
 
     $this->rule->ensure($this->group);
 
@@ -43,12 +43,12 @@ it('deja pasar un grupo con la carga en propuesta, asignación o ajustes', funct
 })->with([LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting]);
 
 it('blockedReasons da el motivo de cada grupo bloqueado', function () {
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id]);
     $cancelled = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id, 'subject_id' => $this->subject->id, 'code' => 'E', 'status' => GroupStatus::Cancelled]);
 
     $reasons = $this->rule->blockedReasons([$this->group, $cancelled]);
 
-    expect($reasons[$this->group->id])->toBe('La carga de Sistemas y Computación en Campus II está en cerrada: no se editan horarios.')
+    expect($reasons[$this->group->id])->toBe('La carga de Sistemas y Computación en Presencial está en cerrada: no se editan horarios.')
         ->and($reasons[$cancelled->id])->toBe('El grupo E está cancelado: no se editan horarios.');
 
     $load->update(['status' => LoadStatus::Proposed]);

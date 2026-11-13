@@ -31,9 +31,7 @@ final class UnassignTeacher
             $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
             $load = AcademicLoad::query()
-                ->where('term_id', $group->term_id)
-                ->where('campus_id', $group->campus_id)
-                ->where('department_id', $group->department_id)
+                ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
                 ->first();
 
             if ($load === null || ! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true)) {

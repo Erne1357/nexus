@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
@@ -19,9 +20,10 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * Abre una notificación desde la campana (tarea 2.9): la marca leída y da a dónde lleva. Si su destino ya no
  * está disponible para el usuario (lo decide su clase, NexusNotification::unavailableReason, o la ruta ya no
  * acepta sus parámetros), da el motivo en lugar de la dirección, para que la campana lo avise. Si el aviso es
- * de un campus, la pantalla se abre en ese campus (`?campus=<código>`, #415: la credencial ya no lo elige) y la
- * credencial queda en el periodo del aviso (SetActiveContext), para que la pantalla muestre lo que dice el aviso; si
- * el usuario ya no trabaja en ese campus, tampoco lo lleva. Solo abre notificaciones del usuario, que es el de la
+ * de una modalidad (los de la carga, MS14), la pantalla se abre en ella (`?modalidad=<clave>`); si es de un campus, en
+ * ese campus (`?campus=<código>`, #415: la credencial ya no lo elige); y la credencial queda en el periodo del aviso
+ * (SetActiveContext), para que la pantalla muestre lo que dice el aviso. Si el usuario ya no trabaja en esa modalidad o
+ * ese campus, tampoco lo lleva. Solo abre notificaciones del usuario, que es el de la
  * sesión: la credencial que cambia es la suya.
  *
  * Si el aviso es de un puesto (`data.role`; sin él o con uno que ya no existe, se abre con el perfil activo) que el usuario tiene y no es el activo, todo lo anterior se decide
@@ -68,7 +70,16 @@ final class OpenNotification
         }
 
         $campus = null;
+        $modality = null;
         $term = null;
+
+        if ($message->modalityId !== null) {
+            $modality = KeyLookup::find(Modality::query(), $message->modalityId);
+
+            if (! $modality instanceof Modality || ! $context->modalities()->contains($modality)) {
+                return NotificationTarget::unavailable('Ya no trabajas en la modalidad de ese aviso.');
+            }
+        }
 
         if ($message->campusId !== null) {
             $campus = KeyLookup::find(Campus::query(), $message->campusId);
@@ -76,7 +87,9 @@ final class OpenNotification
             if (! $campus instanceof Campus || ! $context->campuses()->contains($campus)) {
                 return NotificationTarget::unavailable('Ya no trabajas en el campus de ese aviso.');
             }
+        }
 
+        if ($modality !== null || $campus !== null) {
             $term = $message->termId === null ? $this->context->activeTerm() : KeyLookup::find(Term::query(), $message->termId);
 
             if (! $term instanceof Term) {
@@ -85,8 +98,8 @@ final class OpenNotification
         }
 
         try {
-            // Un parámetro `campus` guardado en el aviso (el de una ruta que lo lleva en su camino) gana.
-            $url = route($message->route, $campus === null ? $message->parameters : $message->parameters + ['campus' => $campus->code]);
+            // Un parámetro `modalidad` o `campus` guardado en el aviso (el de una ruta que lo lleva en su camino) gana.
+            $url = route($message->route, $message->parameters + array_filter(['modalidad' => $modality?->code, 'campus' => $campus?->code]));
         } catch (UrlGenerationException) {
             return NotificationTarget::unavailable('Esa pantalla no está disponible.');
         }

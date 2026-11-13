@@ -182,7 +182,7 @@ describe('disparadores', function () {
         Queue::fake();
         $this->teacher = loadTeacher($this->department);
         $this->group = teach($this->teacher, $this->term, $this->c2, 5);
-        $this->proposed = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'department_id' => $this->department->id]);
+        $this->proposed = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'modality_id' => $this->c2->modality_id, 'department_id' => $this->department->id]);
     });
 
     it('al cambiar el docente de un grupo, al cancelarlo o al crear grupos con docente encola el periodo', function () {

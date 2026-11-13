@@ -24,7 +24,7 @@ use Mary\Traits\Toast;
  *
  * Montarlo pide `view` (no `publish`): quien ve la carga ve sus versiones y, si no puede publicar, el último punto dice
  * por qué (DESIGN.md, «Nada oculto por permiso»). Publica quien tiene `publish` (Subdirección, o el jefe del
- * departamento si el campus no exige visto bueno) con la carga cerrada o aprobada. Cada método recarga la carga con
+ * departamento si la modalidad de la carga no exige visto bueno) con la carga cerrada o aprobada. Cada método recarga la carga con
  * KeyLookup y vuelve a autorizar; si la carga cambió con la confirmación abierta, el veto de TransitionLoad sale como
  * motivo en la confirmación. Los ids del DOM salen del id de la instancia, así que la misma carga puede estar dos veces
  * en una página (la pantalla y un drawer).
@@ -119,7 +119,7 @@ new class extends Component
         $this->loaded = null;
         $this->reset('confirming', 'comment', 'vetoes');
         $this->openVersion = $snapshot->version;
-        $this->success("Versión {$snapshot->version} publicada", e("{$load->department->name} · {$load->campus->code}"));
+        $this->success("Versión {$snapshot->version} publicada", e("{$load->department->name} · {$load->modality->name}"));
         $this->dispatch('load-published', loadId: $load->id, version: $snapshot->version);
     }
 
@@ -128,11 +128,11 @@ new class extends Component
      */
     private function blockedReason(AcademicLoad $load): ?string
     {
-        $profile = $load->campus->profile;
+        $profile = $load->modality->profile;
 
         return match (true) {
             ! (auth()->user()?->can('publish', $load) ?? false) => $profile->requiresSubdireccionApproval
-                ? 'En este campus publica Subdirección, después de su visto bueno.'
+                ? 'En esta modalidad publica Subdirección, después de su visto bueno.'
                 : 'Publica Subdirección o el jefe del departamento.',
             $load->status === LoadStatus::Published => 'Ya está publicada. Para cambiarla, Subdirección la reabre.',
             $load->status === LoadStatus::Closed && $profile->requiresSubdireccionApproval => 'Primero va el visto bueno de Subdirección.',
@@ -143,6 +143,6 @@ new class extends Component
 
     private function load(): AcademicLoad
     {
-        return $this->loaded ??= KeyLookup::findOrFail(AcademicLoad::query()->with(['campus', 'department', 'term']), $this->loadId);
+        return $this->loaded ??= KeyLookup::findOrFail(AcademicLoad::query()->with(['modality', 'department', 'term']), $this->loadId);
     }
 };

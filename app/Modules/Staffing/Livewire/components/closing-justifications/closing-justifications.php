@@ -38,6 +38,10 @@ new class extends Component
     #[Locked]
     public bool $withActions = true;
 
+    /** El campus del filtro de la página (id), o null para los grupos de todos los campus de la carga (M1). */
+    #[Locked]
+    public ?string $campusId = null;
+
     /** pending, done o all; '' es «Por justificar» si queda alguno y si no «Justificados». */
     public string $tab = '';
 
@@ -128,7 +132,7 @@ new class extends Component
         // Solo grupos de esta carga y, de ellos, los que siguen en la vista: uno que cambió mientras estaba elegido (se
         // justificó en otro lado, ya tiene docente) no se toca, y se dice. La Action vuelve a preguntar la policy por grupo.
         $own = $query->groupCodesOf($load, $this->selected);
-        $visible = array_flip(array_column($this->filtered($query->items($load))['view'], 'id'));
+        $visible = array_flip(array_column($this->filtered($query->items($load, campusId: $this->campusId))['view'], 'id'));
         $outOfView = array_map(
             fn (string $code): array => ['code' => $code, 'reason' => 'Cambió mientras estaba elegido y ya no está en esta vista: no se tocó.'],
             array_values(array_diff_key($own, $visible)),
@@ -162,7 +166,7 @@ new class extends Component
     public function with(LoadClosingQuery $query): array
     {
         $load = $this->load($query);
-        $items = $query->items($load);
+        $items = $query->items($load, campusId: $this->campusId);
         ['tab' => $tab, 'pending' => $pending, 'inTab' => $inTab, 'view' => $view] = $this->filtered($items);
 
         return [
@@ -170,7 +174,7 @@ new class extends Component
             'activeTab' => $tab,
             'counts' => ['pending' => $pending, 'done' => count($items) - $pending, 'all' => count($items)],
             'lackCounts' => collect(['' => '', 'teacher' => 'teacher', 'room' => 'room'])->map(fn (string $lack): int => count(array_filter($inTab, fn (array $item): bool => self::lacks($item, $lack))))->all(),
-            'usesRooms' => $load->campus->profile->usesRooms,
+            'usesRooms' => $load->modality->profile->usesRooms,
             'total' => count($items),
             'rows' => array_slice($view, 0, $this->shown),
             'viewCount' => count($view),

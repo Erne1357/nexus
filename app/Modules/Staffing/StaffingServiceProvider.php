@@ -244,11 +244,11 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         return [
             new DemoCheck([DemoCheckpoint::Staffing], 'Toda carga con grupos está en asignación', function (DemoContext $demo): true|string {
                 $pending = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->where('status', '!=', LoadStatus::Staffing)
-                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
                     ->whereExists(Group::query()->active()->selectRaw('1')
                         ->whereColumn('groups.term_id', 'academic_loads.term_id')
-                        ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+                        ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
                         ->whereColumn('groups.department_id', 'academic_loads.department_id')
+                        ->whereIn('groups.campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
                         ->toBase())
                     ->count();
 
@@ -281,7 +281,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Lo que deja el cierre al llegar a «publicacion», comparado por campus y periodo: cada carga con grupos activos,
+     * Lo que deja el cierre al llegar a «publicacion», comparado por modalidad y periodo (M1): cada carga con grupos activos,
      * cerrada y limpia según ClosingBlockersQuery (HC-15); sus grupos activos confirmados; al menos un grupo justificado;
      * y las cargas sin grupos, todavía en borrador.
      *
@@ -290,10 +290,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     private function publicationChecks(): array
     {
         $loads = fn (DemoContext $demo, bool $withGroups): Builder => AcademicLoad::query()->where('term_id', $demo->term()->getKey())
-            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereIn('modality_id', Campus::query()->whereIn('code', $demo->campuses)->select('modality_id'))
             ->whereExists(Group::query()->active()->selectRaw('1')
                 ->whereColumn('groups.term_id', 'academic_loads.term_id')
-                ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+                ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
                 ->whereColumn('groups.department_id', 'academic_loads.department_id')
                 ->toBase(), not: ! $withGroups);
         $groups = fn (DemoContext $demo): Builder => Group::query()->active()->where('term_id', $demo->term()->getKey())
@@ -301,14 +301,14 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 
         return [
             new DemoCheck([DemoCheckpoint::Publication], 'Toda carga con grupos está cerrada y sin pendientes de cierre (HC-15)', function (DemoContext $demo) use ($loads): true|string {
-                $withGroups = $loads($demo, true)->with(['department', 'campus', 'term'])->get();
+                $withGroups = $loads($demo, true)->with(['department', 'modality', 'term'])->get();
                 $open = $withGroups->filter(fn (AcademicLoad $load): bool => $load->status !== LoadStatus::Closed);
                 $blocked = $withGroups->diff($open)->mapWithKeys(fn (AcademicLoad $load): array => [
-                    "{$load->department->code} en {$load->campus->code}" => app(ClosingBlockersQuery::class)->of($load)->reasons(),
+                    "{$load->department->code} en {$load->modality->code}" => app(ClosingBlockersQuery::class)->of($load)->reasons(),
                 ])->filter();
 
                 return match (true) {
-                    $open->isNotEmpty() => $open->count().' cargas con grupos no están cerradas: '.$open->map(fn (AcademicLoad $load): string => "{$load->department->code} en {$load->campus->code} ({$load->status->label()})")->implode(', ').'.',
+                    $open->isNotEmpty() => $open->count().' cargas con grupos no están cerradas: '.$open->map(fn (AcademicLoad $load): string => "{$load->department->code} en {$load->modality->code} ({$load->status->label()})")->implode(', ').'.',
                     $blocked->isNotEmpty() => 'Cargas cerradas con pendientes: '.$blocked->map(fn (array $reasons, string $load): string => "{$load}: ".implode(' ', $reasons))->implode('; '),
                     default => true,
                 };

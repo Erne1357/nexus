@@ -3,6 +3,8 @@
 namespace App\Modules\AcademicLoad\Rules;
 
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
 use DateTimeImmutable;
@@ -14,18 +16,26 @@ use InvalidArgumentException;
  * arma la publicación y leen la consulta publicada (4.4), los exportes (4.5) y el exporte al SII (4.6). Documentado
  * en docs/dominio/modelo-de-datos.md, «Contenido del snapshot».
  *
- * AcademicLoad arma el encabezado (`header`), porque la carga, el periodo, el campus, su perfil y el departamento son
- * suyos o de su izquierda; los grupos los da Scheduling al contestar `LoadSnapshotRequested`. Antes de guardar, la
+ * AcademicLoad arma el encabezado (`header`), porque la carga, el periodo, la modalidad, su perfil y el departamento son
+ * suyos o de su izquierda; los grupos los da Scheduling al contestar `LoadSnapshotRequested`, cada uno con su campus (la
+ * carga es por departamento y modalidad, M1; el campus es dónde se da el grupo, o nulo en una modalidad sin salones). Antes de guardar, la
  * publicación revisa el payload completo con `errors`: cada llave presente, ninguna de más, cada valor de su tipo.
  * No usa el validador de Laravel porque la foto de un departamento lleva cientos de grupos y miles de sesiones.
  *
- * Una forma nueva sube `SCHEMA_VERSION`; las fotos guardadas no se reescriben (HC-18), así que quien lee atiende
- * todas las versiones que existan: en el mismo PR se actualizan sus lectores (`PublishedSchedule::SCHEMA_VERSIONS` de la
- * consulta publicada y `SiiLoadExport`).
+ * Una forma nueva sube `SCHEMA_VERSION`; las fotos guardadas no se reescriben (HC-18), así que quien lee pasa cada
+ * payload por `normalize`, que lleva las versiones anteriores a la actual: la v1 (hasta el 12 de noviembre de 2026)
+ * tenía el campus en la raíz y los grupos sin campus (MS13). La página pública, los exportes y el exporte al SII leen
+ * todos por ahí.
  */
 final class SnapshotPayload
 {
-    public const int SCHEMA_VERSION = 1;
+    public const int SCHEMA_VERSION = 2;
+
+    /**
+     * La modalidad de una foto v1 cuyo campus ya no tiene modalidad en el puente (MS13, supuesto por confirmar): las de
+     * antes eran de campus presenciales (C1 y C2).
+     */
+    public const string LEGACY_MODALITY = 'PRES';
 
     /** @var list<string> */
     public const array GROUP_STATUSES = ['planned', 'confirmed'];
@@ -40,8 +50,8 @@ final class SnapshotPayload
      */
     public static function header(AcademicLoad $load, int $version, User $publisher, CarbonImmutable $publishedAt): array
     {
-        $load->loadMissing(['term', 'campus', 'department']);
-        $profile = $load->campus->profile;
+        $load->loadMissing(['term', 'modality', 'department']);
+        $profile = $load->modality->profile;
 
         return [
             'schema_version' => self::SCHEMA_VERSION,
@@ -50,7 +60,7 @@ final class SnapshotPayload
             'published_at' => $publishedAt->toIso8601String(),
             'published_by' => ['id' => $publisher->getKey(), 'name' => $publisher->name],
             'term' => ['id' => $load->term->getKey(), 'code' => $load->term->code, 'name' => $load->term->name],
-            'campus' => ['id' => $load->campus->getKey(), 'code' => $load->campus->code, 'name' => $load->campus->name],
+            'modality' => ['id' => $load->modality->getKey(), 'code' => $load->modality->code, 'name' => $load->modality->name],
             'profile' => [
                 'uses_rooms' => $profile->usesRooms,
                 'uses_time_blocks' => $profile->usesTimeBlocks,
@@ -61,6 +71,64 @@ final class SnapshotPayload
             ],
             'department' => ['id' => $load->department->getKey(), 'code' => $load->department->code, 'name' => $load->department->name],
         ];
+    }
+
+    /**
+     * El payload en la forma actual (MS13): una foto v1, con `campus` en la raíz, se lee como de la modalidad de ese campus
+     * (el puente `campuses.modality_id`, aunque el campus o la modalidad estén borrados) o, si no la tiene, de la
+     * presencial (LEGACY_MODALITY), y el campus de la raíz pasa a cada grupo; lo demás queda igual. El id de la modalidad
+     * es siempre el de una modalidad del catálogo (nulo solo si el catálogo no tiene ninguna de las dos). Una foto de la
+     * forma actual se devuelve tal cual. No escribe: las fotos guardadas no se reescriben (HC-18).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    public static function normalize(array $payload): array
+    {
+        if (($payload['schema_version'] ?? null) !== 1 || ! array_key_exists('campus', $payload)) {
+            return $payload;
+        }
+
+        $campus = $payload['campus'];
+        $bridge = is_string($campus['id'] ?? null) ? Campus::withTrashed()->whereKey($campus['id'])->value('modality_id') : null;
+        $modality = ($bridge === null ? null : Modality::withTrashed()->whereKey($bridge)->first(['id', 'code', 'name']))
+            ?? Modality::withTrashed()->where('code', self::LEGACY_MODALITY)->first(['id', 'code', 'name']);
+        $normalized = [];
+
+        foreach ($payload as $key => $value) {
+            match ($key) {
+                'schema_version' => $normalized[$key] = self::SCHEMA_VERSION,
+                'campus' => $normalized['modality'] = $modality === null
+                    ? ['id' => null, 'code' => self::LEGACY_MODALITY, 'name' => 'Presencial']
+                    : ['id' => $modality->getKey(), 'code' => $modality->code, 'name' => $modality->name],
+                'groups' => $normalized[$key] = array_map(fn (array $group): array => self::withCampus($group, $campus), $value),
+                default => $normalized[$key] = $value,
+            };
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * El grupo de una foto v1 con su campus después de `justification`, donde lo pone la forma actual.
+     *
+     * @param  array<string, mixed>  $group
+     * @param  array<string, mixed>  $campus
+     * @return array<string, mixed>
+     */
+    private static function withCampus(array $group, array $campus): array
+    {
+        $result = [];
+
+        foreach ($group as $key => $value) {
+            $result[$key] = $value;
+
+            if ($key === 'justification') {
+                $result['campus'] = $campus;
+            }
+        }
+
+        return $result + ['campus' => $campus];
     }
 
     /**
@@ -112,7 +180,7 @@ final class SnapshotPayload
     }
 
     /**
-     * La forma v1. Cada valor es un tipo escalar (`uuid`, `?uuid`, `string`, `?string`, `int`, `int>=0`, `int>=1`,
+     * La forma v2. Cada valor es un tipo escalar (`uuid`, `?uuid`, `string`, `?string`, `int`, `int>=0`, `int>=1`,
      * `?int>=1`, `bool`, `time`, `datetime`, `day`) o un arreglo: `object` (llaves exactas), `?object`, `list`,
      * `in` (uno de los valores) o `const`.
      *
@@ -151,6 +219,7 @@ final class SnapshotPayload
             'status' => ['in' => self::GROUP_STATUSES],
             'capacity' => 'int>=1',
             'justification' => '?string',
+            'campus' => ['?object' => ['id' => 'uuid', 'code' => 'string', 'name' => 'string']],
             'subject' => ['object' => [
                 'id' => 'uuid',
                 'code' => 'string',
@@ -172,7 +241,7 @@ final class SnapshotPayload
             'published_at' => 'datetime',
             'published_by' => ['object' => ['id' => 'uuid', 'name' => 'string']],
             'term' => $named,
-            'campus' => $named,
+            'modality' => $named,
             'profile' => ['object' => [
                 'uses_rooms' => 'bool',
                 'uses_time_blocks' => 'bool',

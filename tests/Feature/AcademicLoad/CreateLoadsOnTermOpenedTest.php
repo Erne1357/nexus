@@ -16,14 +16,14 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
 });
 
-it('M4: crea las cargas de la modalidad que se abre y reporta cuántas, en plural', function () {
+it('M1 y M4: crea una carga por departamento en la modalidad que se abre, con C1 y C2, y reporta cuántas, en plural', function () {
     Department::factory()->count(3)->create();
     Campus::factory()->create(['code' => 'C1']);
     $event = new TermOpened(Term::factory()->create(), $this->presencial);
 
     event($event);
 
-    expect($event->lines())->toContain('6 cargas académicas nuevas')
+    expect($event->lines())->toContain('3 cargas académicas nuevas')
         ->and(AcademicLoad::query()->pluck('modality_id')->unique()->all())->toBe([$this->presencial->id]);
 });
 

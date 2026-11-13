@@ -36,8 +36,8 @@ use Illuminate\Support\Str;
  * "Cierre y reapertura de la carga"):
  *
  * - de qué departamentos puede ver el cierre quien entra (los que puede cerrar, `academic_load.load.close`) y, de un
- *   departamento, sus cargas del periodo con grupos activos, una por campus (las pestañas); una carga sin grupos se
- *   queda en borrador y no tiene pestaña;
+ *   departamento, sus cargas del periodo con grupos activos, una por modalidad (M1; las pestañas), cada una con los
+ *   grupos de todos sus campus; una carga sin grupos se queda en borrador y no tiene pestaña;
  * - de una carga (of()), lo que le falta para cerrar con el validador al momento (ClosingBlockersQuery, la misma
  *   cuenta del veto), los acuerdos que la detienen (AgreementsAnswered), las solicitudes de cambio pendientes y
  *   aprobadas sin aplicar (las del veto de Staffing), los grupos sin docente o sin salón con su justificación, quién y
@@ -70,7 +70,7 @@ final class LoadClosingQuery
         ])
             ->groupBy('academic_loads.department_id')
             ->select('academic_loads.department_id')
-            ->selectRaw('bool_or(exists (select 1 from groups where groups.term_id = academic_loads.term_id and groups.campus_id = academic_loads.campus_id and groups.department_id = academic_loads.department_id and groups.status <> ?)) as has_groups', [GroupStatus::Cancelled->value])
+            ->selectRaw('bool_or(exists (select 1 from groups where groups.term_id = academic_loads.term_id and groups.modality_id = academic_loads.modality_id and groups.department_id = academic_loads.department_id and groups.status <> ?)) as has_groups', [GroupStatus::Cancelled->value])
             ->toBase()->pluck('has_groups', 'department_id');
 
         return Department::query()->withTrashed()->whereIn('id', $withGroups->keys()->all())->orderBy('code')->get(['id', 'code', 'name'])
@@ -78,20 +78,20 @@ final class LoadClosingQuery
     }
 
     /**
-     * Un departamento por un id del cliente si el usuario puede cerrar su carga (`academic_load.load.close` sobre él),
-     * aunque no tenga carga en el periodo; null si no existe o no lo cierra.
+     * Un departamento por un id del cliente si el usuario puede cerrar su carga en la modalidad (`academic_load.load.close`
+     * sobre él y la modalidad), aunque no tenga carga en el periodo; null si no existe o no lo cierra.
      */
-    public function closableDepartment(Actor $actor, string $departmentId): ?Department
+    public function closableDepartment(Actor $actor, string $departmentId, string $modalityId): ?Department
     {
         /** @var Department|null $department */
         $department = KeyLookup::find(Department::query()->withTrashed(), $departmentId);
 
-        return $department !== null && $actor->allows(AcademicLoadPermission::LoadClose, Target::of(unit: $department->getKey())) ? $department : null;
+        return $department !== null && $actor->allows(AcademicLoadPermission::LoadClose, Target::of(modality: $modalityId, unit: $department->getKey())) ? $department : null;
     }
 
     /**
-     * Las cargas del departamento en el periodo con grupos activos, por código de campus, con su campus y cuántos
-     * grupos activos tienen (`active_groups`).
+     * Las cargas del departamento en el periodo con grupos activos, una por modalidad (M1), por clave de la modalidad,
+     * con su modalidad y cuántos grupos activos tienen (`active_groups`, de todos sus campus).
      *
      * @return Collection<int, AcademicLoad>
      */
@@ -100,12 +100,12 @@ final class LoadClosingQuery
         return AcademicLoad::query()
             ->where('academic_loads.term_id', $termId)
             ->where('academic_loads.department_id', $departmentId)
-            ->join('campuses', 'campuses.id', '=', 'academic_loads.campus_id')
+            ->join('modalities', 'modalities.id', '=', 'academic_loads.modality_id')
             ->whereExists($this->activeGroupsOf(...))
             ->select('academic_loads.*')
             ->selectSub($this->activeGroupsCount(), 'active_groups')
-            ->orderBy('campuses.code')
-            ->with(['campus', 'department' => fn ($query) => $query->withTrashed()])
+            ->orderBy('modalities.code')
+            ->with(['modality', 'department' => fn ($query) => $query->withTrashed()])
             ->get();
     }
 
@@ -115,7 +115,7 @@ final class LoadClosingQuery
     public function findOrFail(string $id): AcademicLoad
     {
         /** @var AcademicLoad */
-        return KeyLookup::findOrFail(AcademicLoad::query()->with(['campus', 'department' => fn ($query) => $query->withTrashed(), 'term']), $id);
+        return KeyLookup::findOrFail(AcademicLoad::query()->with(['modality', 'department' => fn ($query) => $query->withTrashed(), 'term']), $id);
     }
 
     /**
@@ -172,15 +172,18 @@ final class LoadClosingQuery
 
     /**
      * Los grupos activos de la carga que se justifican (GroupClosingFlags::needsJustification: sin docente o, si el
-     * campus usa salones, con alguna sesión presencial sin salón), con su justificación, quién y cuándo, por clave de
-     * materia y de grupo: la lista de «Justificaciones». Con `$groupIds`, solo esos (el drawer de un grupo).
+     * modalidad usa salones, con alguna sesión presencial sin salón), con su campus, su justificación, quién y cuándo, por
+     * clave de materia y de grupo: la lista de «Justificaciones». Con `$groupIds`, solo esos (el drawer de un grupo); con
+     * `$campusId`, solo los de ese campus (el filtro de la pantalla).
      *
      * @param  list<string>|null  $groupIds
-     * @return list<array{id: string, code: string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
+     * @return list<array{id: string, code: string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
      */
-    public function items(AcademicLoad $load, ?array $groupIds = null): array
+    public function items(AcademicLoad $load, ?array $groupIds = null, ?string $campusId = null): array
     {
-        return $this->itemsOf($load, $this->flags->ofLoad($load, $groupIds));
+        $flags = $this->flags->ofLoad($load, $groupIds);
+
+        return $this->itemsOf($load, $campusId === null ? $flags : $flags->filter(fn (GroupClosingFlags $group): bool => $group->campusId === $campusId));
     }
 
     /**
@@ -192,7 +195,7 @@ final class LoadClosingQuery
         $flags = $this->flags->ofLoad($load);
         $items = $this->itemsOf($load, $flags);
         $requests = ChangeRequest::query()
-            ->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id)
+            ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
             ->whereIn('status', [ChangeRequestStatus::Pending, ChangeRequestStatus::Approved])
             ->selectRaw('status, count(*) as total')->groupBy('status')
             ->pluck('total', 'status');
@@ -220,12 +223,12 @@ final class LoadClosingQuery
 
     /**
      * @param  SupportCollection<string, GroupClosingFlags>  $flags
-     * @return list<array{id: string, code: string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
+     * @return list<array{id: string, code: string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
      */
     private function itemsOf(AcademicLoad $load, SupportCollection $flags): array
     {
-        $load->loadMissing(['campus', 'department' => fn ($query) => $query->withTrashed(), 'term']);
-        $profile = $load->campus->profile;
+        $load->loadMissing(['modality', 'department' => fn ($query) => $query->withTrashed(), 'term']);
+        $profile = $load->modality->profile;
         $needing = $flags->filter(fn (GroupClosingFlags $group): bool => $group->needsJustification($profile));
 
         if ($needing->isEmpty()) {
@@ -237,8 +240,9 @@ final class LoadClosingQuery
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->join('careers', 'careers.id', '=', 'groups.owner_career_id')
             ->leftJoin('users as justifiers', 'justifiers.id', '=', 'groups.close_justified_by')
+            ->leftJoin('campuses', 'campuses.id', '=', 'groups.campus_id')
             ->select(['groups.id', 'groups.code', 'groups.semester', 'groups.close_justification', 'groups.close_justified_at'])
-            ->addSelect(['subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'justifiers.name as justified_by'])
+            ->addSelect(['subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'justifiers.name as justified_by', 'campuses.code as campus_code'])
             ->orderBy('subjects.code')->orderBy('groups.code')
             ->toBase()->get();
 
@@ -253,6 +257,7 @@ final class LoadClosingQuery
             return [
                 'id' => $row->id,
                 'code' => $row->code,
+                'campus_code' => $row->campus_code,
                 'subject_code' => $row->subject_code,
                 'subject_name' => $row->subject_name,
                 'career_code' => $row->career_code,
@@ -289,7 +294,7 @@ final class LoadClosingQuery
     }
 
     /**
-     * Los grupos activos (no cancelados) de la carga.
+     * Los grupos activos (no cancelados) de la carga: los del departamento en su modalidad, de todos los campus (M1).
      *
      * @return Builder<Group>
      */
@@ -297,7 +302,7 @@ final class LoadClosingQuery
     {
         return Group::query()
             ->where('groups.term_id', $load->term_id)
-            ->where('groups.campus_id', $load->campus_id)
+            ->where('groups.modality_id', $load->modality_id)
             ->where('groups.department_id', $load->department_id)
             ->where('groups.status', '<>', GroupStatus::Cancelled->value);
     }
@@ -306,7 +311,7 @@ final class LoadClosingQuery
     {
         $groups->selectRaw('1')->from('groups')
             ->whereColumn('groups.term_id', 'academic_loads.term_id')
-            ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+            ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
             ->whereColumn('groups.department_id', 'academic_loads.department_id')
             ->where('groups.status', '<>', GroupStatus::Cancelled->value);
     }
@@ -315,7 +320,7 @@ final class LoadClosingQuery
     {
         return Group::query()->toBase()->selectRaw('count(*)')
             ->whereColumn('groups.term_id', 'academic_loads.term_id')
-            ->whereColumn('groups.campus_id', 'academic_loads.campus_id')
+            ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
             ->whereColumn('groups.department_id', 'academic_loads.department_id')
             ->where('groups.status', '<>', GroupStatus::Cancelled->value);
     }

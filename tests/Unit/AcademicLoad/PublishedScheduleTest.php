@@ -4,8 +4,8 @@ use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedSchedule;
 
 /*
-| PublishedSchedule (tarea 4.4): junta la última versión publicada de cada carga de un campus y periodo (payload v1 del
-| snapshot) y la ordena para la consulta pública: por carrera, retícula y semestre (con la colocación congelada), por
+| PublishedSchedule (tarea 4.4): junta la última versión publicada de cada carga de una modalidad y periodo (payload v2
+| del snapshot, con el campus de cada grupo; M1) y la ordena para la consulta pública: por carrera, retícula y semestre (con la colocación congelada), por
 | docente, por salón y por departamento. Lo publicado se muestra sin decir qué falta (decisión del usuario del 10 de
 | noviembre de 2026).
 */
@@ -48,7 +48,7 @@ function publishedPlacementPayload(string $career, ?string $plan, ?int $semester
  * @param  list<array<string, mixed>>  $placements
  * @param  list<array<string, mixed>>  $sessions
  */
-function publishedGroupPayload(string $subject, string $code, ?string $teacher, array $placements, array $sessions, string $department = 'dep-sc'): array
+function publishedGroupPayload(string $subject, string $code, ?string $teacher, array $placements, array $sessions, string $department = 'dep-sc', string $campus = 'C2'): array
 {
     return [
         'id' => 'grp-'.$subject.'-'.$code,
@@ -56,6 +56,7 @@ function publishedGroupPayload(string $subject, string $code, ?string $teacher, 
         'status' => 'confirmed',
         'capacity' => 35,
         'justification' => null,
+        'campus' => ['id' => 'campus-'.strtolower($campus), 'code' => $campus, 'name' => 'Campus '.$campus],
         'subject' => ['id' => 'sub-'.$subject, 'code' => $subject, 'name' => 'Materia '.$subject, 'credits' => 5, 'theory_hours' => 3, 'practice_hours' => 2, 'department_id' => $department],
         'teacher' => $teacher === null ? null : ['id' => 'tea-'.$teacher, 'rfc' => 'RFC'.strtoupper($teacher).'000', 'name' => $teacher],
         'placements' => $placements,
@@ -69,13 +70,13 @@ function publishedGroupPayload(string $subject, string $code, ?string $teacher, 
 function publishedLoadPayload(string $department, array $groups, int $version = 1, string $publishedAt = '2026-12-10T09:00:00-07:00', array $overrides = []): array
 {
     return array_replace([
-        'schema_version' => 1,
+        'schema_version' => 2,
         'load_id' => 'load-'.$department,
         'version' => $version,
         'published_at' => $publishedAt,
         'published_by' => ['id' => 'usr-1', 'name' => 'Jefa de prueba'],
         'term' => ['id' => 'term-20271', 'code' => '20271', 'name' => 'Enero–Junio 2027'],
-        'campus' => ['id' => 'campus-c2', 'code' => 'C2', 'name' => 'Campus II'],
+        'modality' => ['id' => 'mod-pres', 'code' => 'PRES', 'name' => 'Presencial'],
         'profile' => ['uses_rooms' => true, 'uses_time_blocks' => true, 'days' => [1, 2, 3, 4, 5], 'day_start' => '07:00', 'day_end' => '21:00', 'block_minutes' => 60],
         'department' => ['id' => $department, 'code' => strtoupper(substr($department, 4)), 'name' => 'Departamento '.$department],
         'groups' => $groups,
@@ -203,7 +204,7 @@ it('conserva las sesiones del grupo con su tipo, sus horas y su salón', functio
         ->toBe([[1, '09:00', '10:00', 'Teoría', 'B-12'], [2, '09:00', '11:00', 'Práctica', 'LC-2'], [5, '09:00', '10:00', 'Virtual', null]]);
 });
 
-it('toma el perfil del campus del payload para pintar la semana', function () {
+it('toma el perfil de la modalidad del payload para pintar la semana', function () {
     $profile = publishedTwoDepartments()->profile();
 
     expect($profile->days)->toBe([1, 2, 3, 4, 5])
@@ -219,13 +220,27 @@ it('sin publicaciones no tiene grupos ni carreras', function () {
         ->and($schedule->isEmpty())->toBeTrue();
 });
 
-it('rechaza juntar payloads de otro campus o periodo, o de una versión de esquema que no conoce', function (array $overrides) {
+it('rechaza juntar payloads de otra modalidad o periodo, o de una versión de esquema que no conoce (llegan normalizados)', function (array $overrides) {
     PublishedSchedule::fromPayloads([
         publishedLoadPayload('dep-cb', []),
         publishedLoadPayload('dep-sc', [], overrides: $overrides),
     ]);
 })->throws(InvalidArgumentException::class)->with([
-    'otro campus' => [['campus' => ['id' => 'campus-c1', 'code' => 'C1', 'name' => 'Campus I']]],
+    'otra modalidad' => [['modality' => ['id' => 'mod-ead', 'code' => 'EAD', 'name' => 'EAD']]],
     'otro periodo' => [['term' => ['id' => 'term-20263', 'code' => '20263', 'name' => 'Agosto–Diciembre 2026']]],
-    'esquema 2' => [['schema_version' => 2]],
+    'esquema 1 sin normalizar' => [['schema_version' => 1]],
 ]);
+
+it('M1: onlyCampus deja solo los grupos que se dan en ese campus, y campuses() dice los campus con grupos', function () {
+    $schedule = PublishedSchedule::fromPayloads([
+        publishedLoadPayload('dep-sc', [
+            publishedGroupPayload('AED-1026', 'C', 'Laura Ríos', [publishedPlacementPayload('ISC', 'ISIC-2010', 3)], [], campus: 'C2'),
+            publishedGroupPayload('AED-1026', 'K', null, [publishedPlacementPayload('ISC', 'ISIC-2010', 3)], [], campus: 'C1'),
+        ]),
+    ]);
+
+    expect(array_column($schedule->campuses(), 'code'))->toBe(['C1', 'C2'])
+        ->and(array_map(fn (PublishedGroup $group): string => $group->code, $schedule->onlyCampus('C1')->groups()))->toBe(['K'])
+        ->and($schedule->onlyCampus('C1')->isPublished('dep-sc'))->toBeTrue()
+        ->and($schedule->onlyCampus(null))->toBe($schedule);
+});

@@ -34,8 +34,8 @@ beforeEach(function () {
     User::factory()->create(['username' => 'admin']);
     $this->department = Department::factory()->create(['code' => 'SC']);
     $this->jefe = User::factory()->create(['username' => 'jefe.sc', 'name' => 'Jefatura de Sistemas']);
-    $this->closed = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id, 'status' => LoadStatus::Closed]);
-    $this->draft = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'status' => LoadStatus::Draft]);
+    $this->closed = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id, 'status' => LoadStatus::Closed]);
+    $this->draft = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'status' => LoadStatus::Draft]);
 
     $teacher = Teacher::factory()->create();
     TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $teacher->id]);

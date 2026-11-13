@@ -248,6 +248,7 @@ it('deja bitácora de la propuesta armada con quién la armó y sus alumnos posi
         ->and($activity->attribute_changes['attributes'])->toBe([
             'term_id' => $this->term->id,
             'campus_id' => $this->campus->id,
+            'modality_id' => $this->campus->modality_id,
             'career_id' => $this->career->id,
             'status' => 'draft',
             'eligible_students' => 3,

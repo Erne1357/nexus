@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Support;
 
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 
 /**
  * La semana de un horario con el perfil del campus: la del editor de horarios (tarea 3.5; DESIGN.md, "Editor de
@@ -48,7 +49,10 @@ final readonly class WeekGrid
         private int $blockMinutes,
     ) {}
 
-    public static function of(CampusProfile $profile): self
+    /**
+     * La semana de un perfil de flujo: el de una modalidad (la carga, M1) o, mientras exista el puente, el de un campus.
+     */
+    public static function of(CampusProfile|ModalityProfile $profile): self
     {
         $start = WeekTime::minutes($profile->dayStart);
         $end = WeekTime::minutes($profile->dayEnd);

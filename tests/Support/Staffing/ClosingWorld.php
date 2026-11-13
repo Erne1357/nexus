@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -22,14 +23,18 @@ use App\Modules\Scheduling\Models\GroupSession;
 use Carbon\CarbonInterface;
 
 /**
- * Un departamento con su carga en Campus II (y, si se pide, en otro campus) en el periodo actual, para las pruebas
- * del cierre de la carga (tareas 4.1 y 4.2): grupos completos por omisión (el lunes de 7:00 a 9:00, con su propio salón
+ * Un departamento con su carga presencial (M1: una por departamento y modalidad, con los grupos de todos sus campus) y
+ * sus grupos en Campus II (y, si se pide, en otro campus) en el periodo actual, para las pruebas del cierre de la carga
+ * (tareas 4.1 y 4.2): grupos completos por omisión (el lunes de 7:00 a 9:00, con su propio salón
  * y su propio docente, de una carrera propia ofrecida en el campus, así que no chocan entre sí), o sin horario, sin
  * docente o sin salón. Nombres y claves ficticios.
  */
 final class ClosingWorld
 {
     private int $sequence = 0;
+
+    /** @var array<string, Campus> el campus de los grupos de cada carga pedida con loadIn(), por id de carga */
+    private array $campusOfLoad = [];
 
     private function __construct(
         public readonly Campus $campus,
@@ -40,29 +45,37 @@ final class ClosingWorld
     ) {}
 
     /**
-     * @param  array<string, mixed>  $settings  el perfil de Campus II, sobre los valores de omisión
+     * @param  array<string, mixed>  $settings  el perfil de la modalidad de la carga (y de Campus II), sobre los valores de omisión
      */
     public static function create(LoadStatus $status = LoadStatus::Staffing, array $settings = []): self
     {
         $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II', 'settings' => [...CampusProfile::DEFAULTS, ...$settings]]);
+
+        if ($settings !== []) {
+            $campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, ...array_intersect_key($settings, ModalityProfile::DEFAULTS)]]);
+        }
+
         $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
         $department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-        $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $department->id]);
+        $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id]);
         $subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Tópicos Avanzados de Programación', 'department_id' => $department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
 
         return new self($campus, $term, $department, $load, $subject);
     }
 
     /**
-     * Otro campus con la carga del departamento (u otro) en el mismo periodo.
+     * La carga del departamento (u otro) en la modalidad de ese campus y el mismo periodo, cuyos grupos (group() con
+     * `load:`) van en ese campus. Si ya existe (M1: el mismo departamento en la misma modalidad es la misma carga), la
+     * misma, sin cambiar su estado.
      */
     public function loadIn(Campus $campus, LoadStatus $status = LoadStatus::Staffing, ?Department $department = null): AcademicLoad
     {
-        return AcademicLoad::factory()->inStatus($status)->create([
-            'term_id' => $this->term->id,
-            'campus_id' => $campus->id,
-            'department_id' => ($department ?? $this->department)->id,
-        ]);
+        $departmentId = ($department ?? $this->department)->id;
+        $load = AcademicLoad::query()->ofDepartment($this->term->id, $campus->modality_id, $departmentId)->first()
+            ?? AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->term->id, 'modality_id' => $campus->modality_id, 'department_id' => $departmentId]);
+        $this->campusOfLoad[$load->id] = $campus;
+
+        return $load;
     }
 
     /**
@@ -73,6 +86,7 @@ final class ClosingWorld
      */
     public function group(array $attributes = [], ?AcademicLoad $load = null, bool $scheduled = true, bool $withRoom = true, bool|Teacher $teacher = true): Group
     {
+        $campus = $load === null ? $this->campus : ($this->campusOfLoad[$load->id] ?? ($load->is($this->load) ? $this->campus : loadCampus($load)));
         $load ??= $this->load;
         $subject = $load->department_id === $this->department->id
             ? $this->subject
@@ -80,7 +94,8 @@ final class ClosingWorld
 
         $group = Group::factory()->create([
             'term_id' => $load->term_id,
-            'campus_id' => $load->campus_id,
+            'campus_id' => $campus->id,
+            'modality_id' => $load->modality_id,
             'subject_id' => $subject->id,
             'code' => sprintf('%d%s', 1 + intdiv($this->sequence, 26), chr(65 + $this->sequence++ % 26)),
             'capacity' => 30,

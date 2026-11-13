@@ -15,7 +15,11 @@ use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityScope;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Rules\SelfApproval;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -27,7 +31,9 @@ use Mary\Traits\Toast;
 
 /**
  * Bandeja del departamento (tarea 2.8, reglas-de-negocio.md, "Propuesta de carrera"): lo que piden las carreras
- * de un campus a un departamento en el periodo y el campus activos de la credencial. A la izquierda las carreras
+ * de un campus a un departamento en el periodo activo de la credencial. La carga del departamento es la de la modalidad
+ * de la pantalla (`?modalidad=`, WithModalityScope; M1) y el campus (`?campus=`) es uno de esa modalidad: las propuestas
+ * todavía son por campus. A la izquierda las carreras
  * con el estado de su parte; a la derecha lo que pide la elegida, materia por materia contra el total de la
  * materia, con la sugerencia de paralelos y los botones Aceptar y Regresar (maqueta C).
  *
@@ -41,6 +47,7 @@ new #[Title('Bandeja del departamento')] class extends Component
 {
     use Toast;
     use WithCampusFilter;
+    use WithModalityScope;
 
     private const array FILTERS = ['todas', 'pendientes'];
 
@@ -60,9 +67,12 @@ new #[Title('Bandeja del departamento')] class extends Component
     #[Url(as: 'anomalias')]
     public bool $onlyAnomalies = false;
 
-    /** El periodo, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
+    /** El periodo, la modalidad, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
     #[Locked]
     public ?string $termId = null;
+
+    #[Locked]
+    public ?string $modalityId = null;
 
     #[Locked]
     public ?string $campusId = null;
@@ -113,6 +123,26 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function updatedCampus(): void
     {
         $this->reopenOnCampus('academic-load.inbox');
+    }
+
+    /**
+     * Otra modalidad: la página se abre de nuevo en ella, con su primer campus.
+     */
+    public function updatedModalidad(): void
+    {
+        $this->redirectRoute('academic-load.inbox', ['modalidad' => $this->requiredModality()->code], navigate: true);
+    }
+
+    /**
+     * Los campus del selector: los de la modalidad de la pantalla donde trabaja (las propuestas son por campus).
+     *
+     * @return Collection<int, Campus>
+     */
+    protected function campusOptions(): Collection
+    {
+        $modality = $this->requiredModality();
+
+        return app(Actor::class)->campuses()->filter(fn (Campus $campus): bool => $campus->modality_id === $modality->getKey())->values();
     }
 
     /**
@@ -257,7 +287,7 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function with(DepartmentInboxQuery $query): array
     {
         if ($this->departmentId === null) {
-            return ['inbox' => null, ...$this->campusViewData()];
+            return ['inbox' => null, ...$this->campusViewData(), ...$this->modalityViewData()];
         }
 
         $inbox = $this->inbox($query);
@@ -278,6 +308,7 @@ new #[Title('Bandeja del departamento')] class extends Component
 
         return [
             ...$this->campusViewData(),
+            ...$this->modalityViewData(),
             'inbox' => $inbox,
             'rows' => $rows,
             'visible' => $this->filter === 'pendientes'
@@ -302,15 +333,26 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
+     * Las modalidades del selector y la que muestra la página, para `<x-core::modality-scope>`.
+     *
+     * @return array{modalityOptions: Collection<int, Modality>, modalityCode: string}
+     */
+    private function modalityViewData(): array
+    {
+        return ['modalityOptions' => $this->modalityOptions(), 'modalityCode' => $this->requiredModality()->code];
+    }
+
+    /**
      * Resuelve con la credencial el periodo, el campus y el departamento, y deja en propiedades bloqueadas con qué
      * pinta y escribe la página (o por qué no hay bandeja). Un departamento pedido por la URL que el usuario no
      * ve es 403.
      */
     private function resolve(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
-        $this->termId = $this->campusId = $this->departmentId = null;
+        $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
+        $modality = $this->requiredModality();
         $campus = $this->requiredCampus();
 
         $term = $context->activeTerm();
@@ -342,6 +384,7 @@ new #[Title('Bandeja del departamento')] class extends Component
 
         $this->department = $department->code;
         $this->termId = $term->getKey();
+        $this->modalityId = $modality->getKey();
         $this->campusId = $campus->getKey();
         $this->departmentId = $department->getKey();
         $this->message = null;
@@ -355,7 +398,7 @@ new #[Title('Bandeja del departamento')] class extends Component
     {
         abort_if($this->departmentId === null, 403);
 
-        $inbox = $query->inboxOf((string) $this->termId, (string) $this->campusId, $this->departmentId);
+        $inbox = $query->inboxOf((string) $this->termId, (string) $this->modalityId, (string) $this->campusId, $this->departmentId);
         $this->authorize('viewAny', [ProposalReview::class, $inbox->campus, $inbox->department]);
 
         return $inbox;
@@ -428,7 +471,7 @@ new #[Title('Bandeja del departamento')] class extends Component
             return 'Valida los catálogos del departamento para poder aceptar.';
         }
 
-        return "{$inbox->department->code} no tiene carga en {$inbox->campus->code} para este periodo.";
+        return "{$inbox->department->code} no tiene carga en ".($inbox->modality?->name ?? $inbox->campus->code).' para este periodo.';
     }
 
     /**

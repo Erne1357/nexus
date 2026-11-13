@@ -100,16 +100,25 @@ final class ChangeRequestsQuery
     }
 
     /**
-     * La carga del departamento en el campus y el periodo, y cuántas solicitudes aprobadas siguen sin aplicar en ella
-     * (todas, las vea o no: son las que la retienen en Ajustes).
+     * La carga del departamento en la modalidad del campus de la pantalla y el periodo (M1; el campus lleva a su
+     * modalidad por el puente `campuses.modality_id` mientras la pantalla sea por campus), y cuántas solicitudes
+     * aprobadas siguen sin aplicar en ella, de todos sus campus (todas, las vea o no: son las que la retienen en Ajustes).
+     * Un campus sin modalidad en el puente no tiene carga.
      *
      * @return array{load: ?AcademicLoad, approved: int}
      */
     public function loadOf(string $termId, string $campusId, string $departmentId): array
     {
+        $modalityId = Campus::withTrashed()->whereKey($campusId)->value('modality_id');
+
+        if ($modalityId === null) {
+            return ['load' => null, 'approved' => 0];
+        }
+
         return [
-            'load' => AcademicLoad::query()->where('term_id', $termId)->where('campus_id', $campusId)->where('department_id', $departmentId)->first(),
-            'approved' => $this->ofDepartment($termId, $campusId, $departmentId)->where('status', ChangeRequestStatus::Approved)->count(),
+            'load' => AcademicLoad::query()->ofDepartment($termId, $modalityId, $departmentId)->first(),
+            'approved' => ChangeRequest::query()->where('term_id', $termId)->where('modality_id', $modalityId)->where('department_id', $departmentId)
+                ->where('status', ChangeRequestStatus::Approved)->count(),
         ];
     }
 
@@ -182,7 +191,7 @@ final class ChangeRequestsQuery
             ->where('groups.campus_id', $campusId)
             ->whereExists(fn (QueryBuilder $load) => $load->select(DB::raw(1))->from('academic_loads')
                 ->whereColumn('academic_loads.term_id', 'groups.term_id')
-                ->whereColumn('academic_loads.campus_id', 'groups.campus_id')
+                ->whereColumn('academic_loads.modality_id', 'groups.modality_id')
                 ->whereColumn('academic_loads.department_id', 'groups.department_id')
                 ->whereIn('academic_loads.status', [LoadStatus::Staffing->value, LoadStatus::Adjusting->value]));
 

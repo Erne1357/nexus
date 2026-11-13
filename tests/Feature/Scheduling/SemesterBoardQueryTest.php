@@ -39,7 +39,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->sistemas = Department::factory()->create(['code' => 'DSC', 'name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sistemas->id,
+        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->sistemas->id,
     ]);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->sistemas->id]);
     $this->iind = Career::factory()->create(['code' => 'IIND']);
@@ -158,8 +158,8 @@ it('con la carga que no está en propuesta, asignación o ajustes nadie acomoda,
     $rows = collect(semesterBoardFor($jefe)['groups'])->keyBy('id');
 
     expect($rows[$closed->id]['can'])->toBe(['editSessions' => false, 'assignRoom' => false, 'manageQuotas' => false])
-        ->and($rows[$closed->id]['editBlockedReason'])->toBe('La carga de Sistemas y Computación en Campus II está en cerrada: no se editan horarios.')
-        ->and($rows[$withoutLoad->id]['editBlockedReason'])->toBe('Ciencias Básicas no tiene carga en Campus II en este periodo: no se editan horarios.');
+        ->and($rows[$closed->id]['editBlockedReason'])->toBe('La carga de Sistemas y Computación en Presencial está en cerrada: no se editan horarios.')
+        ->and($rows[$withoutLoad->id]['editBlockedReason'])->toBe('Ciencias Básicas no tiene carga en Presencial en este periodo: no se editan horarios.');
 });
 
 it('dice lo que puede hacer cada quien según GroupPolicy: el compartido es de solo lectura para el coordinador', function () {
@@ -197,7 +197,7 @@ it('las banderas salen del puesto activo del actor que recibe, no de todos los p
 it('quien ve la carrera ve todos los grupos de su semestre: los que no ve por GroupPolicy van como contexto de solo lectura', function () {
     $own = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]));
     $basicas = Department::factory()->create();
-    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $basicas->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $basicas->id]);
     $calculo = semesterBoardGroup(boardSubject(['department_id' => $basicas->id]));
     $shared = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
     GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id]);

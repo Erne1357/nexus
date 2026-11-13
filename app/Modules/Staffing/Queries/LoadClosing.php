@@ -41,7 +41,7 @@ final readonly class LoadClosing
     /**
      * Lo que falta, en el orden en que se corrige, con la pantalla donde se arregla (`screen`: conflicts, editor,
      * assign, change-requests o agreements). Sin bloqueos calculados, nada. Sin horario y sin salón solo aparecen si el
-     * perfil del campus usa bloques de tiempo y salones.
+     * perfil de la modalidad de la carga usa bloques de tiempo y salones.
      *
      * @return list<array{key: string, label: string, count: int, tone: string, icon: string, detail: ?string, screen: string}>
      */
@@ -53,7 +53,7 @@ final readonly class LoadClosing
             return [];
         }
 
-        $profile = $this->load->campus->profile;
+        $profile = $this->load->modality->profile;
         $justifiedTeacher = $this->justifiedTeacher();
         $justifiedRoom = $this->justifiedRoom();
         $roomDetail = array_filter([
@@ -202,7 +202,7 @@ final readonly class LoadClosing
                 'title' => $reached !== null && in_array($reached['from'], [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published], true) ? "Reabierta{$on}" : 'En Ajustes',
                 'detail' => $missing > 0 ? $this->missingLabel().": {$this->shortList()}" : 'Para cerrarla otra vez, vuelve a asignación.',
             ],
-            LoadStatus::Closed => ['tone' => 'success', 'icon' => 'o-lock-closed', 'title' => "Cerrada{$on}", 'detail' => $by.($load->campus->profile->requiresSubdireccionApproval ? 'espera el visto bueno de Subdirección' : 'falta publicarla')],
+            LoadStatus::Closed => ['tone' => 'success', 'icon' => 'o-lock-closed', 'title' => "Cerrada{$on}", 'detail' => $by.($load->modality->profile->requiresSubdireccionApproval ? 'espera el visto bueno de Subdirección' : 'falta publicarla')],
             LoadStatus::Approved => ['tone' => 'success', 'icon' => 'o-check-badge', 'title' => "Con visto bueno{$on}", 'detail' => "{$by}falta publicarla"],
             LoadStatus::Published => ['tone' => 'success', 'icon' => 'o-check-circle', 'title' => self::statusLabel($load).$on, 'detail' => $reached === null ? 'Ya se consulta y se exporta.' : "Por {$reached['by']}"],
             LoadStatus::Reanalysis => ['tone' => 'warning', 'icon' => 'o-arrow-path', 'title' => 'En re-análisis', 'detail' => 'Al terminar se publica otra versión.'],
@@ -234,7 +234,7 @@ final readonly class LoadClosing
     /**
      * La línea de estados: Borrador, Propuesta, Asignación, Ajustes, Cerrada, Aprobada y Publicada, cada uno con la fecha
      * en que la carga llegó a él por última vez (`dd/mm`) y si ya pasó, es el actual, se visitó después (Ajustes, que es
-     * una vuelta), se saltó (Ajustes, si la carga nunca pasó por ahí) o sigue. Aprobada va si el campus exige el visto
+     * una vuelta), se saltó (Ajustes, si la carga nunca pasó por ahí) o sigue. Aprobada va si la modalidad exige el visto
      * bueno o si la carga está o estuvo ahí (el perfil pudo cambiar), así que todo estado tiene su paso; re-análisis es
      * el de Publicada.
      *
@@ -244,7 +244,7 @@ final readonly class LoadClosing
     {
         $order = [LoadStatus::Draft, LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Closed];
 
-        if ($this->load->campus->profile->requiresSubdireccionApproval || $this->load->status === LoadStatus::Approved || $this->lastReached(LoadStatus::Approved) !== null) {
+        if ($this->load->modality->profile->requiresSubdireccionApproval || $this->load->status === LoadStatus::Approved || $this->lastReached(LoadStatus::Approved) !== null) {
             $order[] = LoadStatus::Approved;
         }
 

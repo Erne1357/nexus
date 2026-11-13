@@ -21,7 +21,7 @@ final class ConfirmGroupsOnLoadClosing
 
         $confirmed = Group::query()
             ->where('term_id', $load->term_id)
-            ->where('campus_id', $load->campus_id)
+            ->where('modality_id', $load->modality_id)
             ->where('department_id', $load->department_id)
             ->where('status', GroupStatus::Planned->value)
             ->update(['status' => GroupStatus::Confirmed->value, 'updated_at' => now()]);

@@ -15,12 +15,12 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Queries\RecipientsQuery;
 
 /**
- * Avisa a la campana según la transición de la carga (tarea 4.2). Los destinatarios son quienes tienen el permiso en el
- * campus y el departamento de la carga (el admin no recibe, no es titular):
+ * Avisa a la campana según la transición de la carga (tarea 4.2). Los destinatarios son quienes tienen el permiso en la
+ * modalidad y el departamento de la carga (el admin no recibe, no es titular):
  *
  * - a ajustes desde cerrada, aprobada o publicada (reabierta o regresada con comentarios): los titulares de
  *   LoadStartStaffing (el jefe), con el motivo, que es el comentario de esa transición (LoadReopened);
- * - a cerrada en un campus que exige el visto bueno: los titulares de LoadApprove (LoadAwaitingApproval);
+ * - a cerrada en una modalidad que exige el visto bueno: los titulares de LoadApprove (LoadAwaitingApproval);
  * - a aprobada: los titulares de LoadStartStaffing (LoadApproved).
  *
  * Los avisos al jefe van por LoadStartStaffing y no por LoadClose porque Subdirección también cierra (confirmado el 10
@@ -35,11 +35,11 @@ final class NotifyLoadClosing
 
     public function handle(AcademicLoad $load, LoadStatus $from, LoadStatus $to, ?string $reason = null): int
     {
-        $load->loadMissing(['department', 'campus']);
+        $load->loadMissing(['department', 'modality']);
 
         [$permission, $notification] = match (true) {
             $to === LoadStatus::Adjusting && in_array($from, self::REOPENED_FROM, true) => [AcademicLoadPermission::LoadStartStaffing, new LoadReopened($load, $load->department, $reason)],
-            $to === LoadStatus::Closed && $load->campus->profile->requiresSubdireccionApproval => [AcademicLoadPermission::LoadApprove, new LoadAwaitingApproval($load, $load->department)],
+            $to === LoadStatus::Closed && $load->modality->profile->requiresSubdireccionApproval => [AcademicLoadPermission::LoadApprove, new LoadAwaitingApproval($load, $load->department)],
             $to === LoadStatus::Approved => [AcademicLoadPermission::LoadStartStaffing, new LoadApproved($load, $load->department)],
             default => [null, null],
         };

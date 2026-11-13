@@ -5,8 +5,8 @@ namespace App\Modules\AcademicLoad\Queries;
 use Carbon\CarbonImmutable;
 
 /**
- * Un grupo de una carga publicada, tal como lo congeló su snapshot (payload v1, `groups[]`), con la versión y la fecha
- * de la publicación de su carga. El docente va sin RFC: el RFC es para el exporte al SII y la consulta pública no lo
+ * Un grupo de una carga publicada, tal como lo congeló su snapshot (payload normalizado, `groups[]`), con su campus (dónde
+ * se da; nulo en una modalidad sin salones), la versión y la fecha de la publicación de su carga. El docente va sin RFC: el RFC es para el exporte al SII y la consulta pública no lo
  * muestra. La justificación de HC-15 tampoco viaja: el público ve «Por asignar» sin el motivo (decisión del usuario,
  * 10 de noviembre de 2026).
  */
@@ -17,6 +17,7 @@ final readonly class PublishedGroup
      * @param  array{id: string, name: string}|null  $teacher
      * @param  list<array{career: array{id: string, code: string, name: string}, study_plan: array{id: string, code: string}|null, semester: int|null, seats: int, is_owner: bool}>  $placements
      * @param  list<PublishedSession>  $sessions
+     * @param  array{id: string, code: string, name: string}|null  $campus
      */
     public function __construct(
         public string $id,
@@ -30,6 +31,7 @@ final readonly class PublishedGroup
         public string $loadId,
         public int $version,
         public CarbonImmutable $publishedAt,
+        public ?array $campus = null,
     ) {}
 
     /**
@@ -50,6 +52,7 @@ final readonly class PublishedGroup
             loadId: $payload['load_id'],
             version: $payload['version'],
             publishedAt: CarbonImmutable::parse($payload['published_at']),
+            campus: $group['campus'] ?? null,
         );
     }
 
@@ -77,7 +80,7 @@ final readonly class PublishedGroup
      */
     public function withSessions(array $sessions): self
     {
-        return new self($this->id, $this->code, $this->capacity, $this->subject, $this->teacher, $this->placements, $sessions, $this->departmentId, $this->loadId, $this->version, $this->publishedAt);
+        return new self($this->id, $this->code, $this->capacity, $this->subject, $this->teacher, $this->placements, $sessions, $this->departmentId, $this->loadId, $this->version, $this->publishedAt, $this->campus);
     }
 
     /**

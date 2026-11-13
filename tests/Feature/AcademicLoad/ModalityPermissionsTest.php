@@ -20,7 +20,7 @@ beforeEach(function () {
     $this->ead->update(['is_active' => true]);
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'modality_id' => $this->pres->id]);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'modality_id' => $this->pres->id]);
-    $this->load = AcademicLoad::factory()->create(['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)]);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => $this->c1->modality_id, 'department_id' => departmentKey(10)]);
     $this->proposal = CareerProposal::factory()->create(['campus_id' => $this->c1->id, 'career_id' => careerKey(20)]);
     $this->review = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => departmentKey(10)]);
 });

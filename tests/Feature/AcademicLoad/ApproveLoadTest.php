@@ -8,20 +8,23 @@ use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| ApproveLoad da el visto bueno de Subdirección a una carga cerrada (`closed` → `approved`, tarea 4.2), solo en un
-| campus con `requires_subdireccion_approval`. Regresarla con comentarios es ReopenLoad desde cerrada.
+| ApproveLoad da el visto bueno de Subdirección a una carga cerrada (`closed` → `approved`, tarea 4.2), solo en una
+| modalidad con `requires_subdireccion_approval` (la carga es por departamento y modalidad, M1). Regresarla con
+| comentarios es ReopenLoad desde cerrada.
 */
 
 function approvalLoad(bool $requiresApproval, LoadStatus $status = LoadStatus::Closed): AcademicLoad
 {
-    $campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]]);
+    $modality = Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]]);
 
-    return AcademicLoad::factory()->inStatus($status)->create(['campus_id' => $campus->id]);
+    return AcademicLoad::factory()->inStatus($status)->create(['modality_id' => $modality->id]);
 }
 
 beforeEach(function () {
@@ -55,7 +58,16 @@ it('el comentario es opcional', function () {
     expect(LoadTransition::query()->sole()->comment)->toBeNull();
 });
 
-it('en un campus que no exige el visto bueno no puede pasar a Aprobada', function () {
+it('el visto bueno lo decide el perfil de la modalidad de la carga, no el de sus campus (M1)', function () {
+    $load = approvalLoad(true);
+    Campus::factory()->create(['modality_id' => $load->modality_id, 'settings' => [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => false]]);
+
+    app(ApproveLoad::class)->handle($load, $this->user);
+
+    expect($load->fresh()->status)->toBe(LoadStatus::Approved);
+});
+
+it('en una modalidad que no exige el visto bueno no puede pasar a Aprobada', function () {
     $load = approvalLoad(false);
 
     expect(fn () => app(ApproveLoad::class)->handle($load, $this->user))->toThrow(
@@ -84,7 +96,7 @@ it('regresar con comentarios es reabrir la carga cerrada', function () {
 
 it('la policy deja aprobar al admin y a Subdirección, y niega a los demás', function (?Role $role, bool $expected) {
     $campus = Campus::factory()->create();
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['campus_id' => $campus->id, 'department_id' => departmentKey(10)]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['modality_id' => $campus->modality_id, 'department_id' => departmentKey(10)]);
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [

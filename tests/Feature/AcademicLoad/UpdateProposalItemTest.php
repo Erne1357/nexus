@@ -162,7 +162,7 @@ it('con la propuesta regresada, la parte que un departamento acepta mientras tan
     $this->proposal->update(['status' => ProposalStatus::Submitted]);
     $cbPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->department->id]);
     $scPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $sc->id]);
-    AcademicLoad::factory()->create(['term_id' => $this->proposal->term_id, 'campus_id' => $this->proposal->campus_id, 'department_id' => $this->department->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id, 'department_id' => $this->department->id]);
     foreach (Catalog::general() as $catalog) {
         CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->department->id]);
     }

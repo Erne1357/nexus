@@ -19,7 +19,8 @@ use Illuminate\Support\Collection;
 final class GroupClosingFlagsQuery
 {
     /**
-     * Los grupos activos de la carga (o solo `$groupIds` de ellos), por id.
+     * Los grupos activos de la carga (los del departamento en su modalidad, de todos los campus, M1; o solo `$groupIds`
+     * de ellos), por id.
      *
      * @param  list<string>|null  $groupIds
      * @return Collection<string, GroupClosingFlags>
@@ -28,7 +29,7 @@ final class GroupClosingFlagsQuery
     {
         return $this->read($this->query()
             ->where('groups.term_id', $load->term_id)
-            ->where('groups.campus_id', $load->campus_id)
+            ->where('groups.modality_id', $load->modality_id)
             ->where('groups.department_id', $load->department_id)
             ->when($groupIds !== null, fn (Builder $query) => $query->whereIn('groups.id', $groupIds)))
             ->keyBy('id');
@@ -48,7 +49,7 @@ final class GroupClosingFlagsQuery
     {
         return Group::query()->toBase()
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
-            ->select(['groups.id', 'groups.campus_id', 'groups.department_id', 'groups.teacher_id'])
+            ->select(['groups.id', 'groups.campus_id', 'groups.modality_id', 'groups.department_id', 'groups.teacher_id'])
             ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active) as has_sessions')
             ->selectRaw('(select count(*) from group_sessions s where s.group_id = groups.id and s.is_active and s.room_id is null and s.kind <> ?) as roomless_sessions', [SessionKind::Virtual->value])
             ->selectRaw('exists (select 1 from teachers t where t.id = groups.teacher_id and (not t.is_active or t.deleted_at is not null)) as inactive_teacher')
@@ -64,6 +65,7 @@ final class GroupClosingFlagsQuery
         return $query->get()->map(fn (object $row): GroupClosingFlags => new GroupClosingFlags(
             id: $row->id,
             campusId: $row->campus_id,
+            modalityId: $row->modality_id,
             departmentId: $row->department_id,
             teacherId: $row->teacher_id,
             hasSessions: (bool) $row->has_sessions,

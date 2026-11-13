@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
@@ -190,6 +191,39 @@ function useFakePermissions(): void
 function modalityOf(string $code): Modality
 {
     return Modality::withTrashed()->where('code', $code)->sole();
+}
+
+/**
+ * Un campus de la modalidad de la carga (M1: la carga ya no tiene campus; sus grupos sí): el primero activo por clave, o
+ * uno nuevo de esa modalidad.
+ */
+function loadCampus(AcademicLoad $load): Campus
+{
+    return Campus::query()->where('modality_id', $load->modality_id)->where('is_active', true)->orderBy('code')->first()
+        ?? Campus::factory()->create(['modality_id' => $load->modality_id]);
+}
+
+/**
+ * Una foto con la forma v1 (MS13): el campus en la raíz y los grupos sin campus, como las que se publicaron antes de la
+ * carga por modalidad. Sale de una v2 (la de LoadSnapshotFactory) quitándole la modalidad y el campus de cada grupo.
+ *
+ * @param  array<string, mixed>  $payload
+ * @return array<string, mixed>
+ */
+function legacySnapshotPayload(array $payload, Campus $campus): array
+{
+    $legacy = ['schema_version' => 1];
+
+    foreach ($payload as $key => $value) {
+        match ($key) {
+            'schema_version' => null,
+            'modality' => $legacy['campus'] = ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name],
+            'groups' => $legacy['groups'] = array_map(fn (array $group): array => array_diff_key($group, ['campus' => true]), $value),
+            default => $legacy[$key] = $value,
+        };
+    }
+
+    return $legacy;
 }
 
 /**

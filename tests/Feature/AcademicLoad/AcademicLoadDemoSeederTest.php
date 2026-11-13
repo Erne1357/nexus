@@ -135,10 +135,10 @@ describe('completo (punto 4 de la demo)', function () {
 
         expect(CareerProposal::query()->where('campus_id', $this->c2->id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
             ->and(ProposalReview::query()->where('status', '!=', 'accepted')->count())->toBe(0)
-            ->and(AcademicLoad::query()->where('campus_id', $this->c2->id)->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
+            ->and(AcademicLoad::query()->where('modality_id', $this->c2->modality_id)->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
             ->and(AcademicLoad::query()->whereNotIn('department_id', $withParts)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0)
-            // Abrir Presencial creó también las de C1 (M4); sin propuestas de C1, siguen en borrador.
-            ->and(AcademicLoad::query()->where('campus_id', '!=', $this->c2->id)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0);
+            // M1: abrir Presencial creó una carga por departamento, con los grupos de C1 y C2; no hay otras.
+            ->and(AcademicLoad::query()->where('modality_id', '!=', $this->c2->modality_id)->count())->toBe(0);
     });
 
     it('termina lo que dejó la demo mezclada: reenvía las regresadas y acepta las pendientes', function () {
@@ -185,19 +185,19 @@ it('demo por puntos: los pasos que llevan a «horarios» dejan todas sus revisio
         ->and($failed)->toBe([]);
 });
 
-it('demo por puntos: una carga se compara con las partes de su campus, no con las de otro', function () {
+it('demo por puntos: una carga se compara con las partes de su modalidad en los campus de la demo (M1)', function () {
     validateEveryCatalogReview($this->term);
     seedProposals(['complete' => true]);
-    $c1 = Campus::query()->where('code', 'C1')->firstOrFail();
     $teaching = ProposalReview::query()->value('department_id');
-    // Abrir Presencial creó también la carga de C1 (M4), en borrador y sin partes de C1.
-    expect(AcademicLoad::query()->where('term_id', $this->term->id)->where('campus_id', $c1->id)->where('department_id', $teaching)->sole()->status)->toBe(LoadStatus::Draft);
+    // M1: una sola carga presencial del departamento, con los grupos de C1 y C2; las partes son de C2.
+    expect(AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $teaching)->sole()->status)->toBe(LoadStatus::Proposed);
     $check = collect(app()->getProvider(AcademicLoadServiceProvider::class)->demoChecks())
         ->first(fn (DemoCheck $check): bool => $check->label === 'Las cargas con partes aceptadas están en propuesta');
 
-    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBeTrue();
+    expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBeTrue()
+        ->and(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1'])))->toBeTrue();
 
-    AcademicLoad::query()->where('campus_id', $this->c2->id)->where('department_id', $teaching)->update(['status' => LoadStatus::Draft]);
+    AcademicLoad::query()->where('modality_id', $this->c2->modality_id)->where('department_id', $teaching)->update(['status' => LoadStatus::Draft]);
 
     expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con partes aceptadas no están en propuesta.');
 });

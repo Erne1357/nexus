@@ -2,7 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Queries;
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Core\Support\WeekTime;
 use Carbon\CarbonImmutable;
@@ -79,7 +79,7 @@ final class PublishedWeek
      * @param  list<PublishedGroup>  $groups
      * @return array{grid: WeekGrid, laid: array<int, list<array<string, mixed>>>, lanes: array<int, int>, items: list<array<string, mixed>>, chains: array<string, int>}
      */
-    public static function week(array $groups, CampusProfile $profile): array
+    public static function week(array $groups, ModalityProfile $profile): array
     {
         $items = self::sessions($groups);
         $grid = WeekGrid::of($profile)->covering($items);

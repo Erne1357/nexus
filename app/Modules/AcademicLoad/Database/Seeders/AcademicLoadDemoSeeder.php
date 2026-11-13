@@ -161,7 +161,7 @@ final class AcademicLoadDemoSeeder extends Seeder
                     continue;
                 }
 
-                $validated = app(CatalogReviewQuery::class)->pendingFor($term, $campus, $part->department) === [];
+                $validated = app(CatalogReviewQuery::class)->pendingFor($term, $campus->catalogModality, $part->department) === [];
 
                 try {
                     if ($decision % $returnEvery === 0) {

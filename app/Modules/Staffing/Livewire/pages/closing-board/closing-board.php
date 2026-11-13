@@ -24,7 +24,7 @@ use Mary\Traits\Toast;
  * la búsqueda, y un renglón por departamento con su jefe (ClosingBoardQuery::heads), una insignia por carga y los
  * faltantes sumados por columna (ClosingBoardQuery, con los choques duros
  * vigentes de `schedule_conflicts`; por eso dice cuándo se recalcularon). Tocar un renglón o una insignia abre el
- * drawer de esa carga: el selector de campus, la línea de estados, la publicación con su línea de versiones
+ * drawer de esa carga: el selector de modalidad (M1: la carga es por departamento y modalidad), la línea de estados, la publicación con su línea de versiones
  * (academic-load::components.publish-load, que avisa con `load-published`), «Para cerrar», «Justificaciones» e
  * «Historial», sus acciones (ClosesLoads; ahí el validador sí corre, para esa carga) y «Abrir en Cierre de la carga».
  *
@@ -53,17 +53,17 @@ new #[Title('Avance del cierre')] class extends Component
     }
 
     /**
-     * Abre el drawer con la carga de un departamento: la del campus pedido o, si no, la primera que sigue sin cerrar
-     * (ni cerrada, ni aprobada, ni publicada o en re-análisis) y, si todas pasaron el cierre, la primera.
+     * Abre el drawer con la carga de un departamento: la de la modalidad pedida (por clave; M1) o, si no, la primera que
+     * sigue sin cerrar (ni cerrada, ni aprobada, ni publicada o en re-análisis) y, si todas pasaron el cierre, la primera.
      */
-    public function open(string $departmentId, LoadClosingQuery $query, string $campusCode = ''): void
+    public function open(string $departmentId, LoadClosingQuery $query, string $modalityCode = ''): void
     {
         abort_unless(app(Actor::class)->allowsAny(AcademicLoadPermission::LoadReopen), 403);
 
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId);
         $term = app(Actor::class)->activeTerm() ?? abort(404);
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
-        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === $campusCode)
+        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->modality->code === $modalityCode)
             ?? $loads->first(fn (AcademicLoad $candidate): bool => ! in_array($candidate->status, [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published, LoadStatus::Reanalysis], true))
             ?? $loads->first();
 
@@ -75,12 +75,12 @@ new #[Title('Avance del cierre')] class extends Component
     }
 
     /**
-     * Cambia el drawer a la carga del mismo departamento en otro campus.
+     * Cambia el drawer a la carga del mismo departamento en otra modalidad.
      */
-    public function selectCampus(string $campusCode, LoadClosingQuery $query): void
+    public function selectModality(string $modalityCode, LoadClosingQuery $query): void
     {
         $current = $this->closingLoad($query);
-        $this->open($current->department_id, $query, $campusCode);
+        $this->open($current->department_id, $query, $modalityCode);
     }
 
     /**

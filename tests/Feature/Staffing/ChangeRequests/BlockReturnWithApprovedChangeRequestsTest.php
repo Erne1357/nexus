@@ -34,7 +34,7 @@ function returnVetoRequest(array $scenario, string $state = 'approved'): ChangeR
 
     return ChangeRequest::factory()->{$state}()->create([
         'term_id' => $load->term_id,
-        'campus_id' => $load->campus_id,
+        'modality_id' => $load->modality_id,
         'department_id' => $load->department_id,
     ]);
 }

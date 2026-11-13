@@ -11,6 +11,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use Illuminate\Support\Collection;
@@ -23,8 +24,8 @@ final class CatalogReviewQuery
     public function __construct(private readonly CatalogContentsQuery $contents) {}
 
     /**
-     * Los catálogos que todavía bloquean la salida de borrador de la carga de un departamento en un campus
-     * (HC-14): cada catálogo que exige el campus (todos, y los salones solo si su perfil usa salones) cuya revisión del
+     * Los catálogos que todavía bloquean la salida de borrador de la carga de un departamento en una modalidad (HC-14,
+     * M1): cada catálogo que exige la modalidad (todos, y los salones solo si su perfil usa salones) cuya revisión del
      * periodo y el departamento falta o no está validada. Todas las revisiones son del departamento para todo el Tec,
      * también la de salones (decisión 6, confirmada el 12 de noviembre de 2026). En el orden del enum Catalog.
      *
@@ -36,14 +37,17 @@ final class CatalogReviewQuery
      * Solo cuentan los catálogos que el admin abrió en el periodo, es decir, que tienen revisiones en él (CV9, HC-14,
      * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
      *
+     * `$where` es la modalidad de la carga; el aviso a los jefes (NotifyPendingReviews), que todavía va por campus, da el
+     * campus y cuenta con su perfil mientras exista el puente.
+     *
      * @return list<Catalog>
      */
-    public function pendingFor(Term|string $term, Campus $campus, Department|string $department, bool $lock = false): array
+    public function pendingFor(Term|string $term, Modality|Campus $where, Department|string $department, bool $lock = false): array
     {
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
 
-        $required = Catalog::requiredFor($campus->profile->usesRooms);
+        $required = Catalog::requiredFor($where->profile->usesRooms);
 
         $validated = CatalogReview::query()
             ->where('term_id', $termId)

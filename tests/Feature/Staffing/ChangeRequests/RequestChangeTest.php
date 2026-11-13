@@ -49,7 +49,10 @@ it('el docente del grupo lo pide: queda pendiente con su docente y la foto de la
 
 it('la solicitud copia la modalidad de su grupo (ampliación de la ronda 2)', function () {
     $s = changeScenario();
-    $s['group']->update(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+    $ead = Modality::query()->where('code', 'EAD')->sole();
+    $ead->update(['is_active' => true]);
+    $s['group']->update(['modality_id' => $ead->id]);
+    $s['load']->update(['modality_id' => $ead->id]);
 
     expect(askChange($s)->fresh()->modality->code)->toBe('EAD');
 });

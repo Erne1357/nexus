@@ -1,7 +1,7 @@
 {{--
     «Para cerrar» en cifras (maqueta B2): una celda por cosa que falta (LoadClosing::conditions), con su cifra en Mono,
     su icono y su tono, el detalle («14 justificados», el nombre del docente dado de baja) y «Ir a …», que lleva a la
-    pantalla donde se arregla con `?campus=` del campus de la carga. Lo que ya no falta queda atenuado con
+    pantalla donde se arregla con el `?campus=` del filtro, si hay. Lo que ya no falta queda atenuado con
     `o-check-circle`. La caja es un contenedor: cuatro columnas desde 44rem, dos desde 26rem y, más angosta, un renglón
     por cifra. `$closing`.
 --}}

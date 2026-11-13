@@ -29,7 +29,7 @@ beforeEach(function () {
     $this->teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
     $this->group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'teacher_id' => $this->teacher->id]);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->group->department_id,
+        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->group->department_id,
     ]);
 });
 

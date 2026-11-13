@@ -39,9 +39,7 @@ final class RejectChangeRequest
             }
 
             $load = AcademicLoad::query()
-                ->where('term_id', $request->term_id)
-                ->where('campus_id', $request->campus_id)
-                ->where('department_id', $request->department_id)
+                ->ofDepartment($request->term_id, $request->modality_id, $request->department_id)
                 ->lockForUpdate()
                 ->first();
 

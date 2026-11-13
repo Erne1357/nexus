@@ -46,7 +46,7 @@ beforeEach(function () {
     ]);
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
     $this->otherPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
     validateAcceptCatalogs($this->cb);
 });
 
@@ -114,7 +114,7 @@ it('AZ-01: quien envió la propuesta acepta su parte y la bitácora lo marca', f
 });
 
 it('con la primera parte aceptada la carga del departamento pasa de borrador a propuesta, con su historial', function () {
-    $scLoad = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sc->id]);
+    $scLoad = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->sc->id]);
 
     acceptPart();
 
@@ -266,7 +266,7 @@ it('usa el estado de la base y no el de los modelos que llegaron', function () {
 it('M4: sin la carga del departamento en el campus no acepta y dice que se complete la apertura en su modalidad', function () {
     $this->load->delete();
 
-    expect(acceptErrors())->toBe(['load' => ['CB no tiene carga en C2 para el periodo 20271: completa la apertura del periodo en Presencial para crearla.']])
+    expect(acceptErrors())->toBe(['load' => ['CB no tiene carga en Presencial para el periodo 20271: completa la apertura del periodo en Presencial para crearla.']])
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
 });
 

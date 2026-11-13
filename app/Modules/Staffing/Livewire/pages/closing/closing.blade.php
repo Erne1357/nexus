@@ -1,8 +1,9 @@
 {{--
     Cierre de la carga (tarea 4.1; DESIGN.md, «Cierre de la carga»: maqueta B2, elegida por el usuario el 10 de noviembre
     de 2026). El título con el departamento y el periodo; a quien ve varios, el selector «Departamento». Una pestaña por
-    campus donde el departamento tiene grupos, con la insignia del estado de su carga (con uno solo, la insignia va junto
-    al título). De la carga elegida: la línea de estados con la línea del estado y sus acciones; debajo, a todo el ancho,
+    modalidad donde el departamento tiene grupos (M1: la carga es por departamento y modalidad), con la insignia del
+    estado de su carga (con una sola, la insignia va junto al título). El filtro de campus deja en las justificaciones
+    solo los grupos de ese campus. De la carga elegida: la línea de estados con la línea del estado y sus acciones; debajo, a todo el ancho,
     la publicación con su línea de versiones (staffing::closing.publication); «Para cerrar» en cifras;
     el historial y las justificaciones (staffing::components.closing-justifications, con su drawer aparte). Desde 1280 px
     el historial es una columna lateral; antes, va entre «Para cerrar» y las justificaciones, que son largas.
@@ -16,7 +17,7 @@
                     <span class="font-mono text-[15px] font-semibold text-base-content">{{ $closing->load->department->code }}</span>
                     <span>{{ $closing->load->department->name }}</span>
                     <span aria-hidden="true">·</span>
-                    <span>{{ $single ? $closing->load->campus->name.' · ' : '' }}{{ $closing->load->term->name }}</span>
+                    <span>{{ $single ? $closing->load->modality->name.' · ' : '' }}{{ $closing->load->term->name }}</span>
                 </span>
             @else
                 Cierra la carga del departamento cuando ya no le falte nada.
@@ -35,6 +36,8 @@
         </div>
     @endif
 
+    <x-core::campus-filter :options="$campusOptions" :selected="$campusFilter?->code" all />
+
     @if ($closing === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="closing-empty">
             <x-icon name="o-lock-closed" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
@@ -43,13 +46,13 @@
     @else
         @php($load = $closing->load)
         @if (! $single)
-            <div class="relative flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Campus" data-testid="campus-tabs">
+            <div class="relative flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Modalidad" data-testid="modality-tabs">
                 @foreach ($tabs as $tab)
                     @php($active = $tab->id === $load->id)
-                    <button type="button" role="tab" aria-selected="{{ $active ? 'true' : 'false' }}" wire:key="campus-tab-{{ $tab->id }}" wire:click="selectCampus('{{ $tab->campus->code }}')"
+                    <button type="button" role="tab" aria-selected="{{ $active ? 'true' : 'false' }}" wire:key="modality-tab-{{ $tab->id }}" wire:click="selectModality('{{ $tab->modality->code }}')"
                         @class(['-mb-px flex shrink-0 items-center gap-2.5 border-b-2 px-3 pt-2 pb-2.5 max-md:flex-col max-md:items-start max-md:gap-1', 'border-primary text-base-content' => $active, 'border-transparent text-neutral hover:text-base-content' => ! $active])
-                        data-testid="campus-tab-{{ $tab->campus->code }}">
-                        <span class="flex items-baseline gap-2"><span class="font-mono text-[15px] font-semibold">{{ $tab->campus->code }}</span><span @class(['max-md:hidden', 'font-semibold' => $active])>{{ $tab->campus->name }}</span></span>
+                        data-testid="modality-tab-{{ $tab->modality->code }}">
+                        <span @class(['font-semibold' => $active])>{{ $tab->modality->name }}</span>
                         <x-core::status-badge :tone="$tab->status->tone()" :label="\App\Modules\Staffing\Queries\LoadClosing::statusLabel($tab)" :icon="\App\Modules\Staffing\Queries\LoadClosing::statusIcon($tab)" />
                     </button>
                 @endforeach
@@ -58,7 +61,7 @@
 
         @include('staffing::closing.veto')
 
-        <section class="rounded-box border border-base-300 bg-base-100" aria-label="Estado de la carga en {{ $load->campus->name }}" data-testid="load-state">
+        <section class="rounded-box border border-base-300 bg-base-100" aria-label="Estado de la carga en {{ $load->modality->name }}" data-testid="load-state">
             <div class="px-4 pt-4 md:px-5">@include('staffing::closing.steps', ['closing' => $closing])</div>
             <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-base-300 px-4 py-3.5 md:px-5">
                 <div class="min-w-0 flex-[1_1_20rem]">@include('staffing::closing.headline', ['closing' => $closing])</div>
@@ -120,7 +123,7 @@
                     @endif
                 </header>
                 {{-- Aparte, para que justificar o abrir un grupo no vuelva a pintar la página; se monta otra vez al cambiar de carga o de estado. --}}
-                <livewire:staffing::components.closing-justifications :load-id="$load->id" :with-actions="true" wire:key="justifications-{{ $load->id }}-{{ $load->status->value }}" />
+                <livewire:staffing::components.closing-justifications :load-id="$load->id" :with-actions="true" :campus-id="$campusFilter?->id" wire:key="justifications-{{ $load->id }}-{{ $load->status->value }}-{{ $campusFilter?->code ?? 'todos' }}" />
             </section>
         </div>
     @endif

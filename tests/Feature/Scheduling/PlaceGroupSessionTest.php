@@ -40,7 +40,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
     ]);
     $this->group = Group::factory()->create([
         'term_id' => $this->term->id,
@@ -131,7 +131,7 @@ it('rechaza con la carga en cualquier otro estado, sin escribir', function (Load
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(["La carga de Sistemas y Computación en Campus II está en {$label}: no se editan horarios."]))
+            ->toBe(["La carga de Sistemas y Computación en Presencial está en {$label}: no se editan horarios."]))
         ->and($this->group->sessions()->count())->toBe(0)
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
@@ -146,7 +146,7 @@ it('rechaza si el departamento no tiene carga en el campus y el periodo', functi
     $this->load->delete();
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
-        ->toThrow(ValidationException::class, 'Sistemas y Computación no tiene carga en Campus II en este periodo: no se editan horarios.');
+        ->toThrow(ValidationException::class, 'Sistemas y Computación no tiene carga en Presencial en este periodo: no se editan horarios.');
 });
 
 it('rechaza un grupo cancelado', function () {

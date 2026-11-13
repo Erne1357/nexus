@@ -301,7 +301,7 @@ it('el aviso de un préstamo cancelado se abre en Acuerdos y deja de abrirse si 
 
 describe('préstamos que cancela la sesión al cambiar', function () {
     beforeEach(function () {
-        AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->ii->id]);
+        AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->ii->id]);
         $this->session = GroupSession::factory()->for($this->group)->on(1, '09:00', '11:00')->inRoom($this->room)->create();
         $this->pending = ($this->loan)();
     });

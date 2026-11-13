@@ -4,7 +4,7 @@ namespace App\Modules\AcademicLoad\Exports;
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Illuminate\Http\Request;
 
@@ -19,10 +19,10 @@ interface StaffExport extends PublishedExport
      * El exporte que pide la URL (con sus parámetros, como `?departamento=`) si está publicado; null si no, para
      * responder 404 sin encolar nada.
      */
-    public static function fromRequest(PublishedScheduleQuery $query, Term $term, Campus $campus, Request $request): ?static;
+    public static function fromRequest(PublishedScheduleQuery $query, Term $term, Modality $modality, Request $request): ?static;
 
     /**
-     * Cómo se ofrece en la consulta: «Excel del campus», «PDF del departamento».
+     * Cómo se ofrece en la consulta: «Excel de la modalidad», «PDF del departamento».
      */
     public static function label(): string;
 

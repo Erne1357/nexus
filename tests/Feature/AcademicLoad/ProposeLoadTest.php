@@ -9,24 +9,25 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /*
-| ProposeLoad pasa la carga de borrador a propuesta con dos guardas: HC-14 (como la reescribe D2), los
-| cuatro catálogos generales del departamento validados en el periodo y, si el campus usa salones, los
-| salones del departamento en el campus; y HC-20, al menos una parte aceptada del departamento en una
-| propuesta de carrera del periodo y campus (supuesto por confirmar).
+| ProposeLoad pasa la carga de un departamento en una modalidad (M1) de borrador a propuesta con dos guardas: HC-14
+| (como la reescribe D2), los cuatro catálogos generales del departamento validados en el periodo y, si el perfil de la
+| modalidad usa salones, los salones del departamento; y HC-20, al menos una parte aceptada del departamento en una
+| propuesta de carrera del periodo en cualquier campus de esa modalidad (supuesto por confirmar).
 */
 
-function loadWith(?Campus $campus = null): AcademicLoad
+function loadWith(?Modality $modality = null): AcademicLoad
 {
     return AcademicLoad::factory()->create([
         'term_id' => Term::factory()->create()->id,
-        'campus_id' => ($campus ?? Campus::factory()->create())->id,
+        'modality_id' => ($modality ?? modalityOf('PRES'))->id,
         'department_id' => Department::factory()->create()->id,
     ]);
 }
@@ -59,17 +60,18 @@ function validateRooms(AcademicLoad $load): void
 }
 
 /**
- * Una parte del departamento de la carga en una propuesta de carrera del mismo periodo y campus; aceptada, salvo
- * que se pida otro estado.
+ * Una parte del departamento de la carga en una propuesta de carrera del mismo periodo, en un campus de su modalidad;
+ * aceptada, salvo que se pida otro estado.
  *
  * @param  array<string, mixed>  $proposal
  */
 function partFor(AcademicLoad $load, string $state = 'accepted', array $proposal = []): ProposalReview
 {
     $factory = ProposalReview::factory();
+    $campus = Campus::factory()->create(['modality_id' => $load->modality_id]);
 
     return ($state === 'pending' ? $factory : $factory->{$state}())->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'campus_id' => $load->campus_id, ...$proposal])->id,
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'campus_id' => $campus->id, 'modality_id' => $load->modality_id, ...$proposal])->id,
         'department_id' => $load->department_id,
     ]);
 }
@@ -142,9 +144,10 @@ it('HC-14: bloquea si los salones están pendientes', function () {
     expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Salones.');
 });
 
-it('HC-14: no exige salones si el perfil del campus no los usa', function () {
-    $campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-    $load = loadWith($campus);
+it('HC-14: no exige salones si el perfil de la modalidad no los usa, aunque el de su campus sí (M1)', function () {
+    $modality = Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $load = loadWith($modality);
+    openAllCatalogs($load);
     validateGenerals($load);
     partFor($load);
 
@@ -153,10 +156,19 @@ it('HC-14: no exige salones si el perfil del campus no los usa', function () {
     expect($load->fresh()->status)->toBe(LoadStatus::Proposed);
 });
 
+it('HC-14: exige salones si el perfil de la modalidad los usa', function () {
+    $load = loadWith(Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => true]]));
+    openAllCatalogs($load);
+    validateGenerals($load);
+    partFor($load);
+
+    expect(blockedReasons($load))->toBe(['HC-14: faltan por validar los catálogos de Salones.']);
+});
+
 it('HC-14: las revisiones generales de otro departamento no cuentan', function () {
     $load = loadWith();
     validateRooms($load);
-    $other = AcademicLoad::factory()->create(['term_id' => $load->term_id, 'campus_id' => $load->campus_id]);
+    $other = AcademicLoad::factory()->create(['term_id' => $load->term_id, 'modality_id' => $load->modality_id]);
     validateGenerals($other);
 
     expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Docentes, Materias, Planes de estudio y Carreras.');
@@ -207,17 +219,30 @@ it('HC-20: una parte pendiente o regresada no cuenta', function (string $state) 
     expect(blockedReason($load))->toStartWith('HC-20:');
 })->with(['pending', 'returned']);
 
-it('HC-20: no cuenta la parte aceptada de otro departamento, de otro campus ni de otro periodo', function () {
+it('HC-20: no cuenta la parte aceptada de otro departamento, de otra modalidad ni de otro periodo', function () {
     $load = loadWith();
     validateGenerals($load);
     validateRooms($load);
     ProposalReview::factory()->accepted()->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'campus_id' => $load->campus_id])->id,
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $load->term_id, 'modality_id' => $load->modality_id])->id,
     ]);
-    partFor($load, proposal: ['campus_id' => Campus::factory()->create()->id]);
+    $ead = Campus::factory()->create(['modality_id' => modalityOf('EAD')->id]);
+    partFor($load, proposal: ['campus_id' => $ead->id, 'modality_id' => $ead->modality_id]);
     partFor($load, proposal: ['term_id' => Term::factory()->create()->id]);
 
     expect(blockedReason($load))->toStartWith('HC-20:');
+});
+
+it('HC-20 (M1): cuenta la parte aceptada en una propuesta de C1 para la carga presencial que también tiene a C2', function () {
+    $load = loadWith();
+    validateGenerals($load);
+    validateRooms($load);
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    Campus::factory()->create(['code' => 'C2']);
+    partFor($load, proposal: ['campus_id' => $c1->id]);
+
+    expect(blockedReasons($load))->toBe([])
+        ->and($load->fresh()->status)->toBe(LoadStatus::Proposed);
 });
 
 it('HC-20: cuenta la parte aceptada aunque la propuesta esté regresada por otro departamento', function () {

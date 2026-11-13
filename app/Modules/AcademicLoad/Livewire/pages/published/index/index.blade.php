@@ -16,7 +16,10 @@
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Horarios</h1>
             <p class="flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                 <span class="font-medium text-base-content" data-testid="published-term-name">{{ $context->term->name }}</span>
-                <span data-testid="published-campus-name">{{ $context->campus->name }}</span>
+                <span data-testid="published-modality-name">{{ $context->modality->name }}</span>
+                @if ($context->campus !== null)
+                    <span data-testid="published-campus-name">{{ $context->campus->name }}</span>
+                @endif
             </p>
             @if ($updated !== '')
                 <p class="flex items-center gap-1.5 text-sm text-neutral" data-testid="published-updated"><x-icon name="o-clock" class="h-4 w-4" aria-hidden="true" />Actualizado el {{ $updated }}</p>
@@ -34,9 +37,9 @@
             <section class="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-box border border-base-300 bg-base-100 px-4 py-3" aria-labelledby="staff-exports" data-testid="published-staff-exports">
                 <div class="grid gap-0.5 md:me-auto">
                     <h2 id="staff-exports" class="font-semibold">Exportes del personal</h2>
-                    <p class="text-sm text-neutral">Todo lo publicado de {{ $context->campus->name }} en {{ $context->term->name }}.</p>
+                    <p class="text-sm text-neutral">Todo lo publicado de {{ $context->modality->name }} en {{ $context->term->name }}, de todos los campus.</p>
                 </div>
-                <a href="{{ $staffExports['excel'] }}" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full" data-testid="published-export-excel"><x-icon name="o-table-cells" class="h-4 w-4" aria-hidden="true" />Excel del campus</a>
+                <a href="{{ $staffExports['excel'] }}" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full" data-testid="published-export-excel"><x-icon name="o-table-cells" class="h-4 w-4" aria-hidden="true" />Excel de la modalidad</a>
                 @if ($staffExports['sii'] !== null)
                     <a href="{{ $staffExports['sii'] }}" class="btn btn-outline btn-sm max-md:h-11 max-md:w-full" data-testid="published-export-sii"><x-icon name="o-archive-box-arrow-down" class="h-4 w-4" aria-hidden="true" />Archivos para el SII</a>
                 @endif
@@ -55,7 +58,7 @@
         @endif
 
         @if ($careers === [])
-            <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="published-empty">Todavía no hay horarios publicados para {{ $context->campus->name }} en {{ $context->term->name }}.</div>
+            <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="published-empty">Todavía no hay horarios publicados para {{ $context->campus?->name ?? $context->modality->name }} en {{ $context->term->name }}.</div>
         @else
             <div class="grid items-start gap-10 desktop:grid-cols-[minmax(0,1fr)_380px] desktop:gap-14">
                 <section aria-labelledby="by-career">
@@ -88,7 +91,7 @@
                                 </div>
                                 <div class="flex flex-wrap gap-1.5" role="group" aria-label="Semestre de {{ $entry['career']['code'] }}">
                                     @foreach ($selected['semesters'] as $semester)
-                                        <a href="{{ route('published.semester', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'carrera' => $entry['career']['code'], 'reticula' => $selected['plan']['code'], 'semestre' => $semester]) }}" wire:navigate
+                                        <a href="{{ route('published.semester', [...$routeParameters, 'carrera' => $entry['career']['code'], 'reticula' => $selected['plan']['code'], 'semestre' => $semester]) }}" wire:navigate
                                             aria-label="{{ $entry['career']['code'] }}, semestre {{ $semester }}"
                                             class="btn btn-outline btn-square h-11 w-11 border-base-300 bg-base-100 font-mono font-semibold hover:btn-primary md:h-10 md:w-10">{{ $semester }}</a>
                                     @endforeach
@@ -112,7 +115,7 @@
                             @else
                                 <ul class="grid" data-testid="published-teacher-results">
                                     @foreach ($teachers as $teacher)
-                                        <li><a href="{{ route('published.teacher', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'docente' => $teacher['id']]) }}" wire:navigate class="flex min-h-11 items-center gap-2 rounded-field px-2 hover:bg-base-300/50 focus-visible:outline-2 focus-visible:outline-primary"><x-icon name="o-user" class="h-4 w-4 shrink-0 text-neutral" aria-hidden="true" />{{ $teacher['name'] }}</a></li>
+                                        <li><a href="{{ route('published.teacher', [...$routeParameters, 'docente' => $teacher['id']]) }}" wire:navigate class="flex min-h-11 items-center gap-2 rounded-field px-2 hover:bg-base-300/50 focus-visible:outline-2 focus-visible:outline-primary"><x-icon name="o-user" class="h-4 w-4 shrink-0 text-neutral" aria-hidden="true" />{{ $teacher['name'] }}</a></li>
                                     @endforeach
                                 </ul>
                             @endif
@@ -135,7 +138,7 @@
                                 @else
                                     <ul class="grid" data-testid="published-room-results">
                                         @foreach ($rooms as $room)
-                                            <li><a href="{{ route('published.room', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'salon' => $room['id']]) }}" wire:navigate class="flex min-h-11 flex-wrap items-center gap-x-2 rounded-field px-2 hover:bg-base-300/50 focus-visible:outline-2 focus-visible:outline-primary"><x-icon name="o-map-pin" class="h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><b class="font-mono font-semibold">{{ $room['code'] }}</b>@if ($room['name'] !== $room['code'])<span>{{ $room['name'] }}</span>@endif<span class="text-sm text-neutral">{{ $room['building'] }}</span></a></li>
+                                            <li><a href="{{ route('published.room', [...$routeParameters, 'salon' => $room['id']]) }}" wire:navigate class="flex min-h-11 flex-wrap items-center gap-x-2 rounded-field px-2 hover:bg-base-300/50 focus-visible:outline-2 focus-visible:outline-primary"><x-icon name="o-map-pin" class="h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><b class="font-mono font-semibold">{{ $room['code'] }}</b>@if ($room['name'] !== $room['code'])<span>{{ $room['name'] }}</span>@endif<span class="text-sm text-neutral">{{ $room['building'] }}</span></a></li>
                                         @endforeach
                                     </ul>
                                 @endif

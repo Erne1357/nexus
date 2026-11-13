@@ -23,7 +23,7 @@ final class BlockClosingWithPendingChangeRequests
 
         $load = $event->load;
         $counts = ChangeRequest::query()
-            ->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id)
+            ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
             ->whereIn('status', [ChangeRequestStatus::Pending, ChangeRequestStatus::Approved])
             ->selectRaw('status, count(*) as total')->groupBy('status')
             ->pluck('total', 'status');

@@ -41,14 +41,14 @@ final class MyChangeRequestsQuery
             ->active()
             ->where('term_id', $term->id)
             ->where('teacher_id', $teacher->id)
-            ->get(['id', 'campus_id', 'department_id']);
+            ->get(['id', 'modality_id', 'department_id']);
 
         $loads = $groups->isEmpty() ? collect() : AcademicLoad::query()
             ->where('term_id', $term->id)
-            ->whereIn('campus_id', $groups->pluck('campus_id')->unique()->values())
+            ->whereIn('modality_id', $groups->pluck('modality_id')->unique()->values())
             ->whereIn('department_id', $groups->pluck('department_id')->unique()->values())
-            ->get(['campus_id', 'department_id', 'status'])
-            ->keyBy(fn (AcademicLoad $load): string => $load->campus_id.'|'.$load->department_id);
+            ->get(['modality_id', 'department_id', 'status'])
+            ->keyBy(fn (AcademicLoad $load): string => $load->modality_id.'|'.$load->department_id);
 
         $open = $requests
             ->filter(fn (ChangeRequest $request): bool => $request->status->isOpen() && $request->teacher_id === $teacher->id)
@@ -69,7 +69,7 @@ final class MyChangeRequestsQuery
             ])->values()->all(),
             'groups' => $groups->mapWithKeys(fn (Group $group): array => [$group->id => [
                 'open' => $open->get($group->id),
-                'load' => $loads->get($group->campus_id.'|'.$group->department_id)?->status,
+                'load' => $loads->get($group->modality_id.'|'.$group->department_id)?->status,
             ]])->all(),
         ];
     }

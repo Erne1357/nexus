@@ -499,7 +499,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     {
         $open = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
 
-        return AcademicLoad::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->get(['department_id', 'status'])
+        return AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->get(['department_id', 'status'])
             ->filter(fn (AcademicLoad $load): bool => in_array($load->status, $open, true))
             ->mapWithKeys(fn (AcademicLoad $load): array => [$load->department_id => true])->all();
     }

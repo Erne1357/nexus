@@ -11,7 +11,7 @@ use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
- * Las descargas del personal de lo publicado (tareas 4.5 y 4.6): el PDF por departamento, el Excel del campus y los
+ * Las descargas del personal de lo publicado (tareas 4.5 y 4.6): el PDF por departamento, el Excel de la modalidad y los
  * archivos para el SII, por su tipo (StaffExports::TYPES). Piden sesión (ruta con `auth`) y su permiso
  * (PublishedExportPolicy, antes de encolar). Lo que no está publicado es 404.
  */
@@ -21,15 +21,15 @@ final class DownloadStaffExport
 
     public function __construct(private readonly PublishedScheduleQuery $published) {}
 
-    public function __invoke(Request $request, Actor $actor, string $periodo, string $campus, string $tipo): Response|StreamedResponse
+    public function __invoke(Request $request, Actor $actor, string $periodo, string $modalidad, string $tipo): Response|StreamedResponse
     {
         $class = StaffExports::TYPES[$tipo] ?? null;
         abort_if($class === null, 404);
         // Sin el permiso en ningún alcance, 403 antes de buscar nada: no se distingue lo publicado de lo que no.
         abort_unless($actor->allowsAny($class::requiredPermission()), 403);
 
-        [$term, $campusModel] = $this->context($periodo, $campus);
+        [$term, $modality] = $this->context($periodo, $modalidad);
 
-        return $this->deliver($request, StaffExports::make($tipo, $this->published, $term, $campusModel, $request));
+        return $this->deliver($request, StaffExports::make($tipo, $this->published, $term, $modality, $request));
     }
 }

@@ -22,6 +22,7 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -42,22 +43,20 @@ final class DepartmentInboxQuery
     /**
      * Todo lo que muestra la bandeja (DepartmentInbox); una parte se decide si ProposalReviewRules::isDecidable lo
      * dice: pendiente, con la propuesta enviada o regresada por otro departamento (confirmado el 2 de noviembre de
-     * 2026). Un número fijo de consultas, sin importar cuántas carreras, partes o filas haya: la carga; los
-     * catálogos sin validar (CatalogReviewQuery::pendingFor, HC-14); las propuestas del periodo y campus; las partes
+     * 2026). Un número fijo de consultas, sin importar cuántas carreras, partes o filas haya: la carga del departamento
+     * en la modalidad (M1); los catálogos sin validar en ella (CatalogReviewQuery::pendingFor, HC-14); las propuestas del
+     * periodo y campus (todavía por campus; el campus es de la modalidad de la pantalla); las partes
      * del departamento, cada una con su propuesta ya puesta (para ProposalReviewPolicy::decide sin otra consulta);
      * las filas con grupos de sus materias en esas partes, con sus materias; las carreras, y el tamaño objetivo de
      * los grupos (SuggestedGroups).
      */
-    public function inbox(Term $term, Campus $campus, Department $department): DepartmentInbox
+    public function inbox(Term $term, Modality $modality, Campus $campus, Department $department): DepartmentInbox
     {
-        $load = AcademicLoad::query()
-            ->where('term_id', $term->getKey())
-            ->where('campus_id', $campus->getKey())
-            ->where('department_id', $department->getKey())
-            ->first();
+        $load = AcademicLoad::query()->ofDepartment($term->getKey(), $modality->getKey(), $department->getKey())->first();
 
         $proposals = CareerProposal::query()
             ->where('term_id', $term->getKey())
+            ->where('modality_id', $modality->getKey())
             ->where('campus_id', $campus->getKey())
             ->get()
             ->keyBy('id');
@@ -108,7 +107,8 @@ final class DepartmentInboxQuery
             campus: $campus,
             department: $department,
             load: $load,
-            pendingCatalogs: $this->catalogReviews->pendingFor($term, $campus, $department),
+            pendingCatalogs: $this->catalogReviews->pendingFor($term, $modality, $department),
+            modality: $modality,
             careers: $rows->all(),
             subjects: $this->parallels($rows),
             anomalies: $anomalies,
@@ -159,14 +159,15 @@ final class DepartmentInboxQuery
     }
 
     /**
-     * La bandeja con los ids que la página guardó al entrar (periodo, campus y departamento, ya autorizados).
+     * La bandeja con los ids que la página guardó al entrar (periodo, modalidad, campus y departamento, ya autorizados).
      *
      * @throws ModelNotFoundException<Term>
      */
-    public function inboxOf(string $termId, string $campusId, string $departmentId): DepartmentInbox
+    public function inboxOf(string $termId, string $modalityId, string $campusId, string $departmentId): DepartmentInbox
     {
         return $this->inbox(
             KeyLookup::findOrFail(Term::query(), $termId),
+            KeyLookup::findOrFail(Modality::withTrashed(), $modalityId),
             KeyLookup::findOrFail(Campus::query(), $campusId),
             KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId),
         );

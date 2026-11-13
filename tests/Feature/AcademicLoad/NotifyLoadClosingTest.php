@@ -13,28 +13,30 @@ use App\Modules\AcademicLoad\Notifications\LoadReopened;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NotificationMessage;
 use Illuminate\Support\Facades\Notification;
 
 /*
 | Tarea 4.2: la campana avisa al jefe cuando Subdirección reabre o aprueba su carga, y a Subdirección cuando una
-| carga cerrada espera su visto bueno. Reciben los titulares del permiso en el campus y el departamento de la carga.
+| carga cerrada espera su visto bueno. Reciben los titulares del permiso en la modalidad y el departamento de la carga
+| (M1); el aviso abre la pantalla en la modalidad, sin campus (MS14).
 */
 
 function approvalNoticeScenario(bool $requiresApproval = true, LoadStatus $status = LoadStatus::Closed): array
 {
-    $campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]]);
+    $campus = Campus::factory()->create();
+    $campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]]);
     $department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $other = Department::factory()->create();
 
     return [
-        'load' => AcademicLoad::factory()->inStatus($status)->create(['campus_id' => $campus->id, 'department_id' => $department->id]),
+        'load' => AcademicLoad::factory()->inStatus($status)->create(['modality_id' => $campus->modality_id, 'department_id' => $department->id]),
         'jefe' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department->id])->create(),
         'otroJefe' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $other->id])->create(),
         'subdireccion' => User::factory()->withRole(Role::Subdireccion)->create(),
-        'proyecto' => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $campus->id, 'department_id' => $department->id])->create(),
+        'proyecto' => User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => $campus->modality_id, 'department_id' => $department->id])->create(),
         'admin' => User::factory()->admin()->create(),
         'department' => $department,
     ];
@@ -54,13 +56,13 @@ it('al reabrir, avisa al jefe del departamento con el motivo', function (LoadSta
             && $message->body === 'Falta el grupo vespertino de Cálculo'
             && $message->route === 'staffing.closing'
             && $message->parameters === ['departamento' => $s['department']->id]
-            && $message->campusId === $s['load']->campus_id
+            && $message->modalityId === $s['load']->modality_id && $message->campusId === null
             && $message->termId === $s['load']->term_id;
     });
     Notification::assertNotSentTo([$s['otroJefe'], $s['subdireccion'], $s['admin'], $s['proyecto']], LoadReopened::class);
 })->with([LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published]);
 
-it('al cerrar en un campus que exige visto bueno, avisa a Subdirección', function () {
+it('al cerrar en una modalidad que exige visto bueno, avisa a Subdirección', function () {
     Notification::fake();
     $s = approvalNoticeScenario(true, LoadStatus::Staffing);
     $this->actingAs($s['jefe']);
@@ -71,7 +73,7 @@ it('al cerrar en un campus que exige visto bueno, avisa a Subdirección', functi
     Notification::assertNotSentTo([$s['jefe'], $s['otroJefe'], $s['admin'], $s['proyecto']], LoadAwaitingApproval::class);
 });
 
-it('al cerrar en un campus que no lo exige, no avisa', function () {
+it('al cerrar en una modalidad que no lo exige, no avisa', function () {
     Notification::fake();
     $s = approvalNoticeScenario(false, LoadStatus::Staffing);
     $this->actingAs($s['jefe']);

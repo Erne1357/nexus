@@ -6,14 +6,16 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 
 /**
  * Lo que ve el docente de las cargas publicadas (P8, confirmado el 10 de noviembre de 2026): con la carga de un
  * departamento publicada, «Mi carga» y la oferta muestran su última versión publicada; antes, lo vivo. Si se reabre,
- * siguen viendo la última versión, como el público (supuesto por confirmar). Lee lo publicado de cada campus con
- * PublishedScheduleQuery (AcademicLoad), que casi siempre viene de la caché: una consulta por los campus que publicaron
- * algo en el periodo y la de PublishedScheduleQuery por cada uno. Sin publicaciones, una sola consulta.
+ * siguen viendo la última versión, como el público (supuesto por confirmar). Lee lo publicado de cada modalidad con
+ * PublishedScheduleQuery (AcademicLoad; la carga es por departamento y modalidad, M1), que casi siempre viene de la
+ * caché: una consulta por las modalidades que publicaron algo en el periodo, la de PublishedScheduleQuery por cada una y
+ * una por los campus de sus grupos. Sin publicaciones, una sola consulta.
  */
 final class PublishedLoadsQuery
 {
@@ -21,15 +23,20 @@ final class PublishedLoadsQuery
 
     public function forTerm(Term $term): PublishedLoads
     {
-        $campuses = Campus::query()
-            ->whereIn('id', AcademicLoad::query()->select('campus_id')
+        $modalities = Modality::withTrashed()
+            ->whereIn('id', AcademicLoad::query()->select('modality_id')
                 ->where('term_id', $term->id)
                 ->whereIn('id', LoadSnapshot::query()->select('academic_load_id')))
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
 
-        return new PublishedLoads($campuses->mapWithKeys(fn (Campus $campus): array => [
-            $campus->id => ['campus' => $campus, 'schedule' => $this->published->schedule($term, $campus)],
-        ])->all());
+        $schedules = $modalities->mapWithKeys(fn (Modality $modality): array => [
+            $modality->id => ['modality' => $modality, 'schedule' => $this->published->schedule($term, $modality)],
+        ])->all();
+
+        $campusIds = collect($schedules)->flatMap(fn (array $entry): array => array_column($entry['schedule']->campuses(), 'id'))->unique()->values()->all();
+        $campuses = $campusIds === [] ? [] : Campus::withTrashed()->whereIn('id', $campusIds)->get(['id', 'code', 'name'])->keyBy('id')->all();
+
+        return new PublishedLoads($schedules, $campuses);
     }
 }

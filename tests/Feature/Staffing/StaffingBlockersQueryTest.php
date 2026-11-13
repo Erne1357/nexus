@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Models\Group;
@@ -28,14 +29,14 @@ beforeEach(function () {
  */
 function blockersGroup(array $attributes = []): Group
 {
-    $group = Group::factory()->create(['term_id' => test()->load->term_id, 'campus_id' => test()->load->campus_id, 'subject_id' => test()->subject->id, 'capacity' => 30, ...$attributes]);
+    $group = Group::factory()->create(['term_id' => test()->load->term_id, 'campus_id' => loadCampus(test()->load)->id, 'subject_id' => test()->subject->id, 'capacity' => 30, ...$attributes]);
     CareerCampus::factory()->create(['career_id' => $group->owner_career_id, 'campus_id' => $group->campus_id]);
 
     return $group;
 }
 
 it('cuenta los grupos con choques duros y los grupos sin horario', function () {
-    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => $this->load->campus_id])->id]);
+    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id]);
     GroupSession::factory()->for(blockersGroup())->inRoom($room)->on(1, '07:00', '09:00')->create();
     blockersGroup();
     blockersGroup();
@@ -44,16 +45,24 @@ it('cuenta los grupos con choques duros y los grupos sin horario', function () {
     expect(app(StaffingBlockersQuery::class)->of($this->load))->toBe(['conflicted' => 1, 'unscheduled' => 2]);
 });
 
+it('M1: no cuenta los choques de un grupo del departamento de otra modalidad en el mismo campus', function () {
+    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id]);
+    GroupSession::factory()->for(blockersGroup())->inRoom($room)->on(1, '07:00', '09:00')->create();
+    GroupSession::factory()->for(blockersGroup(['modality_id' => modalityOf('EAD')->id]))->inRoom($room)->on(2, '07:00', '09:00')->create();
+
+    expect(app(StaffingBlockersQuery::class)->of($this->load))->toBe(['conflicted' => 1, 'unscheduled' => 0]);
+});
+
 it('no cuenta grupos cancelados ni de otros departamentos', function () {
     GroupSession::factory()->for(blockersGroup())->on(1, '07:00', '09:00')->create();
     blockersGroup(['status' => 'cancelled']);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus($this->load)->id]);
 
     expect(app(StaffingBlockersQuery::class)->of($this->load))->toBe(['conflicted' => 0, 'unscheduled' => 0]);
 });
 
 it('sin bloques de tiempo no pide horario', function () {
-    $this->load->campus->update(['settings' => ['uses_time_blocks' => false]]);
+    $this->load->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_time_blocks' => false]]);
     blockersGroup();
 
     expect(app(StaffingBlockersQuery::class)->of($this->load->fresh()))->toBe(['conflicted' => 0, 'unscheduled' => 0]);

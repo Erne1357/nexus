@@ -66,8 +66,9 @@ class Group extends Model
     }
 
     /**
-     * Su modalidad del catálogo (ADR-0025): ampliación de la ronda 2, la de la propuesta de donde nace (la copian sus
-     * sesiones); aún no la lee nadie.
+     * Su modalidad del catálogo (ADR-0025): la de la propuesta de donde nace o, en los grupos anteriores a la ronda 2, la
+     * de su campus (la copian sus sesiones). Liga el grupo a la carga de su departamento en esa modalidad (M1) y su
+     * perfil decide si el grupo usa salones y bloques de tiempo.
      *
      * @return BelongsTo<Modality, $this>
      */

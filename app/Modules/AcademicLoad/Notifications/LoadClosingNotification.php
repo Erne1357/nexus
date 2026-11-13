@@ -10,8 +10,9 @@ use Illuminate\Support\Str;
 
 /**
  * Base de los avisos del cierre de una carga (tarea 4.2): todos llevan a la pantalla de cierre del departamento
- * (`staffing.closing?departamento=<id>`, «Cierre de la carga» de la tarea 4.1), en el periodo y el campus de la carga:
- * al abrirlo, la credencial cambia a ese campus y la pantalla abre su pestaña. Cada aviso define su título, ícono y
+ * (`staffing.closing?departamento=<id>`, «Cierre de la carga» de la tarea 4.1), en el periodo y la modalidad de la carga
+ * (M1): al abrirlo, la credencial cambia a ese periodo y la pantalla se abre en esa modalidad (`?modalidad=`, MS14), con
+ * los grupos de todos sus campus. Cada aviso define su título, ícono y
  * tono.
  */
 abstract class LoadClosingNotification extends NexusNotification
@@ -40,8 +41,8 @@ abstract class LoadClosingNotification extends NexusNotification
             route: 'staffing.closing',
             parameters: ['departamento' => $this->department->getKey()],
             termId: $this->load->term_id,
-            campusId: $this->load->campus_id,
             tone: $this->tone(),
+            modalityId: $this->load->modality_id,
         );
     }
 }
