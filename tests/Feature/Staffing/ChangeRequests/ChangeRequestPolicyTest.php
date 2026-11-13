@@ -111,7 +111,7 @@ it('AZ-S17: un jefe de proyecto docente de EAD no ve en la lista una solicitud d
     $request = requestFor($s['group']);
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $s['group']->department_id])->create();
 
-    $listed = app(ChangeRequestsQuery::class)->listFor(app(Actor::class)->forUser($jpd), $s['load']->term_id, $s['group']->campus_id, $s['group']->department_id);
+    $listed = app(ChangeRequestsQuery::class)->listFor(app(Actor::class)->forUser($jpd), $s['load']->term_id, $s['group']->modality_id, $s['group']->campus_id, $s['group']->department_id);
 
     expect($listed)->toHaveCount(0)
         ->and($jpd->can('view', $request))->toBeFalse();
@@ -123,7 +123,7 @@ it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve la solicitud de
     $request = requestFor($s['group']);
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('PRES')->id, 'campus_id' => $c2->id, 'department_id' => $s['group']->department_id])->create();
 
-    $listed = app(ChangeRequestsQuery::class)->listFor(app(Actor::class)->forUser($jpd), $s['load']->term_id, $s['group']->campus_id, $s['group']->department_id);
+    $listed = app(ChangeRequestsQuery::class)->listFor(app(Actor::class)->forUser($jpd), $s['load']->term_id, $s['group']->modality_id, $s['group']->campus_id, $s['group']->department_id);
 
     expect($listed->modelKeys())->toBe([$request->id])
         ->and($jpd->can('view', $request))->toBeTrue();

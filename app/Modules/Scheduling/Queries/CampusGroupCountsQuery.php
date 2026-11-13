@@ -20,11 +20,21 @@ final class CampusGroupCountsQuery
      */
     public function ofLoad(AcademicLoad $load): array
     {
+        return $this->of($load->term_id, $load->modality_id, $load->department_id);
+    }
+
+    /**
+     * Lo mismo con el periodo, la modalidad y el departamento de la carga (la asignación docente, que puede no tener una).
+     *
+     * @return array<string, int>
+     */
+    public function of(string $termId, string $modalityId, string $departmentId): array
+    {
         return Group::query()->active()->toBase()
             ->join('campuses', 'campuses.id', '=', 'groups.campus_id')
-            ->where('groups.term_id', $load->term_id)
-            ->where('groups.modality_id', $load->modality_id)
-            ->where('groups.department_id', $load->department_id)
+            ->where('groups.term_id', $termId)
+            ->where('groups.modality_id', $modalityId)
+            ->where('groups.department_id', $departmentId)
             ->groupBy('campuses.code')
             ->orderBy('campuses.code')
             ->selectRaw('campuses.code, count(*) as total')

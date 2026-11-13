@@ -8,10 +8,14 @@ use App\Modules\Core\Models\ModalityProfile;
  * Lo que le falta a la carga de un departamento para cerrarse o publicarse (HC-15), contado por grupo activo con la
  * regla de GroupClosingFlags (tally()). `justified` no bloquea: son los grupos sin docente o sin salón que pasan con
  * justificación. `groups` son los grupos distintos que bloquean: uno sin docente ni salón cuenta en dos cifras y ahí
- * una vez.
+ * una vez. `byCampus` son las mismas cifras por el campus de cada grupo (su id; '' sin campus, MS4): el reparto de
+ * «Para cerrar» y su filtro de campus (maqueta U2, opción A); la carga se cierra entera (M1).
  */
 final readonly class ClosingBlockers
 {
+    /**
+     * @param  array<string, array{conflicted: int, unscheduled: int, withoutTeacher: int, withoutRoom: int, inactiveTeacher: int, justified: int, groups: int}>  $byCampus
+     */
     public function __construct(
         public int $conflicted = 0,
         public int $unscheduled = 0,
@@ -20,6 +24,7 @@ final readonly class ClosingBlockers
         public int $inactiveTeacher = 0,
         public int $justified = 0,
         public int $groups = 0,
+        public array $byCampus = [],
     ) {}
 
     /**
@@ -32,21 +37,41 @@ final readonly class ClosingBlockers
     public static function tally(iterable $groups, ModalityProfile $profile, ?array $conflicted = null): self
     {
         $hard = $conflicted === null ? null : array_flip($conflicted);
-        $counts = ['conflicted' => 0, 'unscheduled' => 0, 'withoutTeacher' => 0, 'withoutRoom' => 0, 'inactiveTeacher' => 0, 'justified' => 0, 'groups' => 0];
+        $zero = ['conflicted' => 0, 'unscheduled' => 0, 'withoutTeacher' => 0, 'withoutRoom' => 0, 'inactiveTeacher' => 0, 'justified' => 0, 'groups' => 0];
+        $counts = $zero;
+        $byCampus = [];
 
         foreach ($groups as $group) {
             $isConflicted = $hard === null ? $group->storedHardConflict : isset($hard[$group->id]);
+            $flags = [
+                'conflicted' => (int) $isConflicted,
+                'unscheduled' => (int) $group->unscheduled($profile),
+                'withoutTeacher' => (int) $group->withoutTeacher(),
+                'withoutRoom' => (int) $group->withoutRoom($profile),
+                'inactiveTeacher' => (int) $group->inactiveTeacher,
+                'justified' => (int) $group->passesJustified($profile),
+                'groups' => (int) $group->blocks($profile, $isConflicted),
+            ];
+            $campus = (string) $group->campusId;
+            $byCampus[$campus] ??= $zero;
 
-            $counts['conflicted'] += (int) $isConflicted;
-            $counts['unscheduled'] += (int) $group->unscheduled($profile);
-            $counts['withoutTeacher'] += (int) $group->withoutTeacher();
-            $counts['withoutRoom'] += (int) $group->withoutRoom($profile);
-            $counts['inactiveTeacher'] += (int) $group->inactiveTeacher;
-            $counts['justified'] += (int) $group->passesJustified($profile);
-            $counts['groups'] += (int) $group->blocks($profile, $isConflicted);
+            foreach ($flags as $key => $flag) {
+                $counts[$key] += $flag;
+                $byCampus[$campus][$key] += $flag;
+            }
         }
 
-        return new self(...$counts);
+        ksort($byCampus);
+
+        return new self(...$counts, byCampus: $byCampus);
+    }
+
+    /**
+     * Las cifras de los grupos de un campus (su id); un campus sin grupos en la carga, todo en cero.
+     */
+    public function forCampus(string $campusId): self
+    {
+        return new self(...($this->byCampus[$campusId] ?? []));
     }
 
     public function isClear(): bool

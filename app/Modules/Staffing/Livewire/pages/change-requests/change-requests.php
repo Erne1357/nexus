@@ -3,7 +3,9 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
@@ -28,7 +30,10 @@ use Mary\Traits\Toast;
 
 /**
  * Solicitudes de cambio (tarea 3.11, maqueta A «Lista y detalle»): las solicitudes de cambio de horario y de salón de
- * un departamento en el periodo y el campus de la credencial. A la izquierda la lista (pendientes, luego aprobadas por
+ * un departamento en el periodo activo y la modalidad de la página (`?modalidad=`, WithModalityCampusFilter; M1: de los
+ * grupos de todos sus campus), que se elige con el select «Modalidad» (maqueta U2, opción A; sin select con una sola,
+ * MS16). El campus es un filtro (`?campus=`, «Todos» por omisión) con las solicitudes que ve en cada uno, y cada renglón
+ * lleva el campus de hoy de su grupo (M8). A la izquierda la lista (pendientes, luego aprobadas por
  * aplicar, luego el resto) con filtros de estado, tipo y texto; a la derecha el detalle de la elegida, con la foto de
  * las sesiones contra lo que se propone, el motivo y el historial. Arriba, el estado de la carga del departamento.
  *
@@ -38,19 +43,20 @@ use Mary\Traits\Toast;
  * como aplicada». Si Scheduling veta el regreso de la carga a Asignación, la pantalla muestra los motivos.
  *
  * El coordinador también pide desde aquí (confirmado el 7 de noviembre de 2026): «Nueva solicitud» (solo con el
- * permiso de pedir en un grupo de su carrera) abre un modal con los grupos de su carrera en el campus y el periodo cuya
- * carga está en Asignación o Ajustes (ChangeRequestsQuery::requestableGroups), el tipo, qué propone y el motivo, y
+ * permiso de pedir en un grupo de su carrera) abre un modal con los grupos de su carrera en la modalidad, el periodo y el
+ * campus del filtro (los de su campus si su nombramiento lo tiene, MS6) cuya carga está en Asignación o Ajustes
+ * (ChangeRequestsQuery::requestableGroups), el tipo, qué propone y el motivo, y
  * llama a RequestChange; la solicitud del coordinador no lleva docente, así que no la limita la de una abierta por
  * docente. Al enviarla, la pantalla la abre.
  *
  * Entra quien puede ver, decidir, aplicar o pedir alguna; cada quien ve solo lo de su alcance (ChangeRequestsQuery).
  * El departamento es el primero que puede ver; con varios, `?depto=<código>` lo elige, y `?solicitud=<id>` (el de los
- * avisos) abre esa solicitud en su departamento.
+ * avisos) abre esa solicitud en su departamento y su modalidad, con el filtro en «Todos» si el campus la esconde.
  */
 new #[Title('Solicitudes de cambio')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityCampusFilter;
 
     /** Valores de `?estado=` y el estado que filtran. */
     private const array STATUSES = [
@@ -98,9 +104,15 @@ new #[Title('Solicitudes de cambio')] class extends Component
 
     public string $reason = '';
 
-    /** El periodo, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
+    /**
+     * El periodo, la modalidad, el campus del filtro (null, «Todos») y el departamento con los que pinta y escribe. El
+     * navegador no los puede cambiar: cambian al elegir otra modalidad, campus o departamento, que se resuelven de nuevo.
+     */
     #[Locked]
     public ?string $termId = null;
+
+    #[Locked]
+    public ?string $modalityId = null;
 
     #[Locked]
     public ?string $campusId = null;
@@ -137,9 +149,35 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->resolve($context, $query);
     }
 
-    public function updatedCampus(): void
+    /**
+     * Otro campus en el filtro: la lista de ese campus en la misma modalidad (se recuerda para la siguiente pantalla,
+     * AZ-02); la solicitud abierta se suelta si ya no está en la lista.
+     */
+    public function updatedCampus(Actor $context, ChangeRequestsQuery $query): void
     {
-        $this->reopenOnCampus('staffing.change-requests');
+        $chosen = $this->campusFilter();
+
+        if ($chosen !== null) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $chosen->code);
+        }
+
+        $this->reset('requestId', 'comment', 'mobileDetail', 'vetoReasons');
+        $this->resolve($context, $query);
+    }
+
+    /**
+     * Otra modalidad en el select: las solicitudes del departamento en ella (M1); si no lo puede elegir ahí, el primero.
+     */
+    public function updatedModalidad(Actor $context, ChangeRequestsQuery $query): void
+    {
+        $modality = $this->requiredModality();
+        $term = $context->activeTerm();
+
+        if ($term === null || ! $query->departmentsFor($context, $term->id, $modality->getKey(), $this->campusFilter()?->getKey(), $this->campusesOf($modality)->modelKeys())->contains('code', $this->department)) {
+            $this->department = '';
+        }
+
+        $this->updatedDepartment($context, $query);
     }
 
     public function updatedDepartment(Actor $context, ChangeRequestsQuery $query): void
@@ -193,7 +231,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         }
 
         $this->comment = '';
-        $load = $query->loadOf((string) $this->termId, (string) $this->campusId, (string) $this->departmentId)['load'];
+        $load = $query->loadOf((string) $this->termId, (string) $this->modalityId, (string) $this->departmentId)['load'];
         $this->success('Aprobaste la solicitud', $load?->status === LoadStatus::Adjusting
             ? 'La carga del departamento está en Ajustes. Se avisó a quien la aplica.'
             : 'Se avisó a quien la aplica.');
@@ -271,7 +309,8 @@ new #[Title('Solicitudes de cambio')] class extends Component
             'reason.max' => "El motivo lleva hasta {$max} caracteres.",
         ]);
 
-        $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, $this->requiredCampus()->id, $this->requestGroupId) ?? abort(404);
+        abort_if($this->modalityId === null, 404);
+        $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId) ?? abort(404);
         $this->authorize('create', [ChangeRequest::class, $group]);
 
         try {
@@ -297,22 +336,29 @@ new #[Title('Solicitudes de cambio')] class extends Component
      */
     public function with(Actor $context, ChangeRequestsQuery $query): array
     {
-        $canRequest = $this->canRequest($context);
         $termId = (string) $context->activeTerm()?->id;
-        $shownCampus = $this->requiredCampus();
-        $campusId = $shownCampus->id;
+        $modality = $this->modalityId === null ? null : $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $this->modalityId);
+        $campuses = $modality === null ? collect() : $this->campusesOf($modality);
+        $canRequest = $this->canRequest($context) && $modality !== null;
+        $scope = [
+            'modalityOptions' => $this->modalityOptions(),
+            'shownModality' => $modality,
+            'campusOptions' => $campuses,
+            'shownCampus' => $this->campusId === null ? null : $campuses->firstWhere('id', $this->campusId),
+            'multiCampus' => $campuses->count() > 1,
+        ];
         $requesting = [
             'canRequest' => $canRequest,
-            'requestBlocked' => $canRequest && ! $query->hasRequestableGroups($context, $termId, $campusId) ? 'No hay grupos de tu carrera con la carga en Asignación o Ajustes.' : null,
-            'groupOptions' => $canRequest && $this->showRequest ? self::groupOptions($query->requestableGroups($context, $termId, $campusId)) : [],
+            'requestBlocked' => $canRequest && ! $query->hasRequestableGroups($context, $termId, $modality->getKey(), $this->campusId) ? 'No hay grupos de tu carrera con la carga en Asignación o Ajustes.' : null,
+            'groupOptions' => $canRequest && $this->showRequest ? self::groupOptions($query->requestableGroups($context, $termId, $modality->getKey(), $this->campusId), $scope['multiCampus']) : [],
             'maxText' => ChangeRequestRules::MAX_TEXT_LENGTH,
         ];
 
         if ($this->departmentId === null) {
-            return ['requests' => null, ...$this->campusViewData(), ...$requesting];
+            return ['requests' => null, ...$scope, ...$requesting];
         }
 
-        $requests = $query->listFor($context, (string) $this->termId, (string) $this->campusId, $this->departmentId);
+        $requests = $query->listFor($context, (string) $this->termId, (string) $this->modalityId, $this->campusId, $this->departmentId);
         $visible = $this->filtered($requests);
         $selected = ($this->requestId === '' ? null : $requests->firstWhere('id', $this->requestId)) ?? $visible->first();
         $department = collect($this->departments)->firstWhere('code', $this->department);
@@ -323,26 +369,27 @@ new #[Title('Solicitudes de cambio')] class extends Component
             'counts' => ['' => $requests->count()] + array_map(fn (ChangeRequestStatus $status): int => $requests->where('status', $status)->count(), self::STATUSES),
             'selected' => $selected,
             'departmentName' => $department['label'] ?? $this->department,
-            'loadState' => $query->loadOf((string) $this->termId, (string) $this->campusId, $this->departmentId),
+            'loadState' => $query->loadOf((string) $this->termId, (string) $this->modalityId, $this->departmentId),
+            'campusCounts' => $query->campusCounts($context, (string) $this->termId, (string) $this->modalityId, $this->departmentId),
             'approvedListed' => $requests->where('status', ChangeRequestStatus::Approved)->count(),
             'listScope' => $context->allowsAny(StaffingPermission::ChangeRequestApplySchedule) ? 'de tu carrera' : 'en tu lista',
             'canDecide' => $selected !== null && $selected->status === ChangeRequestStatus::Pending && Gate::allows('decide', $selected),
             'canApply' => $selected !== null && $selected->status === ChangeRequestStatus::Approved && Gate::allows('apply', $selected),
-            'editorUrl' => $selected !== null ? route('scheduling.editor', ['campus' => $shownCampus->code, 'grupo' => $selected->group_id]) : null,
-            'campusName' => $shownCampus->name,
-            ...$this->campusViewData(),
+            'editorUrl' => $selected !== null ? route('scheduling.editor', ['modalidad' => $modality?->code, 'campus' => $selected->group->campus?->code, 'grupo' => $selected->group_id]) : null,
+            ...$scope,
             'termName' => $context->activeTerm()?->name,
             ...$requesting,
         ];
     }
 
     /**
-     * Los grupos del modal «Nueva solicitud»: clave, materia y «Sem. 3 · SC · Lu Mi 7:00–9:00».
+     * Los grupos del modal «Nueva solicitud»: clave, materia y «C2 · Sem. 3 · SC · Lu Mi 7:00–9:00» (el campus, si la
+     * modalidad tiene más de uno).
      *
      * @param  iterable<Group>  $groups
      * @return list<array{id: string, code: string, subject: string, detail: string, reason: null}>
      */
-    private static function groupOptions(iterable $groups): array
+    private static function groupOptions(iterable $groups, bool $withCampus): array
     {
         $options = [];
 
@@ -351,7 +398,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
                 'id' => $group->id,
                 'code' => $group->code,
                 'subject' => $group->subject->name,
-                'detail' => implode(' · ', ['Sem. '.$group->semester, $group->department->code, ...array_map(fn (array $line): string => $line['days'].' '.$line['time'], SessionLabels::schedule($group->sessions))]),
+                'detail' => implode(' · ', [...($withCampus && $group->campus !== null ? [$group->campus->code] : []), 'Sem. '.$group->semester, $group->department->code, ...array_map(fn (array $line): string => $line['days'].' '.$line['time'], SessionLabels::schedule($group->sessions))]),
                 'reason' => null,
             ];
         }
@@ -389,17 +436,27 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
-     * Resuelve con la credencial el periodo, el campus y el departamento, y deja en propiedades bloqueadas con qué
-     * pinta y escribe la página (o por qué no hay lista). `?solicitud=` que no ve en el periodo y el campus es 404; un
-     * departamento pedido por `?depto=` que no puede elegir, 403.
+     * Resuelve con la credencial el periodo, la modalidad (la elegida, o la de `?solicitud=`, o la de omisión, MS30; queda
+     * fija en `?modalidad=`), el campus del filtro (uno que no es de la modalidad es «Todos») y el departamento, y deja en
+     * propiedades bloqueadas con qué pinta y escribe la página (o por qué no hay lista). `?solicitud=` que no ve en el
+     * periodo y la modalidad es 404 (si el filtro de campus la esconde, el filtro pasa a «Todos»); un departamento pedido
+     * por `?depto=` que no puede elegir, 403.
      */
     private function resolve(Actor $context, ChangeRequestsQuery $query): void
     {
-        $this->termId = $this->campusId = $this->departmentId = null;
+        $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $campus = $this->requiredCampus();
         $term = $context->activeTerm();
+
+        if ($this->requestId !== '' && $term !== null && blank($this->modalidad)) {
+            $modalityId = $query->modalityIdOf($this->requestId, $term->id);
+            $this->modalidad = $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $modalityId)?->code;
+        }
+
+        $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
+        $campus = $this->campusFilter();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
@@ -407,14 +464,24 @@ new #[Title('Solicitudes de cambio')] class extends Component
             return;
         }
 
-        $departments = $query->departmentsFor($context, $campus, $term);
         $requestedDepartment = null;
 
         if ($this->requestId !== '') {
-            $requestedDepartment = $query->departmentOf($context, $this->requestId, $term->id, $campus->id);
+            $requestedDepartment = $query->departmentOf($context, $this->requestId, $term->id, $modality->getKey(), $campus?->getKey());
+
+            if ($requestedDepartment === null && $campus !== null) {
+                $requestedDepartment = $query->departmentOf($context, $this->requestId, $term->id, $modality->getKey());
+                $campus = $requestedDepartment === null ? $campus : null;
+            }
 
             abort_if($requestedDepartment === null, 404);
         }
+
+        $this->campus = $campus?->code;
+        $this->termId = $term->id;
+        $this->modalityId = $modality->getKey();
+        $this->campusId = $campus?->getKey();
+        $departments = $query->departmentsFor($context, $term->id, $modality->getKey(), $campus?->getKey(), $this->campusesOf($modality)->modelKeys());
 
         $department = match (true) {
             $requestedDepartment !== null => $departments->firstWhere('id', $requestedDepartment),
@@ -427,14 +494,12 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->departments = $departments->map(fn (Department $department): array => ['code' => $department->code, 'name' => "{$department->code} · {$department->name}", 'label' => $department->name])->all();
 
         if ($department === null) {
-            $this->message = 'No tienes solicitudes de cambio en este campus.';
+            $this->message = $campus === null ? "No tienes solicitudes de cambio en {$modality->name}." : "No tienes solicitudes de cambio en {$campus->code}.";
 
             return;
         }
 
         $this->department = $department->code;
-        $this->termId = $term->id;
-        $this->campusId = $campus->id;
         $this->departmentId = $department->id;
         $this->message = null;
     }
@@ -446,7 +511,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     {
         abort_if($this->departmentId === null, 403);
 
-        $id = $this->requestId !== '' ? $this->requestId : (string) $this->filtered($query->listFor($context, (string) $this->termId, (string) $this->campusId, $this->departmentId))->first()?->id;
+        $id = $this->requestId !== '' ? $this->requestId : (string) $this->filtered($query->listFor($context, (string) $this->termId, (string) $this->modalityId, $this->campusId, $this->departmentId))->first()?->id;
 
         return $this->visibleOrFail($id, $context, $query);
     }
@@ -455,7 +520,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     {
         abort_if($this->departmentId === null, 403);
 
-        return $query->find($context, $id, (string) $this->termId, (string) $this->campusId, $this->departmentId) ?? abort(404);
+        return $query->find($context, $id, (string) $this->termId, (string) $this->modalityId, $this->campusId, $this->departmentId) ?? abort(404);
     }
 
     private function validateComment(bool $required): void

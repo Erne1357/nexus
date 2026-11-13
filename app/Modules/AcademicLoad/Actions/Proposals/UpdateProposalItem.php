@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\Core\Models\User;
+use Closure;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -30,7 +31,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * sea el de la base. Sin cambios no escribe, no registra ni avisa; con cambios guarda, deja en la bitácora de la
  * fila el valor anterior y el nuevo de lo que cambió y, después del commit, avisa con ProposalItemUpdated. Quién
  * puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla: un coordinador con campus solo corrige las
- * de su campus (M7); quien corrige se recibe como parámetro.
+ * de su campus (M7); quien corrige se recibe como parámetro. En la fila de un campus inactivo solo se dejan en cero los
+ * grupos pedidos (zeroRequestedGroups(), M14).
  */
 final class UpdateProposalItem
 {
@@ -43,6 +45,38 @@ final class UpdateProposalItem
     {
         $data = $this->rules->normalize($expectedStudents, $requestedGroups, $notes);
 
+        return $this->write($item, $actor, fn (): array => $data);
+    }
+
+    /**
+     * M14 (confirmado el 12 de noviembre de 2026): deja en cero los grupos pedidos de una fila cuyo campus está inactivo o
+     * borrado, sin tocar los alumnos esperados ni la nota, con las mismas guardas y la misma bitácora que una corrección.
+     * Dentro de la transacción vuelve a leer el campus: si ya está activo, la fila se corrige como siempre y es una
+     * ValidationException sobre `item`. Quién puede lo decide CareerProposalPolicy::zeroInactiveCampus antes de llamarla.
+     *
+     * @throws ValidationException
+     */
+    public function zeroRequestedGroups(ProposalItem $item, User $actor): ProposalItem
+    {
+        return $this->write($item, $actor, function (ProposalItem $locked): array {
+            if ($locked->campus === null || ($locked->campus->is_active && ! $locked->campus->trashed())) {
+                throw ValidationException::withMessages(['item' => ($locked->campus?->code ?? 'La fila').' está activo: corrige la fila como siempre.']);
+            }
+
+            return ['requested_groups' => 0];
+        });
+    }
+
+    /**
+     * La corrección en una transacción: bloquea la propuesta y la parte, relee la fila con bloqueo y escribe lo que
+     * devuelve `$data` con la fila ya leída (con su materia y su campus), con la bitácora y el aviso si algo cambió.
+     *
+     * @param  Closure(ProposalItem): array<string, mixed>  $data
+     *
+     * @throws ValidationException
+     */
+    private function write(ProposalItem $item, User $actor, Closure $data): ProposalItem
+    {
         return DB::transaction(function () use ($item, $data, $actor): ProposalItem {
             $proposal = CareerProposal::query()
                 ->with(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()])
@@ -73,8 +107,9 @@ final class UpdateProposalItem
 
             $item->setRawAttributes($item->newQuery()->lockForUpdate()->findOrFail($item->getKey())->getAttributes(), sync: true);
 
-            $old = $item->only(array_keys($data));
-            $item->fill($data);
+            $values = $data($item);
+            $old = $item->only(array_keys($values));
+            $item->fill($values);
             $changed = array_keys($item->getDirty());
 
             if ($changed === []) {

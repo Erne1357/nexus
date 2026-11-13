@@ -226,6 +226,19 @@ it('el job corre RankGroups sin encimar dos corridas del mismo alcance', functio
         ->and($middleware[0]->key)->toBe($job->uniqueId());
 });
 
+it('el tiempo límite del job deja el doble del departamento más grande y vence antes de que Redis lo entregue otra vez', function () {
+    // El departamento × modalidad más grande del masivo (CEA presencial, 1 139 grupos de C1 y C2) tardó 403 s como un
+    // solo job, sin otros corriendo (12 de noviembre de 2026; docs/arquitectura/testing.md).
+    $largestSeconds = 403;
+    $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);
+    $overlap = $job->middleware()[0];
+
+    expect($job->timeout)->toBeGreaterThanOrEqual(2 * $largestSeconds)
+        ->toBeLessThan((int) config('queue.connections.redis.retry_after'))
+        ->and($job->failOnTimeout)->toBeTrue()
+        ->and($overlap->expiresAfter)->toBe($job->timeout);
+});
+
 it('el job no hace nada si el departamento ya no existe', function () {
     $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);
     $this->department->delete();

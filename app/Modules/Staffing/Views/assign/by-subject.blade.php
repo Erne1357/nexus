@@ -32,7 +32,7 @@
         </section>
     @empty
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="assign-no-groups">
-            {{ $board->total() === 0 ? 'El departamento no tiene grupos en este periodo y campus.' : 'Ningún grupo cumple los filtros.' }}
+            {{ $board->total() === 0 ? ($board->campus === null ? 'El departamento no tiene grupos en esta modalidad y periodo.' : "El departamento no tiene grupos en {$board->campus->code}.") : 'Ningún grupo cumple los filtros.' }}
         </div>
     @endforelse
 </div>

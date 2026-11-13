@@ -3,7 +3,8 @@
     quien puede; si ya se sabe que Scheduling lo vetaría (choques duros, grupos sin horario), el botón deshabilitado y,
     debajo, los motivos en palabras con las ligas para arreglarlos; si lo veta al pasarla, sus motivos. En celular el
     texto y el botón se apilan. En borrador o después de ajustes, una línea de solo lectura; en asignación o ajustes,
-    una línea para quien solo consulta.
+    una línea para quien solo consulta, o para quien asigna solo en su campus (MS6) cuáles son de consulta. Las ligas
+    llevan la modalidad de la página y el campus del filtro.
 --}}
 @if ($board->load?->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Proposed)
     <div role="status" class="alert alert-info alert-soft grid-flow-row grid-cols-[auto_minmax(0,1fr)] items-start text-sm md:items-center" data-testid="load-banner">
@@ -37,10 +38,10 @@
                 </ul>
                 <p class="flex flex-wrap gap-x-5 gap-y-1">
                     @if (\Illuminate\Support\Facades\Route::has('scheduling.conflicts'))
-                        <a href="{{ route('scheduling.conflicts', ['campus' => $board->campus?->code]) }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0" data-testid="blockers-conflicts-link">Ir a Choques y avance<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
+                        <a href="{{ route('scheduling.conflicts', ['modalidad' => $board->modality->code, 'campus' => $board->campus?->code]) }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0" data-testid="blockers-conflicts-link">Ir a Choques y avance<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
                     @endif
                     @if (\Illuminate\Support\Facades\Route::has('scheduling.editor'))
-                        <a href="{{ route('scheduling.editor', ['campus' => $board->campus?->code]) }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0">Abrir el editor de horarios<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
+                        <a href="{{ route('scheduling.editor', ['modalidad' => $board->modality->code, 'campus' => $board->campus?->code]) }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold md:min-h-0">Abrir el editor de horarios<x-icon name="o-arrow-right" class="h-4 w-4" aria-hidden="true" /></a>
                     @endif
                 </p>
             </div>
@@ -64,4 +65,6 @@
     <p class="flex items-center gap-2 text-sm text-neutral" data-testid="read-only"><x-icon name="o-lock-closed" class="h-4 w-4 shrink-0" />{{ $stateMessage }}</p>
 @elseif (! $canAssign)
     <p class="flex items-center gap-2 text-sm text-neutral" data-testid="read-only"><x-icon name="o-eye" class="h-4 w-4 shrink-0" />{{ $readOnlyReason }}</p>
+@elseif ($limitedTo !== null)
+    <p class="flex items-center gap-2 text-sm text-neutral" data-testid="read-only-campus"><x-icon name="o-eye" class="h-4 w-4 shrink-0" />Asignas solo los grupos de {{ $limitedTo['own'] }}; los de {{ $limitedTo['others'] }} son de consulta.</p>
 @endif

@@ -182,6 +182,18 @@ final class AssignmentBoardQuery
     }
 
     /**
+     * La modalidad de un grupo del periodo por un id del cliente (`?grupo=` sin `?modalidad=`), o null si no existe ahí.
+     * Si el usuario la ve lo decide la página.
+     */
+    public function modalityIdOfGroup(string $termId, string $groupId): ?string
+    {
+        /** @var Group|null $group */
+        $group = KeyLookup::find(Group::query()->where('term_id', $termId), $groupId);
+
+        return $group?->modality_id;
+    }
+
+    /**
      * Un docente por un id del cliente; 404 si no existe. Si está activo lo decide AssignTeacher.
      */
     public function teacherOrFail(string $teacherId): Teacher

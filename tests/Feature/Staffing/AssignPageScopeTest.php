@@ -13,8 +13,8 @@ use Tests\Support\Staffing\AssignmentWorld;
 
 /*
 | Alcance de «Asignación docente» (tarea 3.9; reglas-de-negocio.md, "Aprobaciones y permisos"): ven el ranking el jefe
-| y el jefe de proyecto docente de su departamento (y campus), la Subdirección y el admin; asignan solo los primeros.
-| Lo de otro departamento u otro campus no se ve ni se toca.
+| y el jefe de proyecto docente de su departamento, la Subdirección y el admin; asignan solo los primeros. Lo de otro
+| departamento no se ve ni se toca; lo de otro campus se ve de solo consulta y no se toca (MS6).
 */
 
 beforeEach(function () {
@@ -51,16 +51,21 @@ it('el jefe de otro departamento no ve los grupos del departamento ni los toca',
     expect($this->group->fresh()->teacher_id)->toBeNull();
 });
 
-it('el jefe de proyecto docente de otro campus no ve los grupos de este campus', function () {
+it('MS6: el jefe de proyecto docente de otro campus ve los grupos de este campus de solo consulta y no asigna en ellos', function () {
     $otherCampus = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $proyecto = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $otherCampus->id, 'department_id' => $this->world->department->id])->create();
 
     scopedAssignPage($proyecto, ['grupo' => $this->group->id])
-        ->assertSee('Campus I')
-        ->assertDontSeeHtml('data-subject="SCC-1013"')
-        ->assertSet('groupId', '')
+        ->assertSeeHtml('data-subject="SCC-1013"')
+        ->assertSet('groupId', $this->group->id)
+        ->assertDontSeeHtml('data-testid="assign-button"')
+        ->assertSeeHtml('data-testid="assign-disabled"')
         ->call('toggleRanking', $this->group->id)
-        ->assertNotFound();
+        ->assertHasNoErrors()
+        ->call('assign', $this->group->id, $this->teacher->id, 'tarjetas')
+        ->assertForbidden();
+
+    expect($this->group->fresh()->teacher_id)->toBeNull();
 });
 
 it('el coordinador y el docente no entran', function (Role $role) {

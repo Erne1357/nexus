@@ -72,8 +72,25 @@ it('HC-15: ClosingBlockers::tally cuenta cada cifra por grupo y los grupos disti
         closingFlags(['inactiveTeacher' => true]),
     ];
 
-    expect(ClosingBlockers::tally($groups, closingProfile()))->toEqual(new ClosingBlockers(
-        conflicted: 1, unscheduled: 1, withoutTeacher: 1, withoutRoom: 1, inactiveTeacher: 1, justified: 1, groups: 3,
-    ))->and(ClosingBlockers::tally($groups, closingProfile(), conflicted: [$groups[0]->id])->conflicted)->toBe(1)
+    $counts = ['conflicted' => 1, 'unscheduled' => 1, 'withoutTeacher' => 1, 'withoutRoom' => 1, 'inactiveTeacher' => 1, 'justified' => 1, 'groups' => 3];
+
+    expect(ClosingBlockers::tally($groups, closingProfile()))->toEqual(new ClosingBlockers(...$counts, byCampus: ['c2' => $counts]))
+        ->and(ClosingBlockers::tally($groups, closingProfile(), conflicted: [$groups[0]->id])->conflicted)->toBe(1)
         ->and(ClosingBlockers::tally($groups, closingProfile(), conflicted: [$groups[0]->id])->groups)->toBe(4);
+});
+
+it('HC-15, U2: ClosingBlockers reparte cada cifra por el campus de cada grupo; un campus sin grupos es cero', function () {
+    $groups = [
+        closingFlags(['campusId' => 'c1', 'teacherId' => null]),
+        closingFlags(['campusId' => 'c2', 'teacherId' => null]),
+        closingFlags(['campusId' => 'c2', 'teacherId' => null, 'storedHardConflict' => true]),
+    ];
+    $blockers = ClosingBlockers::tally($groups, closingProfile());
+
+    expect($blockers->withoutTeacher)->toBe(3)
+        ->and(array_keys($blockers->byCampus))->toBe(['c1', 'c2'])
+        ->and($blockers->forCampus('c1'))->withoutTeacher->toBe(1)->conflicted->toBe(0)->groups->toBe(1)
+        ->and($blockers->forCampus('c2'))->withoutTeacher->toBe(2)->conflicted->toBe(1)->groups->toBe(2)
+        ->and($blockers->forCampus('c9'))->toEqual(new ClosingBlockers)
+        ->and(new ClosingBlockers(...get_object_vars($blockers)))->toEqual($blockers);
 });

@@ -1,6 +1,7 @@
 {{--
     El detalle de la solicitud elegida (staffing::pages.change-requests, maqueta A): el grupo, el estado y, en un renglón,
-    el docente, quién la pidió (si fue la coordinación), la materia, la carrera dueña y el campus; la foto de las sesiones
+    el docente, quién la pidió (si fue la coordinación), la materia, la carrera dueña y el campus de hoy de su grupo (M8);
+    la foto de las sesiones
     al pedirla contra lo que se propone; el motivo; el historial (pidió, aprobó o rechazó con su comentario, aplicó) y,
     en un pie pegado abajo del panel, lo que le toca a quien lo ve: decidir (el jefe), aplicar (el coordinador si es de
     horario, el jefe si es de salón) o quién sigue.
@@ -36,7 +37,9 @@
             @endif
             <div class="flex gap-1.5"><dt class="text-neutral">Materia</dt><dd class="font-mono">{{ $group->subject->code }}</dd></div>
             <div class="flex min-w-0 gap-1.5"><dt class="shrink-0 text-neutral">Carrera dueña</dt><dd class="min-w-0"><span class="font-mono font-semibold">{{ $career?->code }}</span> {{ $career?->name }}</dd></div>
-            <div class="flex gap-1.5"><dt class="text-neutral">Campus</dt><dd>{{ $campusName }}</dd></div>
+            @if ($group->campus !== null)
+                <div class="flex items-center gap-1.5"><dt class="text-neutral">Campus</dt><dd class="inline-flex items-center gap-1.5">@if ($multiCampus)<x-core::campus-tag :campus="$group->campus" decorative />@endif{{ $group->campus->name }}</dd></div>
+            @endif
         </dl>
     </header>
 

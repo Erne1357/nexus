@@ -1,6 +1,7 @@
 {{--
     Avance del cierre (tarea 4.2; DESIGN.md, «Avance del cierre»: maqueta E, elegida por el usuario el 10 de noviembre de
-    2026), con la forma del avance de validación: el periodo y cuántos departamentos y cargas; cuatro cifras de todo el
+    2026), con la forma del avance de validación: la modalidad (como dato con una sola; con varias, el select «Modalidad»
+    a la derecha del título, maqueta U2, opción A), el periodo y cuántos departamentos y cargas; cuatro cifras de todo el
     Tec; la búsqueda, el filtro de estado y cuándo se recalcularon los choques; y la matriz, una tabla desde 1024 px y,
     antes, renglones apilados con las mismas cifras. Un renglón por departamento con una insignia por carga (código,
     icono y cifra) y los faltantes sumados por columna; uno sin grupos en ningún campus va al final, atenuado. Tocar un
@@ -11,6 +12,9 @@
         <x-slot:subtitle class="text-sm text-neutral!">
             @if ($board)
                 <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="board-meta">
+                    @if ($modalityOptions->count() <= 1)
+                        <span>{{ $shownModality->name }}</span><span aria-hidden="true">·</span>
+                    @endif
                     <span>{{ $term->name }}</span><span aria-hidden="true">·</span>
                     <span>{{ $board['departments'] }} {{ $board['departments'] === 1 ? 'departamento' : 'departamentos' }} · {{ $board['kpis']['total'] }} {{ $board['kpis']['total'] === 1 ? 'carga' : 'cargas' }}@if ($board['campuses']->isNotEmpty()) en @foreach ($board['campuses'] as $campus)<span class="font-mono font-semibold text-base-content">{{ $campus->code }}</span>@if (! $loop->last){{ $loop->remaining === 1 ? ' y ' : ', ' }}@endif @endforeach @endif</span>
                 </span>
@@ -18,6 +22,9 @@
                 Cuánto le falta a cada carga del Tec para cerrar.
             @endif
         </x-slot:subtitle>
+        <x-slot:actions>
+            <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" class="w-full md:w-56" />
+        </x-slot:actions>
     </x-header>
 
     @if ($board === null)
@@ -93,7 +100,7 @@
                                     <tr wire:key="board-row-{{ $department->id }}" class="text-neutral" data-testid="board-row-{{ $department->code }}">
                                         <th scope="row" class="sticky left-0 z-10 bg-base-100 px-4 py-2.5 text-start font-normal">
                                             <span class="me-2 font-mono font-semibold">{{ $department->code }}</span><span class="font-medium">{{ $department->name }}</span>
-                                            <span class="block text-xs">Sin grupos en ninguna modalidad</span>
+                                            <span class="block text-xs">Sin grupos en {{ $shownModality->name }}</span>
                                         </th>
                                         <td colspan="7"></td>
                                     </tr>
@@ -137,7 +144,7 @@
                         <li wire:key="board-card-{{ $department->id }}" @class(['space-y-2 px-4 py-3', 'text-neutral' => $row['loads'] === []])>
                             @if ($row['loads'] === [])
                                 <p><span class="me-1.5 font-mono font-semibold">{{ $department->code }}</span>{{ $department->name }}</p>
-                                <p class="text-xs">Sin grupos en ninguna modalidad</p>
+                                <p class="text-xs">Sin grupos en {{ $shownModality->name }}</p>
                             @else
                                 {{-- Las insignias de campus siempre bajo el nombre en celular, junto a él desde 640 px. --}}
                                 <div class="flex flex-col items-start gap-x-3 gap-y-1 sm:flex-row sm:flex-wrap sm:justify-between">

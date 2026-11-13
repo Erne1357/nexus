@@ -1,6 +1,6 @@
 {{--
     El aviso del estado de la carga del departamento en la pantalla de solicitudes de cambio (tarea 3.11, maqueta A):
-    el departamento y el campus, las etapas Propuesta · Asignación · Ajustes · Cierre con la actual marcada, la insignia
+    el departamento y la modalidad (M1: la carga es de todos sus campus), las etapas Propuesta · Asignación · Ajustes · Cierre con la actual marcada, la insignia
     del estado y qué pasa con las solicitudes: aprobar una pasa la carga de Asignación a Ajustes, y aplicar la última
     aprobada la regresa (reglas-de-negocio.md, "Solicitudes de cambio"). Las aprobadas por aplicar se cuentan en todo el
     departamento; si la lista de quien la ve tiene menos (el coordinador ve las de su carrera), también las suyas.
@@ -15,7 +15,7 @@
         default => 3,
     };
     $note = match ($load?->status) {
-        null => 'El departamento no tiene carga en este campus.',
+        null => 'El departamento no tiene carga en esta modalidad.',
         LoadStatus::Staffing => 'Al aprobar una solicitud, la carga pasa a Ajustes.',
         LoadStatus::Adjusting => $approved > 0
             ? "{$approved} ".($approved === 1 ? 'aprobada por aplicar' : 'aprobadas por aplicar').' en el departamento'
@@ -24,11 +24,11 @@
         default => 'Las solicitudes se piden y se deciden con la carga en Asignación o Ajustes.',
     };
 @endphp
-<section class="grid items-center gap-x-8 gap-y-3 rounded-box border border-base-300 bg-base-100 px-5 py-3.5 desktop:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,24rem)]" aria-label="Estado de la carga" data-testid="load-banner">
+<section class="grid items-center gap-x-8 gap-y-3 rounded-box border border-base-300 bg-base-100 px-5 py-3.5 min-[1440px]:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,24rem)]" aria-label="Estado de la carga" data-testid="load-banner">
     <div class="min-w-0">
         <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Carga del departamento</span>
         <p class="font-bold leading-snug">{{ $departmentName }}</p>
-        <p class="text-sm text-neutral">{{ $campusName }}{{ $termName ? ' · '.$termName : '' }}</p>
+        <p class="text-sm text-neutral">{{ $shownModality?->name }}{{ $termName ? ' · '.$termName : '' }}</p>
     </div>
 
     <ol class="flex min-w-0 items-center gap-2 max-md:hidden" aria-label="Etapas de la carga">
@@ -49,7 +49,7 @@
         @endforeach
     </ol>
 
-    <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 desktop:flex-col desktop:items-start">
+    <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 min-[1440px]:flex-col min-[1440px]:items-start">
         @if ($load === null)
             <x-core::status-badge tone="draft" label="Sin carga" data-testid="load-status" />
         @else

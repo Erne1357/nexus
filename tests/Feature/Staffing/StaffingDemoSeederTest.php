@@ -2,6 +2,9 @@
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
@@ -12,8 +15,11 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
@@ -265,6 +271,29 @@ it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma 
         ->and($travel)->not->toBeEmpty()
         ->and($first['groups'])->not->toBeEmpty()
         ->and(staffingSnapshot())->toBe($first);
+});
+
+it('MS6: la solicitud de horario de un grupo de C2 la aplica el coordinador que cubre C2, aunque el primero de la carrera sea de C1', function () {
+    $pres = modalityOf('PRES');
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $department = Department::factory()->create(['code' => 'SC']);
+    $career = Career::factory()->create(['code' => 'ISC']);
+    $term = Term::factory()->create();
+    $group = Group::factory()->create(['term_id' => $term->id, 'campus_id' => $c2->id, 'modality_id' => $pres->id, 'subject_id' => Subject::factory()->create(['department_id' => $department->id])->id, 'owner_career_id' => $career->id]);
+    // El de C1 se nombra primero: el seeder de antes tomaba al primer titular del primer campus.
+    $ofC1 = User::factory()->withRole(Role::Coordinador, ['modality_id' => $pres->id, 'campus_id' => $c1->id, 'career_id' => $career->id])->create();
+    $ofC2 = User::factory()->withRole(Role::Coordinador, ['modality_id' => $pres->id, 'campus_id' => $c2->id, 'career_id' => $career->id])->create();
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department->id])->create();
+    $schedule = ChangeRequest::factory()->forGroup($group)->schedule()->approved()->create();
+    $room = ChangeRequest::factory()->forGroup($group)->approved()->create(['kind' => ChangeRequestKind::Room]);
+    $applier = new ReflectionMethod(StaffingDemoSeeder::class, 'applier');
+    $seeder = new StaffingDemoSeeder;
+
+    expect($applier->invoke($seeder, $schedule, $head)->is($ofC2))->toBeTrue()
+        ->and($ofC1->can('apply', $schedule))->toBeFalse()
+        ->and($ofC2->can('apply', $schedule))->toBeTrue()
+        ->and($applier->invoke($seeder, $room, $head)->is($head))->toBeTrue();
 });
 
 it('no corre en producción', function () {

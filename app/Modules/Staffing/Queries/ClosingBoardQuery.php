@@ -49,9 +49,10 @@ final class ClosingBoardQuery
     ) {}
 
     /**
-     * El tablero del periodo. `$search` filtra por clave o nombre del departamento sin importar acentos; `$state`
-     * (missing, ready, closed o published) deja los departamentos con alguna carga en esa cubeta (LoadProgress::bucket).
-     * Las cifras de arriba (`kpis`) son de todo el Tec; los totales, de los renglones que quedan.
+     * El tablero del periodo, de una modalidad (`$modality`, la de la pantalla, M1) o de todas (null). `$search` filtra
+     * por clave o nombre del departamento sin importar acentos; `$state` (missing, ready, closed o published) deja los
+     * departamentos con alguna carga en esa cubeta (LoadProgress::bucket). Las cifras de arriba (`kpis`) son de todo el
+     * Tec en esa modalidad; los totales, de los renglones que quedan.
      *
      * @return array{
      *     rows: list<array{department: Department, loads: list<LoadProgress>, groups: int, hard: int, unscheduled: int, withoutTeacher: int, withoutRoom: int, others: int, justified: int}>,
@@ -63,10 +64,13 @@ final class ClosingBoardQuery
      *     unsynced: list<string>
      * }
      */
-    public function board(Term $term, string $search = '', string $state = ''): array
+    public function board(Term $term, string $search = '', string $state = '', ?Modality $modality = null): array
     {
-        $loads = AcademicLoad::query()->where('term_id', $term->getKey())->with(['modality', 'department' => fn ($query) => $query->withTrashed()])->get();
+        $loads = AcademicLoad::query()->where('term_id', $term->getKey())
+            ->when($modality !== null, fn ($query) => $query->where('modality_id', $modality->getKey()))
+            ->with(['modality', 'department' => fn ($query) => $query->withTrashed()])->get();
         $flags = $this->flags->ofTerm($term->getKey());
+        $flags = $modality === null ? $flags : $flags->filter(fn (GroupClosingFlags $group): bool => $group->modalityId === $modality->getKey());
         $progress = $this->progress($term, $loads, $flags);
         $withGroups = $progress->filter(fn (LoadProgress $load): bool => $load->groups > 0);
 
