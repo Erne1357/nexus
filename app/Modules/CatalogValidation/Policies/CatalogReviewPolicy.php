@@ -26,9 +26,9 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
  *   Subdirección (CV-S1, supuesto por confirmar).
  *
- * Se resuelve con los permisos de CatalogValidationPermission (`catalog_validation.review.*` por campus y
- * departamento; las revisiones no son de un campus: las cubre cualquier nombramiento del departamento, sea cual sea su
- * campus), que el provider concede por puesto; corregir, validar, reabrir y observar no se conceden al admin
+ * Se resuelve con los permisos de CatalogValidationPermission (`catalog_validation.review.*`, que solo
+ * declaran la unidad: las revisiones no son de un campus ni de una modalidad, así que las cubre cualquier nombramiento
+ * del departamento, sea cual sea su campus; AZ-S17, supuesto por confirmar), que el provider concede por puesto; corregir, validar, reabrir y observar no se conceden al admin
  * (adminDenies).
  *
  * El estado de la revisión (corregir y observar mientras no está validada, reabrir una validada) lo hacen
@@ -113,6 +113,6 @@ final class CatalogReviewPolicy
 
     private function can(User $user, CatalogValidationPermission $permission, CatalogReview $review): bool
     {
-        return CatalogReviewQuery::allowsOnDepartment($this->actor($user), $permission, $review->campus_id, $review->department_id);
+        return CatalogReviewQuery::allowsOnDepartment($this->actor($user), $permission, $review->department_id);
     }
 }

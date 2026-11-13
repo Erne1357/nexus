@@ -7,7 +7,7 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
- * Permisos del módulo Core: campus, periodos, nombramientos, organigrama y acceso de usuarios (los de nombramientos,
+ * Permisos del módulo Core: campus, modalidades, periodos, nombramientos, organigrama y acceso de usuarios (los de nombramientos,
  * organigrama y acceso son solo del admin). La clave es `core.<recurso>.<accion>`.
  */
 enum CorePermission: string implements Permission
@@ -17,6 +17,11 @@ enum CorePermission: string implements Permission
     case CampusCreate = 'core.campus.create';
     case CampusUpdate = 'core.campus.update';
     case CampusUpdateProfile = 'core.campus.update_profile';
+    case ModalityView = 'core.modality.view';
+    case ModalityViewInactive = 'core.modality.view_inactive';
+    case ModalityCreate = 'core.modality.create';
+    case ModalityUpdate = 'core.modality.update';
+    case ModalityUpdateProfile = 'core.modality.update_profile';
     case TermView = 'core.term.view';
     case TermCreate = 'core.term.create';
     case TermUpdate = 'core.term.update';
@@ -41,6 +46,11 @@ enum CorePermission: string implements Permission
             self::CampusCreate => 'Dar de alta campus',
             self::CampusUpdate => 'Editar datos y estado de un campus',
             self::CampusUpdateProfile => 'Editar el perfil de flujo de un campus',
+            self::ModalityView => 'Ver modalidades',
+            self::ModalityViewInactive => 'Ver modalidades inactivas',
+            self::ModalityCreate => 'Dar de alta modalidades',
+            self::ModalityUpdate => 'Editar datos y estado de una modalidad',
+            self::ModalityUpdateProfile => 'Editar el perfil de flujo de una modalidad',
             self::TermView => 'Ver periodos',
             self::TermCreate => 'Dar de alta periodos',
             self::TermUpdate => 'Editar periodos',
@@ -63,6 +73,7 @@ enum CorePermission: string implements Permission
     {
         return match ($this) {
             self::CampusView, self::CampusUpdateProfile => [Dimension::Campus],
+            self::ModalityView, self::ModalityUpdateProfile => [Dimension::Modality],
             self::TermOpen => [Dimension::Modality],
             default => [],
         };

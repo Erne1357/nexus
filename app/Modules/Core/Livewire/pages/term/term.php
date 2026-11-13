@@ -26,12 +26,12 @@ use Mary\Traits\Toast;
 /**
  * Ficha del periodo (tarea 2.1, maqueta B «Línea de tiempo»): su encabezado con «Editar» y «Marcar como actual», el
  * resumen de modalidades en un renglón (dónde se abrió y «Abrir en…» para las modalidades que faltan; M4: el periodo
- * se abre y se calendariza por modalidad) y el calendario de sus 8 etapas como una línea de tiempo
+ * se abre y se calendariza por modalidad; cada «Abrir en» abre el panel «Abrir el periodo» con lo que se crea) y el calendario de sus 8 etapas como una línea de tiempo
  * (core::terms.timeline) con la barra general de cada etapa y una barra delgada por cada modalidad con ventana propia.
  * Tocar una etapa abre su panel lateral (x-drawer): las fechas generales y, por cada modalidad activa, una ventana
  * propia opcional que se agrega y se quita. La sección «Modalidades» lista las activas, y las que se abrieron y ya no
- * están activas, solo lectura: abre el periodo en una modalidad o completa una apertura con OpenTerm (`openIn`,
- * `completeIn`) y dice en un toast lo que creó. El diseño final de la ficha por modalidad es de la tarea 14.
+ * están activas, solo lectura: el panel (`prepareOpen`) abre el periodo en una modalidad o completa una apertura con OpenTerm
+ * (`openIn`, `completeIn`) y se dice en un toast lo que creó.
  *
  * Lo ven y cambian el admin y la subdirección (TermPolicy). El componente lee con TermQuery, TermCalendarQuery y
  * ModalityQuery, autoriza en mount() y en cada método público (una petición puede llegar con una página que abrió otra
@@ -72,6 +72,21 @@ new #[Title('Ficha del periodo')] class extends Component
     #[Locked]
     public ?array $copyReplace = null;
 
+    /** El panel «Abrir el periodo»; `showOpen` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
+    public bool $showOpen = false;
+
+    /** La modalidad del panel «Abrir el periodo». El navegador no la puede cambiar; se vuelve a leer y autorizar al abrir. */
+    #[Locked]
+    public ?string $openingId = null;
+
+    /**
+     * Lo que se creará al abrir, calculado una vez al abrir el panel (TermQuery::openingPreview), no en cada render.
+     *
+     * @var array{items: list<array{count: int, text: string, chips: list<string>}>, campuses: list<string>, profile: ?string, ownWindows: int, completing: bool}|null
+     */
+    #[Locked]
+    public ?array $openPreview = null;
+
     /** `showDrawer` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
     public bool $showDrawer = false;
 
@@ -110,6 +125,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $stage = $this->stage === null ? null : Stage::from($this->stage);
         $modalityRows = $terms->modalityRows($term, $active);
         $copySources = $calendar->copySources($term);
+        $opening = $this->showOpen && $this->openingId !== null && $this->openPreview !== null ? $modalities->findOrFail($this->openingId) : null;
 
         return [
             'term' => $term,
@@ -119,6 +135,8 @@ new #[Title('Ficha del periodo')] class extends Component
             'openedRows' => $modalityRows->filter(fn (array $row): bool => $row['opening'] !== null)->values(),
             'pendingRows' => $modalityRows->filter(fn (array $row): bool => $row['opening'] === null && $row['actionable'])->values(),
             'canOpen' => Gate::allows('open', $term),
+            'openModality' => $opening,
+            'openPreview' => $opening === null ? null : $this->openPreview,
             'editing' => $stage === null ? null : [
                 'stage' => $stage,
                 'number' => array_search($stage, Stage::cases(), true) + 1,
@@ -236,6 +254,23 @@ new #[Title('Ficha del periodo')] class extends Component
         $term = $makeTermCurrent->handle($term);
 
         $this->success('Periodo actual', $this->describe($term));
+    }
+
+    /**
+     * Abre el panel «Abrir el periodo» de una modalidad activa (U4 opción A): lo que se creará, sin escribir nada. En una
+     * modalidad ya abierta es «Completar apertura». Confirmar es `openIn` o `completeIn`.
+     */
+    public function prepareOpen(string $modalityId, TermQuery $terms, ModalityQuery $modalities): void
+    {
+        $term = $terms->findOrFail($this->termId);
+        $this->authorize('open', $term);
+
+        $modality = $this->activeModality($modalities, $modalityId);
+        $this->authorize('open', [$term, $modality]);
+
+        $this->openingId = $modality->id;
+        $this->openPreview = $terms->openingPreview($term, $modality);
+        $this->showOpen = true;
     }
 
     /**
@@ -504,6 +539,7 @@ new #[Title('Ficha del periodo')] class extends Component
             return;
         }
 
+        $this->showOpen = false;
         $this->success(e("{$title} {$modality->name}"), e($lines === [] ? 'No faltaba nada.' : implode(', ', $lines)));
     }
 

@@ -6,7 +6,8 @@
     más de dos; M4); la sección «Calendario» con la línea de tiempo de las etapas (core::terms.timeline); y al final la
     lista «Modalidades» con quién abrió y cuándo, y «Completar apertura». Tocar una etapa abre su panel lateral, un
     x-drawer: fechas generales y, por cada modalidad activa, una ventana propia opcional. «Editar» abre el mismo
-    formulario que la tabla de periodos. El diseño final por modalidad es de la tarea 14.
+    formulario que la tabla de periodos. «Abrir en…» y «Completar apertura» abren el panel «Abrir el periodo» (x-drawer,
+    core::terms.open-panel) con lo que se crea antes de confirmar.
 --}}
 <div class="space-y-6">
     <a href="{{ route('core.terms') }}" wire:navigate data-testid="back-to-terms" class="inline-flex items-center gap-1.5 font-medium text-primary max-md:min-h-11">
@@ -89,11 +90,7 @@
                                 <button
                                     type="button"
                                     class="max-md:min-h-11"
-                                    wire:click="openIn('{{ $row['modality']->id }}')"
-                                    x-confirm="Se crea la carga académica de cada departamento activo en cada campus de la modalidad."
-                                    data-confirm-title="¿Abrir el periodo {{ $term->code }} en {{ $row['modality']->name }}?"
-                                    data-confirm-button="Abrir"
-                                    data-confirm-tone="warning"
+                                    wire:click="prepareOpen('{{ $row['modality']->id }}')"
                                     data-testid="open-{{ $row['modality']->code }}"
                                 >{{ $row['modality']->name }}</button>
                             </li>
@@ -112,12 +109,8 @@
                         wire:key="open-{{ $row['modality']->id }}"
                         label="Abrir en {{ $row['modality']->name }}"
                         class="btn-outline btn-sm max-md:h-11"
-                        wire:click="openIn('{{ $row['modality']->id }}')"
-                        x-confirm="Se crea la carga académica de cada departamento activo en cada campus de la modalidad."
-                        data-confirm-title="¿Abrir el periodo {{ $term->code }} en {{ $row['modality']->name }}?"
-                        data-confirm-button="Abrir"
-                        data-confirm-tone="warning"
-                        spinner="openIn('{{ $row['modality']->id }}')"
+                        wire:click="prepareOpen('{{ $row['modality']->id }}')"
+                        spinner="prepareOpen('{{ $row['modality']->id }}')"
                         data-testid="open-{{ $row['modality']->code }}"
                     />
                 @else
@@ -184,8 +177,8 @@
                                 @if ($canOpen)
                                     <x-core::row-menu-item
                                         label="Completar apertura"
-                                        wire:click="completeIn('{{ $modality->id }}')"
-                                        :spinner="'completeIn(\''.$modality->id.'\')'"
+                                        wire:click="prepareOpen('{{ $modality->id }}')"
+                                        :spinner="'prepareOpen(\''.$modality->id.'\')'"
                                         :data-testid="'complete-'.$modality->code"
                                     />
                                 @else
@@ -279,6 +272,12 @@
             @endif
         </x-slot:actions>
     </x-modal>
+
+    <x-drawer wire:model.live="showOpen" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="open-drawer-title" data-testid="open-drawer">
+        @if ($openModality !== null)
+            @include('core::terms.open-panel')
+        @endif
+    </x-drawer>
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="stage-drawer-title" data-testid="stage-drawer">
         @if ($editing !== null)

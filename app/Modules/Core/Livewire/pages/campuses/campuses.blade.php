@@ -8,7 +8,7 @@
 <div>
     <x-header title="Campus" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Cada campus con su modalidad y su perfil de flujo, que decide qué pasos del proceso aplican.
+            Los lugares físicos del Tec: cada edificio y cada salón está en un campus. Qué se trabaja y cómo, está en Modalidades.
         </x-slot:subtitle>
     </x-header>
 
@@ -58,18 +58,6 @@
                 <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $campus->is_active])>{{ $campus->code }}</span>
             @endscope
 
-            @scope('cell_modality', $campus)
-                {{ $campus->modality->label() }}
-            @endscope
-
-            @scope('cell_profile', $campus, $profiles)
-                @if ($profiles[$campus->id] === null)
-                    <x-core::status-badge tone="error" label="Perfil inválido" />
-                @else
-                    <span class="text-neutral">{{ $profiles[$campus->id] }}</span>
-                @endif
-            @endscope
-
             @scope('cell_is_active', $campus)
                 <x-core::status-badge :tone="$campus->is_active ? 'success' : 'neutral'" :label="$campus->is_active ? 'Activo' : 'Inactivo'" />
             @endscope
@@ -93,15 +81,6 @@
                         <x-core::status-badge :tone="$campus->is_active ? 'success' : 'neutral'" :label="$campus->is_active ? 'Activo' : 'Inactivo'" />
                     </div>
 
-                    <div class="text-neutral">
-                        {{ $campus->modality->label() }} ·
-                        @if ($profiles[$campus->id] === null)
-                            <x-core::status-badge tone="error" label="Perfil inválido" />
-                        @else
-                            {{ $profiles[$campus->id] }}
-                        @endif
-                    </div>
-
                     @include('core::campuses.row-actions', ['campus' => $campus, 'inTable' => false])
                 </li>
             @endforeach
@@ -118,59 +97,17 @@
         @endif
     </div>
 
-    <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo campus' : 'Editar campus'" box-class="max-w-3xl" separator>
+    <p class="mt-4 flex items-start gap-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-3 text-sm" data-testid="campus-note">
+        <x-icon name="o-information-circle" class="mt-0.5 h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
+        <span>El formulario de un campus pide solo código y nombre. La modalidad y el perfil de flujo se administran en <a href="{{ route('core.modalities') }}" wire:navigate class="font-medium text-primary underline">Modalidades</a>.</span>
+    </p>
+
+    <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo campus' : 'Editar campus'" box-class="max-w-xl" separator>
         <x-form wire:submit="save" no-separator>
-            @if ($profileWasReset)
-                <x-alert
-                    title="El perfil de flujo guardado no es válido; se cargaron los valores por omisión. Revísalos y guarda para repararlo."
-                    icon="o-exclamation-triangle"
-                    class="alert-warning"
-                />
-            @endif
-
-            <div class="grid gap-4 md:grid-cols-3">
-                <x-input label="Código" name="code" wire:model="code" placeholder="C3" :disabled="! $canEditData" />
-                <x-input label="Nombre" name="name" wire:model="name" :disabled="! $canEditData" />
-                <x-select label="Modalidad" name="modality" wire:model="modality" :options="$modalities" :disabled="! $canEditData" />
+            <div class="grid gap-4 md:grid-cols-2">
+                <x-input label="Código" name="code" wire:model="code" placeholder="C3" />
+                <x-input label="Nombre" name="name" wire:model="name" />
             </div>
-
-            @unless ($canEditData)
-                <p class="text-sm text-base-content/70">Solo el administrador cambia código, nombre y modalidad.</p>
-            @endunless
-
-            <x-header title="Perfil de flujo" subtitle="Qué pasos del proceso aplican en este campus." size="text-lg" class="!mb-0 mt-4" />
-
-            <div class="grid gap-x-4 md:grid-cols-2">
-                <x-toggle label="Usa salones" wire:model="settings.uses_rooms" />
-                <x-toggle label="Usa bloques de horario" wire:model="settings.uses_time_blocks" />
-                <x-toggle label="Admite docentes externos" wire:model="settings.allow_external_teachers" />
-                <x-toggle label="Requiere visto bueno de Subdirección" hint="Antes de publicar la carga." wire:model="settings.requires_subdireccion_approval" />
-            </div>
-
-            <div class="grid gap-4 md:grid-cols-4">
-                <x-select label="Asignación docente" wire:model="settings.staffing_mode" :options="$staffingModes" />
-                <x-input label="Duración del bloque" type="number" min="1" suffix="min" wire:model="settings.block_minutes" />
-                <x-input label="Inicio de la jornada" type="time" wire:model="settings.day_start" />
-                <x-input label="Fin de la jornada" type="time" wire:model="settings.day_end" />
-            </div>
-
-            <fieldset>
-                <legend class="text-sm font-medium">Días</legend>
-
-                <div class="flex flex-wrap gap-x-4">
-                    @foreach ($days as $value => $label)
-                        <x-checkbox :label="$label" value="{{ $value }}" wire:model="settings.days" omit-error />
-                    @endforeach
-                </div>
-
-                @error('settings.days')
-                    <div class="text-sm text-error">{{ $message }}</div>
-                @enderror
-            </fieldset>
-
-            @error('settings')
-                <x-alert :title="$message" icon="o-x-circle" class="alert-error" />
-            @enderror
 
             <x-slot:actions>
                 <x-button label="Cancelar" @click="$wire.showModal = false" />
