@@ -1,9 +1,12 @@
 {{--
     Lo que le falta a un conjunto de grupos (una celda de la retícula o un departamento): sus choques duros, con su
     regla, el grupo y el mensaje del validador, y los grupos sin horario, sin docente y sin salón, cada uno con el
-    enlace a la pantalla que lo corrige. `$detail` sale de ConflictBoardQuery::detail().
+    enlace a la pantalla que lo corrige. Con más de un campus en la modalidad, cada grupo lleva la etiqueta de su campus
+    (maqueta U2, opción A). `$detail` sale de ConflictBoardQuery::detail().
 --}}
 @php($group = fn (array $g): string => $g['subject_code'].' · '.$g['code'])
+@php($tagged = isset($campusOptions) && $campusOptions->count() > 1)
+@php($campusOf = fn (array $g): ?object => $tagged && $g['campus_code'] !== '' ? (object) ['code' => $g['campus_code'], 'name' => $g['campus_name']] : null)
 <div class="divide-y divide-base-300">
     @if ($detail['conflicts'] !== [])
         @php($total = array_sum(array_map(fn (array $entry): int => count($entry['items']), $detail['conflicts'])))
@@ -13,7 +16,7 @@
                 @foreach ($detail['conflicts'] as $entry)
                     <li wire:key="{{ $prefix }}-g-{{ $entry['group']['id'] }}" class="grid content-start gap-2 rounded-field border border-base-300 px-3 py-2.5" data-testid="conflict-group-{{ $entry['group']['id'] }}">
                         <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                            <span class="font-mono font-semibold whitespace-nowrap">{{ $group($entry['group']) }}</span>
+                            <span class="inline-flex items-center gap-1.5 font-mono font-semibold whitespace-nowrap">{{ $group($entry['group']) }}<x-core::campus-tag :campus="$campusOf($entry['group'])" class="self-center" /></span>
                             <span class="font-semibold">{{ $entry['group']['subject_name'] }}</span>
                             <span class="text-sm text-neutral">{{ $entry['group']['career_code'] }} · sem. {{ $entry['group']['semester'] }}</span>
                         </div>
@@ -43,7 +46,7 @@
                 <ul class="grid {{ $wide ?? false ? '@2xl:grid-cols-2 @5xl:grid-cols-3' : '' }}">
                     @foreach ($detail[$key] as $g)
                         <li wire:key="{{ $prefix }}-{{ $key }}-{{ $g['id'] }}" class="flex min-w-0 items-center gap-3 border-b border-base-300/60 py-1.5 last:border-b-0">
-                            <span class="font-mono text-sm font-semibold whitespace-nowrap">{{ $group($g) }}</span>
+                            <span class="inline-flex items-center gap-1.5 font-mono text-sm font-semibold whitespace-nowrap">{{ $group($g) }}<x-core::campus-tag :campus="$campusOf($g)" /></span>
                             <span class="min-w-0 flex-1 truncate" title="{{ $g['subject_name'] }}">{{ $g['subject_name'] }}</span>
                             @if ($g['inactive_teacher'] ?? false)
                                 <span class="badge badge-error badge-soft badge-sm shrink-0 whitespace-nowrap" data-testid="inactive-teacher"><x-icon name="o-user-minus" class="h-3.5 w-3.5" aria-hidden="true" />Docente dado de baja</span>

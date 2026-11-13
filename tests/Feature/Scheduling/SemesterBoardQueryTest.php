@@ -81,7 +81,7 @@ function semesterBoardFor(User $user, int $semester = 1): array
 {
     test()->actingAs($user);
 
-    return app(SemesterBoardQuery::class)->for(test()->term, test()->campus, test()->isc, test()->plan, $semester, app(Actor::class));
+    return app(SemesterBoardQuery::class)->for(test()->term, test()->campus, modalityOf('PRES'), test()->isc, test()->plan, $semester, app(Actor::class));
 }
 
 it('trae los grupos de la carrera en el plan y semestre y los compartidos donde la carrera tiene cupo, en el orden de la retícula', function () {
@@ -110,6 +110,20 @@ it('trae los grupos de la carrera en el plan y semestre y los compartidos donde 
         ->and(array_column($board['groups'], 'shared'))->toBe([false, false, true]);
 });
 
+it('M1: solo trae los grupos de la modalidad de la página, y campusCounts cuenta los del semestre en cada campus', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $subject = boardSubject();
+    $own = semesterBoardGroup($subject, ['code' => 'A']);
+    semesterBoardGroup($subject, ['code' => 'E', 'modality_id' => modalityOf('EAD')->id]);
+    $elsewhere = Campus::factory()->create(['code' => 'C1']);
+    semesterBoardGroup($subject, ['code' => 'Z', 'campus_id' => $elsewhere->id]);
+
+    expect(array_column(semesterBoardFor(User::factory()->admin()->create())['groups'], 'id'))->toBe([$own->id])
+        ->and(app(SemesterBoardQuery::class)->campusCounts($this->term, modalityOf('PRES'), $this->isc, $this->plan, 1))
+        ->toEqualCanonicalizing([$this->campus->code => 1, 'C1' => 1])
+        ->and(app(SemesterBoardQuery::class)->campusCounts($this->term, modalityOf('EAD'), $this->isc, $this->plan, 1))->toBe([$this->campus->code => 1]);
+});
+
 it('por grupo da la materia con su departamento, el docente, la capacidad, los cupos, las sesiones con su salón y las horas', function () {
     $subject = boardSubject(['code' => 'SCD-1001', 'name' => 'Cálculo Diferencial', 'theory_hours' => 3, 'practice_hours' => 2, 'needs_lab' => true, 'department_id' => $this->sistemas->id]);
     $teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
@@ -126,6 +140,7 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
         'id' => $group->id,
         'code' => 'D',
         'modality_id' => $group->modality_id,
+        'campus' => ['id' => $this->campus->id, 'code' => $this->campus->code, 'name' => $this->campus->name],
         'status' => GroupStatus::Planned,
         'shared' => false,
         'context' => false,
@@ -145,7 +160,7 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
         'required_hours' => 5,
         'placed_hours' => 3.5,
         'can' => ['editSessions' => true, 'assignRoom' => true, 'manageQuotas' => true],
-        'campus_bound' => false,
+        'edit_campuses' => [],
         'editBlockedReason' => null,
     ]);
 });
@@ -189,8 +204,8 @@ it('las banderas salen del puesto activo del actor que recibe, no de todos los p
         ->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
     actingAsRole($both, Role::JefeDepartamento);
 
-    $asCoordinator = app(SemesterBoardQuery::class)->for($this->term, $this->campus, $this->isc, $this->plan, 1, app(Actor::class)->asRole(Role::Coordinador));
-    $asJefe = app(SemesterBoardQuery::class)->for($this->term, $this->campus, $this->isc, $this->plan, 1, app(Actor::class));
+    $asCoordinator = app(SemesterBoardQuery::class)->for($this->term, $this->campus, modalityOf('PRES'), $this->isc, $this->plan, 1, app(Actor::class)->asRole(Role::Coordinador));
+    $asJefe = app(SemesterBoardQuery::class)->for($this->term, $this->campus, modalityOf('PRES'), $this->isc, $this->plan, 1, app(Actor::class));
 
     expect($asCoordinator['groups'][0]['can'])->toBe(['editSessions' => true, 'assignRoom' => false, 'manageQuotas' => false])
         ->and($asJefe['groups'][0]['can'])->toBe(['editSessions' => true, 'assignRoom' => true, 'manageQuotas' => true]);
@@ -252,7 +267,7 @@ it('lee con pocas consultas aunque el semestre tenga 10 grupos', function () {
     app(Actor::class)->allowsAny(SchedulingPermission::ScheduleView);
 
     DB::enableQueryLog();
-    $board = app(SemesterBoardQuery::class)->for($this->term, $this->campus, $this->isc, $this->plan, 1, app(Actor::class));
+    $board = app(SemesterBoardQuery::class)->for($this->term, $this->campus, modalityOf('PRES'), $this->isc, $this->plan, 1, app(Actor::class));
     $queries = count(DB::getQueryLog());
     DB::disableQueryLog();
 

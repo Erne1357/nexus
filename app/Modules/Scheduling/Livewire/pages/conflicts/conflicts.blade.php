@@ -14,9 +14,14 @@
             @endif
         </x-slot:subtitle>
         <x-slot:actions>
-            <div class="flex flex-wrap items-center gap-2">
-                <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" />
-                <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
+            <div class="flex flex-wrap items-end gap-x-4 gap-y-2">
+                <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" class="max-md:w-full md:w-56" />
+                @if ($campusOptions->count() > 1)
+                    <fieldset class="fieldset min-w-0 py-0" data-testid="conflicts-campus">
+                        <legend class="fieldset-legend mb-0.5">Campus</legend>
+                        <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" :counts="$campusCounts" all />
+                    </fieldset>
+                @endif
             </div>
         </x-slot:actions>
     </x-header>

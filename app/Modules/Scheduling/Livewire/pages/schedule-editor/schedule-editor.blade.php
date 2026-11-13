@@ -1,10 +1,11 @@
 {{--
     Editor de horarios (tarea 3.5; maqueta A «Semana con bandeja», `.impeccable/mocks/horarios/a.html`; DESIGN.md,
     "Editor de horarios"):
-    - Encabezado: «Horarios» con el periodo, y el resumen (campus, retícula, grupos, horas colocadas y las insignias de
-      choques y avisos, que llevan al panel).
-    - Selectores: Carrera, Retícula (la vigente con «Vigente», las viejas con «Prioridad» y sus grupos sin acomodar),
-      Semestre, Docente o Salón según la vista y «Ver por». Un aviso por retícula vieja con grupos sin acomodar.
+    - Encabezado: «Horarios» con el periodo, y el resumen (la modalidad con una sola y el campus con uno solo, la
+      retícula, los grupos, las horas colocadas y las insignias de choques y avisos, que llevan al panel).
+    - Selectores (maqueta U2, opción A): Modalidad (con más de una), Carrera, Retícula (la vigente con «Vigente», las viejas con «Prioridad» y sus grupos sin acomodar),
+      Semestre, Docente o Salón según la vista,
+      Campus (un campus a la vez, con su cuenta) y «Ver por». Un aviso por retícula vieja con grupos sin acomodar.
     - Desde 1200 px, a la izquierda y pegada arriba, la bandeja de grupos por materia y «Choques del semestre»; antes,
       arriba y abajo de la semana, plegables. A la derecha, la barra del grupo elegido (o del docente o salón) y la
       semana (scheduling::editor.week); bajo 768 px, la lista de horas de un día (scheduling::editor.day-list).
@@ -33,10 +34,24 @@
                 <x-core::status-badge tone="primary" :label="$term->name" />
             @endif
         </h1>
-        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
+        @unless (isset($plan))
+            {{-- Sin retícula que mostrar, los selectores no llegan al campus (y sin carrera no se pintan): el alcance va
+                 aquí para poder cambiarlo. --}}
+            <div class="mt-2 flex flex-wrap items-end gap-x-4 gap-y-3" data-testid="editor-scope">
+                @unless ($career || $careers !== [])
+                    <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" class="max-md:w-full md:w-56" />
+                @endunless
+                <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" />
+            </div>
+        @endunless
         @isset($plan)
             <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-neutral" data-testid="editor-facts">
-                <span class="font-medium text-base-content">{{ $shownCampus->name }}</span>
+                @if ($modalityOptions->count() <= 1)
+                    <span class="font-medium text-base-content" data-testid="editor-modality">{{ $shownModality->name }}</span>
+                @endif
+                @if ($campusOptions->count() <= 1)
+                    <span class="font-medium text-base-content">{{ $shownCampus->name }}</span>
+                @endif
                 <span>Retícula <span class="font-mono text-base-content">{{ $plan->code }}</span></span>
                 <span>Grupos <span class="font-mono text-base-content">{{ count($groups) }}</span></span>
                 <span>Horas colocadas <span class="text-base-content"><span class="font-mono">{{ $placedHours }}</span> de <span class="font-mono">{{ $requiredHours }}</span></span></span>

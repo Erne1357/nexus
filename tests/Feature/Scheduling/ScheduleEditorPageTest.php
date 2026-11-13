@@ -281,6 +281,8 @@ describe('coordinador de la carrera dueña', function () {
             'career' => $this->isc, 'plan' => $this->oldPlan, 'view' => 'semestre', 'teacherOptions' => [], 'roomOptions' => [],
             'plans' => [['id' => $this->oldPlan->id, 'code' => 'ISIC-2004-296', 'is_current' => false, 'is_active' => true, 'unscheduled' => 2]],
             'semesters' => [['semester' => 3, 'unscheduled' => 2]],
+            'modalityOptions' => collect([modalityOf('PRES')]), 'shownModality' => modalityOf('PRES'),
+            'campusOptions' => collect([$this->campus]), 'campusCode' => $this->campus->code, 'campusCounts' => null,
         ])->render();
         $plan = domOf($html)->querySelector('[data-testid="plan-ISIC-2004-296"]');
 
@@ -632,25 +634,93 @@ describe('docente', function () {
 });
 
 describe('otro campus', function () {
-    it('en la página de su campus, el coordinador de la carrera limitado a otro campus no ve los grupos de este ni los toca: el campus de la página es un filtro (MS6)', function () {
+    it('MS6: el coordinador de la carrera limitado a otro campus abre en el suyo; en el filtro elige este y ve sus grupos de solo lectura, con dónde sí edita, sin acomodarlos', function () {
+        $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
+        onCampusPage(null);
+
+        Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->assertOk()->assertSet('campus', $this->otherCampus->code)
+            ->assertDontSee('ACF-0904')->assertSee('no ofrece carreras');
+
+        $page = Livewire::withQueryParams(['campus' => $this->campus->code, 'semestre' => '3'])->actingAs($elsewhere)->test(SCHEDULE_EDITOR)
+            ->assertSee('ACF-0904 · A')
+            ->call('pick', $this->calcGroup->id)
+            ->assertSee('Solo lectura: solo puedes editar los grupos de C1.');
+
+        $page->call('place', $this->calcGroup->id, 1, '07:00')->assertForbidden();
+        expect($this->calcGroup->sessions()->count())->toBe(0);
+    });
+
+    it('en la página de su campus, el coordinador limitado a otro campus no ve los grupos de este: el campus de la página es un filtro', function () {
         $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
         onCampusPage($this->otherCampus);
 
-        Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->assertOk()->assertDontSee('ACF-0904')->assertSee('no ofrece carreras');
         Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->call('place', $this->calcGroup->id, 1, '07:00')->assertNotFound();
-        Livewire::withQueryParams(['carrera' => $this->isc->id])->actingAs($elsewhere)->test(SCHEDULE_EDITOR)->assertNotFound();
     });
 });
 
 describe('modalidad', function () {
-    it('MS6: el coordinador de la carrera limitado a otro campus ve la sesión, de solo lectura, y el motivo nombra el campus del grupo', function () {
+    it('MS6: el coordinador de la carrera limitado a otro campus ve la sesión, de solo lectura, y el motivo dice dónde sí edita', function () {
         $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
 
         editorDrawerAs($elsewhere, SESSION_DRAWER)->call('open', $session->id)
-            ->assertSee('Solo lectura: acomodan sus sesiones el coordinador de ISC en Campus II y el jefe de Ciencias Básicas.');
+            ->assertSee('Solo lectura: solo puedes editar los grupos de C1.');
         editorDrawerAs($this->coordinator, SESSION_DRAWER)->call('open', $session->id)
             ->assertDontSee('Solo lectura');
+    });
+
+    it('M1: un semestre que mezcla modalidades sigue la elegida en el select «Modalidad»', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $ead = editorGroup($this->calculus, 'E', ['modality_id' => modalityOf('EAD')->id]);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+
+        $presencial = editorAs($jefe, ['carrera' => $this->isc->id, 'modalidad' => 'PRES'])
+            ->assertSeeHtml('data-testid="modality-scope"');
+        $distancia = editorAs($jefe, ['carrera' => $this->isc->id, 'modalidad' => 'EAD']);
+
+        expect(array_column($presencial->viewData('groups'), 'id'))->toContain($this->calcGroup->id)->not->toContain($ead->id)
+            ->and(array_column($distancia->viewData('groups'), 'id'))->toBe([$ead->id]);
+    });
+
+    it('cambiar de modalidad reabre la página en ella, en el mismo campus', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        editorAs($subdireccion, ['campus' => $this->campus->code, 'modalidad' => 'PRES'])
+            ->set('modalidad', 'EAD')
+            ->assertRedirect(route('scheduling.editor', ['modalidad' => 'EAD', 'campus' => $this->campus->code]));
+    });
+
+    it('otra modalidad: el coordinador de la carrera en EAD no ve los grupos presenciales aunque pida ?modalidad=PRES, ni los acomoda', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $ead = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->isc->id])->create();
+
+        $page = editorAs($ead, ['carrera' => $this->isc->id, 'modalidad' => 'PRES'])->assertSet('modalidad', 'PRES')->assertDontSee('ACF-0904');
+
+        expect($page->viewData('shownModality')->code)->toBe('EAD');
+        $page->call('place', $this->calcGroup->id, 1, '07:00')->assertForbidden();
+    });
+
+    it('U2: el filtro de campus ofrece los campus de la modalidad, uno a la vez, con los grupos del semestre en cada uno; cada grupo lleva su etiqueta', function () {
+        $dom = domOf(editorAs($this->coordinator, ['carrera' => $this->isc->id]));
+
+        expect($dom->querySelector('[data-testid="campus-filter-todos"]'))->toBeNull()
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C2"]')))->toBe('2')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C1"]')))->toBe('0')
+            ->and($dom->querySelector('[data-testid="campus-filter-C2"]')?->getAttribute('aria-pressed'))->toBe('true')
+            ->and($dom->querySelectorAll('[data-testid="tray-campus"]'))->toHaveCount(2)
+            ->and(textOf($dom->querySelector('[data-testid="editor-modality"]')))->toBe('Presencial');
+    });
+
+    it('?grupo= abre el campus y la modalidad del grupo, aunque la sesión recuerde otro campus', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+        onCampusPage($this->otherCampus);
+
+        Livewire::withQueryParams(['grupo' => $this->calcGroup->id])->actingAs($subdireccion)->test(SCHEDULE_EDITOR)
+            ->assertSet('campus', $this->campus->code)
+            ->assertSet('modalidad', 'PRES')
+            ->assertSet('groupId', $this->calcGroup->id)
+            ->assertSee('ACF-0904 · A');
     });
 
     it('HC-04: un semestre sin grupos pinta la semana con el perfil de la modalidad de la página, no con el de omisión', function () {
@@ -690,7 +760,7 @@ describe('contexto', function () {
             ->assertSee($this->otherCampus->name)
             ->assertSeeHtml('data-testid="campus-filter-'.$this->campus->code.'"')
             ->set('campus', $this->campus->code)
-            ->assertRedirect(route('scheduling.editor', ['campus' => $this->campus->code]));
+            ->assertRedirect(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => $this->campus->code]));
     });
 
     it('el menú lleva a «Horarios» en Académico a quien ve los horarios', function () {
@@ -739,11 +809,12 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     $groupDrawer = editorDrawerAs($this->coordinator, GROUP_DRAWER);
     $openGroup = $queries(fn () => $groupDrawer->call('open', $this->calcGroup->id));
 
-    // Cada petición lee una vez las modalidades activas para el alcance del coordinador (Actor, MS8).
+    // Cada petición lee una vez las modalidades activas para el alcance del coordinador (Actor, MS8), y los campus de la
+    // modalidad y los grupos del semestre en cada uno para el filtro de campus (maqueta U2).
     expect($many)->toBe($few)
-        ->and($many)->toBeLessThanOrEqual(32)
-        ->and($pick)->toBeLessThanOrEqual(34)
-        ->and($place)->toBeLessThanOrEqual(100)
+        ->and($many)->toBeLessThanOrEqual(34)
+        ->and($pick)->toBeLessThanOrEqual(36)
+        ->and($place)->toBeLessThanOrEqual(102)
         ->and($openSession)->toBeLessThanOrEqual(38) // con la sección del salón y sus sugerencias (tarea 3.7)
         ->and($openGroup)->toBeLessThanOrEqual(18); // con el perfil de su modalidad y los campus a los que se puede cambiar (M8)
 });
