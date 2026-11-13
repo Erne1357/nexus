@@ -115,7 +115,7 @@ new class extends Component
             'offered' => $this->offeredOn($detail->unit, $detail->appointRoles),
             'roleCase' => Role::tryFrom($this->role),
             'options' => $this->showAppoint && Role::tryFrom($this->role) !== null
-                ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null)
+                ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null, Str::isUuid($this->modality) ? $this->modality : null)
                 : ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []],
             'person' => $this->showAppoint && $this->appointUserId !== null ? $people->findOrFail($this->appointUserId) : null,
             'found' => $this->showAppoint && $this->appointUserId === null ? $people->search($this->findPerson) : collect(),

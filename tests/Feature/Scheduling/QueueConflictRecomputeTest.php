@@ -1,7 +1,11 @@
 <?php
 
+use App\Modules\Core\Actions\UpdateModality;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Events\RoomUpdated;
 use App\Modules\Facilities\Models\Building;
@@ -96,4 +100,40 @@ it('cambiar la disponibilidad, las horas externas o las plazas de un docente rec
     event(new PositionChanged(TeacherPosition::factory()->for($this->teacher)->create()));
 
     expect(queuedRecomputes())->toEqualCanonicalizing([pairOf($this->group), pairOf($this->elsewhere)]);
+});
+
+it('cambiar el perfil de una modalidad recalcula sus cargas en los periodos abiertos en ella que no han terminado (HC-04, HC-12)', function () {
+    $presencial = Modality::query()->findOrFail($this->group->modality_id);
+    $admin = User::factory()->admin()->create();
+    $next = Term::factory()->create(['starts_on' => today()->addMonths(2)->toDateString(), 'ends_on' => today()->addMonths(6)->toDateString()]);
+    $ended = Term::factory()->create(['starts_on' => '2020-01-18', 'ends_on' => '2020-06-01']);
+    $notOpened = Term::factory()->create(['starts_on' => today()->toDateString(), 'ends_on' => today()->addMonths(4)->toDateString()]);
+
+    foreach ([$this->term, $next, $ended] as $term) {
+        TermOpening::factory()->for($term)->for($presencial)->create(['opened_by' => $admin->id]);
+    }
+
+    TermOpening::factory()->for($notOpened)->for(Modality::query()->findOrFail($this->elsewhere->modality_id))->create(['opened_by' => $admin->id]);
+    $this->actingAs($admin);
+
+    app(UpdateModality::class)->handle($presencial, ['name' => 'Presencial escolarizada']);
+
+    expect(queuedRecomputes())->toBe([]);
+
+    app(UpdateModality::class)->handle($presencial, ['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+
+    expect(queuedRecomputes())->toEqualCanonicalizing([[$this->term->id, $presencial->id], [$next->id, $presencial->id]]);
+});
+
+it('el tiempo límite del recálculo deja margen sobre el más grande y vence antes de que Redis lo entregue otra vez', function () {
+    // El recálculo más grande del masivo (Presencial de Ene-Jun 2027 a punto de re-análisis: 3 611 grupos de C1 y C2,
+    // 9 744 sesiones) tardó 1.5 s como SyncScheduleConflicts, sin otros corriendo (13 de noviembre de 2026).
+    $largestSeconds = 1.5;
+    $job = new RecomputeScheduleConflicts($this->term->id, $this->group->modality_id);
+    $overlap = $job->middleware()[0];
+
+    expect($job->timeout)->toBeGreaterThanOrEqual((int) ceil(100 * $largestSeconds))
+        ->toBeLessThan((int) config('queue.connections.redis.retry_after'))
+        ->and($job->failOnTimeout)->toBeTrue()
+        ->and($overlap->expiresAfter)->toBe($job->timeout);
 });

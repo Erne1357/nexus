@@ -2,6 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Actions\Proposals;
 
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Transitions\ProposeLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
@@ -9,9 +10,11 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\Constraints\CatalogsValidated;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\SelfApproval;
 use Illuminate\Support\Facades\DB;
@@ -27,9 +30,10 @@ use Throwable;
  * otro departamento (ProposalReviewRules; confirmado el 2 de noviembre de 2026). Exige HC-14, los catálogos del
  * departamento validados en el periodo y la modalidad de la propuesta (CatalogsValidated, con bloqueo compartido),
  * como ValidationException sobre `catalogs`; y la carga del departamento en ese periodo y modalidad (M1), que bloquea,
- * sobre `load` (supuesto por confirmar: completar la apertura del periodo en la modalidad la crea, M4). Marca la parte aceptada
- * con quién y cuándo: desde ahí el coordinador ya no cambia sus materias, aunque la propuesta siga regresada. Si la
- * propuesta está enviada y ya no queda ninguna parte sin aceptar, queda aceptada; regresada, sigue regresada,
+ * sobre `load` (supuesto por confirmar: completar la apertura del periodo en la modalidad la crea, M4); y HC-13 por
+ * columna: cada campus donde la parte pide grupos sigue activo, sobre `campus` (ensureActiveColumns()). Marca la parte
+ * aceptada con quién y cuándo: desde ahí el coordinador ya no cambia sus materias, aunque la propuesta siga regresada.
+ * Si la propuesta está enviada y ya no queda ninguna parte sin aceptar, queda aceptada; regresada, sigue regresada,
  * porque tiene una parte regresada. Si la carga sigue en borrador, la propone con ProposeLoad en la misma transacción
  * (load_transitions y bitácora de la carga); si ProposeLoad la bloquea, no se acepta nada. Deja bitácora de la
  * parte y, después del commit, avisa con ProposalReviewAccepted. Quién puede lo decide ProposalReviewPolicy::decide
@@ -89,6 +93,8 @@ final class AcceptProposalReview
                 throw ValidationException::withMessages(['load' => "{$department->code} no tiene carga en {$proposal->modality->name} para el periodo {$proposal->term->code}: completa la apertura del periodo en {$proposal->modality->name} para crearla."]);
             }
 
+            $this->ensureActiveColumns($proposal, $review);
+
             $review->update(['status' => ProposalReviewStatus::Accepted, 'decided_by' => $actor->getKey(), 'decided_at' => now()]);
 
             $from = $proposal->status;
@@ -119,5 +125,29 @@ final class AcceptProposalReview
 
             return $review;
         });
+    }
+
+    /**
+     * HC-13 por columna, otra vez al aceptar: cada campus donde la parte del departamento pide grupos sigue activo, porque
+     * aceptar crea esos grupos en su campus (M8) y un campus pudo desactivarse después del envío. Si no, se rechaza con el
+     * primer campus por clave; la parte se regresa y el coordinador deja en cero sus grupos de ese campus (M14).
+     *
+     * @throws ValidationException sobre `campus`
+     */
+    private function ensureActiveColumns(CareerProposal $proposal, ProposalReview $review): void
+    {
+        $inactive = Campus::withTrashed()
+            ->whereIn('id', ProposalItem::query()
+                ->requested()
+                ->where('career_proposal_id', $proposal->getKey())
+                ->whereIn('subject_id', Subject::query()->withTrashed()->where('department_id', $review->department_id)->select('id'))
+                ->select('campus_id'))
+            ->where(fn ($query) => $query->where('is_active', false)->orWhereNotNull('deleted_at'))
+            ->orderBy('code')
+            ->value('code');
+
+        if ($inactive !== null) {
+            throw ValidationException::withMessages(['campus' => "{$inactive} está inactivo y la parte pide grupos ahí: regrésala para que el coordinador deje en cero sus grupos de {$inactive} (HC-13)."]);
+        }
     }
 }

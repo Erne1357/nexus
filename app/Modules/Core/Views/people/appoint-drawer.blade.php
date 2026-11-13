@@ -59,7 +59,7 @@
             </div>
         @endif
 
-        @if (in_array('campus_id', $columns, true))
+        @if (in_array('campus_id', $columns, true) && $options['campuses'] !== [])
             <fieldset data-testid="field-campus">
                 <legend class="mb-1 text-sm font-semibold">Campus <span class="font-normal text-neutral">(opcional)</span></legend>
                 <div class="join flex w-full flex-wrap">

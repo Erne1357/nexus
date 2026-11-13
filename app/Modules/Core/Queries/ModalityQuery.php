@@ -9,6 +9,7 @@ use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -41,8 +42,8 @@ final class ModalityQuery
 
     /**
      * Lo que desactivar cada modalidad deja a medias, para el texto de la confirmación (M11), por id de modalidad: los
-     * códigos de los periodos abiertos en ella (`terms`) y cuántos nombramientos vigentes hoy la llevan
-     * (`appointments`).
+     * códigos de los periodos vigentes y futuros abiertos en ella (`terms`; los que terminan hoy o después en la zona del
+     * Tec, como la guarda, M13) y cuántos nombramientos vigentes hoy la llevan (`appointments`).
      *
      * @param  list<string>  $ids
      * @return array<string, array{terms: list<string>, appointments: int}>
@@ -51,8 +52,11 @@ final class ModalityQuery
     {
         $impact = array_fill_keys($ids, ['terms' => [], 'appointments' => 0]);
 
+        $today = CarbonImmutable::now(config('app.timezone'))->toDateString();
+
         TermOpening::query()
             ->whereIn('modality_id', $ids)
+            ->whereIn('term_id', Term::query()->whereDate('ends_on', '>=', $today)->select('id'))
             ->with('term:id,code')
             ->get()
             ->each(function (TermOpening $opening) use (&$impact): void {

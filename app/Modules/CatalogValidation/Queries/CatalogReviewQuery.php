@@ -39,7 +39,8 @@ final class CatalogReviewQuery
      * Solo cuentan los catálogos que el admin abrió en el periodo, es decir, que tienen revisiones en él (CV9, HC-14,
      * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
      *
-     * `$modality` es la modalidad de la carga: sin salones, no exige la revisión de salones. El aviso a los jefes
+     * `$modality` es la modalidad de la carga: sin salones (o con perfil guardado inválido, Modality::valid_profile), no
+     * exige la revisión de salones. El aviso a los jefes
      * (NotifyPendingReviews), que no es de una carga, no da modalidad y cuenta todo lo abierto: la revisión es del
      * departamento en todo el Tec y la de salones solo se abre si alguna modalidad abierta usa salones (roomsApply()).
      *
@@ -50,7 +51,7 @@ final class CatalogReviewQuery
         $termId = $term instanceof Term ? $term->getKey() : $term;
         $departmentId = $department instanceof Department ? $department->getKey() : $department;
 
-        $required = Catalog::requiredFor($modality === null || $modality->profile->usesRooms);
+        $required = Catalog::requiredFor($modality === null || $modality->valid_profile?->usesRooms === true);
 
         $validated = CatalogReview::query()
             ->where('term_id', $termId)

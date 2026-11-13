@@ -208,3 +208,11 @@ it('con tres campus la tabla ancha pide más espacio antes de dejar las fichas',
 
     perModalityPageAs($this->ofC2, ['vista' => 'tabla'])->assertSeeHtml('@max-[69rem]:hidden')->assertDontSeeHtml('@max-[55rem]:hidden');
 });
+
+it('M6: la propuesta conserva su modalidad aunque se borre, como la carga', function () {
+    $modality = Modality::factory()->create();
+    $proposal = CareerProposal::factory()->create(['modality_id' => $modality->id]);
+    $modality->delete();
+
+    expect(CareerProposal::query()->findOrFail($proposal->id)->modality?->is($modality))->toBeTrue();
+});

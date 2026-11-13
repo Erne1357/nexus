@@ -64,7 +64,7 @@ trait AppointsRoles
 
     /**
      * Un puesto nuevo olvida el alcance del anterior (y la unidad si no es fija) y vuelve a la modalidad propuesta; un
-     * campus nuevo, la carrera.
+     * campus nuevo, la carrera; una modalidad sin salones, el campus (MS4: ahí el nombramiento va sin campus).
      */
     protected function appointFieldUpdated(string $property, bool $unitLocked = false): void
     {
@@ -77,6 +77,9 @@ trait AppointsRoles
                 $this->reset('unit');
             }
         } elseif ($property === 'campus') {
+            $this->keepOfferedCareers();
+        } elseif ($property === 'modality' && $this->campus !== '' && ! app(PeopleQuery::class)->usesCampuses($this->modality)) {
+            $this->campus = '';
             $this->keepOfferedCareers();
         }
     }

@@ -12,13 +12,14 @@ use Illuminate\Support\Facades\Schema;
  *
  * Las filas de campus que eran modalidades (su `modality` no es presencial: EAD, ENL y TNMV, M2) se desactivan y se
  * borran lógicamente. Antes revisa que nada las referencie (referenceCounts()): la columna que apunta a `campuses.id` de
- * cada llave foránea a `campuses` (en una compuesta, solo esa) y cada columna `campus_id` (comparada como texto, sea del
- * tipo que sea), de cualquier tabla y esquema (se leen del catálogo de PostgreSQL al migrar, así que una tabla nueva
- * también cuenta), los parámetros de `settings` con alcance de campus y los avisos guardados con su campus. Si algo las
- * referencia, se detiene con un RuntimeException que lista cada referencia con su número y no escribe nada. La bitácora
- * no cuenta: es historia y la fila borrada lógicamente sigue ahí (MS33, supuesto por confirmar). Tampoco cuentan los ids
- * de campus guardados dentro de un jsonb (las fotos v1, los alumnos posibles por campus de una propuesta): las filas se
- * borran lógicamente, no se quitan, así que esos ids siguen resolviendo.
+ * cada llave foránea a `campuses` (en una compuesta, solo esa; solo cuentan las llaves cuya columna destino es
+ * `campuses.id`: una que apuntara a otra columna, como `campuses.code`, no se revisaría) y cada columna `campus_id`
+ * (comparada como texto, sea del tipo que sea), de cualquier tabla y esquema (se leen del catálogo de PostgreSQL al
+ * migrar, así que una tabla nueva también cuenta), los parámetros de `settings` con alcance de campus y los avisos
+ * guardados con su campus. Si algo las referencia, se detiene con un RuntimeException que lista cada referencia con su
+ * número y no escribe nada. La bitácora no cuenta: es historia y la fila borrada lógicamente sigue ahí (MS33, supuesto
+ * por confirmar). Tampoco cuentan los ids de campus guardados dentro de un jsonb (las fotos v1, los alumnos posibles por
+ * campus de una propuesta): las filas se borran lógicamente, no se quitan, así que esos ids siguen resolviendo.
  *
  * Antes, 2026_11_12_211101 (Scheduling) pasó los avisos guardados de la propuesta y de los acuerdos que llevaban solo
  * el campus a llevar su modalidad por el puente (MS14), que esta migración quita.

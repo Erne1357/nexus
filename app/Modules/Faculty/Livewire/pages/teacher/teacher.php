@@ -195,6 +195,16 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
+     * Una modalidad sin salones suelta el campus de la jefatura: ahí el jefe de proyecto docente va sin campus (MS4).
+     */
+    public function updatedHeadModalityId(PeopleQuery $people): void
+    {
+        if (! $people->usesCampuses($this->headModalityId)) {
+            $this->headCampusId = '';
+        }
+    }
+
+    /**
      * Al elegir un tipo de plaza con horas fijas, las horas se ponen solas.
      */
     public function updatedKind(): void
@@ -250,7 +260,7 @@ new #[Title('Ficha del docente')] class extends Component
         };
 
         $canAppoint = Gate::allows('viewAny', RoleAssignment::class);
-        $headOptions = $canAppoint && $this->showHeadshipModal ? $people->scopeOptions(Role::JefeProyectoDocente, null) : ['modalities' => [], 'campuses' => [], 'units' => []];
+        $headOptions = $canAppoint && $this->showHeadshipModal ? $people->scopeOptions(Role::JefeProyectoDocente, null, $this->headModalityId) : ['modalities' => [], 'campuses' => [], 'units' => []];
 
         $removing = $this->removingAdscriptionId === null ? null : $record->adscriptions->firstWhere('id', $this->removingAdscriptionId);
 

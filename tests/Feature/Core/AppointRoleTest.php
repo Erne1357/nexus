@@ -229,6 +229,25 @@ it('rechaza un campus, una unidad o una carrera que ya no sirven', function () {
     expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
 });
 
+it('MS4: el coordinador y el jefe de proyecto docente de una modalidad sin salones van sin campus', function (Closure $modality) {
+    $modality = $modality();
+    $name = $modality->name;
+
+    expectInvalid(fn () => appoint($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, modality: $modality), 'campus', "{$name} no usa salones: sus grupos no tienen campus, así que el nombramiento va sin campus.");
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $this->systems, modality: $modality), 'campus', "{$name} no usa salones: sus grupos no tienen campus, así que el nombramiento va sin campus.");
+
+    expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse()
+        ->and(appoint($this->rosa, Role::Coordinador, null, null, $this->isc->id, modality: $modality)->campus_id)->toBeNull();
+})->with([
+    'En línea' => [fn () => tap(modalityOf('ENL'))->update(['is_active' => true])],
+    'con perfil inválido' => [function (): Modality {
+        $broken = Modality::factory()->create(['name' => 'Rota']);
+        $broken->forceFill(['settings' => ['block_minutes' => 45]])->save();
+
+        return $broken;
+    }],
+]);
+
 it('rechaza fechas al revés y a un usuario inactivo', function () {
     expectInvalid(
         fn () => appoint($this->rosa, Role::Admin, from: CarbonImmutable::parse('2026-11-10'), to: CarbonImmutable::parse('2026-11-09')),

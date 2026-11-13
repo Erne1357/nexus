@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Proposals\AcceptProposalReview;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
@@ -11,6 +12,7 @@ use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -156,6 +158,23 @@ it('HC-14: en una modalidad que usa salones exige también los salones del depar
     CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Rooms)->update(['status' => 'validated']);
 
     expect(acceptPart()->status)->toBe(ProposalReviewStatus::Accepted);
+});
+
+it('HC-13 por columna: no acepta la parte si pide grupos en un campus que ya está inactivo, y lo nombra', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $subject = Subject::factory()->create(['department_id' => $this->cb->id]);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'subject_id' => $subject->id, 'campus_id' => $this->campus->id, 'requested_groups' => 2]);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'subject_id' => $subject->id, 'campus_id' => $c1->id, 'requested_groups' => 1]);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'subject_id' => Subject::factory()->create(['department_id' => $this->sc->id])->id, 'campus_id' => $this->campus->id, 'requested_groups' => 1]);
+    $this->campus->update(['is_active' => false]);
+
+    expect(acceptErrors())->toBe(['campus' => ['C2 está inactivo y la parte pide grupos ahí: regrésala para que el coordinador deje en cero sus grupos de C2 (HC-13).']])
+        ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending)
+        ->and($this->load->fresh()->status)->toBe(LoadStatus::Draft);
+
+    ProposalItem::query()->where('campus_id', $this->campus->id)->whereIn('subject_id', [$subject->id])->update(['requested_groups' => 0]);
+
+    expect(acceptPart()->fresh()->status)->toBe(ProposalReviewStatus::Accepted);
 });
 
 it('con la carga ya fuera de borrador solo acepta: no hay otra transición', function (LoadStatus $status) {

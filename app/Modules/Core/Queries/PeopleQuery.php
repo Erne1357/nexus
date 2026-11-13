@@ -110,17 +110,18 @@ final class PeopleQuery
      * Lo que se elige al nombrar o al preguntar quién ocupa un puesto: las modalidades activas («Presencial»), los
      * campus activos («C2 · Campus II»), las unidades activas que el puesto admite y las carreras que se ofrecen en el
      * campus. Sin campus, ninguna carrera, salvo al puesto que pide carrera con el campus opcional (el coordinador,
-     * AZ-S17): las que se ofrecen en algún campus activo.
+     * AZ-S17): las que se ofrecen en algún campus activo. Con `$modalityId` de una modalidad sin salones (o con perfil
+     * inválido), ningún campus: sus grupos no tienen (MS4) y el nombramiento va sin campus (RoleAssignmentRules).
      *
      * @return array{modalities: list<array{id: string, name: string}>, campuses: list<array{id: string, name: string}>, units: list<array{id: string, name: string}>, careers: list<array{id: string, name: string}>}
      */
-    public function scopeOptions(Role $role, ?string $campusId): array
+    public function scopeOptions(Role $role, ?string $campusId, ?string $modalityId = null): array
     {
         $modalities = $this->modalityOptions();
 
-        $campuses = Campus::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name'])
+        $campuses = $this->usesCampuses($modalityId) ? Campus::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name'])
             ->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])
-            ->all();
+            ->all() : [];
 
         $units = $role->unitKind() === null ? [] : OrgUnit::query()
             ->where('is_active', true)
@@ -141,6 +142,17 @@ final class PeopleQuery
         }
 
         return ['modalities' => $modalities, 'campuses' => $campuses, 'units' => $units, 'careers' => $careers];
+    }
+
+    /**
+     * Si en la modalidad elegida un nombramiento lleva campus: sí sin modalidad (o con una que no existe), no en una sin
+     * salones o con perfil inválido (MS4; Modality::valid_profile).
+     */
+    public function usesCampuses(?string $modalityId): bool
+    {
+        $modality = $modalityId === null || ! Str::isUuid($modalityId) ? null : $this->modality($modalityId);
+
+        return $modality === null || $modality->valid_profile?->usesRooms === true;
     }
 
     /**

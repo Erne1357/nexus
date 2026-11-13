@@ -4,7 +4,8 @@
     a la derecha del título, maqueta U2, opción A), el periodo y cuántos departamentos y cargas; cuatro cifras de todo el
     Tec; la búsqueda, el filtro de estado y cuándo se recalcularon los choques; y la matriz, una tabla desde 1024 px y,
     antes, renglones apilados con las mismas cifras. Un renglón por departamento con una insignia por carga (código,
-    icono y cifra) y los faltantes sumados por columna; uno sin grupos en ningún campus va al final, atenuado. Tocar un
+    icono y cifra; columna «Modalidad») y los faltantes sumados por columna; uno sin grupos en la modalidad va al final,
+    atenuado. Tocar un
     renglón o una insignia abre el drawer de esa carga.
 --}}
 <div>
@@ -84,7 +85,7 @@
                         <thead class="bg-base-200">
                             <tr class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
                                 <th scope="col" class="sticky left-0 z-10 min-w-52 bg-base-200 px-4 py-2.5 text-start font-medium">Departamento</th>
-                                <th scope="col" class="min-w-64 px-2 py-2.5 text-start font-medium">Campus</th>
+                                <th scope="col" class="min-w-64 px-2 py-2.5 text-start font-medium">Modalidad</th>
                                 <th scope="col" class="w-24 px-2 py-2.5 text-center font-medium">Choques duros</th>
                                 <th scope="col" class="w-24 px-2 py-2.5 text-center font-medium">Sin horario</th>
                                 <th scope="col" class="w-24 px-2 py-2.5 text-center font-medium">Sin docente</th>

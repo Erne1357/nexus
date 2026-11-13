@@ -545,12 +545,12 @@ describe('menú', function () {
 });
 
 describe('avisos', function () {
-    it('el aviso a los jefes dice el tipo de cambio y abre la pantalla con la solicitud', function () {
+    it('el aviso a los jefes dice el tipo de cambio y abre la pantalla con la solicitud en el campus del grupo (MS14)', function () {
         $request = crRequest($this->g1, $this->w->teacherUser, 'pending', ['kind' => 'room']);
         $message = (new ChangeRequested($request))->message($this->w->jefeSc);
 
         expect($message->title)->toBe('Solicitud de cambio de salón')
-            ->and(route($message->route, $message->parameters))->toBe(route('staffing.change-requests', ['solicitud' => $request->id]))
+            ->and(route($message->route, $message->parameters))->toBe(route('staffing.change-requests', ['solicitud' => $request->id, 'campus' => $this->g1->campus->code]))
             ->and(ChangeRequested::unavailableReason(app(Actor::class)->forUser($this->w->jefeSc), $message))->toBeNull();
     });
 });

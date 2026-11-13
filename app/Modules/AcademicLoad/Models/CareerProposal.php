@@ -55,13 +55,13 @@ class CareerProposal extends Model
     }
 
     /**
-     * Su modalidad del catálogo (M6, ADR-0025).
+     * Su modalidad del catálogo (M6, ADR-0025), aunque esté borrada, como la de la carga: la propuesta la conserva.
      *
      * @return BelongsTo<Modality, $this>
      */
     public function modality(): BelongsTo
     {
-        return $this->belongsTo(Modality::class);
+        return $this->belongsTo(Modality::class)->withTrashed();
     }
 
     /**

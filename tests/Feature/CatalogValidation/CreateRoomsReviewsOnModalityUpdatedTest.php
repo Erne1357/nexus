@@ -3,9 +3,11 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnModalityUpdated;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Actions\UpdateModality;
+use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
@@ -75,4 +77,14 @@ it('no duplica si se vuelve a guardar el perfil, y no crea nada si la modalidad 
     modalityUsesRooms($this->online, ['requires_subdireccion_approval' => true]);
 
     expect(roomsReviews($this->opened))->toBe(2);
+});
+
+it('un perfil guardado inválido cuenta como sin salones: no crea nada y no falla', function () {
+    app(OpenCatalogValidation::class)->handle($this->opened, [Catalog::Rooms], $this->admin);
+    Department::factory()->create(['code' => 'D2']);
+    $this->online->forceFill(['settings' => ['uses_rooms' => true, 'block_minutes' => 45]])->save();
+
+    app(CreateRoomsReviewsOnModalityUpdated::class)->handle(new ModalityUpdated($this->online, ['settings']));
+
+    expect(roomsReviews($this->opened))->toBe(1);
 });

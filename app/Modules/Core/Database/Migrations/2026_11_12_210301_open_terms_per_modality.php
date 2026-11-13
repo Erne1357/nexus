@@ -11,8 +11,10 @@ use Illuminate\Support\Facades\Schema;
  * `campuses.modality_id` (ADR-0025; C1 y C2 → `PRES`).
  *
  * up(), todo en una transacción (si se detiene, no deja nada):
- * 1. Revisión previa: si una apertura o una ventana es de un campus sin modalidad del catálogo, o si dos campus de la
- *    misma modalidad tienen la misma etapa del mismo periodo con fechas distintas, se detiene con un RuntimeException
+ * 1. Revisión previa: si una apertura o una ventana es de un campus sin modalidad del catálogo, si dos campus de la
+ *    misma modalidad tienen la misma etapa del mismo periodo con fechas distintas, o si un campus tiene ventana propia
+ *    en una etapa y otro campus sin borrar de la misma modalidad usa la general (sin ventana propia, su fecha es la
+ *    general o «Sin fecha»: al juntarlas tomaría en silencio las fechas del primero), se detiene con un RuntimeException
  *    que lista los campus o los ids de las ventanas.
  * 2. `term_openings` recibe `modality_id` (FK obligatoria a `modalities`). Las aperturas de los campus de una misma
  *    modalidad se funden en una: se queda la más antigua (`opened_at` y, a igual hora, el id), con su quién y cuándo, y
@@ -155,9 +157,11 @@ return new class extends Migration
 
     /**
      * Dos campus de la misma modalidad con la misma etapa del mismo periodo y fechas distintas no caben en un solo
-     * calendario (M4): alguien tiene que decidir cuál queda.
+     * calendario (M4): alguien tiene que decidir cuál queda. Tampoco una etapa con ventana propia en un campus y sin ella
+     * en otro campus sin borrar de la misma modalidad, que usa la general: heredar la del primero cambiaría sus fechas
+     * en silencio.
      *
-     * @throws RuntimeException con los ids de las ventanas en conflicto
+     * @throws RuntimeException con los ids de las ventanas en conflicto y los campus que usan la general
      */
     private function ensureNoConflictingStages(): void
     {
@@ -177,6 +181,30 @@ return new class extends Migration
             throw new RuntimeException(sprintf(
                 'Hay ventanas propias de campus de la misma modalidad con la misma etapa y fechas distintas, y el calendario es uno por modalidad (M4): %s. Deja una sola fecha por etapa (o quita las propias) antes de migrar.',
                 collect($conflicts)->map(fn (object $row): string => "{$row->term_code} {$row->modality_code} {$row->stage}: {$row->windows}")->implode('; '),
+            ));
+        }
+
+        $inheriting = DB::select(<<<'SQL'
+            select terms.code as term_code, modalities.code as modality_code, own.stage,
+                string_agg(distinct own.id::text || ' (' || owner.code || ': ' || own.starts_on || ' a ' || own.ends_on || ')', ', ') as windows,
+                string_agg(distinct others.code, ', ') as general_campuses
+            from term_stages as own
+            join campuses as owner on owner.id = own.campus_id
+            join campuses as others on others.modality_id = owner.modality_id and others.deleted_at is null
+                and not exists (
+                    select 1 from term_stages as theirs
+                    where theirs.term_id = own.term_id and theirs.stage = own.stage and theirs.campus_id = others.id
+                )
+            join modalities on modalities.id = owner.modality_id
+            join terms on terms.id = own.term_id
+            group by terms.code, modalities.code, own.stage
+            order by terms.code, modalities.code, own.stage
+            SQL);
+
+        if ($inheriting !== []) {
+            throw new RuntimeException(sprintf(
+                'Hay etapas con ventana propia en un campus y la general en otro campus de la misma modalidad, y el calendario es uno por modalidad (M4): al juntarlas, el segundo tomaría las fechas del primero sin que nadie lo decida: %s. Da la misma ventana propia a todos los campus de la modalidad (o quita las propias) antes de migrar.',
+                collect($inheriting)->map(fn (object $row): string => "{$row->term_code} {$row->modality_code} {$row->stage}: {$row->windows}; con la general: {$row->general_campuses}.")->implode(' '),
             ));
         }
     }

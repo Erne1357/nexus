@@ -410,8 +410,10 @@
                     <x-select label="Cargo" name="headKind" wire:model.live="headKind" :options="$headKinds" placeholder="Elige el cargo" />
                     <x-select label="Departamento" name="headDepartmentId" wire:model="headDepartmentId" :options="$departmentOptions" placeholder="Elige el departamento" />
                     @if ($headKind === \App\Modules\Core\Enums\Role::JefeProyectoDocente->value)
-                        <x-select label="Modalidad" name="headModalityId" wire:model="headModalityId" :options="$modalityOptions" placeholder="Elige la modalidad" />
-                        <x-select label="Campus (opcional)" name="headCampusId" wire:model="headCampusId" :options="$campusOptions" placeholder="Todos los campus" />
+                        <x-select label="Modalidad" name="headModalityId" wire:model.live="headModalityId" :options="$modalityOptions" placeholder="Elige la modalidad" />
+                        @if ($campusOptions !== [])
+                            <x-select label="Campus (opcional)" name="headCampusId" wire:model="headCampusId" :options="$campusOptions" placeholder="Todos los campus" />
+                        @endif
                     @elseif ($headKind !== '')
                         <p class="self-end pb-2 text-sm text-neutral md:col-span-2">El jefe de departamento es de todo el Tec: no lleva campus.</p>
                     @endif

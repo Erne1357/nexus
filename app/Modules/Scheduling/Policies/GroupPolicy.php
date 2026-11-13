@@ -95,11 +95,11 @@ final class GroupPolicy
     }
 
     /**
-     * Si el campus del grupo está inactivo o borrado (M16).
+     * Si el campus del grupo está inactivo o borrado (M16). Un grupo sin campus (modalidad sin salones, MS4) no lo está.
      */
     private function inInactiveCampus(Group $group): bool
     {
-        return ! Campus::query()->whereKey($group->campus_id)->where('is_active', true)->exists();
+        return $group->campus_id !== null && ! Campus::query()->whereKey($group->campus_id)->where('is_active', true)->exists();
     }
 
     /**

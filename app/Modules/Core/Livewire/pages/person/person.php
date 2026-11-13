@@ -98,7 +98,7 @@ new #[Title('Ficha de la persona')] class extends Component
             'roleCase' => $role,
             'isCoordinator' => $role === Role::Coordinador,
             'careerGroups' => $role === Role::Coordinador && $this->showModal ? $people->careerChecklist($this->uuid($this->campus), $this->uuid($this->modality), $person, $this->careerSearch) : [],
-            'options' => $role === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus)),
+            'options' => $role === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus), $this->uuid($this->modality)),
             'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente && $role !== Role::Alumno)),
             'whoRoleCase' => $whoRole,
             'whoOptions' => $whoRole === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($whoRole, $this->uuid($this->whoCampus)),

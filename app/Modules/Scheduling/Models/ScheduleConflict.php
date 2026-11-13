@@ -17,9 +17,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Choque que encontró el validador en la carga de un periodo y una modalidad (M1): la regla (`HC-xx`, `SC-xx`), su
- * gravedad, de qué se trata (`group`, `teacher` o `room` con su id), el grupo, su campus (un filtro del tablero), el
- * departamento y la carrera dueña para contarlo en el tablero, el detalle y el mensaje en español. Tabla derivada: la
- * reescribe el recálculo del periodo y la modalidad.
+ * gravedad, de qué se trata (`group`, `teacher` o `room` con su id), el grupo, una copia de su campus (el recálculo la
+ * pone al día; hoy no la lee nadie: el tablero filtra por el campus del grupo), el departamento y la carrera dueña para
+ * contarlo en el tablero, el detalle y el mensaje en español. Tabla derivada: la reescribe el recálculo del periodo y la
+ * modalidad.
  */
 #[Fillable(['term_id', 'campus_id', 'modality_id', 'department_id', 'career_id', 'group_id', 'rule', 'severity', 'subject_type', 'subject_id', 'related', 'message', 'resolved_at'])]
 #[UseFactory(ScheduleConflictFactory::class)]

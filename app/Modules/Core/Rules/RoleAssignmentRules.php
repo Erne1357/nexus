@@ -26,7 +26,8 @@ use Illuminate\Validation\ValidationException;
  *   jefe de proyecto docente, sobre su departamento y una modalidad. La modalidad debe estar activa y sin borrar (MS8).
  *   El campus es opcional: si se elige, debe estar activo y la carrera del coordinador debe ofrecerse ahí; sin campus,
  *   la carrera debe ofrecerse en algún campus activo (supuesto por confirmar: la oferta de las modalidades sin salones
- *   se define en la fase 10, MS5).
+ *   se define en la fase 10, MS5). En una modalidad sin salones (o con perfil inválido, Modality::valid_profile) no se
+ *   elige campus: sus grupos no tienen (MS4), así que un nombramiento con campus nunca los cubriría al escribir.
  *
  * - AZ-S10 (confirmado el 3 de noviembre de 2026): el puesto Subdirección Académica solo va sobre la unidad
  *   Subdirección Académica.
@@ -80,6 +81,8 @@ final class RoleAssignmentRules
                 }
             } elseif ($campus->trashed() || ! $campus->is_active) {
                 $errors['campus'] = "El campus {$campus->code} está inactivo.";
+            } elseif ($modality !== null && ! isset($errors['modality']) && $modality->valid_profile?->usesRooms !== true) {
+                $errors['campus'] = "{$modality->name} no usa salones: sus grupos no tienen campus, así que el nombramiento va sin campus.";
             } else {
                 $campusUsable = true;
             }

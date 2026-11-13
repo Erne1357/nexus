@@ -124,7 +124,7 @@ it('cada renglón dice quién es el jefe del departamento, o que no tiene', func
         ->and(textOf(domOf($page)->querySelector('[data-testid="board-row-EE"] th')))->toContain('Sin jefe vigente');
 });
 
-it('abre el detalle de una carga: el selector de campus, lo que falta, las justificaciones, el historial y «Abrir en Cierre de la carga»', function () {
+it('abre el detalle de una carga: el selector de modalidad, lo que falta, las justificaciones, el historial y «Abrir en Cierre de la carga»', function () {
     closingBoardPage($this->subdireccion)
         ->call('open', $this->world->department->id, 'PRES')
         ->assertSet('showDrawer', true)
