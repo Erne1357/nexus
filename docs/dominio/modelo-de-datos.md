@@ -5,7 +5,7 @@ Modelo conceptual por módulo. Describe tablas, campos clave y decisiones; los t
 Convenciones transversales:
 
 - Toda tabla de catálogo tiene `is_active` (lo que el SII llama "inactivo" no se borra, se desactiva) y una **clave natural** única (`code`, `control_number`, `rfc`) que sirve de llave de upsert en importaciones.
-- Toda tabla que participe en la carga académica lleva `term_id` y `modality_id` explícitos, aunque sean derivables, para que las consultas por periodo y modalidad sean directas (M1). Lleva `campus_id` solo donde algo es físico: dónde se da el grupo (y sus sesiones), el salón, el alumno; lo que cuelga de un grupo y no es físico (ranking, asignaciones, solicitudes de cambio) no lo copia y lo lee del grupo, así que nada queda viejo si el grupo cambia de campus (M8).
+- Toda tabla que participe en la carga académica lleva `term_id` y `modality_id` explícitos, aunque sean derivables, para que las consultas por periodo y modalidad sean directas (M1). Lleva `campus_id` solo donde algo es físico: dónde se da el grupo (y sus sesiones), el salón, el alumno; lo que cuelga de un grupo y no es físico (ranking, asignaciones, solicitudes de cambio) no lo copia y lo lee del grupo, así que nada queda viejo si el grupo cambia de campus (M8). La excepción es `schedule_conflicts`, una tabla derivada que guarda el campus de cada grupo como filtro del tablero de choques: el recálculo que sigue a cualquier cambio del grupo (también cambiarlo de campus, MS9) la reescribe con el campus de hoy, así que esa copia no es fuente de nada.
 - Los cambios de negocio se registran con `spatie/laravel-activitylog` (tabla `activity_log`, inmutable).
 - Los enums de dominio son enums de PHP respaldados por `string` en la base de datos.
 
