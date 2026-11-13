@@ -13,9 +13,9 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\ModalityQuery;
 use App\Modules\Core\Queries\RecipientsQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -37,6 +37,7 @@ final class ValidationProgressQuery
         private readonly CatalogContentsQuery $contents,
         private readonly CatalogReviewQuery $catalogReviews,
         private readonly CampusQuery $campuses,
+        private readonly ModalityQuery $modalityQuery,
     ) {}
 
     /**
@@ -58,12 +59,7 @@ final class ValidationProgressQuery
      */
     public function openModalities(Term $term): Collection
     {
-        return Modality::query()
-            ->whereIn('id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
-            ->orderBy('code')
-            ->get()
-            ->filter(fn (Modality $modality): bool => $modality->profile->usesRooms)
-            ->values();
+        return $this->modalityQuery->openedWithRooms($term);
     }
 
     /**
