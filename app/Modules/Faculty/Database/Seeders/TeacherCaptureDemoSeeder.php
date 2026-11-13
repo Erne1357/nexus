@@ -11,8 +11,9 @@ use RuntimeException;
 /**
  * Variedad en la captura de los docentes activos del último periodo abierto, para la pantalla de validación: de los
  * que FacultyDemoSeeder sembró, unos quedan sin disponibilidad, unos sin perfil (sin materias calificadas) y unos con
- * horas fuera del ITCJ (el resto, sin ellas). Quién cae en cada grupo sale de un hash del RFC, así que
- * es el mismo siempre y no cambia al sembrar más docentes. Lo que quita lo borra de forma lógica (`deleted_at`). Idempotente. Sin periodos abiertos, no hace nada. No corre
+ * horas fuera del ITCJ (el resto, sin ellas). Quién cae en cada grupo y cuántas horas externas lleva salen de un hash
+ * del RFC, no del UUID (que trae bits al azar), así que es lo mismo en cada corrida y no cambia al sembrar más docentes.
+ * Lo que quita lo borra de forma lógica (`deleted_at`). Idempotente. Sin periodos abiertos, no hace nada. No corre
  * en producción.
  *
  * Porcentajes: `demo` 20 % sin disponibilidad, 10 % sin perfil y 25 % con horas externas; `massive` 25, 15 y 30.
@@ -77,7 +78,9 @@ class TeacherCaptureDemoSeeder extends Seeder
             $this->in($number, 'external', $percent['external']) ? $withExternal[] = $id : $withoutExternal[] = $id;
         }
 
-        DB::transaction(function () use ($term, $now, $stamps, $withoutAvailability, $withAvailability, $withoutProfile, $withExternal, $withoutExternal): void {
+        $rfcs = $teachers->flip();
+
+        DB::transaction(function () use ($term, $now, $stamps, $withoutAvailability, $withAvailability, $withoutProfile, $withExternal, $withoutExternal, $rfcs): void {
             foreach (array_chunk($withoutAvailability, 1000) as $chunk) {
                 DB::table('teacher_availability')->where('term_id', $term->id)->whereNull('deleted_at')->whereIn('teacher_id', $chunk)->update(['deleted_at' => $now]);
             }
@@ -95,7 +98,7 @@ class TeacherCaptureDemoSeeder extends Seeder
             ]);
 
             $this->insertMissing('teacher_external_loads', $term->id, $withExternal, fn (string $id): array => [
-                'teacher_id' => $id, 'term_id' => $term->id, 'source' => 'Universidad Autónoma de Ciudad Juárez', 'hours' => 4 + crc32($id) % 9, 'notes' => null, ...$stamps,
+                'teacher_id' => $id, 'term_id' => $term->id, 'source' => 'Universidad Autónoma de Ciudad Juárez', 'hours' => 4 + crc32("hours/{$rfcs[$id]}") % 9, 'notes' => null, ...$stamps,
             ]);
         });
 
