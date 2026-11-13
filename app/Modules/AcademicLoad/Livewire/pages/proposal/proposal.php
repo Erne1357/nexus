@@ -50,7 +50,9 @@ use Mary\Traits\Toast;
  * propuesta no existe y el usuario puede armarla (CareerProposalPolicy::create), la arma al entrar
  * (StartCareerProposal). Corregir es por fila (CareerProposalPolicy::update sobre la fila, M7): un coordinador con
  * campus solo cambia su columna, y la de otro campus se ve de solo lectura con quién la captura; uno sin campus cambia
- * todas. Enviar es de cualquier coordinador de la carrera (M6). Todo lo que muestra sale de
+ * todas. En la columna de un campus inactivo, quien envía la propuesta solo deja en cero los grupos de cada fila
+ * («Dejar en 0», `zeroRow`; CareerProposalPolicy::zeroInactiveCampus, M14). Enviar es de cualquier coordinador de la
+ * carrera (M6). Todo lo que muestra sale de
  * CareerProposalQuery::overview; las escrituras pasan por UpdateProposalItem y SubmitCareerProposal, con la policy de
  * la propuesta o de la fila antes de cada una.
  */
@@ -425,6 +427,31 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
+     * «Dejar en 0» en una fila de un campus inactivo (M14): solo los grupos pedidos, sin tocar lo demás, con
+     * CareerProposalPolicy::zeroInactiveCampus. Cualquier otro cambio de esa fila sigue negado por saveCell().
+     */
+    public function zeroRow(string $id, CareerProposalQuery $proposals, UpdateProposalItem $update): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('zeroInactiveCampus', [$proposal, $item]);
+        $cell = "{$item->id}.requested_groups";
+        unset($this->cellErrors[$cell]);
+
+        try {
+            $update->zeroRequestedGroups($item, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e, $item->id, $cell);
+
+            return;
+        }
+
+        $this->keepRow($item->subject_id);
+        $this->dispatch('cell-saved', id: $item->id, field: 'requested_groups');
+        $this->success('Grupos en 0', e("{$item->subject->code} en {$item->campus->code}: ya no se piden grupos ahí."));
+    }
+
+    /**
      * Abre la confirmación de envío con los totales por campus, a quién se avisa y el aviso de catálogos pendientes.
      */
     public function confirmSubmit(CareerProposalQuery $proposals): void
@@ -659,8 +686,10 @@ new #[Title('Propuesta de carrera')] class extends Component
      * Cada columna de la propuesta, por su llave (ProposalOverview::columnKey), con su campus, si el usuario la puede
      * corregir y, si no, quién la captura (ProposalHeader::capturedBy). Se decide con la policy de la fila
      * (CareerProposalPolicy::update) sobre una fila de esa columna: un coordinador con campus solo corrige la suya (M7).
+     * La de un campus inactivo no la corrige nadie, pero quien envía la propuesta deja en cero sus grupos (`zeroable`,
+     * M14), y eso dice en lugar de quién la captura.
      *
-     * @return array<string, array{campus: ?Campus, editable: bool, readonly: ?string}>
+     * @return array<string, array{campus: ?Campus, editable: bool, zeroable: bool, readonly: ?string}>
      */
     private function columns(ProposalOverview $overview, ProposalHeader $header): array
     {
@@ -675,8 +704,18 @@ new #[Title('Propuesta de carrera')] class extends Component
         foreach ($overview->columns as $campus) {
             $key = ProposalOverview::columnKey($campus);
             $editable = isset($samples[$key]) && Gate::allows('update', [$overview->proposal, $samples[$key]]);
+            $zeroable = ! $editable && isset($samples[$key]) && Gate::allows('zeroInactiveCampus', [$overview->proposal, $samples[$key]]);
 
-            $columns[$key] = ['campus' => $campus, 'editable' => $editable, 'readonly' => $editable ? null : $header->capturedBy($key)];
+            $columns[$key] = [
+                'campus' => $campus,
+                'editable' => $editable,
+                'zeroable' => $zeroable,
+                'readonly' => match (true) {
+                    $editable => null,
+                    $zeroable => "{$campus->code} está inactivo: solo se pueden dejar sus grupos en 0.",
+                    default => $header->capturedBy($key),
+                },
+            ];
         }
 
         return $columns;
