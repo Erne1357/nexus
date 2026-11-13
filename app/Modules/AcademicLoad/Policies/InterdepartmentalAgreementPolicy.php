@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
@@ -46,13 +47,21 @@ final class InterdepartmentalAgreementPolicy
         return $this->actor($user)->allows(AcademicLoadPermission::AgreementDecide, Target::of(modality: $agreement->modality_id, unit: $agreement->to_department_id));
     }
 
-    public function cancel(User $user, InterdepartmentalAgreement $agreement): bool
+    /**
+     * Con el campus del acuerdo: el del salón en un préstamo. El grupo compartido no guarda campus (su lugar es el del
+     * grupo, que AcademicLoad no lee): quien llama da el campus del grupo (`$groupCampusId`); sin él, solo lo cancela
+     * quien pide sin límite de campus.
+     */
+    public function cancel(User $user, InterdepartmentalAgreement $agreement, ?string $groupCampusId = null): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $agreement->modality_id, campus: $agreement->campus_id, unit: $agreement->from_department_id));
+        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $agreement->modality_id, campus: $agreement->campus_id ?? $groupCampusId, unit: $agreement->from_department_id));
     }
 
-    public function request(User $user, Campus $campus, Department $from): bool
+    /**
+     * Pedir en la modalidad, para el departamento que pide y, si es un préstamo de salón, en el campus del salón.
+     */
+    public function request(User $user, Modality $modality, ?Campus $campus, Department $from): bool
     {
-        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $campus->modality_id, campus: $campus->getKey(), unit: $from->getKey()));
+        return $this->actor($user)->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $modality->getKey(), campus: $campus?->getKey(), unit: $from->getKey()));
     }
 }

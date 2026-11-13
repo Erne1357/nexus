@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 
@@ -39,6 +40,20 @@ it('reabre a ajustes con el motivo en su historial', function (LoadStatus $statu
     Event::assertDispatched(LoadTransitioned::class, fn (LoadTransitioned $event): bool => $event->to === LoadStatus::Adjusting);
 })->with([LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published]);
 
+it('M11: reabrir toma primero la modalidad de la carga (FOR SHARE) y después la carga, el orden en que la desactivación las bloquea', function () {
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Published)->create();
+    DB::enableQueryLog();
+
+    app(ReopenLoad::class)->handle($load, $this->user, 'Faltó un grupo');
+
+    $locks = collect(DB::getQueryLog())->pluck('query')
+        ->filter(fn (string $query): bool => str_contains($query, 'for share') || str_contains($query, 'for update'))
+        ->values();
+
+    expect($locks->first())->toContain('from "modalities"')->toContain('for share')
+        ->and($locks->search(fn (string $query): bool => str_contains($query, 'from "academic_loads"') && str_contains($query, 'for update')))->toBe(1);
+});
+
 it('exige el motivo', function (?string $reason) {
     $load = AcademicLoad::factory()->inStatus(LoadStatus::Published)->create();
 
@@ -60,7 +75,7 @@ it('no reabre una carga que todavía se está armando', function (LoadStatus $st
 
 it('la policy deja reabrir al admin y a Subdirección, y niega a los demás', function (?Role $role, bool $expected) {
     $campus = Campus::factory()->create();
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['modality_id' => $campus->modality_id, 'department_id' => departmentKey(10)]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [

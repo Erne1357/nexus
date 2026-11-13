@@ -20,8 +20,8 @@ beforeEach(function () {
     $this->pres = modalityOf('PRES');
     $this->ead = modalityOf('EAD');
     $this->ead->update(['is_active' => true]);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'modality_id' => $this->pres->id]);
-    $this->c2 = Campus::factory()->create(['code' => 'C2', 'modality_id' => $this->pres->id]);
+    $this->c1 = Campus::factory()->create(['code' => 'C1']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->term = Term::factory()->create();
     $this->career = Career::factory()->create(['department_id' => departmentKey(10)]);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->career->id, 'is_current' => true]);

@@ -39,7 +39,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->sistemas = Department::factory()->create(['code' => 'DSC', 'name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->sistemas->id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sistemas->id,
     ]);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->sistemas->id]);
     $this->iind = Career::factory()->create(['code' => 'IIND']);
@@ -214,7 +214,7 @@ it('las banderas salen del puesto activo del actor que recibe, no de todos los p
 it('quien ve la carrera ve todos los grupos de su semestre: los que no ve por GroupPolicy van como contexto de solo lectura', function () {
     $own = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]));
     $basicas = Department::factory()->create();
-    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $basicas->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $basicas->id]);
     $calculo = semesterBoardGroup(boardSubject(['department_id' => $basicas->id]));
     $shared = semesterBoardGroup(boardSubject(['department_id' => $this->sistemas->id]), ['owner_career_id' => $this->iind->id, 'study_plan_id' => $this->iindPlan->id]);
     GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id]);

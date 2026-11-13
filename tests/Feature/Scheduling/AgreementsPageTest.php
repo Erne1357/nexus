@@ -41,7 +41,7 @@ const AGREEMENTS = 'scheduling::pages.agreements';
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
@@ -63,11 +63,11 @@ beforeEach(function () {
     // II propone a SC un cupo de ISC en el mismo grupo.
     $this->career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas Computacionales', 'department_id' => $this->sc->id]);
     $this->share = InterdepartmentalAgreement::factory()->sharedGroup(8)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+        'term_id' => $this->term->id, 'group_id' => $this->group->id,
         'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
     ]);
 
-    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->ii->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->ii->id]);
     $this->jefeSc = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sc->id])->create();
     $this->jefeIi = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->ii->id])->create();
 });
@@ -145,7 +145,7 @@ describe('jefe del departamento que decide', function () {
             ->and(GroupQuota::query()->where('group_id', $this->group->id)->where('career_id', $this->career->id)->value('max_seats'))->toBe(8);
 
         $other = InterdepartmentalAgreement::factory()->sharedGroup(3)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'term_id' => $this->term->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
         ]);
 
@@ -227,7 +227,7 @@ describe('decidir uno tras otro', function () {
 
     it('al aceptar o rechazar abre el siguiente por decidir de la lista; del último vuelve al primero y sin más se queda en el decidido', function () {
         $third = InterdepartmentalAgreement::factory()->sharedGroup(2)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'term_id' => $this->term->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->addMinute(),
         ]);
 
@@ -286,7 +286,7 @@ describe('aceptar varios', function () {
         // Un tercer acuerdo que rompe HC-07 en otro grupo del mismo departamento: 20 de la dueña + 30 > 40 de capacidad.
         // Va en su propio grupo porque las propuestas apartan sus lugares: en el grupo de ISC, también impediría aceptar ISC.
         $this->tooMany = InterdepartmentalAgreement::factory()->sharedGroup(30)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
+            'term_id' => $this->term->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
             'created_at' => now()->addMinute(),
             'group_id' => Group::factory()->withQuota(20)->create([
                 'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'code' => '3B', 'capacity' => 40,
@@ -379,7 +379,7 @@ describe('aceptar varios', function () {
 
     it('acepta hasta 50 a la vez: con más no acepta ninguno, y la lista lo dice cuando hay más de 50 por decidir', function () {
         $many = InterdepartmentalAgreement::factory()->count(49)->sharedGroup(1)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => Group::factory()->withQuota(20)->create([
+            'term_id' => $this->term->id, 'group_id' => Group::factory()->withQuota(20)->create([
                 'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'capacity' => 200,
             ])->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
@@ -399,7 +399,7 @@ describe('aceptar varios', function () {
     it('acepta 50 (40 grupos compartidos y 10 préstamos) en una sola petición en poco tiempo', function () {
         $this->group->update(['capacity' => 200]);
         $shares = InterdepartmentalAgreement::factory()->count(40)->sharedGroup(1)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'term_id' => $this->term->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
         ]);
         $building = Building::factory()->create(['campus_id' => $this->campus->id]);
@@ -420,11 +420,11 @@ describe('aceptar varios', function () {
     it('HC-07: dos propuestas de antes de la regla que ya no caben juntas no se aceptan hasta retirar o rechazar una (supuesto por confirmar)', function () {
         // La dueña tiene 20 de 40 y las dos propuestas apartan 15 cada una: el grupo ya se pasa por 10.
         $older = InterdepartmentalAgreement::factory()->sharedGroup(15)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'term_id' => $this->term->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->subMinutes(10),
         ]);
         $newer = InterdepartmentalAgreement::factory()->sharedGroup(15)->create([
-            'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+            'term_id' => $this->term->id, 'group_id' => $this->group->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'created_at' => now()->subMinutes(5),
         ]);
         $this->share->update(['status' => AgreementStatus::Rejected, 'comment' => 'No.', 'decided_by' => $this->jefeSc->id, 'decided_at' => now()]);
@@ -636,7 +636,7 @@ describe('otros puestos', function () {
         $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
         $inC1 = Group::factory()->withQuota(20)->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'capacity' => 40, 'subject_id' => $this->group->subject_id]);
         $share = InterdepartmentalAgreement::factory()->sharedGroup(4)->create([
-            'term_id' => $this->term->id, 'campus_id' => $c1->id, 'group_id' => $inC1->id,
+            'term_id' => $this->term->id, 'group_id' => $inC1->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
         ]);
         vacate(Role::JefeDepartamento, $this->sc->id);
@@ -659,7 +659,7 @@ describe('otros puestos', function () {
         $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
         $inC1 = Group::factory()->withQuota(20)->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'capacity' => 40, 'subject_id' => $this->group->subject_id]);
         InterdepartmentalAgreement::factory()->sharedGroup(4)->create([
-            'term_id' => $this->term->id, 'campus_id' => $c1->id, 'group_id' => $inC1->id,
+            'term_id' => $this->term->id, 'group_id' => $inC1->id,
             'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
         ]);
 

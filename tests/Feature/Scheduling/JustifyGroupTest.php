@@ -4,7 +4,6 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -64,17 +63,15 @@ it('no justifica un grupo que ya tiene docente y salón en cada sesión presenci
     );
 });
 
-it('M1: el perfil de la modalidad decide si cuenta la sesión sin salón, aunque el del campus diga otra cosa', function () {
+it('M1: el perfil de la modalidad decide si cuenta la sesión sin salón (el campus no tiene perfil, MS3)', function () {
     $this->group->update(['teacher_id' => Teacher::factory()->create()->id]);
     GroupSession::factory()->for($this->group)->on(1, '07:00', '09:00')->create();
-    $this->group->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => true]]);
     $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 
     expect(fn () => app(JustifyGroup::class)->handle($this->group->fresh(), 'Por si acaso', $this->user))->toThrow(
         fn (ValidationException $e) => expect($e->errors())->toBe(['justification' => ['El grupo ya tiene docente y salón: no necesita justificación.']]),
     );
 
-    $this->group->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
     $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => true]]);
 
     expect(app(JustifyGroup::class)->handle($this->group->fresh(), 'Laboratorio en remodelación', $this->user)->close_justification)->toBe('Laboratorio en remodelación');

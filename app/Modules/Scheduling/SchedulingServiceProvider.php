@@ -266,8 +266,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 };
             }),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Cupos decididos: hay grupos compartidos aceptados y ningún acuerdo pendiente', function (DemoContext $demo): true|string {
+                // Los acuerdos de los grupos de los campus de la demo: el grupo compartido no guarda campus (es el del grupo).
                 $agreements = InterdepartmentalAgreement::query()->where('term_id', $demo->term()->getKey())
-                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+                    ->whereIn('group_id', Group::query()->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))->select('id'));
                 $pending = (clone $agreements)->where('status', AgreementStatus::Proposed->value)->count();
                 $shared = (clone $agreements)->where('kind', AgreementKind::SharedGroup->value)->where('status', AgreementStatus::Accepted->value)->count();
 

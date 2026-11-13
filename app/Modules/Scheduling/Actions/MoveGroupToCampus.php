@@ -4,12 +4,11 @@ namespace App\Modules\Scheduling\Actions;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
-use App\Modules\AcademicLoad\Enums\AgreementKind;
-use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\GroupQuotasQuery;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -34,7 +33,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  */
 final class MoveGroupToCampus
 {
-    public function __construct(private readonly LoadEditability $editability) {}
+    public function __construct(
+        private readonly LoadEditability $editability,
+        private readonly GroupQuotasQuery $quotas,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -78,13 +80,7 @@ final class MoveGroupToCampus
      */
     private function ensureWithoutSharedGroup(Group $group): void
     {
-        $shared = InterdepartmentalAgreement::query()
-            ->where('kind', AgreementKind::SharedGroup->value)
-            ->where('group_id', $group->getKey())
-            ->live()
-            ->exists();
-
-        if ($shared) {
+        if ($this->quotas->hasLiveSharedGroup($group)) {
             throw ValidationException::withMessages(['campus' => "El grupo {$group->code} tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo antes de cambiarlo de campus (MS25)."]);
         }
     }

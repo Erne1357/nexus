@@ -85,10 +85,11 @@ final class AcademicLoadDemoSeeder extends Seeder
     /**
      * @param  list<string>  $campuses  claves de campus
      * @param  bool  $complete  todas las carreras envían y todas las partes se aceptan (punto 4 de la demo)
+     * @param  string  $modality  la clave de la modalidad de la carga (Presencial)
      *
      * @throws RuntimeException en producción, si el periodo no existe o, con `$complete`, si algo no se puede completar
      */
-    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3, bool $complete = false): void
+    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3, bool $complete = false, string $modality = 'PRES'): void
     {
         $this->refuseProduction();
         $this->random = new Randomizer(new Mt19937($seed));
@@ -98,25 +99,19 @@ final class AcademicLoadDemoSeeder extends Seeder
         config(['queue.default' => 'sync']);
 
         try {
+            // La carga de la demo es de una modalidad (Presencial) con sus grupos en esos campus: el campus es solo el lugar (MS3).
             $campusModels = Campus::query()->whereIn('code', $campuses)->orderBy('code')->get();
+            $modalityModel = Modality::query()->where('code', $modality)->firstOrFail();
+            $codes = $campusModels->pluck('code')->implode(', ');
 
-            foreach ($campusModels->groupBy('modality_id') as $modalityId => $inModality) {
-                $modality = Modality::query()->findOrFail($modalityId);
-                $codes = $inModality->pluck('code')->implode(', ');
-
-                if (! TermOpening::query()->where('term_id', $termModel->id)->where('modality_id', $modality->id)->exists()) {
-                    if ($complete) {
-                        throw new RuntimeException("El periodo {$term} no está abierto en {$modality->name} ({$codes}): no se pueden enviar sus propuestas.");
-                    }
-
-                    $this->command?->warn("El periodo {$term} no está abierto en {$modality->name} ({$codes}): no se arman propuestas ahí.");
-
-                    continue;
-                }
-
+            if (TermOpening::query()->where('term_id', $termModel->id)->where('modality_id', $modalityModel->id)->exists()) {
                 $complete
-                    ? $this->completeModality($termModel, $modality, $inModality)
-                    : $this->seedModality($termModel, $modality, $inModality, $returnEvery, $pendingEvery);
+                    ? $this->completeModality($termModel, $modalityModel, $campusModels)
+                    : $this->seedModality($termModel, $modalityModel, $campusModels, $returnEvery, $pendingEvery);
+            } elseif ($complete) {
+                throw new RuntimeException("El periodo {$term} no está abierto en {$modalityModel->name} ({$codes}): no se pueden enviar sus propuestas.");
+            } else {
+                $this->command?->warn("El periodo {$term} no está abierto en {$modalityModel->name} ({$codes}): no se arman propuestas ahí.");
             }
 
             $this->markOlderNoticesRead($readOlderThan);

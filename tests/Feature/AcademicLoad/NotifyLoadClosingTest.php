@@ -27,16 +27,16 @@ use Illuminate\Support\Facades\Notification;
 function approvalNoticeScenario(bool $requiresApproval = true, LoadStatus $status = LoadStatus::Closed): array
 {
     $campus = Campus::factory()->create();
-    $campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]]);
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]]);
     $department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $other = Department::factory()->create();
 
     return [
-        'load' => AcademicLoad::factory()->inStatus($status)->create(['modality_id' => $campus->modality_id, 'department_id' => $department->id]),
+        'load' => AcademicLoad::factory()->inStatus($status)->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id]),
         'jefe' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department->id])->create(),
         'otroJefe' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $other->id])->create(),
         'subdireccion' => User::factory()->withRole(Role::Subdireccion)->create(),
-        'proyecto' => User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => $campus->modality_id, 'department_id' => $department->id])->create(),
+        'proyecto' => User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id])->create(),
         'admin' => User::factory()->admin()->create(),
         'department' => $department,
     ];

@@ -50,13 +50,14 @@ function errorsOf(Closure $callback): array
     return [];
 }
 
-it('propone con el periodo, campus y departamento del grupo, sin darle cupo', function () {
+it('propone con el periodo, la modalidad y el departamento del grupo, sin campus (su lugar es el del grupo) ni cupo', function () {
     $agreement = app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 8, $this->actor);
 
     expect($agreement->status)->toBe(AgreementStatus::Proposed)
         ->and($agreement->group_id)->toBe($this->group->id)
         ->and($agreement->term_id)->toBe($this->group->term_id)
-        ->and($agreement->campus_id)->toBe($this->group->campus_id)
+        ->and($agreement->campus_id)->toBeNull()
+        ->and($agreement->modality_id)->toBe($this->group->modality_id)
         ->and($agreement->from_department_id)->toBe($this->imparte->id)
         ->and($agreement->to_department_id)->toBe($this->otro->id)
         ->and($agreement->max_seats)->toBe(8)

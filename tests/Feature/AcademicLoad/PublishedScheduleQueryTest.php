@@ -25,7 +25,7 @@ function publishedQueryLoad(Term $term, Campus $campus, string $department, Load
 {
     return AcademicLoad::factory()
         ->for($term)
-        ->state(['modality_id' => $campus->modality_id])
+        ->state(['modality_id' => modalityOf('PRES')->id])
         ->for(Department::query()->firstWhere('code', $department) ?? Department::factory()->create(['code' => $department, 'name' => 'Departamento '.$department]))
         ->inStatus($status)
         ->create();

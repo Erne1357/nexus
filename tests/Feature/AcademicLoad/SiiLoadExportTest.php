@@ -37,7 +37,7 @@ beforeEach(function () {
 function publishLoad(?array $groups, array $load = [], array $snapshot = []): LoadSnapshot
 {
     $loadModel = AcademicLoad::factory()->inStatus(LoadStatus::Published)->create([
-        'term_id' => test()->term->id, 'modality_id' => test()->campus->modality_id, ...$load,
+        'term_id' => test()->term->id, 'modality_id' => modalityOf('PRES')->id, ...$load,
     ]);
     $factory = LoadSnapshot::factory()->state(['academic_load_id' => $loadModel->id, ...$snapshot]);
 
@@ -68,7 +68,7 @@ function exportFiles(): array
 }
 
 it('sin cargas publicadas devuelve los dos archivos solo con el encabezado', function () {
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
 
     $files = exportFiles();
 

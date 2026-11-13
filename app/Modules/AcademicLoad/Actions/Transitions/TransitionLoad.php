@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioned;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use Closure;
 use Illuminate\Support\Facades\DB;
@@ -16,8 +17,10 @@ use Illuminate\Validation\ValidationException;
  * docs/arquitectura/arquitectura.md). Cada transición (ProposeLoad y las que llegan en las fases 3 y 4) la
  * llama con su estado destino y su guarda.
  *
- * En una transacción relee la carga con bloqueo (el estado que vale es el de la base, no el del modelo que
- * llegó), exige que el diagrama permita pasar de ahí al destino (LoadStatus::canTransitionTo, según el perfil de su modalidad) y junta los
+ * En una transacción toma primero la modalidad de la carga con bloqueo compartido (FOR SHARE) y después relee la carga
+ * con bloqueo (el estado que vale es el de la base, no el del modelo que llegó): es el orden de la desactivación de una
+ * modalidad (UpdateModality la bloquea FOR UPDATE y luego cuenta sus cargas sin publicar, M11), así una reapertura o un
+ * re-análisis que deja una carga sin publicar no se cruza con ella sin que la guarda lo vea. Exige que el diagrama permita pasar de ahí al destino (LoadStatus::canTransitionTo, según el perfil de su modalidad) y junta los
  * motivos de bloqueo: los de la guarda que da quien llama (reglas de los módulos de la izquierda) y los del
  * veto de LoadTransitioning (módulos de la derecha). Con cualquier motivo, una ValidationException sobre
  * `status` con todos y no se escribe nada. Si no, cambia el estado, agrega la fila de `load_transitions`
@@ -37,6 +40,7 @@ final class TransitionLoad
         $comment = $comment === null || trim($comment) === '' ? null : trim($comment);
 
         return DB::transaction(function () use ($load, $to, $comment, $guard, $actor): AcademicLoad {
+            Modality::withTrashed()->whereKey($load->modality_id)->sharedLock()->first();
             $load->setRawAttributes($load->newQuery()->lockForUpdate()->findOrFail($load->getKey())->getAttributes(), sync: true);
             $from = $load->status;
 

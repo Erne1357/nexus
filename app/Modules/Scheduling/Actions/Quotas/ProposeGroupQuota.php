@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Agreements\ProposeSharedGroup;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Models\Group;
@@ -49,7 +50,8 @@ final class ProposeGroupQuota
 
             return $this->propose->handle(
                 Term::query()->findOrFail($group->term_id),
-                Campus::query()->findOrFail($group->campus_id),
+                Modality::withTrashed()->findOrFail($group->modality_id),
+                $group->campus_id === null ? null : Campus::withTrashed()->findOrFail($group->campus_id),
                 Department::withTrashed()->findOrFail($group->department_id),
                 $group->id,
                 $career,

@@ -32,7 +32,7 @@ beforeEach(function () {
 
 function siiVersion(?AcademicLoad $load = null, int $version = 1, string $code = 'A'): LoadSnapshot
 {
-    $load ??= AcademicLoad::factory()->inStatus(LoadStatus::Published)->create(['term_id' => test()->term->id, 'modality_id' => test()->campus->modality_id, 'department_id' => departmentKey(10)]);
+    $load ??= AcademicLoad::factory()->inStatus(LoadStatus::Published)->create(['term_id' => test()->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
 
     return LoadSnapshot::factory()->for($load)->withGroups([LoadSnapshotFactory::group(['code' => $code])])->create(['version' => $version]);
 }

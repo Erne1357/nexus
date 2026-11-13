@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -62,13 +63,13 @@ final class PublicationShowcaseDemoSeeder extends Seeder
         'Cambio de salones por el mantenimiento del edificio',
     ];
 
-    public function run(string $campus = 'C2', string $department = 'CEA', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false): void
+    public function run(string $campus = 'C2', string $department = 'CEA', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false, string $modality = 'PRES'): void
     {
         $this->refuseProduction();
 
-        $campusModel = Campus::query()->where('code', $campus)->firstOrFail();
+        Campus::query()->where('code', $campus)->firstOrFail();
         $load = AcademicLoad::query()
-            ->ofDepartment(Term::query()->where('code', $term)->firstOrFail()->id, $campusModel->modality_id, Department::query()->where('code', $department)->firstOrFail()->id)
+            ->ofDepartment(Term::query()->where('code', $term)->firstOrFail()->id, Modality::query()->where('code', $modality)->firstOrFail()->id, Department::query()->where('code', $department)->firstOrFail()->id)
             ->firstOrFail();
 
         if (! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Closed], true)) {

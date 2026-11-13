@@ -14,7 +14,6 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -25,11 +24,11 @@ use App\Modules\Core\Models\User;
 */
 
 beforeEach(function () {
-    $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['code' => '20271']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     $department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id]);
     foreach (Catalog::general() as $catalog) {
         CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $term->id, 'department_id' => $department->id]);
     }

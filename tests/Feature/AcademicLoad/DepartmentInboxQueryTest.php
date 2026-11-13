@@ -19,7 +19,6 @@ use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -36,7 +35,7 @@ use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     $this->term = Term::factory()->create();
-    $this->campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $this->campus = Campus::factory()->create();
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->calculo = Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Cálculo Diferencial', 'department_id' => $this->cb->id, 'needs_lab' => false]);
@@ -338,7 +337,7 @@ it('da la carga del departamento en la modalidad (M1) y bloquea aceptar sin ella
     expect(inboxOf()->load)->toBeNull()
         ->and(inboxOf()->canAccept())->toBeFalse();
 
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
     AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id]);
     foreach (Catalog::general() as $catalog) {
         CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
@@ -353,7 +352,7 @@ it('da la carga del departamento en la modalidad (M1) y bloquea aceptar sin ella
 });
 
 it('HC-14: avisa de los catálogos del departamento sin validar y bloquea aceptar', function () {
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
     CatalogReview::factory()->general(Catalog::Teachers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
     foreach ([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
         CatalogReview::factory()->general($catalog)->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);

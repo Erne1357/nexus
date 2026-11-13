@@ -34,7 +34,7 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
     $this->career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas']);
     CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->campus->id]);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);

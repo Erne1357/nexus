@@ -26,7 +26,7 @@ use Carbon\CarbonImmutable;
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'modality_id' => $this->campus->modality_id, 'department_id' => departmentKey(10)]);
+    $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
     $this->building = Building::factory()->create(['campus_id' => $this->campus->id, 'code' => 'A', 'name' => 'Edificio A']);
 });
 
@@ -135,7 +135,7 @@ it('deja fuera los grupos cancelados, los de otro departamento, otra modalidad y
     snapshotGroup(['code' => 'D'], $taller);
     snapshotGroup(['code' => 'C', 'status' => 'cancelled'], $calculo);
     Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->campus->id]);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'subject_id' => $calculo->id, 'campus_id' => Campus::factory()->create(['modality_id' => modalityOf('EAD')->id])->id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'subject_id' => $calculo->id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => modalityOf('EAD')->id]);
     Group::factory()->create(['campus_id' => $this->campus->id, 'subject_id' => $calculo->id]);
 
     expect(collect(snapshotGroups())->map(fn (array $g): string => "{$g['subject']['code']} {$g['code']}")->all())

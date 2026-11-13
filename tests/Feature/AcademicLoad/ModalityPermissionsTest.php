@@ -18,9 +18,9 @@ beforeEach(function () {
     $this->pres = modalityOf('PRES');
     $this->ead = modalityOf('EAD');
     $this->ead->update(['is_active' => true]);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'modality_id' => $this->pres->id]);
-    $this->c2 = Campus::factory()->create(['code' => 'C2', 'modality_id' => $this->pres->id]);
-    $this->load = AcademicLoad::factory()->create(['modality_id' => $this->c1->modality_id, 'department_id' => departmentKey(10)]);
+    $this->c1 = Campus::factory()->create(['code' => 'C1']);
+    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
     $this->proposal = CareerProposal::factory()->create(['career_id' => careerKey(20)]);
     $this->review = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => departmentKey(10)]);
 });

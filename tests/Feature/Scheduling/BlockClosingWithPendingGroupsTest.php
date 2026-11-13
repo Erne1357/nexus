@@ -144,7 +144,7 @@ it('publicar vuelve a revisar HC-15 desde cerrada y desde aprobada', function (L
 it('no mira otras transiciones, grupos cancelados ni grupos de otro departamento o modalidad', function () {
     closingGroup(teacher: null, attributes: ['status' => 'cancelled']);
     closingGroup(teacher: null, attributes: ['subject_id' => Subject::factory()->create(['department_id' => departmentKey(11)])->id]);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => Campus::factory()->create(['modality_id' => modalityOf('EAD')->id])->id, 'subject_id' => $this->subject->id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => modalityOf('EAD')->id, 'subject_id' => $this->subject->id]);
 
     expect(closingVeto()->blocked())->toBeFalse();
 

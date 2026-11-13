@@ -174,6 +174,24 @@ final class PublishedScheduleQuery
     }
 
     /**
+     * Las modalidades activas con grupos publicados en ese campus (por clave) en el periodo, por clave: de lo publicado,
+     * no del campus, que es solo el lugar (MS3). Para llevar una liga vieja por campus a su modalidad.
+     *
+     * @return list<Modality>
+     */
+    public function modalitiesWithGroupsIn(Term $term, string $campusCode): array
+    {
+        return Modality::query()
+            ->where('is_active', true)
+            ->whereIn('id', $this->publishedLoads()->select('modality_id')->where('term_id', $term->getKey()))
+            ->orderBy('code')
+            ->get()
+            ->filter(fn (Modality $modality): bool => ! $this->schedule($term, $modality)->onlyCampus($campusCode)->isEmpty())
+            ->values()
+            ->all();
+    }
+
+    /**
      * Las cargas con al menos una versión publicada (snapshot), la misma fuente que schedule().
      *
      * @return Builder<AcademicLoad>

@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -213,6 +214,7 @@ final class SyncSessionLoans
         }
 
         $term = Term::query()->findOrFail($group->term_id);
+        $modality = Modality::withTrashed()->findOrFail($group->modality_id);
         $campus = Campus::query()->findOrFail($group->campus_id);
         $from = Department::withTrashed()->findOrFail($group->department_id);
         $requested = false;
@@ -220,7 +222,7 @@ final class SyncSessionLoans
 
         foreach ($gaps as [$start, $end, $strict]) {
             try {
-                $this->request->handle($term, $campus, $from, $group->id, $room, $day, Minutes::format($start), Minutes::format($end), $actor);
+                $this->request->handle($term, $modality, $campus, $from, $group->id, $room, $day, Minutes::format($start), Minutes::format($end), $actor);
                 $requested = true;
             } catch (ValidationException $exception) {
                 if ($strict || ! array_key_exists('room_id', $exception->errors())) {

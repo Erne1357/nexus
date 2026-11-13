@@ -39,7 +39,7 @@ function agreementAbilitiesOf(User $user): array
         $user->can('view', $agreement),
         $user->can('decide', $agreement),
         $user->can('cancel', $agreement),
-        $user->can('request', [InterdepartmentalAgreement::class, test()->c1, test()->from]),
+        $user->can('request', [InterdepartmentalAgreement::class, modalityOf('PRES'), test()->c1, test()->from]),
     ];
 }
 
@@ -88,7 +88,7 @@ it('el jefe de departamento de todo el Tec actúa en cualquier campus', function
     ]);
 
     expect($jefe->can('cancel', $inC2))->toBeTrue()
-        ->and($jefe->can('request', [InterdepartmentalAgreement::class, $this->c2, $this->from]))->toBeTrue()
+        ->and($jefe->can('request', [InterdepartmentalAgreement::class, modalityOf('PRES'), $this->c2, $this->from]))->toBeTrue()
         ->and($jefe->can('decide', $inC2))->toBeFalse();
 });
 

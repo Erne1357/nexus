@@ -17,10 +17,12 @@ use Illuminate\Support\Facades\DB;
 | los alumnos borrados, inactivos o que no son elegibles para ninguna de sus materias.
 */
 it('calcula los alumnos posibles de las propuestas que ya existen como EligibleStudentsQuery::distinctFor', function () {
-    // La propuesta por carrera y modalidad (posterior) quita career_proposals.campus_id: se deshace primero.
+    // La propuesta por carrera y modalidad (posterior) quita career_proposals.campus_id y lee el puente de campus a
+    // modalidad, que quitó la contracción: se deshacen primero, de la última a la primera.
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
     $plan = StudyPlan::factory()->create();
-    $campus = Campus::factory()->create();
+    $campus = campusBeforeContraction('C9');
     $calculo = Subject::factory()->create();
     $fisica = Subject::factory()->create();
     $outside = Subject::factory()->create();
