@@ -173,9 +173,9 @@ it('rechaza encimarse con otra sesión del mismo grupo, sin mover', function () 
         ->and($this->session->fresh()->day)->toBe(1);
 });
 
-it('HC-04: rechaza moverla fuera de la ventana del campus', function () {
+it('HC-04: rechaza moverla fuera de la ventana de la modalidad', function () {
     expect(fn () => moveSession($this->session, 1, '20:00', '22:00'))
-        ->toThrow(ValidationException::class, 'HC-04: la sesión debe caer dentro del horario de Campus II')
+        ->toThrow(ValidationException::class, 'HC-04: la sesión debe caer dentro del horario de Presencial')
         ->and($this->session->fresh()->ends_at)->toBe('09:00:00');
 });
 

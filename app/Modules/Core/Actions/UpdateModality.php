@@ -21,8 +21,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * (ModalityRules); conservar la clave propia vale.
  *
  * En una transacción vuelve a leer la modalidad con bloqueo (`lockForUpdate`), así el valor anterior de la bitácora es
- * el confirmado aunque `$modality` llegue vieja, y la deja en `$modality`. El perfil se compara normalizado (PostgreSQL
- * reordena el jsonb): uno igual no cuenta como cambio. Un perfil guardado inválido no estorba: los demás cambios
+ * el confirmado aunque `$modality` llegue vieja, y la deja en `$modality`. Las claves del perfil que no llegan (las
+ * que el formulario no lleva, como la tolerancia de HC-12, MS17, o una que el perfil no conoce) se conservan de lo
+ * guardado. El perfil se compara normalizado (PostgreSQL reordena el jsonb): uno igual no cuenta como cambio. Un perfil guardado inválido no estorba: los demás cambios
  * funcionan y cualquier perfil válido lo repara. Si nada cambió, no escribe, no registra ni avisa; si algo cambió,
  * guarda, deja en la bitácora el valor anterior y el nuevo de cada campo y, después del commit, avisa con
  * ModalityUpdated.
@@ -58,10 +59,6 @@ final class UpdateModality
             $data['code'] = $this->rules->normalizeCode($data['code']);
         }
 
-        if (array_key_exists('settings', $data)) {
-            $data['settings'] = $this->rules->profile($data['settings']);
-        }
-
         return DB::transaction(function () use ($modality, $data): Modality {
             $activeOthers = null;
 
@@ -74,6 +71,16 @@ final class UpdateModality
 
             $modality->setRawAttributes($modality->newQuery()->lockForUpdate()->findOrFail($modality->getKey())->getAttributes(), sync: true);
             $old = [...$modality->only(['code', 'name', 'is_active']), 'settings' => $this->storedProfile($modality)];
+            $unchangedProfile = false;
+
+            if (array_key_exists('settings', $data)) {
+                // Lo que el formulario no lleva (la tolerancia de HC-12, MS17, o una clave que el perfil no conoce) se
+                // conserva de lo guardado; lo que sí lleva manda.
+                $settings = [...($modality->settings ?? []), ...$data['settings']];
+                $profile = $this->rules->profile($settings);
+                $unchangedProfile = $profile === $old['settings'];
+                $data['settings'] = [...$settings, ...$profile];
+            }
 
             if (array_key_exists('code', $data)) {
                 if ($data['code'] !== $modality->code) {
@@ -87,7 +94,7 @@ final class UpdateModality
                 $this->ensureCanDeactivate($modality, $activeOthers ?? 0);
             }
 
-            if (array_key_exists('settings', $data) && $data['settings'] === $old['settings']) {
+            if (array_key_exists('settings', $data) && $unchangedProfile) {
                 unset($data['settings']);
             }
 

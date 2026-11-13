@@ -2,7 +2,7 @@
 
 namespace App\Modules\Scheduling\Jobs;
 
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use DateTimeInterface;
@@ -12,10 +12,11 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 
 /**
- * Recalcula en la cola los choques de la carga de un campus en un periodo (SyncScheduleConflicts; tarea 3.2): lo
- * despacha QueueConflictRecompute al guardar una sesión, un docente o un salón. Uno solo espera en la cola por
- * periodo y campus aunque lleguen varios cambios seguidos; si llega otro mientras corre, se encola de nuevo y no se
- * encima con la corrida en curso. Recalcular es idempotente, así que reintentar es seguro.
+ * Recalcula en la cola los choques de la carga de una modalidad en un periodo, con los grupos de todos sus campus
+ * (SyncScheduleConflicts; tarea 3.2, M1): lo despacha QueueConflictRecompute al guardar una sesión, un docente o un
+ * salón. Uno solo espera en la cola por periodo y modalidad aunque lleguen varios cambios seguidos; si llega otro
+ * mientras corre, se encola de nuevo y no se encima con la corrida en curso. Recalcular es idempotente, así que
+ * reintentar es seguro.
  */
 final class RecomputeScheduleConflicts implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -31,24 +32,24 @@ final class RecomputeScheduleConflicts implements ShouldBeUniqueUntilProcessing,
 
     public function __construct(
         public string $termId,
-        public string $campusId,
+        public string $modalityId,
     ) {}
 
     public function handle(SyncScheduleConflicts $sync): void
     {
         $term = Term::query()->find($this->termId);
-        $campus = Campus::query()->find($this->campusId);
+        $modality = Modality::query()->withTrashed()->find($this->modalityId);
 
-        if ($term === null || $campus === null) {
+        if ($term === null || $modality === null) {
             return;
         }
 
-        $sync->handle($term, $campus);
+        $sync->handle($term, $modality);
     }
 
     public function uniqueId(): string
     {
-        return "{$this->termId}:{$this->campusId}";
+        return "{$this->termId}:{$this->modalityId}";
     }
 
     /**

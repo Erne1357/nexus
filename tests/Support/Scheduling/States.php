@@ -11,7 +11,7 @@ use App\Modules\Scheduling\Validation\State\StateTeacher;
 
 /**
  * Atajos para describir un horario en las pruebas unitarias de las reglas, sin base: un grupo con lo mínimo, una
- * materia, un salón y un docente, con valores de omisión legibles (campus «C2», plan «P1», semestre 1).
+ * materia, un salón y un docente, con valores de omisión legibles (campus «C2», modalidad «PRES», plan «P1», semestre 1).
  */
 final class States
 {
@@ -21,7 +21,7 @@ final class States
     }
 
     /**
-     * Un grupo con su materia (`subject` o `S-<id>`), en el campus, plan y semestre indicados.
+     * Un grupo con su materia (`subject` o `S-<id>`), en el campus, modalidad, plan y semestre indicados.
      */
     public static function group(
         string $id,
@@ -35,8 +35,9 @@ final class States
         ?string $code = null,
         int $capacity = 35,
         bool $active = true,
+        string $modality = 'PRES',
     ): StateGroup {
-        return new StateGroup($id, $campus, $subject ?? "S-{$id}", $department, $career, $plan, $semester, $code ?? $id, $teacher, $capacity, $active);
+        return new StateGroup($id, $campus, $modality, $subject ?? "S-{$id}", $department, $career, $plan, $semester, $code ?? $id, $teacher, $capacity, $active);
     }
 
     public static function subject(string $id, string $name = 'Materia', int $theory = 3, int $practice = 2, bool $lab = false, bool $active = true): StateSubject

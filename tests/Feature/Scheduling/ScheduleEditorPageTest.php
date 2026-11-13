@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -631,13 +632,46 @@ describe('docente', function () {
 });
 
 describe('otro campus', function () {
-    it('el coordinador de la carrera en otro campus no ve sus grupos ni los toca', function () {
+    it('en la página de su campus, el coordinador de la carrera limitado a otro campus no ve los grupos de este ni los toca: el campus de la página es un filtro (MS6)', function () {
         $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
         onCampusPage($this->otherCampus);
 
         Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->assertOk()->assertDontSee('ACF-0904')->assertSee('no ofrece carreras');
         Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->call('place', $this->calcGroup->id, 1, '07:00')->assertNotFound();
         Livewire::withQueryParams(['carrera' => $this->isc->id])->actingAs($elsewhere)->test(SCHEDULE_EDITOR)->assertNotFound();
+    });
+});
+
+describe('modalidad', function () {
+    it('MS6: el coordinador de la carrera limitado a otro campus ve la sesión, de solo lectura, y el motivo nombra el campus del grupo', function () {
+        $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
+        $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
+
+        editorDrawerAs($elsewhere, SESSION_DRAWER)->call('open', $session->id)
+            ->assertSee('Solo lectura: acomodan sus sesiones el coordinador de ISC en Campus II y el jefe de Ciencias Básicas.');
+        editorDrawerAs($this->coordinator, SESSION_DRAWER)->call('open', $session->id)
+            ->assertDontSee('Solo lectura');
+    });
+
+    it('HC-04: un semestre sin grupos pinta la semana con el perfil de la modalidad de la página, no con el de omisión', function () {
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+
+        $page = editorAs($this->coordinator, ['carrera' => $this->isc->id, 'reticula' => $this->plan->id, 'semestre' => '1']);
+
+        expect($page->viewData('groups'))->toBe([])
+            ->and(array_column($page->viewData('grid')->days, 'day'))->toBe([1, 2, 3, 4, 5, 6]);
+    });
+
+    it('HC-04: la semana del editor y del cajón son las del perfil de la modalidad del grupo, no las del campus', function () {
+        $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1, 2, 3, 4, 5]]]);
+        $this->calcGroup->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+        $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
+
+        $page = editorAs($this->coordinator)->call('pick', $this->calcGroup->id);
+        $drawer = editorDrawerAs($this->coordinator, SESSION_DRAWER)->call('open', $session->id);
+
+        expect(array_column($page->viewData('grid')->days, 'day'))->toBe([1, 2, 3, 4, 5, 6])
+            ->and(array_column($drawer->get('panel')['days'], 'id'))->toBe(['1', '2', '3', '4', '5', '6']);
     });
 });
 
@@ -711,5 +745,5 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
         ->and($pick)->toBeLessThanOrEqual(34)
         ->and($place)->toBeLessThanOrEqual(100)
         ->and($openSession)->toBeLessThanOrEqual(38) // con la sección del salón y sus sugerencias (tarea 3.7)
-        ->and($openGroup)->toBeLessThanOrEqual(16);
+        ->and($openGroup)->toBeLessThanOrEqual(18); // con el perfil de su modalidad y los campus a los que se puede cambiar (M8)
 });

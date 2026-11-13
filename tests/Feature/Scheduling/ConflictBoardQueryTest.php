@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -22,11 +23,13 @@ use App\Modules\Scheduling\Queries\GroupBoardStatus;
 
 /*
 | ConflictBoardQuery (tarea 3.4): qué le falta a cada grupo para cerrar (HC-15), contado por carrera, retícula y
-| semestre, y por departamento, solo en el alcance de quien mira.
+| semestre, y por departamento, solo en el alcance de quien mira. Es de la carga de una modalidad (M1), con el campus
+| como filtro opcional.
 */
 
 beforeEach(function () {
     $this->term = Term::factory()->create();
+    $this->modality = modalityOf('PRES');
     $this->campus = Campus::factory()->create();
     $this->career = Career::factory()->create(['code' => 'ISC']);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->career->id, 'is_current' => true, 'semesters_count' => 9]);
@@ -52,9 +55,9 @@ function readyBoardGroup(array $attributes = []): Group
     return $group;
 }
 
-function boardStatuses(User $user)
+function boardStatuses(User $user, ?Campus $campus = null)
 {
-    return app(ConflictBoardQuery::class)->statuses(app(Actor::class)->forUser($user), test()->term, test()->campus);
+    return app(ConflictBoardQuery::class)->statuses(app(Actor::class)->forUser($user), test()->term, test()->modality, $campus);
 }
 
 it('cuenta lo que le falta a cada grupo: choque duro, horario, docente y salón', function () {
@@ -83,8 +86,8 @@ it('cuenta lo que le falta a cada grupo: choque duro, horario, docente y salón'
         ->and($summary->ready())->toBe(2);
 });
 
-it('sin bloques de tiempo no cuenta grupos sin horario y sin salones no cuenta grupos sin salón', function () {
-    $this->campus->update(['settings' => ['uses_time_blocks' => false, 'uses_rooms' => false]]);
+it('con una modalidad sin bloques de tiempo no cuenta grupos sin horario y sin salones no cuenta grupos sin salón', function () {
+    $this->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_time_blocks' => false, 'uses_rooms' => false]]);
     boardGroup();
     $session = boardGroup();
     GroupSession::factory()->for($session)->on(1, '07:00', '09:00')->create();
@@ -197,15 +200,30 @@ it('el coordinador ve los grupos de otra carrera con cupo de la suya, y no los q
         ->and(boardStatuses(User::factory()->admin()->create()))->toHaveCount(2);
 });
 
-it('dice cuándo se recalcularon los choques del campus, aunque el recálculo no haya cambiado nada', function () {
+it('dice cuándo se recalcularon los choques de la modalidad, aunque el recálculo no haya cambiado nada', function () {
     $board = app(ConflictBoardQuery::class);
 
-    expect($board->lastSyncedAt($this->term, $this->campus))->toBeNull();
+    expect($board->lastSyncedAt($this->term, $this->modality))->toBeNull();
 
-    app(SyncScheduleConflicts::class)->handle($this->term, $this->campus);
+    app(SyncScheduleConflicts::class)->handle($this->term, $this->modality);
 
-    expect($board->lastSyncedAt($this->term, $this->campus))->not->toBeNull()
-        ->and($board->hasDepartment(app(Actor::class)->forUser(User::factory()->admin()->create()), $this->term, $this->campus, departmentKey(10)))->toBeFalse();
+    expect($board->lastSyncedAt($this->term, $this->modality))->not->toBeNull()
+        ->and($board->hasDepartment(app(Actor::class)->forUser(User::factory()->admin()->create()), $this->term, $this->modality, null, departmentKey(10)))->toBeFalse();
+});
+
+it('es de la carga de una modalidad con todos sus campus (M1) y el campus es un filtro; otra modalidad no cuenta', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $here = boardGroup();
+    $there = boardGroup(['campus_id' => $c1->id]);
+    boardGroup(['modality_id' => modalityOf('EAD')->id]);
+    $admin = User::factory()->admin()->create();
+    $board = app(ConflictBoardQuery::class);
+    $actor = app(Actor::class)->forUser($admin);
+
+    expect(boardStatuses($admin)->pluck('id')->all())->toEqualCanonicalizing([$here->id, $there->id])
+        ->and(boardStatuses($admin, $c1)->pluck('id')->all())->toBe([$there->id])
+        ->and($board->hasDepartment($actor, $this->term, $this->modality, $c1, departmentKey(10)))->toBeTrue()
+        ->and($board->hasDepartment($actor, $this->term, $this->modality, Campus::factory()->create(), departmentKey(10)))->toBeFalse();
 });
 
 it('HC-15: un grupo con choque duro no está listo para cerrar, aunque tenga horario, docente y salón', function () {

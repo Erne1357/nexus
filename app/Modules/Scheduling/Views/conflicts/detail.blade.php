@@ -25,7 +25,7 @@
                                 </li>
                             @endforeach
                         </ul>
-                        <div>@include('scheduling::conflicts.fix', ['to' => 'editor', 'group' => $entry['group']['id'], 'label' => 'Corregir en el editor'])</div>
+                        <div>@include('scheduling::conflicts.fix', ['to' => 'editor', 'group' => $entry['group']['id'], 'campus' => $entry['group']['campus_code'], 'label' => 'Corregir en el editor'])</div>
                     </li>
                 @endforeach
             </ul>
@@ -48,7 +48,7 @@
                             @if ($g['inactive_teacher'] ?? false)
                                 <span class="badge badge-error badge-soft badge-sm shrink-0 whitespace-nowrap" data-testid="inactive-teacher"><x-icon name="o-user-minus" class="h-3.5 w-3.5" aria-hidden="true" />Docente dado de baja</span>
                             @endif
-                            <span class="shrink-0">@include('scheduling::conflicts.fix', ['to' => $to, 'group' => $g['id'], 'label' => $label])</span>
+                            <span class="shrink-0">@include('scheduling::conflicts.fix', ['to' => $to, 'group' => $g['id'], 'campus' => $g['campus_code'], 'label' => $label])</span>
                         </li>
                     @endforeach
                 </ul>

@@ -160,7 +160,7 @@ it('HC-01: lee el horario de ahora aunque el validador (scoped) ya tenga una fot
     GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();
     $busy = ($this->teacher)('Ana', 40);
     ($this->teacher)('Beatriz', 10);
-    app(ScheduleValidator::class)->stateFor($this->term->id, $this->campus->id);
+    app(ScheduleValidator::class)->stateFor($this->term->id, $group->modality_id);
     $elsewhere = Group::factory()->withTeacher($busy)->create(['term_id' => $this->term->id, 'campus_id' => Campus::factory()->create()->id]);
     GroupSession::factory()->for($elsewhere)->on(1, '08:00', '10:00')->create();
 

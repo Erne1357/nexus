@@ -2,7 +2,7 @@
 
 namespace App\Modules\Scheduling\Validation;
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Scheduling\Validation\State\StateGroup;
 use App\Modules\Scheduling\Validation\State\StateQuota;
 use App\Modules\Scheduling\Validation\State\StateRoom;
@@ -14,10 +14,11 @@ use App\Modules\Scheduling\Validation\State\StateTeacher;
 use LogicException;
 
 /**
- * Foto en memoria de lo que el validador revisa en un periodo (tarea 3.2): los grupos y sesiones del campus que se
- * valida, más los grupos con docente de otros campus del periodo (HC-01 cruza campus), y las materias, salones,
- * docentes, bloqueos, cupos, préstamos, perfiles de campus, carreras ofrecidas y planes activos que las reglas
- * consultan. Las reglas son puras: leen esta foto y nunca la base, así que se prueban sin base y el editor puede
+ * Foto en memoria de lo que el validador revisa en un periodo (tarea 3.2): los grupos y sesiones de la modalidad que se
+ * valida, de todos sus campus (M1), más los grupos con docente de otras modalidades del periodo (HC-01 cruza campus y
+ * modalidades) y los que usan salón, y las materias, salones, docentes, bloqueos, cupos, préstamos, perfiles de las
+ * modalidades, carreras ofrecidas y planes activos que las reglas consultan. Cada regla lee el perfil de la modalidad
+ * del grupo (profile()). Las reglas son puras: leen esta foto y nunca la base, así que se prueban sin base y el editor puede
  * preguntar «¿y si…?» sin escribir (withSession(), withTeacher()). La arma ScheduleStateQuery o, en las pruebas,
  * ScheduleStateBuilder. Inmutable: los with…() devuelven otra foto.
  */
@@ -41,7 +42,7 @@ final class ScheduleState
      * @param  array<string, list<StateRoomBlock>>  $blocks  por salón
      * @param  array<string, list<StateQuota>>  $quotas  por grupo
      * @param  array<string, list<StateRoomLoan>>  $loans  por grupo
-     * @param  array<string, CampusProfile>  $profiles  por campus
+     * @param  array<string, ModalityProfile>  $profiles  por modalidad
      * @param  array<string, true>  $offerings  llaves «carrera|campus» de las carreras ofrecidas
      * @param  array<string, true>  $activePlans  ids de los planes activos
      * @param  array<string, mixed>  $settings  parámetros (`staffing.extra_hours_tolerance`…)
@@ -68,7 +69,7 @@ final class ScheduleState
                 continue;
             }
 
-            $this->bySemester[self::semesterKey($group->campusId, $group->studyPlanId, $group->semester)][] = $group;
+            $this->bySemester[self::semesterKey($group->modalityId, $group->campusId, $group->studyPlanId, $group->semester)][] = $group;
 
             foreach ($this->sessions[$group->id] ?? [] as $session) {
                 if ($group->teacherId !== null) {
@@ -134,28 +135,29 @@ final class ScheduleState
     }
 
     /**
-     * Los grupos activos de un plan y semestre reticular en un campus (HC-03).
+     * Los grupos activos de un plan y semestre reticular de una modalidad en un campus (HC-03): el alumno tipo es de un
+     * campus (MS10), así que los grupos de otro campus de la misma carga no cuentan.
      *
      * @return list<StateGroup>
      */
-    public function groupsOfSemester(string $campusId, string $studyPlanId, int $semester): array
+    public function groupsOfSemester(string $modalityId, string $campusId, string $studyPlanId, int $semester): array
     {
-        return $this->bySemester[self::semesterKey($campusId, $studyPlanId, $semester)] ?? [];
+        return $this->bySemester[self::semesterKey($modalityId, $campusId, $studyPlanId, $semester)] ?? [];
     }
 
     /**
-     * Los planes y semestres con grupos activos de un campus, como [plan, semestre].
+     * Los planes y semestres con grupos activos de una modalidad en un campus, como [plan, semestre].
      *
      * @return list<array{string, int}>
      */
-    public function semestersOf(string $campusId): array
+    public function semestersOf(string $modalityId, string $campusId): array
     {
         $semesters = [];
 
         foreach (array_keys($this->bySemester) as $key) {
-            [$campus, $plan, $semester] = explode('|', $key);
+            [$modality, $campus, $plan, $semester] = explode('|', $key);
 
-            if ($campus === $campusId) {
+            if ($modality === $modalityId && $campus === $campusId) {
                 $semesters[] = [$plan, (int) $semester];
             }
         }
@@ -185,7 +187,7 @@ final class ScheduleState
     }
 
     /**
-     * Los salones que trae la foto, por id: los del campus y los de otros campus que usan sus sesiones.
+     * Los salones que trae la foto, por id: los de los campus de la modalidad y los que usan sus sesiones.
      *
      * @return array<string, StateRoom>
      */
@@ -226,11 +228,11 @@ final class ScheduleState
     }
 
     /**
-     * El perfil de flujo del campus; sin perfil cargado, el de omisión (presencial).
+     * El perfil de flujo de la modalidad; sin perfil cargado, el de omisión (presencial).
      */
-    public function profile(string $campusId): CampusProfile
+    public function profile(string $modalityId): ModalityProfile
     {
-        return $this->profiles[$campusId] ?? CampusProfile::fromArray([]);
+        return $this->profiles[$modalityId] ?? ModalityProfile::fromArray([]);
     }
 
     public function isOffered(string $careerId, string $campusId): bool
@@ -360,8 +362,8 @@ final class ScheduleState
         return array_values(array_filter($sessions, fn (StateSession $session): bool => $session->groupId !== $groupId));
     }
 
-    private static function semesterKey(string $campusId, string $studyPlanId, int $semester): string
+    private static function semesterKey(string $modalityId, string $campusId, string $studyPlanId, int $semester): string
     {
-        return "{$campusId}|{$studyPlanId}|{$semester}";
+        return "{$modalityId}|{$campusId}|{$studyPlanId}|{$semester}";
     }
 }

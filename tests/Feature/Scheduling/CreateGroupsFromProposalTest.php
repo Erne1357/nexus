@@ -240,7 +240,7 @@ it('deja una entrada de bitácora por grupo, con quien aceptó como autor', func
         ]);
 });
 
-it('avisa con GroupsCreated una sola vez, después del commit, y solo si creó algo', function () {
+it('avisa con GroupsCreated una sola vez, después del commit, con la modalidad de la carga, y solo si creó algo', function () {
     createGroupsItem(createGroupsSubject($this->cb), 2);
     Event::fake([GroupsCreated::class]);
 
@@ -253,7 +253,7 @@ it('avisa con GroupsCreated una sola vez, después del commit, y solo si creó a
 
     Event::assertDispatchedTimes(GroupsCreated::class, 1);
     Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event) => $event->termId === $this->term->id
-        && $event->campusId === $this->campus->id
+        && $event->modalityId === $this->proposal->modality_id
         && collect($event->groupIds)->sort()->values()->all() === $this->ids);
 
     createGroupsFor();
@@ -298,8 +298,9 @@ it('M8, HC-13: el grupo creado desde la fila de C2 es de C2, y el de la fila de 
         ->and(Group::query()->where('proposal_item_id', $inC1->id)->pluck('campus_id')->all())->toBe([$c1->id, $c1->id])
         ->and(Group::query()->pluck('modality_id')->unique()->all())->toBe([$this->proposal->modality_id])
         ->and(Activity::query()->where('subject_type', (new Group)->getMorphClass())->get()->every(fn (Activity $activity): bool => $activity->attribute_changes['attributes']['modality_id'] === $this->proposal->modality_id))->toBeTrue();
-    Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event): bool => $event->campusId === $c1->id && count($event->groupIds) === 2);
-    Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event): bool => $event->campusId === $c2->id && count($event->groupIds) === 1);
+    // Un solo aviso por decisión, con la modalidad y los grupos de los dos campus: quien lo escucha lee el campus de cada grupo.
+    Event::assertDispatchedTimes(GroupsCreated::class, 1);
+    Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event): bool => $event->modalityId === $this->proposal->modality_id && count($event->groupIds) === 3);
 });
 
 it('MS4: una fila sin campus todavía no da grupos; la de su campus sí', function () {

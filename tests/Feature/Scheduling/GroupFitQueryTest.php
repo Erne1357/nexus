@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -16,8 +17,8 @@ use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Support\Facades\DB;
 
 /*
-| GroupFitQuery (tarea 3.5): para pintar «dónde cabe» un grupo en el editor. Por cada día y bloque del perfil del
-| campus, sin las horas donde el grupo ya tiene sesión, pregunta al validador por una sesión de un bloque y dice si
+| GroupFitQuery (tarea 3.5): para pintar «dónde cabe» un grupo en el editor. Por cada día y bloque del perfil de la
+| modalidad del grupo, sin las horas donde el grupo ya tiene sesión, pregunta al validador por una sesión de un bloque y dice si
 | cabe (sin reglas duras nuevas) y, si no, qué reglas rompe y sus mensajes. Lee la foto una vez y pregunta por todas
 | las celdas con checkSessions(). Un grupo que no se edita (cancelado, o con la carga fuera de propuesta, asignación o
 | ajustes) no tiene celdas.
@@ -120,19 +121,20 @@ it('un grupo cancelado o con la carga fuera de propuesta, asignación o ajustes 
     'sin carga' => [fn ($test) => $test->load->delete()],
 ]);
 
-it('sigue los días, la ventana y el bloque del perfil del campus', function () {
-    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [6], 'block_minutes' => 30, 'day_start' => '08:00', 'day_end' => '10:00']]);
+it('sigue los días, la ventana y el bloque del perfil de la modalidad del grupo, no los del campus', function () {
+    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1]]]);
+    $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [6], 'block_minutes' => 30, 'day_start' => '08:00', 'day_end' => '10:00']]);
 
     expect(array_keys(app(GroupFitQuery::class)->for($this->group->fresh())))->toBe(['6|08:00', '6|08:30', '6|09:00', '6|09:30']);
 });
 
-it('un campus sin bloques de tiempo no tiene celdas', function () {
-    $this->campus->update(['settings' => [...$this->campus->settings, 'uses_time_blocks' => false]]);
+it('una modalidad sin bloques de tiempo no tiene celdas', function () {
+    $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_time_blocks' => false]]);
 
     expect(app(GroupFitQuery::class)->for($this->group->fresh()))->toBe([]);
 });
 
-it('con 9 grupos en el campus y 70 celdas lee con pocas consultas', function () {
+it('con 9 grupos en la modalidad y 70 celdas lee con pocas consultas', function () {
     foreach (range(1, 9) as $index) {
         $group = fitGroup(['teacher_id' => Teacher::factory()->create()->id]);
         GroupSession::factory()->for($group)->on(1 + $index % 5, sprintf('%02d:00', 7 + $index), sprintf('%02d:00', 8 + $index))->create();
@@ -147,7 +149,7 @@ it('con 9 grupos en el campus y 70 celdas lee con pocas consultas', function () 
         ->and($queries)->toBeLessThanOrEqual(20);
 });
 
-it('con 200 grupos en el campus revisa las 70 celdas con pocas consultas', function () {
+it('con 200 grupos en la modalidad revisa las 70 celdas con pocas consultas', function () {
     $teachers = Teacher::factory()->count(50)->create()->prepend($this->teacher)->values();
     $building = Building::factory()->create(['campus_id' => $this->campus->id]);
     $rooms = Room::factory()->count(30)->create(['building_id' => $building->id]);

@@ -8,9 +8,10 @@ use App\Modules\Scheduling\Validation\Violation;
 
 /**
  * HC-12: las horas semanales de sesiones de un grupo deben ser iguales a `theory_hours + practice_hours` de la
- * materia (tolerancia configurable por campus para modalidades mixtas). La tolerancia, en minutos, es la
- * configuración `scheduling.weekly_hours_tolerance` (0 sin configurar). Un grupo sin sesiones no se revisa (el
- * tablero lo cuenta como «sin horario»), ni el de un campus sin bloques de tiempo.
+ * materia, con la tolerancia de la modalidad del grupo (MS17, supuesto por confirmar). La tolerancia, en minutos, es
+ * la clave `weekly_hours_tolerance` del perfil de la modalidad; sin ella, la configuración global
+ * `scheduling.weekly_hours_tolerance` (0 sin configurar). Un grupo sin sesiones no se revisa (el tablero lo cuenta como
+ * «sin horario»), ni el de una modalidad sin bloques de tiempo.
  */
 final class WeeklyHours implements Constraint
 {
@@ -21,16 +22,19 @@ final class WeeklyHours implements Constraint
 
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
-        $tolerance = (int) $state->setting('scheduling.weekly_hours_tolerance', 0);
+        $global = (int) $state->setting('scheduling.weekly_hours_tolerance', 0);
 
         foreach ($scope->groupIds() as $groupId) {
             $group = $state->group($groupId);
             $subject = $group === null ? null : $state->subject($group->subjectId);
             $sessions = $state->sessionsOf($groupId);
+            $profile = $group === null ? null : $state->profile($group->modalityId);
 
-            if ($group === null || $subject === null || ! $group->isActive || $sessions === [] || ! $state->profile($group->campusId)->usesTimeBlocks) {
+            if ($group === null || $subject === null || ! $group->isActive || $sessions === [] || ! $profile?->usesTimeBlocks) {
                 continue;
             }
+
+            $tolerance = $profile->weeklyHoursTolerance ?? $global;
 
             $required = $subject->weeklyHours() * 60;
             $scheduled = array_sum(array_map(fn ($session): int => $session->minutes(), $sessions));

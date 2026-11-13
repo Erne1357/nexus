@@ -146,7 +146,7 @@ it('no corre en producción', function () {
 function hardViolations(Department $department): array
 {
     return array_values(array_filter(
-        app(ScheduleValidator::class)->validateLoad(test()->term, test()->campus, $department)->violations(),
+        app(ScheduleValidator::class)->validateLoad(test()->term, modalityOf('PRES'), $department)->violations(),
         fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
     ));
 }

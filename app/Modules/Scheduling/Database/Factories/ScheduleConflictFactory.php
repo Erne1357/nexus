@@ -2,7 +2,6 @@
 
 namespace App\Modules\Scheduling\Database\Factories;
 
-use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\ScheduleConflict;
@@ -34,8 +33,8 @@ class ScheduleConflictFactory extends Factory
     }
 
     /**
-     * Lo que no se indicó sale del grupo, leído una sola vez: su periodo, campus, departamento, carrera dueña y el
-     * grupo como sujeto; la modalidad, del campus del choque, como la llena SyncScheduleConflicts.
+     * Lo que no se indicó sale del grupo, leído una sola vez, como lo llena SyncScheduleConflicts: su periodo, modalidad,
+     * campus, departamento, carrera dueña y el grupo como sujeto.
      */
     public function configure(): static
     {
@@ -44,7 +43,7 @@ class ScheduleConflictFactory extends Factory
 
             $conflict->term_id ??= $group->term_id;
             $conflict->campus_id ??= $group->campus_id;
-            $conflict->modality_id ??= Campus::withTrashed()->whereKey($conflict->campus_id)->value('modality_id');
+            $conflict->modality_id ??= $group->modality_id;
             $conflict->department_id ??= $group->department_id;
             $conflict->career_id ??= $group->owner_career_id;
             $conflict->subject_id ??= $group->id;
@@ -52,13 +51,14 @@ class ScheduleConflictFactory extends Factory
     }
 
     /**
-     * Choque de un grupo: su periodo, campus, departamento, carrera dueña y el grupo como sujeto.
+     * Choque de un grupo: su periodo, modalidad, campus, departamento, carrera dueña y el grupo como sujeto.
      */
     public function forGroup(Group $group): static
     {
         return $this->state([
             'group_id' => $group->id,
             'term_id' => $group->term_id,
+            'modality_id' => $group->modality_id,
             'campus_id' => $group->campus_id,
             'department_id' => $group->department_id,
             'career_id' => $group->owner_career_id,

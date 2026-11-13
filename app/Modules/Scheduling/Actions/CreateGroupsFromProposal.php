@@ -33,8 +33,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * La capacidad es la del salón por defecto de la materia en el campus de la fila (el de menor prioridad, sin contar los
  * borrados); sin él, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). El cupo de la carrera dueña nace
- * igual a la capacidad. Cada grupo deja su entrada en la bitácora, con su campus y su modalidad, y, después del commit,
- * GroupsCreated avisa una vez por cada campus donde nació alguno.
+ * igual a la capacidad. Cada grupo deja su entrada en la bitácora, con su campus y su modalidad, y, después del commit y
+ * solo si nació alguno, GroupsCreated avisa una vez por decisión con la modalidad de la propuesta y todos los grupos,
+ * de cualquier campus: quien lo escucha lee el campus de cada grupo.
  */
 final class CreateGroupsFromProposal
 {
@@ -67,8 +68,8 @@ final class CreateGroupsFromProposal
                 }
             }
 
-            foreach ($created->groupBy('campus_id') as $campusId => $groups) {
-                GroupsCreated::dispatch($proposal->term_id, (string) $campusId, $groups->pluck('id')->all());
+            if ($created->isNotEmpty()) {
+                GroupsCreated::dispatch($proposal->term_id, $proposal->modality_id, $created->pluck('id')->all());
             }
 
             return $created->values();

@@ -9,11 +9,11 @@ use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
 
 /**
- * HC-04: las sesiones deben caer dentro de la ventana del campus (`day_start`, `day_end`, `days`) y alinearse a
- * `block_minutes`. La alineación se cuenta desde `day_start`. Un campus sin bloques de tiempo (`uses_time_blocks`
- * en falso) no tiene ventana y no se revisa.
+ * HC-04: las sesiones deben caer dentro de la ventana de la modalidad del grupo (`day_start`, `day_end`, `days` de su
+ * perfil) y alinearse a `block_minutes`. La alineación se cuenta desde `day_start`. Una modalidad sin bloques de tiempo
+ * (`uses_time_blocks` en falso) no tiene ventana y no se revisa. El campus es solo el lugar: su perfil no cuenta.
  */
-final class CampusWindow implements Constraint
+final class ModalityWindow implements Constraint
 {
     public function rule(): string
     {
@@ -24,7 +24,7 @@ final class CampusWindow implements Constraint
     {
         foreach ($scope->groupIds() as $groupId) {
             $group = $state->group($groupId);
-            $profile = $group === null ? null : $state->profile($group->campusId);
+            $profile = $group === null ? null : $state->profile($group->modalityId);
 
             if ($group === null || ! $group->isActive || $profile === null || ! $profile->usesTimeBlocks) {
                 continue;
@@ -40,7 +40,7 @@ final class CampusWindow implements Constraint
 
                 yield Violation::hard(
                     $this->rule(),
-                    "La sesión del {$session->describe()} de {$state->labelOf($groupId)} cae fuera de la ventana del campus ({$profile->schedule()}).",
+                    "La sesión del {$session->describe()} de {$state->labelOf($groupId)} cae fuera de la ventana de la modalidad ({$profile->schedule()}).",
                     'group',
                     $groupId,
                     $groupId,

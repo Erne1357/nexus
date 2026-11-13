@@ -130,7 +130,7 @@ it('al liberar no quita un bloqueo ni otro tramo del mismo salón', function () 
 });
 
 it('se arma desde la foto del validador con los salones del campus, sus bloqueos y las sesiones que ya tienen salón', function () {
-    $group = fn (string $id, bool $active = true): StateGroup => new StateGroup($id, 'campus', 'materia', 'depto', 'carrera', 'plan', 1, $id, null, 30, $active);
+    $group = fn (string $id, bool $active = true): StateGroup => new StateGroup($id, 'campus', 'PRES', 'materia', 'depto', 'carrera', 'plan', 1, $id, null, 30, $active);
     $state = (new ScheduleStateBuilder)
         ->room(supplyRoom('A', 40))
         ->room(supplyRoom('B', 40))

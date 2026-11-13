@@ -4,7 +4,6 @@ namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
@@ -17,8 +16,9 @@ use Illuminate\Support\Collection;
  *
  * Cuenta las banderas de cada grupo activo (GroupClosingFlagsQuery) con la regla por grupo de GroupClosingFlags
  * (ClosingBlockers::tally), la misma del tablero, con el perfil de la modalidad de la carga. El choque duro lo calcula el
- * validador en ese momento, en cada campus donde la carga tiene grupos y con la foto de todo el campus (HC-01 cruza
- * departamentos y campus), no `schedule_conflicts`, que el job pudo no recalcular todavía.
+ * validador en ese momento, una vez con la foto de la modalidad de la carga en el periodo (con los grupos de todos sus
+ * campus; HC-01 cruza departamentos, campus y modalidades), no `schedule_conflicts`, que el job pudo no recalcular
+ * todavía; solo cuentan los grupos de la carga.
  * Olvida la foto antes, porque el validador es `scoped` y en el mismo request pudo haber leído una vieja (por ejemplo,
  * justo después de asignar el último salón).
  */
@@ -44,8 +44,8 @@ final class ClosingBlockersQuery
     }
 
     /**
-     * Los ids de los grupos del departamento con al menos un choque duro: el validador, que todavía lee por campus, en
-     * cada campus donde están esos grupos.
+     * Los ids de los grupos de la carga con al menos un choque duro: el validador, una vez por periodo y modalidad, con
+     * el alcance del departamento, cruzado con los grupos de la carga.
      *
      * @param  Collection<string, GroupClosingFlags>  $flags
      * @return list<string>
@@ -55,14 +55,10 @@ final class ClosingBlockersQuery
         $department = Department::query()->withTrashed()->whereKey($load->department_id)->firstOrFail();
 
         $this->validator->forget();
-        $hard = [];
-
-        foreach (Campus::query()->whereIn('id', $flags->pluck('campusId')->unique()->values()->all())->orderBy('code')->get() as $campus) {
-            array_push($hard, ...array_filter(
-                $this->validator->validateLoad($load->term, $campus, $department)->violations(),
-                fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
-            ));
-        }
+        $hard = array_filter(
+            $this->validator->validateLoad($load->term, $load->modality, $department)->violations(),
+            fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
+        );
 
         return array_values(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $flags->keys()->all()));
     }

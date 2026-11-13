@@ -20,12 +20,14 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\RankGroups;
 use App\Modules\Staffing\Jobs\ComputeRankings;
+use App\Modules\Staffing\Listeners\FollowGroupMovedToCampus;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
@@ -100,6 +102,7 @@ it('registra sus listeners en StaffingServiceProvider', function () {
     Event::fake();
 
     Event::assertListening(GroupsCreated::class, RerankOnGroupsCreated::class);
+    Event::assertListening(GroupMovedToCampus::class, FollowGroupMovedToCampus::class);
     Event::assertListening(GroupScheduleChanged::class, RerankOnGroupChange::class);
     Event::assertListening(GroupCancelled::class, RerankOnGroupChange::class);
     Event::assertListening(GroupTeacherChanged::class, RerankOnGroupChange::class);
@@ -114,7 +117,7 @@ it('Ranking docente: al nacer grupos encola uno por cada departamento de esos gr
     $sibling = ($this->group)($this->term, $this->campus, $this->subject);
     $foreign = ($this->group)($this->term, $this->campus, $this->otherSubject);
 
-    GroupsCreated::dispatch($this->term->id, $this->campus->id, [$this->ownGroup->id, $sibling->id, $foreign->id]);
+    GroupsCreated::dispatch($this->term->id, $this->ownGroup->modality_id, [$this->ownGroup->id, $sibling->id, $foreign->id]);
 
     expect(queuedRankingScopes())->toBe(sortedRankingScopes([
         [$this->term->id, $this->campus->id, $this->department->id],

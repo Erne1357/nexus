@@ -5,7 +5,6 @@ namespace App\Modules\Scheduling\Listeners;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
@@ -18,10 +17,10 @@ use App\Modules\Scheduling\Validation\Violation;
  * campus) no tienen choques duros y, en una modalidad con bloques de tiempo, todos tienen sesiones
  * (docs/proceso/proceso-propuesto.md, «grupos y sesiones sin choques duros»). Valida la carga en ese momento con el
  * validador, no con `schedule_conflicts`, que el job pudo no haber recalculado todavía (por eso puede vetar mientras el
- * tablero, que lee la tabla, aún no lo muestra). El validador todavía lee por campus: valida la carga en cada campus
- * donde tiene grupos, con la foto del campus completo porque HC-01 cruza departamentos y campus; la validación de 400
- * grupos tarda menos de 5 s. Veta
- * con un motivo por cosa que falta (evento con veto, LoadTransitioning).
+ * tablero, que lee la tabla, aún no lo muestra). Valida una vez, con la foto de la modalidad de la carga en el periodo
+ * (los grupos de todos sus campus; HC-01 cruza departamentos, campus y modalidades), y cuenta solo los grupos de la
+ * carga; la validación de 400 grupos tarda menos de 5 s. Veta con un motivo por cosa que falta (evento con veto,
+ * LoadTransitioning).
  */
 final class BlockStaffingWithHardConflicts
 {
@@ -40,16 +39,11 @@ final class BlockStaffingWithHardConflicts
 
         $this->validator->forget();
         $loadGroups = Group::query()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id);
-        $hard = [];
+        $hard = array_filter(
+            $this->validator->validateLoad($load->term, $load->modality, $department)->violations(),
+            fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
+        );
 
-        foreach (Campus::query()->whereIn('id', (clone $loadGroups)->select('campus_id'))->orderBy('code')->get() as $campus) {
-            array_push($hard, ...array_filter(
-                $this->validator->validateLoad($load->term, $campus, $department)->violations(),
-                fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
-            ));
-        }
-
-        // Solo los grupos de esta carga: el validador de un campus también ve grupos de otra modalidad en él.
         $groups = count(array_intersect(
             array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))),
             (clone $loadGroups)->pluck('id')->all(),
