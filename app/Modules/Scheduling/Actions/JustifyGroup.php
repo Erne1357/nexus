@@ -73,7 +73,7 @@ final class JustifyGroup
 
     private function lacksTeacherOrRoom(Group $group): bool
     {
-        return $group->teacher_id === null || ($group->campus->profile->usesRooms && $group->sessions()
+        return $group->teacher_id === null || ($group->modality->profile->usesRooms && $group->sessions()
             ->where('is_active', true)
             ->whereNull('room_id')
             ->where('kind', '<>', SessionKind::Virtual->value)

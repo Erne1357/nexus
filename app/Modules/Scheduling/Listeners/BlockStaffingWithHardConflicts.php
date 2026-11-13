@@ -49,7 +49,11 @@ final class BlockStaffingWithHardConflicts
             ));
         }
 
-        $groups = count(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))));
+        // Solo los grupos de esta carga: el validador de un campus también ve grupos de otra modalidad en él.
+        $groups = count(array_intersect(
+            array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))),
+            (clone $loadGroups)->pluck('id')->all(),
+        ));
 
         if ($groups > 0) {
             $event->block("{$groups} ".($groups === 1 ? 'grupo tiene' : 'grupos tienen').' choques duros: corrígelos en el editor de horarios antes de asignar docentes (HC-15).');

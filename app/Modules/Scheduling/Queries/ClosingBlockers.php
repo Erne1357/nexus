@@ -2,7 +2,6 @@
 
 namespace App\Modules\Scheduling\Queries;
 
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\ModalityProfile;
 
 /**
@@ -30,7 +29,7 @@ final readonly class ClosingBlockers
      * @param  iterable<GroupClosingFlags>  $groups
      * @param  list<string>|null  $conflicted
      */
-    public static function tally(iterable $groups, CampusProfile|ModalityProfile $profile, ?array $conflicted = null): self
+    public static function tally(iterable $groups, ModalityProfile $profile, ?array $conflicted = null): self
     {
         $hard = $conflicted === null ? null : array_flip($conflicted);
         $counts = ['conflicted' => 0, 'unscheduled' => 0, 'withoutTeacher' => 0, 'withoutRoom' => 0, 'inactiveTeacher' => 0, 'justified' => 0, 'groups' => 0];
