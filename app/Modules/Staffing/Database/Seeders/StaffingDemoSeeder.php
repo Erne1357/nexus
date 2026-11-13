@@ -290,6 +290,12 @@ final class StaffingDemoSeeder extends Seeder
     /** @var array<string, array<string, string>> campus => departamento vetado => primer motivo */
     private array $vetoed = [];
 
+    /** @var list<string> las modalidades cuyas cargas ya se pasaron a asignación en esta corrida (startOnce()) */
+    private array $startedModalities = [];
+
+    /** @var array<string, array<string, string>> modalidad => departamento => papel: el de la carga, igual en sus campus */
+    private array $modalityRoles = [];
+
     /** @var array<string, int> */
     private array $counts = [];
 
@@ -431,6 +437,11 @@ final class StaffingDemoSeeder extends Seeder
      */
     private function startAll(Term $term, Campus $campus): void
     {
+        // M1: la carga es de la modalidad; si otro campus de la misma ya la pasó, no se vuelve a pasar.
+        if (! $this->startOnce($campus)) {
+            return;
+        }
+
         $loads = AcademicLoad::query()->with('department')
             ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Proposed)
             ->get()->sortBy('department.code');
@@ -617,9 +628,17 @@ final class StaffingDemoSeeder extends Seeder
         });
 
         $this->timed('solicitudes', function () use ($term, $campuses): void {
+            // Las solicitudes mueven la carga entera (M1): una vez por departamento y modalidad, en el primer campus.
+            $requested = [];
+
             foreach ($campuses as $campus) {
                 foreach ($this->roles[$campus->code] ?? [] as $departmentId => $role) {
-                    $this->requestChanges($term, $campus, Department::query()->findOrFail($departmentId), $role);
+                    if (isset($requested["{$campus->modality_id}|{$departmentId}"])) {
+                        continue;
+                    }
+
+                    $requested["{$campus->modality_id}|{$departmentId}"] = true;
+                    $this->requestChanges($term, $campus, Department::query()->findOrFail($departmentId), $role, $campuses->where('modality_id', $campus->modality_id)->pluck('id')->all());
                 }
             }
         });
@@ -634,6 +653,14 @@ final class StaffingDemoSeeder extends Seeder
      */
     private function startStaffing(Term $term, Campus $campus): void
     {
+        // M1: la carga es de la modalidad: se pasa a asignación y se reparten sus papeles una vez, con el primer campus de
+        // la demo en ella; los demás campus de la modalidad toman los mismos papeles.
+        if (! $this->startOnce($campus)) {
+            $this->roles[$campus->code] = $this->modalityRoles[$campus->modality_id] ?? [];
+
+            return;
+        }
+
         $loads = AcademicLoad::query()->with('department')
             ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Proposed)
             ->get()->sortBy('department.code');
@@ -654,7 +681,7 @@ final class StaffingDemoSeeder extends Seeder
 
         $staffing = AcademicLoad::query()->with('department')
             ->where('term_id', $term->id)->where('modality_id', $campus->modality_id)->where('status', LoadStatus::Staffing)->get();
-        $groups = Group::query()->active()->where('term_id', $term->id)->where('campus_id', $campus->id)
+        $groups = Group::query()->active()->where('term_id', $term->id)->where('modality_id', $campus->modality_id)
             ->selectRaw('department_id, count(*) as total')->groupBy('department_id')->pluck('total', 'department_id')->all();
         $ordered = $staffing->sort(fn (AcademicLoad $a, AcademicLoad $b): int => [$groups[$b->department_id] ?? 0, $a->department->code] <=> [$groups[$a->department_id] ?? 0, $b->department->code])->values();
         $count = $ordered->count();
@@ -663,8 +690,25 @@ final class StaffingDemoSeeder extends Seeder
             : array_slice([self::ADJUSTING, self::APPLIED], 0, $count);
 
         foreach ($ordered as $index => $load) {
-            $this->roles[$campus->code][$load->department_id] = $sequence[$index];
+            $this->modalityRoles[$campus->modality_id][$load->department_id] = $sequence[$index];
         }
+
+        $this->roles[$campus->code] = $this->modalityRoles[$campus->modality_id] ?? [];
+    }
+
+    /**
+     * Si las cargas de la modalidad del campus todavía no se pasaron a asignación en esta corrida: la primera vez que se
+     * pregunta por una modalidad dice que sí y la recuerda (la carga es por departamento y modalidad, M1).
+     */
+    private function startOnce(Campus $campus): bool
+    {
+        if (in_array($campus->modality_id, $this->startedModalities, true)) {
+            return false;
+        }
+
+        $this->startedModalities[] = $campus->modality_id;
+
+        return true;
     }
 
     /**
@@ -1073,8 +1117,10 @@ final class StaffingDemoSeeder extends Seeder
      * Las solicitudes de cambio del departamento según su papel: las piden los docentes de sus grupos asignados (los
      * que tienen más grupos primero, hasta dos solicitudes cada uno) y las decide el jefe; las aplicadas, el
      * coordinador de la carrera dueña (horario) o el jefe (salón).
+     *
+     * @param  list<string>  $campusIds  los campus de la demo en la modalidad de la carga, de cuyos grupos salen las solicitudes
      */
-    private function requestChanges(Term $term, Campus $campus, Department $department, string $role): void
+    private function requestChanges(Term $term, Campus $campus, Department $department, string $role, array $campusIds = []): void
     {
         $plan = $this->requestPlan[$role] ?? [];
         $statuses = array_merge(...array_map(fn (string $status, int $times): array => array_fill(0, $times, $status), array_keys($plan), $plan));
@@ -1088,7 +1134,7 @@ final class StaffingDemoSeeder extends Seeder
             ->selectRaw('teacher_id, count(*) as total, count(distinct campus_id) as campuses')->groupBy('teacher_id')
             ->get()->keyBy('teacher_id');
         $groups = Group::query()->active()->with(['teacher.user', 'subject'])
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('department_id', $department->id)->whereNotNull('teacher_id')
+            ->where('term_id', $term->id)->whereIn('campus_id', $campusIds === [] ? [$campus->id] : $campusIds)->where('department_id', $department->id)->whereNotNull('teacher_id')
             ->whereHas('teacher', fn ($query) => $query->whereNotNull('user_id'))
             ->get()
             ->sort(fn (Group $a, Group $b): int => $this->requestRank($b, $loads) <=> $this->requestRank($a, $loads) ?: [$a->teacher->rfc, $a->subject->code, $a->code] <=> [$b->teacher->rfc, $b->subject->code, $b->code]);

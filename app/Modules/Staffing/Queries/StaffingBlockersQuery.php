@@ -45,7 +45,11 @@ final class StaffingBlockersQuery
         }
 
         return [
-            'conflicted' => count(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard)))),
+            // Solo los grupos de esta carga: el validador de un campus también ve grupos de otra modalidad en él.
+            'conflicted' => count(array_intersect(
+                array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))),
+                $this->groups($load)->pluck('id')->all(),
+            )),
             'unscheduled' => $load->modality->profile->usesTimeBlocks ? $this->unscheduled($load) : 0,
         ];
     }

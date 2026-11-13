@@ -207,7 +207,7 @@ trait ClosesLoads
         };
 
         $context->handle($load->term);
-        $campus = property_exists($this, 'campus') ? (string) $this->campus : '';
+        $campus = property_exists($this, 'campus') ? (string) ($this->campus ?? '') : '';
 
         if ($campus !== '' && app(Actor::class)->campuses()->contains('code', $campus)) {
             $route[1]['campus'] = $campus;

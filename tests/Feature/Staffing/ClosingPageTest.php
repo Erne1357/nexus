@@ -9,8 +9,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Enums\GroupStatus;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Models\ChangeRequest;
-use App\Modules\Staffing\Queries\LoadClosingQuery;
 use Illuminate\Support\Facades\Event;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -179,21 +179,43 @@ describe('pestañas por modalidad y filtro de campus (M1)', function () {
             ->assertSee('La carga ya pasó el cierre.');
     });
 
-    it('M1: la carga presencial junta los grupos de C1 y C2; el campus solo filtra las justificaciones', function () {
+    it('M1: la carga presencial junta los grupos de C1 y C2; el campus solo filtra la lista de justificaciones', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $inC1 = $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+        $inC2 = $this->world->group(teacher: false);
+        $item = fn (Group $group): string => 'data-testid="page-item-'.$group->code.'"';
+
+        closingPage($this->jefe)
+            ->assertDontSeeHtml('data-testid="modality-tabs"')
+            ->assertSee('Faltan 2 grupos para cerrar');
+
+        $this->actingAs($this->jefe)->get(route('staffing.closing', ['campus' => 'C1']))
+            ->assertOk()->assertSee('Faltan 2 grupos para cerrar')
+            ->assertSee($item($inC1), false)->assertDontSee($item($inC2), false);
+        $this->get(route('staffing.closing'))
+            ->assertOk()->assertSee($item($inC1), false)->assertSee($item($inC2), false);
+
+        closingPage($this->jefe)->set('campus', 'C1')->assertSet('campus', 'C1');
+
+        expect(session('core.last_campus'))->toBe('C1');
+    });
+
+    it('«Todos» quita el filtro de campus sin error y la lista vuelve a los grupos de C1 y C2', function () {
         $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
         $this->world->group(teacher: false, load: $this->world->loadIn($c1));
         $this->world->group(teacher: false);
 
-        $page = closingPage($this->jefe)
-            ->assertDontSeeHtml('data-testid="modality-tabs"')
+        $page = closingPage($this->jefe, ['campus' => 'C1'])
+            ->assertSeeHtml('data-testid="campus-filter-todos"')
+            ->set('campus', null)
+            ->assertOk()
+            ->assertSet('campus', null)
             ->assertSee('Faltan 2 grupos para cerrar');
 
-        expect(app(LoadClosingQuery::class)->items($this->world->load, campusId: $c1->id))->toHaveCount(1)
-            ->and(app(LoadClosingQuery::class)->items($this->world->load))->toHaveCount(2);
+        expect(Livewire::actingAs($this->jefe)->test('staffing::components.closing-justifications', ['loadId' => $this->world->load->id, 'campusId' => null])->viewData('total'))->toBe(2)
+            ->and(Livewire::actingAs($this->jefe)->test('staffing::components.closing-justifications', ['loadId' => $this->world->load->id, 'campusId' => $c1->id])->viewData('total'))->toBe(1);
 
-        $page->set('campus', 'C1')->assertSet('campus', 'C1');
-
-        expect(session('core.last_campus'))->toBe('C1');
+        $page->call('goTo', 'assign')->assertRedirect(route('staffing.assign', ['depto' => 'SC']));
     });
 
     it('un departamento sin grupos en la modalidad dice que su carga se queda en borrador', function () {

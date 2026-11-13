@@ -39,9 +39,9 @@ new #[Title('Cierre de la carga')] class extends Component
     #[Url(as: 'departamento')]
     public string $department = '';
 
-    /** El código del campus del filtro de las justificaciones; '' son todos. */
+    /** El código del campus del filtro de las justificaciones; null (o '') son todos los campus de la carga. */
     #[Url(as: 'campus')]
-    public string $campus = '';
+    public ?string $campus = null;
 
     #[Locked]
     public ?string $termId = null;
@@ -89,7 +89,7 @@ new #[Title('Cierre de la carga')] class extends Component
      */
     public function updatedCampus(Actor $context): void
     {
-        if ($context->campuses()->contains('code', $this->campus)) {
+        if (filled($this->campus) && $context->campuses()->contains('code', $this->campus)) {
             session()->put(Campus::LAST_CHOSEN_KEY, $this->campus);
         }
     }
@@ -136,7 +136,7 @@ new #[Title('Cierre de la carga')] class extends Component
     public function with(LoadClosingQuery $query): array
     {
         $campusOptions = app(Actor::class)->campuses();
-        $filter = $campusOptions->firstWhere('code', $this->campus);
+        $filter = blank($this->campus) ? null : $campusOptions->firstWhere('code', $this->campus);
 
         if ($this->loadId === null) {
             return ['closing' => null, 'tabs' => collect(), 'actions' => [], 'canViewLoad' => false, 'campusOptions' => $campusOptions, 'campusFilter' => $filter];

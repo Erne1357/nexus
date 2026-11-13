@@ -2,9 +2,13 @@
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Notifications\ChangeRequestApplied;
+use App\Modules\Staffing\Queries\AssignmentBoardQuery;
+use App\Modules\Staffing\Queries\ChangeRequestsQuery;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
@@ -54,6 +58,25 @@ it('con otra aprobada sin aplicar de la misma carga, se queda en ajustes', funct
         ->and($s['load']->fresh()->status)->toBe(LoadStatus::Adjusting);
 });
 
+it('M1: una aprobada de un grupo de otro campus de la misma carga presencial la retiene en ajustes', function () {
+    // Sin el veto de Scheduling, si se intentara el regreso a asignación, pasaría: así se ve que no se intenta.
+    Event::forget(LoadTransitioning::class);
+    $s = changeScenario(LoadStatus::Adjusting);
+    $otherCampus = Group::factory()->create([
+        'term_id' => $s['group']->term_id,
+        'campus_id' => Campus::factory()->create(['code' => 'C9'])->id,
+        'subject_id' => $s['group']->subject_id,
+    ]);
+    requestFor($otherCampus, 'approved');
+
+    $result = app(MarkChangeRequestApplied::class)->handle(requestFor($s['group'], 'approved'), $s['coordinador']);
+
+    expect($otherCampus->modality_id)->toBe($s['load']->modality_id)
+        ->and($result->returnedToStaffing)->toBeFalse()
+        ->and($s['load']->fresh()->status)->toBe(LoadStatus::Adjusting)
+        ->and($s['load']->transitions()->count())->toBe(0);
+});
+
 it('una aprobada de otro departamento no retiene la carga', function () {
     // El veto real de Scheduling (BlockStaffingWithHardConflicts) tiene sus pruebas; aquí se aísla el flujo.
     Event::forget(LoadTransitioning::class);
@@ -100,3 +123,13 @@ it('solo se aplica una solicitud aprobada', function (string $state) {
     expect(fn () => app(MarkChangeRequestApplied::class)->handle(requestFor($s['group'], $state), $s['coordinador']))
         ->toThrow(ValidationException::class, 'no está aprobada');
 })->with(['pending', 'rejected', 'applied']);
+
+it('la carga de un campus sin modalidad en el puente es ninguna, sin error (pantallas por campus)', function () {
+    $s = changeScenario(LoadStatus::Adjusting);
+    $orphan = Campus::factory()->create(['code' => 'C9']);
+    $orphan->forceFill(['modality_id' => null])->save();
+
+    expect(app(ChangeRequestsQuery::class)->loadOf($s['group']->term_id, $orphan->id, $s['group']->department_id))->toBe(['load' => null, 'approved' => 0])
+        ->and(app(AssignmentBoardQuery::class)->load($s['group']->term_id, $orphan->id, $s['group']->department_id))->toBeNull()
+        ->and(app(ChangeRequestsQuery::class)->loadOf($s['group']->term_id, $s['group']->campus_id, $s['group']->department_id)['load']?->is($s['load']))->toBeTrue();
+});

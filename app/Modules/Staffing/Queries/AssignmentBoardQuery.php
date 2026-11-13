@@ -112,13 +112,14 @@ final class AssignmentBoardQuery
 
     /**
      * La carga del departamento en el periodo y en la modalidad del campus de la pantalla (M1; por el puente
-     * `campuses.modality_id` mientras la pantalla sea por campus), o null si no tiene.
+     * `campuses.modality_id` mientras la pantalla sea por campus), o null si no tiene (también si el campus no tiene
+     * modalidad en el puente).
      */
     public function load(string $termId, string $campusId, string $departmentId): ?AcademicLoad
     {
-        return AcademicLoad::query()
-            ->ofDepartment($termId, (string) Campus::withTrashed()->whereKey($campusId)->value('modality_id'), $departmentId)
-            ->first();
+        $modalityId = Campus::withTrashed()->whereKey($campusId)->value('modality_id');
+
+        return $modalityId === null ? null : AcademicLoad::query()->ofDepartment($termId, $modalityId, $departmentId)->first();
     }
 
     /**

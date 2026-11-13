@@ -63,7 +63,7 @@ final class MarkChangeRequestApplied
 
         $pending = ChangeRequest::query()
             ->where('term_id', $request->term_id)
-            ->where('campus_id', $request->campus_id)
+            ->where('modality_id', $request->modality_id)
             ->where('department_id', $request->department_id)
             ->where('status', ChangeRequestStatus::Approved)
             ->exists();
