@@ -60,7 +60,7 @@ it('no reabre una carga que todavía se está armando', function (LoadStatus $st
 
 it('la policy deja reabrir al admin y a Subdirección, y niega a los demás', function (?Role $role, bool $expected) {
     $campus = Campus::factory()->create();
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['campus_id' => $campus->id, 'department_id' => departmentKey(10)]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['modality_id' => $campus->modality_id, 'department_id' => departmentKey(10)]);
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [

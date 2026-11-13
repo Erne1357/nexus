@@ -273,13 +273,13 @@ describe('tablero', function () {
 
     it('CV5: con la carga fuera de borrador, Reabrir queda deshabilitado con su motivo y no reabre', function () {
         reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
-        AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sis->id, 'status' => LoadStatus::Proposed]);
+        AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->sis->id, 'status' => LoadStatus::Proposed]);
 
         reviewPage()
-            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->assertSee('La carga académica de SIS ya salió de borrador en Presencial.')
             ->call('confirm', 'reopen', 'subjects')
             ->assertHasErrors('status')
-            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->assertSee('La carga académica de SIS ya salió de borrador en Presencial.')
             ->assertSet('showConfirm', false);
 
         expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Validated);

@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
@@ -190,6 +191,16 @@ function useFakePermissions(): void
 function modalityOf(string $code): Modality
 {
     return Modality::withTrashed()->where('code', $code)->sole();
+}
+
+/**
+ * Un campus de la modalidad de la carga (M1: la carga ya no tiene campus; sus grupos sí): el primero activo por clave, o
+ * uno nuevo de esa modalidad.
+ */
+function loadCampus(AcademicLoad $load): Campus
+{
+    return Campus::query()->where('modality_id', $load->modality_id)->where('is_active', true)->orderBy('code')->first()
+        ?? Campus::factory()->create(['modality_id' => $load->modality_id]);
 }
 
 /**

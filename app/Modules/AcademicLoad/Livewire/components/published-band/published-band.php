@@ -15,7 +15,7 @@ use Livewire\Component;
  * `/horarios?periodo=&modalidad=&campus=`.
  *
  * Lo publicado es por modalidad (M1) y el campus es un filtro: el selector de Campus ofrece «Todos los campus» y los
- * campus donde se dan los grupos publicados de la modalidad en el periodo. La modalidad no tiene selector todavía (con
+ * campus activos donde se dan los grupos publicados de la modalidad en el periodo. La modalidad no tiene selector todavía (con
  * solo Presencial activa no aparecería, MS16): va en la URL y se conserva al cambiar de periodo si publicó en él.
  *
  * Los códigos que se ven son los de la página que pinta el layout, aunque no estén entre las opciones publicadas
@@ -99,7 +99,11 @@ new class extends Component
         $term = PublishedContextQuery::isCode($this->periodo) ? Term::query()->where('code', $this->periodo)->first() : null;
         $modality = PublishedContextQuery::isCode($this->modalidad) ? PublishedContextQuery::modality($this->modalidad) : null;
         $withGroups = $term === null || $modality === null ? [] : $published->schedule($term, $modality)->campuses();
-        $campuses = [['id' => '', 'name' => 'Todos los campus'], ...array_map(fn (array $campus): array => ['id' => $campus['code'], 'name' => $campus['name']], $withGroups)];
+        $active = Campus::query()->where('is_active', true)->whereIn('code', array_column($withGroups, 'code'))->pluck('code')->all();
+        $campuses = [
+            ['id' => '', 'name' => 'Todos los campus'],
+            ...array_map(fn (array $campus): array => ['id' => $campus['code'], 'name' => $campus['name']], array_values(array_filter($withGroups, fn (array $campus): bool => in_array($campus['code'], $active, true)))),
+        ];
 
         if ($term !== null && ! in_array($this->periodo, array_column($terms, 'id'), true)) {
             $terms[] = ['id' => $term->code, 'name' => $term->name];

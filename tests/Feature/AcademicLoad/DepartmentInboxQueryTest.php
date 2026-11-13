@@ -45,7 +45,7 @@ beforeEach(function () {
 
 function inboxOf(?Department $department = null): DepartmentInbox
 {
-    return app(DepartmentInboxQuery::class)->inbox(test()->term, test()->campus, $department ?? test()->cb);
+    return app(DepartmentInboxQuery::class)->inbox(test()->term, modalityOf('PRES'), test()->campus, $department ?? test()->cb);
 }
 
 /**
@@ -334,12 +334,12 @@ it('no cuenta las propuestas de otro periodo ni de otro campus', function () {
         ->and($inbox->subjects)->toBe([]);
 });
 
-it('da la carga del departamento en el campus y bloquea aceptar sin ella', function () {
+it('da la carga del departamento en la modalidad (M1) y bloquea aceptar sin ella', function () {
     expect(inboxOf()->load)->toBeNull()
         ->and(inboxOf()->canAccept())->toBeFalse();
 
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id]);
     foreach (Catalog::general() as $catalog) {
         CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
     }
@@ -353,7 +353,7 @@ it('da la carga del departamento en el campus y bloquea aceptar sin ella', funct
 });
 
 it('HC-14: avisa de los catálogos del departamento sin validar y bloquea aceptar', function () {
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
     CatalogReview::factory()->general(Catalog::Teachers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
     foreach ([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
         CatalogReview::factory()->general($catalog)->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);

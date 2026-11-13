@@ -145,10 +145,12 @@ describe('accesibilidad y renglones', function () {
             ->and($cards[0])->toContain('hoy');
     });
 
-    it('«Carga:» sale con las cargas que se pintan, separadas por un punto medio', function () {
+    it('«Carga:» sale con la carga del departamento en la modalidad de los campus (M1), una aunque haya dos campus', function () {
         $html = progressPage()->html();
 
-        expect($html)->toContain('data-testid="loads-SIS"')->and(preg_match('/loads-SIS.*?C1.*?·.*?C2/s', $html))->toBe(1);
+        expect($html)->toContain('data-testid="loads-SIS"')->toContain('data-testid="load-SIS-PRES"')
+            ->and(preg_match('/data-testid="loads-SIS".*?<\/p>/s', $html, $line))->toBe(1)
+            ->and($line[0])->not->toContain('·');
     });
 
     it('con una sola carga no hay separador, y sin ninguna no hay «Carga:»', function () {

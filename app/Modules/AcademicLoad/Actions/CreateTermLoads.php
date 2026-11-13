@@ -24,25 +24,24 @@ final class CreateTermLoads
     public function __construct(private readonly DepartmentQuery $departments) {}
 
     /**
-     * Lo que handle() crearía, sin escribir: las cargas que faltan (`loads`), las claves de los departamentos activos y los
-     * campus activos de la modalidad. Lo usa el panel de abrir el periodo, por TermOpeningPreviewing.
+     * Lo que handle() crearía, sin escribir: las cargas que faltan en la modalidad (`loads`, una por departamento activo
+     * que no la tiene, M1) y las claves de los departamentos activos. Lo usa el panel de abrir el periodo, por
+     * TermOpeningPreviewing.
      *
-     * @return array{loads: int, departments: list<string>, campuses: int}
+     * @return array{loads: int, departments: list<string>}
      */
     public function preview(Term $term, Modality $modality): array
     {
         $departments = $this->departments->activeIds();
-        $campuses = Campus::query()->where('modality_id', $modality->getKey())->where('is_active', true)->pluck('id');
-        $existing = $campuses->isEmpty() || $departments === [] ? 0 : AcademicLoad::query()
+        $existing = $departments === [] ? 0 : AcademicLoad::query()
             ->where('term_id', $term->getKey())
-            ->whereIn('campus_id', $campuses)
+            ->where('modality_id', $modality->getKey())
             ->whereIn('department_id', $departments)
             ->count();
 
         return [
-            'loads' => $campuses->count() * count($departments) - $existing,
+            'loads' => count($departments) - $existing,
             'departments' => $this->departments->activeCodes(),
-            'campuses' => $campuses->count(),
         ];
     }
 

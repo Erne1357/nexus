@@ -263,7 +263,7 @@ describe('admin', function () {
         $this->ead->update(['is_active' => true]);
         $term = Term::factory()->create(['code' => '20271']);
         TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
-        AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $this->c1->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Closed]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->c1->modality_id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Closed]);
 
         $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
 
@@ -276,7 +276,7 @@ describe('admin', function () {
         $this->ead->update(['is_active' => true]);
         $term = Term::factory()->create(['code' => '20271']);
         TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
-        AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $this->c1->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Published]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->c1->modality_id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Published]);
 
         $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
 

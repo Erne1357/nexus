@@ -29,7 +29,7 @@ beforeEach(function () {
     $term = Term::factory()->current()->create(['code' => '20271']);
     TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id]);
     $department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $department->id]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id]);
     foreach (Catalog::general() as $catalog) {
         CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $term->id, 'department_id' => $department->id]);
     }

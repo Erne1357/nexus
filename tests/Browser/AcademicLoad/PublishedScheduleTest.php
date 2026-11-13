@@ -31,7 +31,7 @@ beforeEach(function () {
         'sessions' => [LoadSnapshotFactory::session(['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => $room])],
     ]);
 
-    $load = AcademicLoad::factory()->for($term)->for($campus)->for(Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']))->inStatus(LoadStatus::Published)->create();
+    $load = AcademicLoad::factory()->for($term)->state(['modality_id' => $campus->modality_id])->for(Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']))->inStatus(LoadStatus::Published)->create();
     LoadSnapshot::factory()->for($load)->publishedAt(CarbonImmutable::parse('2026-12-12 10:30'))->withGroups([$group])->create();
 });
 

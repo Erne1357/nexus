@@ -42,7 +42,7 @@ beforeEach(function () {
 
     $placement = LoadSnapshotFactory::placement(['career' => $this->career, 'study_plan' => $this->plan, 'semester' => 3]);
     $subject = fn (string $code, string $name): array => ['id' => (string) Str::uuid7(), 'code' => $code, 'name' => $name, 'credits' => 5, 'theory_hours' => 3, 'practice_hours' => 2, 'department_id' => (string) Str::uuid7()];
-    $load = AcademicLoad::factory()->for($this->term)->for($this->campus)->for(Department::factory())->inStatus(LoadStatus::Published)->create();
+    $load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->campus->modality_id])->for(Department::factory())->inStatus(LoadStatus::Published)->create();
 
     LoadSnapshot::factory()->for($load)->publishedAt(CarbonImmutable::parse('2026-12-12 10:30'))->withGroups([
         LoadSnapshotFactory::group([
@@ -105,8 +105,8 @@ it('responde 404 sin encolar nada a lo que no está publicado', function (string
 ]);
 
 it('responde 404 a otro periodo o campus', function () {
-    $this->get(route('published.teacher.pdf', ['periodo' => '20263', 'campus' => 'C2', 'docente' => $this->teacher['id']]))->assertNotFound();
-    $this->get(route('published.teacher.pdf', ['periodo' => '20271', 'campus' => 'C1', 'docente' => $this->teacher['id']]))->assertNotFound();
+    $this->get(route('published.teacher.pdf', ['periodo' => '20263', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->teacher['id']]))->assertNotFound();
+    $this->get(route('published.teacher.pdf', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C1', 'docente' => $this->teacher['id']]))->assertNotFound();
 });
 
 it('las descargas públicas llevan el límite de la consulta', function () {
@@ -136,19 +136,19 @@ it('responde 404 en un campus inactivo y a una retícula que no es texto', funct
 });
 
 it('arma el PDF con las versiones de su llave aunque después se publique otra', function () {
-    $export = TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, $this->campus, $this->teacher['id']);
+    $export = TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, modalityOf('PRES'), $this->campus, $this->teacher['id']);
     $load = AcademicLoad::query()->firstOrFail();
     LoadSnapshot::factory()->for($load)->withGroups([])->create(['version' => 2]);
 
-    $schedule = app(PublishedScheduleQuery::class)->scheduleOf($this->term, $this->campus, $export->snapshotIds);
+    $schedule = app(PublishedScheduleQuery::class)->scheduleOf($this->term, modalityOf('PRES'), $export->snapshotIds);
 
     expect($schedule->teacher($this->teacher['id']))->toHaveCount(1)
-        ->and(app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus)->teacher($this->teacher['id']))->toBe([])
-        ->and(TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, $this->campus, $this->teacher['id']))->toBeNull();
+        ->and(app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'))->teacher($this->teacher['id']))->toBe([])
+        ->and(TeacherPdf::find(app(PublishedScheduleQuery::class), $this->term, modalityOf('PRES'), $this->campus, $this->teacher['id']))->toBeNull();
 });
 
 it('la semana lista en una celda las sesiones que se empalman aunque empiecen en bloques distintos', function () {
-    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
     $group = $schedule->teacher($this->teacher['id'])[0];
     $overlapping = $group->withSessions([
         new PublishedSession(2, '08:00', '10:00', 'teoria', 'Teoría', $this->room),
@@ -164,8 +164,8 @@ it('la semana lista en una celda las sesiones que se empalman aunque empiecen en
 });
 
 it('el PDF del semestre agrega la columna de un día fuera del perfil', function () {
-    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
-    $export = SemesterPdf::find(app(PublishedScheduleQuery::class), $this->term, $this->campus, 'ISC', 'ISIC-2010-224', 3);
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
+    $export = SemesterPdf::find(app(PublishedScheduleQuery::class), $this->term, modalityOf('PRES'), $this->campus, 'ISC', 'ISIC-2010-224', 3);
     $group = $schedule->semester($this->career['id'], $this->plan['id'], 3)[0];
     $saturday = $group->withSessions([new PublishedSession(6, '08:00', '09:00', 'teoria', 'Teoría', $this->room)]);
 
@@ -175,7 +175,7 @@ it('el PDF del semestre agrega la columna de un día fuera del perfil', function
 });
 
 it('el PDF del semestre lista materias y grupos por día, con «Por asignar» y sin el RFC ni la justificación', function () {
-    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
     $groups = $schedule->semester($this->career['id'], $this->plan['id'], 3);
 
     $html = view('academic-load::pdf.semester', [
@@ -197,7 +197,7 @@ it('el PDF del semestre lista materias y grupos por día, con «Por asignar» y 
 });
 
 it('la semana de un docente acomoda cada sesión en sus bloques y suma sus horas', function () {
-    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
     $week = WeekPdf::week($schedule->teacher($this->teacher['id']), $schedule, fn (PublishedGroup $group, array $session): array => $session);
 
     expect($week['hours'])->toBe(3)
@@ -209,12 +209,12 @@ it('la semana de un docente acomoda cada sesión en sus bloques y suma sus horas
 });
 
 it('las páginas de semestre, docente y salón ofrecen «Descargar PDF» con su liga', function () {
-    $this->get(route('published.semester', ['periodo' => '20271', 'campus' => 'C2', 'carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3]))
+    $this->get(route('published.semester', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3]))
         ->assertOk()->assertSee('Descargar PDF')
         ->assertSee(e(publishedPdfUrl('published.semester.pdf', ['carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3])), false);
-    $this->get(route('published.teacher', ['periodo' => '20271', 'campus' => 'C2', 'docente' => $this->teacher['id']]))
+    $this->get(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'docente' => $this->teacher['id']]))
         ->assertOk()->assertSee(publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]), false);
-    $this->get(route('published.room', ['periodo' => '20271', 'campus' => 'C2', 'salon' => $this->room['id']]))
+    $this->get(route('published.room', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'salon' => $this->room['id']]))
         ->assertOk()->assertSee(publishedPdfUrl('published.room.pdf', ['salon' => $this->room['id']]), false);
 });
 
@@ -228,7 +228,7 @@ it('DomPDF corre sin acceso remoto, sin PHP ni JavaScript y solo lee resources/i
 });
 
 it('un periodo o campus con caracteres raros es 404 en la descarga, sin llegar a la base', function () {
-    $this->get('/horarios/20271%27/C2/docente/'.$this->teacher['id'].'/pdf')->assertNotFound();
+    $this->get('/horarios/20271%27/pres/docente/'.$this->teacher['id'].'/pdf')->assertNotFound();
 });
 
 it('MS13: arma el PDF del semestre con una foto vieja, con el campus en la raíz', function () {

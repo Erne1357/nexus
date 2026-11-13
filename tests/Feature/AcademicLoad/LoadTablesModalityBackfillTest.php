@@ -21,6 +21,8 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    // La carga por departamento y modalidad (posterior) quita academic_loads.campus_id: se deshace primero.
+    (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210501_make_academic_loads_per_modality.php'))->down();
     $this->migration = require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210401_add_modality_to_load_tables.php');
     $this->migration->down();
     $this->term = Term::factory()->create();

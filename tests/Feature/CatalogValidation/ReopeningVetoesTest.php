@@ -21,11 +21,11 @@ it('CV5: devuelve el motivo del veto si una carga del departamento ya salió de 
     $term = Term::factory()->create();
     $department = Department::factory()->create(['code' => 'SIS']);
     $campus = Campus::factory()->create(['code' => 'C2']);
-    AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $department->id, 'status' => LoadStatus::Proposed]);
+    AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id, 'status' => LoadStatus::Proposed]);
     $review = CatalogReview::factory()->general(Catalog::Subjects)->validated()->create(['term_id' => $term->id, 'department_id' => $department->id]);
     $activities = Activity::query()->count();
 
-    expect(app(CatalogReviewQuery::class)->reopeningVetoes($review))->toBe(['La carga académica de SIS ya salió de borrador en C2.'])
+    expect(app(CatalogReviewQuery::class)->reopeningVetoes($review))->toBe(['La carga académica de SIS ya salió de borrador en Presencial.'])
         ->and($review->fresh()->status)->toBe(ReviewStatus::Validated)
         ->and(Activity::query()->count())->toBe($activities);
 });
@@ -33,7 +33,7 @@ it('CV5: devuelve el motivo del veto si una carga del departamento ya salió de 
 it('CV5: sin cargas fuera de borrador no hay motivos', function () {
     $term = Term::factory()->create();
     $department = Department::factory()->create();
-    AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => Campus::factory(), 'department_id' => $department->id, 'status' => LoadStatus::Draft]);
+    AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id, 'status' => LoadStatus::Draft]);
     $review = CatalogReview::factory()->general(Catalog::Careers)->validated()->create(['term_id' => $term->id, 'department_id' => $department->id]);
 
     expect(app(CatalogReviewQuery::class)->reopeningVetoes($review))->toBe([]);

@@ -39,7 +39,7 @@ beforeEach(function () {
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
     $this->accepted = ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id]);
     $this->pending = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id]);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
 });
 
 function returnPart(string $comment = 'Pide un grupo menos de Cálculo.', ?ProposalReview $part = null): ProposalReview
