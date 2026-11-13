@@ -116,7 +116,7 @@ final class StaffingSupplyDemoSeeder extends Seeder
             $offered = DB::table('career_campus')->where('campus_id', $campus->id)->where('is_active', true)->whereNull('deleted_at')->pluck('career_id');
 
             foreach (Career::query()->where('is_active', true)->whereIn('id', $offered)->orderBy('code')->get() as $career) {
-                $eligible = app(EligibleStudentsQuery::class)->countsFor($career, $campus);
+                $eligible = app(EligibleStudentsQuery::class)->countsFor($career, $campus->catalogModality, $campus);
 
                 foreach ($this->placements($career) as $subject) {
                     $groups = $suggested->for($eligible[$subject->id] ?? 0, (bool) $subject->needs_lab);
