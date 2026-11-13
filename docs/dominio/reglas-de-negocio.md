@@ -566,6 +566,7 @@ Reglas, código y pruebas citan estas reglas por su id. Las decisiones M1 a M14 
 - **MS33.** Al contraer la carga por modalidad, las filas de campus que eran modalidades (EAD, En línea y TecNM Virtual) se desactivan y se borran lógicamente solo si nada las referencia (MS3); la bitácora no cuenta como referencia: es historia y la fila borrada lógicamente sigue ahí (supuesto por confirmar).
 - **MS34.** Todo campus activo es un lugar con salones (MS3, MS4): el catálogo de salones ya no se filtra por un perfil de campus. La jornada de los salones, donde caen sus bloqueos, es la que cubre a las modalidades activas con salones (unión de días, inicio más temprano y fin más tarde, como MS11); con solo Presencial activa es lunes a viernes de 7:00 a 21:00 (supuesto por confirmar).
 - **MS35.** El exporte de demo de alumnos escribe la modalidad como la escribe el SII (Presencial como `presencial`; EAD como `distancia`, MS7) y no exporta, con un aviso de cuántos, a los alumnos de una modalidad sin valor en el SII (En línea, TecNM Virtual) (supuesto por confirmar).
+- **MS36.** Una carga publicada de una modalidad desactivada o borrada no se reabre ni pasa a re-análisis: el admin activa la modalidad primero. Sale de M11 y M13: una modalidad inactiva nunca deja una carga sin publicar en un periodo vigente o futuro. Las demás transiciones de esa carga siguen (supuesto por confirmar).
 
 ## Parámetros por campus (perfil de flujo)
 
