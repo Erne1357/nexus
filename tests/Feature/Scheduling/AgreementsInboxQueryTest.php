@@ -40,7 +40,7 @@ beforeEach(function () {
 
 function agreementsInboxOf(User $user, Term $term, Campus $campus, ?AgreementKind $kind = null, string $search = ''): array
 {
-    return app(AgreementsInboxQuery::class)->inbox(app(Actor::class)->forUser($user), $term, $campus, $kind, $search);
+    return app(AgreementsInboxQuery::class)->inbox(app(Actor::class)->forUser($user), $term, $campus->catalogModality, $campus, $kind, $search);
 }
 
 function loanOf(Department $from, Department $to, array $attributes = [], ?string $subjectCode = null): InterdepartmentalAgreement
@@ -222,7 +222,7 @@ it('no hace una consulta por acuerdo: las mismas consultas con 1 que con 8 acuer
         $actor->allowsAny(AcademicLoadPermission::AgreementView);
         DB::flushQueryLog();
         DB::enableQueryLog();
-        app(AgreementsInboxQuery::class)->inbox($actor, $this->term, $this->campus);
+        app(AgreementsInboxQuery::class)->inbox($actor, $this->term, $this->campus->catalogModality, $this->campus);
         $queries = count(DB::getQueryLog());
         DB::disableQueryLog();
 
@@ -304,9 +304,9 @@ it('findOrFail da el acuerdo visible y falla con el de otro departamento o campu
     $actor = app(Actor::class)->forUser($jefe);
     $query = app(AgreementsInboxQuery::class);
 
-    expect($query->findOrFail($actor, $this->term, $this->campus, $mine->id)->is($mine))->toBeTrue()
-        ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus, $foreign->id))->toThrow(ModelNotFoundException::class)
-        ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
+    expect($query->findOrFail($actor, $this->term, $this->campus->catalogModality, $this->campus, $mine->id)->is($mine))->toBeTrue()
+        ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus->catalogModality, $this->campus, $foreign->id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus->catalogModality, $this->campus, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
 });
 
 it('la semana incluye las horas de lo ocupado fuera de la ventana del campus', function () {

@@ -14,8 +14,8 @@ use App\Modules\Core\Queries\KeyLookup;
 
 /**
  * «Ingeniería Industrial te pide LC-201» (tareas 3.6 y 3.7): al jefe del departamento al que va dirigido un acuerdo
- * propuesto, con lo que se pide. Lleva a la pantalla Acuerdos con el acuerdo abierto, en el periodo y campus del
- * acuerdo. Deja de poder abrirse si el acuerdo ya no existe, si ya no lo puede decidir o si ya no está propuesto.
+ * propuesto, con lo que se pide. Lleva a la pantalla Acuerdos con el acuerdo abierto, en el periodo y la modalidad del
+ * acuerdo y, si es un préstamo de salón, en su campus (MS14); un grupo compartido no filtra campus. Deja de poder abrirse si el acuerdo ya no existe, si ya no lo puede decidir o si ya no está propuesto.
  */
 final class AgreementReceived extends NexusNotification
 {
@@ -43,7 +43,7 @@ final class AgreementReceived extends NexusNotification
             route: 'scheduling.agreements',
             parameters: ['acuerdo' => $agreement->getKey()],
             termId: $agreement->term_id,
-            campusId: $agreement->campus_id,
+            campusId: $agreement->kind === AgreementKind::RoomLoan ? $agreement->campus_id : null,
             modalityId: $agreement->modality_id,
             tone: 'warning',
         );

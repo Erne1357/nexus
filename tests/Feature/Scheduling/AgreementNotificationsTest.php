@@ -94,7 +94,10 @@ it('al proponerse un grupo compartido, avisa al jefe del departamento de la carr
     event(new AgreementRequested($share));
 
     Notification::assertSentTo($this->jefeSc, AgreementReceived::class, fn (AgreementReceived $notification): bool => $notification->message($this->jefeSc)->title === 'Ingeniería Industrial propone un grupo compartido'
-        && $notification->message($this->jefeSc)->body === '6 lugares de ISC');
+        && $notification->message($this->jefeSc)->body === '6 lugares de ISC'
+        // MS14: el aviso de un grupo compartido abre la pantalla en la modalidad, sin filtrar un campus.
+        && $notification->message($this->jefeSc)->campusId === null
+        && $notification->message($this->jefeSc)->modalityId === $share->modality_id);
 });
 
 it('el aviso se queda en la modalidad: un jefe del mismo departamento en otra modalidad no lo recibe', function () {

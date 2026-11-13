@@ -53,7 +53,7 @@ final class AgreementAnswered extends NexusNotification
             route: 'scheduling.agreements',
             parameters: ['acuerdo' => $agreement->getKey()],
             termId: $agreement->term_id,
-            campusId: $agreement->campus_id,
+            campusId: $agreement->kind === AgreementKind::RoomLoan ? $agreement->campus_id : null,
             modalityId: $agreement->modality_id,
             tone: $rejected ? 'warning' : 'success',
         );

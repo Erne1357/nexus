@@ -1,6 +1,7 @@
 {{--
-    Acuerdos entre departamentos (tareas 3.6 y 3.7, maqueta B «Bandeja de dos paneles»): encabezado con el periodo y el
-    campus; a la izquierda la lista agrupada («Por decidir», «Enviados», «Decididos», plegables) con búsqueda y filtro
+    Acuerdos entre departamentos (tareas 3.6 y 3.7, maqueta B «Bandeja de dos paneles»): encabezado con el periodo y la
+    modalidad, y a la derecha el select «Modalidad» (con más de una) y el filtro de campus con sus acuerdos en cada uno
+    (maqueta U2, opción A; cada acuerdo lleva la etiqueta de su campus); a la izquierda la lista agrupada («Por decidir», «Enviados», «Decididos», plegables) con búsqueda y filtro
     de tipo; a la derecha el detalle con las acciones fijas al pie. Desde lg los dos paneles van juntos; debajo, la lista
     y el detalle van por separado y el detalle trae «Volver». Todo lo que se pinta viene de AgreementsInboxQuery.
 
@@ -37,12 +38,22 @@
     }"
     x-init="$nextTick(() => reveal(false))"
     x-on:agreement-shown.window="$nextTick(() => requestAnimationFrame(() => reveal(true)))">
-    <div>
-        <h1 class="text-2xl font-bold leading-tight md:text-3xl">Acuerdos</h1>
-        @if ($groups !== null)
-            <p class="mt-1.5 text-neutral">Préstamos de salón y grupos compartidos entre departamentos, <span data-testid="agreements-term">{{ $term->name }}</span> en {{ $shownCampus->name }}.</p>
-        @endif
-        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
+    <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div class="min-w-0">
+            <h1 class="text-2xl font-bold leading-tight md:text-3xl">Acuerdos</h1>
+            @if ($groups !== null)
+                <p class="mt-1.5 text-neutral">Préstamos de salón y grupos compartidos entre departamentos, <span data-testid="agreements-term">{{ $term->name }}</span> en {{ $shownModality->name }}{{ $shownCampus ? ' · '.$shownCampus->name : '' }}.</p>
+            @endif
+        </div>
+        <div class="flex flex-wrap items-end gap-x-4 gap-y-2 max-md:w-full">
+            <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" class="max-md:w-full md:w-56" />
+            @if ($campusOptions->count() > 1)
+                <fieldset class="fieldset min-w-0 py-0" data-testid="agreements-campus">
+                    <legend class="fieldset-legend mb-0.5">Campus</legend>
+                    <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" :counts="$campusCounts" all />
+                </fieldset>
+            @endif
+        </div>
     </div>
 
     @if ($groups === null)

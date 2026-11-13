@@ -72,7 +72,12 @@
                     <button type="button" wire:click="pick('{{ $row['id'] }}')" aria-current="{{ $row['id'] === $selectedId ? 'true' : 'false' }}" data-agreement="{{ $row['id'] }}"
                         @class(['grid min-h-14 min-w-0 flex-1 cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-0.5 py-2.5 pe-3 text-start', 'ps-3.5' => ! $choosing])>
                         <x-icon :name="$row['kind']->icon()" class="row-span-3 mt-px h-[18px] w-[18px] text-neutral" aria-hidden="true" />
-                        <span class="col-start-2 min-w-0 font-mono text-sm font-semibold break-words">{{ $name }}</span>
+                        <span class="col-start-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                            <span class="min-w-0 font-mono text-sm font-semibold break-words">{{ $name }}</span>
+                            @if ($campusOptions->count() > 1)
+                                <x-core::campus-tag :campus="(object) $row['campus']" data-testid="agreement-campus" />
+                            @endif
+                        </span>
                         @if ($key === 'done')
                             <x-core::status-badge :tone="$row['status']->tone()" :label="$row['status']->label()" :icon="$row['status']->icon()" class="col-start-3 row-start-1 h-6 text-xs" />
                         @endif
