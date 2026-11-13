@@ -212,14 +212,14 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         $profile = fn (DemoContext $demo): string => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo';
-        $staffing = fn (DemoContext $demo, string $mode) => $demo->runSeeder(StaffingDemoSeeder::class, [
+        $staffing = fn (DemoContext $demo, string $mode) => $demo->runSeederPerModality(StaffingDemoSeeder::class, [
             'profile' => $profile($demo),
             'campuses' => $demo->campuses,
             'term' => $demo->termCode,
             'seed' => $demo->seed,
             'mode' => $mode,
         ]);
-        $closing = fn (DemoContext $demo, string $mode) => $demo->runSeeder(LoadClosingDemoSeeder::class, [
+        $closing = fn (DemoContext $demo, string $mode) => $demo->runSeederPerModality(LoadClosingDemoSeeder::class, [
             'profile' => $profile($demo),
             'campuses' => $demo->campuses,
             'term' => $demo->termCode,
@@ -228,7 +228,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         ]);
 
         return [
-            new DemoStep(DemoCheckpoint::CatalogValidation, 'Plantilla suficiente para la asignación', fn (DemoContext $demo) => $demo->runSeeder(StaffingSupplyDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::CatalogValidation, 'Plantilla suficiente para la asignación', fn (DemoContext $demo) => $demo->runSeederPerModality(StaffingSupplyDemoSeeder::class, [
                 'campuses' => $demo->campuses, 'term' => $demo->termCode, 'seed' => $demo->seed,
             ])),
             new DemoStep(DemoCheckpoint::Staffing, 'Cargas a asignación y rankings', fn (DemoContext $demo) => $staffing($demo, 'start')),

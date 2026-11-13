@@ -68,12 +68,15 @@ use RuntimeException;
  * tarde, así el alumno tipo tiene una combinación válida. Las prácticas de materias con laboratorio van en sesiones
  * `practica`.
  *
- * Además, los `clean_departments` departamentos con más grupos de cada campus (3 con el perfil demo, 4 con el massive)
- * quedan limpios para que su carga pueda pasar a asignación de docentes: todos sus grupos activos tienen sesiones con
- * exactamente sus horas, sin parejas encimadas, salones chicos ni prácticas en aula, con salones sin dueño o de su
- * propio departamento y sin docente (los asigna después el seeder de Staffing). Los demás departamentos conservan la
- * variedad de arriba, y siempre queda al menos uno con choques duros. Las proporciones se calculan sobre los grupos de
- * los departamentos no limpios. `cleanDepartments()` devuelve los códigos por campus y se imprimen al sembrar.
+ * Además, los `clean_departments` departamentos con más grupos de cada modalidad (3 con el perfil demo, 4 con el
+ * massive) quedan limpios para que su carga pueda pasar a asignación de docentes: todos sus grupos activos tienen
+ * sesiones con exactamente sus horas, sin parejas encimadas, salones chicos ni prácticas en aula, con salones sin dueño
+ * o de su propio departamento y sin docente (los asigna después el seeder de Staffing). La carga es por departamento y
+ * modalidad y junta los grupos de todos sus campus (M1), así que se escogen una vez por modalidad, contando los grupos
+ * de todos los campus de `$campuses`, y un departamento queda limpio en todos sus campus o en ninguno. Los demás
+ * departamentos conservan la variedad de arriba, y cada campus conserva al menos uno con choques duros: se salta el
+ * departamento que dejaría limpio a un campus entero. Las proporciones se calculan sobre los grupos de los departamentos
+ * no limpios. `cleanDepartments()` devuelve los códigos por campus y se imprimen al sembrar.
  *
  * Determinista con `$seed` sobre los mismos datos. Idempotente: un grupo que ya tiene sesiones no se toca, ni se le
  * cambia un docente que ya tiene. Se niega a correr en producción.
@@ -109,6 +112,9 @@ final class SchedulingDemoSeeder extends Seeder
 
     /** @var array<string, true> */
     private array $cleanIds = [];
+
+    /** @var array<string, list<string>> modalidad => ids de los departamentos limpios en todos sus campus */
+    private array $cleanByModality = [];
 
     /** @var array<string, true> «plan|semestre» con algún grupo de un departamento limpio */
     private array $cleanCohorts = [];
@@ -151,6 +157,8 @@ final class SchedulingDemoSeeder extends Seeder
             ->whereIn('id', Group::query()->where('term_id', $termModel->id)->whereIn('campus_id', $found->modelKeys())->select('modality_id'))
             ->orderBy('code')->get();
 
+        $this->cleanByModality = $modalities->mapWithKeys(fn (Modality $modality): array => [$modality->id => $this->pickClean($termModel, $found, $modality)])->all();
+
         Event::fakeFor(function () use ($found, $modalities, $termModel, $user): void {
             foreach ($found as $campus) {
                 foreach ($modalities as $modality) {
@@ -175,20 +183,39 @@ final class SchedulingDemoSeeder extends Seeder
     }
 
     /**
-     * Los departamentos con más grupos del campus (contando los cancelados, para que no cambie al repetir), sin dejar a todos limpios.
+     * Los departamentos con más grupos de la modalidad en los campus (contando los cancelados, para que no cambie al
+     * repetir), sin dejar a todos limpios: de más a menos grupos, saltando el que dejaría sin choques a un campus entero.
      *
-     * @param  Collection<int, Group>  $groups
+     * @param  Collection<int, Campus>  $campuses
      * @return list<string> ids de departamento
      */
-    private function pickClean($groups): array
+    private function pickClean(Term $term, Collection $campuses, Modality $modality): array
     {
-        $counts = $groups->countBy('department_id')->all();
+        $rows = Group::query()->where('term_id', $term->id)->where('modality_id', $modality->id)->whereIn('campus_id', $campuses->modelKeys())
+            ->selectRaw('campus_id, department_id, count(*) as total')->groupBy('campus_id', 'department_id')->toBase()->get();
+        $counts = $rows->groupBy('department_id')->map(fn (Collection $perCampus): int => (int) $perCampus->sum('total'))->all();
+        $dirty = $rows->groupBy('campus_id')->map(fn (Collection $perCampus): array => array_fill_keys($perCampus->pluck('department_id')->all(), true))->all();
         $codes = Department::query()->withTrashed()->whereIn('id', array_keys($counts))->pluck('code', 'id')->all();
         $wanted = min((int) $this->ratios['clean_departments'], count($counts) - 1);
 
         uksort($counts, fn (string $a, string $b): int => [$counts[$b], $codes[$a] ?? $a] <=> [$counts[$a], $codes[$b] ?? $b]);
 
-        return array_slice(array_keys($counts), 0, max(0, $wanted));
+        $clean = [];
+
+        foreach (array_keys($counts) as $departmentId) {
+            if (count($clean) >= $wanted) {
+                break;
+            }
+
+            if (collect($dirty)->contains(fn (array $departments): bool => isset($departments[$departmentId]) && count($departments) === 1)) {
+                continue;
+            }
+
+            $clean[] = $departmentId;
+            $dirty = array_map(fn (array $departments): array => array_diff_key($departments, [$departmentId => true]), $dirty);
+        }
+
+        return $clean;
     }
 
     private function seedCampus(Term $term, Campus $campus, Modality $modality, User $user): void
@@ -204,7 +231,7 @@ final class SchedulingDemoSeeder extends Seeder
         $this->loadTeachers();
         $this->loadRooms($term, $campus);
 
-        $cleanIds = $this->pickClean($groups);
+        $cleanIds = array_values(array_intersect($this->cleanByModality[$modality->id] ?? [], $groups->pluck('department_id')->all()));
         $this->cleanIds = array_fill_keys($cleanIds, true);
         $this->cleanByCampus[$campus->code] = array_values(Department::query()->withTrashed()->whereIn('id', $cleanIds)->orderBy('code')->pluck('code')->all());
         $this->command?->info("Departamentos limpios en {$campus->code}: ".($this->cleanByCampus[$campus->code] === [] ? 'ninguno' : implode(', ', $this->cleanByCampus[$campus->code])).'.');

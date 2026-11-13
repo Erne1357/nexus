@@ -206,7 +206,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 }
             }),
             // Los cupos terminan la etapa 4, como el horario limpio que sigue.
-            new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeederPerModality(SchedulingAgreementsDemoSeeder::class, [
                 'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -217,7 +217,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
             ])),
-            new DemoStep(DemoCheckpoint::Closing, 'Salón para toda sesión presencial y préstamos aceptados', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Closing, 'Salón para toda sesión presencial y préstamos aceptados', fn (DemoContext $demo) => $demo->runSeederPerModality(SchedulingAgreementsDemoSeeder::class, [
                 'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
