@@ -8,7 +8,6 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
@@ -182,10 +181,11 @@ function modalityOf(string $code): Modality
 }
 
 /**
- * Un campus de la modalidad de la carga (M1: la carga ya no tiene campus; sus grupos sí): el primero activo por clave, o
- * uno nuevo de esa modalidad.
+ * Un campus donde poner los grupos de una carga en una prueba: el primero activo por clave, o uno nuevo. La carga ya no
+ * tiene campus (M1) y el campus no sale de su modalidad: `groups.campus_id` sigue obligatoria, así que también lo lleva
+ * un grupo de una modalidad sin salones.
  */
-function loadCampus(AcademicLoad $load): Campus
+function loadCampus(): Campus
 {
     return Campus::query()->where('is_active', true)->orderBy('code')->first() ?? Campus::factory()->create();
 }

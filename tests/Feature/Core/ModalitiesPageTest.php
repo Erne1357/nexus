@@ -71,7 +71,7 @@ describe('admin', function () {
             ->assertViewHas('modalities', listsModalities(['EAD', 'ENL', 'TNMV']));
     });
 
-    it('da de alta una modalidad desde el panel y lo confirma con un toast', function () {
+    it('MS24: da de alta una modalidad desde el panel, nace activa y lo confirma con un toast', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.modalities')
             ->call('create')
@@ -211,7 +211,7 @@ describe('admin', function () {
             ->assertSee('El perfil de flujo guardado no es válido');
     });
 
-    it('la clave no cambia una vez creada: el panel la deshabilita con su motivo y la Action la rechaza', function () {
+    it('MS22: la clave no cambia una vez creada: el panel la deshabilita con su motivo y la Action la rechaza', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.modalities')
             ->call('edit', $this->pres->id)

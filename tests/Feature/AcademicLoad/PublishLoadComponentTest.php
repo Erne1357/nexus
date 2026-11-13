@@ -43,9 +43,9 @@ function componentGroup(): Group
 {
     $teacher = Teacher::factory()->create();
     TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $teacher->id]);
-    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus(test()->load)->id])->id, 'department_id' => departmentKey(10)]);
+    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id, 'department_id' => departmentKey(10)]);
     $group = Group::factory()->withQuota()->create([
-        'term_id' => test()->load->term_id, 'campus_id' => loadCampus(test()->load)->id, 'teacher_id' => $teacher->id, 'capacity' => 30,
+        'term_id' => test()->load->term_id, 'campus_id' => loadCampus()->id, 'teacher_id' => $teacher->id, 'capacity' => 30,
         'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10), 'theory_hours' => 2, 'practice_hours' => 0])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $group->owner_career_id, 'campus_id' => $group->campus_id]);

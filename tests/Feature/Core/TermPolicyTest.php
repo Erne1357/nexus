@@ -8,7 +8,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\TermPolicy;
 
 /*
-| TermPolicy. Fila "Abrir periodo, calendario, perfil de campus" de reglas-de-negocio.md: `admin` y
+| TermPolicy. Fila "Abrir periodo, calendario, perfil de modalidad" de reglas-de-negocio.md: `admin` y
 | `subdireccion` (supuesto por confirmar). Nadie borra periodos.
 */
 

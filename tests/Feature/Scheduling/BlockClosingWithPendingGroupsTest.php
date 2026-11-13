@@ -38,7 +38,7 @@ function closingTeacher(bool $active = true): Teacher
 
 function closingRoom(int $capacity = 40): Room
 {
-    return Room::factory()->capacity($capacity)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus(test()->load)->id])->id]);
+    return Room::factory()->capacity($capacity)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id]);
 }
 
 /**
@@ -54,7 +54,7 @@ function closingGroup(array $attributes = [], bool $scheduled = true, ?Room $roo
     };
     $group = Group::factory()->create([
         'term_id' => test()->load->term_id,
-        'campus_id' => loadCampus(test()->load)->id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => test()->subject->id,
         'capacity' => 30,
         'teacher_id' => $teacherId,
@@ -155,7 +155,7 @@ it('no mira otras transiciones, grupos cancelados ni grupos de otro departamento
         ->and(closingVeto(LoadStatus::Proposed, LoadStatus::Staffing)->blocked())->toBeFalse();
 });
 
-it('sigue el perfil del campus: sin salones no pide salón y sin bloques de tiempo no pide horario', function () {
+it('sigue el perfil de la modalidad de la carga: sin salones no pide salón y sin bloques de tiempo no pide horario', function () {
     $this->load->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false, 'uses_time_blocks' => false]]);
     closingGroup(withRoom: false);
     closingGroup(scheduled: false);

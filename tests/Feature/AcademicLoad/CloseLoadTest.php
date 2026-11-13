@@ -37,7 +37,7 @@ function closeLoadAgreement(AcademicLoad $load, array $attributes = [], Agreemen
 {
     return InterdepartmentalAgreement::factory()->inStatus($status)->create([
         'term_id' => $load->term_id,
-        'campus_id' => loadCampus($load)->id,
+        'campus_id' => loadCampus()->id,
         ...$attributes,
     ]);
 }

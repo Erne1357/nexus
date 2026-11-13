@@ -18,9 +18,9 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| Bloqueos de un salón. El día y las horas deben caber en el perfil del campus (días y jornada); la
-| hora de fin es posterior a la de inicio; el periodo es opcional (sin él, todos); quitar es borrado
-| lógico.
+| Bloqueos de un salón. El día y las horas deben caber en la jornada de los salones (días y horario de las
+| modalidades activas con salones, MS34); la hora de fin es posterior a la de inicio; el periodo es opcional
+| (sin él, todos); quitar es borrado lógico.
 */
 
 beforeEach(function () {

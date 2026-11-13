@@ -269,7 +269,7 @@ describe('bloqueos del salón en el panel', function () {
         expect(textOf(domOf($component)->querySelector('[data-testid="blocks-drawer"]')))->toContain('Bloqueos de A-101')->toContain('08:00 a 10:00');
     });
 
-    it('agrega un bloqueo dentro del perfil del campus y lo lista', function () {
+    it('agrega un bloqueo dentro de la jornada de los salones y lo lista', function () {
         $term = Term::factory()->create();
 
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
@@ -336,7 +336,7 @@ describe('bloqueos del salón en el panel', function () {
     });
 });
 
-describe('robustez y perfil del campus', function () {
+describe('robustez y jornada de los salones', function () {
     it('si el salón del panel se borra, cierra el panel en lugar de romper la página', function () {
         $component = Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertSet('showDrawer', true);
         $this->a101->delete();

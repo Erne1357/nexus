@@ -222,8 +222,7 @@ it('HC-03 se revisa por campus dentro de la carga presencial (MS10): el grupo de
     expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $typical))->toEqualCanonicalizing([$onlyHere->id, $clash->id]);
 });
 
-it('HC-04 usa la ventana de la modalidad: con sábado en su perfil, una sesión en sábado no es choque aunque el perfil del campus no lo tenga', function () {
-    $this->campus->update(['settings' => ['days' => [1, 2, 3, 4, 5]]]);
+it('HC-04 usa la ventana de la modalidad: con sábado en su perfil, una sesión en sábado no es choque; sin él, sí', function () {
     $this->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
     $group = validatorGroup();
     GroupSession::factory()->for($group)->on(6, '08:00', '10:00')->create();

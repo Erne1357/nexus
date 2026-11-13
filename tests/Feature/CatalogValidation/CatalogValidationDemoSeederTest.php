@@ -31,7 +31,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /**
  * Seis departamentos con jefe, docentes, materias, carrera y salones en cada campus, y los periodos 20263 y 20271
- * abiertos con OpenTerm en las modalidades de `$campuses` (M4; por el puente `campuses.modality_id`: Presencial).
+ * abiertos con OpenTerm en Presencial (M4: la apertura es por modalidad; los campus son solo el lugar, MS3).
  *
  * @param  list<string>  $campuses
  */

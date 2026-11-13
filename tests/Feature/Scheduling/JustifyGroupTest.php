@@ -26,7 +26,7 @@ beforeEach(function () {
     $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Staffing, 'department_id' => departmentKey(10)]);
     $this->group = Group::factory()->create([
         'term_id' => $this->load->term_id,
-        'campus_id' => loadCampus($this->load)->id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10)])->id,
     ]);
 });
@@ -54,7 +54,7 @@ it('la quita con un texto vacío', function () {
 });
 
 it('no justifica un grupo que ya tiene docente y salón en cada sesión presencial', function () {
-    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id]);
+    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id]);
     $this->group->update(['teacher_id' => Teacher::factory()->create()->id]);
     GroupSession::factory()->for($this->group)->inRoom($room)->on(1, '07:00', '09:00')->create();
 
@@ -89,7 +89,7 @@ it('la policy deja justificar a quien cierra la carga del departamento: el jefe 
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [
-            'campus_id' => loadCampus($this->load)->id,
+            'campus_id' => loadCampus()->id,
             ...($role === Role::Coordinador ? ['career_id' => $this->group->owner_career_id] : ($role === Role::Subdireccion ? [] : ['department_id' => departmentKey($department)])),
         ])->create();
 

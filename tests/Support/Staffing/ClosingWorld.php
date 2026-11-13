@@ -88,7 +88,7 @@ final class ClosingWorld
      */
     public function group(array $attributes = [], ?AcademicLoad $load = null, bool $scheduled = true, bool $withRoom = true, bool|Teacher $teacher = true): Group
     {
-        $campus = $load === null ? $this->campus : ($this->campusOfLoad[$load->id] ?? ($load->is($this->load) ? $this->campus : loadCampus($load)));
+        $campus = $load === null ? $this->campus : ($this->campusOfLoad[$load->id] ?? ($load->is($this->load) ? $this->campus : loadCampus()));
         $load ??= $this->load;
         $subject = $load->department_id === $this->department->id
             ? $this->subject

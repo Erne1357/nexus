@@ -172,7 +172,8 @@ it('cambiar la modalidad del grupo la propaga a sus sesiones', function () {
 });
 
 it('se detiene y nombra el campus si un grupo o un choque es de un campus sin modalidad del catálogo, y no deja nada', function () {
-    $orphan = Campus::factory()->create(['code' => 'C9', 'modality_id' => null]);
+    $orphan = campusBeforeContraction('C9');
+    DB::table('campuses')->where('id', $orphan->id)->update(['modality_id' => null]);
     schedulingGroupBeforeModality($this, $this->c1);
     $group = schedulingGroupBeforeModality($this, $orphan);
     schedulingSessionBeforeModality($group, 1);

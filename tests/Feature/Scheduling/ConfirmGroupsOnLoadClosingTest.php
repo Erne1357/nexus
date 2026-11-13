@@ -26,7 +26,7 @@ function confirmingGroup(array $attributes = []): Group
 {
     return Group::factory()->create([
         'term_id' => test()->load->term_id,
-        'campus_id' => loadCampus(test()->load)->id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => test()->subject->id,
         ...$attributes,
     ]);
@@ -35,7 +35,7 @@ function confirmingGroup(array $attributes = []): Group
 it('confirma los grupos planeados del departamento y deja bitácora en la carga', function () {
     $planned = [confirmingGroup(), confirmingGroup()];
     $cancelled = confirmingGroup(['status' => GroupStatus::Cancelled]);
-    $other = Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus($this->load)->id]);
+    $other = Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus()->id]);
 
     $actor = User::factory()->admin()->create();
     LoadClosing::dispatch($this->load, $actor);

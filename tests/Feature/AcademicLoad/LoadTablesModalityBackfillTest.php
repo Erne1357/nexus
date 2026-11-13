@@ -131,7 +131,8 @@ it('cada fila de la propuesta recibe el campus de su propuesta, y la columna que
 });
 
 it('se detiene y nombra el campus si una fila es de un campus sin modalidad del catálogo, y no deja nada', function () {
-    $orphan = Campus::factory()->create(['code' => 'C9', 'modality_id' => null]);
+    $orphan = campusBeforeContraction('C9');
+    DB::table('campuses')->where('id', $orphan->id)->update(['modality_id' => null]);
     academicLoadBeforeModality($this, $this->c1, $this->sis);
     academicLoadBeforeModality($this, $orphan, $this->sis);
     sharedGroupAgreementBeforeModality($this, $orphan);

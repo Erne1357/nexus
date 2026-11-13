@@ -121,7 +121,7 @@ it('un grupo cancelado o con la carga fuera de propuesta, asignación o ajustes 
     'sin carga' => [fn ($test) => $test->load->delete()],
 ]);
 
-it('sigue los días, la ventana y el bloque del perfil de la modalidad del grupo, (el campus no tiene perfil, MS3)', function () {
+it('sigue los días, la ventana y el bloque del perfil de la modalidad del grupo (el campus no tiene perfil, MS3)', function () {
     $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [6], 'block_minutes' => 30, 'day_start' => '08:00', 'day_end' => '10:00']]);
 
     expect(array_keys(app(GroupFitQuery::class)->for($this->group->fresh())))->toBe(['6|08:00', '6|08:30', '6|09:00', '6|09:30']);

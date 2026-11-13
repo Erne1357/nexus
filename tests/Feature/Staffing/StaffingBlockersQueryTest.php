@@ -29,14 +29,14 @@ beforeEach(function () {
  */
 function blockersGroup(array $attributes = []): Group
 {
-    $group = Group::factory()->create(['term_id' => test()->load->term_id, 'campus_id' => loadCampus(test()->load)->id, 'subject_id' => test()->subject->id, 'capacity' => 30, ...$attributes]);
+    $group = Group::factory()->create(['term_id' => test()->load->term_id, 'campus_id' => loadCampus()->id, 'subject_id' => test()->subject->id, 'capacity' => 30, ...$attributes]);
     CareerCampus::factory()->create(['career_id' => $group->owner_career_id, 'campus_id' => $group->campus_id]);
 
     return $group;
 }
 
 it('cuenta los grupos con choques duros y los grupos sin horario', function () {
-    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id]);
+    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id]);
     GroupSession::factory()->for(blockersGroup())->inRoom($room)->on(1, '07:00', '09:00')->create();
     blockersGroup();
     blockersGroup();
@@ -46,7 +46,7 @@ it('cuenta los grupos con choques duros y los grupos sin horario', function () {
 });
 
 it('M1: no cuenta los choques de un grupo del departamento de otra modalidad en el mismo campus', function () {
-    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id]);
+    $room = Room::factory()->capacity(20)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id]);
     GroupSession::factory()->for(blockersGroup())->inRoom($room)->on(1, '07:00', '09:00')->create();
     GroupSession::factory()->for(blockersGroup(['modality_id' => modalityOf('EAD')->id]))->inRoom($room)->on(2, '07:00', '09:00')->create();
 
@@ -56,7 +56,7 @@ it('M1: no cuenta los choques de un grupo del departamento de otra modalidad en 
 it('no cuenta grupos cancelados ni de otros departamentos', function () {
     GroupSession::factory()->for(blockersGroup())->on(1, '07:00', '09:00')->create();
     blockersGroup(['status' => 'cancelled']);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus($this->load)->id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus()->id]);
 
     expect(app(StaffingBlockersQuery::class)->of($this->load))->toBe(['conflicted' => 0, 'unscheduled' => 0]);
 });

@@ -31,7 +31,7 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'department_id' => departmentKey(10)]);
     $this->publisher = User::factory()->create(['name' => 'Laura Méndez']);
-    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus($this->load)->id])->id, 'department_id' => departmentKey(10)]);
+    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id, 'department_id' => departmentKey(10)]);
     $this->teacher = publishTeacher();
 
     $this->taught = publishGroup(['code' => 'A', 'teacher_id' => $this->teacher->id]);
@@ -48,7 +48,7 @@ function publishGroup(array $attributes): Group
 {
     $group = Group::factory()->withQuota()->create([
         'term_id' => test()->load->term_id,
-        'campus_id' => loadCampus(test()->load)->id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10), 'theory_hours' => 2, 'practice_hours' => 0])->id,
         'capacity' => 30,
         ...$attributes,
@@ -117,7 +117,7 @@ it('lleva al historial docente cada grupo con docente, con fuente nexus', functi
         'teacher_id' => $this->teacher->id,
         'subject_id' => $this->taught->subject_id,
         'term_code' => $this->load->term->code,
-        'campus_id' => loadCampus($this->load)->id,
+        'campus_id' => loadCampus()->id,
         'group_code' => 'A',
         'source' => HistorySource::Nexus->value,
     ]]);

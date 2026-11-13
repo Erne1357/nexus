@@ -4,7 +4,7 @@ use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Support\WeekGrid;
 
 /*
-| WeekGrid (tareas 3.5 y 4.4): la semana de un horario con el perfil del campus. Da los días y los bloques de la
+| WeekGrid (tareas 3.5 y 4.4): la semana de un horario con el perfil de la modalidad. Da los días y los bloques de la
 | cuadrícula y acomoda cada sesión en su día: desde qué renglón y cuántos abarca, y en qué carril va cuando otras del
 | mismo día coinciden con ella.
 */
@@ -22,7 +22,7 @@ function weekItem(string $id, int $day, string $startsAt, string $endsAt): array
     return ['id' => $id, 'day' => $day, 'starts_at' => $startsAt, 'ends_at' => $endsAt];
 }
 
-it('da los días y los bloques del perfil del campus, con su hora sin cero a la izquierda', function () {
+it('da los días y los bloques del perfil de la modalidad, con su hora sin cero a la izquierda', function () {
     $grid = weekGrid(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '07:00', 'day_end' => '10:00', 'block_minutes' => 60]);
 
     expect($grid->days)->toBe([

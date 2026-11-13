@@ -764,7 +764,7 @@ describe('modalidad', function () {
             ->and(array_column($page->viewData('grid')->days, 'day'))->toBe([1, 2, 3, 4, 5, 6]);
     });
 
-    it('HC-04: la semana del editor y del cajón son las del perfil de la modalidad del grupo, (el campus no tiene perfil, MS3)', function () {
+    it('HC-04: la semana del editor y del cajón son las del perfil de la modalidad del grupo (el campus no tiene perfil, MS3)', function () {
         $this->calcGroup->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
 

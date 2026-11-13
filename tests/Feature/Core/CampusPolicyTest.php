@@ -7,9 +7,10 @@ use App\Modules\Core\Policies\CampusPolicy;
 
 /*
 | CampusPolicy. Según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Abrir periodo,
-| calendario, perfil de campus": `admin`, `subdireccion`):
-| - el admin da de alta campus y edita sus datos, su estado y su perfil de flujo, en cualquier campus;
-| - la subdirección ve los campus de su alcance y edita solo su perfil de flujo (`settings`);
+| calendario, perfil de modalidad": `admin`, `subdireccion`):
+| - el admin da de alta campus y edita sus datos y su estado, en cualquier campus;
+| - la subdirección solo ve los campus de su alcance (MS23): el campus es solo el lugar (MS3) y el perfil de flujo es
+|   de la modalidad;
 | - nadie más administra campus, y nadie los borra (catálogo: se desactivan).
 */
 
