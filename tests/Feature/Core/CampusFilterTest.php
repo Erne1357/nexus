@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Blade;
@@ -221,4 +222,99 @@ describe('x-core::campus-filter', function () {
         expect($select->querySelector('option[value=""]'))->toBeNull()
             ->and($select->querySelector('option[value="C1"]')?->hasAttribute('selected'))->toBeTrue();
     });
+});
+
+describe('x-core::campus-filter con cuentas (maqueta U2, opción A)', function () {
+    it('cada botón lleva la etiqueta del campus y su cifra; «Todos», la suma o el total que se le da', function () {
+        $html = Blade::render('<x-core::campus-filter :options="$options" :counts="$counts" all />', ['options' => collect([$this->c1, $this->c2]), 'counts' => ['C1' => 168, 'C2' => 46]]);
+        $buttons = iterator_to_array(domOf($html)->querySelectorAll('[role="group"] button'));
+
+        expect(array_map(fn ($button): string => textOf($button), $buttons))->toBe(['Todos 214', 'C1 Campus I 168', 'C2 Campus II 46'])
+            ->and(domOf($html)->querySelector('[data-testid="campus-filter-C1"] [aria-hidden="true"]')?->textContent)->toBe('C1');
+
+        $withTotal = Blade::render('<x-core::campus-filter :options="$options" :counts="$counts" :total="5" all />', ['options' => collect([$this->c1, $this->c2]), 'counts' => ['C1' => 5, 'C2' => 4]]);
+
+        expect(textOf(domOf($withTotal)->querySelector('[data-testid="campus-count-todos"]')))->toBe('5');
+    });
+
+    it('un campus sin cifra lleva 0, y sin cuentas los botones siguen como antes', function () {
+        $counted = Blade::render('<x-core::campus-filter :options="$options" :counts="$counts" selected="C1" />', ['options' => collect([$this->c1, $this->c2]), 'counts' => ['C1' => 3]]);
+        $plain = Blade::render('<x-core::campus-filter :options="$options" selected="C1" />', ['options' => collect([$this->c1, $this->c2])]);
+
+        expect(textOf(domOf($counted)->querySelector('[data-testid="campus-count-C2"]')))->toBe('0')
+            ->and($plain)->not->toContain('campus-count-');
+    });
+});
+
+/*
+| WithModalityCampusFilter: el campus de las pantallas de la carga (MS6, maqueta U2, opción A). Las opciones son los
+| campus de la modalidad elegida, no los del nombramiento: quien tiene un nombramiento con campus lee toda su modalidad.
+*/
+
+function modalityCampusPage(): Component
+{
+    return new class extends Component
+    {
+        use WithModalityCampusFilter;
+
+        /**
+         * @return array{options: list<string>, filter: ?string, required: string}
+         */
+        public function shown(): array
+        {
+            return [
+                'options' => $this->campusOptions()->pluck('code')->all(),
+                'filter' => $this->campusFilter()?->code,
+                'required' => $this->requiredCampus()->code,
+            ];
+        }
+
+        public function render(): string
+        {
+            return '<div>{{ $campus }}</div>';
+        }
+    };
+}
+
+describe('WithModalityCampusFilter', function () {
+    it('MS6: al coordinador limitado a C2 le ofrece los campus de su modalidad, y abre en el suyo', function () {
+        $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create());
+
+        expect(Livewire::test(modalityCampusPage())->instance()->shown())->toBe(['options' => ['C1', 'C2', 'C9'], 'filter' => null, 'required' => 'C2'])
+            ->and(Livewire::withQueryParams(['campus' => 'C1'])->test(modalityCampusPage())->instance()->shown())->toBe(['options' => ['C1', 'C2', 'C9'], 'filter' => 'C1', 'required' => 'C1']);
+    });
+
+    it('MS4: una pantalla de un solo campus en una modalidad sin salones responde 403', function () {
+        modalityOf('PRES')->update(['is_active' => false]);
+        modalityOf('ENL')->update(['is_active' => true]);
+        $this->actingAs(User::factory()->admin()->create());
+
+        expect(fn () => Livewire::test(modalityCampusPage())->instance()->shown())
+            ->toThrow(HttpException::class, 'La modalidad no tiene campus donde trabajar.');
+    });
+
+    it('MS4: sin salones, el filtro es «Todos» y no hay opciones', function () {
+        modalityOf('PRES')->update(['is_active' => false]);
+        modalityOf('ENL')->update(['is_active' => true]);
+        $this->actingAs(User::factory()->admin()->create());
+        $page = Livewire::withQueryParams(['campus' => 'C1'])->test(modalityCampusPage())->instance();
+
+        expect((fn (): array => [$this->campusOptions()->all(), $this->campusFilter()])->call($page))->toBe([[], null]);
+    });
+
+    it('un ?campus[]= que no es texto, o un código que no ofrece, es «Todos», sin error', function (array $query) {
+        $this->actingAs($this->jefe);
+
+        expect(Livewire::withQueryParams($query)->test(modalityCampusPage())->instance()->shown()['filter'])->toBeNull();
+    })->with([
+        'arreglo' => [['campus' => ['C1']]],
+        'inactivo' => [['campus' => 'EAD']],
+        'no existe' => [['campus' => 'XX']],
+    ]);
+
+    it('sus métodos no se pueden llamar desde el navegador', function (string $method) {
+        $this->actingAs($this->jefe);
+
+        expect(fn () => Livewire::test(modalityCampusPage())->call($method))->toThrow(MethodNotFoundException::class);
+    })->with(['campusOptions', 'campusesOf', 'scopeViewData', 'defaultCampus']);
 });
