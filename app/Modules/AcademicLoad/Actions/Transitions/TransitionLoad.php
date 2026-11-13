@@ -26,8 +26,8 @@ use Illuminate\Validation\ValidationException;
  * bloquear cargas. La modalidad releída queda como la de la carga, así el diagrama lee su perfil de la base.
  *
  * Exige que el diagrama permita pasar de ahí al destino (LoadStatus::canTransitionTo, según el perfil de su modalidad)
- * y que una carga publicada de una modalidad desactivada o borrada no salga de Publicada (MS36, supuesto por
- * confirmar): el admin activa la modalidad primero. Después junta los motivos de bloqueo: los de la guarda que da
+ * y que una carga publicada de una modalidad desactivada o borrada no salga de Publicada (MS36, confirmado el 13 de
+ * noviembre de 2026): el admin activa la modalidad primero. Después junta los motivos de bloqueo: los de la guarda que da
  * quien llama (reglas de los módulos de la izquierda) y los del veto de LoadTransitioning (módulos de la derecha). Con
  * cualquier motivo, una ValidationException sobre `status` con todos y no se escribe nada. Si no, cambia el estado,
  * agrega la fila de `load_transitions` (HC-18), deja bitácora de la carga y, después del commit, avisa con
