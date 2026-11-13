@@ -6,6 +6,8 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -390,6 +392,22 @@ final class ScheduleEditorQuery
             ->get()
             ->filter(fn (Campus $campus): bool => $gate->allows('moveToCampus', [$group, $campus]))
             ->values();
+    }
+
+    /**
+     * Por qué el grupo no puede cambiar de campus aunque quien mira pueda moverlo, para decirlo en el cajón antes del clic;
+     * null si nada lo detiene de antemano. Hoy es MS25 (confirmado el 12 de noviembre de 2026): un acuerdo de grupo
+     * compartido propuesto o aceptado. MoveGroupToCampus lo vuelve a revisar al cambiarlo.
+     */
+    public function campusMoveBlockedReason(Group $group): ?string
+    {
+        $shared = InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::SharedGroup->value)
+            ->where('group_id', $group->getKey())
+            ->live()
+            ->exists();
+
+        return $shared ? 'Tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo en Acuerdos antes de cambiarlo de campus.' : null;
     }
 
     /**

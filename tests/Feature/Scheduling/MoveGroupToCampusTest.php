@@ -171,6 +171,34 @@ it('MS25: se rechaza mientras el grupo tenga un acuerdo de grupo compartido prop
     'cancelado' => [AgreementStatus::Cancelled, false],
 ]);
 
+it('MS25: el cajón dice por qué no se cambia de campus antes del clic, con el botón deshabilitado, mientras el acuerdo siga vivo', function (AgreementStatus $status, bool $blocked) {
+    InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'group_id' => $this->group->id, 'from_department_id' => $this->department->id,
+    ]);
+    $drawer = Livewire::test('scheduling::components.group-drawer', ['termId' => $this->term->id, 'campusId' => $this->c2->id])->call('open', $this->group->id);
+
+    if (! $blocked) {
+        $drawer->assertDontSeeHtml('data-testid="group-campus-blocked"')->assertSeeHtml('data-testid="group-campus-move"');
+
+        return;
+    }
+
+    $drawer->assertSeeHtml('data-testid="group-campus-blocked"')
+        ->assertSee('Tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo en Acuerdos antes de cambiarlo de campus.')
+        ->assertSeeHtml('aria-describedby="group-campus-blocked"')
+        ->assertDontSeeHtml('data-testid="group-campus-move"')
+        ->assertDontSee('(MS25)')
+        ->set('targetCampus', $this->c1->code)
+        ->call('moveToCampus')
+        ->assertHasErrors('campus');
+
+    expect($this->group->fresh()->campus_id)->toBe($this->c2->id);
+})->with([
+    'propuesto' => [AgreementStatus::Proposed, true],
+    'aceptado' => [AgreementStatus::Accepted, true],
+    'rechazado' => [AgreementStatus::Rejected, false],
+]);
+
 it('MS25: un préstamo de salón vivo de otro grupo no detiene el cambio', function () {
     InterdepartmentalAgreement::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id]);
 
