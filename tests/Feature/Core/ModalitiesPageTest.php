@@ -12,6 +12,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
@@ -285,6 +286,24 @@ describe('admin', function () {
             ->and(lastToastOf($page)['description'])->toContain('20271')->toContain('1 carga sin publicar')
             ->and($this->pres->fresh()->is_active)->toBeTrue();
     });
+
+    it('M13: la guarda de M11 cuenta el periodo vigente y los futuros, no uno ya terminado', function (string $starts, string $ends, bool $blocks) {
+        // Hoy es el 12 de noviembre de 2026 a las 23:30 en Ciudad Juárez (ya 13 en UTC): el día es el de la zona del Tec.
+        $this->travelTo(CarbonImmutable::parse('2026-11-12 23:30', 'America/Ciudad_Juarez'));
+        $this->ead->update(['is_active' => true]);
+        $term = Term::factory()->create(['code' => '20263', 'starts_on' => $starts, 'ends_on' => $ends]);
+        TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Draft]);
+
+        $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
+
+        expect($this->pres->fresh()->is_active)->toBe($blocks)
+            ->and(lastToastOf($page)['type'])->toBe($blocks ? 'error' : 'success');
+    })->with([
+        'terminado ayer: ya no bloquea' => ['2026-05-01', '2026-11-11', false],
+        'termina hoy: vigente, bloquea' => ['2026-08-01', '2026-11-12', true],
+        'futuro: bloquea' => ['2027-01-18', '2027-06-11', true],
+    ]);
 
     it('M11: desactiva una modalidad con periodo abierto si todas sus cargas están publicadas', function () {
         $this->ead->update(['is_active' => true]);
