@@ -5,8 +5,8 @@
     una modalidad, el select «Modalidad» (M1: la carga es por departamento y modalidad; MS16). A quien ve varios, el
     selector «Departamento». De la carga elegida: la línea de estados con la línea del estado, el reparto por campus y sus
     acciones; debajo, a todo el ancho, la publicación con su línea de versiones (staffing::closing.publication); el filtro
-    de campus con los grupos de la carga en cada uno, que deja en las justificaciones solo los grupos de ese campus (el
-    cierre es de toda la carga); «Para cerrar» en cifras; el historial y las justificaciones
+    de campus con los grupos de la carga en cada uno, que deja en «Para cerrar» y en las justificaciones solo los grupos
+    de ese campus (el cierre es de toda la carga); «Para cerrar» en cifras, con el reparto por campus sin filtro; el historial y las justificaciones
     (staffing::components.closing-justifications, con su drawer aparte). Desde 1280 px el historial es una columna
     lateral; antes, va entre «Para cerrar» y las justificaciones, que son largas.
 --}}
@@ -70,7 +70,7 @@
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="closing-campus">
                 <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
                 <x-core::campus-filter :options="$campusOptions" :selected="$campusFilter?->code" :counts="$campusCounts" all />
-                <span class="text-sm text-neutral">Filtra las justificaciones; el cierre es de toda la carga.</span>
+                <span class="text-sm text-neutral">Filtra lo que falta y las justificaciones; el cierre es de toda la carga.</span>
             </div>
         @endif
 
@@ -89,8 +89,11 @@
                     <div class="flex items-center">
                         @if ($closing->blockers === null)
                             <x-core::status-badge tone="neutral" icon="o-minus-circle" label="No aplica" />
-                        @elseif ($closing->missing() > 0)
-                            <x-core::status-badge :tone="$closing->hasHardConflicts() ? 'error' : 'warning'" :icon="$closing->hasHardConflicts() ? 'o-x-circle' : 'o-exclamation-triangle'" :label="$closing->missingLabel()" data-testid="missing-badge" />
+                        @elseif ($missingHere > 0)
+                            <x-core::status-badge :tone="$hardHere ? 'error' : 'warning'" :icon="$hardHere ? 'o-x-circle' : 'o-exclamation-triangle'" :label="$missingHereLabel" data-testid="missing-badge" />
+                        @elseif ($campusFilter !== null && $closing->missing() > 0)
+                            {{-- Nada le falta a este campus, pero la carga se cierra entera: no es «Lista para cerrar». --}}
+                            <x-core::status-badge tone="success" icon="o-check-circle" :label="'Nada falta en '.$campusFilter->code" data-testid="missing-badge" />
                         @elseif (in_array($load->status, [\App\Modules\AcademicLoad\Enums\LoadStatus::Closed, \App\Modules\AcademicLoad\Enums\LoadStatus::Approved], true))
                             <x-core::status-badge tone="success" label="Sin pendientes" data-testid="missing-badge" />
                         @else
@@ -106,7 +109,7 @@
                     @if (in_array($load->status, [\App\Modules\AcademicLoad\Enums\LoadStatus::Closed, \App\Modules\AcademicLoad\Enums\LoadStatus::Approved], true) && $closing->missing() > 0)
                         <p class="border-t border-base-300 px-4 py-2.5 text-sm text-warning md:px-5" data-testid="changed-after-close">Algo cambió después del cierre: publicarla se vetará hasta reabrirla y corregirlo.</p>
                     @endif
-                    @include('staffing::closing.conditions', ['closing' => $closing])
+                    @include('staffing::closing.conditions', ['conditions' => $conditions, 'campusOptions' => $campusOptions])
                 @endif
             </section>
 

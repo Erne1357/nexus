@@ -33,8 +33,10 @@ use Mary\Traits\Toast;
  * Entra quien cierra la carga de algún departamento (`academic_load.load.close`: el jefe y Subdirección, y el admin);
  * el jefe va a su departamento y Subdirección y el admin eligen (`?departamento=<id>`, como llegan los avisos del
  * cierre). Un departamento que no puede cerrar es 403; uno que sí, pero sin carga en el periodo, lo dice. `?campus=` es
- * un filtro de las justificaciones (los grupos de ese campus); sin él, las de todos los campus de la carga. Sus opciones
- * son los campus de la modalidad, cada uno con los grupos de la carga que se dan ahí (MS6); el cierre es de toda la carga.
+ * un filtro de «Para cerrar» (las cifras de los grupos de ese campus; los trámites son de toda la carga) y de las
+ * justificaciones (los grupos de ese campus); sin él, toda la carga, con el reparto por campus de cada cifra. Sus
+ * opciones son los campus de la modalidad, cada uno con los grupos de la carga que se dan ahí (MS6); el cierre es de toda
+ * la carga.
  */
 new #[Title('Cierre de la carga')] class extends Component
 {
@@ -145,15 +147,20 @@ new #[Title('Cierre de la carga')] class extends Component
         ];
 
         if ($this->loadId === null) {
-            return ['closing' => null, 'actions' => [], 'canViewLoad' => false, 'campusCounts' => [], 'campusSplit' => null, ...$scope];
+            return ['closing' => null, 'actions' => [], 'canViewLoad' => false, 'campusCounts' => [], 'campusSplit' => null, 'conditions' => [], ...$scope];
         }
 
         $load = $this->closingLoad($query);
         $closing = $query->of($load, $this->cachedBlockers());
         $byCampus = $counts->ofLoad($load);
+        $filter = $scope['campusFilter']?->getKey();
 
         return [
             'closing' => $closing,
+            'conditions' => $closing->conditionsIn($filter, $scope['campusOptions']->pluck('code', 'id')->all()),
+            'missingHere' => $closing->missingIn($filter),
+            'missingHereLabel' => $closing->missingLabelIn($filter),
+            'hardHere' => $closing->hasHardConflictsIn($filter),
             'actions' => $this->loadActions($closing),
             'canViewLoad' => Gate::allows('view', $load),
             'campusCounts' => $byCampus,

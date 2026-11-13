@@ -177,7 +177,7 @@ final class LoadClosingQuery
      * `$campusId`, solo los de ese campus (el filtro de la pantalla).
      *
      * @param  list<string>|null  $groupIds
-     * @return list<array{id: string, code: string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
+     * @return list<array{id: string, code: string, campus_id: ?string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
      */
     public function items(AcademicLoad $load, ?array $groupIds = null, ?string $campusId = null): array
     {
@@ -201,14 +201,16 @@ final class LoadClosingQuery
             ->pluck('total', 'status');
 
         $pending = $this->agreements->pending($load);
-        $inactive = $flags->filter(fn (GroupClosingFlags $group): bool => $group->inactiveTeacher)->pluck('teacherId')->unique()->values()->all();
+        $inactiveFlags = $flags->filter(fn (GroupClosingFlags $group): bool => $group->inactiveTeacher);
+        $inactive = $inactiveFlags->pluck('teacherId')->unique()->values()->all();
+        $names = $inactive === [] ? collect() : Teacher::withTrashed()->whereKey($inactive)->orderBy('name')->pluck('name', 'id');
 
         return new LoadClosing(
             load: $load,
             activeGroups: $flags->count(),
             blockers: $blockers ?? $this->blockers($load, $flags),
             roomlessSessions: (int) collect($items)->whereNull('justification')->sum('roomless_sessions'),
-            inactiveTeachers: $inactive === [] ? [] : Teacher::withTrashed()->whereKey($inactive)->distinct()->orderBy('name')->pluck('name')->all(),
+            inactiveTeachers: $names->unique()->values()->all(),
             pendingRequests: (int) ($requests[ChangeRequestStatus::Pending->value] ?? 0),
             approvedRequests: (int) ($requests[ChangeRequestStatus::Approved->value] ?? 0),
             sharedWaitingOn: $pending['proposed']->map(fn (InterdepartmentalAgreement $agreement): string => $agreement->toDepartment->name ?? $agreement->to_department_id)->values()->all(),
@@ -218,12 +220,15 @@ final class LoadClosingQuery
             ],
             items: $items,
             history: $this->history($load),
+            inactiveTeachersByCampus: $inactiveFlags->groupBy('campusId')
+                ->map(fn (SupportCollection $groups): array => $names->only($groups->pluck('teacherId')->unique()->all())->unique()->sort()->values()->all())
+                ->all(),
         );
     }
 
     /**
      * @param  SupportCollection<string, GroupClosingFlags>  $flags
-     * @return list<array{id: string, code: string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
+     * @return list<array{id: string, code: string, campus_id: ?string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>
      */
     private function itemsOf(AcademicLoad $load, SupportCollection $flags): array
     {
@@ -241,7 +246,7 @@ final class LoadClosingQuery
             ->join('careers', 'careers.id', '=', 'groups.owner_career_id')
             ->leftJoin('users as justifiers', 'justifiers.id', '=', 'groups.close_justified_by')
             ->leftJoin('campuses', 'campuses.id', '=', 'groups.campus_id')
-            ->select(['groups.id', 'groups.code', 'groups.semester', 'groups.close_justification', 'groups.close_justified_at'])
+            ->select(['groups.id', 'groups.code', 'groups.campus_id', 'groups.semester', 'groups.close_justification', 'groups.close_justified_at'])
             ->addSelect(['subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'justifiers.name as justified_by', 'campuses.code as campus_code'])
             ->orderBy('subjects.code')->orderBy('groups.code')
             ->toBase()->get();
@@ -257,6 +262,7 @@ final class LoadClosingQuery
             return [
                 'id' => $row->id,
                 'code' => $row->code,
+                'campus_id' => $row->campus_id,
                 'campus_code' => $row->campus_code,
                 'subject_code' => $row->subject_code,
                 'subject_name' => $row->subject_name,

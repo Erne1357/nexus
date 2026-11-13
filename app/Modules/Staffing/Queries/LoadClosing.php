@@ -21,7 +21,8 @@ final readonly class LoadClosing
      * @param  list<string>  $inactiveTeachers  los docentes dados de baja que siguen en algún grupo, por nombre
      * @param  list<string>  $sharedWaitingOn  a quién esperan los grupos compartidos que propuso el departamento
      * @param  array{room_loan: int, shared_group: int}  $awaiting  los acuerdos que esperan la respuesta del departamento, por tipo
-     * @param  list<array{id: string, code: string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>  $items
+     * @param  list<array{id: string, code: string, campus_id: ?string, campus_code: ?string, subject_code: string, subject_name: string, career_code: string, semester: int, schedule: string, lacks_teacher: bool, roomless_sessions: int, justification: ?string, justified_by: ?string, justified_at: ?CarbonImmutable}>  $items
+     * @param  array<string, list<string>>  $inactiveTeachersByCampus  los de `$inactiveTeachers` por campus de sus grupos
      * @param  list<array{from: LoadStatus, to: LoadStatus, by: string, at: CarbonImmutable, comment: ?string}>  $history  del más reciente al más antiguo
      */
     public function __construct(
@@ -36,6 +37,7 @@ final readonly class LoadClosing
         public array $awaiting,
         public array $items,
         public array $history,
+        public array $inactiveTeachersByCampus = [],
     ) {}
 
     /**
@@ -79,6 +81,70 @@ final readonly class LoadClosing
             self::row('shared', 'Grupos compartidos propuestos sin respuesta', count($this->sharedWaitingOn), 'warning', 'o-arrows-right-left', $this->sharedWaitingOn === [] ? null : (count($this->sharedWaitingOn) === 1 ? 'Espera' : 'Esperan').' a '.implode(', ', array_unique($this->sharedWaitingOn)), 'agreements'),
             self::row('awaiting', 'Acuerdos que esperan la respuesta del departamento', array_sum($this->awaiting), 'warning', 'o-inbox-arrow-down', $awaitingDetail === [] ? null : implode(' · ', $awaitingDetail), 'agreements'),
         ]));
+    }
+
+    /**
+     * «Para cerrar» con el filtro de campus de la pantalla (maqueta U2, opción A; M1: la carga se cierra entera): con
+     * `$campusId`, las cifras de grupos (choques, sin horario, sin docente, sin salón, docente de baja) y sus detalles son
+     * los de los grupos de ese campus; sin él, las de toda la carga con su reparto por campus (`by`: clave del campus =>
+     * cifra, de los campus donde la carga tiene grupos, en el orden de `$campusCodes`) cuando los tiene en más de uno.
+     * Los trámites (solicitudes y acuerdos) son de toda la carga y no se reparten.
+     *
+     * @param  array<string, string>  $campusCodes  id => clave de los campus de la modalidad, por clave
+     * @return list<array{key: string, label: string, count: int, tone: string, icon: string, detail: ?string, screen: string, by: array<string, int>|null}>
+     */
+    public function conditionsIn(?string $campusId, array $campusCodes): array
+    {
+        $grouped = ['conflicted' => 'conflicted', 'unscheduled' => 'unscheduled', 'teacher' => 'withoutTeacher', 'room' => 'withoutRoom', 'inactive' => 'inactiveTeacher'];
+
+        if ($campusId === null) {
+            $withGroups = $this->blockers === null ? [] : array_filter($campusCodes, fn (string $code, string $id): bool => isset($this->blockers->byCampus[$id]), ARRAY_FILTER_USE_BOTH);
+
+            return array_map(fn (array $row): array => [...$row, 'by' => count($withGroups) > 1 && isset($grouped[$row['key']])
+                ? array_combine(array_values($withGroups), array_map(fn (string $id): int => (int) ($this->blockers->byCampus[$id][$grouped[$row['key']]] ?? 0), array_keys($withGroups)))
+                : null], $this->conditions());
+        }
+
+        $here = new self(
+            load: $this->load,
+            activeGroups: $this->activeGroups,
+            blockers: $this->blockers?->forCampus($campusId),
+            roomlessSessions: (int) collect($this->items)->where('campus_id', $campusId)->whereNull('justification')->sum('roomless_sessions'),
+            inactiveTeachers: $this->inactiveTeachersByCampus[$campusId] ?? [],
+            pendingRequests: $this->pendingRequests,
+            approvedRequests: $this->approvedRequests,
+            sharedWaitingOn: $this->sharedWaitingOn,
+            awaiting: $this->awaiting,
+            items: array_values(array_filter($this->items, fn (array $item): bool => $item['campus_id'] === $campusId)),
+            history: [],
+        );
+
+        return array_map(fn (array $row): array => [...$row, 'by' => null], $here->conditions());
+    }
+
+    /**
+     * «Faltan 12 grupos y 3 trámites» de «Para cerrar» con el filtro de campus: los grupos de ese campus y los trámites
+     * de toda la carga; sin filtro, missingLabel().
+     */
+    public function missingLabelIn(?string $campusId): string
+    {
+        return $campusId === null ? $this->missingLabel() : self::missingPhrase($this->blockers?->forCampus($campusId)->groups ?? 0, $this->procedures());
+    }
+
+    /**
+     * Si a «Para cerrar» con el filtro de campus le falta algo: grupos de ese campus o trámites de la carga.
+     */
+    public function missingIn(?string $campusId): int
+    {
+        return $campusId === null ? $this->missing() : ($this->blockers?->forCampus($campusId)->groups ?? 0) + $this->procedures();
+    }
+
+    /**
+     * Si algún grupo con choque duro está en el campus del filtro (sin filtro, hasHardConflicts()).
+     */
+    public function hasHardConflictsIn(?string $campusId): bool
+    {
+        return $campusId === null ? $this->hasHardConflicts() : ($this->blockers?->forCampus($campusId)->conflicted ?? 0) > 0;
     }
 
     /**

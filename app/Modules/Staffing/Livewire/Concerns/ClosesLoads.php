@@ -192,8 +192,8 @@ trait ClosesLoads
     /**
      * Lleva a la pantalla donde se arregla un faltante, con la credencial en el periodo de la carga y, si esta pantalla
      * filtra un campus de la modalidad de la carga que el usuario lee (`?campus=`; WithModalityCampusFilter, MS6), la otra
-     * en ese campus; si no, la otra elige el suyo. Choques, horarios y acuerdos son
-     * por modalidad (M1, maqueta U2): van en la de la carga (`?modalidad=`). `$screen`: conflicts, editor, assign,
+     * en ese campus; si no, la otra elige el suyo. Todas son por modalidad (M1, maqueta U2): van en la de la carga
+     * (`?modalidad=`). `$screen`: conflicts, editor, assign,
      * change-requests o agreements.
      */
     public function goTo(string $screen, LoadClosingQuery $query, SetActiveContext $context): void
@@ -202,8 +202,8 @@ trait ClosesLoads
         $route = match ($screen) {
             'conflicts' => ['scheduling.conflicts', ['vista' => 'departamentos', 'modalidad' => $load->modality->code]],
             'editor' => ['scheduling.editor', ['modalidad' => $load->modality->code]],
-            'assign' => ['staffing.assign', ['depto' => $load->department->code]],
-            'change-requests' => ['staffing.change-requests', ['depto' => $load->department->code]],
+            'assign' => ['staffing.assign', ['depto' => $load->department->code, 'modalidad' => $load->modality->code]],
+            'change-requests' => ['staffing.change-requests', ['depto' => $load->department->code, 'modalidad' => $load->modality->code]],
             'agreements' => ['scheduling.agreements', ['modalidad' => $load->modality->code]],
             default => abort(404),
         };
