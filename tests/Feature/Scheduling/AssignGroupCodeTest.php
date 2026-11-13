@@ -89,7 +89,7 @@ it('si la clave no cambia no escribe ni registra', function () {
 it('con la carga del departamento publicada no cambia la clave', function () {
     AcademicLoad::factory()->create([
         'term_id' => $this->group->term_id,
-        'campus_id' => $this->group->campus_id,
+        'modality_id' => $this->group->modality_id,
         'department_id' => $this->group->department_id,
         'status' => LoadStatus::Published,
     ]);
@@ -102,7 +102,7 @@ it('con la carga del departamento publicada no cambia la clave', function () {
 it('la carga publicada de otro departamento no frena el cambio', function () {
     AcademicLoad::factory()->create([
         'term_id' => $this->group->term_id,
-        'campus_id' => $this->group->campus_id,
+        'modality_id' => $this->group->modality_id,
         'department_id' => Department::factory()->create()->id,
         'status' => LoadStatus::Published,
     ]);

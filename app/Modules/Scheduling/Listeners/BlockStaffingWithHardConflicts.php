@@ -39,10 +39,10 @@ final class BlockStaffingWithHardConflicts
         $department = Department::query()->withTrashed()->findOrFail($load->department_id);
 
         $this->validator->forget();
-        $groups = Group::query()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id);
+        $loadGroups = Group::query()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id);
         $hard = [];
 
-        foreach (Campus::query()->whereIn('id', (clone $groups)->select('campus_id'))->orderBy('code')->get() as $campus) {
+        foreach (Campus::query()->whereIn('id', (clone $loadGroups)->select('campus_id'))->orderBy('code')->get() as $campus) {
             array_push($hard, ...array_filter(
                 $this->validator->validateLoad($load->term, $campus, $department)->violations(),
                 fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
@@ -59,7 +59,7 @@ final class BlockStaffingWithHardConflicts
             return;
         }
 
-        $unscheduled = $groups
+        $unscheduled = $loadGroups
             ->where('status', '<>', GroupStatus::Cancelled->value)
             ->whereDoesntHave('sessions')
             ->count();

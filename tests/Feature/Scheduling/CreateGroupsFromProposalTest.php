@@ -272,7 +272,7 @@ it('al aceptar la parte con AcceptProposalReview nacen los grupos de su departam
     $subject = createGroupsSubject($this->cb);
     createGroupsItem($subject, 2);
     createGroupsItem(createGroupsSubject($this->sc), 1);
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->cb->id]);
     foreach (Catalog::general() as $catalog) {
         CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
     }

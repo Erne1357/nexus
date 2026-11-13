@@ -44,7 +44,7 @@ beforeEach(function () {
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $this->sameDept->id, 'campus_id' => $this->group->campus_id]);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 /**
@@ -169,7 +169,7 @@ it('no edita cupos si el departamento no tiene carga en el campus y el periodo (
     $this->load->delete();
 
     expect(setQuotasErrors([$this->owner->id => 25])['quotas'][0])
-        ->toBe("{$this->imparte->name} no tiene carga en {$this->group->campus->name} en este periodo: no se editan cupos.")
+        ->toBe("{$this->imparte->name} no tiene carga en {$this->group->modality->name} en este periodo: no se editan cupos.")
         ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
 });
 

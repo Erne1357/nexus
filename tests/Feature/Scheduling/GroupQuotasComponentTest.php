@@ -39,7 +39,7 @@ beforeEach(function () {
         CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $this->group->campus_id]);
     }
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->imparte->id])->create();
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 function quotasAs(User $user, Group $group): Testable

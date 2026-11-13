@@ -51,7 +51,7 @@ beforeEach(function () {
     $this->oldPlan = StudyPlan::factory()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-2004-296', 'is_current' => false]);
 
     foreach ([$this->sc, $this->cb] as $department) {
-        AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $department->id]);
+        AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $department->id]);
     }
 
     $this->calculus = editorSubject('ACF-0904', 'Cálculo Vectorial', $this->cb, theory: 2);

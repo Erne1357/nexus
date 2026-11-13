@@ -169,7 +169,7 @@ it('arma la foto con un número fijo de consultas', function () {
     DB::enableQueryLog();
     snapshotGroups();
 
-    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(12);
+    expect(count(DB::getQueryLog()))->toBeLessThanOrEqual(13);
 });
 
 it('lleva la justificación de HC-15 solo del grupo al que le falta docente o salón', function () {

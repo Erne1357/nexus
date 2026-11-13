@@ -32,7 +32,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
     ]);
     $this->group = Group::factory()->create([
         'term_id' => $this->term->id,
@@ -74,7 +74,7 @@ it('con la carga fuera de propuesta, asignación o ajustes, o el grupo cancelado
         ->and(GroupSession::query()->whereKey($this->session->id)->exists())->toBeTrue()
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
-    'carga publicada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Published]), 'La carga de Sistemas y Computación en Campus II está en publicada: no se editan horarios.'],
+    'carga publicada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Published]), 'La carga de Sistemas y Computación en Presencial está en publicada: no se editan horarios.'],
     'grupo cancelado' => [fn ($test) => $test->group->update(['status' => 'cancelled']), 'El grupo D está cancelado: no se editan horarios.'],
 ]);
 
