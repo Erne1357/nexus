@@ -104,7 +104,7 @@ it('un coordinador no ve la opción Periodos en el menú', function () {
         ->assertNoJavaScriptErrors();
 });
 
-it('M4: el admin abre el periodo en Presencial desde la ficha y ve quién y cuándo', function () {
+it('M4: el admin abre el periodo en Presencial desde la ficha, revisa lo que se crea y ve quién y cuándo', function () {
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
 
     $page = signInToTerms('admin')
@@ -112,7 +112,9 @@ it('M4: el admin abre el periodo en Presencial desde la ficha y ve quién y cuá
         ->assertSee('No abierto en este periodo');
 
     $page->click('@open-PRES')
-        ->click('@confirm-accept')
+        ->waitForText('Revisa lo que se crea antes de abrir.')
+        ->assertSee('Salones · bloques de 60 min')
+        ->click('@confirm-open')
         ->waitForText('Periodo abierto en Presencial')
         ->waitForText('Abierto el')
         ->assertSee('por Ana Admin')

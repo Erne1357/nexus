@@ -352,7 +352,7 @@ Decisiones confirmadas el 2 de noviembre de 2026, que no llevan id propio: la ma
 
 | Acción | Quién | Condición |
 |---|---|---|
-| Abrir periodo, calendario, perfil de campus | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo y solo el perfil de flujo; crear un campus o cambiar su código, nombre, modalidad o estado es solo de `admin`. Dar de alta y editar periodos, marcar el actual y armar su calendario es de los dos, en todo el Tec (supuesto por confirmar) |
+| Abrir periodo, calendario, perfil de modalidad | `admin`, `subdireccion` | Modalidades: `subdireccion` ve las modalidades de su alcance y edita solo el perfil de flujo; dar de alta una modalidad o cambiar su nombre o estado (activar, desactivar) es solo de `admin`, y la clave no cambia una vez creada (MS22). Campus (solo el lugar: código, nombre y estado, MS3): crear o editar un campus, o activarlo y desactivarlo, es solo de `admin`; `subdireccion` los ve y no los edita (MS23). Dar de alta y editar periodos, marcar el actual y armar su calendario es de los dos, en todo el Tec (supuesto por confirmar) |
 | Administrar edificios y salones | `admin`, `subdireccion` | `subdireccion`, en cualquier campus activo; las pantallas muestran todos los campus del usuario juntos (#415). Al validar sus catálogos, el `jefe_departamento` corrige los salones de su departamento en cualquier campus y los mueve a un edificio de otro campus (CV2, CV-S10) |
 | Importar catálogos | `admin` | |
 | Administrar catálogos de Academic (departamentos, carreras, materias, planes y su retícula) | `admin` | En la fase 2 se abren a los jefes para validar (confirmado el 29 de octubre de 2026) |
@@ -520,6 +520,7 @@ Reglas, código y pruebas citan estas reglas por su id. Las decisiones M1 a M9 s
 - **M8.** El grupo nace con campus, desde la propuesta o elegido por el jefe al crearlo; el salón debe ser de ese campus y el alumno ve dónde se da. Se puede cambiar mientras la carga esté abierta (confirmado el 12 de noviembre de 2026).
 - **M9.** El jefe de proyecto docente lleva departamento y modalidad, con campus opcional (antes departamento y campus). Con campus solo trabaja los grupos de ese campus (confirmado el 12 de noviembre de 2026).
 - **M10.** Una modalidad inactiva solo bloquea trabajar su carga, no ver a sus alumnos. Solo la lectura de alumnos lo alcanza: un nombramiento sin modalidad (Subdirección, jefe de departamento) cubre para ver alumnos todas las modalidades no borradas, activas o inactivas; para todo lo demás (cargas, periodos, grupos), solo las activas. Uno con modalidad cubre solo esa, y solo mientras esté activa (MS8). Mientras EAD esté inactiva, Subdirección y los jefes siguen viendo a los alumnos de EAD, y un coordinador de PRES solo ve a los de PRES de su carrera (confirmado el 12 de noviembre de 2026).
+- **M11.** Nunca se desactiva la única modalidad activa, ni una que tenga un periodo abierto con cargas en esa modalidad sin publicar. Si no, se puede desactivar con una confirmación que muestra el impacto: los periodos abiertos y los nombramientos vigentes en esa modalidad (confirmado el 12 de noviembre de 2026).
 
 ### Supuestos
 
@@ -543,6 +544,10 @@ Reglas, código y pruebas citan estas reglas por su id. Las decisiones M1 a M9 s
 - **MS18.** Al enviar o reenviar la propuesta, además de los jefes con su parte pendiente se avisa a los demás coordinadores vigentes de la carrera en la modalidad (M6); al regresar una parte, a todos ellos (supuesto por confirmar).
 - **MS19.** Nombrar sobre varias carreras crea un nombramiento por carrera en la misma operación; terminar uno no toca los otros (supuesto por confirmar).
 - **MS20.** La ventana de disponibilidad docente (MS11) solo cuenta las modalidades activas con bloques de tiempo; una modalidad a ritmo propio (TecNM Virtual) no la ensancha (supuesto por confirmar).
+- **MS21.** Un campus nuevo nace presencial: ligado a Presencial por el puente `campuses.modality_id`, con el perfil de Presencial en `campuses.settings`, hasta que la carga lea el perfil de la modalidad (supuesto por confirmar).
+- **MS22.** La clave de una modalidad no cambia una vez creada: los campus se ligan a ella por el puente mientras exista, y cambiarla los desligaría en silencio (supuesto por confirmar).
+- **MS23.** `subdireccion` ya no edita campus: solo los ve; lo que editaba, el perfil de flujo, pasó a la modalidad (supuesto por confirmar).
+- **MS24.** Una modalidad nueva nace activa; el admin la desactiva después si no quiere que se use todavía (supuesto por confirmar). Mientras Scheduling lea `campuses.settings`, guardar el perfil de una modalidad lo escribe también en los campus ligados a ella (supuesto por confirmar, temporal).
 
 ## Parámetros por campus (perfil de flujo)
 

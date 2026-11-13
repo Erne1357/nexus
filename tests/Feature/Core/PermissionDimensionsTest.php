@@ -40,6 +40,7 @@ function dimensionTables(): array
 {
     return [
         'core.campus' => 'campuses',
+        'core.modality' => 'modalities',
         'core.term' => 'terms',
         'core.term.open' => 'term_openings',
         'core.term.manage_calendar' => 'term_stages',

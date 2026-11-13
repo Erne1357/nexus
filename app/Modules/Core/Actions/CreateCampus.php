@@ -22,33 +22,42 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * entre la revisión y el insert, la restricción única de la base responde con el mismo error de
  * código. Después del commit avisa con CampusCreated.
  *
- * Liga el campus a su modalidad del catálogo por el puente `modality_id` (ADR-0025; se quita al contraer). El puente no
- * va a la bitácora: sale de `modality`, que sí va.
+ * El campus es solo el lugar (MS3; nace presencial, MS21), así que la pantalla pide únicamente código y nombre: sin `modality` ni `settings`
+ * nace presencial, ligado a Presencial por el puente `modality_id` (ADR-0025; se quita al contraer), con el perfil de
+ * esa modalidad en `settings` para que Scheduling, que todavía lo lee ahí, no vea una jornada distinta (supuesto por
+ * confirmar). Quien llame con `modality` o `settings` (sembradores, pruebas) los conserva. El puente no va a la
+ * bitácora: sale de `modality`, que sí va.
  */
 final class CreateCampus
 {
     public function __construct(private readonly CampusRules $rules) {}
 
     /**
-     * @param  array{code: string, name: string, modality: Modality|string, settings: array<string, mixed>}  $data
+     * @param  array{code: string, name: string, modality?: Modality|string, settings?: array<string, mixed>}  $data
      *
      * @throws ValidationException
      */
     public function handle(array $data): Campus
     {
         $code = $this->rules->normalizeCode($data['code']);
-        $settings = $this->rules->profile($data['settings']);
-        $modality = $data['modality'] instanceof Modality ? $data['modality'] : Modality::from($data['modality']);
+        $modality = match (true) {
+            ! isset($data['modality']) => Modality::Presencial,
+            $data['modality'] instanceof Modality => $data['modality'],
+            default => Modality::from($data['modality']),
+        };
 
-        return DB::transaction(function () use ($code, $data, $settings, $modality): Campus {
+        return DB::transaction(function () use ($code, $data, $modality): Campus {
             $this->rules->ensureCodeIsFree($code);
+
+            $catalog = CatalogModality::withTrashed()->sharedLock()->where('code', $modality->catalogCode())->first();
+            $settings = $this->rules->profile($data['settings'] ?? $catalog?->settings ?? []);
 
             try {
                 $campus = Campus::create([
                     'code' => $code,
                     'name' => $data['name'],
                     'modality' => $modality,
-                    'modality_id' => CatalogModality::withTrashed()->where('code', $modality->catalogCode())->value('id'),
+                    'modality_id' => $catalog?->id,
                     'settings' => $settings,
                     'is_active' => true,
                 ]);

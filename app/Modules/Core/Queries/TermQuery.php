@@ -4,9 +4,12 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
+use App\Modules\Core\Events\TermOpeningPreviewing;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\TermStage;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -74,6 +77,46 @@ final class TermQuery
             )
             ->sortBy(fn (array $row): string => $row['modality']->code)
             ->values();
+    }
+
+    /**
+     * Lo que pasa si se abre el periodo en la modalidad, para el panel «Abrir el periodo» (tarea 14, U4 opción A), sin
+     * escribir nada:
+     *
+     * - `items`: lo que se crea, que dicen los módulos de la derecha con TermOpeningPreviewing (hoy, AcademicLoad: las
+     *   cargas en borrador, con el número que falta si ya estaba abierto);
+     * - `campuses`: sus campus activos, «C1 · Campus I», por el puente `campuses.modality_id` (mientras la carga sea por
+     *   campus);
+     * - `profile`: el perfil de flujo de la modalidad en una línea, o null si el guardado no es válido;
+     * - `ownWindows`: cuántas ventanas propias tiene la modalidad en el calendario del periodo (0: usa el general);
+     * - `completing`: si el periodo ya estaba abierto en la modalidad.
+     *
+     * @return array{items: list<array{count: int, text: string, chips: list<string>}>, campuses: list<string>, profile: ?string, ownWindows: int, completing: bool}
+     */
+    public function openingPreview(Term $term, Modality $modality): array
+    {
+        $event = new TermOpeningPreviewing($term, $modality);
+        event($event);
+
+        try {
+            $profile = $modality->profile->summary();
+        } catch (\InvalidArgumentException) {
+            $profile = null;
+        }
+
+        return [
+            'items' => $event->items(),
+            'campuses' => Campus::query()
+                ->where('modality_id', $modality->getKey())
+                ->where('is_active', true)
+                ->orderBy('code')
+                ->get(['code', 'name'])
+                ->map(fn (Campus $campus): string => "{$campus->code} · {$campus->name}")
+                ->all(),
+            'profile' => $profile,
+            'ownWindows' => TermStage::query()->where('term_id', $term->getKey())->where('modality_id', $modality->getKey())->count(),
+            'completing' => $term->openings()->where('modality_id', $modality->getKey())->exists(),
+        ];
     }
 
     /**
