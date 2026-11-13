@@ -50,8 +50,7 @@ it('no guarda ningún campus en la sesión', function () {
 
     app(SetActiveContext::class)->handle($this->previous);
 
-    expect(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([])
-        ->and(app(Actor::class)->activeCampus())->toBeNull();
+    expect(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
 });
 
 it('olvida las páginas del menú que el usuario visitó: una ficha de otro periodo ya no aplicaría', function () {

@@ -34,8 +34,8 @@ beforeEach(function () {
     User::factory()->create(['username' => 'admin']);
     $this->department = Department::factory()->create(['code' => 'SC']);
     $this->jefe = User::factory()->create(['username' => 'jefe.sc', 'name' => 'Jefatura de Sistemas']);
-    $this->closed = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id, 'status' => LoadStatus::Closed]);
-    $this->draft = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'status' => LoadStatus::Draft]);
+    $this->closed = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id, 'status' => LoadStatus::Closed]);
+    $this->draft = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'status' => LoadStatus::Draft]);
 
     $teacher = Teacher::factory()->create();
     TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $teacher->id]);
@@ -66,7 +66,7 @@ function reanalysisChecks(): array
 }
 
 it('publica cada carga cerrada como su jefe y deja en borrador la que no tiene grupos', function () {
-    app(PublicationDemoSeeder::class)->run(['C2'], '20271');
+    app(PublicationDemoSeeder::class)->run('20271');
 
     $closed = $this->closed->fresh();
 
@@ -80,7 +80,7 @@ it('publica cada carga cerrada como su jefe y deja en borrador la que no tiene g
 it('las revisiones del punto 9 pasan después de publicar y fallan antes', function () {
     expect(reanalysisChecks())->each->not->toBeTrue();
 
-    app(PublicationDemoSeeder::class)->run(['C2'], '20271');
+    app(PublicationDemoSeeder::class)->run('20271');
 
     expect(reanalysisChecks())->each->toBeTrue()
         ->and(reanalysisChecks())->toHaveCount(3);

@@ -32,7 +32,7 @@ beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20271', 'name' => 'Enero–Junio 2027']);
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-    $this->load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->campus->modality_id])->for($this->department)->inStatus(LoadStatus::Published)->create();
+    $this->load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for($this->department)->inStatus(LoadStatus::Published)->create();
     $this->lent = ['id' => (string) Str::uuid7(), 'code' => 'LC-2', 'name' => 'Laboratorio 2', 'building' => ['id' => (string) Str::uuid7(), 'code' => 'L', 'name' => 'Edificio de Laboratorios'], 'owner_department_id' => (string) Str::uuid7()];
 
     LoadSnapshot::factory()->for($this->load)->publishedAt(CarbonImmutable::parse('2026-12-12 10:30'))->withGroups([
@@ -191,7 +191,7 @@ it('otro periodo sin nada publicado es 404 para el personal con permiso', functi
 
 it('el jefe de otro departamento que publicó descarga también el PDF de este (supuesto por confirmar)', function () {
     $other = Department::factory()->create(['code' => 'II', 'name' => 'Industrial']);
-    $otherLoad = AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->campus->modality_id])->for($other)->inStatus(LoadStatus::Published)->create();
+    $otherLoad = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for($other)->inStatus(LoadStatus::Published)->create();
     LoadSnapshot::factory()->for($otherLoad)->withGroups([LoadSnapshotFactory::group(['subject' => ['id' => (string) Str::uuid7(), 'code' => 'IND-1001', 'name' => 'Ergonomía', 'credits' => 4, 'theory_hours' => 2, 'practice_hours' => 2, 'department_id' => $other->id]])])->create();
 
     $this->actingAs(staffExportsHead($other, $this->campus))->get($this->pdfUrl)->assertOk()->assertHeader('Content-Type', 'application/pdf');

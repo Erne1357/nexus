@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use Tests\Support\Authorization\CampusBoundWrites;
 
 /*
 | AZ-S17 (MS6, supuesto por confirmar): los horarios y el tablero se leen a nivel de modalidad y se escribe con campus.
@@ -11,18 +12,14 @@ use App\Modules\Scheduling\Enums\SchedulingPermission;
 
 /**
  * Los permisos de escritura de Scheduling sobre algo con campus: crear o cancelar un grupo, acomodar sus sesiones,
- * asignar salón y repartir cupos. Lista explícita: un caso nuevo que escriba algo con campus se agrega aquí.
+ * asignar salón y repartir cupos. Lista explícita en CampusBoundWrites: un caso nuevo que escriba algo con campus se
+ * agrega allí.
  *
  * @return list<SchedulingPermission>
  */
 function schedulingCampusBoundWrites(): array
 {
-    return [
-        SchedulingPermission::GroupManage,
-        SchedulingPermission::SessionEdit,
-        SchedulingPermission::RoomAssign,
-        SchedulingPermission::QuotaManage,
-    ];
+    return CampusBoundWrites::scheduling();
 }
 
 it('AZ-S17: los permisos de Scheduling que escriben algo con campus declaran Dimension::Campus', function (SchedulingPermission $permission) {

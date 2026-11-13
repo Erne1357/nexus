@@ -30,8 +30,7 @@ use Mary\Traits\Toast;
  * El componente lee con ModalityQuery, autoriza con ModalityPolicy en mount() y en cada acción (una petición puede
  * llegar con una página que abrió otra sesión), valida la forma de los datos y llama a CreateModality o UpdateModality,
  * que hacen cumplir las reglas (ModalityRules). La subdirección solo cambia el perfil de flujo: lo demás no se le envía a
- * la Action aunque llegue del navegador, y en pantalla se muestra deshabilitado con su motivo. Mientras Scheduling lea
- * `campuses.settings`, UpdateModality escribe el perfil también en los campus de la modalidad (temporal).
+ * la Action aunque llegue del navegador, y en pantalla se muestra deshabilitado con su motivo.
  */
 new #[Title('Modalidades')] class extends Component
 {

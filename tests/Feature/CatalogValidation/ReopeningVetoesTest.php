@@ -21,7 +21,7 @@ it('CV5: devuelve el motivo del veto si una carga del departamento ya salió de 
     $term = Term::factory()->create();
     $department = Department::factory()->create(['code' => 'SIS']);
     $campus = Campus::factory()->create(['code' => 'C2']);
-    AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id, 'status' => LoadStatus::Proposed]);
+    AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id, 'status' => LoadStatus::Proposed]);
     $review = CatalogReview::factory()->general(Catalog::Subjects)->validated()->create(['term_id' => $term->id, 'department_id' => $department->id]);
     $activities = Activity::query()->count();
 

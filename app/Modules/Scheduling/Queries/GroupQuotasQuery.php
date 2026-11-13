@@ -26,6 +26,20 @@ use App\Modules\Scheduling\Models\GroupQuota;
 final class GroupQuotasQuery
 {
     /**
+     * Si el grupo tiene un acuerdo de grupo compartido vivo (propuesto o aceptado): con él no cambia de campus (MS25,
+     * confirmado el 12 de noviembre de 2026). Lo leen el cajón del grupo antes del clic (ScheduleEditorQuery) y
+     * MoveGroupToCampus al cambiarlo.
+     */
+    public function hasLiveSharedGroup(Group $group): bool
+    {
+        return InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::SharedGroup->value)
+            ->where('group_id', $group->getKey())
+            ->live()
+            ->exists();
+    }
+
+    /**
      * @return array{capacity: int, counted: int, proposed: int, department: Dept, rows: list<Row>, addable: list<Addable>}
      */
     public function for(Group $group): array

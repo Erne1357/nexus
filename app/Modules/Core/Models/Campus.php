@@ -3,24 +3,18 @@
 namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Database\Factories\CampusFactory;
-use App\Modules\Core\Enums\Modality;
-use App\Modules\Core\Models\Modality as CatalogModality;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Campus: C1, C2, EAD, ENL y TNMV. `settings` guarda el perfil de flujo y `profile` lo expone
- * como CampusProfile de solo lectura; el flujo se decide por el perfil, nunca por `code`.
- *
- * @property-read CampusProfile $profile
+ * Campus: el lugar físico donde se dan los grupos (C1, C2), solo con código, nombre y estado (M2; MS3, supuesto por
+ * confirmar). La modalidad y el perfil de flujo son del catálogo `modalities` (MS1): el campus no decide qué aplica.
  */
-#[Fillable(['code', 'name', 'modality', 'modality_id', 'settings', 'is_active'])]
+#[Fillable(['code', 'name', 'is_active'])]
 #[UseFactory(CampusFactory::class)]
 class Campus extends Model
 {
@@ -36,31 +30,7 @@ class Campus extends Model
     protected function casts(): array
     {
         return [
-            'modality' => Modality::class,
-            'settings' => 'array',
             'is_active' => 'boolean',
         ];
-    }
-
-    /**
-     * @return Attribute<CampusProfile, never>
-     */
-    protected function profile(): Attribute
-    {
-        // Sin caché de objeto: si cambia `settings`, el siguiente acceso arma el perfil nuevo.
-        return Attribute::get(fn (): CampusProfile => CampusProfile::fromArray($this->settings ?? []))
-            ->withoutObjectCaching();
-    }
-
-    /**
-     * Su modalidad en el catálogo `modalities` (ADR-0025): puente temporal mientras los lectores pasan de
-     * `campuses.modality` al catálogo; se quita al contraer. Nulo solo en un campus guardado sin las Actions de
-     * campus, su sembrador ni su factory.
-     *
-     * @return BelongsTo<CatalogModality, $this>
-     */
-    public function catalogModality(): BelongsTo
-    {
-        return $this->belongsTo(CatalogModality::class, 'modality_id');
     }
 }

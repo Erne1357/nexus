@@ -10,8 +10,9 @@ use InvalidArgumentException;
 /**
  * Perfil de flujo de una modalidad (ADR-0025; MS1, supuesto por confirmar), de solo lectura, construido desde
  * `modalities.settings`. Pantallas, validadores y transiciones consultan este perfil, nunca la clave de la modalidad.
- * Es el perfil que antes llevaba cada campus (CampusProfile) sin `heads_edit_rooms`, que es de la validación de salones
- * y no de la modalidad: si llega en `settings`, se ignora como cualquier clave desconocida.
+ * Es el perfil que antes llevaba cada campus en `campuses.settings` (el campus ya es solo el lugar, MS3) sin
+ * `heads_edit_rooms`, que es de la validación de salones y no de la modalidad: si llega en `settings`, se ignora como
+ * cualquier clave desconocida.
  *
  * - Una clave que falta toma su valor de DEFAULTS, así una clave nueva no obliga a migrar cada modalidad.
  * - Un valor presente pero inválido lanza InvalidArgumentException: una configuración rota falla

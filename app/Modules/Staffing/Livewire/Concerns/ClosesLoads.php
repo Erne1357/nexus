@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Scheduling\Queries\ClosingBlockers;
 use App\Modules\Staffing\Queries\LoadClosing;
 use App\Modules\Staffing\Queries\LoadClosingQuery;
@@ -191,7 +192,7 @@ trait ClosesLoads
 
     /**
      * Lleva a la pantalla donde se arregla un faltante, con la credencial en el periodo de la carga y, si esta pantalla
-     * filtra un campus de la modalidad de la carga que el usuario lee (`?campus=`; WithModalityCampusFilter, MS6), la otra
+     * filtra un campus donde se dan los grupos de la modalidad de la carga (`?campus=`; CampusQuery::of, MS4, MS6), la otra
      * en ese campus; si no, la otra elige el suyo. Todas son por modalidad (M1, maqueta U2): van en la de la carga
      * (`?modalidad=`). `$screen`: conflicts, editor, assign,
      * change-requests o agreements.
@@ -210,7 +211,7 @@ trait ClosesLoads
 
         $context->handle($load->term);
         $campus = property_exists($this, 'campus') ? (string) ($this->campus ?? '') : '';
-        $readable = method_exists($this, 'campusesOf') ? $this->campusesOf($load->modality) : app(Actor::class)->campuses();
+        $readable = app(CampusQuery::class)->of($load->modality);
 
         if ($campus !== '' && $readable->contains('code', $campus)) {
             $route[1]['campus'] = $campus;

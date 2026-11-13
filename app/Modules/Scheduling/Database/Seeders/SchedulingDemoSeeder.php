@@ -57,7 +57,7 @@ use RuntimeException;
  *   semestre y vetaría también su paso a asignación);
  * - docente sin HC-08 ni HC-09 salvo el 3 % de los grupos (`teacher_conflict_groups`) que los rompe a propósito; sin
  *   candidato que sirva, el grupo queda sin docente;
- * - salón en el 75 % de las sesiones (`room_sessions`, solo si el campus usa salones): de capacidad suficiente y del
+ * - salón en el 75 % de las sesiones (`room_sessions`, solo si la modalidad usa salones): de capacidad suficiente y del
  *   tipo correcto; el 6 % va a un salón chico (`small_room_sessions`, HC-05) y el 25 % de las prácticas de materias con
  *   laboratorio a un aula (`lab_in_aula_sessions`, HC-06); el 3 % (`foreign_room_sessions`) va a un salón de otro departamento (HC-10). Los demás son salones sin dueño o del propio departamento, y las prácticas de materias con laboratorio van a laboratorio, taller o sala de cómputo. Un salón ocupado a esa hora se salta (la base lo rechaza,
  *   HC-02), así que no hay empalmes de salón.

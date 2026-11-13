@@ -153,7 +153,7 @@ it('M8: el cajón del grupo lo cambia de campus y un coordinador limitado a su c
 
 it('MS25: se rechaza mientras el grupo tenga un acuerdo de grupo compartido propuesto o aceptado, y se permite si se rechazó o se canceló', function (AgreementStatus $status, bool $refused) {
     InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'group_id' => $this->group->id, 'from_department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'group_id' => $this->group->id, 'from_department_id' => $this->department->id,
     ]);
 
     if ($refused) {
@@ -173,7 +173,7 @@ it('MS25: se rechaza mientras el grupo tenga un acuerdo de grupo compartido prop
 
 it('MS25: el cajón dice por qué no se cambia de campus antes del clic, con el botón deshabilitado, mientras el acuerdo siga vivo', function (AgreementStatus $status, bool $blocked) {
     InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'group_id' => $this->group->id, 'from_department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'group_id' => $this->group->id, 'from_department_id' => $this->department->id,
     ]);
     $drawer = Livewire::test('scheduling::components.group-drawer', ['termId' => $this->term->id, 'campusId' => $this->c2->id])->call('open', $this->group->id);
 

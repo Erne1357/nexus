@@ -14,7 +14,7 @@ use App\Modules\Core\Models\User;
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
-    $this->load = AcademicLoad::factory()->create(['modality_id' => $this->c1->modality_id, 'department_id' => departmentKey(10)]);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
 });
 
 it('permite según el rol y su alcance en la propia carga', function (Role $role, array $scope, bool $view, bool $propose) {

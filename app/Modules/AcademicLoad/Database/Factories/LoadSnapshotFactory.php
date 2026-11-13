@@ -6,8 +6,8 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -103,14 +103,14 @@ class LoadSnapshotFactory extends Factory
     }
 
     /**
-     * El campus de los grupos de ejemplo: el primero activo de la modalidad de la carga (por el puente
-     * `campuses.modality_id`), o ninguno si no tiene.
+     * El campus de los grupos de ejemplo: el primero donde se dan los grupos de la modalidad de la carga (MS4,
+     * CampusQuery::of), o ninguno si no tiene.
      *
      * @return array{id: string, code: string, name: string}|null
      */
     private static function campusOf(AcademicLoad $load): ?array
     {
-        $campus = Campus::query()->where('modality_id', $load->modality_id)->where('is_active', true)->orderBy('code')->first(['id', 'code', 'name']);
+        $campus = app(CampusQuery::class)->of($load->modality)->first();
 
         return $campus === null ? null : ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name];
     }

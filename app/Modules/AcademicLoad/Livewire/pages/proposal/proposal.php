@@ -687,17 +687,22 @@ new #[Title('Propuesta de carrera')] class extends Component
      * corregir y, si no, quién la captura (ProposalHeader::capturedBy). Se decide con la policy de la fila
      * (CareerProposalPolicy::update) sobre una fila de esa columna: un coordinador con campus solo corrige la suya (M7).
      * La de un campus inactivo no la corrige nadie, pero quien envía la propuesta deja en cero sus grupos (`zeroable`,
-     * M14), y eso dice en lugar de quién la captura.
+     * M14), y eso dice en lugar de quién la captura. `zeroAlert`: el aviso de la columna, solo mientras la propuesta se
+     * edita y alguna fila de ella todavía pide grupos.
      *
-     * @return array<string, array{campus: ?Campus, editable: bool, zeroable: bool, readonly: ?string}>
+     * @return array<string, array{campus: ?Campus, editable: bool, zeroable: bool, zeroAlert: bool, readonly: ?string}>
      */
     private function columns(ProposalOverview $overview, ProposalHeader $header): array
     {
         $samples = [];
+        $subjects = $overview->subjects();
 
-        foreach ($overview->subjects() as $subject) {
+        foreach ($subjects as $subject) {
             $samples += $subject->cells;
         }
+
+        $requested = $overview->groupsByColumn($subjects);
+        $open = $overview->proposal->status->isEditable();
 
         $columns = [];
 
@@ -710,6 +715,7 @@ new #[Title('Propuesta de carrera')] class extends Component
                 'campus' => $campus,
                 'editable' => $editable,
                 'zeroable' => $zeroable,
+                'zeroAlert' => $zeroable && $open && ($requested[$key] ?? 0) > 0,
                 'readonly' => match (true) {
                     $editable => null,
                     $zeroable => "{$campus->code} está inactivo: solo se pueden dejar sus grupos en 0.",

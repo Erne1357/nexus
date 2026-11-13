@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Enums\Modality as CampusModality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -17,11 +16,12 @@ use Illuminate\Support\Facades\Schema;
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210201_add_modality_to_role_assignments.php');
     $this->migration->down();
 
-    $this->c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->c1 = campusBeforeContraction('C1');
+    $this->c2 = campusBeforeContraction('C2');
 });
 
 /**
@@ -158,7 +158,7 @@ it('el admin sigue sin alcance: tampoco lleva modalidad', function () {
 });
 
 it('se detiene, lista los ids y no deja nada si un coordinador o un jefe de proyecto docente tiene un campus que no es presencial', function () {
-    $ead = Campus::factory()->create(['code' => 'EAD', 'modality' => CampusModality::Mixta, 'is_active' => false]);
+    $ead = campusBeforeContraction('EAD', 'mixta', active: false);
     $fine = assignmentBeforeModality(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)]);
     $coordinator = assignmentBeforeModality(Role::Coordinador, ['campus_id' => $ead->id, 'career_id' => careerKey(21)]);
     $lead = assignmentBeforeModality(Role::JefeProyectoDocente, ['campus_id' => $ead->id, 'org_unit_id' => departmentKey(10)]);

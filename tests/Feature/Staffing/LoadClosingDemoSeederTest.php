@@ -57,7 +57,7 @@ beforeEach(function () {
 function loadClosingDepartment(string $code, LoadStatus $status = LoadStatus::Staffing, array $days = [1, 2], ?int $labDay = null, array $hours = []): AcademicLoad
 {
     $department = Department::factory()->create(['code' => $code]);
-    $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => test()->term->id, 'modality_id' => test()->campus->modality_id, 'department_id' => $department->id]);
+    $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => test()->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id]);
     $subject = Subject::factory()->create(['department_id' => $department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
     $career = Career::factory()->create(['department_id' => $department->id]);
     CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => test()->campus->id]);
@@ -95,10 +95,10 @@ function loadClosingSeed(string $mode, array $keepOpen = []): void
 it('en el punto 8 deja el terreno limpio, justifica grupos sin docente y un laboratorio sin salón, cierra cada carga con grupos y deja en borrador la que no tiene, con las revisiones del punto en verde', function () {
     $ii = loadClosingDepartment('II', days: [1, 2, 3], labDay: 3);
     $cea = loadClosingDepartment('CEA', days: [4, 5]);
-    $draft = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => Department::factory()->create(['code' => 'EE'])->id]);
+    $draft = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => Department::factory()->create(['code' => 'EE'])->id]);
     $request = ChangeRequest::factory()->forGroup(loadClosingGroup($cea, 4))->pending()->create();
     $shared = InterdepartmentalAgreement::factory()->sharedGroup()->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => loadClosingGroup($ii, 1)->id,
+        'term_id' => $this->term->id, 'group_id' => loadClosingGroup($ii, 1)->id,
         'from_department_id' => $ii->department_id, 'to_department_id' => $cea->department_id,
     ]);
 

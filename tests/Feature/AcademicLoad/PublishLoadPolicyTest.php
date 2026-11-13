@@ -14,7 +14,7 @@ use App\Modules\Core\Models\User;
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
-    $this->load = AcademicLoad::factory()->create(['modality_id' => $this->campus->modality_id, 'department_id' => departmentKey(10), 'status' => LoadStatus::Closed]);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10), 'status' => LoadStatus::Closed]);
 });
 
 it('en una modalidad sin visto bueno publican Subdirección y el jefe del departamento', function (Role $role, array $scope, bool $publish) {
@@ -31,7 +31,7 @@ it('en una modalidad sin visto bueno publican Subdirección y el jefe del depart
 ]);
 
 it('en una modalidad con visto bueno solo publica Subdirección', function (Role $role, array $scope, bool $publish) {
-    $this->campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
     $user = User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create();
 
     expect($user->can('publish', $this->load->fresh()))->toBe($publish);

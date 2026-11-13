@@ -11,7 +11,7 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
  * Quién administra periodos y su calendario, según reglas-de-negocio.md, "Aprobaciones y permisos"
- * (fila "Abrir periodo, calendario, perfil de campus": `admin`, `subdireccion`). Que la subdirección
+ * (fila "Abrir periodo, calendario, perfil de modalidad": `admin`, `subdireccion`). Que la subdirección
  * dé de alta y edite periodos, los marque actuales y maneje el calendario es (supuesto por confirmar, docs/dominio/reglas-de-negocio.md, Periodo y calendario). Los periodos son de toda la
  * institución: no hay alcance por campus. Nadie los borra (supuesto por confirmar, mismo apartado): no hay `delete`.
  *

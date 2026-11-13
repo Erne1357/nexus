@@ -75,7 +75,7 @@ it('la carrera: aceptado entre la lectura y la cancelación da un error claro y 
 
 it('la carrera en un grupo compartido: aceptado entre la lectura y retirar no deja cupo huérfano', function () {
     $shared = InterdepartmentalAgreement::factory()->sharedGroup(5)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->from->id, 'to_department_id' => $this->to->id,
     ]);
     $stale = InterdepartmentalAgreement::query()->find($shared->id);

@@ -100,7 +100,6 @@
             "catalog_validation.progress.view",
             "catalog_validation.review.resolve_flag",
             "catalog_validation.review.view",
-            "core.campus.update_profile",
             "core.campus.view",
             "core.modality.update_profile",
             "core.modality.view",

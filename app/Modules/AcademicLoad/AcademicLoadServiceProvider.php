@@ -44,6 +44,7 @@ use App\Modules\Core\Events\ModalityDeactivating;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Faculty\Enums\HistorySource;
@@ -180,7 +181,6 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ])),
             // La publicación termina la etapa 8: cada carga cerrada sale con su versión 1 (tarea 4.3).
             new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeeder(PublicationDemoSeeder::class, [
-                'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
             ])),
         ];
@@ -189,7 +189,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoChecks(): array
     {
         $campusIds = fn (DemoContext $demo): array => Campus::query()->whereIn('code', $demo->campuses)->pluck('id')->all();
-        $modalityIds = fn (DemoContext $demo): array => Campus::query()->whereIn('code', $demo->campuses)->distinct()->pluck('modality_id')->all();
+        $modalityIds = fn (DemoContext $demo): array => Modality::query()->whereIn('code', $demo->volume->modalities())->pluck('id')->all();
         // Las carreras ofrecidas en los campus de la demo, cada una una vez: su propuesta es una por modalidad (M6).
         $offeredCareerIds = fn (DemoContext $demo): array => CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->distinct()->pluck('career_id')->all();
         $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())

@@ -39,7 +39,7 @@ function agreementAbilitiesOf(User $user): array
         $user->can('view', $agreement),
         $user->can('decide', $agreement),
         $user->can('cancel', $agreement),
-        $user->can('request', [InterdepartmentalAgreement::class, test()->c1, test()->from]),
+        $user->can('request', [InterdepartmentalAgreement::class, modalityOf('PRES'), test()->c1, test()->from]),
     ];
 }
 
@@ -88,8 +88,32 @@ it('el jefe de departamento de todo el Tec actúa en cualquier campus', function
     ]);
 
     expect($jefe->can('cancel', $inC2))->toBeTrue()
-        ->and($jefe->can('request', [InterdepartmentalAgreement::class, $this->c2, $this->from]))->toBeTrue()
+        ->and($jefe->can('request', [InterdepartmentalAgreement::class, modalityOf('PRES'), $this->c2, $this->from]))->toBeTrue()
         ->and($jefe->can('decide', $inC2))->toBeFalse();
+});
+
+it('MS6: el grupo compartido no guarda campus: lo cancela quien pide con el campus del grupo, y sin él solo quien pide sin límite de campus', function () {
+    $share = InterdepartmentalAgreement::factory()->sharedGroup()->create([
+        'from_department_id' => $this->from->id,
+        'to_department_id' => $this->to->id,
+    ]);
+    $inC1 = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])->create();
+
+    expect($inC1->can('cancel', [$share, $this->c1->id]))->toBeTrue()
+        ->and($inC1->can('cancel', [$share, $this->c2->id]))->toBeFalse()
+        ->and($inC1->can('cancel', $share))->toBeFalse();
+
+    vacate(Role::JefeDepartamento, departmentKey(10));
+    $tecWide = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10), 'valid_from' => today()->toDateString()])->create();
+
+    expect($tecWide->can('cancel', $share))->toBeTrue()
+        ->and($tecWide->can('cancel', [$share, $this->c2->id]))->toBeTrue();
+});
+
+it('MS6: en un préstamo manda el campus del salón, no el que da quien llama', function () {
+    $inC2 = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
+
+    expect($inC2->can('cancel', [$this->agreement, $this->c2->id]))->toBeFalse();
 });
 
 it('niega todo a un admin desactivado y a un jefe desactivado', function () {

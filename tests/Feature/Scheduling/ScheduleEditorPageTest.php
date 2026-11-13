@@ -53,7 +53,7 @@ beforeEach(function () {
     $this->oldPlan = StudyPlan::factory()->create(['career_id' => $this->isc->id, 'code' => 'ISIC-2004-296', 'is_current' => false]);
 
     foreach ([$this->sc, $this->cb] as $department) {
-        AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $department->id]);
+        AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id]);
     }
 
     $this->calculus = editorSubject('ACF-0904', 'Cálculo Vectorial', $this->cb, theory: 2);
@@ -764,8 +764,7 @@ describe('modalidad', function () {
             ->and(array_column($page->viewData('grid')->days, 'day'))->toBe([1, 2, 3, 4, 5, 6]);
     });
 
-    it('HC-04: la semana del editor y del cajón son las del perfil de la modalidad del grupo, no las del campus', function () {
-        $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1, 2, 3, 4, 5]]]);
+    it('HC-04: la semana del editor y del cajón son las del perfil de la modalidad del grupo (el campus no tiene perfil, MS3)', function () {
         $this->calcGroup->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
         $session = GroupSession::factory()->for($this->calcGroup)->on(1, '07:00', '09:00')->create();
 

@@ -16,7 +16,6 @@ enum CorePermission: string implements Permission
     case CampusViewInactive = 'core.campus.view_inactive';
     case CampusCreate = 'core.campus.create';
     case CampusUpdate = 'core.campus.update';
-    case CampusUpdateProfile = 'core.campus.update_profile';
     case ModalityView = 'core.modality.view';
     case ModalityViewInactive = 'core.modality.view_inactive';
     case ModalityCreate = 'core.modality.create';
@@ -45,7 +44,6 @@ enum CorePermission: string implements Permission
             self::CampusViewInactive => 'Ver campus inactivos',
             self::CampusCreate => 'Dar de alta campus',
             self::CampusUpdate => 'Editar datos y estado de un campus',
-            self::CampusUpdateProfile => 'Editar el perfil de flujo de un campus',
             self::ModalityView => 'Ver modalidades',
             self::ModalityViewInactive => 'Ver modalidades inactivas',
             self::ModalityCreate => 'Dar de alta modalidades',
@@ -72,7 +70,7 @@ enum CorePermission: string implements Permission
     public function dimensions(): array
     {
         return match ($this) {
-            self::CampusView, self::CampusUpdateProfile => [Dimension::Campus],
+            self::CampusView => [Dimension::Campus],
             self::ModalityView, self::ModalityUpdateProfile => [Dimension::Modality],
             self::TermOpen => [Dimension::Modality],
             default => [],

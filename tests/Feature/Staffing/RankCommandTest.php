@@ -18,15 +18,16 @@ beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->ead = Campus::factory()->create(['code' => 'X1', 'modality_id' => modalityOf('EAD')->id]);
+    $this->ead = Campus::factory()->create(['code' => 'X1']);
     $this->sistemas = Department::factory()->create(['code' => 'SC']);
     $this->basicas = Department::factory()->create(['code' => 'CB']);
-    $groupIn = function (Campus $campus, Department $department): Group {
+    $groupIn = function (Campus $campus, Department $department, string $modality = 'PRES'): Group {
         TeacherDepartment::factory()->create(['department_id' => $department->id]);
 
         return Group::factory()->create([
             'term_id' => $this->term->id,
             'campus_id' => $campus->id,
+            'modality_id' => modalityOf($modality)->id,
             'subject_id' => Subject::factory()->create(['department_id' => $department->id])->id,
         ]);
     };
@@ -34,7 +35,7 @@ beforeEach(function () {
         'c2-sc' => $groupIn($this->c2, $this->sistemas),
         'c2-cb' => $groupIn($this->c2, $this->basicas),
         'c1-sc' => $groupIn($this->c1, $this->sistemas),
-        'ead-sc' => $groupIn($this->ead, $this->sistemas),
+        'ead-sc' => $groupIn($this->ead, $this->sistemas, 'EAD'),
     ];
     $this->rankedGroups = fn (): array => collect($this->groups)
         ->filter(fn (Group $group): bool => StaffingRanking::query()->where('group_id', $group->id)->exists())

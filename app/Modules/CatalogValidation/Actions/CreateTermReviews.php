@@ -13,7 +13,7 @@ use App\Modules\Core\Models\Term;
  * noviembre de 2026). Nacen pendientes. Devuelve cuántas creó: 0 si no faltaba ninguna.
  *
  * Es la pieza de escritura de OpenCatalogValidation (CV9), que decide qué catálogos y deja la bitácora, y de
- * CreateRoomsReviewsOnCampusUpdated. No autoriza ni avisa. Un solo insert que ignora las que ya existen (la unicidad,
+ * CreateRoomsReviewsOnModalityUpdated. No autoriza ni avisa. Un solo insert que ignora las que ya existen (la unicidad,
  * con el campus nulo como un valor), así que es idempotente y otra sesión que abra a la vez no la hace fallar.
  */
 final class CreateTermReviews

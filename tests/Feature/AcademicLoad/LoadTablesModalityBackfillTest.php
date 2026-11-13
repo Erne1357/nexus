@@ -4,7 +4,6 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Core\Enums\Modality as CampusModality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -21,6 +20,8 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_211103_keep_agreement_campus_for_room_loans.php'))->down();
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     // La carga y la propuesta por modalidad (posteriores) quitan academic_loads.campus_id y career_proposals.campus_id: se
     // deshacen primero.
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
@@ -28,9 +29,9 @@ beforeEach(function () {
     $this->migration = require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210401_add_modality_to_load_tables.php');
     $this->migration->down();
     $this->term = Term::factory()->create();
-    $this->c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
-    $this->ead = Campus::factory()->inactive()->create(['code' => 'EAD', 'modality' => CampusModality::Mixta]);
+    $this->c1 = campusBeforeContraction('C1');
+    $this->c2 = campusBeforeContraction('C2');
+    $this->ead = campusBeforeContraction('EAD', 'mixta', active: false);
     $this->sis = Department::factory()->create(['code' => 'SIS']);
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->career = Career::factory()->create(['department_id' => $this->sis->id]);
@@ -130,7 +131,8 @@ it('cada fila de la propuesta recibe el campus de su propuesta, y la columna que
 });
 
 it('se detiene y nombra el campus si una fila es de un campus sin modalidad del catálogo, y no deja nada', function () {
-    $orphan = Campus::factory()->create(['code' => 'C9', 'modality_id' => null]);
+    $orphan = campusBeforeContraction('C9');
+    DB::table('campuses')->where('id', $orphan->id)->update(['modality_id' => null]);
     academicLoadBeforeModality($this, $this->c1, $this->sis);
     academicLoadBeforeModality($this, $orphan, $this->sis);
     sharedGroupAgreementBeforeModality($this, $orphan);

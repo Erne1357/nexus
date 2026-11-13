@@ -39,7 +39,7 @@ it('HC-15: un grupo completo no bloquea ni se justifica', function () {
         ->and($group->blocks(closingProfile(), conflicted: true))->toBeTrue();
 });
 
-it('HC-15: sin horario y sin salón solo cuentan si el perfil del campus usa bloques de tiempo y salones', function () {
+it('HC-15: sin horario y sin salón solo cuentan si el perfil de la modalidad usa bloques de tiempo y salones', function () {
     $unscheduled = closingFlags(['hasSessions' => false]);
     $roomless = closingFlags(['roomlessSessions' => 2]);
 

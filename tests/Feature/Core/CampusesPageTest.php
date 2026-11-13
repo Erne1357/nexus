@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -25,7 +24,7 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $this->ead = Campus::factory()->inactive()->create(['code' => 'EAD', 'name' => 'Educación a Distancia', 'modality' => Modality::Mixta]);
+    $this->ead = Campus::factory()->inactive()->create(['code' => 'EAD', 'name' => 'Educación a Distancia']);
 
     $this->admin = User::factory()->admin()->create();
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
@@ -189,7 +188,7 @@ describe('admin', function () {
             ->assertViewHas('campuses', listsCampuses(['C1', 'C2']));
     });
 
-    it('da de alta un campus desde el modal con solo código y nombre: nace presencial y con el perfil de Presencial', function () {
+    it('MS3, MS21: da de alta un campus desde el modal con solo código y nombre: es solo el lugar', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.campuses')
             ->call('create')
@@ -207,15 +206,11 @@ describe('admin', function () {
 
         expect($campus)
             ->name->toBe('Campus III')
-            ->modality->toBe(Modality::Presencial)
-            ->modality_id->toBe(modalityOf('PRES')->id)
-            ->and($campus->profile->toArray())->toBe(modalityOf('PRES')->profile->toArray())
+            ->is_active->toBeTrue()
             ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Campus creado')->description->toBe('C3 · Campus III');
     });
 
-    it('edita código y nombre de un campus sin tocar su modalidad ni su perfil', function () {
-        $settings = $this->c2->fresh()->profile->toArray();
-
+    it('edita código y nombre de un campus', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.campuses')
             ->call('edit', $this->c2->id)
@@ -229,8 +224,6 @@ describe('admin', function () {
 
         expect($this->c2->fresh())
             ->name->toBe('Campus Dos')
-            ->modality->toBe(Modality::Presencial)
-            ->and($this->c2->fresh()->profile->toArray())->toBe($settings)
             ->and(lastToastOf($page)['title'])->toBe('Campus actualizado');
     });
 

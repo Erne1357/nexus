@@ -90,7 +90,7 @@ it('arma una propuesta por carrera ofrecida en C2, con borrador y propuestas env
     $offered = CareerCampus::query()->where('campus_id', $this->c2->id)->where('is_active', true)->count();
     $statuses = CareerProposal::query()->where('term_id', $this->term->id)->pluck('status')->map->value->unique()->sort()->values()->all();
 
-    expect(CareerProposal::query()->where('term_id', $this->term->id)->where('modality_id', $this->c2->modality_id)->count())->toBe($offered)
+    expect(CareerProposal::query()->where('term_id', $this->term->id)->where('modality_id', modalityOf('PRES')->id)->count())->toBe($offered)
         ->and($statuses)->toContain(ProposalStatus::Draft->value)
         ->and(array_intersect($statuses, [ProposalStatus::Submitted->value, ProposalStatus::Returned->value, ProposalStatus::Accepted->value]))->not->toBeEmpty()
         ->and(ProposalReview::query()->where('status', 'accepted')->exists())->toBeTrue()
@@ -148,13 +148,13 @@ describe('completo (punto 4 de la demo)', function () {
         $offered = CareerCampus::query()->where('campus_id', $this->c2->id)->where('is_active', true)->count();
         $withParts = ProposalReview::query()->distinct()->pluck('department_id');
 
-        expect(CareerProposal::query()->where('modality_id', $this->c2->modality_id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
+        expect(CareerProposal::query()->where('modality_id', modalityOf('PRES')->id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
             ->and(ProposalItem::query()->where('campus_id', '!=', $this->c2->id)->where('requested_groups', '>', 0)->count())->toBe(0)
             ->and(ProposalReview::query()->where('status', '!=', 'accepted')->count())->toBe(0)
-            ->and(AcademicLoad::query()->where('modality_id', $this->c2->modality_id)->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
+            ->and(AcademicLoad::query()->where('modality_id', modalityOf('PRES')->id)->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
             ->and(AcademicLoad::query()->whereNotIn('department_id', $withParts)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0)
             // M1: abrir Presencial creó una carga por departamento, con los grupos de C1 y C2; no hay otras.
-            ->and(AcademicLoad::query()->where('modality_id', '!=', $this->c2->modality_id)->count())->toBe(0);
+            ->and(AcademicLoad::query()->where('modality_id', '!=', modalityOf('PRES')->id)->count())->toBe(0);
     });
 
     it('termina lo que dejó la demo mezclada: reenvía las regresadas y acepta las pendientes', function () {
@@ -173,7 +173,7 @@ describe('completo (punto 4 de la demo)', function () {
     });
 
     it('se detiene si el periodo no está abierto en la modalidad del campus', function () {
-        expect(fn () => seedProposals(['complete' => true, 'campuses' => ['EAD']]))->toThrow(RuntimeException::class, 'no está abierto en EAD');
+        expect(fn () => seedProposals(['complete' => true, 'modality' => 'EAD']))->toThrow(RuntimeException::class, 'no está abierto en EAD');
     });
 });
 
@@ -213,7 +213,7 @@ it('demo por puntos: una carga se compara con las partes de su modalidad en los 
     expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBeTrue()
         ->and(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1'])))->toBeTrue();
 
-    AcademicLoad::query()->where('modality_id', $this->c2->modality_id)->where('department_id', $teaching)->update(['status' => LoadStatus::Draft]);
+    AcademicLoad::query()->where('modality_id', modalityOf('PRES')->id)->where('department_id', $teaching)->update(['status' => LoadStatus::Draft]);
 
     expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con partes aceptadas no están en propuesta.');
 });

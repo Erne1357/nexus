@@ -2,13 +2,12 @@
 
 namespace App\Modules\Core\Support;
 
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\ModalityProfile;
 
 /**
- * La semana de un horario con el perfil del campus: la del editor de horarios (tarea 3.5; DESIGN.md, "Editor de
+ * La semana de un horario con el perfil de flujo de su modalidad: la del editor de horarios (tarea 3.5; DESIGN.md, "Editor de
  * horarios") y la de la consulta publicada (tarea 4.4). Vive en Core para que la use cualquier módulo del mapa: una
- * columna por día del perfil del campus y un renglón por bloque, de `day_start` a `day_end`. Acomoda cada sesión en su día: desde qué renglón empieza
+ * columna por día del perfil y un renglón por bloque, de `day_start` a `day_end`. Acomoda cada sesión en su día: desde qué renglón empieza
  * (`top`) y cuántos abarca (`span`), en bloques del perfil, y en qué carril va (`lane` de `lanes`) cuando otras del
  * mismo día coinciden con ella, para que se vean lado a lado. Es puro: no lee la base.
  */
@@ -50,9 +49,9 @@ final readonly class WeekGrid
     ) {}
 
     /**
-     * La semana de un perfil de flujo: el de una modalidad (la carga, M1) o, mientras exista el puente, el de un campus.
+     * La semana de un perfil de flujo de modalidad (la carga, M1).
      */
-    public static function of(CampusProfile|ModalityProfile $profile): self
+    public static function of(ModalityProfile $profile): self
     {
         $start = WeekTime::minutes($profile->dayStart);
         $end = WeekTime::minutes($profile->dayEnd);

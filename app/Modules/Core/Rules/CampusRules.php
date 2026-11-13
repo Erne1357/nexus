@@ -3,10 +3,8 @@
 namespace App\Modules\Core\Rules;
 
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
 
 /**
  * Reglas de un campus que comparten CreateCampus y UpdateCampus (docs/dominio/modelo-de-datos.md,
@@ -16,7 +14,8 @@ use InvalidArgumentException;
  * - `code`: texto UTF-8 válido, en mayúsculas, sin espacios (también los de Unicode, como NBSP), no
  *   vacío y único entre todos los campus, también los borrados: el código de uno borrado sigue
  *   reservado.
- * - `settings`: un perfil de flujo que CampusProfile acepte; se guarda completo y normalizado.
+ *
+ * El campus es solo el lugar (MS3, supuesto por confirmar): no tiene perfil de flujo, que es de la modalidad.
  */
 final class CampusRules
 {
@@ -64,20 +63,5 @@ final class CampusRules
         return ValidationException::withMessages([
             'code' => "Ya existe un campus con el código {$code}, aunque esté desactivado o borrado.",
         ]);
-    }
-
-    /**
-     * @param  array<string, mixed>  $settings
-     * @return array<string, mixed> el perfil completo y normalizado que se guarda en `settings`
-     *
-     * @throws ValidationException
-     */
-    public function profile(array $settings): array
-    {
-        try {
-            return CampusProfile::fromArray($settings)->toArray();
-        } catch (InvalidArgumentException $exception) {
-            throw ValidationException::withMessages(['settings' => $exception->getMessage()]);
-        }
     }
 }

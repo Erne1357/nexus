@@ -56,7 +56,7 @@ it('devuelve con su motivo los que no aplican y justifica los demás: uno comple
     $pending = $this->world->group(teacher: false);
     $complete = $this->world->group();
     modalityOf('EAD')->update(['is_active' => true]);
-    $closed = $this->world->group(teacher: false, load: $this->world->loadIn(Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]), LoadStatus::Closed));
+    $closed = $this->world->group(teacher: false, load: $this->world->loadIn(Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']), LoadStatus::Closed, modality: modalityOf('EAD')));
 
     $result = justifyGroupsOf([$pending, $complete, $closed]);
 

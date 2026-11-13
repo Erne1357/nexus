@@ -10,7 +10,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -45,34 +45,36 @@ final class ClosingWorld
     ) {}
 
     /**
-     * @param  array<string, mixed>  $settings  el perfil de la modalidad de la carga (y de Campus II), sobre los valores de omisión
+     * @param  array<string, mixed>  $settings  el perfil de Presencial, la modalidad de la carga, sobre los valores de omisión
      */
     public static function create(LoadStatus $status = LoadStatus::Staffing, array $settings = []): self
     {
-        $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II', 'settings' => [...CampusProfile::DEFAULTS, ...$settings]]);
+        $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+        $presencial = Modality::query()->where('code', 'PRES')->sole();
 
         if ($settings !== []) {
-            $campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, ...array_intersect_key($settings, ModalityProfile::DEFAULTS)]]);
+            $presencial->update(['settings' => [...ModalityProfile::DEFAULTS, ...array_intersect_key($settings, ModalityProfile::DEFAULTS)]]);
         }
 
         $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
         $department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-        $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => $term->id, 'modality_id' => $campus->modality_id, 'department_id' => $department->id]);
+        $load = AcademicLoad::factory()->inStatus($status)->create(['term_id' => $term->id, 'modality_id' => $presencial->id, 'department_id' => $department->id]);
         $subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Tópicos Avanzados de Programación', 'department_id' => $department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
 
         return new self($campus, $term, $department, $load, $subject);
     }
 
     /**
-     * La carga del departamento (u otro) en la modalidad de ese campus y el mismo periodo, cuyos grupos (group() con
-     * `load:`) van en ese campus. Si ya existe (M1: el mismo departamento en la misma modalidad es la misma carga), la
-     * misma, sin cambiar su estado.
+     * La carga del departamento (u otro) en la modalidad (la de la carga del mundo, Presencial, si no se da) y el mismo
+     * periodo, cuyos grupos (group() con `load:`) van en ese campus: el campus es solo el lugar (MS3). Si ya existe (M1:
+     * el mismo departamento en la misma modalidad es la misma carga), la misma, sin cambiar su estado.
      */
-    public function loadIn(Campus $campus, LoadStatus $status = LoadStatus::Staffing, ?Department $department = null): AcademicLoad
+    public function loadIn(Campus $campus, LoadStatus $status = LoadStatus::Staffing, ?Department $department = null, ?Modality $modality = null): AcademicLoad
     {
         $departmentId = ($department ?? $this->department)->id;
-        $load = AcademicLoad::query()->ofDepartment($this->term->id, $campus->modality_id, $departmentId)->first()
-            ?? AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->term->id, 'modality_id' => $campus->modality_id, 'department_id' => $departmentId]);
+        $modalityId = $modality?->id ?? $this->load->modality_id;
+        $load = AcademicLoad::query()->ofDepartment($this->term->id, $modalityId, $departmentId)->first()
+            ?? AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->term->id, 'modality_id' => $modalityId, 'department_id' => $departmentId]);
         $this->campusOfLoad[$load->id] = $campus;
 
         return $load;
@@ -86,7 +88,7 @@ final class ClosingWorld
      */
     public function group(array $attributes = [], ?AcademicLoad $load = null, bool $scheduled = true, bool $withRoom = true, bool|Teacher $teacher = true): Group
     {
-        $campus = $load === null ? $this->campus : ($this->campusOfLoad[$load->id] ?? ($load->is($this->load) ? $this->campus : loadCampus($load)));
+        $campus = $load === null ? $this->campus : ($this->campusOfLoad[$load->id] ?? ($load->is($this->load) ? $this->campus : loadCampus()));
         $load ??= $this->load;
         $subject = $load->department_id === $this->department->id
             ? $this->subject

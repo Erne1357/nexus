@@ -682,7 +682,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /**
      * «N de M validados» (HC-14, CV9): los catálogos que el admin abrió en el periodo (los que tienen revisiones en él) y
-     * que se exigen al departamento (los salones, si algún campus donde el periodo está abierto usa salones; una revisión
+     * que se exigen al departamento (los salones, si alguna modalidad donde el periodo está abierto usa salones; una revisión
      * de salones para todos los campus, decisión 6), y los que todavía bloquean la salida de borrador de sus cargas. Uno
      * que no se abrió no cuenta ni se menciona; uno abierto cuya revisión le falta al departamento cuenta como pendiente.
      * `items` trae cada catálogo contado con su revisión, si existe y el usuario la ve.

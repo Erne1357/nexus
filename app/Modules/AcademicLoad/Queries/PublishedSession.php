@@ -4,7 +4,7 @@ namespace App\Modules\AcademicLoad\Queries;
 
 /**
  * Una sesión de un grupo publicado, tal como la congeló el snapshot (payload v1, `groups[].sessions[]`): día, horas en
- * `HH:MM`, tipo con su etiqueta y salón (o null si es virtual o el campus no usa salones).
+ * `HH:MM`, tipo con su etiqueta y salón (o null si es virtual o la modalidad no usa salones).
  */
 final readonly class PublishedSession
 {

@@ -2,7 +2,6 @@
 
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
-use App\Modules\Core\Enums\Modality as CampusModality;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -21,12 +20,13 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     $this->migration = require base_path('app/Modules/Scheduling/Database/Migrations/2026_11_12_210402_add_modality_to_groups.php');
     $this->migration->down();
     $this->term = Term::factory()->create();
-    $this->c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
-    $this->ead = Campus::factory()->inactive()->create(['code' => 'EAD', 'modality' => CampusModality::Mixta]);
+    $this->c1 = campusBeforeContraction('C1');
+    $this->c2 = campusBeforeContraction('C2');
+    $this->ead = campusBeforeContraction('EAD', 'mixta', active: false);
     $this->subject = Subject::factory()->create();
     $this->plan = StudyPlan::factory()->create();
 });
@@ -143,7 +143,7 @@ it('llena la modalidad de grupos, sesiones y choques con la de su campus: C1 y C
 
 it('una sesión nueva copia la modalidad de su grupo, aunque se escriba otra', function () {
     $this->migration->up();
-    $group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->ead->id]);
+    $group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->ead->id, 'modality_id' => schedulingModalityId('EAD')]);
 
     $session = GroupSession::factory()->for($group)->create();
     $forced = (string) Str::uuid7();
@@ -172,7 +172,8 @@ it('cambiar la modalidad del grupo la propaga a sus sesiones', function () {
 });
 
 it('se detiene y nombra el campus si un grupo o un choque es de un campus sin modalidad del catálogo, y no deja nada', function () {
-    $orphan = Campus::factory()->create(['code' => 'C9', 'modality_id' => null]);
+    $orphan = campusBeforeContraction('C9');
+    DB::table('campuses')->where('id', $orphan->id)->update(['modality_id' => null]);
     schedulingGroupBeforeModality($this, $this->c1);
     $group = schedulingGroupBeforeModality($this, $orphan);
     schedulingSessionBeforeModality($group, 1);

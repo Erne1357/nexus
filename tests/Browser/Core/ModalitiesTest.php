@@ -44,7 +44,7 @@ it('el admin abre Modalidades desde el menú y edita el perfil de Presencial en 
         ->assertSee('7:00 a 22:00')
         ->assertNoJavaScriptErrors();
 
-    expect(Campus::where('code', 'C1')->sole()->profile->dayEnd)->toBe('22:00');
+    expect(modalityOf('PRES')->fresh()->profile->dayEnd)->toBe('22:00');
 });
 
 it('Modalidades no desborda a 390 px, ni la tabla ni el panel', function () {

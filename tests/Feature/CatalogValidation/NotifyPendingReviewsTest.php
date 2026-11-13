@@ -10,11 +10,12 @@ use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
@@ -71,9 +72,8 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
     Notification::assertNotSentTo($this->jefeBasicas, CatalogReviewsPending::class);
 });
 
-it('sin salones en el perfil del campus, no los cuenta como pendientes', function () {
+it('MS34: el aviso cuenta lo que el admin abrió, sin un perfil de campus: con los salones validados, solo docentes', function () {
     Notification::fake();
-    $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
     CatalogReview::query()->where('department_id', $this->basicas->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
 
@@ -128,6 +128,31 @@ it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', funct
     expect($this->jefeSistemas->notifications()->count())->toBe(1)
         ->and($this->jefeBasicas->notifications()->count())->toBe(1)
         ->and($this->jefeSistemas->notifications()->first()->data['title'])->toBe('Tienes catálogos por validar');
+});
+
+it('CV9: con varios campus avisa una vez por jefe y departamento, con el primer campus, y cuenta lo pendiente una vez por departamento', function () {
+    reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
+    reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $queriesWith = function (EloquentCollection $campuses): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(NotifyPendingReviews::class)->notifyOpened($this->term, $campuses, Catalog::cases());
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    Notification::fake();
+    $queriesWith(new EloquentCollection([$c1]));
+    Notification::fake();
+    $alone = $queriesWith(new EloquentCollection([$c1]));
+    $both = $queriesWith(new EloquentCollection([$c1, $this->c2]));
+
+    expect($both)->toBe($alone);
+    Notification::assertSentToTimes($this->jefeSistemas, CatalogReviewsPending::class, 2);
+    Notification::assertSentTo($this->jefeSistemas, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification, array $channels, User $notifiable): bool => $notification->message($notifiable)->campusId === $c1->id);
+    Notification::assertNotSentTo($this->jefeBasicas, CatalogReviewsPending::class);
 });
 
 it('si la apertura falla, no avisa a nadie', function () {

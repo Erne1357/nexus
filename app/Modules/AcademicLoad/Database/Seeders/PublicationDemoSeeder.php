@@ -6,7 +6,7 @@ use App\Modules\AcademicLoad\Actions\Transitions\PublishLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Seeder;
@@ -25,9 +25,9 @@ final class PublicationDemoSeeder extends Seeder
     use RefusesProduction;
 
     /**
-     * @param  list<string>  $campuses
+     * @param  string  $modality  la clave de la modalidad de la carga de la demo (Presencial, con los grupos de sus campus)
      */
-    public function run(array $campuses = ['C2'], string $term = '20271'): void
+    public function run(string $term = '20271', string $modality = 'PRES'): void
     {
         $this->refuseProduction();
 
@@ -37,7 +37,7 @@ final class PublicationDemoSeeder extends Seeder
         $loads = AcademicLoad::query()
             ->with(['department', 'modality'])
             ->where('term_id', $termModel->id)
-            ->whereIn('modality_id', Campus::query()->whereIn('code', $campuses)->select('modality_id'))
+            ->whereIn('modality_id', Modality::query()->where('code', $modality)->select('id'))
             ->where('status', LoadStatus::Closed->value)
             ->get()
             ->sortBy(fn (AcademicLoad $load): string => $load->modality->code.$load->department->code);

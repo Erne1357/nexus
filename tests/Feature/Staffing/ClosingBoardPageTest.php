@@ -21,13 +21,13 @@ use Tests\Support\Staffing\ClosingWorld;
 
 beforeEach(function () {
     $this->world = ClosingWorld::create();
-    // Campus I es de otra modalidad para tener dos cargas del mismo departamento (M1: una por departamento y modalidad).
+    // Una carga de otra modalidad (EAD) con sus grupos en Campus I, para tener dos cargas del mismo departamento (M1).
     modalityOf('EAD')->update(['is_active' => true]);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]);
+    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion)->create(['name' => 'Héctor Salinas']);
     $this->world->group();
     $this->world->group(teacher: false);
-    $c1Load = $this->world->loadIn($this->c1, LoadStatus::Published);
+    $c1Load = $this->world->loadIn($this->c1, LoadStatus::Published, modality: modalityOf('EAD'));
     $c1Load->update(['current_version' => 2]);
     $this->world->group(load: $c1Load);
     $this->ee = Department::factory()->create(['code' => 'EE', 'name' => 'Eléctrica y Electrónica']);
@@ -158,7 +158,7 @@ it('Subdirección cierra desde el detalle, con la confirmación de los grupos ac
 });
 
 it('Subdirección reabre una carga publicada con motivo desde el detalle', function () {
-    $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
+    $c1Load = $this->world->load->newQuery()->where('modality_id', modalityOf('EAD')->id)->sole();
 
     $page = closingBoardPage($this->subdireccion)
         ->call('open', $this->world->department->id, 'EAD')
@@ -173,7 +173,7 @@ it('Subdirección reabre una carga publicada con motivo desde el detalle', funct
 });
 
 it('tocar el renglón abre la carga del departamento en la modalidad de la página', function () {
-    $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
+    $c1Load = $this->world->load->newQuery()->where('modality_id', modalityOf('EAD')->id)->sole();
 
     closingBoardPage($this->subdireccion)
         ->call('open', $this->world->department->id)
@@ -185,7 +185,7 @@ it('tocar el renglón abre la carga del departamento en la modalidad de la pági
 });
 
 it('sin carga que reabra en la modalidad pedida, abre otra del departamento que sí reabre (la primera sin cerrar) y nunca una que no reabre', function () {
-    $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
+    $c1Load = $this->world->load->newQuery()->where('modality_id', modalityOf('EAD')->id)->sole();
     // Solo hay una Subdirección: su nombramiento queda en EAD.
     RoleAssignment::query()->where('user_id', $this->subdireccion->id)->update(['modality_id' => modalityOf('EAD')->id]);
     $ofEad = $this->subdireccion->fresh();
@@ -198,6 +198,20 @@ it('sin carga que reabra en la modalidad pedida, abre otra del departamento que 
         ->assertDontSeeHtml('data-testid="drawer-modality-PRES"');
 
     closingBoardPage($ofEad, [])->call('open', $this->ee->id)->assertForbidden();
+});
+
+it('sin carga en la modalidad pedida abre la primera que sigue sin cerrar y, si todas pasaron el cierre, la primera que reabre (por clave)', function () {
+    $c1Load = $this->world->load->newQuery()->where('modality_id', modalityOf('EAD')->id)->sole();
+
+    closingBoardPage($this->subdireccion, [])
+        ->call('open', $this->world->department->id, 'ENL')
+        ->assertSet('loadId', $this->world->load->id);
+
+    $this->world->load->update(['status' => LoadStatus::Closed]);
+
+    closingBoardPage($this->subdireccion, [])
+        ->call('open', $this->world->department->id, 'ENL')
+        ->assertSet('loadId', $c1Load->id);
 });
 
 it('cerrar el drawer con Esc o con el velo olvida la carga y los modales', function () {

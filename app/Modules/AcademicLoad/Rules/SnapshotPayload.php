@@ -3,7 +3,6 @@
 namespace App\Modules\AcademicLoad\Rules;
 
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
@@ -32,8 +31,8 @@ final class SnapshotPayload
     public const int SCHEMA_VERSION = 2;
 
     /**
-     * La modalidad de una foto v1 cuyo campus ya no tiene modalidad en el puente (MS13, supuesto por confirmar): las de
-     * antes eran de campus presenciales (C1 y C2).
+     * La modalidad de una foto v1 (MS13, supuesto por confirmar): las de antes de la carga por modalidad eran de campus
+     * presenciales (C1 y C2).
      */
     public const string LEGACY_MODALITY = 'PRES';
 
@@ -74,10 +73,10 @@ final class SnapshotPayload
     }
 
     /**
-     * El payload en la forma actual (MS13): una foto v1, con `campus` en la raíz, se lee como de la modalidad de ese campus
-     * (el puente `campuses.modality_id`, aunque el campus o la modalidad estén borrados) o, si no la tiene, de la
-     * presencial (LEGACY_MODALITY), y el campus de la raíz pasa a cada grupo; lo demás queda igual. El id de la modalidad
-     * es siempre el de una modalidad del catálogo (nulo solo si el catálogo no tiene ninguna de las dos). Una foto de la
+     * El payload en la forma actual (MS13): una foto v1, con `campus` en la raíz, se lee como de la presencial
+     * (LEGACY_MODALITY: antes de la carga por modalidad solo se publicaba la presencial de C1 y C2), y el campus de la raíz
+     * pasa a cada grupo; lo demás queda igual. El id de la modalidad es el del catálogo, aunque esté borrada (nulo solo
+     * si el catálogo no la tiene). Una foto de la
      * forma actual se devuelve tal cual. No escribe: las fotos guardadas no se reescriben (HC-18).
      *
      * @param  array<string, mixed>  $payload
@@ -90,9 +89,7 @@ final class SnapshotPayload
         }
 
         $campus = $payload['campus'];
-        $bridge = is_string($campus['id'] ?? null) ? Campus::withTrashed()->whereKey($campus['id'])->value('modality_id') : null;
-        $modality = ($bridge === null ? null : Modality::withTrashed()->whereKey($bridge)->first(['id', 'code', 'name']))
-            ?? Modality::withTrashed()->where('code', self::LEGACY_MODALITY)->first(['id', 'code', 'name']);
+        $modality = Modality::withTrashed()->where('code', self::LEGACY_MODALITY)->first(['id', 'code', 'name']);
         $normalized = [];
 
         foreach ($payload as $key => $value) {

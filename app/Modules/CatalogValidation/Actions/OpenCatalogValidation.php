@@ -5,17 +5,16 @@ namespace App\Modules\CatalogValidation\Actions;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Jobs\NotifyPendingReviewsJob;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use Illuminate\Support\Facades\DB;
 
 /**
  * El admin abre la validación de catálogos de un periodo (CV9, confirmada el 12 de noviembre de 2026): decide
  * cuáles catálogos se validan (ninguno, algunos o todos) y después puede abrir uno que faltó. Crea las revisiones de
- * esos catálogos para cada departamento activo (CreateTermReviews); los salones solo si algún campus abierto en el
- * periodo usa salones, y una sola revisión por departamento para todos los campus. Abrir un catálogo ya abierto no hace
+ * esos catálogos para cada departamento activo (CreateTermReviews); los salones solo si alguna modalidad abierta en el
+ * periodo usa salones (CatalogReviewQuery::roomsApply), y una sola revisión por departamento para todos los campus. Abrir un catálogo ya abierto no hace
  * nada (idempotente) y uno abierto no se quita del periodo (supuesto por confirmar).
  *
  * Deja una entrada en la bitácora del periodo (evento `validation_opened`) con los catálogos que abrió y cuántas
@@ -28,6 +27,7 @@ final class OpenCatalogValidation
     public function __construct(
         private readonly CreateTermReviews $createTermReviews,
         private readonly CatalogReviewQuery $reviews,
+        private readonly CampusQuery $campuses,
     ) {}
 
     /**
@@ -73,11 +73,9 @@ final class OpenCatalogValidation
         if ($createdBy !== []) {
             NotifyPendingReviewsJob::dispatch(
                 $term->getKey(),
-                // Los campus activos de las modalidades donde se abrió el periodo (M4; puente `campuses.modality_id`; MS15,
+                // Los campus activos donde se dan los grupos de las modalidades donde se abrió el periodo (M4, MS4; MS15,
                 // supuesto por confirmar: antes, los campus donde se abrió aunque después se desactivaran).
-                Campus::query()->where('is_active', true)
-                    ->whereIn('modality_id', TermOpening::query()->where('term_id', $term->getKey())->select('modality_id'))
-                    ->pluck('id')->all(),
+                $this->campuses->openIn($term)->modelKeys(),
                 array_keys($createdBy),
             )->afterCommit();
         }

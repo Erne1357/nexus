@@ -32,7 +32,7 @@ const PUBLISH_COMPONENT = 'academic-load::components.publish-load';
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
-    $this->load = AcademicLoad::factory()->create(['modality_id' => $this->campus->modality_id, 'department_id' => departmentKey(10), 'status' => LoadStatus::Closed]);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10), 'status' => LoadStatus::Closed]);
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion)->create(['name' => 'Laura Méndez']);
 });
 
@@ -43,9 +43,9 @@ function componentGroup(): Group
 {
     $teacher = Teacher::factory()->create();
     TeacherPosition::factory()->asignatura(20)->create(['teacher_id' => $teacher->id]);
-    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus(test()->load)->id])->id, 'department_id' => departmentKey(10)]);
+    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id, 'department_id' => departmentKey(10)]);
     $group = Group::factory()->withQuota()->create([
-        'term_id' => test()->load->term_id, 'campus_id' => loadCampus(test()->load)->id, 'teacher_id' => $teacher->id, 'capacity' => 30,
+        'term_id' => test()->load->term_id, 'campus_id' => loadCampus()->id, 'teacher_id' => $teacher->id, 'capacity' => 30,
         'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10), 'theory_hours' => 2, 'practice_hours' => 0])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $group->owner_career_id, 'campus_id' => $group->campus_id]);
@@ -150,12 +150,12 @@ it('dice por qué no se puede publicar', function (Closure $arrange, string $rea
         return test()->subdireccion;
     }, 'Se publica cuando la carga está cerrada.'],
     'con visto bueno, cerrada sin aprobar' => [function () {
-        test()->campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
 
         return test()->subdireccion;
     }, 'Primero va el visto bueno de Subdirección.'],
     'con visto bueno, el jefe' => [function () {
-        test()->campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
 
         return User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
     }, 'En esta modalidad publica Subdirección, después de su visto bueno.'],
@@ -210,7 +210,7 @@ it('publica quien tiene publish: el jefe sin visto bueno, Subdirección en cualq
     'el jefe del departamento, campus sin visto bueno' => [fn () => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create()],
     'Subdirección en una modalidad sin visto bueno' => [fn () => test()->subdireccion],
     'Subdirección, carga aprobada donde se exige visto bueno' => [function () {
-        test()->campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
         test()->load->update(['status' => LoadStatus::Approved]);
 
         return test()->subdireccion;
@@ -218,7 +218,7 @@ it('publica quien tiene publish: el jefe sin visto bueno, Subdirección en cualq
 ]);
 
 it('con visto bueno, el jefe no publica la carga aprobada', function () {
-    $this->campus->catalogModality->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
     $this->load->update(['status' => LoadStatus::Approved]);
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
 

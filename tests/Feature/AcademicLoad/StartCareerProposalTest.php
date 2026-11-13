@@ -38,7 +38,7 @@ beforeEach(function () {
     $this->actor = User::factory()->create();
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->term = Term::factory()->create(['code' => '20271']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
     $this->career = Career::factory()->create(['code' => 'ISC']);
     CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $this->campus->id]);
     $this->plan = StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2010-224']);
@@ -48,7 +48,7 @@ function startProposal(?Term $term = null, ?Modality $modality = null, ?Career $
 {
     return app(StartCareerProposal::class)->handle(
         $term ?? test()->term,
-        $modality ?? test()->campus->catalogModality,
+        $modality ?? modalityOf('PRES'),
         $career ?? test()->career,
         test()->actor,
     );
@@ -96,7 +96,7 @@ it('arma la propuesta en borrador con una fila por materia, sus elegibles y la p
 
     expect($proposal->status)->toBe(ProposalStatus::Draft)
         ->and($proposal->term_id)->toBe($this->term->id)
-        ->and($proposal->modality_id)->toBe($this->campus->modality_id)
+        ->and($proposal->modality_id)->toBe(modalityOf('PRES')->id)
         ->and($proposal->career_id)->toBe($this->career->id)
         ->and($proposal->items()->pluck('campus_id')->unique()->all())->toBe([$this->campus->id])
         ->and(proposalRowsOf($proposal))->toBe([
@@ -202,7 +202,7 @@ it('es idempotente: la segunda vez devuelve la misma propuesta sin tocar sus fil
 });
 
 it('devuelve la propuesta que ya existe aunque el periodo o la oferta ya no la dejarían armar', function () {
-    $existing = CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'career_id' => $this->career->id]);
+    $existing = CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'career_id' => $this->career->id]);
     CareerCampus::query()->update(['is_active' => false]);
 
     expect(startProposal()->id)->toBe($existing->id);
@@ -266,7 +266,7 @@ it('deja bitácora de la propuesta armada con quién la armó y sus alumnos posi
         ->and($activity->event)->toBe('created')
         ->and($activity->attribute_changes['attributes'])->toBe([
             'term_id' => $this->term->id,
-            'modality_id' => $this->campus->modality_id,
+            'modality_id' => modalityOf('PRES')->id,
             'career_id' => $this->career->id,
             'status' => 'draft',
             'eligible_students' => 3,
@@ -306,7 +306,7 @@ it('si otra sesión la arma entre la revisión y la escritura, devuelve la suya 
     DB::listen(function (QueryExecuted $query) use (&$rivalInserted) {
         if (! $rivalInserted && str_contains($query->sql, 'career_campus')) {
             $rivalInserted = true;
-            DB::table('career_proposals')->insert(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'career_id' => $this->career->id]);
+            DB::table('career_proposals')->insert(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'career_id' => $this->career->id]);
         }
     });
 

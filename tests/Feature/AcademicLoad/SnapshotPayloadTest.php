@@ -85,13 +85,13 @@ it('MS13: normalize lee una foto v1 como modalidad presencial y pasa el campus d
         ->and(SnapshotPayload::errors($normalized))->toBe([]);
 });
 
-it('MS13: normalize toma la modalidad del campus de la raíz por el puente y, sin él, la presencial; nunca usa el id del campus', function () {
-    $ead = Campus::factory()->create(['code' => 'EAD', 'modality_id' => modalityOf('EAD')->id]);
+it('MS13: normalize lee toda foto v1 como presencial, sin buscar el campus de la raíz', function () {
+    $campus = Campus::factory()->create(['code' => 'C2']);
     $old = fn (array $campus): array => [...array_diff_key(samplePayload(), ['modality' => true]), 'schema_version' => 1, 'campus' => $campus];
+    $presencial = ['id' => modalityOf('PRES')->id, 'code' => 'PRES', 'name' => modalityOf('PRES')->name];
 
-    expect(SnapshotPayload::normalize($old(['id' => $ead->id, 'code' => 'EAD', 'name' => 'Campus EAD']))['modality']['code'])->toBe('EAD')
-        ->and(SnapshotPayload::normalize($old(['id' => (string) Str::uuid7(), 'code' => 'CX', 'name' => 'Campus que ya no existe']))['modality'])
-        ->toBe(['id' => modalityOf('PRES')->id, 'code' => 'PRES', 'name' => modalityOf('PRES')->name]);
+    expect(SnapshotPayload::normalize($old(['id' => $campus->id, 'code' => 'C2', 'name' => 'Campus II']))['modality'])->toBe($presencial)
+        ->and(SnapshotPayload::normalize($old(['id' => (string) Str::uuid7(), 'code' => 'CX', 'name' => 'Campus que ya no existe']))['modality'])->toBe($presencial);
 });
 
 it('normalize deja igual una foto v2', function () {

@@ -116,3 +116,29 @@ it('M14: la Action solo deja en cero una fila cuyo campus sigue inactivo', funct
 
     expect($this->inC1->fresh()->requested_groups)->toBe(5);
 });
+
+it('M14: el panel tampoco guarda ni sugiere en la fila del campus inactivo: una fila armada a mano es 403', function () {
+    $page = fn () => Livewire::withQueryParams(['vista' => 'tabla'])->actingAs($this->ofBoth)->test('academic-load::pages.proposal');
+
+    $page()->set('form', [$this->inC1->id => ['expected_students' => 151, 'requested_groups' => 0, 'notes' => '']])
+        ->call('save')
+        ->assertForbidden();
+
+    $page()->call('useSuggested', $this->inC1->id)->assertForbidden();
+
+    expect($this->inC1->fresh())->requested_groups->toBe(5)->expected_students->toBe(151);
+});
+
+it('M14: el aviso de la columna inactiva sale solo mientras la propuesta se edita y alguna fila de ella pide grupos', function () {
+    $alert = 'data-testid="inactive-column-C1"';
+    $page = fn () => Livewire::withQueryParams(['vista' => 'tabla'])->actingAs($this->ofBoth)->test('academic-load::pages.proposal');
+
+    $page()->assertSeeHtml($alert);
+
+    $this->inC1->update(['requested_groups' => 0]);
+    $page()->assertDontSeeHtml($alert);
+
+    $this->inC1->update(['requested_groups' => 2]);
+    $this->proposal->update(['status' => ProposalStatus::Submitted]);
+    $page()->assertDontSeeHtml($alert);
+});

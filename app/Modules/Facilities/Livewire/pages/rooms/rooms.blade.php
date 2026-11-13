@@ -16,203 +16,194 @@
         </x-slot:subtitle>
     </x-header>
 
-    @if (! $usesRooms)
-        <div class="rounded-box border border-base-300 bg-base-100 px-6 py-10 text-center text-neutral" data-testid="rooms-not-used">
-            <x-icon name="o-rectangle-stack" class="mx-auto mb-2 w-8 h-8" />
-            <p>{{ $shownCampus === null ? 'Ninguno de tus campus usa salones' : "El campus {$shownCampus->code} no usa salones" }}: sus grupos no se asignan a un salón.</p>
-            <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all class="mx-auto mt-4 w-fit" />
-            <x-button label="Nuevo salón" icon="o-plus" class="btn-primary mt-4" disabled title="Este campus no usa salones." />
-        </div>
-    @else
-        <x-core::catalog-toolbar narrow>
-            <x-slot:search>
-                <x-input
-                    wire:model.live.debounce.300ms="search"
-                    placeholder="Clave o nombre"
-                    aria-label="Buscar salones"
-                    icon="o-magnifying-glass"
-                    clearable
-                />
-            </x-slot:search>
+    <x-core::catalog-toolbar narrow>
+        <x-slot:search>
+            <x-input
+                wire:model.live.debounce.300ms="search"
+                placeholder="Clave o nombre"
+                aria-label="Buscar salones"
+                icon="o-magnifying-glass"
+                clearable
+            />
+        </x-slot:search>
 
-            @if ($buildingGroups === [])
-                <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+        @if ($buildingGroups === [])
+            <x-select wire:model.live="buildingFilter" aria-label="Edificio" :options="$buildings" placeholder="Edificio" />
+        @else
+            {{-- Con más de un campus, el campus va dentro de este filtro (un grupo por campus y «Todo C2»), no como otro control. --}}
+            <label class="select w-full">
+                <select aria-label="Edificio" wire:change="setBuildingScope($event.target.value)" data-testid="building-scope">
+                    <option value="" @selected($buildingScope === '')>Edificio</option>
+                    @foreach ($buildingGroups as $code => $group)
+                        <optgroup label="{{ $group['name'] }}">
+                            <option value="campus:{{ $code }}" @selected($buildingScope === "campus:{$code}")>Todo {{ $code }}</option>
+                            @foreach ($group['buildings'] as $building)
+                                <option value="{{ $building['id'] }}" @selected($buildingScope === $building['id'])>{{ $building['name'] }}</option>
+                            @endforeach
+                        </optgroup>
+                    @endforeach
+                </select>
+            </label>
+        @endif
+        <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Tipo" />
+        <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Dueño" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
+
+        <x-slot:action>
+            @if ($canCreate)
+                <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
             @else
-                {{-- Con más de un campus, el campus va dentro de este filtro (un grupo por campus y «Todo C2»), no como otro control. --}}
-                <label class="select w-full">
-                    <select aria-label="Edificio" wire:change="setBuildingScope($event.target.value)" data-testid="building-scope">
-                        <option value="" @selected($buildingScope === '')>Edificio</option>
-                        @foreach ($buildingGroups as $code => $group)
-                            <optgroup label="{{ $group['name'] }}">
-                                <option value="campus:{{ $code }}" @selected($buildingScope === "campus:{$code}")>Todo {{ $code }}</option>
-                                @foreach ($group['buildings'] as $building)
-                                    <option value="{{ $building['id'] }}" @selected($buildingScope === $building['id'])>{{ $building['name'] }}</option>
-                                @endforeach
-                            </optgroup>
-                        @endforeach
-                    </select>
-                </label>
+                <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra salones." />
             @endif
-            <x-select wire:model.live="typeFilter" aria-label="Tipo" :options="$types" placeholder="Tipo" />
-            <x-select wire:model.live="ownerFilter" aria-label="Dueño" :options="$ownerFilters" placeholder="Dueño" />
-            <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" />
+        </x-slot:action>
+    </x-core::catalog-toolbar>
 
-            <x-slot:action>
-                @if ($canCreate)
-                    <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" wire:click="create" spinner="create" />
+    <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+        <x-table
+            :headers="$headers"
+            :rows="$rooms"
+            :row-decoration="$rowDecoration"
+            class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
+        >
+            @scope('cell_code', $room)
+                <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
+            @endscope
+
+            @scope('cell_name', $room)
+                {{ $room->name ?? '—' }}
+            @endscope
+
+            @scope('cell_campus', $room)
+                <span class="font-mono" title="{{ $room->campus->name }}" data-testid="room-campus">{{ $room->campus->code }}</span>
+            @endscope
+
+            @scope('cell_building', $room)
+                <span class="font-mono" title="{{ $room->building?->name }}">{{ $room->building?->code }}</span>
+            @endscope
+
+            @scope('cell_type', $room)
+                {{ $room->type->label() }}
+            @endscope
+
+            @scope('cell_capacity', $room)
+                <span class="font-mono tabular-nums">{{ $room->capacity }}</span>
+            @endscope
+
+            @scope('cell_department', $room)
+                @if ($room->department === null)
+                    <span class="text-neutral">Sin dueño</span>
                 @else
-                    <x-button label="Nuevo salón" icon="o-plus" class="btn-primary" disabled title="Tu rol no administra salones." />
+                    <span class="font-mono" title="{{ $room->department->name }}">{{ $room->department->code }}</span>
                 @endif
-            </x-slot:action>
-        </x-core::catalog-toolbar>
+            @endscope
 
-        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
-            <x-table
-                :headers="$headers"
-                :rows="$rooms"
-                :row-decoration="$rowDecoration"
-                class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
-            >
-                @scope('cell_code', $room)
-                    <span @class(['whitespace-nowrap font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
-                @endscope
+            @scope('cell_blocks_count', $room)
+                <span class="font-mono tabular-nums">{{ $room->blocks_count }}</span>
+            @endscope
 
-                @scope('cell_name', $room)
-                    {{ $room->name ?? '—' }}
-                @endscope
+            @scope('cell_is_active', $room)
+                <x-core::status-badge :tone="$room->is_active ? 'success' : 'neutral'" :label="$room->is_active ? 'Activo' : 'Inactivo'" />
+            @endscope
 
-                @scope('cell_campus', $room)
-                    <span class="font-mono" title="{{ $room->campus->name }}" data-testid="room-campus">{{ $room->campus->code }}</span>
-                @endscope
+            @scope('actions', $room)
+                @include('facilities::rooms.row-actions', ['room' => $room, 'inTable' => true])
+            @endscope
 
-                @scope('cell_building', $room)
-                    <span class="font-mono" title="{{ $room->building?->name }}">{{ $room->building?->code }}</span>
-                @endscope
+            <x-slot:empty>
+                <x-icon name="o-rectangle-stack" label="Ningún salón coincide con la búsqueda." />
+            </x-slot:empty>
+        </x-table>
 
-                @scope('cell_type', $room)
-                    {{ $room->type->label() }}
-                @endscope
+        <ul class="divide-y divide-base-300 md:hidden" data-testid="room-cards">
+            @foreach ($rooms as $room)
+                <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active])>
+                    <div class="flex items-center gap-2.5">
+                        <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
+                        <span @class(['min-w-0 flex-1', 'font-semibold' => $room->is_active])>{{ $room->name ?? $room->type->label() }}</span>
 
-                @scope('cell_capacity', $room)
-                    <span class="font-mono tabular-nums">{{ $room->capacity }}</span>
-                @endscope
+                        <x-core::status-badge :tone="$room->is_active ? 'success' : 'neutral'" :label="$room->is_active ? 'Activo' : 'Inactivo'" />
+                    </div>
 
-                @scope('cell_department', $room)
-                    @if ($room->department === null)
-                        <span class="text-neutral">Sin dueño</span>
-                    @else
-                        <span class="font-mono" title="{{ $room->department->name }}">{{ $room->department->code }}</span>
-                    @endif
-                @endscope
+                    <div class="text-neutral">
+                        @if ($campusOptions->count() > 1)<span class="font-mono">{{ $room->campus->code }}</span> · @endif<span class="font-mono">{{ $room->building?->code }}</span> ·
+                        {{ $room->type->label() }} ·
+                        <span class="font-mono tabular-nums">{{ $room->capacity }}</span> lugares ·
+                        @if ($room->department === null) Sin dueño @else <span class="font-mono">{{ $room->department->code }}</span> @endif
+                        @if ($room->blocks_count > 0) · {{ trans_choice('{1} 1 bloqueo|[2,*] :count bloqueos', $room->blocks_count) }} @endif
+                    </div>
 
-                @scope('cell_blocks_count', $room)
-                    <span class="font-mono tabular-nums">{{ $room->blocks_count }}</span>
-                @endscope
+                    @include('facilities::rooms.row-actions', ['room' => $room, 'inTable' => false])
+                </li>
+            @endforeach
+        </ul>
 
-                @scope('cell_is_active', $room)
-                    <x-core::status-badge :tone="$room->is_active ? 'success' : 'neutral'" :label="$room->is_active ? 'Activo' : 'Inactivo'" />
-                @endscope
+        @if ($rooms->isNotEmpty() || $rooms->hasPages())
+            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
+                @if ($rooms->isNotEmpty())
+                    <p>Salones <span class="font-mono">{{ $rooms->first()->code }}</span>@if ($rooms->count() > 1) a <span class="font-mono">{{ $rooms->last()->code }}</span> · <span class="font-mono">{{ $rooms->firstItem() }}–{{ $rooms->lastItem() }}</span>@else · <span class="font-mono">{{ $rooms->firstItem() }}</span>@endif de <span class="font-mono">{{ $rooms->total() }}</span>@if ($shownCampus !== null) en <span class="font-mono">{{ $shownCampus->code }}</span>@endif</p>
+                @endif
 
-                @scope('actions', $room)
-                    @include('facilities::rooms.row-actions', ['room' => $room, 'inTable' => true])
-                @endscope
+                {{ $rooms->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+            </div>
+        @endif
+    </div>
 
-                <x-slot:empty>
-                    <x-icon name="o-rectangle-stack" label="Ningún salón coincide con la búsqueda." />
-                </x-slot:empty>
-            </x-table>
-
-            <ul class="divide-y divide-base-300 md:hidden" data-testid="room-cards">
-                @foreach ($rooms as $room)
-                    <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active])>
-                        <div class="flex items-center gap-2.5">
-                            <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
-                            <span @class(['min-w-0 flex-1', 'font-semibold' => $room->is_active])>{{ $room->name ?? $room->type->label() }}</span>
-
-                            <x-core::status-badge :tone="$room->is_active ? 'success' : 'neutral'" :label="$room->is_active ? 'Activo' : 'Inactivo'" />
-                        </div>
-
-                        <div class="text-neutral">
-                            @if ($campusOptions->count() > 1)<span class="font-mono">{{ $room->campus->code }}</span> · @endif<span class="font-mono">{{ $room->building?->code }}</span> ·
-                            {{ $room->type->label() }} ·
-                            <span class="font-mono tabular-nums">{{ $room->capacity }}</span> lugares ·
-                            @if ($room->department === null) Sin dueño @else <span class="font-mono">{{ $room->department->code }}</span> @endif
-                            @if ($room->blocks_count > 0) · {{ trans_choice('{1} 1 bloqueo|[2,*] :count bloqueos', $room->blocks_count) }} @endif
-                        </div>
-
-                        @include('facilities::rooms.row-actions', ['room' => $room, 'inTable' => false])
-                    </li>
-                @endforeach
-            </ul>
-
-            @if ($rooms->isNotEmpty() || $rooms->hasPages())
-                <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
-                    @if ($rooms->isNotEmpty())
-                        <p>Salones <span class="font-mono">{{ $rooms->first()->code }}</span>@if ($rooms->count() > 1) a <span class="font-mono">{{ $rooms->last()->code }}</span> · <span class="font-mono">{{ $rooms->firstItem() }}–{{ $rooms->lastItem() }}</span>@else · <span class="font-mono">{{ $rooms->firstItem() }}</span>@endif de <span class="font-mono">{{ $rooms->total() }}</span>@if ($shownCampus !== null) en <span class="font-mono">{{ $shownCampus->code }}</span>@endif</p>
-                    @endif
-
-                    {{ $rooms->onEachSide(1)->links(data: ['scrollTo' => false]) }}
+    <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo salón' : 'Editar salón'" box-class="max-w-2xl" separator>
+        <x-form wire:submit="save" no-separator>
+            <div class="grid gap-4 md:grid-cols-6">
+                <div class="md:col-span-3">
+                    <fieldset class="fieldset py-0">
+                        <legend class="fieldset-legend">Edificio</legend>
+                        <label class="select w-full">
+                            <select name="building_id" wire:model="building_id" aria-label="Edificio" data-testid="room-building">
+                                <option value="">Elige el edificio</option>
+                                @foreach ($formBuildings as $campusCode => $group)
+                                    <optgroup label="{{ $campusCode }}">
+                                        @foreach ($group as $building)
+                                            <option value="{{ $building['id'] }}">{{ $building['name'] }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                        </label>
+                        @error('building_id') <p class="text-error text-sm">{{ $message }}</p> @enderror
+                    </fieldset>
                 </div>
-            @endif
-        </div>
-
-        <x-modal wire:model="showModal" :title="$editingId === null ? 'Nuevo salón' : 'Editar salón'" box-class="max-w-2xl" separator>
-            <x-form wire:submit="save" no-separator>
-                <div class="grid gap-4 md:grid-cols-6">
-                    <div class="md:col-span-3">
-                        <fieldset class="fieldset py-0">
-                            <legend class="fieldset-legend">Edificio</legend>
-                            <label class="select w-full">
-                                <select name="building_id" wire:model="building_id" aria-label="Edificio" data-testid="room-building">
-                                    <option value="">Elige el edificio</option>
-                                    @foreach ($formBuildings as $campusCode => $group)
-                                        <optgroup label="{{ $campusCode }}">
-                                            @foreach ($group as $building)
-                                                <option value="{{ $building['id'] }}">{{ $building['name'] }}</option>
-                                            @endforeach
-                                        </optgroup>
-                                    @endforeach
-                                </select>
-                            </label>
-                            @error('building_id') <p class="text-error text-sm">{{ $message }}</p> @enderror
-                        </fieldset>
-                    </div>
-                    <div class="md:col-span-3">
-                        <x-input label="Clave" name="code" wire:model="code" placeholder="A-101" />
-                    </div>
-
-                    <div class="md:col-span-6">
-                        <x-input label="Nombre (opcional)" name="name" wire:model="name" />
-                    </div>
-
-                    <div class="md:col-span-3">
-                        <x-select label="Tipo" name="type" wire:model="type" :options="$types" placeholder="Elige el tipo" />
-                    </div>
-                    <div class="md:col-span-3">
-                        <x-input label="Capacidad" name="capacity" wire:model="capacity" type="number" min="1" inputmode="numeric" />
-                    </div>
-
-                    <div class="md:col-span-6">
-                        <x-select label="Departamento dueño" name="department_id" wire:model="department_id" :options="$ownerOptions" placeholder="Sin dueño" />
-                    </div>
-
-                    <div class="md:col-span-6">
-                        <x-input label="Características" name="features" wire:model="features" placeholder="Proyector, aire acondicionado" hint="Sepáralas con comas." />
-                    </div>
+                <div class="md:col-span-3">
+                    <x-input label="Clave" name="code" wire:model="code" placeholder="A-101" />
                 </div>
 
-                <x-slot:actions>
-                    <x-button label="Cancelar" @click="$wire.showModal = false" />
-                    <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
-                </x-slot:actions>
-            </x-form>
-        </x-modal>
+                <div class="md:col-span-6">
+                    <x-input label="Nombre (opcional)" name="name" wire:model="name" />
+                </div>
 
-        {{-- Los atributos que no son de x-drawer caen en su panel (la x-card): ahí van la semántica de diálogo y el título que lo nombra. --}}
-        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="blocks-drawer-title">
-            @if ($blocksRoom !== null)
-                @include('facilities::rooms.blocks-panel')
-            @endif
-        </x-drawer>
-    @endif
+                <div class="md:col-span-3">
+                    <x-select label="Tipo" name="type" wire:model="type" :options="$types" placeholder="Elige el tipo" />
+                </div>
+                <div class="md:col-span-3">
+                    <x-input label="Capacidad" name="capacity" wire:model="capacity" type="number" min="1" inputmode="numeric" />
+                </div>
+
+                <div class="md:col-span-6">
+                    <x-select label="Departamento dueño" name="department_id" wire:model="department_id" :options="$ownerOptions" placeholder="Sin dueño" />
+                </div>
+
+                <div class="md:col-span-6">
+                    <x-input label="Características" name="features" wire:model="features" placeholder="Proyector, aire acondicionado" hint="Sepáralas con comas." />
+                </div>
+            </div>
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showModal = false" />
+                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
+            </x-slot:actions>
+        </x-form>
+    </x-modal>
+
+    {{-- Los atributos que no son de x-drawer caen en su panel (la x-card): ahí van la semántica de diálogo y el título que lo nombra. --}}
+    <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="blocks-drawer-title">
+        @if ($blocksRoom !== null)
+            @include('facilities::rooms.blocks-panel')
+        @endif
+    </x-drawer>
 </div>

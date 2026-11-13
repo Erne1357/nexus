@@ -75,7 +75,7 @@
                         <span class="col-start-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5">
                             <span class="min-w-0 font-mono text-sm font-semibold break-words">{{ $name }}</span>
                             @if ($campusOptions->count() > 1)
-                                <x-core::campus-tag :campus="(object) $row['campus']" data-testid="agreement-campus" />
+                                <x-core::campus-tag :campus="$row['campus'] === null ? null : (object) $row['campus']" data-testid="agreement-campus" />
                             @endif
                         </span>
                         @if ($key === 'done')

@@ -31,7 +31,7 @@ function changeScenario(LoadStatus $status = LoadStatus::Staffing): array
     ]);
     $load = AcademicLoad::factory()->create([
         'term_id' => $term->id,
-        'modality_id' => $campus->modality_id,
+        'modality_id' => modalityOf('PRES')->id,
         'department_id' => $group->department_id,
         'status' => $status,
     ]);

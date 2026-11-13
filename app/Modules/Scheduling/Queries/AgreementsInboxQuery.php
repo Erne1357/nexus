@@ -50,6 +50,7 @@ final class AgreementsInboxQuery
     public function __construct(
         private readonly RoomScheduleQuery $rooms,
         private readonly RoomLoanFree $free,
+        private readonly AgreementPlaceQuery $place,
     ) {}
 
     /**
@@ -73,8 +74,11 @@ final class AgreementsInboxQuery
 
         foreach ($rows as $row) {
             $deciders[$row['to']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementDecide, Target::of(modality: $modality->getKey(), unit: $row['to']['id']));
-            $requesters[$row['from']['id'].'|'.$row['campus']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $modality->getKey(), campus: $row['campus']['id'], unit: $row['from']['id']));
-            $row['side'] = $deciders[$row['to']['id']] ? 'to' : ($requesters[$row['from']['id'].'|'.$row['campus']['id']] ? 'from' : null);
+            // Pide con el campus del lugar: el del salón en un préstamo y el del grupo en un grupo compartido (como
+            // InterdepartmentalAgreementPolicy::cancel con el campus del grupo).
+            $requested = $row['campus']['id'] ?? null;
+            $requesters[$row['from']['id'].'|'.$requested] ??= $actor->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $modality->getKey(), campus: $requested, unit: $row['from']['id']));
+            $row['side'] = $deciders[$row['to']['id']] ? 'to' : ($requesters[$row['from']['id'].'|'.$requested] ? 'from' : null);
 
             if ($row['status'] !== AgreementStatus::Proposed) {
                 $grouped[self::DONE][] = $row;
@@ -146,7 +150,7 @@ final class AgreementsInboxQuery
     public function campusCounts(Actor $actor, Term $term, Modality $modality): array
     {
         return $this->visible($actor, $term, $modality, null)
-            ->join('campuses', 'campuses.id', '=', 'interdepartmental_agreements.campus_id')
+            ->join('campuses', 'campuses.id', '=', $this->place->campusIdColumn())
             ->groupBy('campuses.code')
             ->selectRaw('campuses.code, count(*) as total')
             ->toBase()
@@ -187,9 +191,10 @@ final class AgreementsInboxQuery
     }
 
     /**
-     * Los acuerdos del periodo y la modalidad (y del campus del filtro, si hay) que el actor ve: `agreement.view` sobre la
-     * modalidad y el departamento que lo pide o el que lo decide, sin el campus. El jefe ve y decide los de toda la
-     * modalidad de su departamento, de cualquier campus: ningún jefe de departamento está limitado a un campus (M12).
+     * Los acuerdos del periodo y la modalidad (y del campus del filtro, si hay: el lugar de AgreementPlaceQuery, el del
+     * salón en un préstamo y el del grupo en un grupo compartido) que el actor ve: `agreement.view` sobre la modalidad y
+     * el departamento que lo pide o el que lo decide, sin el campus. El jefe ve y decide los de toda la modalidad de su
+     * departamento, de cualquier campus: ningún jefe de departamento está limitado a un campus (M12).
      *
      * @return Builder<InterdepartmentalAgreement>
      */
@@ -198,7 +203,7 @@ final class AgreementsInboxQuery
         $query = InterdepartmentalAgreement::query()
             ->where('interdepartmental_agreements.term_id', $term->getKey())
             ->where('interdepartmental_agreements.modality_id', $modality->getKey())
-            ->when($campus !== null, fn (Builder $inCampus) => $inCampus->where('interdepartmental_agreements.campus_id', $campus?->getKey()));
+            ->when($campus !== null, fn (Builder $inCampus) => $this->place->in($inCampus, $campus));
 
         return $actor->constrain($query, AcademicLoadPermission::AgreementView, [
             'modality' => 'interdepartmental_agreements.modality_id',
@@ -243,7 +248,7 @@ final class AgreementsInboxQuery
         ]);
         $groups = Group::query()
             ->whereIn('id', $agreements->pluck('group_id')->filter()->all())
-            ->with(['subject' => $trashed])
+            ->with(['subject' => $trashed, 'campus' => $trashed])
             ->get()
             ->keyBy('id');
 
@@ -268,7 +273,7 @@ final class AgreementsInboxQuery
                 'room' => $agreement->room?->code,
                 'room_id' => $agreement->room_id,
                 'term_id' => $agreement->term_id,
-                'campus' => ['id' => $agreement->campus_id, 'code' => $agreement->campus->code, 'name' => $agreement->campus->name],
+                'campus' => ($place = $this->place->campusOf($agreement, $group)) === null ? null : ['id' => $place->getKey(), 'code' => $place->code, 'name' => $place->name],
                 'day' => $agreement->day,
                 'starts_at' => $agreement->starts_at === null ? null : substr($agreement->starts_at, 0, 5),
                 'ends_at' => $agreement->ends_at === null ? null : substr($agreement->ends_at, 0, 5),

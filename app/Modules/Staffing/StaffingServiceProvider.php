@@ -15,6 +15,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -293,7 +294,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     private function publicationChecks(): array
     {
         $loads = fn (DemoContext $demo, bool $withGroups): Builder => AcademicLoad::query()->where('term_id', $demo->term()->getKey())
-            ->whereIn('modality_id', Campus::query()->whereIn('code', $demo->campuses)->select('modality_id'))
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))
             ->whereExists(Group::query()->active()->selectRaw('1')
                 ->whereColumn('groups.term_id', 'academic_loads.term_id')
                 ->whereColumn('groups.modality_id', 'academic_loads.modality_id')

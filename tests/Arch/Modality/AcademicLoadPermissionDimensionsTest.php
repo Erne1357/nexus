@@ -2,6 +2,7 @@
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Dimension;
+use Tests\Support\Authorization\CampusBoundWrites;
 
 /*
 | AZ-S17 (MS6, supuesto por confirmar): se lee a nivel de modalidad y se escribe con campus. Los permisos de
@@ -11,16 +12,14 @@ use App\Modules\Core\Authorization\Dimension;
 /**
  * Los permisos de escritura de AcademicLoad sobre algo con campus: una fila de la propuesta (de un campus, M7) y el
  * acuerdo de un préstamo de salón o de un grupo compartido (ambos en un campus). Lista explícita: un caso nuevo que
- * escriba algo con campus se agrega aquí.
+ * escriba algo con campus se agrega en Tests\Support\Authorization\CampusBoundWrites, que también lee
+ * PermissionDimensionsTest.
  *
  * @return list<AcademicLoadPermission>
  */
 function academicLoadCampusBoundWrites(): array
 {
-    return [
-        AcademicLoadPermission::ProposalUpdate,
-        AcademicLoadPermission::AgreementRequest,
-    ];
+    return CampusBoundWrites::academicLoad();
 }
 
 it('AZ-S17: los permisos de AcademicLoad que escriben algo con campus declaran Dimension::Campus', function (AcademicLoadPermission $permission) {

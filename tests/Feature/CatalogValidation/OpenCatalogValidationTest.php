@@ -12,7 +12,7 @@ use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -82,14 +82,13 @@ it('CV9: sin catálogos, o con todos ya abiertos, no hace nada: sin bitácora ni
     expect(Activity::query()->where('event', 'validation_opened')->count())->toBe(1);
 });
 
-it('CV9: los salones solo se abren si algún campus abierto en el periodo usa salones, una revisión por departamento', function () {
-    $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+it('CV9: los salones solo se abren si alguna modalidad abierta en el periodo usa salones, una revisión por departamento', function () {
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 
     expect(openValidation([Catalog::Rooms]))->toBe(0)
         ->and(CatalogReview::count())->toBe(0);
 
-    $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => true]]);
-    // C1 es de Presencial, donde el periodo ya está abierto (M4).
+    modalityOf('PRES')->update(['settings' => ModalityProfile::DEFAULTS]);
     Campus::factory()->create(['code' => 'C1']);
 
     expect(openValidation([Catalog::Rooms]))->toBe(2)

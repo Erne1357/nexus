@@ -42,7 +42,7 @@ beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->department = Department::factory()->create(['code' => 'II']);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id]);
     $subject = $this->subject = Subject::factory()->create(['department_id' => $this->department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
     $career = $this->career = Career::factory()->create(['department_id' => $this->department->id]);
     $plan = $this->plan = StudyPlan::factory()->create(['career_id' => $career->id]);

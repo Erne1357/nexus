@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\AcademicLoad\Rules\AgreementRules;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\WeekTime;
@@ -44,12 +45,12 @@ final class RequestRoomLoan
     /**
      * @throws ValidationException
      */
-    public function handle(Term $term, Campus $campus, Department $from, string $groupId, Room $room, int $day, string $startsAt, string $endsAt, User $actor): InterdepartmentalAgreement
+    public function handle(Term $term, Modality $modality, Campus $campus, Department $from, string $groupId, Room $room, int $day, string $startsAt, string $endsAt, User $actor): InterdepartmentalAgreement
     {
         $this->rules->ensureRoomNeedsLoan($room, $campus, $from);
         $this->rules->ensureSlot($day, $startsAt, $endsAt);
 
-        return DB::transaction(function () use ($term, $campus, $from, $groupId, $room, $day, $startsAt, $endsAt, $actor): InterdepartmentalAgreement {
+        return DB::transaction(function () use ($term, $modality, $campus, $from, $groupId, $room, $day, $startsAt, $endsAt, $actor): InterdepartmentalAgreement {
             $existing = InterdepartmentalAgreement::query()
                 ->where('kind', AgreementKind::RoomLoan->value)
                 ->where('term_id', $term->getKey())
@@ -74,7 +75,7 @@ final class RequestRoomLoan
                 $agreement = DB::transaction(fn (): InterdepartmentalAgreement => InterdepartmentalAgreement::query()->create([
                     'term_id' => $term->getKey(),
                     'campus_id' => $campus->getKey(),
-                    'modality_id' => $campus->modality_id,
+                    'modality_id' => $modality->getKey(),
                     'kind' => AgreementKind::RoomLoan,
                     'from_department_id' => $from->getKey(),
                     'to_department_id' => $room->department_id,

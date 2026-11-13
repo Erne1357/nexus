@@ -30,7 +30,7 @@ beforeEach(function () {
     $this->teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
     $this->group = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'teacher_id' => $this->teacher->id]);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create([
-        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->group->department_id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->group->department_id,
     ]);
 });
 
@@ -121,8 +121,7 @@ it('un grupo cancelado o con la carga fuera de propuesta, asignación o ajustes 
     'sin carga' => [fn ($test) => $test->load->delete()],
 ]);
 
-it('sigue los días, la ventana y el bloque del perfil de la modalidad del grupo, no los del campus', function () {
-    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1]]]);
+it('sigue los días, la ventana y el bloque del perfil de la modalidad del grupo (el campus no tiene perfil, MS3)', function () {
     $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [6], 'block_minutes' => 30, 'day_start' => '08:00', 'day_end' => '10:00']]);
 
     expect(array_keys(app(GroupFitQuery::class)->for($this->group->fresh())))->toBe(['6|08:00', '6|08:30', '6|09:00', '6|09:30']);

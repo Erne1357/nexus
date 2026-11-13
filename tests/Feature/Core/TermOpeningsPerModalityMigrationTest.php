@@ -20,11 +20,12 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     $this->migration = require base_path('app/Modules/Core/Database/Migrations/2026_11_12_210301_open_terms_per_modality.php');
     $this->migration->down();
 
-    $this->c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->c1 = campusBeforeContraction('C1');
+    $this->c2 = campusBeforeContraction('C2');
     $this->term = Term::factory()->create(['code' => '20271']);
     $this->presencial = modalityOf('PRES');
 });
@@ -144,7 +145,7 @@ it('M4: la misma etapa con fechas distintas en C1 y C2 detiene la migración, li
 });
 
 it('una apertura o ventana de un campus sin modalidad del catálogo detiene la migración y lo nombra', function () {
-    $loose = Campus::factory()->create(['code' => 'C9']);
+    $loose = campusBeforeContraction('C9');
     DB::table('campuses')->where('id', $loose->id)->update(['modality_id' => null]);
     openingBeforeModality($this->term->id, $loose->id, '2026-11-03 09:00:00');
 

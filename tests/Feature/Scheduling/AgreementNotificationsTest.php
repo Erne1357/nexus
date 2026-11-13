@@ -88,7 +88,7 @@ it('al proponerse un grupo compartido, avisa al jefe del departamento de la carr
     Notification::fake();
     $career = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->sc->id]);
     $share = InterdepartmentalAgreement::factory()->sharedGroup(6)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+        'term_id' => $this->term->id, 'group_id' => $this->group->id,
         'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $career->id,
     ]);
 
@@ -156,7 +156,7 @@ it('si el rechazo no dejó ninguna sesión sin salón, el aviso no lo dice', fun
 it('al rechazarse un grupo compartido, avisa con el motivo sin hablar de salón', function () {
     Notification::fake();
     $share = InterdepartmentalAgreement::factory()->sharedGroup(6)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+        'term_id' => $this->term->id, 'group_id' => $this->group->id,
         'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
     ]);
 
@@ -266,7 +266,7 @@ it('un préstamo rechazado no avisa al dueño como cancelado, ni lo que ya se de
 it('retirar un grupo compartido no avisa como préstamo cancelado', function () {
     Notification::fake();
     $share = InterdepartmentalAgreement::factory()->sharedGroup(6)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->group->id,
+        'term_id' => $this->term->id, 'group_id' => $this->group->id,
         'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id,
     ]);
 
@@ -306,7 +306,7 @@ it('el aviso de un préstamo cancelado se abre en Acuerdos y deja de abrirse si 
 
 describe('préstamos que cancela la sesión al cambiar', function () {
     beforeEach(function () {
-        AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->ii->id]);
+        AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->ii->id]);
         $this->session = GroupSession::factory()->for($this->group)->on(1, '09:00', '11:00')->inRoom($this->room)->create();
         $this->pending = ($this->loan)();
     });

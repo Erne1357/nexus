@@ -6,8 +6,6 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
-use App\Modules\AcademicLoad\Enums\AgreementKind;
-use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -70,6 +68,7 @@ final class ScheduleEditorQuery
         private readonly LoadEditability $editability,
         private readonly TeacherScheduleQuery $teacherSchedules,
         private readonly RoomScheduleQuery $roomSchedules,
+        private readonly GroupQuotasQuery $quotas,
     ) {}
 
     public function term(string $id): Term
@@ -401,13 +400,7 @@ final class ScheduleEditorQuery
      */
     public function campusMoveBlockedReason(Group $group): ?string
     {
-        $shared = InterdepartmentalAgreement::query()
-            ->where('kind', AgreementKind::SharedGroup->value)
-            ->where('group_id', $group->getKey())
-            ->live()
-            ->exists();
-
-        return $shared ? 'Tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo en Acuerdos antes de cambiarlo de campus.' : null;
+        return $this->quotas->hasLiveSharedGroup($group) ? 'Tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo en Acuerdos antes de cambiarlo de campus.' : null;
     }
 
     /**

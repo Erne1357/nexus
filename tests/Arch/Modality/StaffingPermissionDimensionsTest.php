@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use Tests\Support\Authorization\CampusBoundWrites;
 
 /*
 | AZ-S17 (MS6, supuesto por confirmar): se lee a nivel de modalidad y se escribe con campus. Los permisos de
@@ -10,19 +11,14 @@ use App\Modules\Staffing\Enums\StaffingPermission;
 */
 
 /**
- * Los permisos de escritura de Staffing sobre algo con campus. Lista explícita: un caso nuevo que escriba algo con
- * campus se agrega aquí.
+ * Los permisos de escritura de Staffing sobre algo con campus. Lista explícita en CampusBoundWrites: un caso nuevo que
+ * escriba algo con campus se agrega allí.
  *
  * @return list<StaffingPermission>
  */
 function staffingCampusBoundWrites(): array
 {
-    return [
-        StaffingPermission::TeacherAssign,
-        StaffingPermission::ChangeRequestRequest,
-        StaffingPermission::ChangeRequestApplySchedule,
-        StaffingPermission::ChangeRequestApplyRoom,
-    ];
+    return CampusBoundWrites::staffing();
 }
 
 it('AZ-S17: los permisos de Staffing que escriben algo con campus declaran Dimension::Campus', function (StaffingPermission $permission) {

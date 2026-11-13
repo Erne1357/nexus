@@ -41,7 +41,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create([
-        'term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     $this->group = Group::factory()->create([
         'term_id' => $this->term->id,
@@ -171,8 +171,7 @@ it('HC-04: rechaza lo que cae fuera de los días, la ventana o los bloques de la
     'hora mal escrita' => [1, '7am', '08:00', 'La hora «7am» no es válida: se escribe como 07:00.'],
 ]);
 
-it('HC-04: sigue el perfil de la modalidad del grupo, no el del campus ni un horario fijo', function () {
-    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1]]]);
+it('HC-04: sigue el perfil de la modalidad del grupo, no un horario fijo (el campus no tiene perfil, MS3)', function () {
     $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [5, 6], 'block_minutes' => 30, 'day_start' => '08:00']]);
 
     placeSession($this->group, 6, '08:30', '09:00');

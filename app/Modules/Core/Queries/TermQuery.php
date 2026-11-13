@@ -85,8 +85,8 @@ final class TermQuery
      *
      * - `items`: lo que se crea, que dicen los módulos de la derecha con TermOpeningPreviewing (hoy, AcademicLoad: las
      *   cargas en borrador, con el número que falta si ya estaba abierto);
-     * - `campuses`: sus campus activos, «C1 · Campus I», por el puente `campuses.modality_id` (mientras la carga sea por
-     *   campus);
+     * - `campuses`: los campus donde se dan sus grupos (MS4, CampusQuery::of), «C1 · Campus I»: con salones, los activos;
+     *   sin salones o con el perfil inválido, ninguno;
      * - `profile`: el perfil de flujo de la modalidad en una línea, o null si el guardado no es válido;
      * - `ownWindows`: cuántas ventanas propias tiene la modalidad en el calendario del periodo (0: usa el general);
      * - `completing`: si el periodo ya estaba abierto en la modalidad.
@@ -98,19 +98,11 @@ final class TermQuery
         $event = new TermOpeningPreviewing($term, $modality);
         event($event);
 
-        try {
-            $profile = $modality->profile->summary();
-        } catch (\InvalidArgumentException) {
-            $profile = null;
-        }
+        $profile = $modality->valid_profile?->summary();
 
         return [
             'items' => $event->items(),
-            'campuses' => Campus::query()
-                ->where('modality_id', $modality->getKey())
-                ->where('is_active', true)
-                ->orderBy('code')
-                ->get(['code', 'name'])
+            'campuses' => app(CampusQuery::class)->of($modality)
                 ->map(fn (Campus $campus): string => "{$campus->code} · {$campus->name}")
                 ->all(),
             'profile' => $profile,

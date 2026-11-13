@@ -110,8 +110,8 @@ final class ClosingBoardQuery
 
     /**
      * El jefe de cada departamento de los renglones, por id: quienes tienen vigente pasar la carga a asignación
-     * (`academic_load.load.start_staffing`, que solo tiene la jefatura; RecipientsQuery::holders) en sus campus con
-     * grupos, por nombre; ninguno si no hay titular. Va aparte de board() y lee a los titulares una vez para todos los
+     * (`academic_load.load.start_staffing`, que solo tiene la jefatura; RecipientsQuery::holders) en la modalidad de sus
+     * cargas, por nombre; ninguno si no hay titular. Va aparte de board() y lee a los titulares una vez para todos los
      * renglones (RecipientsQuery::holdersByKey).
      *
      * @param  list<array{department: Department, loads: list<LoadProgress>}>  $rows

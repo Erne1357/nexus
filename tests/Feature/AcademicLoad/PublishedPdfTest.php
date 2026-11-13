@@ -42,7 +42,7 @@ beforeEach(function () {
 
     $placement = LoadSnapshotFactory::placement(['career' => $this->career, 'study_plan' => $this->plan, 'semester' => 3]);
     $subject = fn (string $code, string $name): array => ['id' => (string) Str::uuid7(), 'code' => $code, 'name' => $name, 'credits' => 5, 'theory_hours' => 3, 'practice_hours' => 2, 'department_id' => (string) Str::uuid7()];
-    $load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->campus->modality_id])->for(Department::factory())->inStatus(LoadStatus::Published)->create();
+    $load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for(Department::factory())->inStatus(LoadStatus::Published)->create();
 
     LoadSnapshot::factory()->for($load)->publishedAt(CarbonImmutable::parse('2026-12-12 10:30'))->withGroups([
         LoadSnapshotFactory::group([

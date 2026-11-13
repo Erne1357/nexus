@@ -11,7 +11,8 @@ use App\Modules\Scheduling\Notifications\AgreementReceived;
 
 /**
  * Avisa que se pidió un acuerdo (reglas-de-negocio.md, "Acuerdos entre departamentos"; supuesto por confirmar): a los
- * titulares de `academic_load.agreement.decide` del departamento al que va dirigido, en el campus (AgreementReceived).
+ * titulares de `academic_load.agreement.decide` del departamento al que va dirigido, en la modalidad del acuerdo, sin
+ * campus: el jefe decide los de toda su modalidad (M12; AgreementReceived).
  * Da a cuántos usuarios avisó.
  */
 final class NotifyAgreementRequested

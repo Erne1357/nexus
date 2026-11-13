@@ -13,7 +13,6 @@ use Closure;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use LogicException;
 
@@ -127,8 +126,6 @@ final class Actor
     /**
      * @param  Closure(): mixed  $resolveUser  usuario de esta petición; sin sesión, el contexto
      *                                         activo es siempre el de omisión
-     * @param  (Closure(): mixed)|null  $resolveRequest  la petición en curso, de donde el puente activeCampus() lee
-     *                                                   `?campus=`; sin ella, no lo lee
      */
     public function __construct(
         private readonly Closure $resolveUser,
@@ -136,12 +133,11 @@ final class Actor
         private readonly AuthorizationSnapshots $snapshots,
         private readonly PermissionRegistry $permissions,
         private readonly ?Session $session = null,
-        private readonly ?Closure $resolveRequest = null,
     ) {}
 
     /**
      * Este mismo contexto si `$user` es el autenticado; si no, uno nuevo de `$user`, sin el
-     * periodo ni el perfil que eligió en su sesión ni el campus de la petición: cuenta todos sus puestos.
+     * periodo ni el perfil que eligió en su sesión: cuenta todos sus puestos.
      */
     public function forUser(User $user): self
     {
@@ -499,45 +495,6 @@ final class Actor
         return $this->modalities[$key] = $this->activeModalities()
             ->filter(fn (Modality $modality): bool => in_array($modality->getKey(), $modalityIds, true))
             ->values();
-    }
-
-    /**
-     * Puente mientras las pantallas de los demás módulos pasan al campus de la pantalla (#415): el campus que nombra
-     * `?campus=<código>` de la petición, si está en campuses(); si no, el único de campuses(), o ninguno. En una
-     * petición de Livewire, que no trae la consulta de la página, lo lee de su Referer, como Livewire lee `#[Url]`. Los
-     * contextos de forUser() y asRole() no leen la petición. No es alcance: allows() y constrain() no lo usan.
-     *
-     * @deprecated Usa el concern Core\Livewire\Concerns\WithCampusFilter (campusFilter() o requiredCampus()) en la
-     *             pantalla; este puente se borra cuando ninguna lo use.
-     */
-    public function activeCampus(): ?Campus
-    {
-        $campuses = $this->campuses();
-        $code = $this->requestedCampusCode();
-
-        return ($code === null ? null : $campuses->firstWhere('code', $code))
-            ?? ($campuses->count() === 1 ? $campuses->first() : null);
-    }
-
-    /**
-     * El código de `?campus=` de la petición; en una de Livewire, el de la página que la manda (Referer).
-     */
-    private function requestedCampusCode(): ?string
-    {
-        $request = $this->resolveRequest === null ? null : ($this->resolveRequest)();
-
-        if (! $request instanceof Request) {
-            return null;
-        }
-
-        $code = $request->query('campus');
-
-        if ($code === null && $request->hasHeader('X-Livewire')) {
-            parse_str((string) parse_url((string) $request->headers->get('referer'), PHP_URL_QUERY), $query);
-            $code = $query['campus'] ?? null;
-        }
-
-        return is_string($code) && $code !== '' ? $code : null;
     }
 
     /**

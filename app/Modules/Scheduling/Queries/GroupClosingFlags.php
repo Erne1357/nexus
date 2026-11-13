@@ -58,7 +58,7 @@ final readonly class GroupClosingFlags
     }
 
     /**
-     * Si es de los que se justifican: sin docente o, si el campus usa salones, con sesiones presenciales sin salón.
+     * Si es de los que se justifican: sin docente o, si su modalidad usa salones, con sesiones presenciales sin salón.
      */
     public function needsJustification(ModalityProfile $profile): bool
     {

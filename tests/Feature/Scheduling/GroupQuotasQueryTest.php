@@ -35,7 +35,7 @@ it('lista la dueña, los aceptados y los propuestos con su departamento, la capa
     $foreign = Career::factory()->create(['code' => 'IMEC', 'department_id' => $this->otro->id]);
     GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $accepted->id, 'max_seats' => 10]);
     InterdepartmentalAgreement::factory()->sharedGroup(2)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $foreign->id,
     ]);
 
@@ -55,7 +55,7 @@ it('lista la dueña, los aceptados y los propuestos con su departamento, la capa
 it('los acuerdos rechazados o cancelados no aparecen', function (AgreementStatus $status) {
     $foreign = Career::factory()->create(['department_id' => $this->otro->id]);
     InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $foreign->id,
     ]);
 
@@ -74,7 +74,7 @@ it('ofrece las carreras activas del campus sin cupo ni acuerdo vivo, con si nece
     GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $taken->id]);
     $proposed = ($this->offer)(Career::factory()->create(['department_id' => $this->otro->id]));
     InterdepartmentalAgreement::factory()->sharedGroup()->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $proposed->id,
     ]);
 

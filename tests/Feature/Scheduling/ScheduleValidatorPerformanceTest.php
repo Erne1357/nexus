@@ -38,7 +38,7 @@ beforeEach(function () {
         $id = (string) Str::uuid7();
 
         $groups[] = [
-            'id' => $id, 'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => $this->campus->modality_id, 'subject_id' => $subject->id,
+            'id' => $id, 'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => modalityOf('PRES')->id, 'subject_id' => $subject->id,
             'department_id' => $subject->department_id, 'owner_career_id' => $plan->career_id, 'study_plan_id' => $plan->id,
             'semester' => $i % 9 + 1, 'code' => "G{$i}", 'teacher_id' => $teachers[$i % 80]->id, 'capacity' => 30,
             'status' => 'planned', 'created_at' => $now, 'updated_at' => $now,

@@ -20,11 +20,12 @@ use Illuminate\Support\Str;
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     $this->migration = require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210501_make_academic_loads_per_modality.php');
     $this->migration->down();
     $this->term = Term::factory()->create();
-    $this->c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->c2 = Campus::factory()->create(['code' => 'C2']);
+    $this->c1 = campusBeforeContraction('C1');
+    $this->c2 = campusBeforeContraction('C2');
     $this->presencial = Modality::query()->where('code', 'PRES')->sole();
     $this->sis = Department::factory()->create(['code' => 'SIS']);
     $this->user = User::factory()->create();

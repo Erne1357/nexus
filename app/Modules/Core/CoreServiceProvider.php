@@ -65,7 +65,6 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->make(AuthorizationSnapshots::class),
             $app->make(PermissionRegistry::class),
             $app['session.store'],
-            fn (): mixed => $app['request'],
         ));
 
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
@@ -144,7 +143,6 @@ final class CoreServiceProvider extends ModuleServiceProvider
         return [
             Role::Subdireccion->value => [
                 CorePermission::CampusView,
-                CorePermission::CampusUpdateProfile,
                 CorePermission::ModalityView,
                 CorePermission::ModalityUpdateProfile,
                 CorePermission::TermView,
@@ -159,8 +157,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
     /**
      * Demo por puntos: lo base, el admin con la contraseña demo y los periodos 20261, 20263 y 20271 llevan a
-     * «catálogos»; abrir 20271 en las modalidades de los campus del volumen (M4; por el puente `campuses.modality_id`:
-     * Presencial; en el masivo también 20263, la foto anterior de la validación) lleva a «validación». En el masivo, el historial de periodos desde 2014 va justo antes de abrir,
+     * «catálogos»; abrir 20271 en las modalidades del volumen (M4; DemoVolume::modalities(): Presencial; en el masivo
+     * también 20263, la foto anterior de la validación) lleva a «validación». En el masivo, el historial de periodos desde
+     * 2014 va justo antes de abrir,
      * después de los alumnos, como en MassiveSeeder (StudentsDemoSeeder liga el periodo de ingreso solo a los que ya
      * existen). Sin TermCalendarDemoSeeder: el calendario de 20271 lo escribe DemoRunner, sin ventanas propias de
      * Presencial, y 20263 queda sin calendario.
@@ -214,16 +213,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Las claves de las modalidades de los campus del volumen (M4), por el puente `campuses.modality_id`: Presencial.
+     * Las claves de las modalidades del volumen que existen (M4; DemoVolume::modalities()): Presencial.
      *
      * @return list<string>
      */
     private function demoModalityCodes(DemoContext $demo): array
     {
-        return Modality::query()
-            ->whereIn('id', Campus::query()->whereIn('code', $demo->campuses)->select('modality_id'))
-            ->orderBy('code')
-            ->pluck('code')
-            ->all();
+        return Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->pluck('code')->all();
     }
 }

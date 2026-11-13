@@ -115,8 +115,8 @@
         @endif
 
         @foreach ($columns as $column)
-            @if ($column['zeroable'])
-                {{-- M14: la columna de un campus inactivo; sus grupos se dejan en 0 con «Dejar en 0» en cada fila. --}}
+            @if ($column['zeroAlert'])
+                {{-- M14: la columna de un campus inactivo que todavía pide grupos; se dejan en 0 con «Dejar en 0» en cada fila. --}}
                 <x-alert icon="o-no-symbol" class="alert-warning alert-soft text-sm" data-testid="inactive-column-{{ $column['campus']->code }}">
                     <span>{{ $column['readonly'] }} Para enviar la propuesta, ninguna fila de {{ $column['campus']->code }} puede pedir grupos.</span>
                 </x-alert>

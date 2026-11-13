@@ -239,15 +239,14 @@ new #[Title('Acuerdos')] class extends Component
     {
         $this->authorizeView();
         $agreement = $this->find($id, $context, $query);
-        $this->authorize('cancel', $agreement);
+        $row = $query->row($agreement);
+        $this->authorize('cancel', [$agreement, $row['campus']['id'] ?? null]);
 
         if ($agreement->status !== AgreementStatus::Proposed) {
             $this->error('No se canceló', 'Este acuerdo ya se decidió.');
 
             return;
         }
-
-        $row = $query->row($agreement);
 
         try {
             $cleared = $agreement->kind === AgreementKind::RoomLoan
@@ -380,7 +379,7 @@ new #[Title('Acuerdos')] class extends Component
             'selectedId' => $detail['id'] ?? null,
             'detail' => $detail,
             'canDecide' => $agreement !== null && Gate::allows('decide', $agreement),
-            'canCancel' => $agreement !== null && Gate::allows('cancel', $agreement),
+            'canCancel' => $agreement !== null && Gate::allows('cancel', [$agreement, $detail['campus']['id'] ?? null]),
             'acceptBlock' => $detail === null ? null : $this->acceptBlock($detail),
             'maxComment' => AgreementRules::MAX_COMMENT_LENGTH,
             'filtered' => $this->kind !== '' || trim($this->search) !== '',

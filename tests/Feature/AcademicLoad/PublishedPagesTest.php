@@ -27,17 +27,17 @@ use Livewire\Livewire;
 */
 
 /**
- * La carga publicada de un departamento en la modalidad del campus (M1), con sus grupos en ese campus.
+ * La carga publicada de un departamento en la modalidad (M1; Presencial si no se da), con sus grupos en ese campus.
  *
  * @param  list<array<string, mixed>>  $groups
  */
-function publishedPagesSnapshot(Term $term, Campus $campus, string $department, array $groups, string $at = '2026-12-12 10:30', LoadStatus $status = LoadStatus::Published): AcademicLoad
+function publishedPagesSnapshot(Term $term, Campus $campus, string $department, array $groups, string $at = '2026-12-12 10:30', LoadStatus $status = LoadStatus::Published, string $modality = 'PRES'): AcademicLoad
 {
     $groups = array_map(fn (array $group): array => [...$group, 'campus' => ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name]], $groups);
 
     $load = AcademicLoad::factory()
         ->for($term)
-        ->state(['modality_id' => $campus->modality_id])
+        ->state(['modality_id' => modalityOf($modality)->id])
         ->for(Department::query()->firstWhere('code', $department) ?? Department::factory()->create(['code' => $department, 'name' => 'Departamento '.$department]))
         ->inStatus($status)
         ->create();
@@ -307,13 +307,13 @@ describe('lo que el público no ve', function () {
     });
 
     it('no avisa lo que falta por publicar aunque haya cargas sin publicar', function () {
-        AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->c2->modality_id])->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
+        AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
 
         $this->get($this->indexUrl)->assertOk()->assertDontSee('Sin publicar')->assertDontSee('Industrial');
     });
 
     it('al personal con permiso en el campus le dice qué cargas faltan por publicar y a otro rol no', function () {
-        AcademicLoad::factory()->for($this->term)->state(['modality_id' => $this->c2->modality_id])->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
+        AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for(Department::factory()->create(['code' => 'II', 'name' => 'Industrial']))->inStatus(LoadStatus::Staffing)->create();
 
         $head = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => Department::query()->firstWhere('code', 'II')->id])->create();
         $this->actingAs($head)->get($this->indexUrl)->assertOk()->assertSee('Sin publicar')->assertSee('II · Industrial · Asignación');
@@ -488,8 +488,8 @@ describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
 
     it('MS16: con dos modalidades publicadas en el periodo, la banda ofrece las dos y cambiar lleva a la otra, con el campus si ella lo tiene', function () {
         modalityOf('EAD')->update(['is_active' => true]);
-        $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD', 'modality_id' => modalityOf('EAD')->id]);
-        publishedPagesSnapshot($this->term, $ead, 'SC', [publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]])]);
+        $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD']);
+        publishedPagesSnapshot($this->term, $ead, 'SC', [publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]])], modality: 'EAD');
 
         $band = Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => 'pres', 'campusCode' => 'C2']);
         $options = iterator_to_array(domOf($band->html())->querySelectorAll('[data-testid="published-modality"] option'));
@@ -519,8 +519,8 @@ describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
 
     it('el campus de la banda sale de la modalidad elegida: en EAD solo los campus de sus grupos publicados', function () {
         modalityOf('EAD')->update(['is_active' => true]);
-        $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD', 'modality_id' => modalityOf('EAD')->id]);
-        publishedPagesSnapshot($this->term, $ead, 'SC', [publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]])]);
+        $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD']);
+        publishedPagesSnapshot($this->term, $ead, 'SC', [publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]])], modality: 'EAD');
 
         $values = fn (string $modality): array => array_map(fn ($option): string => $option->getAttribute('value'), iterator_to_array(domOf(
             Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => $modality])->html(),

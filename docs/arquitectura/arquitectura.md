@@ -263,7 +263,6 @@ Lo que es de un campus declara campus, lo de un departamento declara unidad y lo
 | `activeRole()` | El perfil activo: la elección de la sesión (`ACTIVE_ROLE`) si aún lo tiene; si no, `users.last_role` si lo conserva; si no, el primero de `heldRoles()`. Nulo en `forUser()` de otra persona y sin puestos. |
 | `heldScopes(?Role $role = null)` | Los nombramientos de todos sus puestos (o solo de `$role`), sin importar el perfil activo: lo que muestra «Actuando como». |
 | `campuses()`, `activeTerm()` | Los campus activos donde trabaja con el perfil activo (las opciones del campus de una pantalla, `WithCampusFilter`; con un nombramiento sin campus, todos), y el periodo de la credencial. |
-| `activeCampus()` | **Obsoleto** (#415): puente mientras las pantallas pasan a `WithCampusFilter`. El campus de `?campus=<código>` de la petición (en una de Livewire, el de su Referer) si está en `campuses()`; si no, el único de `campuses()`, o ninguno. Se borra cuando ninguna pantalla lo use. |
 | `ACTIVE_TERM`, `ACTIVE_ROLE` | Claves de sesión del periodo y el perfil elegidos. |
 
 ### Policies, menú y pantallas

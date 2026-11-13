@@ -1,7 +1,7 @@
 {{--
     La vista de un docente o de un salón publicados (DESIGN.md, «Consulta publicada»; `$mode` es `teacher` o `room`):
     «← Horarios», el título, «N grupos · N horas a la semana» con la fecha de actualización, y la semana. Desde 768 px,
-    la semana del perfil del campus (extendida a lo que cae fuera): una columna por día, tan ancha como sus carriles
+    la semana del perfil de la modalidad (extendida a lo que cae fuera): una columna por día, tan ancha como sus carriles
     (cada uno de al menos 7rem), un renglón de 3.5rem por bloque y cada sesión como un bloque con la franja y el tinte de
     su materia, «CLAVE · grupo» en Mono, la materia, el salón (docente) o el docente (salón) y el icono de su tipo; las
     que se empalman van en carriles (WeekGrid::lay()). Desde 1200 px, a la derecha, la lista de sus grupos. Bajo 768 px,

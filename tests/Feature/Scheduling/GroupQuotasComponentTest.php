@@ -100,7 +100,7 @@ it('proponer a otra carrera de otro departamento crea el acuerdo y la muestra «
 function proposedForeign(object $test, int $seats = 5): InterdepartmentalAgreement
 {
     return InterdepartmentalAgreement::factory()->sharedGroup($seats)->create([
-        'term_id' => $test->group->term_id, 'campus_id' => $test->group->campus_id, 'group_id' => $test->group->id,
+        'term_id' => $test->group->term_id, 'group_id' => $test->group->id,
         'from_department_id' => $test->imparte->id, 'to_department_id' => $test->otro->id, 'career_id' => $test->foreign->id,
     ]);
 }
