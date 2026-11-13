@@ -15,7 +15,9 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Envía, o reenvía después de que un departamento la regresó, la propuesta de carrera a sus departamentos
- * (reglas-de-negocio.md, "Propuesta de carrera"). Cada departamento de una materia con grupos tiene su parte,
+ * (reglas-de-negocio.md, "Propuesta de carrera"). Es una por carrera y modalidad y se envía una vez, con las filas de
+ * todos sus campus; la envía o la reenvía cualquiera de los coordinadores de la carrera en la modalidad (M6). Cada
+ * departamento de una materia con grupos, en cualquier campus, tiene su parte,
  * que decide completa; la propuesta queda aceptada cuando todas sus partes lo están (confirmado el 2 de
  * noviembre de 2026). La decisión de cada departamento es de la bandeja (AcceptProposalReview y
  * ReturnProposalReview), que bloquea la propuesta (`lockForUpdate`) antes de cambiar una parte, como esta Action.
@@ -29,10 +31,10 @@ use Illuminate\Validation\ValidationException;
  * - un departamento nuevo recibe su parte pendiente;
  * - la de un departamento al que ya no se le piden grupos se borra (no es catálogo; queda en la bitácora).
  *
- * Vuelve a exigir lo de armarla (ProposalAvailability): periodo abierto en el campus y carrera ofrecida en él, sobre
- * `term` o `career` (supuesto por confirmar). Queda enviada, o aceptada si todas las partes que quedan ya estaban aceptadas, con quién y cuándo se envió.
+ * Vuelve a exigir lo de armarla (ProposalAvailability): modalidad activa, periodo abierto en ella y carrera ofrecida en
+ * algún campus, sobre `term` o `career` (supuesto por confirmar). Queda enviada, o aceptada si todas las partes que quedan ya estaban aceptadas, con quién y cuándo se envió.
  * Deja bitácora de la propuesta y, después del commit, avisa con CareerProposalSubmitted y los departamentos
- * pendientes. Con catálogos sin validar de un departamento involucrado no se bloquea: el aviso lo muestra la
+ * pendientes; quien la envió queda en `submitted_by`, para avisar a los demás coordinadores (MS18). Con catálogos sin validar de un departamento involucrado no se bloquea: el aviso lo muestra la
  * página (CareerProposalQuery). Quién puede enviar lo decide CareerProposalPolicy::submit antes de llamarla;
  * quien envía se recibe como parámetro.
  */
@@ -55,10 +57,10 @@ final class SubmitCareerProposal
 
             $proposal->load([
                 'term',
-                'campus' => fn ($query) => $query->withTrashed(),
+                'modality' => fn ($query) => $query->withTrashed(),
                 'career' => fn ($query) => $query->withTrashed(),
             ]);
-            $this->availability->ensure($proposal->term, $proposal->campus, $proposal->career);
+            $this->availability->ensure($proposal->term, $proposal->modality, $proposal->career);
 
             $involved = $this->involvedDepartments($proposal);
 
@@ -116,7 +118,7 @@ final class SubmitCareerProposal
                     'removed_reviews' => $removed->map($this->logged(...))->values()->all(),
                 ])
                 ->log(($from === ProposalStatus::Returned ? 'Reenvió' : 'Envió')
-                    ." la propuesta de {$proposal->career->code} en {$proposal->campus->code} para el periodo {$proposal->term->code}");
+                    ." la propuesta de {$proposal->career->code} en {$proposal->modality->name} para el periodo {$proposal->term->code}");
 
             CareerProposalSubmitted::dispatch($proposal, $pending, $from === ProposalStatus::Returned);
 

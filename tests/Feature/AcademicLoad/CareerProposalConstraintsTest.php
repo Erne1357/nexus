@@ -18,35 +18,34 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | Integridad de la propuesta de carrera (docs/dominio/modelo-de-datos.md, "AcademicLoad"): una por periodo,
-| campus y carrera, que nace en borrador y no guarda alumnos posibles negativos; una fila por materia, con semestre desde 1 y conteos no negativos; y
+| modalidad y carrera (M6), que nace en borrador y no guarda alumnos posibles negativos; una fila por materia y campus
+| (también sin campus, MS5), con semestre desde 1 y conteos no negativos; y
 | una parte por departamento, que solo se regresa con comentario.
 */
 
-it('la propuesta nace en borrador y conoce su periodo, campus y carrera', function () {
-    $campus = Campus::factory()->create();
+it('la propuesta nace en borrador y conoce su periodo, modalidad y carrera', function () {
     $proposal = CareerProposal::query()->create([
         'term_id' => Term::factory()->create()->id,
-        'campus_id' => $campus->id,
-        'modality_id' => $campus->modality_id,
+        'modality_id' => modalityOf('PRES')->id,
         'career_id' => Career::factory()->create()->id,
     ])->fresh();
 
     expect($proposal->status)->toBe(ProposalStatus::Draft)
         ->and($proposal->term)->toBeInstanceOf(Term::class)
-        ->and($proposal->campus)->toBeInstanceOf(Campus::class)
+        ->and($proposal->modality->code)->toBe('PRES')
         ->and($proposal->career)->toBeInstanceOf(Career::class)
         ->and($proposal->submitted_by)->toBeNull()
         ->and($proposal->submitted_at)->toBeNull();
 });
 
-it('una sola propuesta por periodo, campus y carrera; cambiando cualquiera de los tres, sí', function () {
+it('M6: una sola propuesta por periodo, modalidad y carrera; cambiando cualquiera de los tres, sí', function () {
     $proposal = CareerProposal::factory()->create();
 
-    CareerProposal::factory()->create($proposal->only(['term_id', 'campus_id']));
-    CareerProposal::factory()->create($proposal->only(['term_id', 'career_id']));
-    CareerProposal::factory()->create($proposal->only(['campus_id', 'career_id']));
+    CareerProposal::factory()->create([...$proposal->only(['term_id', 'modality_id'])]);
+    CareerProposal::factory()->create([...$proposal->only(['term_id', 'career_id']), 'modality_id' => modalityOf('EAD')->id]);
+    CareerProposal::factory()->create($proposal->only(['modality_id', 'career_id']));
 
-    expect(fn () => CareerProposal::factory()->create($proposal->only(['term_id', 'campus_id', 'career_id'])))
+    expect(fn () => CareerProposal::factory()->create($proposal->only(['term_id', 'modality_id', 'career_id'])))
         ->toThrow(UniqueConstraintViolationException::class);
 });
 
@@ -84,12 +83,20 @@ it('la fila conoce su propuesta, materia y plan', function () {
         ->and($item->proposal->items->pluck('id')->all())->toBe([$item->id]);
 });
 
-it('una sola fila por propuesta y materia; la misma materia en otra propuesta, sí', function () {
+it('M6: una sola fila por propuesta, materia y campus; la misma materia en otro campus o en otra propuesta, sí', function () {
     $item = ProposalItem::factory()->create();
 
     ProposalItem::factory()->create(['subject_id' => $item->subject_id]);
+    ProposalItem::factory()->create($item->only(['career_proposal_id', 'subject_id']));
 
-    expect(fn () => ProposalItem::factory()->create($item->only(['career_proposal_id', 'subject_id'])))
+    expect(fn () => ProposalItem::factory()->create($item->only(['career_proposal_id', 'subject_id', 'campus_id'])))
+        ->toThrow(UniqueConstraintViolationException::class);
+});
+
+it('MS5: la fila sin campus de una modalidad sin salones también es una sola por materia', function () {
+    $item = ProposalItem::factory()->create(['campus_id' => null]);
+
+    expect(fn () => ProposalItem::factory()->create([...$item->only(['career_proposal_id', 'subject_id']), 'campus_id' => null]))
         ->toThrow(UniqueConstraintViolationException::class);
 });
 

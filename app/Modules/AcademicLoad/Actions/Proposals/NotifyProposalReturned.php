@@ -11,8 +11,10 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Queries\RecipientsQuery;
 
 /**
- * Avisa que un departamento regresó su parte de una propuesta (tareas 2.8 y 2.9): al coordinador de la carrera
- * en el campus, con el comentario (ProposalReturned). Da a cuántos usuarios avisó.
+ * Avisa que un departamento regresó su parte de una propuesta (tareas 2.8 y 2.9): a todos los coordinadores vigentes de
+ * la carrera en la modalidad, de cualquier campus y también a los que no tienen uno, con el comentario (ProposalReturned;
+ * M6, MS18, supuesto por confirmar). Son los que pueden enviar la propuesta: ese permiso no mira el campus. Da a cuántos
+ * usuarios avisó.
  */
 final class NotifyProposalReturned
 {
@@ -20,7 +22,8 @@ final class NotifyProposalReturned
 
     public function handle(CareerProposal $proposal, Department $department, string $comment): int
     {
-        $coordinators = $this->recipients->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $proposal->campus_id, career: $proposal->career_id));
+        $proposal->loadMissing(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()]);
+        $coordinators = $this->recipients->holders(AcademicLoadPermission::ProposalSubmit, Target::of(modality: $proposal->modality_id, career: $proposal->career_id));
 
         return $this->notifyHolders->handle($coordinators, new ProposalReturned($proposal, $department, $comment))->count();
     }

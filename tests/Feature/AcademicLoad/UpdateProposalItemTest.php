@@ -16,7 +16,6 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -35,12 +34,13 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->actor = User::factory()->create();
     $this->department = Department::factory()->create(['code' => 'CB']);
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->proposal = CareerProposal::factory()->create([
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
-        'campus_id' => Campus::factory()->create(['code' => 'C2'])->id,
     ]);
     $this->item = ProposalItem::factory()->create([
         'career_proposal_id' => $this->proposal->id,
+        'campus_id' => $this->campus->id,
         'subject_id' => Subject::factory()->create(['code' => 'ACF-0901', 'department_id' => $this->department->id])->id,
         'eligible_students' => 40,
         'expected_students' => 40,
@@ -85,8 +85,8 @@ it('corrige esperados, grupos y notas en borrador, y deja bitácora de lo que ca
         ->and($activity->event)->toBe('updated')
         ->and($activity->attribute_changes['attributes'])->toBe(['expected_students' => 45, 'requested_groups' => 1, 'notes' => 'Un solo grupo grande'])
         ->and($activity->attribute_changes['old'])->toBe(['expected_students' => 40, 'requested_groups' => 2, 'notes' => null])
-        ->and($activity->properties->all())->toBe(['career_proposal_id' => $this->proposal->id, 'subject_id' => $this->item->subject_id])
-        ->and($activity->description)->toBe('Cambió ACF-0901 en la propuesta de ISC en C2');
+        ->and($activity->properties->all())->toBe(['career_proposal_id' => $this->proposal->id, 'subject_id' => $this->item->subject_id, 'campus_id' => $this->campus->id])
+        ->and($activity->description)->toBe('Cambió ACF-0901 de C2 en la propuesta de ISC en Presencial');
 });
 
 it('registra solo lo que cambió y guarda unas notas vacías como nulas', function () {
@@ -152,7 +152,6 @@ it('no cambia las materias de un departamento que ya aceptó su parte', function
 });
 
 it('con la propuesta regresada, la parte que un departamento acepta mientras tanto congela sus materias', function () {
-    $this->proposal->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
     $sc = Department::factory()->create(['code' => 'SC']);
     $networks = ProposalItem::factory()->create([
         'career_proposal_id' => $this->proposal->id,

@@ -36,9 +36,10 @@ beforeEach(function () {
 
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas Computacionales']);
     CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $campus->id]);
-    $proposal = CareerProposal::factory()->submitted()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'career_id' => $career->id]);
+    $proposal = CareerProposal::factory()->submitted()->create(['term_id' => $term->id, 'career_id' => $career->id]);
     ProposalItem::factory()->create([
         'career_proposal_id' => $proposal->id,
+        'campus_id' => $campus->id,
         'subject_id' => Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Cálculo Diferencial', 'department_id' => $department->id])->id,
         'requested_groups' => 2,
         'expected_students' => 60,

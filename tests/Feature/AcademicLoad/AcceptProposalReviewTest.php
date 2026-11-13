@@ -41,7 +41,7 @@ beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->proposal = CareerProposal::factory()->submitted()->create([
         'term_id' => $this->term->id,
-        'campus_id' => $this->campus->id,
+        'modality_id' => $this->campus->modality_id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
@@ -100,7 +100,7 @@ it('acepta la parte con los catálogos validados: queda aceptada, con quién y c
             'career_proposal_id' => $this->proposal->id,
             'proposal_status' => ['old' => 'submitted', 'attributes' => 'submitted'],
         ])
-        ->and($activity->description)->toBe('Aceptó la parte de CB en la propuesta de ISC en C2 para el periodo 20271');
+        ->and($activity->description)->toBe('Aceptó la parte de CB en la propuesta de ISC en Presencial para el periodo 20271');
 });
 
 it('AZ-01: quien envió la propuesta acepta su parte y la bitácora lo marca', function () {
@@ -171,7 +171,7 @@ it('con la carga ya fuera de borrador solo acepta: no hay otra transición', fun
 it('la segunda parte que acepta el departamento, de otra carrera, no vuelve a transitar la carga', function () {
     acceptPart();
     $another = ProposalReview::factory()->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id])->id,
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'modality_id' => $this->campus->modality_id])->id,
         'department_id' => $this->cb->id,
     ]);
 

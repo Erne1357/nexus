@@ -45,7 +45,7 @@ beforeEach(function () {
 
 function inboxOf(?Department $department = null): DepartmentInbox
 {
-    return app(DepartmentInboxQuery::class)->inbox(test()->term, modalityOf('PRES'), test()->campus, $department ?? test()->cb);
+    return app(DepartmentInboxQuery::class)->inbox(test()->term, modalityOf('PRES'), $department ?? test()->cb);
 }
 
 /**
@@ -68,7 +68,6 @@ function inboxProposal(Career $career, ProposalStatus $status = ProposalStatus::
 {
     return CareerProposal::factory()->submitted()->create([
         'term_id' => test()->term->id,
-        'campus_id' => test()->campus->id,
         'career_id' => $career->id,
         'status' => $status,
         ...$attributes,
@@ -98,6 +97,7 @@ function inboxRow(CareerProposal $proposal, Subject $subject, int $expected, int
 {
     return ProposalItem::factory()->create([
         'career_proposal_id' => $proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => $subject->id,
         'semester' => $semester,
         'eligible_students' => $expected + 5,
@@ -316,17 +316,17 @@ it('una parte aceptada de una propuesta regresada sigue contando para los parale
     expect(inboxOf()->subjects[0]['parallels']->requested)->toBe(2);
 });
 
-it('muestra la carrera con una parte del departamento aunque ya no se ofrezca en el campus', function () {
+it('muestra la carrera con una parte del departamento aunque ya no se ofrezca en ningún campus', function () {
     $career = offeredCareer('ISC', active: false);
     inboxPart(inboxProposal($career), $this->cb);
 
     expect(array_column(inboxCareersOf(inboxOf()), 0))->toBe(['ISC']);
 });
 
-it('no cuenta las propuestas de otro periodo ni de otro campus', function () {
+it('M6: no cuenta las propuestas de otro periodo ni de otra modalidad', function () {
     $isc = offeredCareer('ISC');
     inboxPart(inboxProposal($isc, attributes: ['term_id' => Term::factory()->create()->id]), $this->cb);
-    inboxPart(inboxProposal($isc, attributes: ['campus_id' => Campus::factory()->create()->id]), $this->cb);
+    inboxPart(inboxProposal($isc, attributes: ['modality_id' => modalityOf('EAD')->id]), $this->cb);
 
     $inbox = inboxOf();
 
@@ -365,8 +365,7 @@ it('HC-14: avisa de los catálogos del departamento sin validar y bloquea acepta
         ->and($inbox->canAccept())->toBeFalse();
 });
 
-it('HC-14: en un campus que usa salones también avisa de los salones', function () {
-    $this->campus->update(['settings' => CampusProfile::DEFAULTS]);
+it('HC-14: en una modalidad que usa salones también avisa de los salones', function () {
     CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
 
     expect(inboxOf()->pendingCatalogs)->toContain(Catalog::Rooms);
@@ -389,7 +388,7 @@ describe('departamentos de la bandeja de un usuario', function () {
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
         $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => offeredCareer('ISC')->id])->create();
         $codes = fn (User $user): array => app(DepartmentInboxQuery::class)
-            ->departmentsFor(app(Actor::class)->forUser($user), $this->campus)->pluck('code')->all();
+            ->departmentsFor(app(Actor::class)->forUser($user), modalityOf('PRES'))->pluck('code')->all();
 
         expect($codes($jefe))->toBe(['CB'])
             ->and($codes($subdireccion))->toContain('CB', 'SC')
@@ -401,30 +400,31 @@ describe('departamentos de la bandeja de un usuario', function () {
         modalityOf('EAD')->update(['is_active' => true]);
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id])->create();
 
-        expect(app(DepartmentInboxQuery::class)->departmentsFor(app(Actor::class)->forUser($jefe), $this->campus))->toBeEmpty();
+        expect(app(DepartmentInboxQuery::class)->departmentsFor(app(Actor::class)->forUser($jefe), modalityOf('PRES')))->toBeEmpty();
     });
 });
 
-describe('departamentos desactivados y partes de otro periodo o campus', function () {
-    it('incluye al departamento desactivado solo si tiene partes en el periodo y campus', function () {
+describe('departamentos desactivados y partes de otro periodo o modalidad', function () {
+    it('incluye al departamento desactivado solo si tiene partes en el periodo y la modalidad', function () {
         $this->cb->update(['is_active' => false]);
         $this->sc->update(['is_active' => false]);
         $isc = offeredCareer('ISC');
         inboxPart(inboxProposal($isc), $this->cb);
         $subdireccion = app(Actor::class)->forUser(User::factory()->withRole(Role::Subdireccion)->create());
-        $codes = fn (?Term $term) => app(DepartmentInboxQuery::class)->departmentsFor($subdireccion, $this->campus, $term)->pluck('code')->all();
+        $codes = fn (?Term $term) => app(DepartmentInboxQuery::class)->departmentsFor($subdireccion, modalityOf('PRES'), $term)->pluck('code')->all();
 
         expect($codes($this->term))->toContain('CB')->not->toContain('SC')
             ->and($codes(null))->not->toContain('CB');
     });
 
-    it('la parte se busca solo en el periodo y campus dados', function () {
+    it('la parte se busca solo en el periodo y la modalidad dados', function () {
         $part = inboxPart(inboxProposal(offeredCareer('ISC')), $this->cb);
         $query = app(DepartmentInboxQuery::class);
+        $pres = modalityOf('PRES')->id;
 
-        expect($query->reviewOrFail($this->cb, $part->id, $this->term->id, $this->campus->id)->id)->toBe($part->id)
-            ->and(fn () => $query->reviewOrFail($this->cb, $part->id, Term::factory()->create()->id, $this->campus->id))->toThrow(ModelNotFoundException::class)
-            ->and(fn () => $query->reviewOrFail($this->cb, $part->id, $this->term->id, Campus::factory()->create()->id))->toThrow(ModelNotFoundException::class);
+        expect($query->reviewOrFail($this->cb, $part->id, $this->term->id, $pres)->id)->toBe($part->id)
+            ->and(fn () => $query->reviewOrFail($this->cb, $part->id, Term::factory()->create()->id, $pres))->toThrow(ModelNotFoundException::class)
+            ->and(fn () => $query->reviewOrFail($this->cb, $part->id, $this->term->id, modalityOf('EAD')->id))->toThrow(ModelNotFoundException::class);
     });
 });
 

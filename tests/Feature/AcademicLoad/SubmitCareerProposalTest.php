@@ -31,13 +31,13 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->actor = User::factory()->create();
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->proposal = CareerProposal::factory()->create([
         'term_id' => Term::factory()->create(['code' => '20271'])->id,
-        'campus_id' => Campus::factory()->create(['code' => 'C2'])->id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
     TermOpening::factory()->create(['term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id]);
-    CareerCampus::factory()->create(['career_id' => $this->proposal->career_id, 'campus_id' => $this->proposal->campus_id]);
+    CareerCampus::factory()->create(['career_id' => $this->proposal->career_id, 'campus_id' => $this->campus->id]);
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->ii = Department::factory()->create(['code' => 'II']);
@@ -55,6 +55,7 @@ function proposalRowIn(Department $department, int $groups): ProposalItem
 {
     return ProposalItem::factory()->create([
         'career_proposal_id' => test()->proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => Subject::factory()->create(['department_id' => $department->id])->id,
         'requested_groups' => $groups,
     ]);
@@ -124,7 +125,7 @@ it('deja bitácora del envío con las partes pendientes', function () {
             'reset_reviews' => [],
             'removed_reviews' => [],
         ])
-        ->and($activity->description)->toBe('Envió la propuesta de ISC en C2 para el periodo 20271');
+        ->and($activity->description)->toBe('Envió la propuesta de ISC en Presencial para el periodo 20271');
 });
 
 it('avisa con CareerProposalSubmitted y los departamentos pendientes, por clave, solo después del commit', function () {
@@ -267,7 +268,7 @@ describe('al reenviar una propuesta regresada', function () {
                 'reset_reviews' => [['department_id' => $this->ii->id, 'status' => 'returned', 'comment' => 'Sin docentes para Calidad.']],
                 'removed_reviews' => [['department_id' => $this->sc->id, 'status' => 'returned', 'comment' => 'Pide un grupo más de Redes.']],
             ])
-            ->and($activity->description)->toBe('Reenvió la propuesta de ISC en C2 para el periodo 20271')
+            ->and($activity->description)->toBe('Reenvió la propuesta de ISC en Presencial para el periodo 20271')
             ->and($pendingInII->fresh()->status)->toBe(ProposalReviewStatus::Pending);
     });
 
@@ -284,21 +285,21 @@ describe('al reenviar una propuesta regresada', function () {
     });
 });
 
-it('no envía si el periodo ya no está abierto en el campus y no escribe nada', function () {
+it('no envía si el periodo ya no está abierto en la modalidad y no escribe nada', function () {
     proposalRowIn($this->cb, 1);
     TermOpening::query()->delete();
 
-    expect(submitErrors())->toBe(['term' => ['El periodo 20271 no está abierto en C2.']])
+    expect(submitErrors())->toBe(['term' => ['El periodo 20271 no está abierto en Presencial.']])
         ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft)
         ->and(ProposalReview::query()->count())->toBe(0)
         ->and(Activity::query()->count())->toBe(0);
 });
 
-it('no envía si la carrera ya no se ofrece en el campus y no escribe nada', function (Closure $stopOffering) {
+it('no envía si la carrera ya no se ofrece en ningún campus y no escribe nada', function (Closure $stopOffering) {
     proposalRowIn($this->cb, 1);
     $stopOffering();
 
-    expect(submitErrors())->toBe(['career' => ['ISC no se ofrece en C2.']])
+    expect(submitErrors())->toBe(['career' => ['ISC no se ofrece en ningún campus.']])
         ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft)
         ->and(ProposalReview::query()->count())->toBe(0);
 })->with([
