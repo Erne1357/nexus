@@ -35,6 +35,7 @@ function signInToTerms(string $username)
 
 it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI', function () {
     $page = signInToTerms('admin')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Periodos"]')
         ->assertPathIs('/terms')
         ->press('Nuevo periodo')
@@ -97,7 +98,7 @@ it('M4: el admin abre la ficha de un periodo, fija las fechas de una etapa y la 
 
 it('un coordinador no ve la opción Periodos en el menú', function () {
     signInToTerms('19110001')
-        ->assertSeeIn('[aria-label="Navegación principal"]', 'Inicio')
+        ->assertVisible('#nexus-menu [data-menu-home]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Periodos')
         ->click('@hare')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Periodos')

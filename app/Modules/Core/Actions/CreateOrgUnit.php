@@ -13,7 +13,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Da de alta una unidad estructural bajo una madre (spec §6.1, AZ-S13). Quién puede lo decide OrgUnitPolicy. La
- * Dirección es la raíz única y los departamentos académicos se dan de alta en Académico, así que esos tipos se
+ * Dirección es la raíz única y los departamentos académicos se dan de alta en Administración › Departamentos, así que esos tipos se
  * rechazan (`kind`). Relee la madre con `lockForUpdate` y revisa que siga activa y que no sea un departamento
  * académico (`parent`). La clave debe ser libre (`code`); si otra sesión la toma entre la revisión y la escritura, el
  * índice único de la base da el mismo error. La unidad queda al final de sus hermanas.

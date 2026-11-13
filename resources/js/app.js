@@ -6,16 +6,27 @@
 |
 | El menú se transforma con FLIP: mide dónde está cada elemento, cambia de estado, mide dónde quedó,
 | lo devuelve a su lugar anterior con un transform y lo deja llegar. Al abrir, con la curva de abrir,
-| en cascada por área y por entrada; el buscador entra primero y los nombres y las entradas de las
-| demás áreas, cuando su icono aterriza. Al cerrar, todo en un solo tiempo: la cortina se recoge, lo
-| que se queda regresa junto con ella (la curva de asentar, sin rebote ni cascada) y lo que se va se
-| desvanece a la vez en una copia del menú abierto. Lo que espera para moverse lleva fill backwards:
-| sin él se pintaría en su lugar final mientras espera. Con prefers-reduced-motion todo cambia sin
-| animar.
+| en cascada por columna y por renglón, sin pasar de CASCADE_MAX_MS; el buscador entra primero y los
+| nombres, encabezados y entradas de las demás áreas, cuando su icono aterriza. Al cerrar, todo en un
+| solo tiempo: la cortina se recoge, lo que se queda regresa junto con ella (la curva de asentar, sin
+| rebote ni cascada) y lo que se va se desvanece a la vez en una copia del menú abierto. Lo que espera
+| para moverse lleva fill backwards: sin él se pintaría en su lugar final mientras espera. Con
+| prefers-reduced-motion todo cambia sin animar.
+|
+| Cerrado, la franja de iconos se queda fija y la columna del área actual se desplaza sola: al cargar
+| deja a la vista la entrada activa, se desvanece arriba y abajo cuando hay más y, al cerrar el menú,
+| regresa a donde estaba.
 */
 
 /** Lo que tarda el menú en asentarse; un abrir o cerrar pedido mientras espera a que termine. */
 const SETTLE_MS = 440;
+
+/** Al abrir, ningún elemento espera más que esto para moverse o entrar, aunque el menú sea largo. */
+const CASCADE_MAX_MS = 400;
+
+/** La columna cerrada se desvanece en esta altura donde hay más arriba o abajo. */
+const FADE_TOP_PX = 32;
+const FADE_BOTTOM_PX = 56;
 
 /** Al cerrar, lo que se queda regresa en lo que tarda la cortina en recogerse (duration-[420ms] del Blade). */
 const RETURN_MS = 420;
@@ -81,6 +92,141 @@ const placeOf = (item) => {
 
 const numberFrom = (element, property) => Number(element.style.getPropertyValue(property)) || 0;
 
+/** El motivo flotante de lo oculto para los demás: uno solo, junto al menú (MN-02). */
+const whyTip = () => document.querySelector('[data-menu-why-tip]');
+
+/** Lo que lleva motivo (data-why) en lo que tocó el cursor o el foco, o null. */
+const whySourceOf = (target) => (target instanceof Element ? target.closest('[data-why]') : null);
+
+/**
+ * Los renglones con el motivo escrito de un encabezado o una entrada, que solo se ven en la hoja del celular
+ * (data-menu-note): van justo después de él, antes del siguiente elemento del menú. El buscador los esconde
+ * junto con lo suyo.
+ */
+const notesOf = (row) => {
+    const notes = [];
+
+    for (let next = row.nextElementSibling; next && !next.hasAttribute('data-menu-flip'); next = next.nextElementSibling) {
+        if (next.hasAttribute('data-menu-note')) {
+            notes.push(next);
+        }
+    }
+
+    return notes;
+};
+
+/** Columnas del menú abierto en escritorio y en tableta (las de --menu-cols-open del menú). */
+const DESKTOP_COLUMNS = 5;
+const TABLET_COLUMNS = 3;
+
+/**
+ * Renglón del nombre de la primera área y renglones de una columna: los de MenuGrid, que el menú trae en
+ * data-grid-first-row y data-grid-column-rows para que no haya dos copias de las constantes.
+ */
+const gridRows = (menu) => ({
+    firstRow: Number(menu.dataset.gridFirstRow) || 3,
+    columnRows: Number(menu.dataset.gridColumnRows) || 12,
+});
+
+/**
+ * La retícula del menú abierto: el mismo algoritmo que App\Modules\Core\Navigation\MenuGrid::place, para
+ * reacomodar sin huecos lo que deja el buscador. Con el buscador vacío debe dar exactamente lo que pintó
+ * el servidor (lo revisa tests/Browser/Core/ShellTest.php). Recibe las áreas en orden, cada una con
+ * `headings` y sus grupos ({ heading, entries }: si se ve su encabezado y cuántas entradas tiene), y da
+ * por área { icon, name, groups: [{ heading, entries }] } con { column, row, span } en cada lugar.
+ */
+const packMenu = (areas, columns, { firstRow, columnRows }) => {
+    const units = areas.map((area) => {
+        const blocks = area.groups.map((group, index) => [
+            ...(group.heading ? [[index, true]] : []),
+            ...Array.from({ length: group.entries }, () => [index, false]),
+        ]);
+
+        if (!area.headings) {
+            return { columns: [blocks.flat()], stacks: true };
+        }
+
+        const split = [[]];
+
+        blocks.forEach((block) => {
+            const current = split[split.length - 1];
+
+            if (current.length > 0 && current.length + block.length > columnRows - 1) {
+                split.push([...block]);
+            } else {
+                current.push(...block);
+            }
+        });
+
+        while (split.length > columns) {
+            const extra = split.pop();
+            split[split.length - 1].push(...extra);
+        }
+
+        return { columns: split, stacks: false };
+    });
+
+    const tallest = Math.max(columnRows, ...units.map((unit) => (unit.columns.length === 1 ? unit.columns[0].length + 1 : 0)));
+    const cell = (column, row, span = 1) => ({ column, row, span });
+    let top = firstRow;
+    let column = 0;
+    let bandBottom = firstRow;
+    let last = null;
+
+    return areas.map((area, index) => {
+        const unit = units[index];
+        const width = unit.columns.length;
+        const height = 1 + Math.max(...unit.columns.map((rows) => rows.length));
+        let firstColumn;
+        let firstRow;
+
+        if (unit.stacks && last?.stacks && last.width === 1 && last.bottom + 2 + height <= top + tallest) {
+            [firstColumn, firstRow] = [last.column, last.bottom + 2];
+        } else {
+            if (column + width > columns) {
+                top = bandBottom + 1;
+                column = 0;
+            }
+
+            [firstColumn, firstRow] = [column + 1, top];
+            column += width;
+        }
+
+        const groups = area.groups.map(() => ({ heading: null, entries: [] }));
+
+        unit.columns.forEach((rows, offset) => rows.forEach(([group, isHeading], line) => {
+            const place = cell(firstColumn + offset, firstRow + 1 + line);
+
+            if (isHeading) {
+                groups[group].heading = place;
+            } else {
+                groups[group].entries.push(place);
+            }
+        }));
+
+        const bottom = firstRow + height - 1;
+        bandBottom = Math.max(bandBottom, bottom + 1);
+        last = { column: firstColumn, bottom, width, stacks: unit.stacks };
+
+        return { icon: cell(firstColumn, firstRow), name: cell(firstColumn, firstRow, width), groups };
+    });
+};
+
+/** Pone en un elemento del menú su lugar en la retícula de cinco columnas y en la de tres. */
+const placeInGrid = (element, wide, narrow) => {
+    element.style.setProperty('--oc', String(wide.column));
+    element.style.setProperty('--or', String(wide.row));
+    element.style.setProperty('--os', String(wide.span));
+    element.style.setProperty('--oc3', String(narrow.column));
+    element.style.setProperty('--or3', String(narrow.row));
+    element.style.setProperty('--os3', String(narrow.span));
+};
+
+/** Columna y renglón de un elemento en la retícula del menú abierto que se ve, para la cascada. */
+const gridPlaceOf = (item) => (isTablet()
+    ? { column: numberFrom(item, '--oc3'), row: numberFrom(item, '--or3') }
+    : { column: numberFrom(item, '--oc'), row: numberFrom(item, '--or') });
+
 document.addEventListener('alpine:init', () => {
     window.Alpine.data('nexusShell', () => ({
         menuOpen: false,
@@ -92,11 +238,20 @@ document.addEventListener('alpine:init', () => {
         queued: null,
         timers: [],
 
+        /** Quién abrió el motivo flotante: 'pointer', 'focus' o null. */
+        whyOwner: null,
+
+        /** Dónde estaba la columna cerrada al abrir el menú, para regresarla ahí al cerrar. */
+        columnScroll: 0,
+
         init() {
             // Livewire guarda la página para el botón de atrás justo después de este evento: se
             // guarda cerrada y sin búsqueda.
             this.onNavigating = () => this.reset();
             document.addEventListener('livewire:navigating', this.onNavigating);
+
+            // Cada página llega con su menú: la entrada activa, a la vista en la columna.
+            requestAnimationFrame(() => this.revealActive());
         },
 
         destroy() {
@@ -158,12 +313,18 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        /** Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el menú. */
+        /**
+         * Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el motivo flotante que abrió el foco;
+         * si no, el menú (y con él el motivo que abrió el cursor).
+         */
         onKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.cardOpen) {
                     this.closeCard();
+                } else if (this.whyOwner === 'focus') {
+                    this.hideWhy();
                 } else {
+                    this.hideWhy();
                     this.closeMenu();
                 }
             }
@@ -172,6 +333,27 @@ document.addEventListener('alpine:init', () => {
             if ((event.ctrlKey || event.metaKey) && event.key?.toLowerCase() === 'k') {
                 event.preventDefault();
                 this.openMenu();
+            }
+
+            if (this.menuOpen && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+                this.moveThroughEntries(event);
+            }
+        },
+
+        /**
+         * Con el menú abierto, ↓ y ↑ recorren las entradas que se ven, en el orden del menú, desde el
+         * buscador o desde la entrada que tiene el foco; al llegar al final, dan la vuelta.
+         */
+        moveThroughEntries(event) {
+            const entries = [...document.querySelectorAll('#nexus-menu [data-menu-entry]')].filter(isRendered);
+            const at = entries.indexOf(document.activeElement);
+            const next = event.key === 'ArrowDown'
+                ? entries[at + 1] ?? entries[0]
+                : entries[at - 1] ?? entries[entries.length - 1];
+
+            if (next) {
+                event.preventDefault();
+                next.focus();
             }
         },
 
@@ -191,6 +373,7 @@ document.addEventListener('alpine:init', () => {
 
             this.busy = true;
             this.menuTarget = open;
+            this.hideWhy();
             this.cardOpen = false;
 
             const reduce = reducedMotion();
@@ -198,6 +381,11 @@ document.addEventListener('alpine:init', () => {
 
             // Dónde está cada elemento, con lo que lleve de un movimiento anterior.
             const first = new Map(items.map((item) => [item, placeOf(item)]));
+
+            // Abierta, la columna deja de desplazarse y pierde su lugar: se recuerda para cerrar.
+            if (open) {
+                this.columnScroll = menu.querySelector('[data-menu-column]')?.scrollTop ?? 0;
+            }
 
             if (!open && !reduce) {
                 this.fadeOut(menu, items);
@@ -223,6 +411,86 @@ document.addEventListener('alpine:init', () => {
             this.later(() => this.settle(), reduce ? 0 : SETTLE_MS);
         },
 
+        /**
+         * El motivo flotante de lo oculto para los demás (MN-02) tiene dueño: el cursor o el foco, el que lo abrió, y
+         * solo ese lo cierra. Lo abierto por el foco manda: mientras lo tenga, el cursor no lo mueve ni lo cierra.
+         */
+        onWhyPointer(target) {
+            if (this.whyOwner === 'focus') {
+                return;
+            }
+
+            const source = whySourceOf(target);
+
+            if (source) {
+                this.showWhy(source, 'pointer');
+            } else {
+                this.hideWhy('pointer');
+            }
+        },
+
+        onWhyFocus(target) {
+            const source = whySourceOf(target);
+
+            if (source) {
+                this.showWhy(source, 'focus');
+            } else {
+                this.hideWhy('focus');
+            }
+        },
+
+        /**
+         * Muestra el motivo de algo con data-why junto a su entrada, su encabezado o el nombre de su área: a la
+         * derecha con el menú cerrado; abierto o en el celular, debajo, o arriba si abajo no cabe.
+         */
+        showWhy(source, owner) {
+            const tip = whyTip();
+            const anchor = source.closest('[data-menu-entry], [data-menu-group], [data-menu-flip="name"]') ?? source;
+            const box = anchor.getBoundingClientRect();
+
+            if (!tip || box.width === 0) {
+                this.hideWhy();
+
+                return;
+            }
+
+            tip.querySelector('[data-menu-why-text]').textContent = source.dataset.why;
+
+            const size = tip.getBoundingClientRect();
+            const below = this.menuOpen || isPhone();
+            const left = below ? Math.min(box.left + 10, window.innerWidth - size.width - 12) : box.right + 10;
+            let top = below ? box.bottom + 4 : box.top + box.height / 2 - size.height / 2;
+
+            if (below && top + size.height > window.innerHeight - 8) {
+                top = box.top - size.height - 4;
+            }
+
+            const shellTop = parseFloat(getComputedStyle(document.body).getPropertyValue('--shell-top')) || 0;
+
+            tip.style.left = `${Math.max(8, left)}px`;
+            tip.style.top = `${Math.max(shellTop + 4, top)}px`;
+            tip.toggleAttribute('data-on', true);
+            this.whyOwner = owner;
+        },
+
+        /**
+         * Esconde el motivo flotante. Con dueño, solo si es suyo (el cursor al salir, el foco al irse); sin dueño,
+         * siempre: al desplazar, al mover el menú y con Esc.
+         */
+        hideWhy(owner = null) {
+            if (owner !== null && this.whyOwner !== owner) {
+                return;
+            }
+
+            const tip = whyTip();
+
+            if (tip?.hasAttribute('data-on')) {
+                tip.removeAttribute('data-on');
+            }
+
+            this.whyOwner = null;
+        },
+
         /** Termina un movimiento y hace el que se pidió mientras corría, si cambia algo. */
         settle() {
             this.busy = false;
@@ -238,8 +506,9 @@ document.addEventListener('alpine:init', () => {
         /**
          * Lleva cada elemento de donde estaba (first) a donde quedó. Al abrir, lo que no se veía entra
          * en su lugar: el buscador de inmediato; lo demás, cuando su icono aterriza (en el celular, en
-         * cascada). Al cerrar, todo regresa junto con la cortina, y lo que no se veía (lo que ocultó la
-         * búsqueda) aparece en su lugar a la vez.
+         * cascada). La cascada va por columna y por renglón y ningún elemento espera más de
+         * CASCADE_MAX_MS. Al cerrar, todo regresa junto con la cortina, y lo que no se veía (lo que
+         * ocultó la búsqueda) aparece en su lugar a la vez.
          */
         play(items, first, open) {
             const phone = isPhone();
@@ -258,13 +527,12 @@ document.addEventListener('alpine:init', () => {
                     return;
                 }
 
-                const area = numberFrom(item, '--c');
-                const index = numberFrom(item, '--i');
+                const { column, row } = gridPlaceOf(item);
 
                 if (!from.shown) {
                     const delay = !open ? 0 : item.dataset.menuFlip === 'search'
                         ? 90
-                        : (phone ? 120 + order * 14 : 340 + area * 35 + index * 22);
+                        : Math.min(phone ? 120 + order * 12 : 280 + column * 24 + row * 8, CASCADE_MAX_MS);
 
                     item.animate(
                         [{ opacity: 0, transform: 'translateY(-8px)' }, { opacity: 1, transform: 'none' }],
@@ -286,7 +554,7 @@ document.addEventListener('alpine:init', () => {
                 item.animate(
                     [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }],
                     open
-                        ? { duration: 580, delay: area * 30 + index * 14, easing: spring, fill: 'backwards' }
+                        ? { duration: 580, delay: Math.min(column * 30 + row * 10, CASCADE_MAX_MS), easing: spring, fill: 'backwards' }
                         : { duration: RETURN_MS, easing: settle },
                 );
             });
@@ -360,7 +628,61 @@ document.addEventListener('alpine:init', () => {
 
             if (!open) {
                 this.clearSearch();
+                this.restoreColumn();
             }
+        },
+
+        /** Cerrado, la columna regresa a donde estaba antes de abrir el menú. */
+        restoreColumn() {
+            const column = document.querySelector('#nexus-menu [data-menu-column]');
+
+            if (column) {
+                column.scrollTop = this.columnScroll;
+            }
+
+            this.fadeColumn();
+        },
+
+        /**
+         * La columna cerrada se desvanece arriba si hay más arriba, y abajo si hay más abajo. Abierta (o
+         * en tableta, donde no se ve) no se desvanece.
+         */
+        fadeColumn(column = document.querySelector('#nexus-menu [data-menu-column]')) {
+            if (!column) {
+                return;
+            }
+
+            const scrolls = !this.menuOpen && column.clientHeight > 0;
+            const above = scrolls && column.scrollTop > 4;
+            const below = scrolls && column.scrollHeight - column.scrollTop - column.clientHeight > 4;
+            const state = `${above ? 'top' : ''}${below ? 'bottom' : ''}`;
+
+            // Al desplazar llega un evento tras otro: solo se escribe cuando cambia qué orilla se desvanece.
+            if (column.dataset.fadeState === state) {
+                return;
+            }
+
+            column.dataset.fadeState = state;
+            column.style.setProperty('--fade-top', above ? `${FADE_TOP_PX}px` : '0px');
+            column.style.setProperty('--fade-bottom', below ? `${FADE_BOTTOM_PX}px` : '0px');
+            column.toggleAttribute('data-fade', above || below);
+        },
+
+        /** Al cargar la página, si la entrada activa quedó fuera de la columna cerrada, la centra. */
+        revealActive() {
+            const column = document.querySelector('#nexus-menu [data-menu-column]');
+            const active = column?.querySelector('[data-active]');
+
+            if (column && active && isRendered(active) && getComputedStyle(column).display !== 'contents') {
+                const box = column.getBoundingClientRect();
+                const entry = active.getBoundingClientRect();
+
+                if (entry.bottom > box.bottom - FADE_BOTTOM_PX || entry.top < box.top + FADE_TOP_PX) {
+                    column.scrollTop += entry.top - box.top - box.height / 2 + entry.height / 2;
+                }
+            }
+
+            this.fadeColumn();
         },
 
         /** Lo que se ve con el menú cerrado: en escritorio, los iconos y el área actual; en tableta, los iconos; en el celular, nada. */
@@ -385,9 +707,10 @@ document.addEventListener('alpine:init', () => {
         },
 
         /**
-         * Deja solo las entradas cuyo nombre contiene lo buscado, sin importar mayúsculas ni acentos,
-         * y las vuelve a numerar para que suban dentro de su columna. Oculta las áreas sin ninguna y,
-         * si no queda ninguna entrada, muestra «Sin resultados».
+         * Deja solo las entradas cuyo nombre contiene lo buscado, sin importar mayúsculas ni acentos.
+         * Oculta los encabezados de los grupos sin ninguna, las áreas sin ninguna (su icono y su nombre)
+         * e Inicio, y vuelve a acomodar lo que queda en la retícula, sin huecos. Si no queda ninguna
+         * entrada, muestra «Sin resultados».
          */
         filterMenu(query) {
             const menu = document.getElementById('nexus-menu');
@@ -397,31 +720,99 @@ document.addEventListener('alpine:init', () => {
             }
 
             const needle = normalize(query.trim());
-            let total = 0;
+            const areas = [];
 
-            menu.querySelectorAll('[data-menu-area]').forEach((area) => {
-                let shown = 0;
+            menu.querySelectorAll('[data-menu-column] [data-menu-area]').forEach((area) => {
+                const groups = [];
+                let group = null;
 
-                area.querySelectorAll('[data-menu-entry]').forEach((entry) => {
-                    const match = needle === '' || searchableLabel(entry).includes(needle);
+                // Un encabezado abre su grupo; las entradas sin grupo van antes del primero.
+                area.querySelectorAll('[data-menu-group], [data-menu-entry]').forEach((row) => {
+                    if ('menuGroup' in row.dataset) {
+                        group = { heading: row, entries: [] };
+                        groups.push(group);
 
-                    entry.hidden = !match;
+                        return;
+                    }
+
+                    if (group === null) {
+                        group = { heading: null, entries: [] };
+                        groups.push(group);
+                    }
+
+                    const match = needle === '' || searchableLabel(row).includes(needle);
+
+                    row.hidden = !match;
+                    notesOf(row).forEach((note) => { note.hidden = !match; });
 
                     if (match) {
-                        shown += 1;
-                        entry.style.setProperty('--i', String(shown));
+                        group.entries.push(row);
                     }
                 });
 
-                area.hidden = shown === 0;
-                total += shown;
+                groups.forEach(({ heading, entries }) => {
+                    if (heading) {
+                        heading.hidden = entries.length === 0;
+                        notesOf(heading).forEach((note) => { note.hidden = entries.length === 0; });
+                    }
+                });
+
+                const kept = groups.filter(({ entries }) => entries.length > 0);
+                const slot = menu.querySelector(`[data-menu-rail] [data-menu-area="${area.dataset.menuArea}"]`);
+                const icon = slot?.querySelector('[data-menu-flip="icon"]');
+
+                area.hidden = kept.length === 0;
+                slot?.toggleAttribute('hidden', kept.length === 0);
+
+                if (kept.length > 0) {
+                    areas.push({ area, icon, headings: 'headings' in area.dataset, groups: kept });
+                }
             });
+
+            // Inicio no es de ningún área, pero también se busca: «inicio» y Enter llevan a él.
+            const home = menu.querySelector('[data-menu-home]');
+            const homeMatches = needle === '' || normalize(home?.getAttribute('aria-label') ?? '').includes(needle);
+
+            home?.toggleAttribute('hidden', !homeMatches);
 
             const empty = menu.querySelector('[data-menu-empty]');
 
             if (empty) {
-                empty.hidden = total > 0;
+                empty.hidden = areas.length > 0 || (home !== null && homeMatches);
             }
+
+            this.placeMenu(areas);
+        },
+
+        /** Da a lo que dejó el buscador su lugar en la retícula de cinco columnas y en la de tres (packMenu). */
+        placeMenu(areas) {
+            const shape = areas.map(({ headings, groups }) => ({
+                headings,
+                groups: groups.map(({ heading, entries }) => ({ heading: heading !== null, entries: entries.length })),
+            }));
+            const rows = gridRows(document.getElementById('nexus-menu'));
+            const wide = packMenu(shape, DESKTOP_COLUMNS, rows);
+            const narrow = packMenu(shape, TABLET_COLUMNS, rows);
+
+            areas.forEach(({ area, icon, groups }, index) => {
+                const name = area.querySelector('[data-menu-flip="name"]');
+
+                if (icon) {
+                    placeInGrid(icon, wide[index].icon, narrow[index].icon);
+                }
+
+                if (name) {
+                    placeInGrid(name, wide[index].name, narrow[index].name);
+                }
+
+                groups.forEach(({ heading, entries }, position) => {
+                    if (heading) {
+                        placeInGrid(heading, wide[index].groups[position].heading, narrow[index].groups[position].heading);
+                    }
+
+                    entries.forEach((entry, order) => placeInGrid(entry, wide[index].groups[position].entries[order], narrow[index].groups[position].entries[order]));
+                });
+            });
         },
 
         clearSearch() {
@@ -434,11 +825,11 @@ document.addEventListener('alpine:init', () => {
             this.filterMenu('');
         },
 
-        /** Enter en el buscador abre la primera entrada que quedó. */
+        /** Enter en el buscador abre lo primero que quedó: Inicio, si coincide, o la primera entrada. */
         openFirstMatch() {
-            const entries = document.querySelectorAll('#nexus-menu [data-menu-entry]');
+            const links = document.querySelectorAll('#nexus-menu [data-menu-home], #nexus-menu [data-menu-entry]');
 
-            [...entries].find((entry) => !entry.closest('[hidden]'))?.click();
+            [...links].find((link) => !link.closest('[hidden]'))?.click();
         },
 
         /** Cierra todo sin animar, antes de que Livewire cambie de página. */

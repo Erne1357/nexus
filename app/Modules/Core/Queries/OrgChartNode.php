@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 final readonly class OrgChartNode
 {
     /**
-     * @param  bool  $locked  es un departamento académico: se edita en Académico (AZ-S13)
+     * @param  bool  $locked  es un departamento académico: se edita en Administración › Departamentos (AZ-S13)
      * @param  bool  $missingTitular  un departamento académico activo sin jefe vigente, o Subdirección Académica sin titular
      * @param  int  $people  usuarios distintos con adscripción o nombramiento vigente en la unidad o en su subárbol
      * @param  list<OrgChartNode>  $children

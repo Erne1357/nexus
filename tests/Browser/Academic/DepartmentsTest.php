@@ -5,7 +5,8 @@ use App\Modules\Core\Models\User;
 
 /*
 | CRUD de Departamentos en el navegador: el admin entra por el menú, da de alta un departamento y
-| lo edita desde la UI. Departamentos es del área Académico, la del inicio.
+| lo edita desde la UI. Departamentos es de Administración › Catálogos: se llega abriendo el menú con la
+| liebre.
 */
 
 beforeEach(function () {
@@ -19,6 +20,7 @@ it('el admin da de alta un departamento y luego lo edita desde la UI', function 
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Departamentos"]')
         ->assertPathIs('/academic/departments')
         ->assertSee('Sistemas y Computación')

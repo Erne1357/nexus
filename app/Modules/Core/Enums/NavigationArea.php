@@ -3,9 +3,9 @@
 namespace App\Modules\Core\Enums;
 
 /**
- * Área del menú a la que pertenece una entrada (ADR-0015, DESIGN.md "Navigation"). El orden de
+ * Área del menú a la que pertenece una entrada (ADR-0015, DESIGN.md "Navigation", MN-01). El orden de
  * los casos es el orden del menú; solo se muestran las áreas con al menos una entrada visible para
- * el usuario.
+ * el usuario. Dentro de un área, las entradas pueden ir en grupos (NavigationGroup).
  */
 enum NavigationArea: string
 {
@@ -14,7 +14,7 @@ enum NavigationArea: string
     case ServiciosEscolares = 'servicios_escolares';
     case RecursosHumanos = 'recursos_humanos';
     case RecursosFinancieros = 'recursos_financieros';
-    case Datos = 'datos';
+    case Administracion = 'administracion';
 
     /**
      * Nombre para la interfaz.
@@ -27,7 +27,7 @@ enum NavigationArea: string
             self::ServiciosEscolares => 'Servicios escolares',
             self::RecursosHumanos => 'Recursos humanos',
             self::RecursosFinancieros => 'Recursos financieros',
-            self::Datos => 'Datos',
+            self::Administracion => 'Administración',
         };
     }
 
@@ -42,7 +42,7 @@ enum NavigationArea: string
             self::ServiciosEscolares => 'o-user-group',
             self::RecursosHumanos => 'o-identification',
             self::RecursosFinancieros => 'o-banknotes',
-            self::Datos => 'o-circle-stack',
+            self::Administracion => 'o-cog-6-tooth',
         };
     }
 }
