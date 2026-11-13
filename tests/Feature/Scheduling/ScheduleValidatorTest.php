@@ -247,3 +247,12 @@ it('HC-12 usa el perfil de la modalidad del grupo: su tolerancia y sus bloques d
 
     expect($this->validator->validateGroup($group)->forRule('HC-12'))->toBe([]);
 });
+
+it('HC-02: dos salones de campus distintos a la misma hora dentro de una carga no se empalman', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c1Room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $c1->id])->id, 'code' => 'LC-2']);
+    GroupSession::factory()->for(validatorGroup())->inRoom($this->room)->on(2, '07:00', '09:00')->create();
+    GroupSession::factory()->for(validatorGroup(['campus_id' => $c1->id]))->inRoom($c1Room)->on(2, '07:00', '09:00')->create();
+
+    expect($this->validator->validateLoad($this->term, $this->modality)->forRule('HC-02'))->toBe([]);
+});

@@ -5,8 +5,10 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -26,8 +28,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | MoveGroupToCampus (M8, MS9): el grupo nace con campus y se puede cambiar mientras la carga esté abierta; exige la
-| carga editable y ninguna sesión con salón (primero se quitan los salones). El campus nuevo está activo y ofrece la
-| carrera dueña del grupo. Quién lo hace: GroupManage con el campus de ahora y con el nuevo (MS6).
+| carga editable y ninguna sesión con salón (primero se quitan los salones), y ningún acuerdo de grupo compartido vivo
+| (MS25). El campus nuevo está activo y ofrece la carrera dueña del grupo. Quién lo hace: GroupManage con el campus de
+| ahora y con el nuevo (MS6).
 */
 
 beforeEach(function () {
@@ -146,4 +149,30 @@ it('M8: el cajón del grupo lo cambia de campus y un coordinador limitado a su c
         ->assertDispatched('schedule-changed');
 
     expect($this->group->fresh()->campus_id)->toBe($this->c1->id);
+});
+
+it('MS25: se rechaza mientras el grupo tenga un acuerdo de grupo compartido propuesto o aceptado, y se permite si se rechazó o se canceló', function (AgreementStatus $status, bool $refused) {
+    InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
+        'term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'group_id' => $this->group->id, 'from_department_id' => $this->department->id,
+    ]);
+
+    if ($refused) {
+        expect(fn () => moveGroup())->toThrow(ValidationException::class, 'El grupo D tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo antes de cambiarlo de campus (MS25).')
+            ->and($this->group->fresh()->campus_id)->toBe($this->c2->id);
+
+        return;
+    }
+
+    expect(moveGroup()->campus_id)->toBe($this->c1->id);
+})->with([
+    'propuesto' => [AgreementStatus::Proposed, true],
+    'aceptado' => [AgreementStatus::Accepted, true],
+    'rechazado' => [AgreementStatus::Rejected, false],
+    'cancelado' => [AgreementStatus::Cancelled, false],
+]);
+
+it('MS25: un préstamo de salón vivo de otro grupo no detiene el cambio', function () {
+    InterdepartmentalAgreement::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id]);
+
+    expect(moveGroup()->campus_id)->toBe($this->c1->id);
 });

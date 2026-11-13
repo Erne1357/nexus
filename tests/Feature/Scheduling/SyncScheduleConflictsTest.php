@@ -67,6 +67,21 @@ it('cada choque nace con la modalidad que se recalcula y el campus de su grupo, 
         ->and(ScheduleConflict::query()->pluck('modality_id')->unique()->all())->toBe([$this->modality->id]);
 });
 
+it('un choque que sigue toma el campus de ahora de su grupo', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $group = syncGroup();
+    GroupSession::factory()->for($group)->on(1, '07:00', '11:00')->create();
+    syncConflicts();
+    $hours = ScheduleConflict::query()->where('rule', 'HC-12')->sole();
+    DB::table('groups')->where('id', $group->id)->update(['campus_id' => $c1->id]);
+
+    syncConflicts();
+
+    expect(ScheduleConflict::query()->where('rule', 'HC-12')->sole())
+        ->id->toBe($hours->id)
+        ->campus_id->toBe($c1->id);
+});
+
 it('no guarda ni resuelve los choques de otra modalidad', function () {
     $ead = Modality::query()->where('code', 'EAD')->sole();
     $other = syncGroup(['modality_id' => $ead->id]);

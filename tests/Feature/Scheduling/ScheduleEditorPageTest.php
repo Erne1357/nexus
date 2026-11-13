@@ -653,6 +653,15 @@ describe('modalidad', function () {
             ->assertDontSee('Solo lectura');
     });
 
+    it('HC-04: un semestre sin grupos pinta la semana con el perfil de la modalidad de la página, no con el de omisión', function () {
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+
+        $page = editorAs($this->coordinator, ['carrera' => $this->isc->id, 'reticula' => $this->plan->id, 'semestre' => '1']);
+
+        expect($page->viewData('groups'))->toBe([])
+            ->and(array_column($page->viewData('grid')->days, 'day'))->toBe([1, 2, 3, 4, 5, 6]);
+    });
+
     it('HC-04: la semana del editor y del cajón son las del perfil de la modalidad del grupo, no las del campus', function () {
         $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1, 2, 3, 4, 5]]]);
         $this->calcGroup->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);

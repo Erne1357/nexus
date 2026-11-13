@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\DB;
  * de todos sus campus): valida la carga completa una vez y deja la tabla igual a lo que encontró. Un choque que sigue
  * se conserva (con su detalle al día), uno nuevo se agrega y uno que ya no aparece queda resuelto (`resolved_at`), así
  * el tablero distingue lo vigente de lo corregido. Solo guarda los choques de los grupos de la modalidad, cada uno con
- * el campus de su grupo (un filtro del tablero, no la carga): el otro lado de un empalme de docente con otra modalidad
+ * el campus de ahora de su grupo (un filtro del tablero, no la carga; uno que sigue lo toma si el grupo cambió de campus): el otro lado de un empalme de docente con otra modalidad
  * lo guarda el recálculo de esa modalidad.
  *
  * Es una tabla derivada, como `student_progress`: no deja bitácora (la bitácora es de las escrituras de las personas,
@@ -61,7 +61,11 @@ final class SyncScheduleConflicts
                 $key = self::keyOf($conflict);
 
                 if (isset($found[$key])) {
-                    $conflict->update(['related' => $found[$key]->related, 'severity' => $found[$key]->severity]);
+                    $conflict->update([
+                        'related' => $found[$key]->related,
+                        'severity' => $found[$key]->severity,
+                        'campus_id' => $groups[$conflict->group_id]->campus_id ?? $conflict->campus_id,
+                    ]);
                     unset($found[$key]);
                     $kept++;
 

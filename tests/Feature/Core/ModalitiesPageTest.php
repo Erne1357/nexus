@@ -118,6 +118,20 @@ describe('admin', function () {
             ->and(lastToastOf($page)['title'])->toBe('Modalidad actualizada');
     });
 
+    it('MS17: guardar el perfil desde la página no pierde las claves que el formulario no lleva, como la tolerancia de HC-12', function () {
+        $this->ead->forceFill(['settings' => [...ModalityProfile::DEFAULTS, 'weekly_hours_tolerance' => 30, 'legacy_flag' => true]])->save();
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.modalities')
+            ->call('edit', $this->ead->id)
+            ->set('settings.uses_rooms', false)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect($this->ead->fresh()->settings)->toMatchArray(['uses_rooms' => false, 'weekly_hours_tolerance' => 30, 'legacy_flag' => true])
+            ->and($this->ead->fresh()->profile->weeklyHoursTolerance)->toBe(30);
+    });
+
     it('activa y desactiva una modalidad desde la tabla', function () {
         $page = Livewire::actingAs($this->admin)->test('core::pages.modalities');
 

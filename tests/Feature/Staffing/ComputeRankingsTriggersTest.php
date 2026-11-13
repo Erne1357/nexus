@@ -21,6 +21,7 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
+use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
@@ -28,6 +29,7 @@ use App\Modules\Staffing\Actions\RankGroups;
 use App\Modules\Staffing\Jobs\ComputeRankings;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
+use App\Modules\Staffing\Listeners\FollowGroupMovedToCampus;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
 use App\Modules\Staffing\Models\StaffingRanking;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -100,6 +102,7 @@ it('registra sus listeners en StaffingServiceProvider', function () {
     Event::fake();
 
     Event::assertListening(GroupsCreated::class, RerankOnGroupsCreated::class);
+    Event::assertListening(GroupMovedToCampus::class, FollowGroupMovedToCampus::class);
     Event::assertListening(GroupScheduleChanged::class, RerankOnGroupChange::class);
     Event::assertListening(GroupCancelled::class, RerankOnGroupChange::class);
     Event::assertListening(GroupTeacherChanged::class, RerankOnGroupChange::class);

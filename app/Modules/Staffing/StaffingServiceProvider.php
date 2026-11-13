@@ -26,6 +26,7 @@ use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
@@ -39,6 +40,7 @@ use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Listeners\BlockClosingWithPendingChangeRequests;
 use App\Modules\Staffing\Listeners\BlockReturnWithApprovedChangeRequests;
+use App\Modules\Staffing\Listeners\FollowGroupMovedToCampus;
 use App\Modules\Staffing\Listeners\QueueTeacherLoadRefresh;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
@@ -97,6 +99,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
         Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
         Event::listen(LoadTransitioning::class, BlockReturnWithApprovedChangeRequests::class);
         Event::listen(GroupsCreated::class, RerankOnGroupsCreated::class);
+        Event::listen(GroupMovedToCampus::class, FollowGroupMovedToCampus::class);
         Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
         Event::listen([
             PositionChanged::class, ExternalLoadChanged::class, AvailabilityChanged::class, QualificationChanged::class,

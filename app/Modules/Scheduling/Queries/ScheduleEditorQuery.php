@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -180,9 +181,10 @@ final class ScheduleEditorQuery
      * grupo elegido) y la lista del celular de cada día.
      *
      * @param  array{career: string, plan: string, semester: string, group: string, view: string, teacher: string, room: string}  $selection
+     * @param  Modality|null  $modality  la de la página: da la semana de un semestre sin grupos
      * @return array<string, mixed>
      */
-    public function editor(Actor $actor, Term $term, Campus $campus, array $selection): array
+    public function editor(Actor $actor, Term $term, Campus $campus, array $selection, ?Modality $modality = null): array
     {
         $careers = $this->careers($actor, $term, $campus);
         $semester = $this->semester($actor, $term, $campus, ['career' => $selection['career'], 'plan' => $selection['plan'], 'semester' => $selection['semester']]);
@@ -205,7 +207,7 @@ final class ScheduleEditorQuery
             default => [$this->semesterWeek($board, $chains, $selected), [], null],
         };
 
-        $grid = WeekGrid::of($this->profileOf($term, $board['groups'], $selected))->covering([...$items, ...array_merge(...array_values($bands))]);
+        $grid = WeekGrid::of($this->profileOf($term, $board['groups'], $selected, $modality))->covering([...$items, ...array_merge(...array_values($bands))]);
         $laid = $grid->lay($items);
         $cells = $grid->cells($selected === null ? null : $this->fit($term, $campus, $selected['id']), self::UNSAVEABLE);
         $canPlace = $selected !== null && $selected['can']['editSessions'];
@@ -680,15 +682,21 @@ final class ScheduleEditorQuery
 
     /**
      * El perfil de la semana del editor: el de la modalidad del grupo elegido; sin grupo, el de la modalidad de los grupos
-     * del semestre, o la ventana que cubre a todas si son de varias (ModalityProfile::covering); sin grupos, el de omisión.
-     * Sale de las fotos del validador que el semestre ya leyó, sin otra consulta.
+     * del semestre, o la ventana que cubre a todas si son de varias (ModalityProfile::covering); sin grupos, el de la
+     * modalidad de la página (y sin ella, el de omisión). Sale de las fotos del validador que el semestre ya leyó, sin
+     * otra consulta.
      *
      * @param  list<array<string, mixed>>  $groups
      * @param  array<string, mixed>|null  $selected
      */
-    private function profileOf(Term $term, array $groups, ?array $selected): ModalityProfile
+    private function profileOf(Term $term, array $groups, ?array $selected, ?Modality $modality): ModalityProfile
     {
         $ids = $selected === null ? array_values(array_unique(array_column($groups, 'modality_id'))) : [$selected['modality_id']];
+
+        if ($ids === []) {
+            return $modality?->profile ?? ModalityProfile::fromArray([]);
+        }
+
         $profiles = array_map(fn (string $id): ModalityProfile => $this->validator->stateFor($term->id, $id)->profile($id), $ids);
 
         return count($profiles) === 1 ? $profiles[0] : ModalityProfile::covering($profiles);

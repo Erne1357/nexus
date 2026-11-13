@@ -4,7 +4,10 @@ namespace App\Modules\Scheduling\Actions;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Rules\LoadEditability;
@@ -20,11 +23,14 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * En una transacción toma la carga (FOR SHARE) y relee el grupo con bloqueo, como las Actions del editor, y exige:
  * - la carga editable y el grupo sin cancelar (LoadEditability);
  * - ninguna sesión con salón: el salón es del campus del grupo, así que primero se quitan (MS9);
+ * - ningún acuerdo de grupo compartido propuesto o aceptado (MS25): el acuerdo guarda el campus del grupo y lo decidió
+ *   el otro departamento para ese campus;
  * - el campus nuevo activo y sin borrar, y que ofrezca la carrera dueña del grupo (`career_campus` activa, HC-13).
  *
  * Al mismo campus no escribe ni avisa. Si cambia, las sesiones toman el campus nuevo por el trigger de `groups`, deja la
- * bitácora con el campus anterior y el nuevo y, después del commit, avisa con GroupScheduleChanged, que recalcula los
- * choques de su modalidad (los traslados de SC-09 cambian) y su ranking.
+ * bitácora con el campus anterior y el nuevo, y avisa dentro de la transacción con GroupMovedToCampus, para que las
+ * copias del campus del grupo de los módulos de la derecha cambien en la misma transacción. Después del commit avisa
+ * con GroupScheduleChanged, que recalcula los choques de su modalidad (los traslados de SC-09 cambian) y su ranking.
  */
 final class MoveGroupToCampus
 {
@@ -46,6 +52,7 @@ final class MoveGroupToCampus
             }
 
             $this->ensureWithoutRooms($group);
+            $this->ensureWithoutSharedGroup($group);
             $this->ensureOffers($campus, $group);
 
             $from = Campus::query()->withTrashed()->findOrFail($group->campus_id);
@@ -57,10 +64,29 @@ final class MoveGroupToCampus
                 ->withChanges(['attributes' => ['campus_id' => $campus->getKey()], 'old' => ['campus_id' => $from->getKey()]])
                 ->log("Cambió el grupo {$group->code} de {$from->name} a {$campus->name}");
 
+            GroupMovedToCampus::dispatch($group->getKey(), $group->term_id, $group->modality_id, $from->getKey(), $campus->getKey());
             GroupScheduleChanged::dispatch($group);
 
             return $group;
         }), 'campus');
+    }
+
+    /**
+     * MS25: un grupo con un acuerdo de grupo compartido vivo (propuesto o aceptado) no cambia de campus.
+     *
+     * @throws ValidationException
+     */
+    private function ensureWithoutSharedGroup(Group $group): void
+    {
+        $shared = InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::SharedGroup->value)
+            ->where('group_id', $group->getKey())
+            ->live()
+            ->exists();
+
+        if ($shared) {
+            throw ValidationException::withMessages(['campus' => "El grupo {$group->code} tiene un acuerdo de grupo compartido propuesto o aceptado: resuélvelo antes de cambiarlo de campus (MS25)."]);
+        }
     }
 
     /**
