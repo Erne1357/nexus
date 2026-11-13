@@ -26,7 +26,6 @@ class ChangeRequestFactory extends Factory
         return [
             'group_id' => Group::factory(),
             'term_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->term_id,
-            'campus_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->campus_id,
             'modality_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->modality_id,
             'department_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->department_id,
             'requested_by' => User::factory(),
@@ -44,7 +43,6 @@ class ChangeRequestFactory extends Factory
         return $this->state([
             'group_id' => $group->id,
             'term_id' => $group->term_id,
-            'campus_id' => $group->campus_id,
             'modality_id' => $group->modality_id,
             'department_id' => $group->department_id,
         ]);

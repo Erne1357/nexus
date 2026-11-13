@@ -9,7 +9,7 @@ use App\Modules\Staffing\Models\ChangeRequest;
 
 /**
  * Guarda de Staffing para cerrar la carga (HC-15, tarea 4.1, P5 confirmado el 10 de noviembre de 2026): no queda
- * ninguna solicitud de cambio del departamento (mismo periodo y campus) pendiente de decidir; las aprobadas que
+ * ninguna solicitud de cambio del departamento (mismo periodo y modalidad) pendiente de decidir; las aprobadas que
  * siguen sin aplicar también la detienen (supuesto por confirmar). Veta con un motivo por tipo (evento con veto,
  * LoadTransitioning).
  */

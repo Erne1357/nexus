@@ -8,8 +8,9 @@ use App\Modules\Staffing\Models\ChangeRequest;
 
 /**
  * Base de los avisos de una solicitud de cambio (tarea 3.11): llevan a la pantalla «Solicitudes de cambio»
- * (`staffing.change-requests`) con la solicitud elegida (`?solicitud=`), en el periodo y campus del grupo; al abrirlo, la
- * campana deja la credencial en ellos (OpenNotification).
+ * (`staffing.change-requests`) con la solicitud elegida (`?solicitud=`), en el periodo y la modalidad de la solicitud
+ * y en el campus de hoy del grupo (la solicitud no lo copia, M8); al abrirlo, la campana deja la credencial en ellos
+ * (OpenNotification).
  */
 abstract class ChangeRequestNotification extends NexusNotification
 {
@@ -32,7 +33,7 @@ abstract class ChangeRequestNotification extends NexusNotification
             route: $this->route(),
             parameters: ['solicitud' => (string) $this->request->getKey()],
             termId: $this->request->term_id,
-            campusId: $this->request->campus_id,
+            campusId: $this->request->group->campus_id,
             tone: $tone,
             modalityId: $this->request->modality_id,
         );

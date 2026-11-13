@@ -10,7 +10,7 @@
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Asignación docente</h1>
         <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-neutral" data-testid="assign-meta">
             <span class="font-medium text-base-content">{{ $board->department->name }}</span>
-            <span>{{ $board->campus->name }}</span>
+            <span>{{ $board->campus?->name }}</span>
             <span>{{ $board->term->name }}</span>
         </p>
         <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-3" />

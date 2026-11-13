@@ -81,7 +81,6 @@ final class RequestChange
 
         $request = ChangeRequest::query()->create([
             'term_id' => $group->term_id,
-            'campus_id' => $group->campus_id,
             'modality_id' => $group->modality_id,
             'department_id' => $group->department_id,
             'group_id' => $group->getKey(),

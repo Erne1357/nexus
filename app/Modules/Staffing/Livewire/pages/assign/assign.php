@@ -5,7 +5,6 @@ use App\Modules\AcademicLoad\Actions\Transitions\StartStaffing;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\AssignTeacher;
@@ -31,10 +30,12 @@ use Mary\Traits\Toast;
 /**
  * Asignación docente (tarea 3.9; reglas-de-negocio.md, «Ranking docente (desempate)», HC-16): el jefe asigna el
  * docente de cada grupo de su departamento, en el periodo y el campus activos de la credencial, con el ranking a la
- * vista. Dos vistas que el usuario alterna y que se recuerdan (`?vista=materia|paneles`, y en la sesión para cuando
- * entra sin ella): por materia, con los tres primeros lugares de cada grupo sin docente en su renglón y el ranking
- * completo en su lugar (maqueta C), y dos paneles, la lista de grupos y el ranking y el historial del elegido (maqueta
- * A). `?grupo=<id>` abre ese grupo; `?depto=<código>` elige el departamento a quien ve varios.
+ * vista. La carga es la del departamento en la modalidad del campus (M1, por el puente `campuses.modality_id` mientras
+ * la pantalla sea por campus) y el campus filtra sus grupos. Dos vistas que el usuario alterna y que se recuerdan
+ * (`?vista=materia|paneles`, y en la sesión para cuando entra sin ella): por materia, con los tres primeros lugares de
+ * cada grupo sin docente en su renglón y el ranking completo en su lugar (maqueta C), y dos paneles, la lista de grupos
+ * y el ranking y el historial del elegido (maqueta A). `?grupo=<id>` abre ese grupo; `?depto=<código>` elige el
+ * departamento a quien ve varios.
  *
  * Asignar al primer lugar es un clic; fuera de él (o fuera del ranking) pide el motivo en el renglón con el lugar que
  * ocupa. Lo que rechaza AssignTeacher se ve en su lugar. Si la carga está en propuesta, quien puede la pasa a
@@ -98,9 +99,12 @@ new #[Title('Asignación docente')] class extends Component
     /** El motivo de asignar fuera del primer lugar (HC-16). */
     public string $reason = '';
 
-    /** El periodo, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
+    /** El periodo, la modalidad, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
     #[Locked]
     public ?string $termId = null;
+
+    #[Locked]
+    public ?string $modalityId = null;
 
     #[Locked]
     public ?string $campusId = null;
@@ -333,7 +337,7 @@ new #[Title('Asignación docente')] class extends Component
     {
         abort_if($this->departmentId === null, 403);
 
-        $load = $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+        $load = $query->load((string) $this->termId, (string) $this->modalityId, $this->departmentId);
 
         abort_if($load === null, 404);
         $this->authorize('startStaffing', $load);
@@ -398,10 +402,11 @@ new #[Title('Asignación docente')] class extends Component
      */
     private function resolve(Actor $context, AssignmentBoardQuery $query): void
     {
-        $this->termId = $this->campusId = $this->departmentId = null;
+        $this->termId = $this->modalityId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
         $campus = $this->requiredCampus();
+        $modalityId = $campus->modality_id;
 
         $term = $context->activeTerm();
 
@@ -411,9 +416,9 @@ new #[Title('Asignación docente')] class extends Component
             return;
         }
 
-        $departments = $query->departmentsFor($context, $campus);
+        $departments = $modalityId === null ? collect() : $query->departmentsFor($context, $modalityId);
         $department = $this->department === ''
-            ? $this->departmentOfRequestedGroup($departments, $query, (string) $term->getKey(), (string) $campus->getKey()) ?? $departments->first()
+            ? $this->departmentOfRequestedGroup($departments, $query, (string) $term->getKey(), (string) $modalityId, (string) $campus->getKey()) ?? $departments->first()
             : $departments->first(fn (Department $department): bool => $department->code === $this->department);
 
         abort_if($this->department !== '' && $department === null, 403);
@@ -428,6 +433,7 @@ new #[Title('Asignación docente')] class extends Component
 
         $this->department = $department->code;
         $this->termId = $term->getKey();
+        $this->modalityId = $modalityId;
         $this->campusId = $campus->getKey();
         $this->departmentId = $department->getKey();
         $this->message = null;
@@ -439,13 +445,13 @@ new #[Title('Asignación docente')] class extends Component
      *
      * @param  Collection<int, Department>  $departments
      */
-    private function departmentOfRequestedGroup(Collection $departments, AssignmentBoardQuery $query, string $termId, string $campusId): ?Department
+    private function departmentOfRequestedGroup(Collection $departments, AssignmentBoardQuery $query, string $termId, string $modalityId, string $campusId): ?Department
     {
         if ($this->groupId === '') {
             return null;
         }
 
-        $departmentId = $query->departmentIdOfGroup($termId, $campusId, $this->groupId);
+        $departmentId = $query->departmentIdOfGroup($termId, $modalityId, $this->groupId, $campusId);
 
         return $departmentId === null ? null : $departments->first(fn (Department $department): bool => $department->getKey() === $departmentId);
     }
@@ -460,7 +466,7 @@ new #[Title('Asignación docente')] class extends Component
             return;
         }
 
-        $group = $this->departmentId === null ? null : $query->findGroup((string) $this->termId, (string) $this->campusId, $this->departmentId, $this->groupId);
+        $group = $this->departmentId === null ? null : $query->findGroup((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->groupId, $this->campusId);
 
         if ($group === null) {
             $this->groupId = '';
@@ -487,9 +493,9 @@ new #[Title('Asignación docente')] class extends Component
             return;
         }
 
-        $load = $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+        $load = $query->load((string) $this->termId, (string) $this->modalityId, $this->departmentId);
 
-        if (in_array($load?->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) && $query->hasGroupWithoutTeacher((string) $this->termId, (string) $this->campusId, $this->departmentId)) {
+        if (in_array($load?->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) && $query->hasGroupWithoutTeacher((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->campusId)) {
             $this->state = 'sin';
         }
     }
@@ -501,7 +507,7 @@ new #[Title('Asignación docente')] class extends Component
     private function checkBlockers(AssignmentBoardQuery $query, StaffingBlockersQuery $blockers): void
     {
         $this->blockers = [];
-        $load = $this->departmentId === null ? null : $query->load((string) $this->termId, (string) $this->campusId, $this->departmentId);
+        $load = $this->departmentId === null ? null : $query->load((string) $this->termId, (string) $this->modalityId, $this->departmentId);
 
         if ($load?->status !== LoadStatus::Proposed || ! Gate::allows('startStaffing', $load)) {
             return;
@@ -519,7 +525,7 @@ new #[Title('Asignación docente')] class extends Component
         abort_if($this->departmentId === null, 403);
         $this->authorize('viewAny', [StaffingRanking::class, $this->scopeGroup()]);
 
-        return $query->board((string) $this->termId, (string) $this->campusId, $this->departmentId);
+        return $query->board((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->campusId);
     }
 
     /**
@@ -530,7 +536,7 @@ new #[Title('Asignación docente')] class extends Component
         abort_if($this->departmentId === null, 403);
         $this->authorize('viewAny', [StaffingRanking::class, $this->scopeGroup()]);
 
-        return $query->groupOrFail((string) $this->termId, (string) $this->campusId, $this->departmentId, $groupId);
+        return $query->groupOrFail((string) $this->termId, (string) $this->modalityId, $this->departmentId, $groupId, $this->campusId);
     }
 
     /**
@@ -550,7 +556,7 @@ new #[Title('Asignación docente')] class extends Component
     private function scopeGroup(): Group
     {
         return new Group([
-            'modality_id' => Campus::withTrashed()->whereKey($this->campusId)->value('modality_id'),
+            'modality_id' => $this->modalityId,
             'campus_id' => $this->campusId,
             'department_id' => $this->departmentId,
         ]);
@@ -675,7 +681,7 @@ new #[Title('Asignación docente')] class extends Component
         $load = $board->load;
 
         return match (true) {
-            $load === null => "{$board->department->code} no tiene carga en {$board->campus->code} para este periodo.",
+            $load === null => "{$board->department->code} no tiene carga en {$board->modality->name} para este periodo.",
             $load->status === LoadStatus::Proposed => 'La carga está en Propuesta. Los docentes se asignan cuando pasa a Asignación.',
             $load->status === LoadStatus::Draft => 'La carga está en Borrador: los docentes se asignan cuando pasa a Asignación.',
             in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) => null,

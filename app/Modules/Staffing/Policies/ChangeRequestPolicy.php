@@ -51,15 +51,19 @@ final class ChangeRequestPolicy
         return $this->actor($user)->allows(StaffingPermission::ChangeRequestDecide, $this->unitTarget($request));
     }
 
+    /**
+     * El campus es el del grupo (la solicitud no lo copia, M8): si el grupo cambió de campus, la aplica quien cubre el
+     * campus nuevo.
+     */
     public function apply(User $user, ChangeRequest $request): bool
     {
-        if ($request->kind === ChangeRequestKind::Room) {
-            return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplyRoom, Target::of(modality: $request->modality_id, campus: $request->campus_id, unit: $request->department_id));
-        }
-
         $request->loadMissing('group');
 
-        return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplySchedule, Target::of(modality: $request->modality_id, campus: $request->campus_id, career: $request->group->owner_career_id));
+        if ($request->kind === ChangeRequestKind::Room) {
+            return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplyRoom, Target::of(modality: $request->modality_id, campus: $request->group->campus_id, unit: $request->department_id));
+        }
+
+        return $this->actor($user)->allows(StaffingPermission::ChangeRequestApplySchedule, Target::of(modality: $request->modality_id, campus: $request->group->campus_id, career: $request->group->owner_career_id));
     }
 
     private function unitTarget(ChangeRequest $request): Target

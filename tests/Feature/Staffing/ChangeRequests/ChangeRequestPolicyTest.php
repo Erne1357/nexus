@@ -138,3 +138,17 @@ it('AZ-S17: un coordinador de PRES limitado a C2 aplica el cambio de horario de 
     expect($coordinador->can('apply', requestFor($c2Group, 'approved', ['kind' => 'schedule'])))->toBeTrue()
         ->and($coordinador->can('apply', requestFor($c1['group'], 'approved', ['kind' => 'schedule'])))->toBeFalse();
 });
+
+it('AZ-S17, MS6: en la lista, el coordinador de PRES limitado a C2 ve las solicitudes de horario de los grupos de C2, por el campus del grupo, y no las de C1 ni las de salón', function () {
+    $c1 = changeScenario();
+    $c2Campus = Campus::factory()->create(['code' => 'C2']);
+    $c2Group = Group::factory()->create(['campus_id' => $c2Campus->id, 'owner_career_id' => $c1['group']->owner_career_id, 'term_id' => $c1['group']->term_id, 'subject_id' => $c1['group']->subject_id]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('PRES')->id, 'campus_id' => $c2Campus->id, 'career_id' => $c1['group']->owner_career_id])->create();
+    $inC2 = requestFor($c2Group, 'approved', ['kind' => 'schedule']);
+    requestFor($c2Group, 'approved', ['kind' => 'room']);
+    requestFor($c1['group'], 'approved', ['kind' => 'schedule']);
+
+    $visible = app(ChangeRequestsQuery::class)->visible(app(Actor::class)->forUser($coordinador), ChangeRequest::query())->pluck('id')->all();
+
+    expect($visible)->toBe([$inC2->id]);
+});

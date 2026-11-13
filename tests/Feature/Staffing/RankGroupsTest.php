@@ -24,13 +24,15 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 
 /*
-| RankGroups: el ranking docente de los grupos de un departamento en un periodo y campus (reglas-de-negocio.md,
-| «Ranking docente (desempate)»). Reescribe `staffing_rankings` en una transacción y avisa con RankingsComputed.
+| RankGroups: el ranking docente de los grupos de un departamento en un periodo y modalidad, de todos sus campus (M1;
+| reglas-de-negocio.md, «Ranking docente (desempate)»). Reescribe `staffing_rankings` en una transacción y avisa con
+| RankingsComputed.
 */
 
 beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
     $this->campus = Campus::factory()->create();
+    $this->modality = modalityOf('PRES');
     $this->department = Department::factory()->create();
     $this->subject = Subject::factory()->create(['department_id' => $this->department->id]);
     $this->group = fn (array $attributes = []): Group => Group::factory()->create($attributes + [
@@ -48,7 +50,7 @@ beforeEach(function () {
 
         return $teacher;
     };
-    $this->rank = fn (): int => app(RankGroups::class)->handle($this->term, $this->campus, $this->department);
+    $this->rank = fn (?Modality $modality = null): int => app(RankGroups::class)->handle($this->term, $modality ?? $this->modality, $this->department);
     $this->ranking = fn (Group $group): array => StaffingRanking::query()->where('group_id', $group->id)->inRankOrder()
         ->with('teacher')->get()->map(fn (StaffingRanking $row): string => $row->teacher->name)->all();
 });
@@ -71,7 +73,7 @@ it('Ranking docente: ordena a los candidatos de cada grupo del departamento como
         ->and($row->rank)->toBe(2)
         ->and((float) $row->score)->toBe(3.0)
         ->and($row->term_id)->toBe($this->term->id)
-        ->and($row->campus_id)->toBe($this->campus->id)
+        ->and($row->modality_id)->toBe($this->modality->id)
         ->and($row->computed_at)->not->toBeNull()
         ->and(collect($row->breakdown)->sortKeys()->all())->toBe([
             'base_hours' => 10,
@@ -90,7 +92,7 @@ it('cada fila del ranking copia la modalidad de su grupo (ampliación de la rond
     ($this->teacher)('Ana', 10);
     ($this->teacher)('Beatriz', 10);
 
-    ($this->rank)();
+    ($this->rank)(modalityOf('EAD'));
 
     expect(StaffingRanking::query()->where('group_id', $group->id)->count())->toBe(2)
         ->and(StaffingRanking::query()->pluck('modality_id')->unique()->all())->toBe([$group->modality_id]);
@@ -197,27 +199,38 @@ it('Ranking docente: los grupos cancelados no tienen filas y pierden las que ten
         ->and(StaffingRanking::query()->where('group_id', $cancelled->id)->exists())->toBeFalse();
 });
 
-it('Ranking docente: no toca el ranking de otro departamento ni de otro campus', function () {
+it('M1: el ranking se recalcula por departamento y modalidad, con los grupos de C1 y C2 en una sola corrida', function () {
+    $inC2 = ($this->group)();
+    $inC1 = ($this->group)(['campus_id' => Campus::factory()->create(['code' => 'C1'])->id]);
+    ($this->teacher)('Ana', 20);
+    ($this->teacher)('Beatriz', 20);
+
+    expect(($this->rank)())->toBe(2)
+        ->and(($this->ranking)($inC2))->toBe(['Ana', 'Beatriz'])
+        ->and(($this->ranking)($inC1))->toBe(['Ana', 'Beatriz']);
+});
+
+it('Ranking docente: no toca el ranking de otro departamento ni de otra modalidad', function () {
     ($this->group)();
     ($this->teacher)('Ana', 20);
     $otherDepartment = StaffingRanking::factory()->create();
-    $otherCampus = StaffingRanking::factory()->create([
-        'group_id' => ($this->group)(['campus_id' => Campus::factory()->create()->id])->id,
+    $otherModality = StaffingRanking::factory()->create([
+        'group_id' => ($this->group)(['modality_id' => modalityOf('EAD')->id])->id,
     ]);
 
     ($this->rank)();
 
-    expect(StaffingRanking::query()->whereKey([$otherDepartment->id, $otherCampus->id])->count())->toBe(2);
+    expect(StaffingRanking::query()->whereKey([$otherDepartment->id, $otherModality->id])->count())->toBe(2);
 });
 
-it('Ranking docente: avisa con RankingsComputed el periodo, el campus y el departamento', function () {
+it('Ranking docente: avisa con RankingsComputed el periodo, la modalidad y el departamento', function () {
     Event::fake([RankingsComputed::class]);
     ($this->group)();
 
     ($this->rank)();
 
     Event::assertDispatched(RankingsComputed::class, fn (RankingsComputed $event): bool => $event->termId === $this->term->id
-        && $event->campusId === $this->campus->id
+        && $event->modalityId === $this->modality->id
         && $event->departmentId === $this->department->id);
 });
 

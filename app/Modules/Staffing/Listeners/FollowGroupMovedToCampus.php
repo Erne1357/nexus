@@ -4,34 +4,29 @@ namespace App\Modules\Staffing\Listeners;
 
 use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Models\Group;
-use App\Modules\Staffing\Actions\FollowGroupToCampus;
 use App\Modules\Staffing\Actions\QueueRankings;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Un grupo cambió de campus (GroupMovedToCampus, M8). Síncrono, dentro de la transacción del cambio: las copias del
- * campus del grupo en Staffing toman el campus nuevo (FollowGroupToCampus) antes de que el cambio se confirme. Después
- * del commit encola el ranking de su departamento en el campus de antes (que ya no tiene el grupo) y en el nuevo.
+ * Un grupo cambió de campus (GroupMovedToCampus, M8) dentro de la carga de su modalidad. Staffing no guarda copias del
+ * campus del grupo (rankings, asignaciones y solicitudes lo leen del grupo), así que no hay nada que cambiar en la
+ * transacción. Síncrono, para leer el departamento del grupo dentro de ella; después del commit encola el ranking de su
+ * departamento en su modalidad, que ya tiene los dos campus (M1): los traslados de SC-09 cambian con el campus. El
+ * GroupScheduleChanged que MoveGroupToCampus manda después del commit también lo encola (RerankOnGroupChange, con los
+ * alcances de su docente); ComputeRankings es único por alcance mientras espera, así que no se calcula dos veces.
  */
 final class FollowGroupMovedToCampus
 {
-    public function __construct(
-        private readonly FollowGroupToCampus $follow,
-        private readonly QueueRankings $queue,
-    ) {}
+    public function __construct(private readonly QueueRankings $queue) {}
 
     public function handle(GroupMovedToCampus $event): void
     {
-        $this->follow->handle($event->groupId, $event->toCampusId);
         $departmentId = Group::query()->whereKey($event->groupId)->value('department_id');
 
         if ($departmentId === null) {
             return;
         }
 
-        DB::afterCommit(function () use ($event, $departmentId): void {
-            $this->queue->forScope($event->termId, $event->fromCampusId, $departmentId);
-            $this->queue->forScope($event->termId, $event->toCampusId, $departmentId);
-        });
+        DB::afterCommit(fn () => $this->queue->forScope($event->termId, $event->modalityId, $departmentId));
     }
 }

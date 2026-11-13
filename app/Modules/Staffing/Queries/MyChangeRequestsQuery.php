@@ -16,8 +16,9 @@ use Carbon\CarbonImmutable;
 /**
  * «Mis solicitudes» de Mi carga (tarea 3.11): las solicitudes de cambio del docente en el periodo (las que pidió o las
  * que son de él como docente del grupo), de la más reciente a la más vieja, y, por cada grupo suyo no cancelado, si
- * tiene una abierta y en qué estado está la carga de su departamento en su campus (solo se pide en Asignación o
- * Ajustes; reglas-de-negocio.md, "Solicitudes de cambio"). Un número constante de consultas.
+ * tiene una abierta y en qué estado está la carga de su departamento en su modalidad (M1; solo se pide en Asignación o
+ * Ajustes; reglas-de-negocio.md, "Solicitudes de cambio"). El campus de cada solicitud es el de hoy de su grupo (la
+ * solicitud no lo copia, M8). Un número constante de consultas.
  */
 final class MyChangeRequestsQuery
 {
