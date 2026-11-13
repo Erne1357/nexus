@@ -59,6 +59,12 @@ it('MS3: solo las tablas donde el campus es un lugar llevan campus_id, cada una 
     expect(array_values(array_diff($tables, array_keys(campusPlaceTables()))))->toBe([]);
 });
 
+it('MS3: cada tabla de la lista sigue existiendo y llevando campus_id: una entrada vieja se quita', function () {
+    $stale = array_values(array_filter(array_keys(campusPlaceTables()), fn (string $table): bool => ! Schema::hasColumn($table, 'campus_id')));
+
+    expect($stale)->toBe([]);
+});
+
 it('M1: ninguna tabla de la carga tiene campus_id de alcance', function () {
     foreach (loadTablesByModality() as $table) {
         expect(Schema::hasTable($table))->toBeTrue("falta la tabla {$table}")

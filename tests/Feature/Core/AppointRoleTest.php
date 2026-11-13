@@ -62,6 +62,19 @@ function expectInvalid(Closure $call, string $key, string $message): void
     });
 }
 
+it('MS8: relee la modalidad con bloqueo compartido (FOR SHARE), no exclusivo: dos nombramientos no se forman, una desactivación sí espera', function () {
+    $presencial = modalityOf('PRES');
+    DB::enableQueryLog();
+
+    appoint($this->rosa, Role::Coordinador, $this->c2, null, $this->isc->id, modality: $presencial);
+
+    $modalityLocks = collect(DB::getQueryLog())->pluck('query')->filter(fn (string $query): bool => str_contains($query, 'from "modalities"')
+        && (str_contains($query, 'for share') || str_contains($query, 'for update')));
+
+    expect($modalityLocks)->toHaveCount(1)
+        ->and($modalityLocks->first())->toContain('for share');
+});
+
 it('AZ-S17: nombra coordinador de una carrera en una modalidad y un campus, con bitácora y evento después del commit', function () {
     Event::fake([RoleAppointed::class]);
 

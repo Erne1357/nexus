@@ -30,11 +30,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Subdirección Académica (AZ-S10). Fuera de la transacción revisa las columnas y las fechas. Dentro bloquea al usuario
  * (inactivo no se nombra) y a la unidad, y relee la modalidad con bloqueo compartido (FOR SHARE: basta para que una
  * desactivación concurrente, que la bloquea FOR UPDATE, espere; MS8: un nombramiento no nace en una modalidad que se
- * acaba de desactivar), y revisa a la misma persona dos
- * veces y el puesto exclusivo ocupado (AZ-S7), cuyo error dice quién lo ocupa. Si otra sesión gana
- * el puesto entre la revisión y la escritura, la exclusión de la base (SQLSTATE 23P01) responde con el mismo error sin
- * nombre; si escribe el mismo jefe de proyecto docente, con el de duplicado. Cualquier otro error de la base sigue
- * igual. Todo error de regla es una ValidationException y no se escribe nada.
+ * acaba de desactivar), y revisa a la misma persona dos veces y el puesto exclusivo ocupado (AZ-S7), cuyo error dice
+ * quién lo ocupa. Si otra sesión gana el puesto entre la revisión y la escritura, la exclusión de la base (SQLSTATE
+ * 23P01) responde con el mismo error sin nombre; si escribe el mismo jefe de proyecto docente, con el de duplicado.
+ * Cualquier otro error de la base sigue igual. Todo error de regla es una ValidationException y no se escribe nada.
  *
  * Deja la bitácora sobre el usuario, recarga Actor (quien se nombra a sí mismo ve su puesto en la misma
  * petición) y avisa con RoleAppointed después del commit.

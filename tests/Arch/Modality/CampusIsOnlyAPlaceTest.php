@@ -12,6 +12,9 @@ use Symfony\Component\Finder\Finder;
 | comentarios, para que nadie los vuelva a usar. Las migraciones quedan fuera: son historia y nombran lo que había.
 */
 
+/** Una lectura del campus que ya no existe: su perfil, su modalidad o el puente (`$campus->modality_id`, `->campus->profile`). */
+const CAMPUS_BRIDGE_READ = '/(\$\w*campus\w*|->campus)\??->(settings|profile|modality|modality_id|catalogModality)\b/i';
+
 /**
  * El código de app/ y resources/ (PHP y Blade), sin las migraciones, por ruta relativa a la raíz.
  *
@@ -48,12 +51,25 @@ it('MS3: nada usa el perfil de flujo de un campus (CampusProfile)', function () 
         ->and(sourcesMatching('/\bCampusProfile\b/'))->toBe([]);
 });
 
-it('MS3: nada lee `settings` ni `profile` de un campus', function () {
-    expect(sourcesMatching('/(\$\w*campus\w*|->campus)\??->(settings|profile)\b/i'))->toBe([]);
+it('MS3: nada lee `settings`, `profile`, `modality` ni `modality_id` de un campus', function () {
+    expect(sourcesMatching(CAMPUS_BRIDGE_READ))->toBe([]);
+});
+
+it('la búsqueda de lecturas del campus atrapa las formas comunes y no confunde las de una carga o un grupo', function () {
+    $caught = ['$campus->settings', '$campus?->profile', '$this->campus->modality', '$room->campus->modality_id', '$campusModel->modality_id'];
+    $allowed = ['$load->modality', '$group->modality_id', '$this->campus', '$campuses->first()', '$modality->profile', 'zeroInactiveCampus($x)'];
+
+    foreach ($caught as $code) {
+        expect(preg_match(CAMPUS_BRIDGE_READ, $code))->toBe(1, $code);
+    }
+
+    foreach ($allowed as $code) {
+        expect(preg_match(CAMPUS_BRIDGE_READ, $code))->toBe(0, $code);
+    }
 });
 
 it('MS1: la modalidad es el catálogo de Core, no el enum Core\Enums\Modality ni el puente de campus', function () {
     expect(file_exists(dirname(__DIR__, 3).'/app/Modules/Core/Enums/Modality.php'))->toBeFalse()
-        ->and(sourcesMatching('/Core\\\\Enums\\\\Modality\b/'))->toBe([])
+        ->and(sourcesMatching('/Core\\\\Enums\\\\Modality\b|Core\\\\Enums\\\\\{[^}]*\bModality\b/'))->toBe([])
         ->and(sourcesMatching('/\bcatalogModality\b|\bcatalogCode\b/'))->toBe([]);
 });

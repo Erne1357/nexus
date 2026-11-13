@@ -11,12 +11,14 @@ use Illuminate\Support\Facades\Schema;
  * `campuses.settings` (el perfil de flujo, que es de la modalidad) y el puente `campuses.modality_id`.
  *
  * Las filas de campus que eran modalidades (su `modality` no es presencial: EAD, ENL y TNMV, M2) se desactivan y se
- * borran lógicamente. Antes revisa que nada las referencie (referenceCounts()): cada columna de una llave foránea a
- * `campuses` y cada columna `campus_id`, de cualquier tabla y esquema (se leen del catálogo de PostgreSQL al migrar, así
- * que una tabla nueva también cuenta), los parámetros de `settings` con alcance de campus y los avisos guardados con su
- * campus. Si algo las referencia, se detiene con un RuntimeException que lista cada referencia con su número y no
- * escribe nada. La bitácora no cuenta: es historia y la fila borrada lógicamente sigue ahí (MS33, supuesto por
- * confirmar).
+ * borran lógicamente. Antes revisa que nada las referencie (referenceCounts()): la columna que apunta a `campuses.id` de
+ * cada llave foránea a `campuses` (en una compuesta, solo esa) y cada columna `campus_id` (comparada como texto, sea del
+ * tipo que sea), de cualquier tabla y esquema (se leen del catálogo de PostgreSQL al migrar, así que una tabla nueva
+ * también cuenta), los parámetros de `settings` con alcance de campus y los avisos guardados con su campus. Si algo las
+ * referencia, se detiene con un RuntimeException que lista cada referencia con su número y no escribe nada. La bitácora
+ * no cuenta: es historia y la fila borrada lógicamente sigue ahí (MS33, supuesto por confirmar). Tampoco cuentan los ids
+ * de campus guardados dentro de un jsonb (las fotos v1, los alumnos posibles por campus de una propuesta): las filas se
+ * borran lógicamente, no se quitan, así que esos ids siguen resolviendo.
  *
  * Antes, 2026_11_12_211101 (Scheduling) pasó los avisos guardados de la propuesta y de los acuerdos que llevaban solo
  * el campus a llevar su modalidad por el puente (MS14), que esta migración quita.
@@ -25,7 +27,9 @@ use Illuminate\Support\Facades\Schema;
  *
  * down() devuelve las columnas (`modality` con `presencial` por omisión, como nace un campus) y el puente: un campus con
  * la clave de una modalidad recupera esa modalidad, su texto en `modality` y la fila sin borrar (desactivada); los demás
- * son presenciales. `settings` toma el perfil de su modalidad.
+ * son presenciales. `settings` toma el perfil de su modalidad, no el que tenía el campus. Quita el `deleted_at` de toda
+ * fila no presencial, también de una que ya estaba borrada antes de up(): la reversa es para las pruebas y para regresar
+ * una base recién migrada, no para recuperar la historia de esas filas.
  */
 return new class extends Migration
 {
@@ -108,7 +112,7 @@ return new class extends Migration
         foreach ($this->referencingColumns() as $column) {
             $source = ($column->schema === 'public' ? '' : "{$column->schema}.")."{$column->table}.{$column->column}";
             $counts[$source] = (int) DB::selectOne(
-                sprintf('select count(*) as total from %s.%s where %s = any (?::uuid[])', $this->quote($column->schema), $this->quote($column->table), $this->quote($column->column)),
+                sprintf('select count(*) as total from %s.%s where %s::text = any (?::text[])', $this->quote($column->schema), $this->quote($column->table), $this->quote($column->column)),
                 [$ids],
             )->total;
         }
@@ -125,8 +129,9 @@ return new class extends Migration
     }
 
     /**
-     * Las columnas de las llaves foráneas a `campuses` y las columnas `campus_id` de las tablas (no de las vistas), de
-     * cualquier esquema, sin `campuses`.
+     * La columna que apunta a `campuses.id` de cada llave foránea a `campuses` (en una compuesta, la que se empareja con
+     * `id` en `confkey`) y las columnas `campus_id` de las tablas (no de las vistas), de cualquier esquema, sin
+     * `campuses`.
      *
      * @return list<object{schema: string, table: string, column: string}>
      */
@@ -137,9 +142,10 @@ return new class extends Migration
             from pg_constraint k
             join pg_class c on c.oid = k.conrelid
             join pg_namespace n on n.oid = c.relnamespace
-            join lateral unnest(k.conkey) as key_column(attnum) on true
+            join lateral unnest(k.conkey, k.confkey) as key_column(attnum, target_attnum) on true
             join pg_attribute a on a.attrelid = k.conrelid and a.attnum = key_column.attnum
-            where k.contype = 'f' and k.confrelid = 'campuses'::regclass
+            join pg_attribute target on target.attrelid = k.confrelid and target.attnum = key_column.target_attnum
+            where k.contype = 'f' and k.confrelid = 'campuses'::regclass and target.attname = 'id'
             union
             select columns.table_schema, columns.table_name, columns.column_name
             from information_schema.columns

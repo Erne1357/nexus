@@ -9,6 +9,7 @@ use App\Modules\Students\Models\Student;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Contraer (ronda 2 de la carga por modalidad, ADR-0025): el campus queda solo como el lugar (MS3, supuesto por confirmar).
@@ -77,13 +78,14 @@ it('MS3: desactiva y borra lógicamente las filas de campus que eran modalidades
 });
 
 it('MS3: si algo referencia una fila de campus que era modalidad, se detiene, lo lista y no escribe nada', function (Closure $reference, string $source) {
+    DB::table('campuses')->where('id', $this->ead->id)->update(['is_active' => true]);
     $reference($this);
 
     expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, "{$source}: 1");
 
     expect(Schema::hasColumn('campuses', 'modality_id'))->toBeTrue()
         ->and(Campus::withTrashed()->whereKey($this->ead->id)->value('deleted_at'))->toBeNull()
-        ->and(Campus::withTrashed()->whereKey($this->ead->id)->value('is_active'))->toBeFalse();
+        ->and(Campus::withTrashed()->whereKey($this->ead->id)->value('is_active'))->toBeTrue();
 })->with([
     'alumno' => [fn ($test) => Student::factory()->create(['campus_id' => $test->ead->id]), 'students.campus_id'],
     'nombramiento' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->ead->id, 'career_id' => Career::factory()->create()->id])->create(), 'role_assignments.campus_id'],
@@ -116,6 +118,45 @@ it('MS3: el guardia revisa cada llave foránea a campuses y cada columna campus_
     DB::table('campus_guard_probe')->insert(['id' => (string) Str::uuid7(), 'place_id' => $this->c1->id, 'campus_id' => $this->tnmv->id]);
 
     expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, 'campus_guard_probe.campus_id: 1');
+
+    DB::table('campus_guard_probe')->update(['place_id' => $this->ead->id, 'campus_id' => null]);
+
+    expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, 'campus_guard_probe.place_id: 1');
+});
+
+it('MS3: en una llave foránea compuesta cuenta solo la columna que apunta a campuses.id, y una columna campus_id de texto se compara sin error', function () {
+    DB::statement('alter table campuses add constraint campuses_id_code_unique unique (id, code)');
+    Schema::create('campus_guard_composite', function ($table) {
+        $table->uuid('id')->primary();
+        $table->string('place_code');
+        $table->uuid('place_id');
+        $table->foreign(['place_code', 'place_id'], 'campus_guard_composite_place_foreign')->references(['code', 'id'])->on('campuses');
+    });
+    Schema::create('campus_guard_text', function ($table) {
+        $table->uuid('id')->primary();
+        $table->string('campus_id')->nullable();
+    });
+
+    $checked = array_keys($this->migration->referenceCounts([$this->ead->id]));
+
+    expect($checked)->toContain('campus_guard_composite.place_id', 'campus_guard_text.campus_id')
+        ->not->toContain('campus_guard_composite.place_code');
+
+    DB::table('campus_guard_composite')->insert(['id' => (string) Str::uuid7(), 'place_code' => 'EAD', 'place_id' => $this->ead->id]);
+    DB::table('campus_guard_text')->insert(['id' => (string) Str::uuid7(), 'campus_id' => 'no es un uuid']);
+
+    expect($this->migration->referenceCounts([$this->ead->id]))->toMatchArray(['campus_guard_composite.place_id' => 1, 'campus_guard_text.campus_id' => 0]);
+});
+
+it('MS33: la bitácora de una fila de campus que era modalidad no detiene la contracción y queda igual', function () {
+    activity()->performedOn($this->ead)->withProperties(['campus_id' => $this->ead->id])->event('updated')->log('Actualizó el campus EAD');
+    $before = Activity::query()->orderBy('id')->get(['id', 'subject_id', 'properties'])->toArray();
+
+    $this->migration->up();
+
+    expect(Campus::onlyTrashed()->whereKey($this->ead->id)->exists())->toBeTrue()
+        ->and(Activity::query()->orderBy('id')->get(['id', 'subject_id', 'properties'])->toArray())->toBe($before)
+        ->and(Activity::query()->where('subject_id', $this->ead->id)->count())->toBe(1);
 });
 
 it('down() devuelve la modalidad, el perfil y el puente, y regresa las filas que eran modalidades', function () {
