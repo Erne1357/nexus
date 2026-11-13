@@ -34,11 +34,11 @@ Esta sección se escribió al cerrar la sesión de los tres rieles de la fase 3,
 
 - **Máquina de estados:**
   - `LoadStatus` (AcademicLoad) ya tiene `closed`, `approved` y `published`.
-  - `transitions(CampusProfile)` decide si el campus pasa por `approved` (`requires_subdireccion_approval`, `false` por omisión, [ADR-0008](../decisiones/0008-cierre-por-departamento.md)). Ya permite `approved → adjusting`, pero **no** `closed → adjusting`, que es la reapertura de la 4.1.
+  - `transitions(ModalityProfile)` decide si la carga de la modalidad pasa por `approved` (antes `CampusProfile`; la ronda 2 de 3.P10 movió el perfil a la modalidad) (`requires_subdireccion_approval`, `false` por omisión, [ADR-0008](../decisiones/0008-cierre-por-departamento.md)). Ya permite `approved → adjusting`, pero **no** `closed → adjusting`, que es la reapertura de la 4.1.
   - `TransitionLoad` es la única puerta. Lanza `LoadTransitioning`, con el que otro módulo puede vetar dando un motivo, y después `LoadTransitioned`.
   - Las Actions de `Actions/Transitions/` (`ProposeLoad`, `StartStaffing`, `StartAdjusting`, `ReturnToStaffing`) son el modelo para `CloseLoad`, `ApproveLoad` y `PublishLoad`, que todavía no existen.
 - **Lo que le falta a un grupo para cerrar (HC-15):**
-  - `ConflictBoardQuery` y `GroupBoardStatus` (Scheduling) ya cuentan, por grupo activo, cuatro faltantes: un choque duro, las sesiones, el docente o el salón de alguna sesión presencial. Respetan el perfil del campus (`uses_time_blocks`, `uses_rooms`).
+  - `ConflictBoardQuery` y `GroupBoardStatus` (Scheduling) ya cuentan, por grupo activo, cuatro faltantes: un choque duro, las sesiones, el docente o el salón de alguna sesión presencial. Respetan el perfil de la modalidad (`uses_time_blocks`, `uses_rooms`).
   - Los choques duros los leen de `schedule_conflicts`, una tabla derivada que el job en cola recalcula después, así que puede ir atrasada.
   - El tablero «Choques y avance» (`/scheduling/conflicts`) los muestra por departamento y carrera.
   - `BlockStaffingWithHardConflicts` (Scheduling) es el modelo de guarda: escucha `LoadTransitioning` y veta con un motivo por cada cosa que falta.
@@ -80,7 +80,7 @@ El mapa es `AcademicLoad → Scheduling → Staffing`, así que AcademicLoad no 
   - Si el snapshot usa `teacher_term_loads` (Staffing), hay que tener en cuenta que es derivada y se refresca en cola (`RefreshTeacherLoads`). Se recalcula en `sync` antes de armar el snapshot, o se cuenta desde los grupos.
 - **4.4 y 4.5:** la consulta pública y los exportes leen solo el `payload` del snapshot, así que pueden vivir en AcademicLoad sin importar Scheduling. La forma del payload es el contrato entre la 4.3 y las 4.4 y 4.5: se publica primero, como el validador en la fase 3.
   - Para pintar la semana, `WeekGrid` es de Scheduling y es puro. Hay dos opciones: moverlo a `Core/Support`, junto a `WeekTime`, o llevar las páginas publicadas a Scheduling cambiando la ruta del plan.
-  - Sin `uses_rooms` en el perfil del campus no hay consulta ni PDF por salón. Sin `uses_time_blocks` los grupos van sin sesiones.
+  - Sin `uses_rooms` en el perfil de la modalidad no hay consulta ni PDF por salón. Sin `uses_time_blocks` los grupos van sin sesiones.
 - **Qué congela el snapshot:** lo que hoy se calcula y cambiaría después:
   - la colocación de cada carrera con cupo (carrera, retícula y semestre), que hoy se calcula desde la retícula activa;
   - la clave final del grupo, ya con la letra de su hora de inicio;

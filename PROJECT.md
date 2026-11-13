@@ -10,7 +10,7 @@ La primera gran meta es el proceso que arranca cada semestre: **carga académica
 
 ## Contexto institucional
 
-- Campus y modalidades: **Campus I** y **Campus II** (presencial), **EAD** (mixta: virtual lunes a jueves, presencial viernes y sábado, docentes propios, mismas carreras y retículas), **EnLínea** y **TecNM Virtual** (docentes del TecNM, algunos del ITCJ). La modalidad cambia el flujo; Nexus la modela desde el inicio y solo implementa presencial en R1 y R2.
+- Campus y modalidades: **Campus I** y **Campus II** son lugares físicos donde se imparte la modalidad **Presencial**. Las otras modalidades son **EAD** (mixta: virtual lunes a jueves, presencial viernes y sábado, docentes propios, mismas carreras y retículas), **EnLínea** y **TecNM Virtual** (docentes del TecNM, algunos del ITCJ); no son campus. La modalidad cambia el flujo y es la unidad de la carga: un departamento tiene una carga por modalidad (Presencial reúne los grupos de C1 y C2), un coordinador lo es de su carrera en una modalidad y el periodo se abre por modalidad. Cada modalidad lleva su perfil de flujo ([ADR-0025](docs/decisiones/0025-modalidad-como-catalogo.md)); Nexus las modela desde el inicio y solo implementa Presencial en R1 y R2.
 - Oferta presencial (folleto "Oferta Educativa"): 12 carreras en Campus I (Administración, Contador Público, Eléctrica, Gestión Empresarial, Industrial, Logística, Sistemas Computacionales, Mecánica, Electromecánica, Mecatrónica, Electrónica, TIC) y 6 en Campus II (Administración, Contador Público, Sistemas Computacionales, Industrial, Logística, Gestión Empresarial). Muchas materias son de tronco común entre carreras.
 - Planta docente de unos 550 profesores con plazas de 40, 30, 20 horas, por asignatura y honorarios.
 - Fuente inicial de datos: **exportaciones del SII** (Excel, CSV o SQL). No hay acceso directo a su base de datos.
@@ -55,7 +55,7 @@ Detalles en `docs/dominio/glosario.md` y `docs/dominio/reglas-de-negocio.md`.
 | Motor | R1 sin motor (validador + edición manual); R2 heurística PHP y luego OR-Tools CP-SAT en Python bajo un contrato JSON | Fecha de R1 muy corta; el algoritmo complejo sí es objetivo |
 | Paralelos | Se reemplazan por cupos por carrera dentro del grupo | Elimina el sobrecupo y simplifica la inscripción |
 | Desempate docente | Base de horas, luego historial y perfil en la materia, luego evaluación docente; ranking visible y asignación fuera de ranking con motivo | Lo acordado como aceptable institucionalmente |
-| Aprobación final | Jefe de departamento; visto bueno de Subdirección configurable por campus | No está confirmado si Subdirección participa |
+| Aprobación final | Jefe de departamento; visto bueno de Subdirección configurable por modalidad | No está confirmado si Subdirección participa |
 | Git | `feature/*` → `develop` por PR; `develop` → `main` por PR cuando la integración está probada | Regla del equipo |
 
 El registro completo está en `docs/decisiones/`.
