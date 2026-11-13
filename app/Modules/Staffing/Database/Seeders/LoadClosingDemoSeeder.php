@@ -419,7 +419,7 @@ final class LoadClosingDemoSeeder extends Seeder
                 $this->count('solicitudes rechazadas');
             });
 
-        InterdepartmentalAgreement::query()->leftJoin('groups', 'groups.id', '=', 'interdepartmental_agreements.group_id')
+        $agreements = InterdepartmentalAgreement::query()->leftJoin('groups', 'groups.id', '=', 'interdepartmental_agreements.group_id')
             ->leftJoin('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->where('interdepartmental_agreements.term_id', $load->term_id)->whereIn('groups.campus_id', $this->campusIds())
             ->where('interdepartmental_agreements.status', AgreementStatus::Proposed)
@@ -427,8 +427,11 @@ final class LoadClosingDemoSeeder extends Seeder
                 ->orWhere('interdepartmental_agreements.to_department_id', $load->department_id))
             ->orderBy('interdepartmental_agreements.kind')->orderBy('subjects.code')->orderBy('groups.code')
             ->orderBy('interdepartmental_agreements.day')->orderBy('interdepartmental_agreements.starts_at')
-            ->select('interdepartmental_agreements.*')->get()
-            ->each(fn (InterdepartmentalAgreement $agreement) => $this->answer($agreement, $this->campuses->firstWhere('id', $agreement->campus_id) ?? $this->campusOf($load)));
+            ->select('interdepartmental_agreements.*')->get();
+        // Cada acuerdo se responde en el campus de su grupo (un grupo compartido no guarda campus en el acuerdo).
+        $groupCampus = Group::query()->whereKey($agreements->pluck('group_id')->unique()->all())->pluck('campus_id', 'id');
+
+        $agreements->each(fn (InterdepartmentalAgreement $agreement) => $this->answer($agreement, $this->campuses->firstWhere('id', $groupCampus[$agreement->group_id] ?? null) ?? $this->campusOf($load)));
     }
 
     /**
