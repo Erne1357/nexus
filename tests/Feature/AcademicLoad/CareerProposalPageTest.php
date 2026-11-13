@@ -375,10 +375,11 @@ describe('alcance', function () {
         expect(CareerProposal::query()->where('career_id', $other->id)->exists())->toBeFalse();
     });
 
-    it('MS16: subdirección elige la modalidad en la página cuando hay varias; sin ?modalidad= abre la primera', function () {
+    it('MS16 y MS30: subdirección elige la modalidad en el select cuando hay varias; sin ?modalidad= abre la que tiene el periodo abierto', function () {
         modalityOf('EAD')->update(['is_active' => true]);
 
-        proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="modality-scope-EAD"')->assertSee('El periodo 20271 no está abierto en EAD.');
+        proposalPageAs($this->subdirection)->assertSeeHtml('data-testid="modality-scope"')->assertSeeHtml('<option value="EAD"')->assertSet('modalidad', null)->assertSee('ISC');
+        proposalPageAs($this->subdirection, ['modalidad' => 'EAD'])->assertSee('El periodo 20271 no está abierto en EAD.');
         proposalPageAs($this->subdirection, ['modalidad' => 'PRES', 'carrera' => $this->career->id])->assertSee('ISC')->assertSee('Cálculo Diferencial');
     });
 

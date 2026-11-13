@@ -316,7 +316,7 @@ describe('aceptar varios', function () {
         Event::assertDispatchedTimes(AgreementAccepted::class, 2);
     });
 
-    it('un id ajeno, de otro campus, que solo ve o que no es uuid no se acepta ni se nombra: «Ya no está disponible» y los demás sí', function () {
+    it('un id ajeno, de otro campus que el filtro deja fuera, que solo ve o que no es uuid no se acepta ni se nombra: «Ya no está disponible» y los demás sí', function () {
         $foreign = InterdepartmentalAgreement::factory()->create([
             'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'from_department_id' => $this->ii->id, 'to_department_id' => $this->cb->id,
         ]);
@@ -327,7 +327,7 @@ describe('aceptar varios', function () {
         ]);
         $unavailable = ['label' => 'Un acuerdo', 'message' => 'Ya no está disponible.'];
 
-        agreementsAs($this->jefeSc)
+        agreementsAs($this->jefeSc, ['campus' => 'C2'])
             ->set('selected', [$foreign->id, $this->share->id, 'no-es-uuid', $elsewhere->id])
             ->call('acceptMany')
             ->assertOk()
@@ -507,7 +507,7 @@ describe('una sola lectura', function () {
         $component->call('accept', $this->loan->id)->assertSet('agreementId', $this->share->id);
 
         $inboxReads = collect(DB::getQueryLog())->pluck('query')
-            ->filter(fn (string $sql): bool => str_starts_with($sql, 'select * from "interdepartmental_agreements" where "term_id"') && ! str_contains($sql, '"id" ='));
+            ->filter(fn (string $sql): bool => str_starts_with($sql, 'select * from "interdepartmental_agreements" where "interdepartmental_agreements"."term_id"') && ! str_contains($sql, '"id" ='));
         DB::disableQueryLog();
 
         expect($inboxReads)->toHaveCount(1);
@@ -621,15 +621,57 @@ describe('otros puestos', function () {
         expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
     });
 
-    it('un jefe de otro campus no ve nada: ni la lista ni el acuerdo por ?acuerdo=', function () {
-        $other = Campus::factory()->create();
-        // El periodo ya está abierto en su modalidad, Presencial (M4).
-        vacate(Role::JefeDepartamento, $this->sc->id);
-        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $other->id, 'department_id' => $this->sc->id, 'valid_from' => today()->toDateString()])->create();
+    it('MS6: el jefe con nombramiento en otro campus lee los acuerdos de toda la modalidad, pero no cancela el préstamo de un campus que no es el suyo', function () {
+        $other = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        vacate(Role::JefeDepartamento, $this->ii->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $other->id, 'department_id' => $this->ii->id, 'valid_from' => today()->toDateString()])->create();
 
-        agreementsAs($jefe)->assertOk()->assertDontSee('LC-201')->assertSee('No tienes acuerdos por decidir.');
-        agreementsAs($jefe, ['acuerdo' => $this->loan->id])->assertNotFound();
-        agreementsAs($jefe)->call('accept', $this->loan->id)->assertNotFound();
+        agreementsAs($jefe, ['acuerdo' => $this->loan->id])->assertOk()->assertSee('LC-201')->assertDontSeeHtml('data-testid="agreement-cancel"');
+        agreementsAs($jefe)->call('cancel', $this->loan->id)->assertForbidden();
+
+        expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
+    });
+
+    it('M12: el jefe decide los acuerdos de toda la modalidad, de cualquier campus', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $inC1 = Group::factory()->withQuota(20)->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'capacity' => 40, 'subject_id' => $this->group->subject_id]);
+        $share = InterdepartmentalAgreement::factory()->sharedGroup(4)->create([
+            'term_id' => $this->term->id, 'campus_id' => $c1->id, 'group_id' => $inC1->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
+        ]);
+        vacate(Role::JefeDepartamento, $this->sc->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id, 'valid_from' => today()->toDateString()])->create();
+
+        agreementsAs($jefe, ['acuerdo' => $share->id])->assertSeeHtml('data-testid="agreement-accept"')->call('accept', $share->id)->assertOk();
+
+        expect($share->fresh()->status)->toBe(AgreementStatus::Accepted);
+    });
+
+    it('otra modalidad: el jefe de proyecto docente de EAD no ve los acuerdos presenciales aunque pida ?modalidad=PRES', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->sc->id])->create();
+
+        agreementsAs($jpd, ['modalidad' => 'PRES'])->assertOk()->assertDontSee('LC-201')->assertSee('en EAD');
+        agreementsAs($jpd, ['modalidad' => 'PRES', 'acuerdo' => $this->loan->id])->assertNotFound();
+    });
+
+    it('U2: el filtro de campus ofrece los campus de la modalidad con sus acuerdos, cada acuerdo con su etiqueta, y filtrar no reabre la página', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $inC1 = Group::factory()->withQuota(20)->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'capacity' => 40, 'subject_id' => $this->group->subject_id]);
+        InterdepartmentalAgreement::factory()->sharedGroup(4)->create([
+            'term_id' => $this->term->id, 'campus_id' => $c1->id, 'group_id' => $inC1->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
+        ]);
+
+        $page = agreementsAs($this->jefeSc);
+        $dom = domOf($page);
+
+        expect(textOf($dom->querySelector('[data-testid="campus-count-todos"]')))->toBe('3')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C1"]')))->toBe('1')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C2"]')))->toBe('2')
+            ->and($dom->querySelectorAll('[data-testid="agreement-campus"]'))->toHaveCount(3);
+
+        $page->set('campus', 'C1')->assertNoRedirect()->assertSet('agreementId', '')->assertDontSee('LC-201')->assertSee('en Presencial · Campus I');
     });
 
     it('un id que no es de un acuerdo visible es 404', function () {
@@ -640,4 +682,13 @@ describe('otros puestos', function () {
 it('la ruta pide entrar y muestra la pantalla a quien ve acuerdos', function () {
     $this->get(route('scheduling.agreements'))->assertRedirect();
     $this->actingAs($this->jefeSc)->get(route('scheduling.agreements'))->assertOk()->assertSee('Acuerdos');
+});
+
+it('fija la modalidad que resolvió: si después se abre otra antes por clave, la pantalla no cambia de modalidad', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $page = agreementsAs($this->jefeSc)->assertSet('modalidad', 'PRES')->assertSee('LC-201');
+
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id]);
+
+    $page->set('search', 'LC')->assertSet('modalidad', 'PRES')->assertSee('LC-201');
 });

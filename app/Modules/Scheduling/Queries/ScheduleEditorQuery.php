@@ -50,7 +50,7 @@ final class ScheduleEditorQuery
     /** Reglas de totales del grupo: se leen como aviso («faltan horas») aunque el validador las dé duras. */
     public const array TOTALS = ['HC-12'];
 
-    /** @var array<string, Term|Campus> */
+    /** @var array<string, Term|Campus|Modality> */
     private array $models = [];
 
     /** @var array<string, list<array{id: string, code: string, name: string}>> */
@@ -81,6 +81,23 @@ final class ScheduleEditorQuery
     }
 
     /**
+     * La modalidad de un grupo (con las borradas: el grupo la conserva), una vez por petición.
+     */
+    public function modality(string $id): Modality
+    {
+        return $this->models["modality|{$id}"] ??= KeyLookup::findOrFail(Modality::withTrashed(), $id);
+    }
+
+    /**
+     * Un grupo sin cancelar del periodo, de cualquier campus y modalidad, o null: para abrir la página en el campus y la
+     * modalidad de un grupo que llega por `?grupo=` (el aviso o el enlace que lo corrige). El id llega del cliente.
+     */
+    public function groupInTerm(Term $term, string $id): ?Group
+    {
+        return KeyLookup::find(Group::query()->active()->where('term_id', $term->id)->with(['campus', 'modality']), $id);
+    }
+
+    /**
      * Un grupo sin cancelar del periodo y campus; el id llega del cliente.
      */
     public function groupOrFail(Term $term, Campus $campus, string $id): Group
@@ -102,18 +119,23 @@ final class ScheduleEditorQuery
     }
 
     /**
-     * Las carreras que el actor ve en el editor (PlanSemestersQuery::careers), una vez por petición.
+     * Las carreras que el actor ve en el editor en el periodo, el campus y la modalidad (PlanSemestersQuery::careers),
+     * una vez por petición.
      *
      * @return list<array{id: string, code: string, name: string}>
      */
-    public function careers(Actor $actor, Term $term, Campus $campus): array
+    public function careers(Actor $actor, Term $term, Campus $campus, Modality $modality): array
     {
-        return $this->careers[$actor->user()?->getKey().'|'.$term->id.'|'.$campus->id] ??= $this->navigation->careers($actor, $term, $campus);
+        return $this->careers[$actor->user()?->getKey().'|'.$term->id.'|'.$campus->id.'|'.$modality->id] ??= $this->navigation->careers($actor, $term, $campus, $modality);
     }
 
+    /**
+     * Si el actor ve el grupo en el editor: por GroupPolicy::view o porque ve una carrera donde está, en la modalidad
+     * del grupo.
+     */
     public function sees(Actor $actor, Term $term, Campus $campus, Group $group): bool
     {
-        return Gate::forUser($actor->user())->allows('view', $group) || $this->visibleCareerOf($actor, $term, $campus, $group) !== null;
+        return Gate::forUser($actor->user())->allows('view', $group) || $this->visibleCareerOf($actor, $term, $campus, $this->modality($group->modality_id), $group) !== null;
     }
 
     /**
@@ -123,9 +145,9 @@ final class ScheduleEditorQuery
      *
      * @return array{career: string, plan: string, semester: string}|null
      */
-    public function entryOf(Actor $actor, Term $term, Campus $campus, Group $group): ?array
+    public function entryOf(Actor $actor, Term $term, Campus $campus, Modality $modality, Group $group): ?array
     {
-        $career = $this->visibleCareerOf($actor, $term, $campus, $group);
+        $career = $this->visibleCareerOf($actor, $term, $campus, $modality, $group);
 
         if ($career === null) {
             return null;
@@ -171,23 +193,25 @@ final class ScheduleEditorQuery
      * @param  array{career: string, plan: string, semester: string}  $selection
      * @return array{message: ?string, career: ?Career, plans: list<array<string, mixed>>, plan: ?StudyPlan, semesters: list<array<string, mixed>>, semester: int, board: ?array<string, mixed>}
      */
-    public function semester(Actor $actor, Term $term, Campus $campus, array $selection): array
+    public function semester(Actor $actor, Term $term, Campus $campus, Modality $modality, array $selection): array
     {
-        return $this->semesters[implode('|', [$actor->user()?->getKey(), $term->id, $campus->id, ...$selection])] ??= $this->resolveSemester($actor, $term, $campus, $selection);
+        return $this->semesters[implode('|', [$actor->user()?->getKey(), $term->id, $campus->id, $modality->id, ...$selection])] ??= $this->resolveSemester($actor, $term, $campus, $modality, $selection);
     }
 
     /**
      * Todo lo que pinta la página: la navegación, la bandeja, los choques, la semana de la vista (con el encaje del
      * grupo elegido) y la lista del celular de cada día.
      *
+     * Con los grupos del semestre en cada campus de la modalidad (`campusCounts`, la cifra de cada botón de campus).
+     *
+     * @param  Modality  $modality  la de la página: sus grupos y la semana de un semestre sin grupos
      * @param  array{career: string, plan: string, semester: string, group: string, view: string, teacher: string, room: string}  $selection
-     * @param  Modality|null  $modality  la de la página: da la semana de un semestre sin grupos
      * @return array<string, mixed>
      */
-    public function editor(Actor $actor, Term $term, Campus $campus, array $selection, ?Modality $modality = null): array
+    public function editor(Actor $actor, Term $term, Campus $campus, Modality $modality, array $selection): array
     {
-        $careers = $this->careers($actor, $term, $campus);
-        $semester = $this->semester($actor, $term, $campus, ['career' => $selection['career'], 'plan' => $selection['plan'], 'semester' => $selection['semester']]);
+        $careers = $this->careers($actor, $term, $campus, $modality);
+        $semester = $this->semester($actor, $term, $campus, $modality, ['career' => $selection['career'], 'plan' => $selection['plan'], 'semester' => $selection['semester']]);
         $base = ['careers' => $careers, ...$semester];
 
         if ($semester['board'] === null) {
@@ -195,6 +219,7 @@ final class ScheduleEditorQuery
         }
 
         $board = $semester['board'];
+        $campusCounts = app(SemesterBoardQuery::class, ['validator' => $this->validator])->campusCounts($term, $modality, $semester['career'], $semester['plan'], $semester['semester']);
         $groups = array_column($board['groups'], null, 'id');
         $selected = $selection['view'] === 'semestre' ? ($groups[$selection['group']] ?? null) : null;
         $chains = array_flip(array_values(array_unique(array_map(fn (array $group): string => $group['subject']['id'], $board['groups']))));
@@ -216,6 +241,7 @@ final class ScheduleEditorQuery
 
         return [
             ...$base,
+            'campusCounts' => $campusCounts,
             'groups' => $board['groups'],
             'subjects' => $this->bySubject($board['groups'], $chains),
             'conflicts' => $conflicts,
@@ -231,7 +257,7 @@ final class ScheduleEditorQuery
             'busy' => array_combine($days, array_map(fn (int $day): int|float => $grid->busyHours($items, $day), $days)),
             'selected' => $selected,
             'selectedChain' => $selected === null ? null : $chains[$selected['subject']['id']],
-            'editReason' => $selected === null ? null : $this->editReason($selected, $semester['career'], $campus),
+            'editReason' => $selected === null ? null : $this->editReason($selected, $semester['career']),
             'cells' => $cells,
             'canPlace' => $canPlace,
             'tabStop' => $grid->tabStop($laid, $cells, $canPlace),
@@ -249,9 +275,9 @@ final class ScheduleEditorQuery
      * @param  array{career: string, plan: string, semester: string}  $selection
      * @return array{teacher: ?string, room: ?string}
      */
-    public function lensOf(Actor $actor, Term $term, Campus $campus, array $selection, string $groupId): array
+    public function lensOf(Actor $actor, Term $term, Campus $campus, Modality $modality, array $selection, string $groupId): array
     {
-        $board = $this->semester($actor, $term, $campus, $selection)['board'];
+        $board = $this->semester($actor, $term, $campus, $modality, $selection)['board'];
         $group = $board === null ? null : array_find($board['groups'], fn (array $row): bool => $row['id'] === $groupId);
         $session = $group === null ? null : array_find($group['sessions'], fn (array $row): bool => $row['room'] !== null);
 
@@ -263,9 +289,9 @@ final class ScheduleEditorQuery
      *
      * @param  array{career: string, plan: string, semester: string}  $selection
      */
-    public function inSemester(Actor $actor, Term $term, Campus $campus, array $selection, string $groupId): bool
+    public function inSemester(Actor $actor, Term $term, Campus $campus, Modality $modality, array $selection, string $groupId): bool
     {
-        $board = $this->semester($actor, $term, $campus, $selection)['board'];
+        $board = $this->semester($actor, $term, $campus, $modality, $selection)['board'];
 
         return $board !== null && in_array($groupId, array_column($board['groups'], 'id'), true);
     }
@@ -295,7 +321,7 @@ final class ScheduleEditorQuery
         $blocked = $this->editability->blockedReasons([$group])[$group->id];
         $grid = WeekGrid::of($this->validator->stateFor($group->term_id, $group->modality_id)->profile($group->modality_id));
         $department = $group->subject->department?->name ?? $group->subject->department?->code;
-        $campusBound = SemesterBoardQuery::editsOnlyElsewhere($actor, $group);
+        $editCampuses = SemesterBoardQuery::editableCampusesElsewhere($actor, $group);
 
         return [
             'id' => $session->id,
@@ -308,7 +334,7 @@ final class ScheduleEditorQuery
             'group' => ['id' => $group->id, 'label' => "{$group->subject->code} · {$group->code}", 'subject' => $group->subject->name, 'teacher' => $group->teacher?->name],
             'hard' => array_map(self::plain(...), array_values(array_filter($mine, self::isHard(...)))),
             'soft' => array_map(self::plain(...), array_values(array_filter([...$mine, ...$groupWide], fn (Violation $violation): bool => ! self::isHard($violation)))),
-            'editReason' => $blocked ?? ($gate->allows('editSessions', $group) ? null : $this->readOnlyReason($group->ownerCareer?->code ?? 'su carrera', $department, $campusBound ? $campus : null)),
+            'editReason' => $blocked ?? ($gate->allows('editSessions', $group) ? null : $this->readOnlyReason($group->ownerCareer?->code ?? 'su carrera', $department, $editCampuses)),
             'roomReason' => $blocked === null && $gate->allows('assignRoom', $group) ? null : "Lo asigna el jefe de {$department}",
             'days' => array_map(fn (array $day): array => ['id' => (string) $day['day'], 'name' => $day['name']], $grid->days),
             'starts' => $this->timeOptions(array_column($grid->blocks, 'starts_at'), Clock::of($session->starts_at)),
@@ -410,28 +436,28 @@ final class ScheduleEditorQuery
      * @param  array{career: string, plan: string, semester: string}  $selection
      * @return array<string, mixed>
      */
-    private function resolveSemester(Actor $actor, Term $term, Campus $campus, array $selection): array
+    private function resolveSemester(Actor $actor, Term $term, Campus $campus, Modality $modality, array $selection): array
     {
-        $careers = $this->careers($actor, $term, $campus);
+        $careers = $this->careers($actor, $term, $campus, $modality);
         $empty = ['message' => null, 'career' => null, 'plans' => [], 'plan' => null, 'semesters' => [], 'semester' => 0, 'board' => null];
 
         if ($selection['career'] === '' && $careers === []) {
             return [...$empty, 'message' => 'Este campus no ofrece carreras cuyos horarios puedas ver.'];
         }
 
-        $career = $this->navigation->careerOrFail($actor, $term, $campus, $selection['career'] !== '' ? $selection['career'] : $careers[0]['id']);
-        $plans = $this->navigation->plans($career, $term, $campus);
+        $career = $this->navigation->careerOrFail($actor, $term, $campus, $modality, $selection['career'] !== '' ? $selection['career'] : $careers[0]['id']);
+        $plans = $this->navigation->plans($career, $term, $campus, $modality);
 
         if ($selection['plan'] === '' && $plans === []) {
             return [...$empty, 'career' => $career, 'message' => "{$career->code} no tiene retículas activas."];
         }
 
-        $plan = $this->navigation->planOrFail($career, $selection['plan'] !== '' ? $selection['plan'] : $plans[0]['id'], $term, $campus);
-        $semesters = $this->navigation->semesters($plan, $term, $campus);
+        $plan = $this->navigation->planOrFail($career, $selection['plan'] !== '' ? $selection['plan'] : $plans[0]['id'], $term, $campus, $modality);
+        $semesters = $this->navigation->semesters($plan, $term, $campus, $modality);
         $numbers = array_column($semesters, 'semester');
         $semester = in_array((int) $selection['semester'], $numbers, true) ? (int) $selection['semester']
             : (array_find($semesters, fn (array $row): bool => $row['groups'] > 0)['semester'] ?? ($numbers[0] ?? 1));
-        $board = app(SemesterBoardQuery::class, ['validator' => $this->validator])->for($term, $campus, $career, $plan, $semester, $actor);
+        $board = app(SemesterBoardQuery::class, ['validator' => $this->validator])->for($term, $campus, $modality, $career, $plan, $semester, $actor);
 
         return [...$empty, 'career' => $career, 'plans' => $plans, 'plan' => $plan, 'semesters' => $semesters, 'semester' => $semester, 'board' => $board];
     }
@@ -447,9 +473,9 @@ final class ScheduleEditorQuery
     /**
      * La carrera que el actor ve donde está el grupo: su dueña primero, luego las de sus cupos; null si ninguna.
      */
-    private function visibleCareerOf(Actor $actor, Term $term, Campus $campus, Group $group): ?string
+    private function visibleCareerOf(Actor $actor, Term $term, Campus $campus, Modality $modality, Group $group): ?string
     {
-        $visible = array_column($this->careers($actor, $term, $campus), 'id');
+        $visible = array_column($this->careers($actor, $term, $campus, $modality), 'id');
 
         if (in_array($group->owner_career_id, $visible, true)) {
             return $group->owner_career_id;
@@ -704,11 +730,12 @@ final class ScheduleEditorQuery
 
     /**
      * Por qué no se acomoda un grupo, una vez en la barra: lo que dice la Query (grupo cancelado, carga fuera de etapa)
-     * o quién lo acomoda, con el campus si el usuario lo acomodaría en otro campus (MS6); null si se puede.
+     * o quién lo acomoda; si el usuario lo acomodaría en su campus pero el grupo es de otro, dónde sí edita (MS6); null
+     * si se puede.
      *
      * @param  array<string, mixed>  $group
      */
-    private function editReason(array $group, ?Career $career, Campus $campus): ?string
+    private function editReason(array $group, ?Career $career): ?string
     {
         if ($group['can']['editSessions']) {
             return null;
@@ -720,18 +747,23 @@ final class ScheduleEditorQuery
 
         $owner = $group['shared'] ? (collect($group['quotas'])->firstWhere('owner', true)['career_code'] ?? 'su carrera') : ($career?->code ?? 'su carrera');
 
-        return $this->readOnlyReason($owner, $group['subject']['department_name'] ?? $group['subject']['department_code'] ?? null, $group['campus_bound'] ? $campus : null);
+        return $this->readOnlyReason($owner, $group['subject']['department_name'] ?? $group['subject']['department_code'] ?? null, $group['edit_campuses']);
     }
 
     /**
-     * Quién acomoda un grupo que el usuario solo ve. Con `$campus` (el del grupo), porque el usuario lo acomodaría si
-     * fuera de su campus: lo dice, para que no parezca un permiso que le falta (MS6).
+     * Quién acomoda un grupo que el usuario solo ve. Si el usuario lo acomodaría en su campus pero el grupo es de otro
+     * (`$editCampuses`, las claves de donde sí edita), lo dice así, para que no parezca un permiso que le falta: lee toda
+     * la modalidad y escribe solo lo de su campus (MS6).
+     *
+     * @param  list<string>  $editCampuses
      */
-    private function readOnlyReason(string $career, ?string $department, ?Campus $campus = null): string
+    private function readOnlyReason(string $career, ?string $department, array $editCampuses = []): string
     {
-        $where = $campus === null ? '' : " en {$campus->name}";
+        if ($editCampuses !== []) {
+            return 'Solo lectura: solo puedes editar los grupos de '.implode(' y ', $editCampuses).'.';
+        }
 
-        return "Solo lectura: acomodan sus sesiones el coordinador de {$career}{$where} y el jefe de ".($department ?? 'su departamento').'.';
+        return "Solo lectura: acomodan sus sesiones el coordinador de {$career} y el jefe de ".($department ?? 'su departamento').'.';
     }
 
     /**

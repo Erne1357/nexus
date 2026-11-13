@@ -1,6 +1,8 @@
 {{--
-    Bandeja del departamento (tarea 2.8, maqueta C de dos paneles): encabezado con el departamento, la modalidad, el
-    periodo y el estado de la carga; el aviso de HC-14; a la izquierda las carreras con el estado de su parte y, a
+    Bandeja del departamento (tarea 2.8, maqueta C de dos paneles): encabezado con el departamento, la modalidad (como
+    dato con una sola; con más, el select «Modalidad», maqueta U2), el periodo y el estado de la carga; el filtro de
+    campus con las carreras que piden algo en cada uno (filtra las cifras y las filas; la parte se decide una vez); el
+    aviso de HC-14; a la izquierda las carreras con el estado de su parte y, a
     la derecha, lo que pide la elegida con la sugerencia de paralelos y sus botones. Desde lg los dos paneles van
     juntos; debajo, la lista y el detalle van por separado. Todo lo que se pinta viene de DepartmentInboxQuery.
 --}}
@@ -39,7 +41,7 @@
     @if ($inbox === null)
         <div>
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
-            <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
+            <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2 max-md:w-full md:w-56" />
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="inbox-empty">{{ $message }}</div>
     @else
@@ -48,13 +50,15 @@
                 <h1 class="text-2xl font-bold leading-tight md:text-3xl">Bandeja del departamento</h1>
                 <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                     <span class="font-medium text-base-content" data-testid="inbox-department-name">{{ $inbox->department->name }}</span>
-                    <span data-testid="inbox-modality">{{ $inbox->modality?->name }}</span>
+                    @if ($modalityOptions->count() <= 1)
+                        <span data-testid="inbox-modality">{{ $inbox->modality?->name }}</span>
+                    @endif
                     <span data-testid="inbox-term">{{ $inbox->term->name }}</span>
                 </p>
-                <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
             </div>
 
             <div class="flex flex-wrap items-end gap-3">
+                <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="max-md:w-full md:w-56" />
                 @if (count($departments) > 1)
                     <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm" data-testid="inbox-department" />
                 @endif
@@ -71,6 +75,14 @@
                 </div>
             </div>
         </div>
+
+        @if ($campusOptions->count() > 1)
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="inbox-campus">
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
+                <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" :counts="$campusCounts" :total="$campusTotal" all />
+                <span class="text-sm text-neutral">Filtra las carreras y las cifras. La parte de <span class="font-mono">{{ $inbox->department->code }}</span> se acepta o se regresa una vez, para todos sus campus.</span>
+            </div>
+        @endif
 
         @if ($inbox->pendingCatalogs !== [])
             <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm" data-testid="pending-catalogs"

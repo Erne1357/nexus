@@ -3,6 +3,8 @@
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Blade;
 use Livewire\Component;
@@ -59,7 +61,17 @@ describe('WithModalityScope', function () {
             ->toBe(['options' => ['EAD', 'PRES'], 'required' => 'EAD']);
     });
 
-    it('sin elegir, o con una modalidad que no ofrece, toma la primera por clave', function (string $code) {
+    it('MS30: sin elegir, con varias, toma la primera por clave donde el periodo activo está abierto, no una sin abrir', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $term = Term::factory()->current()->create();
+        TermOpening::query()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'opened_by' => $this->admin->id, 'opened_at' => now()]);
+        $this->actingAs($this->admin);
+
+        expect(Livewire::test(modalityScopePage())->instance()->shown()['required'])->toBe('PRES')
+            ->and(Livewire::withQueryParams(['modalidad' => 'EAD'])->test(modalityScopePage())->instance()->shown()['required'])->toBe('EAD');
+    });
+
+    it('sin elegir, o con una modalidad que no ofrece, y sin periodo abierto, toma la primera por clave', function (string $code) {
         modalityOf('EAD')->update(['is_active' => true]);
         $this->actingAs($this->admin);
 
@@ -103,20 +115,21 @@ describe('x-core::modality-scope', function () {
         expect(trim($html))->toBe('');
     });
 
-    it('MS16: con varias opciones es un filtro segmentado que fija ?modalidad=, la elegida en primary', function () {
+    it('MS16: con varias opciones es el select «Modalidad» del renglón de selectores (maqueta U2, opción A), que fija ?modalidad= al elegir', function () {
         $html = Blade::render('<x-core::modality-scope :options="$options" selected="EAD" />', ['options' => collect([modalityOf('EAD'), modalityOf('PRES')])]);
-        $group = domOf($html)->querySelector('[role="group"]');
-        $buttons = $group->querySelectorAll('button');
+        $dom = domOf($html);
+        $select = $dom->querySelector('select');
 
-        expect($group->getAttribute('aria-label'))->toBe('Modalidad')
-            ->and(array_map(fn ($button): string => textOf($button), iterator_to_array($buttons)))->toBe(['EAD', 'Presencial'])
-            ->and(array_map(fn ($button): string => $button->getAttribute('aria-pressed'), iterator_to_array($buttons)))->toBe(['true', 'false'])
-            ->and($buttons->item(1)->getAttribute('wire:click'))->toBe("\$set('modalidad', 'PRES')")
-            ->and($buttons->item(0)->getAttribute('class'))->toContain('btn-primary')
-            ->and($buttons->item(1)->getAttribute('class'))->not->toContain('btn-primary');
+        expect(textOf($dom->querySelector('legend')))->toBe('Modalidad')
+            ->and($dom->querySelector('[role="group"]'))->toBeNull()
+            ->and($select->getAttribute('aria-label'))->toBe('Modalidad')
+            ->and($select->getAttribute('wire:change'))->toBe("\$set('modalidad', \$event.target.value)")
+            ->and(array_map(fn ($option): string => textOf($option), iterator_to_array($select->querySelectorAll('option'))))->toBe(['EAD', 'Presencial'])
+            ->and($select->querySelector('option[value="EAD"]')?->hasAttribute('selected'))->toBeTrue()
+            ->and($select->querySelector('option[value="PRES"]')?->hasAttribute('selected'))->toBeFalse();
     });
 
-    it('con más de cuatro opciones es un select que cambia al elegir', function () {
+    it('con más de cuatro opciones sigue siendo el select que cambia al elegir', function () {
         $options = collect(['M1', 'M2', 'M3', 'M4', 'M5'])->map(fn (string $code): Modality => Modality::factory()->make(['code' => $code, 'name' => "Modalidad {$code}"]));
 
         $select = domOf(Blade::render('<x-core::modality-scope :options="$options" selected="M3" />', ['options' => $options]))->querySelector('select');

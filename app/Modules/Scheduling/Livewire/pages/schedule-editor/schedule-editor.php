@@ -1,13 +1,14 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
-use App\Modules\Core\Livewire\Concerns\WithModalityScope;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Scheduling\Actions\Sessions\PlaceGroupSession;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Validation\ValidationException;
@@ -35,14 +36,22 @@ use Mary\Traits\Toast;
  * La URL guarda la vista: `?carrera=`, `?reticula=`, `?semestre=`, `?grupo=` (el elegido; al entrar abre la carrera,
  * retícula y semestre desde donde el usuario lo ve, como lo usan el tablero de choques y las solicitudes de cambio; se
  * conserva al ver por docente o por salón), `?vista=semestre|docente|salon`, `?docente=`, `?salon=` y `?dia=` (el día
- * de la lista en celular). `?modalidad=` (WithModalityScope, sin selector con una sola) da el perfil de la semana de un
- * semestre sin grupos; con grupos manda la modalidad de ellos (el selector completo es de la pantalla U2).
+ * de la lista en celular).
+ *
+ * El alcance (maqueta U2, opción A «Selectores en la página», con la regla del editor de la opción D; elegida por el
+ * usuario el 12 de noviembre de 2026; WithModalityCampusFilter): `?modalidad=` es la carga que se acomoda (M1; el select
+ * «Modalidad» solo con más de una, MS16) y solo cuentan sus grupos, aunque el semestre mezcle modalidades. El campus es
+ * un filtro de un campus a la vez (`?campus=`, sin «Todos»): HC-03 y los salones son de un campus, y dos sesiones de
+ * campus distintos a la misma hora no chocan. Sus opciones son los campus de la modalidad, con los grupos del semestre
+ * en cada uno; quien tiene un nombramiento con campus lee los demás de solo lectura y abre en el suyo (MS6). Un
+ * `?grupo=` abre la modalidad y el campus del grupo. Cambiar de modalidad o de campus reabre la página sin lo elegido.
+ * Sin elegir, abre en una modalidad con salones; una sin salones (sus grupos van sin campus, MS4) lo dice en lugar del
+ * editor.
  */
 new #[Title('Horarios')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
-    use WithModalityScope;
+    use WithModalityCampusFilter;
 
     private const array VIEWS = ['semestre', 'docente', 'salon'];
 
@@ -72,12 +81,15 @@ new #[Title('Horarios')] class extends Component
     #[Url(as: 'dia')]
     public string $day = '';
 
-    /** El periodo y el campus activos al abrir la página; null si faltaba alguno. */
+    /** El periodo, el campus y la modalidad de la página al abrirla; null si faltaba alguno. */
     #[Locked]
     public ?string $termId = null;
 
     #[Locked]
     public ?string $campusId = null;
+
+    #[Locked]
+    public ?string $modalityId = null;
 
     #[Locked]
     public ?string $message = null;
@@ -87,8 +99,22 @@ new #[Title('Horarios')] class extends Component
         abort_unless($context->allowsAny(SchedulingPermission::ScheduleView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'semestre';
-        $campus = $this->requiredCampus();
         $term = $context->activeTerm();
+
+        if ($term !== null && $this->groupId !== '') {
+            $this->followGroup($editor->groupInTerm($term, $this->groupId));
+        }
+
+        $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
+
+        if (! $modality->profile->usesRooms) {
+            $this->message = "{$modality->name} no usa salones: sus grupos no se dan en un campus, y el editor acomoda las sesiones de un campus a la vez.";
+
+            return;
+        }
+
+        $campus = $this->requiredCampus();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
@@ -97,10 +123,11 @@ new #[Title('Horarios')] class extends Component
         }
 
         $this->campusId = $campus->id;
+        $this->modalityId = $modality->id;
         $this->termId = $term->id;
 
         if ($this->groupId !== '') {
-            $entry = $editor->entryOf($context, $term, $campus, $editor->groupOrFail($term, $campus, $this->groupId));
+            $entry = $editor->entryOf($context, $term, $campus, $modality, $editor->groupOrFail($term, $campus, $this->groupId));
             abort_if($entry === null, 403);
 
             $this->careerId = $entry['career'];
@@ -109,9 +136,35 @@ new #[Title('Horarios')] class extends Component
         }
     }
 
+    /**
+     * El editor acomoda un campus a la vez: abre en una modalidad con salones (WithModalityCampusFilter).
+     */
+    protected function needsCampus(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Otro campus: la página se abre en él, con la misma modalidad, sin la carrera ni el grupo del anterior.
+     */
     public function updatedCampus(): void
     {
-        $this->reopenOnCampus('scheduling.editor');
+        $this->reopenOnCampus('scheduling.editor', ['modalidad' => $this->requiredModality()->code]);
+    }
+
+    /**
+     * Otra modalidad: la página se abre en ella, en el mismo campus si la otra lo tiene, sin la carrera ni el grupo.
+     */
+    public function updatedModalidad(): void
+    {
+        $modality = $this->requiredModality();
+
+        if ($this->modalityId !== null && $modality->id === $this->modalityId) {
+            return;
+        }
+
+        $campus = $this->campusFilter();
+        $this->redirectRoute('scheduling.editor', array_filter(['modalidad' => $modality->code, 'campus' => $campus?->code]), navigate: true);
     }
 
     public function updatedCareerId(): void
@@ -139,8 +192,8 @@ new #[Title('Horarios')] class extends Component
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'semestre';
 
         if ($this->groupId !== '' && $this->view !== 'semestre') {
-            [$term, $campus, $editor, $context] = $this->context();
-            $lens = $editor->lensOf($context, $term, $campus, $this->selection(), $this->groupId);
+            [$term, $campus, $editor, $context, $modality] = $this->context();
+            $lens = $editor->lensOf($context, $term, $campus, $modality, $this->selection(), $this->groupId);
             $this->teacherId = $lens['teacher'] ?? $this->teacherId;
             $this->roomId = $lens['room'] ?? $this->roomId;
         }
@@ -153,9 +206,9 @@ new #[Title('Horarios')] class extends Component
      */
     public function pick(string $groupId, bool $toggle = true): void
     {
-        [$term, $campus, $editor, $context] = $this->context();
+        [$term, $campus, $editor, $context, $modality] = $this->context();
         $group = $editor->groupOrFail($term, $campus, $groupId);
-        abort_unless($editor->inSemester($context, $term, $campus, $this->selection(), $group->id), 403);
+        abort_unless($editor->inSemester($context, $term, $campus, $modality, $this->selection(), $group->id), 403);
 
         $this->groupId = $toggle && $this->groupId === $group->id ? '' : $group->id;
         $this->view = 'semestre';
@@ -227,11 +280,11 @@ new #[Title('Horarios')] class extends Component
     public function with(): array
     {
         if ($this->termId === null) {
-            return ['term' => null, 'careers' => [], 'career' => null, 'message' => $this->message, ...$this->campusViewData()];
+            return ['term' => null, 'careers' => [], 'career' => null, 'message' => $this->message, 'campusCounts' => null, ...$this->scopeViewData(), 'campusCode' => $this->campus];
         }
 
-        [$term, $campus, $editor, $context] = $this->context();
-        $data = $editor->editor($context, $term, $campus, [...$this->selection(), 'group' => $this->groupId, 'view' => $this->view, 'teacher' => $this->teacherId, 'room' => $this->roomId], $this->requiredModality());
+        [$term, $campus, $editor, $context, $modality] = $this->context();
+        $data = $editor->editor($context, $term, $campus, $modality, [...$this->selection(), 'group' => $this->groupId, 'view' => $this->view, 'teacher' => $this->teacherId, 'room' => $this->roomId]);
 
         if ($data['board'] !== null) {
             $this->groupId = $this->view === 'semestre' && $data['selected'] === null ? '' : $this->groupId;
@@ -245,8 +298,11 @@ new #[Title('Horarios')] class extends Component
         return [
             ...$data,
             'term' => $term,
+            'campusCounts' => $data['campusCounts'] ?? null,
+            ...$this->scopeViewData(),
+            'shownModality' => $modality,
             'shownCampus' => $campus,
-            ...$this->campusViewData(),
+            'campusCode' => $campus->code,
             'firstDay' => $days[0],
             'mobileDay' => in_array((int) $this->day, $days, true) ? (int) $this->day : $days[0],
             'chainClasses' => WeekGrid::CHAINS,
@@ -263,15 +319,34 @@ new #[Title('Horarios')] class extends Component
     }
 
     /**
-     * El periodo y el campus de la página, la Query del editor (la misma en toda la petición) y el actor.
+     * El periodo, el campus y la modalidad de la página, la Query del editor (la misma en toda la petición) y el actor.
      *
-     * @return array{0: Term, 1: Campus, 2: ScheduleEditorQuery, 3: Actor}
+     * @return array{0: Term, 1: Campus, 2: ScheduleEditorQuery, 3: Actor, 4: Modality}
      */
     private function context(): array
     {
-        abort_if($this->termId === null || $this->campusId === null, 404);
+        abort_if($this->termId === null || $this->campusId === null || $this->modalityId === null, 404);
         $editor = app(ScheduleEditorQuery::class);
 
-        return [$editor->term($this->termId), $editor->campus($this->campusId), $editor, app(Actor::class)];
+        $modality = $this->modalityOptions()->first(fn (Modality $option): bool => $option->id === $this->modalityId) ?? $editor->modality($this->modalityId);
+
+        return [$editor->term($this->termId), $editor->campus($this->campusId), $editor, app(Actor::class), $modality];
+    }
+
+    /**
+     * Un `?grupo=` abre la modalidad y el campus del grupo, si están entre las opciones; si no, la página se queda en los
+     * suyos y el grupo de otro campus da 404 al buscarlo, como antes.
+     */
+    private function followGroup(?Group $group): void
+    {
+        if ($group === null || ! $this->modalityOptions()->contains('id', $group->modality_id)) {
+            return;
+        }
+
+        $this->modalidad = $group->modality->code;
+
+        if ($group->campus !== null && $this->campusOptions()->contains('id', $group->campus_id)) {
+            $this->campus = $group->campus->code;
+        }
     }
 };

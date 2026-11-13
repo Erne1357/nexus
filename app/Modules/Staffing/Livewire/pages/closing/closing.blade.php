@@ -1,16 +1,18 @@
 {{--
     Cierre de la carga (tarea 4.1; DESIGN.md, «Cierre de la carga»: maqueta B2, elegida por el usuario el 10 de noviembre
-    de 2026). El título con el departamento y el periodo; a quien ve varios, el selector «Departamento». Una pestaña por
-    modalidad donde el departamento tiene grupos (M1: la carga es por departamento y modalidad), con la insignia del
-    estado de su carga (con una sola, la insignia va junto al título). El filtro de campus deja en las justificaciones
-    solo los grupos de ese campus. De la carga elegida: la línea de estados con la línea del estado y sus acciones; debajo, a todo el ancho,
-    la publicación con su línea de versiones (staffing::closing.publication); «Para cerrar» en cifras;
-    el historial y las justificaciones (staffing::components.closing-justifications, con su drawer aparte). Desde 1280 px
-    el historial es una columna lateral; antes, va entre «Para cerrar» y las justificaciones, que son largas.
+    de 2026; el alcance, maqueta U2, opción A «Selectores en la página», 12 de noviembre). El título con el departamento,
+    la modalidad (como dato con una sola) y el periodo; a la derecha, la insignia del estado de la carga y, con más de
+    una modalidad, el select «Modalidad» (M1: la carga es por departamento y modalidad; MS16). A quien ve varios, el
+    selector «Departamento». De la carga elegida: la línea de estados con la línea del estado, el reparto por campus y sus
+    acciones; debajo, a todo el ancho, la publicación con su línea de versiones (staffing::closing.publication); el filtro
+    de campus con los grupos de la carga en cada uno, que deja en las justificaciones solo los grupos de ese campus (el
+    cierre es de toda la carga); «Para cerrar» en cifras; el historial y las justificaciones
+    (staffing::components.closing-justifications, con su drawer aparte). Desde 1280 px el historial es una columna
+    lateral; antes, va entre «Para cerrar» y las justificaciones, que son largas.
 --}}
 <div class="space-y-4">
-    @php($single = $tabs->count() <= 1)
-    <x-header title="Cierre de la carga" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-0!" use-h1 :separator="$single" progress-indicator>
+    @php($single = $modalityOptions->count() <= 1)
+    <x-header title="Cierre de la carga" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-0!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="text-sm text-neutral!">
             @if ($closing)
                 <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5" data-testid="closing-meta">
@@ -23,11 +25,14 @@
                 Cierra la carga del departamento cuando ya no le falte nada.
             @endif
         </x-slot:subtitle>
-        @if ($closing && $single)
-            <x-slot:actions>
-                <x-core::status-badge :tone="$closing->load->status->tone()" :label="\App\Modules\Staffing\Queries\LoadClosing::statusLabel($closing->load)" :icon="\App\Modules\Staffing\Queries\LoadClosing::statusIcon($closing->load)" data-testid="load-status" />
-            </x-slot:actions>
-        @endif
+        <x-slot:actions>
+            <div class="flex flex-wrap items-end gap-3 max-md:w-full">
+                @if ($closing)
+                    <x-core::status-badge :tone="$closing->load->status->tone()" :label="\App\Modules\Staffing\Queries\LoadClosing::statusLabel($closing->load)" :icon="\App\Modules\Staffing\Queries\LoadClosing::statusIcon($closing->load)" @class(["mb-2.5" => ! $single]) data-testid="load-status" />
+                @endif
+                <x-core::modality-scope :options="$modalityOptions" :selected="$modalidad" class="w-full md:w-56" />
+            </div>
+        </x-slot:actions>
     </x-header>
 
     @if (count($departments) > 1)
@@ -36,7 +41,6 @@
         </div>
     @endif
 
-    <x-core::campus-filter :options="$campusOptions" :selected="$campusFilter?->code" all />
 
     @if ($closing === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="closing-empty">
@@ -45,31 +49,30 @@
         </div>
     @else
         @php($load = $closing->load)
-        @if (! $single)
-            <div class="relative flex gap-1 overflow-x-auto overflow-y-hidden border-b border-base-300 [scrollbar-width:none]" role="tablist" aria-label="Modalidad" data-testid="modality-tabs">
-                @foreach ($tabs as $tab)
-                    @php($active = $tab->id === $load->id)
-                    <button type="button" role="tab" aria-selected="{{ $active ? 'true' : 'false' }}" wire:key="modality-tab-{{ $tab->id }}" wire:click="selectModality('{{ $tab->modality->code }}')"
-                        @class(['-mb-px flex shrink-0 items-center gap-2.5 border-b-2 px-3 pt-2 pb-2.5 max-md:flex-col max-md:items-start max-md:gap-1', 'border-primary text-base-content' => $active, 'border-transparent text-neutral hover:text-base-content' => ! $active])
-                        data-testid="modality-tab-{{ $tab->modality->code }}">
-                        <span @class(['font-semibold' => $active])>{{ $tab->modality->name }}</span>
-                        <x-core::status-badge :tone="$tab->status->tone()" :label="\App\Modules\Staffing\Queries\LoadClosing::statusLabel($tab)" :icon="\App\Modules\Staffing\Queries\LoadClosing::statusIcon($tab)" />
-                    </button>
-                @endforeach
-            </div>
-        @endif
-
-        @include('staffing::closing.veto')
+    @include('staffing::closing.veto')
 
         <section class="rounded-box border border-base-300 bg-base-100" aria-label="Estado de la carga en {{ $load->modality->name }}" data-testid="load-state">
             <div class="px-4 pt-4 md:px-5">@include('staffing::closing.steps', ['closing' => $closing])</div>
             <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-base-300 px-4 py-3.5 md:px-5">
-                <div class="min-w-0 flex-[1_1_20rem]">@include('staffing::closing.headline', ['closing' => $closing])</div>
+                <div class="min-w-0 flex-[1_1_20rem]">
+                    @include('staffing::closing.headline', ['closing' => $closing])
+                    @if ($campusSplit !== null)
+                        <p class="mt-1 ps-[1.875rem] text-sm text-neutral" data-testid="closing-campus-split">{{ $campusSplit }}</p>
+                    @endif
+                </div>
                 <div class="max-md:w-full">@include('staffing::closing.actions', ['actions' => $actions, 'load' => $load, 'prefix' => 'page'])</div>
             </div>
         </section>
 
         @include('staffing::closing.publication', ['load' => $load, 'visible' => $canViewLoad, 'key' => 'publish'])
+
+        @if ($campusOptions->count() > 1)
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="closing-campus">
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
+                <x-core::campus-filter :options="$campusOptions" :selected="$campusFilter?->code" :counts="$campusCounts" all />
+                <span class="text-sm text-neutral">Filtra las justificaciones; el cierre es de toda la carga.</span>
+            </div>
+        @endif
 
         {{-- Desde 1280 px el historial va a la derecha, pegado arriba; antes, entre «Para cerrar» y «Justificaciones». --}}
         <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-[auto_1fr]">

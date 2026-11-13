@@ -39,7 +39,8 @@
                         No le pide materias a {{ $inbox->department->name }}.
                     @endif
                 @else
-                    {{ $selected['groups'] }} grupos · {{ $selected['subjects'] }} {{ $selected['subjects'] === 1 ? 'materia' : 'materias' }}
+                    @php($figure = $figures[$career->getKey()])
+                    {{ $figure['groups'] }} {{ $figure['groups'] === 1 ? 'grupo' : 'grupos' }} · {{ $figure['subjects'] }} {{ $figure['subjects'] === 1 ? 'materia' : 'materias' }}{{ $shownCampus ? ' en '.$shownCampus->code : '' }}
                 @endif
             </p>
             @if ($acceptBlock !== null && $canDecide)
@@ -145,12 +146,13 @@
     @if ($items !== [])
         <div class="sticky bottom-0 z-10 flex items-baseline justify-between gap-4 rounded-b-box border-t border-base-300 bg-base-100 px-4 py-3 text-sm font-semibold sm:px-5" data-testid="inbox-detail-total">
             <span>Total</span>
-            @php($byCampus = $inbox->groupsByCampus($career->getKey()))
+            @php($byCampus = $figures[$career->getKey()]['byCampus'])
             <span class="flex flex-wrap items-baseline justify-end gap-x-3">
                 @if (count($byCampus) > 1)
                     <span class="font-mono text-sm font-normal tabular-nums text-neutral" data-testid="inbox-total-by-campus">{{ collect($byCampus)->map(fn ($groups, $code) => "{$code} {$groups}")->implode(' · ') }}</span>
                 @endif
-                <span class="font-mono tabular-nums">{{ $selected['groups'] }} grupos</span>
+                @php($totalGroups = $figures[$career->getKey()]['groups'])
+                <span class="font-mono tabular-nums">{{ $totalGroups }} {{ $totalGroups === 1 ? 'grupo' : 'grupos' }}{{ $shownCampus ? ' en '.$shownCampus->code : '' }}</span>
             </span>
         </div>
     @endif

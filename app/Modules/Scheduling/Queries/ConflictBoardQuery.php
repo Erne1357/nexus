@@ -159,8 +159,8 @@ final class ConflictBoardQuery
 
     /**
      * Lo que le falta a un conjunto de grupos, para el detalle: sus choques duros vigentes y los grupos sin horario,
-     * sin docente y sin salón, con la clave y el nombre de su materia y la clave de su campus (el editor que lo corrige
-     * es de un campus).
+     * sin docente y sin salón, con la clave y el nombre de su materia y la clave y el nombre de su campus (su etiqueta, y
+     * el editor que lo corrige acomoda un campus a la vez).
      *
      * @param  Collection<int, GroupBoardStatus>  $statuses
      *                                                       Los choques van agrupados por grupo (un grupo con varios choques es una sola entrada), por semestre, materia y
@@ -173,8 +173,8 @@ final class ConflictBoardQuery
         $groups = Group::query()->whereIn('groups.id', $missing->pluck('id')->all())
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->join('careers', 'careers.id', '=', 'groups.owner_career_id')
-            ->join('campuses', 'campuses.id', '=', 'groups.campus_id')
-            ->get(['groups.id', 'groups.code', 'groups.semester', 'subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'campuses.code as campus_code'])
+            ->leftJoin('campuses', 'campuses.id', '=', 'groups.campus_id')
+            ->get(['groups.id', 'groups.code', 'groups.semester', 'subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'campuses.code as campus_code', 'campuses.name as campus_name'])
             ->keyBy('id');
 
         $describe = fn (GroupBoardStatus $status): array => [
@@ -185,6 +185,7 @@ final class ConflictBoardQuery
             'subject_name' => $groups[$status->id]->subject_name ?? '',
             'career_code' => $groups[$status->id]->career_code ?? '',
             'campus_code' => $groups[$status->id]->campus_code ?? '',
+            'campus_name' => $groups[$status->id]->campus_name ?? '',
             'inactive_teacher' => $status->inactiveTeacher,
         ];
 
@@ -221,6 +222,24 @@ final class ConflictBoardQuery
         $at = Cache::get(SyncScheduleConflicts::stampKey($term->id, $modality->id));
 
         return $at === null ? null : CarbonImmutable::parse($at)->setTimezone(config('app.timezone'));
+    }
+
+    /**
+     * Cuántos grupos activos de la modalidad y periodo ve el usuario en cada campus, por clave: la cifra de cada botón
+     * del filtro de campus (maqueta U2, opción A). Sin los que no tienen campus (una modalidad sin salones, MS4).
+     *
+     * @return array<string, int>
+     */
+    public function campusCounts(Actor $actor, Term $term, Modality $modality): array
+    {
+        return $this->scoped($actor, $term, $modality, null)
+            ->join('campuses', 'campuses.id', '=', 'groups.campus_id')
+            ->groupBy('campuses.code')
+            ->selectRaw('campuses.code, count(*) as total')
+            ->toBase()
+            ->pluck('total', 'code')
+            ->map(fn (mixed $total): int => (int) $total)
+            ->all();
     }
 
     /**

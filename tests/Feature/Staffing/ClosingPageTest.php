@@ -159,8 +159,8 @@ describe('lo que se ve en cada estado', function () {
     });
 });
 
-describe('pestañas por modalidad y filtro de campus (M1)', function () {
-    it('una pestaña por modalidad con grupos, con el estado de cada carga; sin grupos no hay pestaña', function () {
+describe('modalidad y filtro de campus (M1; maqueta U2, opción A)', function () {
+    it('MS16: con dos modalidades, el select «Modalidad» cambia de carga, sin pestañas', function () {
         modalityOf('EAD')->update(['is_active' => true]);
         $ead = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I', 'modality_id' => modalityOf('EAD')->id]);
         $published = $this->world->loadIn($ead, LoadStatus::Published);
@@ -169,14 +169,73 @@ describe('pestañas por modalidad y filtro de campus (M1)', function () {
         $this->world->group(load: $published);
 
         $page = closingPage($this->jefe, ['modalidad' => 'PRES'])
-            ->assertSeeHtml('data-testid="modality-tab-EAD"')
-            ->assertSeeHtml('data-testid="modality-tab-PRES"')
-            ->assertSee('Publicada · v1')
+            ->assertSeeHtml('data-testid="modality-scope"')
+            ->assertDontSeeHtml('data-testid="modality-tabs"')
             ->assertSee('Lista para cerrar');
 
-        $page->call('selectModality', 'EAD')
+        expect(domOf($page)->querySelector('[data-testid="modality-scope"] option[value="PRES"]')?->hasAttribute('selected'))->toBeTrue();
+
+        $page->set('modalidad', 'EAD')
             ->assertSet('modalidad', 'EAD')
+            ->assertSee('Publicada · v1')
             ->assertSee('La carga ya pasó el cierre.');
+    });
+
+    it('MS30: sin elegir, con EAD activa y sin grupos del departamento en ella, abre en la modalidad de su carga, y elegir EAD deja el select para volver', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $this->world->group();
+
+        closingPage($this->jefe)->assertSet('modalidad', 'PRES')->assertSee('Lista para cerrar');
+        closingPage($this->jefe, ['modalidad' => 'EAD'])
+            ->assertSee('Sistemas y Computación no tiene grupos en EAD en Ene-Jun 2027')
+            ->assertSeeHtml('data-testid="modality-scope"');
+    });
+
+    it('una modalidad inactiva o ajena en la URL se ignora: abre la carga de la modalidad que trabaja', function () {
+        $this->world->group();
+
+        closingPage($this->jefe, ['modalidad' => 'ENL'])->assertSet('modalidad', 'PRES')->assertSee('Lista para cerrar');
+
+        // Ajena: EAD activa, pero el nombramiento es solo de Presencial.
+        modalityOf('EAD')->update(['is_active' => true]);
+        vacate(Role::JefeDepartamento, $this->world->department->id);
+        $presencial = User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('PRES')->id, 'department_id' => $this->world->department->id, 'valid_from' => today()->toDateString()])->create();
+
+        closingPage($presencial, ['modalidad' => 'EAD'])->assertSet('modalidad', 'PRES')->assertSee('Lista para cerrar')->assertDontSeeHtml('data-testid="modality-scope"');
+    });
+
+    it('MS6: el filtro ofrece los campus de la modalidad con los grupos de la carga en cada uno, y dice que el cierre es de toda la carga', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $this->world->group(load: $this->world->loadIn($c1));
+        $this->world->group(load: $this->world->loadIn($c1));
+        $this->world->group();
+
+        $dom = domOf(closingPage($this->jefe));
+
+        expect(textOf($dom->querySelector('[data-testid="campus-count-todos"]')))->toBe('3')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C1"]')))->toBe('2')
+            ->and(textOf($dom->querySelector('[data-testid="campus-count-C2"]')))->toBe('1')
+            ->and(textOf($dom->querySelector('[data-testid="closing-campus"]')))->toContain('Filtra las justificaciones; el cierre es de toda la carga.')
+            ->and(textOf($dom->querySelector('[data-testid="closing-campus-split"]')))->toBe('Una sola carga: 2 grupos en C1 y 1 en C2. Se cierra y se publica una vez.');
+    });
+
+    it('MS4: con una modalidad sin salones no hay filtro de campus', function () {
+        Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
+        $this->world->group(withRoom: false);
+
+        closingPage($this->jefe)->assertSee('Lista para cerrar')->assertDontSeeHtml('data-testid="campus-filter"')->assertDontSeeHtml('data-testid="closing-campus"');
+    });
+
+    it('un ?campus[]= que no es texto es «Todos», sin error', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $inC1 = $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+        $inC2 = $this->world->group(teacher: false);
+
+        $this->actingAs($this->jefe)->get(route('staffing.closing').'?campus[]=C1')
+            ->assertOk()
+            ->assertSee('data-testid="page-item-'.$inC1->code.'"', false)
+            ->assertSee('data-testid="page-item-'.$inC2->code.'"', false);
     });
 
     it('M1: la carga presencial junta los grupos de C1 y C2; el campus solo filtra la lista de justificaciones', function () {
@@ -363,6 +422,31 @@ it('«Ir a …» con un campus en el filtro donde no trabaja no agrega ?campus='
     closingPage(User::factory()->admin()->create(), ['departamento' => $this->world->department->id, 'campus' => 'C1'])
         ->call('goTo', 'assign')
         ->assertRedirect(route('staffing.assign', ['depto' => 'SC']));
+});
+
+it('«Ir a …» abre choques, horarios y acuerdos en la modalidad de la carga, con el campus del filtro', function (string $screen, string $route, array $parameters) {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+    $this->world->group();
+
+    closingPage($this->jefe, ['campus' => 'C1'])->call('goTo', $screen)
+        ->assertRedirect(route($route, [...$parameters, 'modalidad' => 'PRES', 'campus' => 'C1']));
+    closingPage($this->jefe)->call('goTo', $screen)
+        ->assertRedirect(route($route, [...$parameters, 'modalidad' => 'PRES']));
+})->with([
+    'choques' => ['conflicts', 'scheduling.conflicts', ['vista' => 'departamentos']],
+    'horarios' => ['editor', 'scheduling.editor', []],
+    'acuerdos' => ['agreements', 'scheduling.agreements', []],
+]);
+
+it('MS6: «Ir a …» copia el campus del filtro si es de la modalidad de la carga, aunque el nombramiento sea de otro campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+    vacate(Role::JefeDepartamento, $this->world->department->id);
+    $limited = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->world->campus->id, 'department_id' => $this->world->department->id, 'valid_from' => today()->toDateString()])->create();
+
+    closingPage($limited, ['campus' => 'C1'])->call('goTo', 'editor')
+        ->assertRedirect(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => 'C1']));
 });
 
 it('el aviso del cierre abre la pantalla con el departamento', function () {

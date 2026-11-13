@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
@@ -15,16 +16,20 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Database\Query\JoinClause;
 
 /**
- * La navegación del editor de horarios (tarea 3.5): carrera → retícula (plan) → semestre, en un periodo y campus
- * (reglas-de-negocio.md, "Editor de horarios").
+ * La navegación del editor de horarios (tarea 3.5): carrera → retícula (plan) → semestre, en un periodo, una modalidad
+ * (la de la página, M1) y un campus (el del filtro: el editor acomoda un campus a la vez, maqueta U2)
+ * (reglas-de-negocio.md, "Editor de horarios"). Solo cuentan los grupos de esa modalidad: un semestre que mezcla
+ * modalidades sigue la elegida.
  *
  * - careers(): las carreras activas que se ofrecen en el campus (`career_campus` activa) y que el actor ve con
- *   «Ver los horarios» (SchedulingPermission::ScheduleView) sobre la carrera: su modalidad (MS6), su departamento como unidad y
- *   ella misma. Además, como supuesto por confirmar, las carreras donde el actor ve algún grupo sin cancelar del
- *   periodo y campus, aunque ya no se ofrezcan o estén inactivas: el jefe de un departamento que imparte en otras
- *   carreras (Ciencias Básicas) llega así a sus grupos, y ningún grupo se queda sin camino.
+ *   «Ver los horarios» (SchedulingPermission::ScheduleView) en la modalidad de la página sobre la carrera: la modalidad
+ *   (MS6, sin el campus), su departamento como unidad y ella misma. Además, como supuesto por confirmar, las carreras
+ *   donde el actor ve algún grupo sin cancelar del periodo, la modalidad y el campus, aunque ya no se ofrezcan o estén
+ *   inactivas: el jefe de un departamento que imparte en otras carreras (Ciencias Básicas) llega así a sus grupos, y
+ *   ningún grupo se queda sin camino.
  * - plans(): los planes activos de la carrera y, para que sus grupos tengan camino, los inactivos con grupos sin
  *   cancelar en el periodo y campus (`is_active` en falso). El vigente primero, luego los activos y luego los inactivos,
  *   cada bloque por clave. `is_priority` es `! is_current`: la marca «Prioridad» de las retículas que no son la vigente.
@@ -39,9 +44,9 @@ final class PlanSemestersQuery
     /**
      * @return list<array{id: string, code: string, name: string}>
      */
-    public function careers(Actor $actor, Term $term, Campus $campus): array
+    public function careers(Actor $actor, Term $term, Campus $campus, Modality $modality): array
     {
-        return $this->visibleCareers($actor, $term, $campus)
+        return $this->visibleCareers($actor, $term, $campus, $modality)
             ->orderBy('careers.code')
             ->get(['careers.id', 'careers.code', 'careers.name'])
             ->map(fn (Career $career): array => ['id' => $career->id, 'code' => $career->code, 'name' => $career->name])
@@ -51,23 +56,23 @@ final class PlanSemestersQuery
     /**
      * La carrera, si el actor la ve en el campus (careers()); el id llega del cliente.
      */
-    public function careerOrFail(Actor $actor, Term $term, Campus $campus, string $careerId): Career
+    public function careerOrFail(Actor $actor, Term $term, Campus $campus, Modality $modality, string $careerId): Career
     {
-        return KeyLookup::findOrFail($this->visibleCareers($actor, $term, $campus), $careerId);
+        return KeyLookup::findOrFail($this->visibleCareers($actor, $term, $campus, $modality), $careerId);
     }
 
     /**
      * @return list<array{id: string, code: string, name: string, is_current: bool, is_priority: bool, is_active: bool, groups: int, unscheduled: int}>
      */
-    public function plans(Career $career, Term $term, Campus $campus): array
+    public function plans(Career $career, Term $term, Campus $campus, Modality $modality): array
     {
-        $counts = $this->counts($term, $campus, $career->id)
+        $counts = $this->counts($term, $campus, $modality, $career->id)
             ->groupBy('groups.study_plan_id')
             ->addSelect('groups.study_plan_id as plan_id')
             ->get()
             ->keyBy('plan_id');
 
-        return $this->reachablePlans($career, $term, $campus)
+        return $this->reachablePlans($career, $term, $campus, $modality)
             ->orderByDesc('is_current')
             ->orderByDesc('is_active')
             ->orderBy('code')
@@ -86,12 +91,12 @@ final class PlanSemestersQuery
     }
 
     /**
-     * Un plan de la carrera que plans() da: activo o, con el periodo y el campus, inactivo con grupos en ellos. El id
-     * llega del cliente.
+     * Un plan de la carrera que plans() da: activo o, con el periodo, el campus y la modalidad, inactivo con grupos en
+     * ellos. El id llega del cliente.
      */
-    public function planOrFail(Career $career, string $planId, ?Term $term = null, ?Campus $campus = null): StudyPlan
+    public function planOrFail(Career $career, string $planId, ?Term $term = null, ?Campus $campus = null, ?Modality $modality = null): StudyPlan
     {
-        return KeyLookup::findOrFail($this->reachablePlans($career, $term, $campus), $planId);
+        return KeyLookup::findOrFail($this->reachablePlans($career, $term, $campus, $modality), $planId);
     }
 
     /**
@@ -99,9 +104,9 @@ final class PlanSemestersQuery
      *
      * @return list<array{semester: int, groups: int, unscheduled: int}>
      */
-    public function semesters(StudyPlan $plan, Term $term, Campus $campus): array
+    public function semesters(StudyPlan $plan, Term $term, Campus $campus, Modality $modality): array
     {
-        $counts = $this->counts($term, $campus, $plan->career_id)
+        $counts = $this->counts($term, $campus, $modality, $plan->career_id)
             ->where('groups.study_plan_id', $plan->id)
             ->groupBy('groups.semester')
             ->addSelect('groups.semester')
@@ -122,41 +127,42 @@ final class PlanSemestersQuery
     }
 
     /**
-     * Los planes activos de la carrera y, con periodo y campus, los inactivos con grupos sin cancelar en ellos.
+     * Los planes activos de la carrera y, con periodo, campus y modalidad, los inactivos con grupos sin cancelar en ellos.
      *
      * @return Builder<StudyPlan>
      */
-    private function reachablePlans(Career $career, ?Term $term, ?Campus $campus): Builder
+    private function reachablePlans(Career $career, ?Term $term, ?Campus $campus, ?Modality $modality): Builder
     {
         return StudyPlan::query()
             ->where('career_id', $career->id)
             ->where(fn (Builder $plans) => $plans->where('is_active', true)
-                ->when($term !== null && $campus !== null, fn (Builder $withGroups) => $withGroups->orWhereIn('id', Group::query()->active()
-                    ->where('term_id', $term?->id)->where('campus_id', $campus?->id)->where('owner_career_id', $career->id)->select('study_plan_id'))));
+                ->when($term !== null && $campus !== null && $modality !== null, fn (Builder $withGroups) => $withGroups->orWhereIn('id', Group::query()->active()
+                    ->where('term_id', $term?->id)->where('modality_id', $modality?->id)->where('campus_id', $campus?->id)->where('owner_career_id', $career->id)->select('study_plan_id'))));
     }
 
     /**
-     * Las que se ofrecen en el campus y el actor ve por carrera, más aquellas donde ve algún grupo del periodo y campus;
-     * `career_campus` se lee una sola vez.
+     * Las que se ofrecen en el campus y el actor ve por carrera en la modalidad de la página, más aquellas donde ve algún
+     * grupo del periodo, la modalidad y el campus; `career_campus` se lee una sola vez. La modalidad de la página entra a
+     * constrain() como columna con un join a su fila de `modalities`.
      *
      * @return Builder<Career>
      */
-    private function visibleCareers(Actor $actor, Term $term, Campus $campus): Builder
+    private function visibleCareers(Actor $actor, Term $term, Campus $campus, Modality $modality): Builder
     {
         $byCareer = $actor->constrain(
             CareerCampus::query()
                 ->join('careers as offered', 'offered.id', '=', 'career_campus.career_id')
-                ->join('campuses as offered_campus', 'offered_campus.id', '=', 'career_campus.campus_id')
+                ->join('modalities as page_modality', fn (JoinClause $join) => $join->where('page_modality.id', $modality->id))
                 ->where('career_campus.campus_id', $campus->id)
                 ->where('career_campus.is_active', true)
                 ->where('offered.is_active', true)
                 ->select('career_campus.career_id'),
             SchedulingPermission::ScheduleView,
-            ['modality' => 'offered_campus.modality_id', 'unit' => 'offered.department_id', 'career' => 'career_campus.career_id'],
+            ['modality' => 'page_modality.id', 'unit' => 'offered.department_id', 'career' => 'career_campus.career_id'],
         );
 
         $byGroups = $actor->constrain(
-            Group::query()->active()->where('groups.term_id', $term->id)->where('groups.campus_id', $campus->id)->select('groups.owner_career_id'),
+            Group::query()->active()->where('groups.term_id', $term->id)->where('groups.modality_id', $modality->id)->where('groups.campus_id', $campus->id)->select('groups.owner_career_id'),
             SchedulingPermission::ScheduleView,
             ['modality' => 'groups.modality_id', 'unit' => 'groups.department_id', 'career' => 'groups.owner_career_id'],
         );
@@ -166,14 +172,15 @@ final class PlanSemestersQuery
     }
 
     /**
-     * Los grupos sin cancelar de la carrera en el periodo y campus, con cuántos tienen horas sin acomodar; quien llama
-     * agrupa.
+     * Los grupos sin cancelar de la carrera en el periodo, la modalidad y el campus, con cuántos tienen horas sin
+     * acomodar; quien llama agrupa.
      */
-    private function counts(Term $term, Campus $campus, string $careerId): QueryBuilder
+    private function counts(Term $term, Campus $campus, Modality $modality, string $careerId): QueryBuilder
     {
         $placed = GroupSession::query()->toBase()
             ->join('groups as owned', 'owned.id', '=', 'group_sessions.group_id')
             ->where('owned.owner_career_id', $careerId)
+            ->where('owned.modality_id', $modality->id)
             ->where('group_sessions.term_id', $term->id)
             ->where('group_sessions.campus_id', $campus->id)
             ->groupBy('group_sessions.group_id')
@@ -183,6 +190,7 @@ final class PlanSemestersQuery
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->leftJoinSub($placed, 'placed', 'placed.group_id', '=', 'groups.id')
             ->where('groups.term_id', $term->id)
+            ->where('groups.modality_id', $modality->id)
             ->where('groups.campus_id', $campus->id)
             ->where('groups.owner_career_id', $careerId)
             ->selectRaw('count(*) as groups')
