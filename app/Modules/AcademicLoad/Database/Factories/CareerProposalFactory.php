@@ -5,14 +5,15 @@ namespace App\Modules\AcademicLoad\Database\Factories;
 use App\Modules\Academic\Models\Career;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Propuesta en borrador de una carrera en un campus y un periodo, sin filas.
+ * Propuesta en borrador de una carrera en Presencial y un periodo, sin filas (M6). Presencial la siembra la migración
+ * del catálogo de modalidades.
  *
  * @extends Factory<CareerProposal>
  */
@@ -26,8 +27,7 @@ class CareerProposalFactory extends Factory
     {
         return [
             'term_id' => Term::factory(),
-            'campus_id' => Campus::factory(),
-            'modality_id' => fn (array $attributes): ?string => Campus::withTrashed()->whereKey($attributes['campus_id'])->value('modality_id'),
+            'modality_id' => fn (): string => Modality::withTrashed()->where('code', 'PRES')->value('id'),
             'career_id' => Career::factory(),
             'eligible_students' => 0,
             'status' => ProposalStatus::Draft,

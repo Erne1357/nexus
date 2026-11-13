@@ -190,7 +190,10 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     {
         $campusIds = fn (DemoContext $demo): array => Campus::query()->whereIn('code', $demo->campuses)->pluck('id')->all();
         $modalityIds = fn (DemoContext $demo): array => Campus::query()->whereIn('code', $demo->campuses)->distinct()->pluck('modality_id')->all();
-        $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo));
+        // Las carreras ofrecidas en los campus de la demo, cada una una vez: su propuesta es una por modalidad (M6).
+        $offeredCareerIds = fn (DemoContext $demo): array => CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->distinct()->pluck('career_id')->all();
+        $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())
+            ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
         return [
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
@@ -220,8 +223,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                     default => true,
                 };
             }),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($campusIds, $proposals): true|string {
-                $offered = CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->count();
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds, $proposals): true|string {
+                $offered = count($offeredCareerIds($demo)) * count($modalityIds($demo));
                 $accepted = $proposals($demo)->where('status', ProposalStatus::Accepted)->count();
 
                 return $accepted === $offered ? true : "{$accepted} de {$offered} carreras ofrecidas tienen su propuesta aceptada.";
@@ -231,16 +234,16 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
                 return $open === 0 ? true : "{$open} partes siguen sin aceptar.";
             }),
-            // Una carga se compara con las partes de su misma modalidad (M1), de los campus de la demo: un departamento
-            // sin partes aceptadas deja su carga en borrador.
-            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($campusIds, $modalityIds): true|string {
+            // Una carga se compara con las partes de su misma modalidad (M1, M6), de las carreras de los campus de la demo: un
+            // departamento sin partes aceptadas deja su carga en borrador.
+            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Proposed)
                     ->whereExists(fn (QueryBuilder $parts) => $parts->selectRaw('1')->from('proposal_reviews')
                         ->join('career_proposals', 'career_proposals.id', '=', 'proposal_reviews.career_proposal_id')
                         ->whereColumn('proposal_reviews.department_id', 'academic_loads.department_id')
                         ->whereColumn('career_proposals.modality_id', 'academic_loads.modality_id')
-                        ->whereIn('career_proposals.campus_id', $campusIds($demo))
+                        ->whereIn('career_proposals.career_id', $offeredCareerIds($demo))
                         ->whereColumn('career_proposals.term_id', 'academic_loads.term_id'))
                     ->count();
 

@@ -9,28 +9,35 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\SeriationChains;
 
 /**
- * Lo que muestra la página de la propuesta de carrera (CareerProposalQuery::overview): la propuesta con su
- * periodo, campus y carrera; sus filas por semestre, cada una con su materia (clave, nombre, `needs_lab`) y el
- * departamento de la materia, también si se borraron después; la parte de cada departamento con su estado y
- * comentario; los totales de lo que se pide, y los departamentos involucrados con catálogos sin validar, para el
- * aviso (reglas-de-negocio.md, "Propuesta de carrera": avisa, no bloquea).
+ * Lo que muestra la página de la propuesta de carrera (CareerProposalQuery::overview; maqueta U1, opción A «Columnas por
+ * campus»): la propuesta con su periodo, modalidad, carrera y quién la envió; sus columnas, una por campus de sus filas
+ * (por clave) o una sola sin campus en una modalidad sin salones (M6, MS5); sus materias por semestre
+ * (ProposalSubject), cada una con su fila de cada columna, su materia (clave, nombre, `needs_lab`) y el departamento de
+ * la materia, también si se borraron después; quiénes la coordinan; la parte de cada departamento con su estado y
+ * comentario; los totales de lo que se pide, con los grupos de cada campus, y los departamentos involucrados con
+ * catálogos sin validar, para el aviso (reglas-de-negocio.md, "Propuesta de carrera": avisa, no bloquea).
  */
 final readonly class ProposalOverview
 {
     /**
-     * @param  array<int, list<ProposalItem>>  $semesters  semestre → sus filas por clave de materia, con `subject.department`
+     * @param  list<Campus|null>  $columns  los campus de sus filas, por clave; [null] en una modalidad sin salones
+     * @param  array<int, list<ProposalSubject>>  $semesters  semestre → sus materias por clave, con `subject.department`
      * @param  list<ProposalReview>  $reviews  la parte de cada departamento, por clave del departamento, con `department`
-     * @param  array{subjects: int, subjects_total: int, groups: int, eligible_students: int}  $totals  materias con grupos, todas las materias, grupos pedidos y alumnos posibles (los distintos que pueden llevar alguna materia, congelados al armarla); los alumnos esperados no se suman entre materias, porque un alumno cuenta en cada una que puede llevar
+     * @param  array{subjects: int, subjects_total: int, subjects_by_campus: array<string, int>, groups: int, groups_by_campus: array<string, int>, eligible_students: int, eligible_by_campus: array<string, int>}  $totals  materias con grupos (en algún campus) y las de cada columna, todas las materias, grupos pedidos y los de cada columna, y alumnos posibles (los distintos que pueden llevar alguna materia, congelados al armarla) y los de cada columna; lo de cada columna va por columnKey. Los alumnos esperados no se suman entre materias, porque un alumno cuenta en cada una que puede llevar
      * @param  list<array{department: Department, catalogs: list<Catalog>}>  $pendingCatalogs  departamentos con grupos pedidos y catálogos sin validar, por clave
      * @param  array<string, string>  $specialtyOf  materia → la especialidad de su plan; las del tronco común no aparecen
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la propuesta, por clave, con cuántas
      * @param  array<string, list<string>>  $seriation  materia → las materias de la propuesta que pide por seriación en el plan de su fila
+     * @param  list<array{user: User, campuses: list<string>}>  $coordinators  quienes coordinan la carrera en la modalidad, por nombre, con las llaves de las columnas que cubren (columnKey)
      */
     public function __construct(
         public CareerProposal $proposal,
+        public array $columns,
         public array $semesters,
         public array $reviews,
         public array $totals,
@@ -39,21 +46,112 @@ final readonly class ProposalOverview
         public array $specialtyOf = [],
         public array $specialties = [],
         public array $seriation = [],
+        public array $coordinators = [],
     ) {}
+
+    /**
+     * La llave de una columna: el id del campus, o '' para la columna sin campus.
+     */
+    public static function columnKey(?Campus $campus): string
+    {
+        return $campus?->getKey() ?? '';
+    }
+
+    /**
+     * Lo que dice el encabezado y lo que avisa el envío (ProposalHeader): las columnas con su campus, quiénes coordinan,
+     * quién la envió y cuándo, la última parte regresada y los departamentos con grupos cuya parte no está aceptada.
+     */
+    public function header(string $timezone): ProposalHeader
+    {
+        $returned = collect($this->reviews)
+            ->filter(fn (ProposalReview $review): bool => $review->status === ProposalReviewStatus::Returned && $review->decided_at !== null)
+            ->sortByDesc(fn (ProposalReview $review): int => $review->decided_at->getTimestamp())
+            ->first();
+
+        return new ProposalHeader(
+            careerCode: $this->proposal->career->code,
+            columns: array_map(fn (?Campus $campus): array => ['key' => self::columnKey($campus), 'code' => $campus?->code, 'name' => $campus?->name], $this->columns),
+            coordinators: array_map(fn (array $row): array => ['id' => (string) $row['user']->getKey(), 'name' => $row['user']->name, 'keys' => $row['campuses']], $this->coordinators),
+            sent: $this->proposal->submitted_at === null ? null : [
+                'id' => $this->proposal->submitted_by,
+                'name' => $this->proposal->submitter?->name,
+                'at' => $this->proposal->submitted_at,
+            ],
+            returned: $returned === null ? null : ['department' => $returned->department->code, 'at' => $returned->decided_at],
+            pendingDepartments: array_values(array_map(
+                fn (array $row): string => $row['department']->code,
+                array_filter($this->departments(), fn (array $row): bool => $row['groups'] > 0 && $row['review']?->status !== ProposalReviewStatus::Accepted),
+            )),
+            timezone: $timezone,
+        );
+    }
+
+    /**
+     * Los grupos pedidos de esas materias en cada columna, por columnKey y en el orden de las columnas: lo que dice el
+     * encabezado de cada semestre de la tabla.
+     *
+     * @param  list<ProposalSubject>  $subjects
+     * @return array<string, int>
+     */
+    public function groupsByColumn(array $subjects): array
+    {
+        $groups = [];
+
+        foreach ($this->columns as $campus) {
+            $key = self::columnKey($campus);
+            $groups[$key] = array_sum(array_map(fn (ProposalSubject $subject): int => ($subject->cells[$key] ?? null)?->requested_groups ?? 0, $subjects));
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Si la propuesta tiene más de una columna: entonces la tabla lleva el total entre campus.
+     */
+    public function isMultiCampus(): bool
+    {
+        return count($this->columns) > 1;
+    }
+
+    /**
+     * La materia de la propuesta con ese id (que puede llegar del cliente), o null.
+     */
+    public function subject(string $subjectId): ?ProposalSubject
+    {
+        foreach ($this->semesters as $subjects) {
+            foreach ($subjects as $subject) {
+                if ($subject->id() === $subjectId) {
+                    return $subject;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Las materias de todos los semestres, en orden.
+     *
+     * @return list<ProposalSubject>
+     */
+    public function subjects(): array
+    {
+        return array_merge([], ...array_values($this->semesters));
+    }
 
     /**
      * La retícula por semestre lista para acomodarse (SemesterGrid): en cada semestre primero el tronco común y
      * luego, por banda, las materias de cada especialidad, cada bloque por clave.
      *
-     * @return array<int, list<ProposalItem>>
+     * @return array<int, list<ProposalSubject>>
      */
     public function gridSemesters(): array
     {
         $band = array_flip(array_column($this->specialties, 'id'));
-        $position = fn (ProposalItem $item): int => isset($this->specialtyOf[$item->subject_id]) ? $band[$this->specialtyOf[$item->subject_id]] + 1 : 0;
+        $position = fn (ProposalSubject $subject): int => isset($this->specialtyOf[$subject->id()]) ? $band[$this->specialtyOf[$subject->id()]] + 1 : 0;
 
-        return array_map(function (array $items) use ($position): array {
-            $indexed = array_map(null, $items, array_keys($items));
+        return array_map(function (array $subjects) use ($position): array {
+            $indexed = array_map(null, $subjects, array_keys($subjects));
             usort($indexed, fn (array $a, array $b): int => [$position($a[0]), $a[1]] <=> [$position($b[0]), $b[1]]);
 
             return array_column($indexed, 0);
@@ -69,8 +167,8 @@ final readonly class ProposalOverview
      */
     public function chains(): array
     {
-        $items = array_merge(...array_values($this->gridSemesters()));
-        $names = array_column(array_map(fn (ProposalItem $item): array => ['id' => $item->subject_id, 'name' => $item->subject->name], $items), 'name', 'id');
+        $subjects = array_merge([], ...array_values($this->gridSemesters()));
+        $names = array_column(array_map(fn (ProposalSubject $subject): array => ['id' => $subject->id(), 'name' => $subject->subject->name], $subjects), 'name', 'id');
         $of = [];
         $chains = [];
 
@@ -83,15 +181,15 @@ final readonly class ProposalOverview
     }
 
     /**
-     * La especialidad del plan en que está la materia de la fila, o null si es del tronco común.
+     * La especialidad del plan en que está la materia, o null si es del tronco común.
      */
-    public function specialtyFor(ProposalItem $item): ?string
+    public function specialtyFor(ProposalSubject $subject): ?string
     {
-        return $this->specialtyOf[$item->subject_id] ?? null;
+        return $this->specialtyOf[$subject->id()] ?? null;
     }
 
     /**
-     * Lo raro de la fila para marcarlo sin bloquear el envío (ProposalAnomalies): más esperados que elegibles y
+     * Lo raro de una fila para marcarlo sin bloquear el envío (ProposalAnomalies): más esperados que elegibles y
      * grupos con muy pocos alumnos.
      *
      * @return list<string>
@@ -99,6 +197,26 @@ final readonly class ProposalOverview
     public function anomaliesFor(ProposalItem $item): array
     {
         return $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups);
+    }
+
+    /**
+     * Lo raro de las filas de una materia, cada cosa con el campus de su fila si hay más de una columna.
+     *
+     * @return list<string>
+     */
+    public function subjectAnomalies(ProposalSubject $subject): array
+    {
+        $anomalies = [];
+
+        foreach ($this->columns as $campus) {
+            $item = $subject->cell($campus);
+
+            foreach ($item === null ? [] : $this->anomaliesFor($item) as $anomaly) {
+                $anomalies[] = $this->isMultiCampus() && $campus !== null ? "{$campus->code}: {$anomaly}" : $anomaly;
+            }
+        }
+
+        return $anomalies;
     }
 
     /**
@@ -116,9 +234,9 @@ final readonly class ProposalOverview
     }
 
     /**
-     * El resumen de cada departamento involucrado, por clave: el que tiene materias con grupos pedidos o una
-     * parte, con cuántas materias y grupos se le piden y su parte (null si todavía no se envía). Es lo que la
-     * página muestra junto a la retícula y la tabla para resaltar y filtrar por departamento.
+     * El resumen de cada departamento involucrado, por clave: el que tiene materias con grupos pedidos (en algún
+     * campus) o una parte, con cuántas materias y grupos se le piden y su parte (null si todavía no se envía). Es lo
+     * que la página muestra junto a la retícula y la tabla para resaltar y filtrar por departamento.
      *
      * @return list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>
      */
@@ -126,15 +244,13 @@ final readonly class ProposalOverview
     {
         $rows = [];
 
-        foreach ($this->semesters as $items) {
-            foreach ($items as $item) {
-                $department = $item->subject->department;
-                $rows[$department->getKey()] ??= ['department' => $department, 'subjects' => 0, 'groups' => 0, 'review' => $this->reviewFor($department->getKey())];
+        foreach ($this->subjects() as $subject) {
+            $department = $subject->subject->department;
+            $rows[$department->getKey()] ??= ['department' => $department, 'subjects' => 0, 'groups' => 0, 'review' => $this->reviewFor($department->getKey())];
 
-                if ($item->requested_groups > 0) {
-                    $rows[$department->getKey()]['subjects']++;
-                    $rows[$department->getKey()]['groups'] += $item->requested_groups;
-                }
+            if ($subject->groups() > 0) {
+                $rows[$department->getKey()]['subjects']++;
+                $rows[$department->getKey()]['groups'] += $subject->groups();
             }
         }
 
@@ -145,9 +261,9 @@ final readonly class ProposalOverview
     }
 
     /**
-     * Si el coordinador puede corregir la fila: la propuesta está en borrador o regresada y el departamento de
-     * la materia no ha aceptado su parte (lo mismo que exige UpdateProposalItem). Para deshabilitar la fila con
-     * su motivo.
+     * Si la fila se puede corregir por su estado: la propuesta está en borrador o regresada y el departamento de la
+     * materia no ha aceptado su parte (lo mismo que exige UpdateProposalItem). Quién puede corregirla, por su campus,
+     * lo decide CareerProposalPolicy::update (M7). Para deshabilitar la fila con su motivo.
      */
     public function isEditable(ProposalItem $item): bool
     {

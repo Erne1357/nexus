@@ -7,7 +7,8 @@ use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 /**
- * Al regresar un departamento su parte de una propuesta, avisa en cola al coordinador (NotifyProposalReturned).
+ * Al regresar un departamento su parte de una propuesta, avisa en cola a los coordinadores de la carrera en la
+ * modalidad (NotifyProposalReturned, MS18).
  * El evento sale después del commit.
  */
 final class NotifyCoordinatorsOnProposalReturned implements ShouldQueue

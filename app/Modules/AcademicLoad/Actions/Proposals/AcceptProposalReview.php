@@ -64,7 +64,7 @@ final class AcceptProposalReview
     {
         return DB::transaction(function () use ($review, $actor): ProposalReview {
             $proposal = CareerProposal::query()
-                ->with(['term', 'campus' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed(), 'career' => fn ($query) => $query->withTrashed()])
+                ->with(['term', 'modality' => fn ($query) => $query->withTrashed(), 'career' => fn ($query) => $query->withTrashed()])
                 ->lockForUpdate()
                 ->findOrFail($review->career_proposal_id);
 
@@ -109,7 +109,7 @@ final class AcceptProposalReview
                     'proposal_status' => ['old' => $from->value, 'attributes' => $proposal->status->value],
                     ...SelfApproval::mark($actor, $proposal->submitted_by),
                 ])
-                ->log("Aceptó la parte de {$department->code} en la propuesta de {$proposal->career->code} en {$proposal->campus->code} para el periodo {$proposal->term->code}");
+                ->log("Aceptó la parte de {$department->code} en la propuesta de {$proposal->career->code} en {$proposal->modality->name} para el periodo {$proposal->term->code}");
 
             if ($load->status === LoadStatus::Draft) {
                 $this->proposeLoad->handle($load, $actor, "Aceptó su parte de la propuesta de {$proposal->career->code}.");

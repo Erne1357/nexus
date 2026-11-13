@@ -1,9 +1,9 @@
 {{--
     El detalle de la carrera elegida (academic-load::pages.inbox), como en la maqueta C pero con una tabla compacta
     para el volumen (~48 px por materia): el encabezado fijo con la carrera, su estado y los botones; un aviso si otro
-    departamento regresó la propuesta; el comentario si la regresaron; una fila por materia con sus elegibles,
-    esperados, grupos y el frente al total de la materia (con el chip de paralelos donde ahorra o hay mixtos); y el
-    total fijo abajo. Con la caja de menos de 40rem (consulta de contenedor), cada materia ocupa dos renglones.
+    departamento regresó la propuesta; el comentario si la regresaron; una fila por materia y campus (M6) con su campus,
+    sus elegibles, esperados, grupos y el frente al total de la materia en ese campus (con el chip de paralelos donde
+    ahorra o hay mixtos); y el total fijo abajo, con los grupos de cada campus. Con la caja de menos de 40rem (consulta de contenedor), cada materia ocupa dos renglones.
 --}}
 @php($career = $selected['career'])
 @php($review = $selected['review'])
@@ -89,14 +89,16 @@
                     @foreach ($items as $entry)
                         @php($item = $entry['item'])
                         @php($total = $entry['total'])
-                        @php($chip = $chips[$item->subject_id] ?? null)
-                        <div role="row" wire:key="item-{{ $item->getKey() }}" data-item="{{ $item->subject->code }}"
+                        @php($chip = $chips[$item->subject_id.'|'.($item->campus_id ?? '')] ?? null)
+                        <div role="row" wire:key="item-{{ $item->getKey() }}" data-item="{{ $item->subject->code }}" data-campus="{{ $item->campus?->code }}"
                             @class(['grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1 py-2 @[40rem]:min-h-12', $rowGrid])>
                             <div role="cell" class="min-w-0 @[40rem]:col-start-1 @[40rem]:row-start-1">
                                 <p class="line-clamp-2 text-sm font-semibold" title="{{ $item->subject->name }}">{{ $item->subject->name }}</p>
-                                <p class="flex flex-wrap items-center gap-x-1 text-sm text-neutral"><span class="whitespace-nowrap font-mono text-[15px] font-semibold text-base-content">{{ $item->subject->code }}</span> · <span class="whitespace-nowrap">semestre {{ $item->semester }}</span>
-                                    @if ($item->notes)
-                                        @endif
+                                <p class="flex flex-wrap items-center gap-x-1 text-sm text-neutral">
+                                    @if ($item->campus)
+                                        <x-academic-load::campus-tag :campus="$item->campus" class="me-1" />
+                                    @endif
+                                    <span class="whitespace-nowrap font-mono text-[15px] font-semibold text-base-content">{{ $item->subject->code }}</span> · <span class="whitespace-nowrap">semestre {{ $item->semester }}</span>
                                 </p>
                                 @if ($item->notes)
                                     <p class="mt-1 flex items-start gap-1.5 text-sm @[40rem]:hidden" data-testid="row-note-inline"><x-icon name="o-chat-bubble-left-ellipsis" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" /><span class="line-clamp-3"><span class="sr-only">Nota del coordinador: </span>{{ $item->notes }}</span></p>
@@ -112,7 +114,7 @@
                                     <span data-testid="against-total"><span class="font-mono font-semibold">{{ $item->requested_groups }}</span> de {{ $total['groups'] }} {{ $total['groups'] === 1 ? 'grupo' : 'grupos' }} · {{ $total['careers'] }} {{ $total['careers'] === 1 ? 'carrera' : 'carreras' }}</span>
                                 @endif
                                 @if ($chip !== null)
-                                    <button type="button" wire:click="openParallels('{{ $item->subject_id }}')" data-opens="parallels-{{ $item->subject_id }}" data-testid="parallels-chip"
+                                    <button type="button" wire:click="openParallels('{{ $item->subject_id }}', '{{ $item->campus_id ?? '' }}')" data-opens="parallels-{{ $item->subject_id }}-{{ $item->campus_id }}" data-testid="parallels-chip"
                                         class="btn btn-sm btn-soft btn-primary h-auto min-h-8 max-w-full whitespace-normal py-1 text-left leading-tight max-md:min-h-11">{{ $chip['label'] }}</button>
                                 @endif
                             </div>
@@ -143,7 +145,13 @@
     @if ($items !== [])
         <div class="sticky bottom-0 z-10 flex items-baseline justify-between gap-4 rounded-b-box border-t border-base-300 bg-base-100 px-4 py-3 text-sm font-semibold sm:px-5" data-testid="inbox-detail-total">
             <span>Total</span>
-            <span class="font-mono tabular-nums">{{ $selected['groups'] }} grupos</span>
+            @php($byCampus = $inbox->groupsByCampus($career->getKey()))
+            <span class="flex flex-wrap items-baseline justify-end gap-x-3">
+                @if (count($byCampus) > 1)
+                    <span class="font-mono text-sm font-normal tabular-nums text-neutral" data-testid="inbox-total-by-campus">{{ collect($byCampus)->map(fn ($groups, $code) => "{$code} {$groups}")->implode(' · ') }}</span>
+                @endif
+                <span class="font-mono tabular-nums">{{ $selected['groups'] }} grupos</span>
+            </span>
         </div>
     @endif
 </div>

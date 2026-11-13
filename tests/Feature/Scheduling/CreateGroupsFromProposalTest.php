@@ -44,7 +44,6 @@ beforeEach(function () {
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->proposal = CareerProposal::factory()->submitted()->create([
         'term_id' => $this->term->id,
-        'campus_id' => $this->campus->id,
         'career_id' => $this->career->id,
     ]);
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id, 'decided_by' => $this->user->id]);
@@ -59,6 +58,7 @@ function createGroupsItem(Subject $subject, int $groups, int $semester = 3): Pro
 {
     return ProposalItem::factory()->create([
         'career_proposal_id' => test()->proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => $subject->id,
         'study_plan_id' => test()->plan->id,
         'semester' => $semester,
@@ -79,7 +79,7 @@ function createGroupsDefaultRoom(Subject $subject, int $capacity, int $priority 
     return SubjectRoomDefault::factory()->create(['subject_id' => $subject->id, 'room_id' => $room->id, 'campus_id' => test()->campus->id, 'priority' => $priority]);
 }
 
-it('crea tantos grupos como se pidieron en cada materia del departamento, con la carrera, plan, semestre, periodo y campus de la propuesta', function () {
+it('M8: crea tantos grupos como se pidieron en cada materia del departamento, con la carrera, plan, semestre y periodo de la propuesta y el campus de la fila', function () {
     $subject = createGroupsSubject($this->cb);
     $item = createGroupsItem($subject, 3);
 
@@ -282,4 +282,35 @@ it('al aceptar la parte con AcceptProposalReview nacen los grupos de su departam
     expect(Group::query()->count())->toBe(2)
         ->and(Group::query()->where('subject_id', $subject->id)->count())->toBe(2)
         ->and(Activity::query()->where('event', 'created')->where('causer_id', $this->user->id)->count())->toBe(2);
+});
+
+it('M8, HC-13: el grupo creado desde la fila de C2 es de C2, y el de la fila de C1 es de C1', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $subject = createGroupsSubject($this->cb, ['code' => 'ACF-0901']);
+    $inC1 = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c1->id, 'subject_id' => $subject->id, 'study_plan_id' => $this->plan->id, 'requested_groups' => 2]);
+    $inC2 = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c2->id, 'subject_id' => $subject->id, 'study_plan_id' => $this->plan->id, 'requested_groups' => 1]);
+    Event::fake([GroupsCreated::class]);
+
+    createGroupsFor();
+
+    expect(Group::query()->where('proposal_item_id', $inC2->id)->pluck('campus_id')->all())->toBe([$c2->id])
+        ->and(Group::query()->where('proposal_item_id', $inC1->id)->pluck('campus_id')->all())->toBe([$c1->id, $c1->id])
+        ->and(Group::query()->pluck('modality_id')->unique()->all())->toBe([$this->proposal->modality_id])
+        ->and(Activity::query()->where('subject_type', (new Group)->getMorphClass())->get()->every(fn (Activity $activity): bool => $activity->attribute_changes['attributes']['modality_id'] === $this->proposal->modality_id))->toBeTrue();
+    // Un solo aviso por decisión, con la modalidad y los grupos de los dos campus: quien lo escucha lee el campus de cada grupo.
+    Event::assertDispatchedTimes(GroupsCreated::class, 1);
+    Event::assertDispatched(GroupsCreated::class, fn (GroupsCreated $event): bool => $event->modalityId === $this->proposal->modality_id && count($event->groupIds) === 3);
+});
+
+it('MS4: una fila sin campus todavía no da grupos; la de su campus sí', function () {
+    $subject = createGroupsSubject($this->cb, ['code' => 'ACF-0901']);
+    $withoutCampus = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => null, 'subject_id' => $subject->id, 'study_plan_id' => $this->plan->id, 'requested_groups' => 2]);
+    $inCampus = createGroupsItem(createGroupsSubject($this->cb, ['code' => 'ACF-0902']), 1);
+
+    $groups = createGroupsFor();
+
+    expect($groups)->toHaveCount(1)
+        ->and(Group::query()->where('proposal_item_id', $withoutCampus->id)->exists())->toBeFalse()
+        ->and(Group::query()->where('proposal_item_id', $inCampus->id)->count())->toBe(1);
 });

@@ -22,6 +22,7 @@ use Illuminate\Support\Str;
 beforeEach(function () {
     // Las tablas de la carga, la apertura y el calendario del periodo, los nombramientos y la modalidad del alumno
     // apuntan al catálogo: sus migraciones, posteriores, se deshacen primero, de la última a la primera.
+    (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210501_make_academic_loads_per_modality.php'))->down();
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210403_add_modality_to_staffing_tables.php'))->down();
     (require base_path('app/Modules/Scheduling/Database/Migrations/2026_11_12_210402_add_modality_to_groups.php'))->down();

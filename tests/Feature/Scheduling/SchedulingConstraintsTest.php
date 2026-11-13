@@ -129,7 +129,8 @@ describe('grupos', function () {
             ->and($group->semester)->toBe($item->semester)
             ->and($group->owner_career_id)->toBe($item->proposal->career_id)
             ->and($group->term_id)->toBe($item->proposal->term_id)
-            ->and($group->campus_id)->toBe($item->proposal->campus_id);
+            ->and($group->modality_id)->toBe($item->proposal->modality_id)
+            ->and($group->campus_id)->toBe($item->campus_id);
     });
 });
 

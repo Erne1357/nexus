@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Notifications\ProposalReturned;
 use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
@@ -37,11 +38,12 @@ use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Event;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Propuestas y bandejas de prueba (tareas 2.7 a 2.9): el demo con el periodo 20271 abierto en Presencial (M4) y los catálogos
 | de Ciencias Básicas y Sistemas validados, como los deja el seeder de CatalogValidation; el seeder arma una
-| propuesta por carrera ofrecida, con borrador, envíos, aceptaciones, regresos y sus avisos.
+| propuesta por carrera ofrecida y modalidad (M6), con borrador, envíos, aceptaciones, regresos y sus avisos.
 */
 
 beforeEach(function () {
@@ -88,11 +90,24 @@ it('arma una propuesta por carrera ofrecida en C2, con borrador y propuestas env
     $offered = CareerCampus::query()->where('campus_id', $this->c2->id)->where('is_active', true)->count();
     $statuses = CareerProposal::query()->where('term_id', $this->term->id)->pluck('status')->map->value->unique()->sort()->values()->all();
 
-    expect(CareerProposal::query()->where('term_id', $this->term->id)->where('campus_id', $this->c2->id)->count())->toBe($offered)
+    expect(CareerProposal::query()->where('term_id', $this->term->id)->where('modality_id', $this->c2->modality_id)->count())->toBe($offered)
         ->and($statuses)->toContain(ProposalStatus::Draft->value)
         ->and(array_intersect($statuses, [ProposalStatus::Submitted->value, ProposalStatus::Returned->value, ProposalStatus::Accepted->value]))->not->toBeEmpty()
         ->and(ProposalReview::query()->where('status', 'accepted')->exists())->toBeTrue()
         ->and(ProposalReview::query()->where('status', 'returned')->exists())->toBeTrue();
+});
+
+it('M7: cada fila la corrige un coordinador que cubre su campus', function () {
+    seedProposals();
+
+    $edits = Activity::query()->where('subject_type', (new ProposalItem)->getMorphClass())->where('event', 'updated')->get();
+
+    expect($edits)->not->toBeEmpty()
+        ->and($edits->reject(function (Activity $edit): bool {
+            $item = ProposalItem::query()->with('proposal')->findOrFail($edit->subject_id);
+
+            return User::query()->findOrFail($edit->causer_id)->can('update', [$item->proposal, $item]);
+        }))->toBeEmpty();
 });
 
 it('solo acepta partes de departamentos con sus catálogos validados, y su carga sale de borrador', function () {
@@ -133,7 +148,8 @@ describe('completo (punto 4 de la demo)', function () {
         $offered = CareerCampus::query()->where('campus_id', $this->c2->id)->where('is_active', true)->count();
         $withParts = ProposalReview::query()->distinct()->pluck('department_id');
 
-        expect(CareerProposal::query()->where('campus_id', $this->c2->id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
+        expect(CareerProposal::query()->where('modality_id', $this->c2->modality_id)->where('status', ProposalStatus::Accepted)->count())->toBe($offered)
+            ->and(ProposalItem::query()->where('campus_id', '!=', $this->c2->id)->where('requested_groups', '>', 0)->count())->toBe(0)
             ->and(ProposalReview::query()->where('status', '!=', 'accepted')->count())->toBe(0)
             ->and(AcademicLoad::query()->where('modality_id', $this->c2->modality_id)->whereIn('department_id', $withParts)->where('status', '!=', LoadStatus::Proposed)->count())->toBe(0)
             ->and(AcademicLoad::query()->whereNotIn('department_id', $withParts)->where('status', '!=', LoadStatus::Draft)->count())->toBe(0)

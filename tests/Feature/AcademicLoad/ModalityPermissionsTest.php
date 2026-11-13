@@ -21,7 +21,7 @@ beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'modality_id' => $this->pres->id]);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'modality_id' => $this->pres->id]);
     $this->load = AcademicLoad::factory()->create(['modality_id' => $this->c1->modality_id, 'department_id' => departmentKey(10)]);
-    $this->proposal = CareerProposal::factory()->create(['campus_id' => $this->c1->id, 'career_id' => careerKey(20)]);
+    $this->proposal = CareerProposal::factory()->create(['career_id' => careerKey(20)]);
     $this->review = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => departmentKey(10)]);
 });
 
@@ -39,7 +39,7 @@ it('AZ-S17: un jefe de proyecto docente de EAD no ve nada de una carga ni de una
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => $this->ead->id, 'department_id' => departmentKey(10)])->create();
 
     expect($jpd->can('view', $this->load))->toBeFalse()
-        ->and($jpd->can('viewAny', [ProposalReview::class, $this->c1, $this->load->department]))->toBeFalse()
+        ->and($jpd->can('viewAny', [ProposalReview::class, $this->pres, $this->load->department]))->toBeFalse()
         ->and($jpd->can('decide', $this->review))->toBeFalse();
 });
 
@@ -47,8 +47,8 @@ it('AZ-S17: un coordinador de EAD no ve ni corrige la propuesta de PRES', functi
     $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => $this->ead->id, 'career_id' => careerKey(20)])->create();
 
     expect($coordinador->can('view', $this->proposal))->toBeFalse()
-        ->and($coordinador->can('update', $this->proposal))->toBeFalse()
-        ->and($coordinador->can('create', [CareerProposal::class, $this->c1, $this->proposal->career]))->toBeFalse();
+        ->and($coordinador->can('update', [$this->proposal, ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $this->c1->id])]))->toBeFalse()
+        ->and($coordinador->can('create', [CareerProposal::class, $this->pres, $this->proposal->career]))->toBeFalse();
 });
 
 it('AZ-S17: un jefe de proyecto docente de PRES con campus ve la carga de otro campus de su modalidad', function () {

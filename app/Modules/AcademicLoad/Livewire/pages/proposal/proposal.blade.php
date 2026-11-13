@@ -1,5 +1,7 @@
 {{--
-    Propuesta de carrera (tarea 2.7): encabezado con la carrera, el periodo y el estado; una alerta por cada
+    Propuesta de carrera (tarea 2.7; una por carrera y modalidad, M6, maqueta U1 opción A «Columnas por campus»):
+    encabezado con la carrera, la modalidad, el periodo, dónde se ofrece, quiénes la coordinan (cada uno con su campus),
+    quién la envió y cuándo, y el estado; el aviso de alcance a quien solo corrige su campus (M7); una alerta por cada
     departamento que regresó su parte; la vista, el filtro de grupos («Todas · Con grupos · Sin grupos») y los totales;
     el resumen de departamentos (elegir uno marca sus materias, en las dos vistas); y la vista que eligió el usuario,
     la retícula por semestre (maqueta C «Las dos», academic-load::proposal.grid) o la tabla con captura en línea
@@ -24,18 +26,18 @@
             setTimeout(() => el.removeAttribute(attribute), ms);
         },
         found(id) {
-            const el = $root.querySelector('[data-item=&quot;' + id + '&quot;]');
+            const el = [...$root.querySelectorAll('[data-item=&quot;' + id + '&quot;]')].find((candidate) => candidate.offsetParent !== null);
             if (! el) { return; }
             el.scrollIntoView({ block: 'center', inline: 'center', behavior: this.reduced ? 'auto' : 'smooth' });
             el.focus({ preventScroll: true });
             this.mark(el, 'data-found', 2500);
         },
         saved(detail) {
-            const cell = $root.querySelector('[data-cell=&quot;' + detail.id + '.' + detail.field + '&quot;]');
-            if (! cell) { return; }
-            const status = cell.querySelector('[data-saved-status]');
-            if (status) { status.textContent = 'Guardado'; setTimeout(() => status.textContent = '', 2000); }
-            this.mark(cell, 'data-saved', 1800);
+            $root.querySelectorAll('[data-cell=&quot;' + detail.id + '.' + detail.field + '&quot;]').forEach((cell) => {
+                const status = cell.querySelector('[data-saved-status]');
+                if (status) { status.textContent = 'Guardado'; setTimeout(() => status.textContent = '', 2000); }
+                this.mark(cell, 'data-saved', 1800);
+            });
         },
     }"
     x-on:proposal-focus.window="$nextTick(() => found($event.detail.id))"
@@ -45,7 +47,7 @@
     @if ($overview === null)
         <div>
             <h1 class="text-2xl font-bold leading-tight md:text-3xl">Propuesta de carrera</h1>
-            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
+            <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
         </div>
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="proposal-empty">{{ $message }}</div>
     @else
@@ -57,10 +59,37 @@
                 </h1>
                 <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-neutral" data-testid="proposal-meta">
                     <span class="font-medium text-base-content"><span class="font-mono">{{ $overview->proposal->career->code }}</span> · {{ $overview->proposal->career->name }}</span>
-                    <span>{{ $overview->proposal->campus->name }}</span>
+                    <span>{{ $overview->proposal->modality->name }}</span>
                     <span>{{ $overview->proposal->term->name }}</span>
+                    @if ($offer)
+                        <span data-testid="proposal-offer">{{ $offer }}</span>
+                    @endif
                 </p>
-                <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
+                @if ($coordinators !== [])
+                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="proposal-coordinators">
+                        <x-icon name="o-users" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>{{ count($coordinators) > 1 ? 'Coordinan:' : 'Coordina:' }}</span>
+                        @foreach ($coordinators as $coordinator)
+                            <span class="inline-flex items-center gap-1.5">
+                                <x-academic-load::campus-tag :campus="$coordinator['campusKey'] === null ? null : $columns[$coordinator['campusKey']]['campus']" />
+                                <span class="text-base-content">{{ $coordinator['name'] }}</span>
+                                @if ($coordinator['me'])<span>(tú)</span>@endif
+                                @if ($coordinator['covers'])<span>· {{ $coordinator['covers'] }}</span>@endif
+                            </span>
+                            @if (! $loop->last)<span aria-hidden="true">·</span>@endif
+                        @endforeach
+                    </p>
+                @endif
+                @if ($sent)
+                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="proposal-sent">
+                        <x-icon name="o-paper-airplane" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span>Enviada por <span class="font-medium text-base-content">{{ $sent['name'] }}</span>@if ($sent['campus']) ({{ $sent['campus'] }})@endif el {{ $sent['at'] }}</span>
+                        @if ($sent['returned'])
+                            <span aria-hidden="true">·</span><span>{{ $sent['returned'] }}</span>
+                        @endif
+                    </p>
+                @endif
+                <x-core::modality-scope :options="$modalityOptions" :selected="$modalityCode" class="mt-2" />
             </div>
 
             <div class="flex flex-wrap items-end gap-3">
@@ -78,6 +107,12 @@
                 @endif
             </div>
         </div>
+
+        @if ($scopeNote)
+            <x-alert icon="o-lock-closed" class="alert-info alert-soft text-sm" data-testid="proposal-scope">
+                <span>Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados y los grupos de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</span>
+            </x-alert>
+        @endif
 
         @if ($returnedParts !== [])
             <div class="space-y-1.5" data-testid="returned-parts">
@@ -150,7 +185,7 @@
 
         <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
             @if ($selected !== null)
-                @include('academic-load::proposal.item-panel', ['item' => $selected, 'lock' => isset($locks[$selected->id]) ? $locks[$selected->id]->message($selected->subject->department->code) : null])
+                @include('academic-load::proposal.item-panel', ['row' => $selected])
             @endif
         </x-drawer>
     @endif

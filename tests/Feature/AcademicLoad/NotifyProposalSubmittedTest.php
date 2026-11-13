@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Notifications\ProposalSubmitted;
+use App\Modules\AcademicLoad\Notifications\ProposalSubmittedByPeer;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -22,8 +23,9 @@ use Illuminate\Support\Facades\Notification;
 
 /*
 | Tareas 2.7 y 2.9: al enviar una propuesta, el jefe de cada departamento con su parte pendiente recibe
-| «<carrera> envió su propuesta» con cuántas materias y grupos le pide; al reenviarla, «reenvió». Los
-| departamentos que ya aceptaron no reciben nada.
+| «<carrera> envió su propuesta» con cuántas materias y grupos le pide en todos los campus; al reenviarla, «reenvió».
+| Los departamentos que ya aceptaron no reciben nada. Los demás coordinadores de la carrera en la modalidad reciben
+| «<quién> envió la propuesta de <carrera>» (M6, MS18).
 */
 
 beforeEach(function () {
@@ -31,7 +33,6 @@ beforeEach(function () {
     $this->career = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
     $this->proposal = CareerProposal::factory()->create([
         'term_id' => Term::factory()->create(['code' => '20271'])->id,
-        'campus_id' => $this->campus->id,
         'career_id' => $this->career->id,
     ]);
     TermOpening::factory()->create(['term_id' => $this->proposal->term_id, 'modality_id' => $this->campus->modality_id]);
@@ -47,6 +48,7 @@ function rowFor(Department $department, int $groups): ProposalItem
 {
     return ProposalItem::factory()->create([
         'career_proposal_id' => test()->proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => Subject::factory()->create(['department_id' => $department->id])->id,
         'requested_groups' => $groups,
     ]);
@@ -65,13 +67,14 @@ it('al enviar, avisa al jefe de cada departamento con cuántas materias y grupos
         $message = $notification->message($this->jefeCb);
 
         return $message->title === 'Ingeniería en Sistemas Computacionales envió su propuesta'
-            && $message->body === 'Campus II · 2 materias, 5 grupos'
+            && $message->body === 'Presencial · 2 materias, 5 grupos'
             && $message->route === 'academic-load.inbox'
             && $message->parameters === ['depto' => 'CB', 'carrera' => $this->career->id]
             && $message->termId === $this->proposal->term_id
-            && $message->campusId === $this->campus->id;
+            && $message->modalityId === $this->proposal->modality_id
+            && $message->campusId === null;
     });
-    Notification::assertSentTo($this->jefeSc, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($this->jefeSc)->body === 'Campus II · 1 materia, 1 grupo');
+    Notification::assertSentTo($this->jefeSc, ProposalSubmitted::class, fn (ProposalSubmitted $notification) => $notification->message($this->jefeSc)->body === 'Presencial · 1 materia, 1 grupo');
     Notification::assertNotSentTo($this->coordinador, ProposalSubmitted::class);
 });
 
@@ -139,4 +142,34 @@ it('guarda el puesto de jefe en el aviso', function () {
     app(NotifyProposalSubmitted::class)->handle($this->proposal, [$this->cb->id]);
 
     expect($this->jefeCb->notifications()->first()->data['role'])->toBe('jefe_departamento');
+});
+
+it('M6, MS18: cualquier coordinador de la carrera envía y se avisa a los demás', function () {
+    Notification::fake();
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $c1->id]);
+    $deC1 = User::factory()->withRole(Role::Coordinador, ['campus_id' => $c1->id, 'career_id' => $this->career->id])->create(['name' => 'Héctor Villalobos']);
+    $sinCampus = User::factory()->withRole(Role::Coordinador, ['career_id' => $this->career->id])->create(['name' => 'Rocío Barraza']);
+    $otraCarrera = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create();
+    $this->coordinador->update(['name' => 'Daniela Quintero']);
+    rowFor($this->cb, 2);
+
+    expect($deC1->can('submit', $this->proposal))->toBeTrue()
+        ->and($this->coordinador->can('submit', $this->proposal))->toBeTrue();
+
+    app(SubmitCareerProposal::class)->handle($this->proposal, $this->coordinador);
+
+    Notification::assertSentTo($this->jefeCb, ProposalSubmitted::class);
+    foreach ([$deC1, $sinCampus] as $peer) {
+        Notification::assertSentTo($peer, ProposalSubmittedByPeer::class, function (ProposalSubmittedByPeer $notification) use ($peer) {
+            $message = $notification->message($peer);
+
+            return $message->title === 'Daniela Quintero envió la propuesta de Ingeniería en Sistemas Computacionales'
+                && $message->route === 'academic-load.proposal'
+                && $message->parameters === ['carrera' => $this->career->id]
+                && $message->modalityId === $this->proposal->modality_id
+                && $message->campusId === null;
+        });
+    }
+    Notification::assertNotSentTo([$this->coordinador, $otraCarrera, $this->jefeCb], ProposalSubmittedByPeer::class);
 });
