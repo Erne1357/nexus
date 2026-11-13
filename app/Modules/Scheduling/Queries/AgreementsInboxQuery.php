@@ -364,7 +364,7 @@ final class AgreementsInboxQuery
 
     private function modalityOf(InterdepartmentalAgreement $agreement): Modality
     {
-        return Modality::query()->withTrashed()->findOrFail($agreement->modality_id);
+        return KeyLookup::findOrFail(Modality::query()->withTrashed(), $agreement->modality_id);
     }
 
     /**
