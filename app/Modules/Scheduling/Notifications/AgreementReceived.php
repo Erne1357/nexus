@@ -44,6 +44,7 @@ final class AgreementReceived extends NexusNotification
             parameters: ['acuerdo' => $agreement->getKey()],
             termId: $agreement->term_id,
             campusId: $agreement->campus_id,
+            modalityId: $agreement->modality_id,
             tone: 'warning',
         );
     }

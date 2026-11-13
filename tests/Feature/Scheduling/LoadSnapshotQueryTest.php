@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -18,20 +19,22 @@ use App\Modules\Scheduling\Queries\LoadSnapshotQuery;
 use Carbon\CarbonImmutable;
 
 /*
-| Los grupos de la foto de una carga (tarea 4.3): los no cancelados del departamento en el campus y el periodo, con la
-| forma de `groups` en SnapshotPayload (docs/dominio/modelo-de-datos.md, «Contenido del snapshot»).
+| Los grupos de la foto de una carga (tarea 4.3): los no cancelados del departamento en la modalidad y el periodo, de
+| todos sus campus (M1), cada uno con su campus, con la forma de `groups` en SnapshotPayload
+| (docs/dominio/modelo-de-datos.md, «Contenido del snapshot»).
 */
 
 beforeEach(function () {
-    $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'department_id' => departmentKey(10)]);
-    $this->building = Building::factory()->create(['campus_id' => $this->load->campus_id, 'code' => 'A', 'name' => 'Edificio A']);
+    $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Closed, 'modality_id' => $this->campus->modality_id, 'department_id' => departmentKey(10)]);
+    $this->building = Building::factory()->create(['campus_id' => $this->campus->id, 'code' => 'A', 'name' => 'Edificio A']);
 });
 
 function snapshotGroup(array $attributes = [], ?Subject $subject = null): Group
 {
     $subject ??= Subject::factory()->create(['department_id' => departmentKey(10)]);
 
-    return Group::factory()->withQuota()->create(['term_id' => test()->load->term_id, 'campus_id' => test()->load->campus_id, 'subject_id' => $subject->id, ...$attributes]);
+    return Group::factory()->withQuota()->create(['term_id' => test()->load->term_id, 'campus_id' => test()->campus->id, 'subject_id' => $subject->id, ...$attributes]);
 }
 
 function snapshotGroups(): array
@@ -58,6 +61,7 @@ it('da los grupos con la forma del snapshot, que pasa la revisión del payload',
             'status' => 'planned',
             'capacity' => 30,
             'justification' => null,
+            'campus' => ['id' => $this->campus->id, 'code' => 'C2', 'name' => 'Campus II'],
             'subject' => ['id' => $subject->id, 'code' => 'SCD-1027', 'name' => 'Tópicos Avanzados', 'credits' => 5, 'theory_hours' => 2, 'practice_hours' => 3, 'department_id' => departmentKey(10)],
             'teacher' => ['id' => $teacher->id, 'rfc' => 'OISM850312AB1', 'name' => 'María Ortiz'],
             'placements' => [[
@@ -114,16 +118,25 @@ it('el salón prestado lleva a su dueño, la sesión virtual va sin salón y el 
         ->and($groups[0]['sessions'][1])->toMatchArray(['kind' => 'virtual', 'kind_label' => 'Virtual', 'room' => null]);
 });
 
-it('deja fuera los grupos cancelados, los de otro departamento, otro campus y otro periodo, y ordena por materia y clave', function () {
+it('M1: la carga presencial de Sistemas tiene los grupos de C1 y C2, cada uno con su campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $subject = Subject::factory()->create(['department_id' => departmentKey(10), 'code' => 'SCD-1027']);
+    snapshotGroup(['code' => 'A'], $subject);
+    snapshotGroup(['code' => 'B', 'campus_id' => $c1->id], $subject);
+
+    expect(collect(snapshotGroups())->map(fn (array $g): string => "{$g['code']} {$g['campus']['code']}")->all())->toBe(['A C2', 'B C1']);
+});
+
+it('deja fuera los grupos cancelados, los de otro departamento, otra modalidad y otro periodo, y ordena por materia y clave', function () {
     $calculo = Subject::factory()->create(['department_id' => departmentKey(10), 'code' => 'ACF-0901']);
     $taller = Subject::factory()->create(['department_id' => departmentKey(10), 'code' => 'ACA-0909']);
     snapshotGroup(['code' => 'B'], $calculo);
     snapshotGroup(['code' => 'A'], $calculo);
     snapshotGroup(['code' => 'D'], $taller);
     snapshotGroup(['code' => 'C', 'status' => 'cancelled'], $calculo);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id]);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'subject_id' => $calculo->id]);
-    Group::factory()->create(['campus_id' => $this->load->campus_id, 'subject_id' => $calculo->id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->campus->id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'subject_id' => $calculo->id, 'campus_id' => Campus::factory()->create(['modality_id' => modalityOf('EAD')->id])->id]);
+    Group::factory()->create(['campus_id' => $this->campus->id, 'subject_id' => $calculo->id]);
 
     expect(collect(snapshotGroups())->map(fn (array $g): string => "{$g['subject']['code']} {$g['code']}")->all())
         ->toBe(['ACA-0909 D', 'ACF-0901 A', 'ACF-0901 B']);

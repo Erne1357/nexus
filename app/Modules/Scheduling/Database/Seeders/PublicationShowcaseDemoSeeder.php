@@ -66,10 +66,9 @@ final class PublicationShowcaseDemoSeeder extends Seeder
     {
         $this->refuseProduction();
 
+        $campusModel = Campus::query()->where('code', $campus)->firstOrFail();
         $load = AcademicLoad::query()
-            ->where('term_id', Term::query()->where('code', $term)->firstOrFail()->id)
-            ->where('campus_id', Campus::query()->where('code', $campus)->firstOrFail()->id)
-            ->where('department_id', Department::query()->where('code', $department)->firstOrFail()->id)
+            ->ofDepartment(Term::query()->where('code', $term)->firstOrFail()->id, $campusModel->modality_id, Department::query()->where('code', $department)->firstOrFail()->id)
             ->firstOrFail();
 
         if (! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Closed], true)) {
@@ -93,7 +92,7 @@ final class PublicationShowcaseDemoSeeder extends Seeder
             // Cada cambio de salón recalcularía los choques de todo el campus (GroupScheduleChanged); se recalculan una vez
             // por versión. El cambio de salón no mueve la hora de inicio, así que la clave del grupo no cambia.
             Event::fakeFor(fn () => $this->moveRooms($load, $head, $index), [GroupScheduleChanged::class]);
-            app(SyncScheduleConflicts::class)->handle($load->term, $load->campus);
+            app(SyncScheduleConflicts::class)->handle($load->term, $campusModel);
             $this->justifyMissing($load, $head);
             $this->closeAndPublish($load, $head, null, $reason);
         }
@@ -166,7 +165,7 @@ final class PublicationShowcaseDemoSeeder extends Seeder
     private function groups(AcademicLoad $load): Collection
     {
         return Group::query()
-            ->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id)
+            ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
             ->where('status', '!=', GroupStatus::Cancelled->value)
             ->with('sessions')
             ->orderBy('id')

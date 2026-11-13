@@ -45,6 +45,7 @@ final class LoanCancelled extends NexusNotification
             parameters: ['acuerdo' => $agreement->getKey()],
             termId: $agreement->term_id,
             campusId: $agreement->campus_id,
+            modalityId: $agreement->modality_id,
             tone: 'neutral',
         );
     }

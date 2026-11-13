@@ -72,9 +72,7 @@ final class AssignGroupCode
     private function loadIsPublished(Group $group): bool
     {
         return AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
+            ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
             ->where('status', LoadStatus::Published)
             ->exists();
     }

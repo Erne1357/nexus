@@ -123,6 +123,7 @@ final class CreateGroupsFromProposal
                     'code' => $group->code,
                     'term_id' => $group->term_id,
                     'campus_id' => $group->campus_id,
+                    'modality_id' => $group->modality_id,
                     'subject_id' => $group->subject_id,
                     'owner_career_id' => $group->owner_career_id,
                     'study_plan_id' => $group->study_plan_id,

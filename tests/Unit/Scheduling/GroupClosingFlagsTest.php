@@ -1,12 +1,12 @@
 <?php
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Scheduling\Queries\ClosingBlockers;
 use App\Modules\Scheduling\Queries\GroupClosingFlags;
 
 /*
 | HC-15 por grupo (GroupClosingFlags): la única regla de lo que le falta a un grupo para cerrar, según el perfil de su
-| campus, que leen el veto, «Cierre de la carga» y «Avance del cierre». ClosingBlockers::tally() la cuenta por grupo.
+| modalidad (M1), que leen el veto, «Cierre de la carga» y «Avance del cierre». ClosingBlockers::tally() la cuenta por grupo.
 */
 
 function closingFlags(array $overrides = []): GroupClosingFlags
@@ -14,6 +14,7 @@ function closingFlags(array $overrides = []): GroupClosingFlags
     return new GroupClosingFlags(...[
         'id' => (string) fake()->uuid(),
         'campusId' => 'c2',
+        'modalityId' => 'pres',
         'departmentId' => 'sc',
         'teacherId' => 't1',
         'hasSessions' => true,
@@ -25,9 +26,9 @@ function closingFlags(array $overrides = []): GroupClosingFlags
     ]);
 }
 
-function closingProfile(bool $rooms = true, bool $blocks = true): CampusProfile
+function closingProfile(bool $rooms = true, bool $blocks = true): ModalityProfile
 {
-    return CampusProfile::fromArray(['uses_rooms' => $rooms, 'uses_time_blocks' => $blocks]);
+    return ModalityProfile::fromArray(['uses_rooms' => $rooms, 'uses_time_blocks' => $blocks]);
 }
 
 it('HC-15: un grupo completo no bloquea ni se justifica', function () {
