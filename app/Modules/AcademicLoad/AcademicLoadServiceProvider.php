@@ -173,14 +173,14 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
-            new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeeder(AcademicLoadDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
                 'seed' => $demo->seed,
                 'complete' => true,
             ])),
             // La publicación termina la etapa 8: cada carga cerrada sale con su versión 1 (tarea 4.3).
-            new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeeder(PublicationDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeederPerModality(PublicationDemoSeeder::class, [
                 'term' => $demo->termCode,
             ])),
         ];
