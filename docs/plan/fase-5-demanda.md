@@ -49,6 +49,7 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
 5. **Parámetros (5.8):** los ajustan **Subdirección y admin**, para todo el Tec, sin despliegue.
 6. **Primer semestre:** no sale de la fórmula. Con los alumnos de nuevo ingreso ya inscritos, **el coordinador arma «paquetes»**: conjuntos de materias de primer semestre, y a veces de segundo, que se asignan cada uno a varios alumnos. La proyección de primer semestre toma lo que el coordinador capture; el concepto de paquete es nuevo en Nexus (ver «Preguntas abiertas»).
 7. **Coordinadores:** en Campus I hay un coordinador por carrera; **en Campus II uno solo para todas las carreras**. Para el piloto de la fase 4 basta con darle a esa persona un nombramiento de coordinador por cada carrera de Campus II. Si conviene un puesto «coordinador de campus» que cubra todas sus carreras se decide al planear.
+   - **Pendiente antes del piloto de Campus II: «apertura por campus»** (M17, decisión del usuario del 13 de noviembre de 2026; todavía no se construye ni está en las reglas). Al abrir el periodo para una modalidad, el admin marca en qué campus se captura; los campus no marcados no tienen columna en la propuesta, grupos, catálogos por validar ni choques, y se pueden agregar campus después. Hoy abrir Presencial cubre todos los campus activos, así que sin esto cada propuesta presencial nace con una columna de C1 llena con los grupos sugeridos que el coordinador de C2 no puede cambiar.
 
 ### Ajustes a las tareas
 
