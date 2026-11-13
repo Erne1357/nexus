@@ -4,8 +4,8 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Livewire\Concerns\WithModalityScope;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Faculty\Enums\PositionKind;
@@ -25,18 +25,21 @@ use Mary\Traits\Toast;
 
 /**
  * Carga por docente (tarea 3.12, maqueta B «Mosaicos por estado», decidida por el usuario): las horas de cada docente
- * del departamento en el periodo activo, sumando todos los campus, en mosaicos agrupados por estado (exceden su tope,
+ * del departamento en el periodo activo, sumando todos los campus y todas sus modalidades (el tope es del docente, MS32,
+ * supuesto por confirmar), en mosaicos agrupados por estado (exceden su tope,
  * sin carga, con horas libres, carga completa, honorarios). Tocar un mosaico abre el drawer con sus grupos por campus
  * y su semana. Lo que muestra sale de TeacherLoadsBoardQuery, que lee `teacher_term_loads`; mientras el periodo no
  * tenga filas, «Calcular ahora» despacha el job RefreshTeacherLoads.
  *
- * El departamento es el del jefe; con varios, o para Subdirección y admin, `?depto=<código>` lo elige. Entran quienes
+ * La página es de una modalidad (`?modalidad=`, WithModalityScope; M1; sin select con una sola, MS16): decide qué
+ * departamentos ve el usuario (el permiso es de la modalidad, AZ-S17) y qué carga del departamento se muestra. El
+ * departamento es el del jefe; con varios, o para Subdirección y admin, `?depto=<código>` lo elige. Entran quienes
  * ven la carga por docente (TeacherTermLoadPolicy::viewAny) y la policy se vuelve a preguntar en cada acción.
  */
 new #[Title('Carga por docente')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityScope;
 
     /** Las secciones del tablero, en orden: estado, título, tono y icono. */
     private const array SECTIONS = [
@@ -72,7 +75,7 @@ new #[Title('Carga por docente')] class extends Component
     public ?string $termId = null;
 
     #[Locked]
-    public ?string $campusId = null;
+    public ?string $modalityId = null;
 
     #[Locked]
     public ?string $departmentId = null;
@@ -99,6 +102,21 @@ new #[Title('Carga por docente')] class extends Component
     {
         $this->reset('teacherId', 'showDrawer');
         $this->resolve($context);
+    }
+
+    /**
+     * Otra modalidad en el select: los departamentos y la carga de esa modalidad; si no ve el departamento ahí, el primero.
+     */
+    public function updatedModalidad(Actor $context): void
+    {
+        $modalityId = $this->requiredModality()->getKey();
+        $department = Department::query()->where('code', $this->department)->first();
+
+        if ($department === null || ! $context->allows(StaffingPermission::TeacherLoadView, Target::of(modality: $modalityId, unit: $department->getKey()))) {
+            $this->department = '';
+        }
+
+        $this->updatedDepartment($context);
     }
 
     public function updatedState(): void
@@ -150,8 +168,10 @@ new #[Title('Carga por docente')] class extends Component
     {
         $board = $this->board($query);
 
+        $scope = ['modalityOptions' => $this->modalityOptions(), 'shownModality' => $this->modalityId === null ? null : $this->modalityOptions()->first(fn (Modality $option): bool => $option->getKey() === $this->modalityId)];
+
         if ($board === null) {
-            return ['board' => null];
+            return ['board' => null, ...$scope];
         }
 
         $needle = Str::of($this->search)->squish()->ascii()->lower()->toString();
@@ -178,12 +198,11 @@ new #[Title('Carga por docente')] class extends Component
         }
 
         $totals = $board->totals();
-        // La carga del departamento en cada modalidad (M1: una por departamento y modalidad, con todos sus campus).
-        $loads = AcademicLoad::query()->where('term_id', $this->termId)->where('department_id', $this->departmentId)
-            ->join('modalities', 'modalities.id', '=', 'academic_loads.modality_id')->orderBy('modalities.code')
-            ->get(['academic_loads.status', 'modalities.code as modality_code']);
+        // La carga del departamento en la modalidad de la página (M1: una por departamento y modalidad).
+        $loads = AcademicLoad::query()->where('term_id', $this->termId)->where('department_id', $this->departmentId)->where('modality_id', $this->modalityId)->get(['status']);
 
         return [
+            ...$scope,
             'board' => $board,
             'department' => KeyLookup::find(Department::query()->withTrashed(), $this->departmentId),
             'term' => KeyLookup::find(Term::query(), $this->termId),
@@ -200,14 +219,16 @@ new #[Title('Carga por docente')] class extends Component
     }
 
     /**
-     * Resuelve con la credencial el periodo, el campus y el departamento. Uno pedido por la URL que el usuario no
-     * ve es 403.
+     * Resuelve con la credencial el periodo, la modalidad (la elegida o la de omisión, MS30; queda fija en `?modalidad=`)
+     * y el departamento. Uno pedido por la URL que el usuario no ve es 403.
      */
     private function resolve(Actor $context): void
     {
-        $this->termId = $this->campusId = $this->departmentId = null;
+        $this->termId = $this->modalityId = $this->departmentId = null;
         $this->departments = [];
 
+        $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
         $term = $context->activeTerm();
 
         if ($term === null) {
@@ -216,11 +237,9 @@ new #[Title('Carga por docente')] class extends Component
             return;
         }
 
-        /* La pantalla muestra todos los campus juntos (S6): el campus solo es el contexto del permiso, sin selector. */
-        $campus = $this->defaultCampus();
-
+        /* La pantalla muestra todos los campus juntos (S6). */
         $departments = Department::query()->whereNull('deleted_at')->where('is_active', true)->orderBy('code')->get()
-            ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(modality: $campus->modality_id, unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(modality: $modality->getKey(), unit: $department->getKey())))
             ->values();
 
         $chosen = $this->department === '' ? $departments->first() : $departments->first(fn (Department $department): bool => $department->code === $this->department);
@@ -230,14 +249,14 @@ new #[Title('Carga por docente')] class extends Component
         $this->departments = $departments->map(fn (Department $department): array => ['code' => $department->code, 'name' => "{$department->code} · {$department->name}"])->all();
 
         if ($chosen === null) {
-            $this->message = 'No tienes un departamento con carga por docente.';
+            $this->message = "No tienes un departamento con carga por docente en {$modality->name}.";
 
             return;
         }
 
         $this->department = $chosen->code;
         $this->termId = $term->getKey();
-        $this->campusId = $campus->getKey();
+        $this->modalityId = $modality->getKey();
         $this->departmentId = $chosen->getKey();
         $this->message = null;
     }
@@ -261,12 +280,12 @@ new #[Title('Carga por docente')] class extends Component
      */
     private function authorizeView(): array
     {
-        abort_if($this->departmentId === null || $this->termId === null, 403);
+        abort_if($this->departmentId === null || $this->termId === null || $this->modalityId === null, 403);
 
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $this->departmentId);
-        $campus = $this->campusId === null ? null : KeyLookup::find(Campus::query(), $this->campusId);
+        $modality = KeyLookup::findOrFail(Modality::query()->withTrashed(), $this->modalityId);
 
-        Gate::authorize('viewAny', [TeacherTermLoad::class, $department, $campus]);
+        Gate::authorize('viewAny', [TeacherTermLoad::class, $department, $modality]);
 
         return [KeyLookup::findOrFail(Term::query(), $this->termId), $department];
     }

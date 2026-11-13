@@ -1,6 +1,7 @@
 {{--
-    Carga por docente (maqueta B «Mosaicos por estado», decidida por el usuario): encabezado con el departamento, «Todos
-    los campus», el periodo y el estado de la carga; la franja de totales; la búsqueda y el filtro de plaza; y los
+    Carga por docente (maqueta B «Mosaicos por estado», decidida por el usuario): encabezado con el departamento, la
+    modalidad (como dato con una sola; con varias, el select «Modalidad», maqueta U2, opción A), «Todos los campus», el
+    periodo y el estado de la carga del departamento en esa modalidad; la franja de totales; la búsqueda y el filtro de plaza; y los
     mosaicos por sección. Tocar un mosaico abre el drawer del docente (hoja completa en celular). Lo que se pinta viene
     de TeacherLoadsBoardQuery.
 --}}
@@ -11,6 +12,7 @@
 <div class="space-y-5">
     @if ($board === null)
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Carga por docente</h1>
+        <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality?->code ?? $modalidad" class="w-full md:w-56" />
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="loads-empty">{{ $message }}</div>
     @else
         <div class="flex flex-wrap items-end justify-between gap-x-7 gap-y-4">
@@ -18,6 +20,9 @@
                 <h1 class="text-2xl font-bold leading-tight md:text-3xl">Carga por docente</h1>
                 <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-neutral">
                     <span class="font-medium text-base-content" data-testid="loads-department">{{ $department->name }}</span>
+                    @if ($modalityOptions->count() <= 1)
+                        <span data-testid="loads-modality">{{ $shownModality?->name }}</span>
+                    @endif
                     <span>Todos los campus</span>
                     <span data-testid="loads-term">{{ $term->name }}</span>
                 </p>
@@ -27,15 +32,12 @@
                 @if (count($departments) > 1)
                     <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm" data-testid="loads-department-select" />
                 @endif
+                <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality?->code" class="w-full md:w-56" />
                 <div class="flex flex-col gap-1.5 rounded-box border border-base-300 bg-base-100 px-4 py-2.5 max-md:w-full" data-testid="loads-state">
                     <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Carga del departamento</span>
                     <span class="flex flex-wrap items-center gap-2">
                         @forelse ($loads as $load)
-                            <x-core::status-badge :tone="$load->status->tone()" :label="$load->status->label()">
-                                @if ($loads->count() > 1)
-                                    <span class="font-mono text-xs opacity-70">{{ $load->modality_code }}</span>
-                                @endif
-                            </x-core::status-badge>
+                            <x-core::status-badge :tone="$load->status->tone()" :label="$load->status->label()" />
                         @empty
                             <x-core::status-badge tone="draft" label="Sin carga" />
                         @endforelse

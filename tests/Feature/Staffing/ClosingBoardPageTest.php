@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Models\Group;
@@ -34,44 +35,71 @@ beforeEach(function () {
     $this->world->loadIn($this->world->campus, LoadStatus::Draft, Department::factory()->create(['code' => 'LO', 'name' => 'Logística']));
 });
 
-function closingBoardPage(User $user): Testable
+/**
+ * La página en una modalidad (`?modalidad=`; sin ella, MS30 toma EAD, la primera por clave, porque ninguna está abierta).
+ *
+ * @param  array<string, string>  $query
+ */
+function closingBoardPage(User $user, array $query = ['modalidad' => 'PRES']): Testable
 {
-    return Livewire::actingAs($user)->test('staffing::pages.closing-board');
+    return Livewire::withQueryParams($query)->actingAs($user)->test('staffing::pages.closing-board');
 }
 
-it('muestra las cifras de todo el Tec, un renglón por departamento con una insignia por carga y el departamento sin grupos al final', function () {
+it('M1: muestra las cifras de la modalidad de la página, un renglón por departamento con la insignia de su carga y el departamento sin grupos al final', function () {
     Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, modalityOf('PRES')->id), now()->setTime(9, 15)->toIso8601String());
     Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, modalityOf('EAD')->id), now()->setTime(9, 40)->toIso8601String());
 
     $page = closingBoardPage($this->subdireccion)
         ->assertSee('Avance del cierre')
+        ->assertSeeHtml('data-testid="modality-scope"')
         ->assertSee('Choques recalculados hoy a las 9:15')
         ->assertSeeHtml('aria-label="Presencial: Asignación, falta 1 grupo"')
-        ->assertSeeHtml('aria-label="EAD: publicada"')
+        ->assertDontSeeHtml('aria-label="EAD: publicada"')
         ->assertSeeHtml('aria-label="Presencial: lista para cerrar"')
-        ->assertSee('Sin grupos en ninguna modalidad');
+        ->assertSee('Sin grupos en Presencial');
 
     $html = $page->html();
-    expect(textOf(domOf($page)->querySelector('[data-testid="board-meta"]')))->toContain('3 departamentos · 3 cargas en C1 y C2')
+    expect(textOf(domOf($page)->querySelector('[data-testid="board-meta"]')))->toContain('3 departamentos · 2 cargas en C2')
         ->and(strpos($html, 'data-testid="board-row-LO"'))->toBeGreaterThan(strpos($html, 'data-testid="board-row-SC"'))
-        ->and(textOf(domOf($page)->querySelector('[data-testid="kpi-missing"]')))->toContain('1 de 3')
-        ->and(textOf(domOf($page)->querySelector('[data-testid="kpi-ready"]')))->toContain('1 de 3')
-        ->and(textOf(domOf($page)->querySelector('[data-testid="kpi-published"]')))->toContain('1 de 3');
+        ->and(textOf(domOf($page)->querySelector('[data-testid="kpi-missing"]')))->toContain('1 de 2')
+        ->and(textOf(domOf($page)->querySelector('[data-testid="kpi-ready"]')))->toContain('1 de 2')
+        ->and(textOf(domOf($page)->querySelector('[data-testid="kpi-published"]')))->toContain('0 de 2');
+
+    $ead = closingBoardPage($this->subdireccion, ['modalidad' => 'EAD'])
+        ->assertSee('Choques recalculados hoy a las 9:40')
+        ->assertSeeHtml('aria-label="EAD: publicada"')
+        ->assertDontSeeHtml('aria-label="Presencial: lista para cerrar"');
+
+    expect(textOf(domOf($ead)->querySelector('[data-testid="kpi-published"]')))->toContain('1 de 1');
 });
 
-it('filtra por departamento y por estado de alguna de sus cargas', function () {
+it('cambiar la modalidad en el select cierra el detalle y deja la matriz de esa modalidad', function () {
+    closingBoardPage($this->subdireccion)
+        ->call('open', $this->world->department->id)
+        ->assertSet('showDrawer', true)
+        ->set('modalidad', 'EAD')
+        ->assertSet('showDrawer', false)
+        ->assertSet('loadId', null)
+        ->assertSeeHtml('aria-label="EAD: publicada"');
+});
+
+it('filtra por departamento y por estado de su carga', function () {
     closingBoardPage($this->subdireccion)
         ->set('search', 'electrica')
         ->assertSeeHtml('data-testid="board-row-EE"')
         ->assertDontSeeHtml('data-testid="board-row-SC"')
         ->set('search', '')
-        ->set('state', 'publicadas')
+        ->set('state', 'faltantes')
         ->assertSeeHtml('data-testid="board-row-SC"')
         ->assertDontSeeHtml('data-testid="board-row-EE"');
+
+    closingBoardPage($this->subdireccion, ['modalidad' => 'EAD'])
+        ->set('state', 'publicadas')
+        ->assertSeeHtml('data-testid="board-row-SC"');
 });
 
 it('las cifras de arriba filtran la matriz y el filtro va en la URL; tocar la elegida lo quita', function () {
-    $page = Livewire::withQueryParams(['estado' => 'listas'])->actingAs($this->subdireccion)->test('staffing::pages.closing-board')
+    $page = Livewire::withQueryParams(['estado' => 'listas', 'modalidad' => 'PRES'])->actingAs($this->subdireccion)->test('staffing::pages.closing-board')
         ->assertSet('state', 'listas')
         ->assertSeeHtml('data-testid="board-row-EE"')
         ->assertDontSeeHtml('data-testid="board-row-SC"');
@@ -109,6 +137,7 @@ it('abre el detalle de una carga: el selector de campus, lo que falta, las justi
         ->assertSee('Historial')
         ->assertSeeHtml('href="'.e(route('staffing.closing', ['departamento' => $this->world->department->id, 'modalidad' => 'PRES'])).'"')
         ->call('selectModality', 'EAD')
+        ->assertSet('modalidad', 'EAD')
         ->assertSee('Publicada · v2')
         ->assertSee('Reabrir carga');
 });
@@ -143,17 +172,32 @@ it('Subdirección reabre una carga publicada con motivo desde el detalle', funct
         ->and(lastToastOf($page)['title'])->toBe('Carga reabierta');
 });
 
-it('tocar el renglón abre la primera carga que sigue sin cerrar; si todas pasaron el cierre, la primera', function () {
-    closingBoardPage($this->subdireccion)
-        ->call('open', $this->world->department->id)
-        ->assertSet('loadId', $this->world->load->id);
-
-    $this->world->load->update(['status' => LoadStatus::Closed]);
+it('tocar el renglón abre la carga del departamento en la modalidad de la página', function () {
     $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
 
     closingBoardPage($this->subdireccion)
         ->call('open', $this->world->department->id)
+        ->assertSet('loadId', $this->world->load->id);
+
+    closingBoardPage($this->subdireccion, ['modalidad' => 'EAD'])
+        ->call('open', $this->world->department->id)
         ->assertSet('loadId', $c1Load->id);
+});
+
+it('sin carga que reabra en la modalidad pedida, abre otra del departamento que sí reabre (la primera sin cerrar) y nunca una que no reabre', function () {
+    $c1Load = $this->world->load->newQuery()->where('modality_id', $this->c1->modality_id)->sole();
+    // Solo hay una Subdirección: su nombramiento queda en EAD.
+    RoleAssignment::query()->where('user_id', $this->subdireccion->id)->update(['modality_id' => modalityOf('EAD')->id]);
+    $ofEad = $this->subdireccion->fresh();
+
+    closingBoardPage($ofEad, [])
+        ->assertSet('modalidad', 'EAD')
+        ->call('open', $this->world->department->id, 'PRES')
+        ->assertSet('loadId', $c1Load->id)
+        ->assertSet('modalidad', 'EAD')
+        ->assertDontSeeHtml('data-testid="drawer-modality-PRES"');
+
+    closingBoardPage($ofEad, [])->call('open', $this->ee->id)->assertForbidden();
 });
 
 it('cerrar el drawer con Esc o con el velo olvida la carga y los modales', function () {
