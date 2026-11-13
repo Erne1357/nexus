@@ -71,7 +71,7 @@
                         <span>{{ count($coordinators) > 1 ? 'Coordinan:' : 'Coordina:' }}</span>
                         @foreach ($coordinators as $coordinator)
                             <span class="inline-flex items-center gap-1.5">
-                                <x-academic-load::campus-tag :campus="$coordinator['campus']" />
+                                <x-academic-load::campus-tag :campus="$coordinator['campusKey'] === null ? null : $columns[$coordinator['campusKey']]['campus']" />
                                 <span class="text-base-content">{{ $coordinator['name'] }}</span>
                                 @if ($coordinator['me'])<span>(tú)</span>@endif
                                 @if ($coordinator['covers'])<span>· {{ $coordinator['covers'] }}</span>@endif

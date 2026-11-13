@@ -176,3 +176,64 @@ it('agrega los índices de los alumnos por carrera, modalidad y campus y de las 
     expect($indexes('students'))->toContain('USING btree (career_id, modality_id, campus_id)')
         ->and($indexes('proposal_items'))->toContain('USING btree (campus_id)');
 });
+
+it('MS12: se detiene si la propuesta con historia absorbería otra que pide grupos, y no cambia nada', function () {
+    $withHistory = proposalBeforePerModality($this, $this->c2, '2026-11-01 10:00:00', ['status' => 'submitted', 'submitted_by' => $this->user->id, 'submitted_at' => now()]);
+    $draft = proposalBeforePerModality($this, $this->c1, '2026-11-02 10:00:00');
+    DB::table('proposal_items')->where('career_proposal_id', $draft)->update(['requested_groups' => 2]);
+
+    expect(fn () => $this->migration->up())->toThrow(RuntimeException::class, $draft)
+        ->and(fn () => $this->migration->up())->toThrow(RuntimeException::class, $withHistory)
+        ->and(fn () => $this->migration->up())->toThrow(RuntimeException::class, $this->career->id);
+
+    expect(DB::table('career_proposals')->count())->toBe(2)
+        ->and(DB::table('proposal_items')->where('career_proposal_id', $draft)->count())->toBe(1)
+        ->and(Schema::hasColumn('career_proposals', 'campus_id'))->toBeTrue()
+        ->and(Schema::hasColumn('career_proposals', 'eligible_students_by_campus'))->toBeFalse();
+});
+
+it('MS12: una propuesta que ya no está en borrador tiene historia aunque no tenga fecha de envío', function () {
+    proposalBeforePerModality($this, $this->c1, '2026-11-01 10:00:00');
+    $accepted = proposalBeforePerModality($this, $this->c2, '2026-11-02 10:00:00', ['status' => 'accepted']);
+
+    $this->migration->up();
+
+    expect(DB::table('career_proposals')->pluck('id')->all())->toBe([$accepted]);
+});
+
+it('M6: guarda los alumnos posibles de cada campus de las propuestas que funde', function () {
+    $older = proposalBeforePerModality($this, $this->c2, '2026-11-01 10:00:00', ['eligible_students' => 40]);
+    proposalBeforePerModality($this, $this->c1, '2026-11-02 10:00:00', ['eligible_students' => 150]);
+    $alone = proposalBeforePerModality($this, $this->c1, '2026-11-02 10:00:00', ['eligible_students' => 9, 'career_id' => Career::factory()->create()->id]);
+
+    $this->migration->up();
+
+    $split = fn (string $id): array => json_decode(DB::table('career_proposals')->where('id', $id)->value('eligible_students_by_campus'), true);
+
+    expect($split($older))->toEqualCanonicalizing([$this->c1->id => 150, $this->c2->id => 40])
+        ->and($split($alone))->toBe([$this->c1->id => 9]);
+});
+
+it('down() se niega con una propuesta de filas de varios campus o sin campus, y regresa y vuelve a subir con datos', function () {
+    $merged = proposalBeforePerModality($this, $this->c2, '2026-11-01 10:00:00');
+    proposalBeforePerModality($this, $this->c1, '2026-11-02 10:00:00');
+    $this->migration->up();
+
+    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, $merged);
+
+    DB::table('proposal_items')->where('campus_id', $this->c1->id)->delete();
+    DB::table('proposal_items')->where('career_proposal_id', $merged)->update(['campus_id' => null]);
+
+    expect(fn () => $this->migration->down())->toThrow(RuntimeException::class, $merged);
+
+    DB::table('proposal_items')->where('career_proposal_id', $merged)->update(['campus_id' => $this->c2->id]);
+    $this->migration->down();
+
+    expect(DB::table('career_proposals')->where('id', $merged)->value('campus_id'))->toBe($this->c2->id)
+        ->and(Schema::hasColumn('career_proposals', 'eligible_students_by_campus'))->toBeFalse();
+
+    $this->migration->up();
+
+    expect(DB::table('career_proposals')->pluck('id')->all())->toBe([$merged])
+        ->and(Schema::hasColumn('career_proposals', 'campus_id'))->toBeFalse();
+});

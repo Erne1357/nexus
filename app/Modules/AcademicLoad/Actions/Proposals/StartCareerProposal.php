@@ -34,9 +34,10 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * activa y sin borrar de la retícula de los planes activos y sin borrar de la carrera (HC-13), una sola vez por materia,
  * con el plan y el semestre del primer plan por clave. Cada fila lleva los alumnos posibles del momento en su campus:
  * los activos de la carrera, la modalidad y ese campus (EligibleStudentsQuery), esperados = posibles y los grupos
- * sugeridos (SuggestedGroups; confirmado el 2 de noviembre de 2026). La propuesta guarda sus alumnos posibles: la suma,
- * por columna, de los distintos que son elegibles para alguna de sus materias (confirmado el 4 de noviembre de 2026;
- * un alumno es de un solo campus). Deja bitácora de la propuesta, con sus alumnos posibles y sus columnas, y, después
+ * sugeridos (SuggestedGroups; confirmado el 2 de noviembre de 2026). La propuesta guarda sus alumnos posibles: por
+ * columna, los distintos que son elegibles para alguna de sus materias (`eligible_students_by_campus`, `none` para la
+ * columna sin campus), y su suma (`eligible_students`; confirmado el 4 de noviembre de 2026; un alumno es de un solo
+ * campus). Deja bitácora de la propuesta, con sus alumnos posibles y sus columnas, y, después
  * del commit, avisa con CareerProposalStarted.
  *
  * La propuesta se inserta ignorando la que ya exista (la unicidad por periodo, modalidad y carrera): si otra sesión
@@ -88,18 +89,18 @@ final class StartCareerProposal
             $placements = $this->placements($career);
             $columns = $this->availability->columns($modality, $career);
             $rows = [];
-            $eligible = 0;
+            $eligible = [];
 
             foreach ($columns as $campus) {
                 $rows = [...$rows, ...$this->rows($proposal, $career, $modality, $campus, $placements)];
-                $eligible += $this->eligibleStudents->distinctFor($career, $modality, $campus, $placements->pluck('subject_id')->all());
+                $eligible[$campus?->getKey() ?? CareerProposal::WITHOUT_CAMPUS] = $this->eligibleStudents->distinctFor($career, $modality, $campus, $placements->pluck('subject_id')->all());
             }
 
             if ($rows !== []) {
                 ProposalItem::query()->insert($rows);
             }
 
-            $proposal->forceFill(['eligible_students' => $eligible])->saveQuietly();
+            $proposal->forceFill(['eligible_students' => array_sum($eligible), 'eligible_students_by_campus' => $eligible])->saveQuietly();
 
             $where = implode(' y ', array_map(fn (?Campus $campus): string => $campus?->code ?? 'sin campus', $columns));
 

@@ -146,7 +146,7 @@ final class AcademicLoadDemoSeeder extends Seeder
                 continue;
             }
 
-            $this->outsideTheDemo($proposal, $campuses, $coordinator);
+            $this->outsideTheDemo($proposal, $campuses);
             $this->adjustRows($proposal, $coordinator, $campuses);
 
             if ($index === 0) {
@@ -210,7 +210,7 @@ final class AcademicLoadDemoSeeder extends Seeder
             $proposal = app(StartCareerProposal::class)->handle($term, $modality, $career, $coordinator);
 
             if (in_array($proposal->status, [ProposalStatus::Draft, ProposalStatus::Returned], true)) {
-                $this->outsideTheDemo($proposal, $campuses, $coordinator);
+                $this->outsideTheDemo($proposal, $campuses, complete: true);
                 $this->adjustRows($proposal, $coordinator, $campuses);
                 $proposal = $this->orFail(fn (): CareerProposal => app(SubmitCareerProposal::class)->handle($proposal, $coordinator), "La propuesta de {$where} no se pudo enviar");
             }
@@ -258,23 +258,42 @@ final class AcademicLoadDemoSeeder extends Seeder
     }
 
     /**
-     * Las filas de los campus que no son de la demo no piden grupos: la demo de un campus solo abre grupos en él (M1).
+     * Las filas de los campus que no son de la demo no piden grupos: la demo de un campus solo abre grupos en él (M1). Cada
+     * fila la deja en cero un coordinador que corrige su campus (M7): uno de ese campus o uno sin campus. Si nadie la
+     * cubre, con `$complete` se detiene (los grupos nacerían fuera de la demo); si no, la deja como está y lo avisa.
      *
      * @param  Collection<int, Campus>  $campuses
+     *
+     * @throws RuntimeException con `$complete`, si una fila con grupos fuera de la demo no tiene quien la corrija
      */
-    private function outsideTheDemo(CareerProposal $proposal, Collection $campuses, User $coordinator): void
+    private function outsideTheDemo(CareerProposal $proposal, Collection $campuses, bool $complete = false): void
     {
         $items = ProposalItem::query()
             ->where('career_proposal_id', $proposal->id)
             ->whereNotNull('campus_id')
             ->whereNotIn('campus_id', $campuses->modelKeys())
             ->where('requested_groups', '>', 0)
+            ->with(['campus', 'subject'])
             ->orderBy('id')
             ->get();
 
         foreach ($items as $item) {
+            $holder = app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $item->campus_id, career: $proposal->career_id))[0]['user'] ?? null;
+
+            if ($holder === null) {
+                $what = "La fila de {$item->subject->code} en {$item->campus->code} de la propuesta {$proposal->id} pide grupos fuera de la demo y nadie la puede corregir";
+
+                if ($complete) {
+                    throw new RuntimeException("{$what}.");
+                }
+
+                $this->command?->warn("{$what}: se deja como está.");
+
+                continue;
+            }
+
             try {
-                app(UpdateProposalItem::class)->handle($item, $item->expected_students, 0, $item->notes, $coordinator);
+                app(UpdateProposalItem::class)->handle($item, $item->expected_students, 0, $item->notes, $holder);
             } catch (ValidationException) {
                 // Fila bloqueada: se deja como está.
             }

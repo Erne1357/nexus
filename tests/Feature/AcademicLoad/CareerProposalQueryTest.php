@@ -102,12 +102,20 @@ it('da las partes de los departamentos por clave, con su estado y comentario', f
 });
 
 it('suma las materias con grupos, todas las materias y sus grupos, y trae los alumnos posibles congelados, sin sumar alumnos esperados entre materias', function () {
-    $this->proposal->update(['eligible_students' => 40]);
+    $this->proposal->update(['eligible_students' => 40, 'eligible_students_by_campus' => [$this->campus->id => 40]]);
     overviewRow($this->cb, 'ACF-0901', 1, 2, 70);
     overviewRow($this->sc, 'SCD-1015', 5, 1, 20);
     overviewRow($this->sc, 'AED-1026', 2, 0, 15);
 
-    expect(proposalOverview()->totals)->toBe(['subjects' => 2, 'subjects_total' => 3, 'groups' => 3, 'groups_by_campus' => [$this->campus->id => 3], 'eligible_students' => 40]);
+    expect(proposalOverview()->totals)->toBe([
+        'subjects' => 2,
+        'subjects_total' => 3,
+        'subjects_by_campus' => [$this->campus->id => 2],
+        'groups' => 3,
+        'groups_by_campus' => [$this->campus->id => 3],
+        'eligible_students' => 40,
+        'eligible_by_campus' => [$this->campus->id => 40],
+    ]);
 });
 
 it('M6: una columna por campus de sus filas, por clave, y cada materia con su fila de cada campus y sus grupos por campus', function () {
@@ -126,6 +134,8 @@ it('M6: una columna por campus de sus filas, por clave, y cada materia con su fi
         ->and($overview->totals['subjects'])->toBe(1)
         ->and($overview->totals['subjects_total'])->toBe(2)
         ->and($overview->totals['groups_by_campus'])->toBe([$c1->id => 4, $this->campus->id => 1])
+        ->and($overview->totals['subjects_by_campus'])->toBe([$c1->id => 1, $this->campus->id => 1])
+        ->and($overview->groupsByColumn($overview->semesters[1]))->toBe([$c1->id => 4, $this->campus->id => 1])
         ->and($overview->departments()[0]['groups'])->toBe(5);
 });
 
@@ -148,7 +158,7 @@ it('una propuesta sin filas da semestres y totales vacíos', function () {
     expect($overview->semesters)->toBe([])
         ->and($overview->reviews)->toBe([])
         ->and($overview->columns)->toBe([])
-        ->and($overview->totals)->toBe(['subjects' => 0, 'subjects_total' => 0, 'groups' => 0, 'groups_by_campus' => [], 'eligible_students' => 0])
+        ->and($overview->totals)->toBe(['subjects' => 0, 'subjects_total' => 0, 'subjects_by_campus' => [], 'groups' => 0, 'groups_by_campus' => [], 'eligible_students' => 0, 'eligible_by_campus' => []])
         ->and($overview->pendingCatalogs)->toBe([]);
 });
 

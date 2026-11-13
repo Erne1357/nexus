@@ -12,16 +12,22 @@ use Illuminate\Support\Facades\Schema;
  * modalidad, y lleva una fila por materia y campus (M6, confirmado el 12 de noviembre de 2026). Sistemas presencial es
  * una sola propuesta con las filas de C1 y C2; cada fila conserva su campus.
  *
+ * Los alumnos posibles de cada campus se guardan junto al total, congelados (`eligible_students_by_campus`, jsonb
+ * `{id del campus: alumnos}`, con la llave `none` para la columna sin campus): cada propuesta de antes era de un campus,
+ * así que su total es el de ese campus.
+ *
  * Cómo se funden las que ya existen (MS12, supuesto por confirmar), por periodo, modalidad y carrera:
- * - Tiene historia la propuesta enviada (`submitted_at`) o con alguna parte decidida (aceptada o regresada en
- *   `proposal_reviews`).
+ * - Tiene historia la propuesta que ya no está en borrador, la enviada (`submitted_at`) o la que tiene alguna parte
+ *   decidida (aceptada o regresada en `proposal_reviews`).
  * - Si a lo más una tiene historia, se queda esa; si ninguna, la más antigua (`created_at`, luego id). Las filas de las
- *   demás pasan a la que se queda con su campus, y sus alumnos posibles se suman a los de ella (los alumnos de un campus
- *   no son de otro). Sus partes, todas sin decidir, pasan a la que se queda si esta no tiene la del departamento; si ya
- *   la tiene, se borran. Cada propuesta que se borra deja su entrada en la bitácora (evento `deleted`, con la que quedó,
- *   su campus y su estado).
- * - Si dos o más tienen historia, se detiene con un RuntimeException que da los ids de cada caso: la historia es
- *   inmutable (HC-18) y no se funde. Todo up() va en una transacción, así que no deja nada.
+ *   demás pasan a la que se queda con su campus, y sus alumnos posibles se suman a los de ella, también los de cada
+ *   campus (los alumnos de un campus no son de otro). Sus partes, todas sin decidir, pasan a la que se queda si esta no
+ *   tiene la del departamento; si ya la tiene, se borran. Cada propuesta que se borra deja su entrada en la bitácora
+ *   (evento `deleted`, con la que quedó, su campus y su estado).
+ * - Se detiene con un RuntimeException que da la carrera, el periodo y los ids de cada caso si dos o más tienen
+ *   historia (la historia es inmutable, HC-18, y no se funde), o si la que tiene historia absorbería otra que pide
+ *   grupos: esas filas quedarían en una propuesta ya enviada o aceptada, sin parte que las decida (MS12). Todo up() va
+ *   en una transacción, así que no deja nada.
  *
  * Después la llave única de `career_proposals` es (periodo, modalidad, carrera), que reemplaza al índice de la
  * ampliación, y `career_proposals.campus_id` se quita con su índice y su llave; las filas son únicas por (propuesta,
@@ -30,8 +36,8 @@ use Illuminate\Support\Facades\Schema;
  * el que se cuentan los alumnos posibles de cada columna.
  *
  * down() regresa la columna con el campus de la primera fila de cada propuesta (por clave del campus) o, sin filas, el
- * primer campus activo de su modalidad por el puente `campuses.modality_id`; si una propuesta tiene filas de varios
- * campus o queda sin campus, se detiene. Las propuestas borradas no regresan.
+ * primer campus activo de su modalidad por el puente `campuses.modality_id`, y quita los alumnos posibles por campus; si
+ * una propuesta tiene filas de varios campus o queda sin campus, se detiene. Las propuestas borradas no regresan.
  */
 return new class extends Migration
 {
@@ -44,6 +50,12 @@ return new class extends Migration
             });
 
             DB::statement('alter table proposal_items add constraint proposal_items_career_proposal_id_subject_id_campus_id_unique unique nulls not distinct (career_proposal_id, subject_id, campus_id)');
+
+            Schema::table('career_proposals', function (Blueprint $table) {
+                $table->jsonb('eligible_students_by_campus')->default('{}');
+            });
+
+            DB::statement('update career_proposals set eligible_students_by_campus = jsonb_build_object(campus_id::text, eligible_students)');
 
             $this->mergeProposals();
 
@@ -102,6 +114,10 @@ return new class extends Migration
                 )
                 SQL);
 
+            Schema::table('career_proposals', function (Blueprint $table) {
+                $table->dropColumn('eligible_students_by_campus');
+            });
+
             $orphans = DB::table('career_proposals')->whereNull('campus_id')->pluck('id')->all();
 
             if ($orphans !== []) {
@@ -120,14 +136,16 @@ return new class extends Migration
     }
 
     /**
-     * @throws RuntimeException si en algún periodo, modalidad y carrera dos o más propuestas tienen historia
+     * @throws RuntimeException si en algún periodo, modalidad y carrera dos o más propuestas tienen historia, o la que la
+     *                          tiene absorbería otra que pide grupos
      */
     private function mergeProposals(): void
     {
         $groups = DB::table('career_proposals')
             ->leftJoin('campuses', 'campuses.id', '=', 'career_proposals.campus_id')
             ->select('career_proposals.*', 'campuses.code as campus_code')
-            ->selectRaw("career_proposals.submitted_at is not null or exists (select 1 from proposal_reviews where proposal_reviews.career_proposal_id = career_proposals.id and proposal_reviews.status in ('accepted', 'returned')) as has_history")
+            ->selectRaw("career_proposals.status <> 'draft' or career_proposals.submitted_at is not null or exists (select 1 from proposal_reviews where proposal_reviews.career_proposal_id = career_proposals.id and proposal_reviews.status in ('accepted', 'returned')) as has_history")
+            ->selectRaw('exists (select 1 from proposal_items where proposal_items.career_proposal_id = career_proposals.id and proposal_items.requested_groups > 0) as requests_groups')
             ->orderBy('career_proposals.created_at')
             ->orderBy('career_proposals.id')
             ->get()
@@ -135,13 +153,13 @@ return new class extends Migration
             ->filter(fn (Collection $group): bool => $group->count() > 1);
 
         $conflicts = $groups
-            ->filter(fn (Collection $group): bool => $group->where('has_history', true)->count() > 1)
-            ->map(fn (Collection $group): string => $group->where('has_history', true)->pluck('id')->implode(' y '))
+            ->map(fn (Collection $group): ?string => $this->conflictOf($group))
+            ->filter()
             ->values();
 
         if ($conflicts->isNotEmpty()) {
             throw new RuntimeException(sprintf(
-                'Hay propuestas de la misma carrera, periodo y modalidad que tienen historia (envío o partes decididas) y no se pueden fundir (MS12, HC-18): %s. Vuelve a sembrar la base con demo:seed o decide qué propuesta se queda antes de migrar.',
+                'Hay propuestas de la misma carrera, periodo y modalidad que no se pueden fundir (MS12, HC-18): %s. Vuelve a sembrar la base con demo:seed o decide qué propuesta se queda antes de migrar.',
                 $conflicts->implode('; '),
             ));
         }
@@ -156,13 +174,49 @@ return new class extends Migration
     }
 
     /**
-     * Pasa las filas, los alumnos posibles y las partes sin decidir de `$absorbed` a `$kept`, y la borra con su entrada
-     * en la bitácora.
+     * Por qué no se funden las propuestas de una carrera en un periodo y una modalidad, o null si se pueden fundir: dos o
+     * más tienen historia, o la que tiene historia absorbería otra que pide grupos.
+     *
+     * @param  Collection<int, object>  $group
+     */
+    private function conflictOf(Collection $group): ?string
+    {
+        $first = $group->first();
+        $where = "carrera {$first->career_id} en el periodo {$first->term_id}";
+        $withHistory = $group->where('has_history', true);
+
+        if ($withHistory->count() > 1) {
+            return "{$where}: {$withHistory->pluck('id')->implode(' y ')} tienen historia (envío o partes decididas)";
+        }
+
+        $kept = $withHistory->first();
+        $requesting = $kept === null ? collect() : $group->reject(fn (object $proposal): bool => $proposal->id === $kept->id)->where('requests_groups', true);
+
+        if ($requesting->isNotEmpty()) {
+            return "{$where}: {$kept->id} tiene historia y absorbería {$requesting->pluck('id')->implode(' y ')}, que pide grupos";
+        }
+
+        return null;
+    }
+
+    /**
+     * Pasa las filas, los alumnos posibles (el total y los de cada campus) y las partes sin decidir de `$absorbed` a
+     * `$kept`, y la borra con su entrada en la bitácora.
      */
     private function absorb(object $absorbed, object $kept): void
     {
         DB::table('proposal_items')->where('career_proposal_id', $absorbed->id)->update(['career_proposal_id' => $kept->id]);
-        DB::table('career_proposals')->where('id', $kept->id)->increment('eligible_students', (int) $absorbed->eligible_students);
+
+        $split = json_decode((string) DB::table('career_proposals')->where('id', $kept->id)->value('eligible_students_by_campus'), true) ?: [];
+
+        foreach (json_decode((string) $absorbed->eligible_students_by_campus, true) ?: [] as $campus => $students) {
+            $split[$campus] = ($split[$campus] ?? 0) + (int) $students;
+        }
+
+        DB::table('career_proposals')->where('id', $kept->id)->update([
+            'eligible_students' => DB::raw('eligible_students + '.(int) $absorbed->eligible_students),
+            'eligible_students_by_campus' => json_encode($split, JSON_FORCE_OBJECT),
+        ]);
 
         $keptDepartments = DB::table('proposal_reviews')->where('career_proposal_id', $kept->id)->pluck('department_id')->all();
         $parts = DB::table('proposal_reviews')->where('career_proposal_id', $absorbed->id)->get(['id', 'department_id']);

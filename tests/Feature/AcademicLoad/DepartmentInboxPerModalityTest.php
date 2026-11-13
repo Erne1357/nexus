@@ -8,8 +8,12 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\User;
+use Livewire\Livewire;
 
 /*
 | La bandeja del departamento es por modalidad (M6): muestra las propuestas de la modalidad, una por carrera, con las
@@ -89,4 +93,20 @@ it('sugiere los paralelos de cada materia por campus: no junta alumnos de C1 y C
         ['C2', ['IIND', 'ISC'], 2, 2],
     ])
         ->and($inbox->totalFor($this->calculo->id, $this->c2->id))->toBe(['careers' => 2, 'groups' => 2, 'expected' => 40]);
+});
+
+it('M6: el detalle de la bandeja pinta cada fila con su campus y el total de grupos por campus', function () {
+    $term = Term::factory()->current()->create();
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
+    $this->term = $term;
+    $isc = inboxCareerIn('ISC', $this->c1, $this->c2);
+    $proposal = inboxPerModalityProposal($isc);
+    inboxPerModalityRow($proposal, $this->c1, 60, 2);
+    inboxPerModalityRow($proposal, $this->c2, 30, 1);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+
+    $html = Livewire::actingAs($jefe)->withQueryParams(['carrera' => $isc->id])->test('academic-load::pages.inbox')->html();
+
+    expect($html)->toContain('data-campus="C1"')->toContain('data-campus="C2"')
+        ->and(textOf(domOf($html)->querySelector('[data-testid="inbox-total-by-campus"]')))->toBe('C1 2 · C2 1');
 });

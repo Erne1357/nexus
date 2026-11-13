@@ -229,11 +229,16 @@ final class CareerProposalQuery
             ->all();
 
         $groupsByCampus = [];
+        $subjectsByCampus = [];
+        $eligibleByCampus = [];
+        $frozen = $proposal->eligible_students_by_campus ?? [];
 
         foreach ($columns as $campus) {
-            $groupsByCampus[ProposalOverview::columnKey($campus)] = (int) $items
-                ->filter(fn (ProposalItem $item): bool => ProposalOverview::columnKey($item->campus) === ProposalOverview::columnKey($campus))
-                ->sum('requested_groups');
+            $key = ProposalOverview::columnKey($campus);
+            $inColumn = $requested->filter(fn (ProposalItem $item): bool => ProposalOverview::columnKey($item->campus) === $key);
+            $groupsByCampus[$key] = (int) $inColumn->sum('requested_groups');
+            $subjectsByCampus[$key] = $inColumn->count();
+            $eligibleByCampus[$key] = (int) ($frozen[$campus?->getKey() ?? CareerProposal::WITHOUT_CAMPUS] ?? 0);
         }
 
         return new ProposalOverview(
@@ -244,9 +249,11 @@ final class CareerProposalQuery
             totals: [
                 'subjects' => $requested->pluck('subject_id')->unique()->count(),
                 'subjects_total' => $subjects->count(),
+                'subjects_by_campus' => $subjectsByCampus,
                 'groups' => (int) $requested->sum('requested_groups'),
                 'groups_by_campus' => $groupsByCampus,
                 'eligible_students' => $proposal->eligible_students,
+                'eligible_by_campus' => $eligibleByCampus,
             ],
             pendingCatalogs: $pendingCatalogs,
             anomalies: ProposalAnomalies::fromSettings(),

@@ -60,7 +60,7 @@
                     $readonlyCampus = ! $column['editable'];
                 @endphp
                 @continue($item === null)
-                <section @class(['space-y-3 rounded-box border border-base-300 px-4 py-3', 'bg-base-200' => $readonlyCampus])
+                <section @class(['space-y-3 rounded-box border border-base-300 px-4 py-3', 'bg-secondary/40' => $readonlyCampus])
                     aria-labelledby="panel-campus-{{ $item->id }}" data-testid="panel-campus-{{ $column['campus']?->code ?? 'unica' }}" @if ($readonlyCampus) data-readonly-section @endif>
                     <h3 id="panel-campus-{{ $item->id }}" class="flex flex-wrap items-center gap-2 font-semibold">
                         <x-academic-load::campus-tag :campus="$column['campus']" size="lg" />

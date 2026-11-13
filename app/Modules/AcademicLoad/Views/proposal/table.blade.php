@@ -8,9 +8,12 @@
     la banda al desplazarse y los totales (materias con grupos de todas, grupos con los de cada campus y alumnos
     posibles) van en una barra pegada al pie.
 
-    Con la caja de menos de 55 rem (880 px; consulta de contenedor) cada materia es una ficha con una tablita campus ×
-    cifras y el total, como en la maqueta. Las dos formas están en la página y la consulta de contenedor muestra una;
-    los campos de la ficha llevan otro id (`card-cell-…`).
+    Con la caja más angosta de lo que pide la tabla ancha (consulta de contenedor: 55 rem, 880 px, con uno o dos campus;
+    69 rem con tres, 82 rem con cuatro y 96 rem con más) cada materia es una ficha con una tablita campus × cifras y el
+    total, como en la maqueta; así la columna del total y la acción nunca se cortan. Las dos formas están en la página y
+    la consulta de contenedor muestra una; los campos de la ficha llevan otro id (`card-cell-…`). Como el encabezado de
+    la tabla ancha es solo visual (`aria-hidden`), cada cifra de solo lectura y cada «Posibles» dice su campo y su campus
+    para lectores de pantalla. La columna de solo lectura va en `secondary/40`, que se distingue en claro y en oscuro.
 
     Si toda la propuesta está bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta sobre la tabla; por
     renglón solo lo que es distinto («CB ya aceptó su parte»). El renglón se pinta por el estado de la parte de su
@@ -18,27 +21,33 @@
     de la fila. El filtro de grupos («Con grupos», «Sin grupos») deja solo sus renglones. Con un departamento elegido,
     los renglones de los demás van con fondo tenue, o se ocultan con «Mostrar solo». Cada renglón tiene una acción que
     abre el panel de la materia (también de solo lectura). Una celda guardada lo dice con una palomita un instante
-    (`cell-saved`, que atiende la página) y una rechazada, con su error debajo. La tabla no pasa de 72 rem
-    (`data-table-width`) para que los números no queden lejos de la materia en una pantalla ancha.
+    (`cell-saved`, que atiende la página) y una rechazada, con su error debajo. Con hasta tres campus la tabla no pasa de
+    72 rem (`data-table-width`) para que los números no queden lejos de la materia en una pantalla ancha.
 --}}
 @php
     $multi = $overview->isMultiCampus();
     $template = '6.5rem minmax(8rem,1fr) repeat('.count($columns).', 12.75rem)'.($multi ? ' 6.75rem' : '').' 2.25rem';
     $label = 'text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral';
     $sublabel = 'text-right text-xs font-medium text-neutral';
+    [$wide, $narrow, $maxWidth] = match (true) {
+        count($columns) <= 2 => ['@max-[55rem]:hidden', '@min-[55rem]:hidden', 'max-w-6xl'],
+        count($columns) === 3 => ['@max-[69rem]:hidden', '@min-[69rem]:hidden', 'max-w-6xl'],
+        count($columns) === 4 => ['@max-[82rem]:hidden', '@min-[82rem]:hidden', 'max-w-none'],
+        default => ['@max-[96rem]:hidden', '@min-[96rem]:hidden', 'max-w-none'],
+    };
 @endphp
-<div class="@container max-w-6xl space-y-3" data-testid="proposal-table" data-table-width>
+<div @class(['@container space-y-3', $maxWidth]) data-testid="proposal-table" data-table-width>
     @if ($generalLock)
         <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock->message('')" data-testid="table-lock" />
     @endif
 
     {{-- Ancho: las columnas de cada campus lado a lado. --}}
-    <div class="@max-[55rem]:hidden">
+    <div class="{{ $wide }}">
         <div class="sticky top-(--shell-top) z-10 grid items-end gap-x-3 rounded-t-box border border-base-300 bg-base-100 px-4 py-2" style="grid-template-columns: {{ $template }}" aria-hidden="true">
             <span class="{{ $label }}">Clave</span>
             <span class="{{ $label }}">Materia</span>
             @foreach ($columns as $key => $column)
-                <div @class(['-my-2 -me-3 grid grid-cols-[3rem_4.25rem_3.75rem] gap-x-2 border-s border-base-300 py-2 ps-2 pe-3', 'bg-base-200' => ! $column['editable']])
+                <div @class(['-my-2 -me-3 grid grid-cols-[3rem_4.25rem_3.75rem] gap-x-2 border-s border-base-300 py-2 ps-2 pe-3', 'bg-secondary/40' => ! $column['editable']])
                     data-column="{{ $column['campus']?->code ?? 'unica' }}" @if (! $column['editable']) data-readonly-column="{{ $column['campus']?->code ?? 'unica' }}" @endif>
                     <span class="col-span-3 mb-1 flex min-w-0 items-center gap-1.5 text-sm font-semibold">
                         <x-academic-load::campus-tag :campus="$column['campus']" />
@@ -84,11 +93,11 @@
                             @php
                                 $item = $row->cells[$key] ?? null;
                             @endphp
-                            <div @class(['-my-2 -me-3 grid min-h-full grid-cols-[3rem_4.25rem_3.75rem] items-center gap-x-2 self-stretch border-s border-base-300 py-2 ps-2 pe-3', 'bg-base-200/70' => ! $column['editable'] && ! $dimmed && $part !== 'accepted'])>
+                            <div @class(['-my-2 -me-3 grid min-h-full grid-cols-[3rem_4.25rem_3.75rem] items-center gap-x-2 self-stretch border-s border-base-300 py-2 ps-2 pe-3', 'bg-secondary/40' => ! $column['editable'] && ! $dimmed && $part !== 'accepted'])>
                                 @if ($item === null)
                                     <span class="col-span-3 text-center text-sm text-neutral">—</span>
                                 @else
-                                    <span class="text-right font-mono text-sm tabular-nums text-neutral" title="Alumnos posibles en {{ $column['campus']?->code ?? 'la modalidad' }}">{{ $item->eligible_students }}</span>
+                                    <span class="text-right font-mono text-sm tabular-nums text-neutral"><span class="sr-only">Alumnos posibles{{ $column['campus'] ? ' en '.$column['campus']->code : '' }}: </span>{{ $item->eligible_students }}</span>
                                     @foreach ([['expected_students', 'Esperados', $item->expected_students, $maxExpected], ['requested_groups', 'Grupos', $item->requested_groups, $maxGroups]] as [$field, $fieldLabel, $value, $max])
                                         @include('academic-load::proposal.cell', ['item' => $item, 'column' => $column, 'field' => $field, 'fieldLabel' => $fieldLabel, 'value' => $value, 'max' => $max, 'prefix' => 'cell', 'subjectCode' => $row->subject->code])
                                     @endforeach
@@ -111,7 +120,7 @@
     </div>
 
     {{-- Angosto: una ficha por materia con una tablita campus × cifras. --}}
-    <div class="space-y-3 @min-[55rem]:hidden" data-testid="proposal-cards">
+    <div class="space-y-3 {{ $narrow }}" data-testid="proposal-cards">
         @forelse ($tableSemesters as $semester => $rows)
             <section aria-label="Semestre {{ $semester }}" class="overflow-hidden rounded-box border border-base-300 bg-base-100" wire:key="card-semester-{{ $semester }}">
                 @include('academic-load::proposal.semester-head', ['rows' => $rows])
@@ -153,7 +162,7 @@
                                 @if ($item === null)
                                     <span class="col-span-3 text-center text-sm text-neutral">—</span>
                                 @else
-                                    <span class="text-right font-mono text-sm tabular-nums text-neutral">{{ $item->eligible_students }}</span>
+                                    <span class="text-right font-mono text-sm tabular-nums text-neutral"><span class="sr-only">Alumnos posibles{{ $column['campus'] ? ' en '.$column['campus']->code : '' }}: </span>{{ $item->eligible_students }}</span>
                                     @foreach ([['expected_students', 'Esperados', $item->expected_students, $maxExpected], ['requested_groups', 'Grupos', $item->requested_groups, $maxGroups]] as [$field, $fieldLabel, $value, $max])
                                         @include('academic-load::proposal.cell', ['item' => $item, 'column' => $column, 'field' => $field, 'fieldLabel' => $fieldLabel, 'value' => $value, 'max' => $max, 'prefix' => 'card-cell', 'subjectCode' => $row->subject->code])
                                     @endforeach

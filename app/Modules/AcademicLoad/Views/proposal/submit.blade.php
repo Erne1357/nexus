@@ -1,18 +1,13 @@
 {{--
-    La confirmación de envío de la propuesta (academic-load::pages.proposal), dentro de x-modal: los totales que se
-    envían, por campus si hay más de uno (materias con grupos y grupos), a quién avisa (los demás coordinadores de la
-    carrera en la modalidad, MS18, y los jefes de los departamentos con su parte por decidir) y, si algún departamento con
-    grupos pedidos aún no valida sus catálogos, un aviso que no bloquea (reglas-de-negocio.md, "Propuesta de carrera").
-    Confirmar llama a `submit`.
+    La confirmación de envío de la propuesta (academic-load::pages.proposal), dentro de x-modal (maqueta U1, opción A):
+    los totales que se envían, por campus si hay más de uno (materias con grupos, grupos y alumnos posibles, de
+    ProposalOverview::totals), a quién avisa (los demás coordinadores de la carrera en la modalidad con su campus, MS18,
+    y los jefes de los departamentos con su parte por decidir; ProposalHeader::submitNotice) y, si algún departamento
+    con grupos pedidos aún no valida sus catálogos, un aviso que no bloquea (reglas-de-negocio.md, "Propuesta de
+    carrera"). Confirmar llama a `submit`.
 --}}
 @php
     $resend = $proposal->status === \App\Modules\AcademicLoad\Enums\ProposalStatus::Returned;
-    $multi = count($columns) > 1;
-    $rows = collect($columns)->map(fn ($column, $key) => [
-        'campus' => $column['campus'],
-        'subjects' => collect($overview->subjects())->filter(fn ($row) => ($row->cells[$key] ?? null)?->requested_groups > 0)->count(),
-        'groups' => $overview->totals['groups_by_campus'][$key] ?? 0,
-    ])->values();
 @endphp
 <div class="space-y-4">
     <h2 id="submit-title" class="text-xl font-bold">{{ $resend ? 'Reenviar' : 'Enviar' }} la propuesta de <span class="font-mono">{{ $proposal->career->code }}</span> · {{ $proposal->modality->name }}</h2>
@@ -24,15 +19,17 @@
                 <th scope="col"><span class="sr-only">Campus</span></th>
                 <th scope="col" class="text-right">Materias con grupos</th>
                 <th scope="col" class="text-right">Grupos</th>
+                <th scope="col" class="text-right">Posibles</th>
             </tr>
         </thead>
         <tbody>
-            @if ($multi)
-                @foreach ($rows as $row)
-                    <tr>
-                        <th scope="row" class="font-normal"><span class="inline-flex items-center gap-1.5"><x-academic-load::campus-tag :campus="$row['campus']" />{{ $row['campus']?->name }}</span></th>
-                        <td class="text-right font-mono tabular-nums">{{ $row['subjects'] }}</td>
-                        <td class="text-right font-mono tabular-nums">{{ $row['groups'] }}</td>
+            @if (count($columns) > 1)
+                @foreach ($columns as $key => $column)
+                    <tr wire:key="submit-campus-{{ $key }}">
+                        <th scope="row" class="font-normal"><span class="inline-flex items-center gap-1.5 whitespace-nowrap"><x-academic-load::campus-tag :campus="$column['campus']" />{{ $column['campus']?->name }}</span></th>
+                        <td class="text-right font-mono tabular-nums">{{ $overview->totals['subjects_by_campus'][$key] ?? 0 }}</td>
+                        <td class="text-right font-mono tabular-nums">{{ $overview->totals['groups_by_campus'][$key] ?? 0 }}</td>
+                        <td class="text-right font-mono tabular-nums">{{ $overview->totals['eligible_by_campus'][$key] ?? 0 }}</td>
                     </tr>
                 @endforeach
             @endif
@@ -40,6 +37,7 @@
                 <th scope="row">Total</th>
                 <td class="text-right font-mono text-base tabular-nums">{{ $overview->totals['subjects'] }}</td>
                 <td class="text-right font-mono text-base tabular-nums">{{ $overview->totals['groups'] }}</td>
+                <td class="text-right font-mono text-base tabular-nums">{{ $overview->totals['eligible_students'] }}</td>
             </tr>
         </tbody>
     </table>

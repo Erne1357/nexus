@@ -13,7 +13,7 @@
 @endphp
 <div class="group/cell flex min-w-0 flex-col gap-0.5" data-cell="{{ $cell }}">
     @if ($readonly)
-        <span class="text-right font-mono text-sm tabular-nums" data-readonly-cell="{{ $field }}">{{ $value }}</span>
+        <span class="text-right font-mono text-sm tabular-nums" data-readonly-cell="{{ $field }}"><span class="sr-only">{{ $fieldLabel }}{{ $where ? ' en '.$where : '' }}: </span>{{ $value }}</span>
     @else
         <div class="relative">
             <input type="text" id="{{ $prefix }}-{{ $item->id }}-{{ $field }}" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $max) }}" autocomplete="off" value="{{ $value }}"

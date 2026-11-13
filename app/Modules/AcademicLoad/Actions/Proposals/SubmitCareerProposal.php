@@ -32,7 +32,8 @@ use Illuminate\Validation\ValidationException;
  * - la de un departamento al que ya no se le piden grupos se borra (no es catálogo; queda en la bitácora).
  *
  * Vuelve a exigir lo de armarla (ProposalAvailability): modalidad activa, periodo abierto en ella y carrera ofrecida en
- * algún campus, sobre `term` o `career` (supuesto por confirmar). Queda enviada, o aceptada si todas las partes que quedan ya estaban aceptadas, con quién y cuándo se envió.
+ * algún campus, sobre `term` o `career` (supuesto por confirmar); y que cada campus donde se piden grupos siga activo y
+ * ofrezca la carrera (HC-13 por columna), sobre `career`. Queda enviada, o aceptada si todas las partes que quedan ya estaban aceptadas, con quién y cuándo se envió.
  * Deja bitácora de la propuesta y, después del commit, avisa con CareerProposalSubmitted y los departamentos
  * pendientes; quien la envió queda en `submitted_by`, para avisar a los demás coordinadores (MS18). Con catálogos sin validar de un departamento involucrado no se bloquea: el aviso lo muestra la
  * página (CareerProposalQuery). Quién puede enviar lo decide CareerProposalPolicy::submit antes de llamarla;
@@ -67,6 +68,14 @@ final class SubmitCareerProposal
             if ($involved === []) {
                 throw ValidationException::withMessages(['requested_groups' => 'Pide al menos un grupo antes de enviar la propuesta.']);
             }
+
+            $this->availability->ensureRequestedColumns($proposal->career, ProposalItem::query()
+                ->requested()
+                ->where('career_proposal_id', $proposal->getKey())
+                ->whereNotNull('campus_id')
+                ->distinct()
+                ->pluck('campus_id')
+                ->all());
 
             $reviews = $proposal->reviews()
                 ->with(['department' => fn ($query) => $query->withTrashed()])

@@ -28,7 +28,7 @@ final readonly class ProposalOverview
      * @param  list<Campus|null>  $columns  los campus de sus filas, por clave; [null] en una modalidad sin salones
      * @param  array<int, list<ProposalSubject>>  $semesters  semestre → sus materias por clave, con `subject.department`
      * @param  list<ProposalReview>  $reviews  la parte de cada departamento, por clave del departamento, con `department`
-     * @param  array{subjects: int, subjects_total: int, groups: int, groups_by_campus: array<string, int>, eligible_students: int}  $totals  materias con grupos (en algún campus), todas las materias, grupos pedidos, los de cada columna (por columnKey) y alumnos posibles (los distintos que pueden llevar alguna materia, congelados al armarla); los alumnos esperados no se suman entre materias, porque un alumno cuenta en cada una que puede llevar
+     * @param  array{subjects: int, subjects_total: int, subjects_by_campus: array<string, int>, groups: int, groups_by_campus: array<string, int>, eligible_students: int, eligible_by_campus: array<string, int>}  $totals  materias con grupos (en algún campus) y las de cada columna, todas las materias, grupos pedidos y los de cada columna, y alumnos posibles (los distintos que pueden llevar alguna materia, congelados al armarla) y los de cada columna; lo de cada columna va por columnKey. Los alumnos esperados no se suman entre materias, porque un alumno cuenta en cada una que puede llevar
      * @param  list<array{department: Department, catalogs: list<Catalog>}>  $pendingCatalogs  departamentos con grupos pedidos y catálogos sin validar, por clave
      * @param  array<string, string>  $specialtyOf  materia → la especialidad de su plan; las del tronco común no aparecen
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la propuesta, por clave, con cuántas
@@ -55,6 +55,54 @@ final readonly class ProposalOverview
     public static function columnKey(?Campus $campus): string
     {
         return $campus?->getKey() ?? '';
+    }
+
+    /**
+     * Lo que dice el encabezado y lo que avisa el envío (ProposalHeader): las columnas con su campus, quiénes coordinan,
+     * quién la envió y cuándo, la última parte regresada y los departamentos con grupos cuya parte no está aceptada.
+     */
+    public function header(string $timezone): ProposalHeader
+    {
+        $returned = collect($this->reviews)
+            ->filter(fn (ProposalReview $review): bool => $review->status === ProposalReviewStatus::Returned && $review->decided_at !== null)
+            ->sortByDesc(fn (ProposalReview $review): string => $review->decided_at->toIso8601String())
+            ->first();
+
+        return new ProposalHeader(
+            careerCode: $this->proposal->career->code,
+            columns: array_map(fn (?Campus $campus): array => ['key' => self::columnKey($campus), 'code' => $campus?->code, 'name' => $campus?->name], $this->columns),
+            coordinators: array_map(fn (array $row): array => ['id' => (string) $row['user']->getKey(), 'name' => $row['user']->name, 'keys' => $row['campuses']], $this->coordinators),
+            sent: $this->proposal->submitted_at === null ? null : [
+                'id' => $this->proposal->submitted_by,
+                'name' => $this->proposal->submitter?->name,
+                'at' => $this->proposal->submitted_at,
+            ],
+            returned: $returned === null ? null : ['department' => $returned->department->code, 'at' => $returned->decided_at],
+            pendingDepartments: array_values(array_map(
+                fn (array $row): string => $row['department']->code,
+                array_filter($this->departments(), fn (array $row): bool => $row['groups'] > 0 && $row['review']?->status !== ProposalReviewStatus::Accepted),
+            )),
+            timezone: $timezone,
+        );
+    }
+
+    /**
+     * Los grupos pedidos de esas materias en cada columna, por columnKey y en el orden de las columnas: lo que dice el
+     * encabezado de cada semestre de la tabla.
+     *
+     * @param  list<ProposalSubject>  $subjects
+     * @return array<string, int>
+     */
+    public function groupsByColumn(array $subjects): array
+    {
+        $groups = [];
+
+        foreach ($this->columns as $campus) {
+            $key = self::columnKey($campus);
+            $groups[$key] = array_sum(array_map(fn (ProposalSubject $subject): int => ($subject->cells[$key] ?? null)?->requested_groups ?? 0, $subjects));
+        }
+
+        return $groups;
     }
 
     /**

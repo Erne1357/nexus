@@ -357,7 +357,8 @@ it('M6: una sola propuesta de Sistemas presencial con filas de C1 y C2, cada una
             'C2|ACF-0901' => [12, 12, 1],
             'C2|SCD-1015' => [0, 0, 0],
         ])
-        ->and($proposal->eligible_students)->toBe(52);
+        ->and($proposal->eligible_students)->toBe(52)
+        ->and($proposal->fresh()->eligible_students_by_campus)->toEqualCanonicalizing([$c1->id => 40, $this->campus->id => 12]);
 });
 
 it('MS5: una carrera solo de C1 tiene una columna', function () {
@@ -385,7 +386,8 @@ it('MS5: en una modalidad sin salones la propuesta lleva una sola columna sin ca
     $proposal = app(StartCareerProposal::class)->handle($this->term, $online, $this->career, $this->actor);
 
     expect(proposalCellsOf($proposal))->toBe(['—|ACF-0901' => [3, 3, 1]])
-        ->and($proposal->eligible_students)->toBe(3);
+        ->and($proposal->eligible_students)->toBe(3)
+        ->and($proposal->fresh()->eligible_students_by_campus)->toBe(['none' => 3]);
 });
 
 it('los alumnos posibles de cada campus son los activos de la carrera, la modalidad y ese campus', function () {

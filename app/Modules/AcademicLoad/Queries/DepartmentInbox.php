@@ -94,6 +94,27 @@ final readonly class DepartmentInbox
     }
 
     /**
+     * Los grupos que la carrera le pide al departamento en cada campus, por clave del campus: el total del detalle de la
+     * bandeja («C1 2 · C2 1»). Sin las filas sin campus; vacío si la carrera no tiene filas.
+     *
+     * @return array<string, int>
+     */
+    public function groupsByCampus(string $careerId): array
+    {
+        $groups = [];
+
+        foreach ($this->career($careerId)['rows'] ?? [] as $item) {
+            if ($item->campus !== null) {
+                $groups[$item->campus->code] = ($groups[$item->campus->code] ?? 0) + $item->requested_groups;
+            }
+        }
+
+        ksort($groups);
+
+        return $groups;
+    }
+
+    /**
      * Lo que piden de una materia en un campus las partes que cuentan para los paralelos: cuántas carreras, cuántos
      * grupos y cuántos alumnos esperados.
      *

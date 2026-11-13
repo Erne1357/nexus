@@ -145,10 +145,10 @@
     @if ($items !== [])
         <div class="sticky bottom-0 z-10 flex items-baseline justify-between gap-4 rounded-b-box border-t border-base-300 bg-base-100 px-4 py-3 text-sm font-semibold sm:px-5" data-testid="inbox-detail-total">
             <span>Total</span>
-            @php($byCampus = collect($selected['rows'])->filter(fn ($row) => $row->campus !== null)->groupBy(fn ($row) => $row->campus->code)->sortKeys())
+            @php($byCampus = $inbox->groupsByCampus($career->getKey()))
             <span class="flex flex-wrap items-baseline justify-end gap-x-3">
-                @if ($byCampus->count() > 1)
-                    <span class="font-mono text-sm font-normal tabular-nums text-neutral" data-testid="inbox-total-by-campus">{{ $byCampus->map(fn ($rows, $code) => $code.' '.$rows->sum('requested_groups'))->implode(' · ') }}</span>
+                @if (count($byCampus) > 1)
+                    <span class="font-mono text-sm font-normal tabular-nums text-neutral" data-testid="inbox-total-by-campus">{{ collect($byCampus)->map(fn ($groups, $code) => "{$code} {$groups}")->implode(' · ') }}</span>
                 @endif
                 <span class="font-mono tabular-nums">{{ $selected['groups'] }} grupos</span>
             </span>

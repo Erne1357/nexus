@@ -145,3 +145,60 @@ it('M6: el coordinador de C1 ve la propuesta que armó la de C2: no hay otra par
 
     expect(CareerProposal::query()->count())->toBe(1);
 });
+
+it('M6: los totales y la confirmación de envío dicen los alumnos posibles y los grupos de cada campus', function () {
+    $this->proposal->update(['eligible_students' => 786, 'eligible_students_by_campus' => [$this->c1->id => 612, $this->c2->id => 174]]);
+
+    $page = perModalityPageAs($this->ofC2, ['vista' => 'tabla']);
+    $bar = textOf(domOf($page)->querySelector('[data-testid="proposal-totals"]'));
+
+    expect($bar)->toContain('786')->toContain('612')->toContain('174');
+
+    perModalityPageAs($this->ofC2)->assertSee('C1 612 · C2 174');
+
+    $modal = perModalityPageAs($this->ofC2)->call('confirmSubmit');
+    $table = textOf(domOf($modal)->querySelector('[data-testid="submit-totals"]'));
+
+    expect($table)->toContain('Posibles')->toContain('612')->toContain('174')->toContain('786')
+        ->and(textOf(domOf($modal)->querySelector('[data-testid="submit-notice"]')))->toContain('Héctor Villalobos (C1), que coordina contigo');
+});
+
+it('las cifras de solo lectura y los alumnos posibles dicen su campus a los lectores de pantalla', function () {
+    perModalityPageAs($this->ofC2, ['vista' => 'tabla'])
+        ->assertSeeHtml('<span class="sr-only">Alumnos posibles en C1: </span>')
+        ->assertSeeHtml('<span class="sr-only">Esperados en C1: </span>')
+        ->assertSeeHtml('<span class="sr-only">Grupos en C1: </span>');
+});
+
+it('una nota que no es texto es un error de validación, no un error del servidor', function () {
+    perModalityPageAs($this->ofC2)
+        ->call('edit', $this->calculus->id)
+        ->set("form.{$this->inC2->id}.notes", ['no', 'es', 'texto'])
+        ->call('save')
+        ->assertOk()
+        ->assertHasErrors("form.{$this->inC2->id}.notes");
+
+    expect($this->inC2->fresh()->notes)->toBeNull();
+});
+
+it('MS5: en una modalidad sin salones la tabla tiene una sola columna sin campus, que corrige un coordinador sin campus', function () {
+    $online = Modality::factory()->create(['code' => 'M901', 'name' => 'En línea', 'settings' => ['uses_rooms' => false]]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => $online->id]);
+    $proposal = CareerProposal::factory()->create(['term_id' => $this->term->id, 'modality_id' => $online->id, 'career_id' => $this->career->id]);
+    $item = ProposalItem::factory()->create(['career_proposal_id' => $proposal->id, 'campus_id' => null, 'subject_id' => $this->calculus->id]);
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['modality_id' => $online->id, 'career_id' => $this->career->id])->create();
+
+    perModalityPageAs($coordinator, ['vista' => 'tabla', 'modalidad' => 'M901'])
+        ->assertSeeHtml('data-column="unica"')
+        ->assertDontSeeHtml('data-readonly-column=')
+        ->assertDontSeeHtml('data-column-total')
+        ->assertSeeHtml('id="cell-'.$item->id.'-requested_groups"')
+        ->assertDontSee('Se ofrece');
+});
+
+it('con tres campus la tabla ancha pide más espacio antes de dejar las fichas', function () {
+    $c3 = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c3->id, 'subject_id' => $this->calculus->id]);
+
+    perModalityPageAs($this->ofC2, ['vista' => 'tabla'])->assertSeeHtml('@max-[69rem]:hidden')->assertDontSeeHtml('@max-[55rem]:hidden');
+});

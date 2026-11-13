@@ -19,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  *   (StartCareerProposal) y otra vez al enviarla (SubmitCareerProposal) (supuestos por confirmar).
  * - columns(): en una modalidad con salones, los campus activos donde se ofrece la carrera, por clave; en una sin
  *   salones, una sola columna sin campus (MS5, supuesto por confirmar).
+ * - ensureRequestedColumns(): al enviar, cada campus donde se piden grupos sigue activo y ofrece la carrera (HC-13 por
+ *   columna): un grupo es de un campus (M8) y solo nace en una carrera ofrecida en él.
  */
 final class ProposalAvailability
 {
@@ -44,6 +46,39 @@ final class ProposalAvailability
 
         if ($this->offeredCampuses($career, lock: true)->isEmpty()) {
             throw ValidationException::withMessages(['career' => "{$career->code} no se ofrece en ningún campus."]);
+        }
+    }
+
+    /**
+     * HC-13 por columna: cada campus de `$campusIds` (los de las filas que piden grupos) sigue activo y ofrece la
+     * carrera. Lee la oferta con bloqueo compartido, dentro de la transacción de quien la llama.
+     *
+     * @param  list<string>  $campusIds
+     *
+     * @throws ValidationException sobre `career`, con el primer campus por clave que no cumple
+     */
+    public function ensureRequestedColumns(Career $career, array $campusIds): void
+    {
+        if ($campusIds === []) {
+            return;
+        }
+
+        $offered = CareerCampus::query()
+            ->where('career_id', $career->getKey())
+            ->whereIn('campus_id', $campusIds)
+            ->where('is_active', true)
+            ->sharedLock()
+            ->pluck('campus_id')
+            ->all();
+
+        foreach (Campus::withTrashed()->whereKey($campusIds)->orderBy('code')->get() as $campus) {
+            if (! $campus->is_active || $campus->trashed()) {
+                throw ValidationException::withMessages(['career' => "{$campus->code} está inactivo: deja en cero sus grupos de {$campus->code} para enviar."]);
+            }
+
+            if (! in_array($campus->getKey(), $offered, true)) {
+                throw ValidationException::withMessages(['career' => "{$career->code} ya no se ofrece en {$campus->code}: deja en cero sus grupos de {$campus->code} para enviar."]);
+            }
         }
     }
 

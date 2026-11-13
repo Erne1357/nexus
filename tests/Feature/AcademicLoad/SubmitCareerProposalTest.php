@@ -306,3 +306,28 @@ it('no envía si la carrera ya no se ofrece en ningún campus y no escribe nada'
     'oferta inactiva' => [fn () => CareerCampus::query()->update(['is_active' => false])],
     'oferta borrada' => [fn () => CareerCampus::query()->get()->each->delete()],
 ]);
+
+it('HC-13: no envía grupos pedidos en un campus que ya no ofrece la carrera o que se desactivó, y lo nombra', function (string $change) {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $offer = CareerCampus::factory()->create(['career_id' => $this->proposal->career_id, 'campus_id' => $c1->id]);
+    proposalRowIn($this->cb, 1);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c1->id, 'subject_id' => Subject::factory()->create(['department_id' => $this->sc->id])->id, 'requested_groups' => 2]);
+    match ($change) {
+        'offer' => $offer->update(['is_active' => false]),
+        default => $c1->update(['is_active' => false]),
+    };
+
+    expect(submitErrors())->toBe(['career' => [$change === 'offer'
+        ? 'ISC ya no se ofrece en C1: deja en cero sus grupos de C1 para enviar.'
+        : 'C1 está inactivo: deja en cero sus grupos de C1 para enviar.']])
+        ->and($this->proposal->fresh()->status)->toBe(ProposalStatus::Draft)
+        ->and(ProposalReview::query()->count())->toBe(0);
+})->with(['oferta inactiva' => ['offer'], 'campus inactivo' => ['campus']]);
+
+it('HC-13: sí envía si la fila de ese campus va en cero grupos', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    proposalRowIn($this->cb, 1);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c1->id, 'subject_id' => Subject::factory()->create(['department_id' => $this->sc->id])->id, 'requested_groups' => 0]);
+
+    expect(submitProposal()->status)->toBe(ProposalStatus::Submitted);
+});

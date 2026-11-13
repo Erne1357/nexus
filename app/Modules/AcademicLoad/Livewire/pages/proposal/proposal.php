@@ -14,6 +14,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
+use App\Modules\AcademicLoad\Queries\ProposalHeader;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Queries\ProposalSubject;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
@@ -339,12 +340,16 @@ new #[Title('Propuesta de carrera')] class extends Component
         $values = [];
 
         foreach ($items as $id => $item) {
-            $row = $this->form[$id];
+            $row = is_array($this->form[$id]) ? $this->form[$id] : [];
 
             foreach (self::CELL_FIELDS as $field) {
                 if (! is_numeric($row[$field] ?? null) || (int) $row[$field] != $row[$field]) {
                     $this->addError("form.{$id}.{$field}", 'Escribe un número.');
                 }
+            }
+
+            if (isset($row['notes']) && ! is_string($row['notes'])) {
+                $this->addError("form.{$id}.notes", 'La nota debe ser texto.');
             }
 
             if ($this->getErrorBag()->isNotEmpty()) {
@@ -462,7 +467,9 @@ new #[Title('Propuesta de carrera')] class extends Component
         $gridSemesters = $overview->gridSemesters();
         $selected = $this->subjectId === null ? null : $overview->subject($this->subjectId);
         $rule = SuggestedGroups::fromSettings();
-        $columns = $this->columns($overview);
+        $header = $overview->header((string) config('app.timezone'));
+        $viewerId = auth()->id() === null ? null : (string) auth()->id();
+        $columns = $this->columns($overview, $header);
 
         $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
 
@@ -493,11 +500,10 @@ new #[Title('Propuesta de carrera')] class extends Component
             'proposal' => $proposal,
             'overview' => $overview,
             'columns' => $columns,
-            'editableColumns' => array_keys(array_filter($columns, fn (array $column): bool => $column['editable'])),
-            'coordinators' => $this->coordinatorLine($overview),
-            'offer' => $this->offer($overview),
-            'scopeNote' => $this->scopeNote($overview, $columns),
-            'sent' => $this->sentLine($overview),
+            'coordinators' => $header->coordinatorLine($viewerId),
+            'offer' => $header->offer(),
+            'scopeNote' => $header->scopeNote(array_keys(array_filter($columns, fn (array $column): bool => $column['editable']))),
+            'sent' => $header->sentLine(),
             'departments' => $departments,
             'department' => $this->department,
             'onlyDepartment' => $this->onlyDepartment,
@@ -510,7 +516,7 @@ new #[Title('Propuesta de carrera')] class extends Component
             'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
             'suggested' => $this->suggested($selected, $rule),
             'canSubmit' => Gate::allows('submit', $proposal),
-            'submitNotice' => $this->showSubmit ? $this->submitNotice($overview) : null,
+            'submitNotice' => $this->showSubmit ? $header->submitNotice($viewerId) : null,
             'gridSemesters' => $gridSemesters,
             'chains' => $chains,
             'highlight' => $highlight,
@@ -651,12 +657,12 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * Cada columna de la propuesta, por su llave (ProposalOverview::columnKey), con su campus, si el usuario la puede
-     * corregir y, si no, quién la captura. Se decide con la policy de la fila (CareerProposalPolicy::update) sobre una
-     * fila de esa columna: un coordinador con campus solo corrige la suya (M7).
+     * corregir y, si no, quién la captura (ProposalHeader::capturedBy). Se decide con la policy de la fila
+     * (CareerProposalPolicy::update) sobre una fila de esa columna: un coordinador con campus solo corrige la suya (M7).
      *
      * @return array<string, array{campus: ?Campus, editable: bool, readonly: ?string}>
      */
-    private function columns(ProposalOverview $overview): array
+    private function columns(ProposalOverview $overview, ProposalHeader $header): array
     {
         $samples = [];
 
@@ -669,134 +675,11 @@ new #[Title('Propuesta de carrera')] class extends Component
         foreach ($overview->columns as $campus) {
             $key = ProposalOverview::columnKey($campus);
             $editable = isset($samples[$key]) && Gate::allows('update', [$overview->proposal, $samples[$key]]);
-            $names = array_map(fn (array $row): string => $row['user']->name, array_values(array_filter($overview->coordinators, fn (array $row): bool => in_array($key, $row['campuses'], true))));
-            $where = $campus?->code ?? 'Esta columna';
 
-            $columns[$key] = [
-                'campus' => $campus,
-                'editable' => $editable,
-                'readonly' => $editable ? null : ($names === []
-                    ? "{$where} no tiene coordinador que la capture."
-                    : "{$where} lo captura ".collect($names)->join(', ', ' y ').'.'),
-            ];
+            $columns[$key] = ['campus' => $campus, 'editable' => $editable, 'readonly' => $editable ? null : $header->capturedBy($key)];
         }
 
         return $columns;
-    }
-
-    /**
-     * Dónde se ofrece la carrera, para el encabezado: «Se ofrece en C1 y C2» o «Se ofrece solo en C1» (MS5); null en la
-     * columna sin campus de una modalidad sin salones.
-     */
-    private function offer(ProposalOverview $overview): ?string
-    {
-        $codes = collect($overview->columns)->filter()->map(fn (Campus $campus): string => $campus->code)->values();
-
-        return match ($codes->count()) {
-            0 => null,
-            1 => "Se ofrece solo en {$codes->first()}",
-            default => 'Se ofrece en '.$codes->join(', ', ' y '),
-        };
-    }
-
-    /**
-     * Quiénes coordinan la carrera en la modalidad, para el encabezado: cada uno con la etiqueta de su campus si cubre
-     * solo una de varias columnas, o con los campus que cubre («· C1 y C2», «· C1») si cubre todas (M5).
-     *
-     * @return list<array{name: string, campus: ?Campus, covers: ?string, me: bool}>
-     */
-    private function coordinatorLine(ProposalOverview $overview): array
-    {
-        $all = array_map(fn (?Campus $campus): string => ProposalOverview::columnKey($campus), $overview->columns);
-        $byKey = collect($overview->columns)->keyBy(fn (?Campus $campus): string => ProposalOverview::columnKey($campus));
-
-        return array_map(function (array $row) use ($all, $byKey): array {
-            $whole = array_diff($all, $row['campuses']) === [];
-            $codes = collect($row['campuses'])->map(fn (string $key): ?string => $byKey->get($key)?->code)->filter()->sort()->values();
-
-            return [
-                'name' => $row['user']->name,
-                'campus' => $whole || count($row['campuses']) !== 1 ? null : $byKey->get($row['campuses'][0]),
-                'covers' => $whole && $codes->isNotEmpty() ? $codes->join(', ', ' y ') : null,
-                'me' => $row['user']->is(auth()->user()),
-            ];
-        }, $overview->coordinators);
-    }
-
-    /**
-     * El aviso de alcance (M7): a quien corrige unas columnas y no otras, cuáles cambia, quién captura las demás y que
-     * cualquiera de los coordinadores envía y Nexus avisa a los demás (M6, MS18). Null si corrige todas o ninguna.
-     *
-     * @param  array<string, array{campus: ?Campus, editable: bool, readonly: ?string}>  $columns
-     */
-    private function scopeNote(ProposalOverview $overview, array $columns): ?array
-    {
-        $editable = array_filter($columns, fn (array $column): bool => $column['editable']);
-        $readonly = array_filter($columns, fn (array $column): bool => ! $column['editable']);
-
-        if ($editable === [] || $readonly === []) {
-            return null;
-        }
-
-        return [
-            'career' => $overview->proposal->career->code,
-            'campuses' => collect($editable)->map(fn (array $column): string => $column['campus']?->name ?? '')->filter()->join(', ', ' y '),
-            'codes' => collect($editable)->map(fn (array $column): string => $column['campus']?->code ?? '')->filter()->join(', ', ' y '),
-            'others' => collect($readonly)->pluck('readonly')->join(' '),
-        ];
-    }
-
-    /**
-     * Quién envió la propuesta la última vez y cuándo, con el campus de quien la envió si coordina solo uno, y la
-     * última parte regresada con su fecha (caso enviada de la maqueta). Null si nunca se ha enviado.
-     *
-     * @return array{name: string, campus: ?string, at: string, returned: ?string}|null
-     */
-    private function sentLine(ProposalOverview $overview): ?array
-    {
-        $proposal = $overview->proposal;
-
-        if ($proposal->submitted_at === null) {
-            return null;
-        }
-
-        $byKey = collect($overview->columns)->keyBy(fn (?Campus $campus): string => ProposalOverview::columnKey($campus));
-        $row = collect($overview->coordinators)->first(fn (array $row): bool => $row['user']->getKey() === $proposal->submitted_by);
-        $campus = $row !== null && count($row['campuses']) === 1 && $overview->isMultiCampus() ? $byKey->get($row['campuses'][0])?->code : null;
-        $returned = collect($overview->reviews)
-            ->filter(fn (ProposalReview $review): bool => $review->status === ProposalReviewStatus::Returned && $review->decided_at !== null)
-            ->sortByDesc('decided_at')
-            ->first();
-
-        return [
-            'name' => $proposal->submitter?->name ?? 'alguien que ya no está',
-            'campus' => $campus,
-            'at' => $proposal->submitted_at->timezone(config('app.timezone'))->format('d/m/Y').' a las '.$proposal->submitted_at->timezone(config('app.timezone'))->format('G:i'),
-            'returned' => $returned === null ? null : "Regresada por {$returned->department->code} el ".$returned->decided_at->timezone(config('app.timezone'))->format('d/m/Y'),
-        ];
-    }
-
-    /**
-     * A quién avisa el envío, para la confirmación: a los demás coordinadores de la carrera en la modalidad (MS18) y a
-     * los jefes de los departamentos con grupos pedidos cuya parte no está aceptada.
-     */
-    private function submitNotice(ProposalOverview $overview): string
-    {
-        $others = collect($overview->coordinators)
-            ->reject(fn (array $row): bool => $row['user']->is(auth()->user()))
-            ->map(fn (array $row): string => $row['user']->name)
-            ->values();
-        $departments = collect($overview->departments())
-            ->filter(fn (array $row): bool => $row['groups'] > 0 && $row['review']?->status !== ProposalReviewStatus::Accepted)
-            ->map(fn (array $row): string => $row['department']->code)
-            ->values();
-
-        $to = array_filter([
-            $others->isEmpty() ? null : $others->join(', ', ' y ').($others->count() === 1 ? ', que coordina contigo' : ', que coordinan contigo'),
-            $departments->isEmpty() ? null : 'a los jefes de '.$departments->join(', ', ' y '),
-        ]);
-
-        return $to === [] ? '' : 'Se avisa a '.implode(', y ', $to).'.';
     }
 
     /**

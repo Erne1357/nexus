@@ -43,7 +43,7 @@ beforeEach(function () {
 });
 
 it('M6, M7: la coordinadora de C2 cambia su columna, ve la de C1 bloqueada y envía la propuesta', function () {
-    visit('/login')
+    $page = visit('/login')
         ->fill('username', '19110005')
         ->fill('password', 'password')
         ->press('Entrar')
@@ -54,14 +54,17 @@ it('M6, M7: la coordinadora de C2 cambia su columna, ve la de C1 bloqueada y env
         ->assertPresent('[data-readonly-column=C1]')
         ->assertMissing('[data-readonly-column=C2]')
         ->assertMissing('#cell-'.$this->inC1->id.'-requested_groups')
-        ->assertPresent('#cell-'.$this->inC2->id.'-requested_groups')
-        ->script("(() => { const input = document.querySelector('#cell-{$this->inC2->id}-requested_groups'); input.value = '2'; input.dispatchEvent(new Event('change', { bubbles: true })); })()");
+        ->assertPresent('#cell-'.$this->inC2->id.'-requested_groups');
+    $page->script("(() => { const input = document.querySelector('#cell-{$this->inC2->id}-requested_groups'); input.value = '2'; input.dispatchEvent(new Event('change', { bubbles: true })); })()");
+
+    // Espera la vuelta de saveCell («Guardado» en la celda) antes de volver a abrir la página.
+    $page->assertScript("function () { return new Promise((resolve) => { const started = Date.now(); const check = () => document.querySelector('[data-cell=\"{$this->inC2->id}.requested_groups\"][data-saved]') ? resolve(true) : (Date.now() - started > 5000 ? resolve(false) : setTimeout(check, 50)); check(); }); }");
 
     visit('/academic-load/proposal?vista=tabla')
         ->assertValue('#cell-'.$this->inC2->id.'-requested_groups', '2')
         ->assertSeeIn('[data-testid=row-ACF-0901] [data-row-total]', '7')
         ->click('@submit-proposal')
-        ->assertSeeIn('@submit-notice', 'Héctor Villalobos Ríos, que coordina contigo')
+        ->assertSeeIn('@submit-notice', 'Héctor Villalobos Ríos (C1), que coordina contigo')
         ->click('@confirm-submit')
         ->assertSee('Enviada')
         ->assertNoJavaScriptErrors();
@@ -101,7 +104,7 @@ function proposalPerModalityVolume(object $test): void
         }
     }
 
-    $test->proposal->update(['eligible_students' => 786]);
+    $test->proposal->update(['eligible_students' => 786, 'eligible_students_by_campus' => [$c1->id => 612, $c2->id => 174]]);
 }
 
 function signInForProposal(string $username)
