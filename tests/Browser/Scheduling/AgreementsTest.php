@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -26,6 +27,8 @@ beforeEach(function () {
     TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     $sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
+    // Carga en curso (MN-04): sin ella, el jefe no ve Acuerdos en el menú.
+    AcademicLoad::factory()->create(['term_id' => $term->id, 'department_id' => $sc->id]);
     $group = Group::factory()->create([
         'term_id' => $term->id, 'campus_id' => $campus->id, 'code' => '3A',
         'subject_id' => Subject::factory()->create(['code' => 'SCC-1013', 'name' => 'Redes', 'department_id' => $ii->id])->id,

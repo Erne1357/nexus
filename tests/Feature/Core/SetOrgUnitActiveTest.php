@@ -16,7 +16,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | SetOrgUnitActive desactiva y activa unidades estructurales (spec §6.1). AZ-S13 (confirmado el 3 de noviembre de
-| 2026): la Dirección no se desactiva y los departamentos académicos se desactivan en Académico.
+| 2026): la Dirección no se desactiva y los departamentos académicos se desactivan en Administración › Departamentos.
 */
 
 beforeEach(function () {
@@ -83,7 +83,7 @@ it('no desactiva con nombramientos vigentes o por empezar; los terminados no cue
     expect($academic->fresh()->is_active)->toBeTrue();
 });
 
-it('AZ-S13: la Dirección no se desactiva; un departamento académico se desactiva en Académico', function () {
+it('AZ-S13: la Dirección no se desactiva; un departamento académico se desactiva en Administración › Departamentos', function () {
     $root = OrgUnit::where('code', 'DIRECCION')->sole();
     $department = OrgUnit::find(Department::factory()->create(['name' => 'Sistemas'])->id);
 
@@ -92,7 +92,7 @@ it('AZ-S13: la Dirección no se desactiva; un departamento académico se desacti
         'Tiene 2 unidades hijas activas; muévelas o desactívalas primero.',
     ]);
     activeInvalid(fn () => app(SetOrgUnitActive::class)->handle($department, false), 'unit', [
-        'Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.',
+        'Es un departamento académico: su nombre, su clave y su estado se editan en Administración › Departamentos.',
     ]);
 });
 

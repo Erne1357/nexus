@@ -36,6 +36,7 @@ enum CorePermission: string implements Permission
     case OrgUnitMove = 'core.org_unit.move';
     case OrgUnitDeactivate = 'core.org_unit.deactivate';
     case UserGrantAccess = 'core.user.grant_access';
+    case NavigationViewUnavailable = 'core.navigation.view_unavailable';
 
     public function label(): string
     {
@@ -64,6 +65,7 @@ enum CorePermission: string implements Permission
             self::OrgUnitMove => 'Mover unidades del organigrama',
             self::OrgUnitDeactivate => 'Desactivar y activar unidades del organigrama',
             self::UserGrantAccess => 'Dar acceso a un usuario sin contraseña',
+            self::NavigationViewUnavailable => 'Ver en el menú las pantallas no disponibles en el periodo (MN-02)',
         };
     }
 

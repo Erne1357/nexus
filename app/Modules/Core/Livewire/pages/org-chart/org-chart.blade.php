@@ -44,7 +44,7 @@
 >
     <x-header title="Organigrama" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Académico.
+            La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Administración › Departamentos.
         </x-slot:subtitle>
     </x-header>
 
@@ -99,7 +99,7 @@
             </div>
 
             <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 px-3 pt-3 pb-4 text-sm text-neutral md:px-5" data-testid="org-legend">
-                <x-icon name="o-lock-closed" class="h-3.5 w-3.5" aria-hidden="true" />Se edita en Académico ·
+                <x-icon name="o-lock-closed" class="h-3.5 w-3.5" aria-hidden="true" />Se edita en Administración › Departamentos ·
                 <x-icon name="o-user" class="h-3.5 w-3.5" aria-hidden="true" /><span class="font-mono">n</span> personas en la unidad y en las que cuelgan de ella
             </p>
         </section>

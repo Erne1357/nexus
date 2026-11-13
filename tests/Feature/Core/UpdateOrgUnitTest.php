@@ -15,7 +15,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | UpdateOrgUnit cambia el nombre, la clave o el tipo de una unidad estructural (spec §6.1). AZ-S13 (confirmado el
-| 3 de noviembre de 2026): los departamentos académicos se editan en Académico y la Dirección y la Subdirección
+| 3 de noviembre de 2026): los departamentos académicos se editan en Administración › Departamentos y la Dirección y la Subdirección
 | Académica conservan su clave.
 */
 
@@ -65,7 +65,7 @@ it('AZ-S13: un departamento académico no se edita aquí', function () {
     updateUnitInvalid(
         fn () => app(UpdateOrgUnit::class)->handle($department, ['name' => 'Otro']),
         'unit',
-        'Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.',
+        'Es un departamento académico: su nombre, su clave y su estado se editan en Administración › Departamentos.',
     );
 
     expect($department->fresh()->name)->toBe('Sistemas');
@@ -146,5 +146,5 @@ it('no cambia a un tipo que deja sin lugar sus nombramientos', function () {
     $root = OrgUnit::where('code', 'DIRECCION')->sole();
     updateUnitInvalid(fn () => app(UpdateOrgUnit::class)->handle($root, ['kind' => OrgUnitKind::Oficina]), 'kind', 'La Dirección no cambia de tipo.');
     updateUnitInvalid(fn () => app(UpdateOrgUnit::class)->handle($this->unit, ['kind' => OrgUnitKind::Direccion]), 'kind', 'Solo hay una Dirección.');
-    updateUnitInvalid(fn () => app(UpdateOrgUnit::class)->handle($this->unit, ['kind' => OrgUnitKind::DepartamentoAcademico]), 'kind', 'Los departamentos académicos se dan de alta en Académico.');
+    updateUnitInvalid(fn () => app(UpdateOrgUnit::class)->handle($this->unit, ['kind' => OrgUnitKind::DepartamentoAcademico]), 'kind', 'Los departamentos académicos se dan de alta en Administración › Departamentos.');
 });

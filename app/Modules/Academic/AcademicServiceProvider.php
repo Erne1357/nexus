@@ -15,6 +15,7 @@ use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -53,13 +54,13 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Departamentos', 'academic.departments', 'o-building-library', NavigationArea::Academico,
+            new NavigationItem('Departamentos', 'academic.departments', 'o-building-library', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [Department::class]),
-            new NavigationItem('Carreras', 'academic.careers', 'o-academic-cap', NavigationArea::Academico,
+            new NavigationItem('Carreras', 'academic.careers', 'o-academic-cap', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [Career::class]),
-            new NavigationItem('Materias', 'academic.subjects', 'o-book-open', NavigationArea::Academico,
+            new NavigationItem('Materias', 'academic.subjects', 'o-book-open', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [Subject::class]),
-            new NavigationItem('Planes de estudio', 'academic.plans', 'o-rectangle-group', NavigationArea::Academico,
+            new NavigationItem('Planes de estudio', 'academic.plans', 'o-rectangle-group', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [StudyPlan::class], childRoutes: ['academic.plans.show']),
         ];
     }

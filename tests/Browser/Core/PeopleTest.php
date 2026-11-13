@@ -39,6 +39,7 @@ function signInToPeople(string $username)
 
 it('el admin nombra coordinadora a una persona y luego termina el nombramiento', function () {
     $page = signInToPeople('admin')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Personas y puestos"]')
         ->assertPathIs('/people')
         ->assertSee('Zacarías Zúñiga')

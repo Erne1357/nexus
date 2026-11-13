@@ -66,7 +66,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
         ->get(route('core.org-chart'))
         ->assertOk()
         ->assertSee('<title>Organigrama · Nexus</title>', false)
-        ->assertSee('La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Académico.')
+        ->assertSee('La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Administración › Departamentos.')
         ->assertSee('Mostrar inactivas (1)')
         ->assertSee('1 departamento académico sin jefe')
         ->assertSee('Nueva unidad');
@@ -80,7 +80,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
         ->and($boxes)->toEqualCanonicalizing(OrgUnit::query()->where('is_active', true)->pluck('code')->all())
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-SC"]')))->toContain('Departamento académico')->toContain('Sistemas y Computación')->toContain('Sin jefe vigente')
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular en Nexus')
-        ->and(textOf(domOf($response)->querySelector('[data-testid="org-legend"]')))->toBe('Se edita en Académico · n personas en la unidad y en las que cuelgan de ella');
+        ->and(textOf(domOf($response)->querySelector('[data-testid="org-legend"]')))->toBe('Se edita en Administración › Departamentos · n personas en la unidad y en las que cuelgan de ella');
 });
 
 it('el panel muestra la unidad elegida', function () {
@@ -216,7 +216,7 @@ it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
         ->and($dom->querySelector('[data-testid="unit-move"]')->hasAttribute('disabled'))->toBeTrue()
         ->and($dom->querySelector('[data-testid="unit-deactivate"]')->hasAttribute('disabled'))->toBeTrue()
         ->and($dom->querySelector('[data-testid="unit-add-child"]'))->toBeNull()
-        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toBe('Es un departamento académico: su nombre, su clave y su estado se editan en Académico › Departamentos.');
+        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toBe('Es un departamento académico: su nombre, su clave y su estado se editan en Administración › Departamentos.');
 
     $panel->call('openEdit')->assertHasErrors(['unit'])->assertSet('showForm', false);
     $panel->call('openMove')->assertHasErrors(['unit'])->assertSet('showForm', false);
@@ -252,7 +252,7 @@ it('muestra en español los errores de las Actions junto al campo', function () 
         ->set('kind', 'departamento_academico')
         ->call('save')
         ->assertHasErrors(['kind'])
-        ->assertSee('Los departamentos académicos se dan de alta en Académico.');
+        ->assertSee('Los departamentos académicos se dan de alta en Administración › Departamentos.');
 
     $panel->dispatch('org-unit-picked', id: $this->planning->id)
         ->call('openMove')
@@ -496,7 +496,7 @@ it('Mostrar inactivas enseña las inactivas', function () {
 
 it('el menú muestra «Organigrama» solo al admin', function () {
     $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
-    $items = collect(app(Navigation::class)->items())->filter(fn (NavigationItem $item): bool => $item->area === NavigationArea::Academico)->pluck('label')->values();
+    $items = collect(app(Navigation::class)->items())->filter(fn (NavigationItem $item): bool => $item->area === NavigationArea::Administracion)->pluck('label')->values();
     $item = collect(app(Navigation::class)->items())->firstWhere('label', 'Organigrama');
 
     expect(seesOrgChartMenu($this->admin))->toBeTrue()

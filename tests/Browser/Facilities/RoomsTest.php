@@ -10,7 +10,7 @@ use App\Modules\Facilities\Models\Room;
 /*
 | Salones en el navegador: la Subdirección de C2 (su único campus, así que es el activo) entra por el
 | menú, da de alta un salón, lo edita y le agrega un bloqueo en el panel lateral; un coordinador no ve la
-| entrada. Salones es del área Académico, la del inicio.
+| entrada. Salones es de Administración › Catálogos: se llega abriendo el menú con la liebre.
 */
 
 beforeEach(function () {
@@ -34,6 +34,7 @@ function signInToRooms(string $username)
 
 it('la subdirección de C2 da de alta un salón, lo edita y le agrega un bloqueo desde la UI', function () {
     $page = signInToRooms('subdireccion')
+        ->click('@hare')
         ->click('#nexus-menu a[data-label="Salones"]')
         ->assertPathIs('/facilities/rooms')
         ->assertSee('A-101')
