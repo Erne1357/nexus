@@ -1,6 +1,6 @@
 # Reglas de negocio
 
-Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla desde issues, pruebas y código. Las **duras** nunca se violan y bloquean transiciones; las **blandas** se puntúan y el motor (R2) las optimiza. Los parámetros marcados como configurables viven en `settings` o en `campuses.settings`.
+Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla desde issues, pruebas y código. Las **duras** nunca se violan y bloquean transiciones; las **blandas** se puntúan y el motor (R2) las optimiza. Los parámetros marcados como configurables viven en `settings` o en `modalities.settings`.
 
 ## Restricciones duras (HC)
 
@@ -572,7 +572,6 @@ Reglas, código y pruebas citan estas reglas por su id. Las decisiones M1 a M14 
 
 | Clave | Presencial | Notas para otras modalidades |
 |---|---|---|
-| `modality` | `presencial` | `mixta` (EAD), `en_linea`, `virtual_tecnm` |
 | `uses_rooms` | `true` | EAD: `true` solo viernes y sábado; EnLínea y Virtual: `false` |
 | `uses_time_blocks` | `true` | EAD: `true`; EnLínea: por definir |
 | `staffing_mode` | `department` | otras modalidades: `central` |
@@ -581,6 +580,7 @@ Reglas, código y pruebas citan estas reglas por su id. Las decisiones M1 a M14 
 | `days` | lunes a viernes | EAD: lunes a sábado |
 | `requires_subdireccion_approval` | `false` por defecto; configurable | |
 | `allow_external_teachers` | `false` | TecNM Virtual: `true` |
+| `weekly_hours_tolerance` | sin clave (usa la configuración global `scheduling.weekly_hours_tolerance`) | Opcional, en minutos (MS17): la tolerancia de HC-12 de la modalidad |
 
 ## Reglas de datos
 
