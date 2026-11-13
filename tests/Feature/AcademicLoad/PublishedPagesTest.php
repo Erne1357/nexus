@@ -475,6 +475,18 @@ describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
             ->assertRedirect(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $this->laura['id'], 'campus' => 'C1']));
     });
 
+    it('una consulta con arreglos en lugar de texto (?campus[]=) no truena: se ignora', function () {
+        foreach (['campus', 'periodo', 'modalidad'] as $key) {
+            expect($this->get('/horarios?'.$key.'[]=x')->status())->toBeIn([200, 404])
+                ->and($this->get('/horarios/20271/pres/carrera/ISC?'.$key.'[]=x')->status())->toBeIn([200, 404]);
+        }
+    });
+
+    it('la redirección no deja que la consulta pise un parámetro del camino', function () {
+        $this->get('/horarios/20271/C2/docente/'.$this->laura['id'].'?docente=x&periodo=29999&modalidad=ead&dia=3')
+            ->assertRedirect(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $this->laura['id'], 'campus' => 'C2', 'dia' => '3']));
+    });
+
     it('MS13: una foto vieja, con el campus en la raíz, se lee como presencial con ese campus en cada grupo', function () {
         $load = AcademicLoad::factory()->for($this->term)->for(modalityOf('PRES'))
             ->for(Department::factory()->create(['code' => 'VIE', 'name' => 'Departamento viejo']))->inStatus(LoadStatus::Published)->create();

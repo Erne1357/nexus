@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Queries;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -66,7 +67,8 @@ final class LoadVersionsQuery
         $payloads = LoadSnapshot::query()
             ->where('academic_load_id', $load->getKey())
             ->whereIn('version', [$version - 1, $version])
-            ->pluck('payload', 'version');
+            ->pluck('payload', 'version')
+            ->map(fn (array $payload): array => SnapshotPayload::normalize($payload));
 
         if ($payloads->count() < 2) {
             return null;

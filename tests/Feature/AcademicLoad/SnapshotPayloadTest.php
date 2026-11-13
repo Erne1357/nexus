@@ -8,6 +8,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 
 /*
 | El contrato del snapshot (tarea 4.3, docs/dominio/modelo-de-datos.md, «Contenido del snapshot»): la forma v2 que
@@ -82,6 +83,15 @@ it('MS13: normalize lee una foto v1 como modalidad presencial y pasa el campus d
         ->and(array_column($normalized['groups'], 'campus'))->toBe(array_fill(0, count($old['groups']), ['id' => $c2->id, 'code' => 'C2', 'name' => 'Campus II']))
         ->and($normalized['groups'][0]['sessions'])->toBe($old['groups'][0]['sessions'])
         ->and(SnapshotPayload::errors($normalized))->toBe([]);
+});
+
+it('MS13: normalize toma la modalidad del campus de la raíz por el puente y, sin él, la presencial; nunca usa el id del campus', function () {
+    $ead = Campus::factory()->create(['code' => 'EAD', 'modality_id' => modalityOf('EAD')->id]);
+    $old = fn (array $campus): array => [...array_diff_key(samplePayload(), ['modality' => true]), 'schema_version' => 1, 'campus' => $campus];
+
+    expect(SnapshotPayload::normalize($old(['id' => $ead->id, 'code' => 'EAD', 'name' => 'Campus EAD']))['modality']['code'])->toBe('EAD')
+        ->and(SnapshotPayload::normalize($old(['id' => (string) Str::uuid7(), 'code' => 'CX', 'name' => 'Campus que ya no existe']))['modality'])
+        ->toBe(['id' => modalityOf('PRES')->id, 'code' => 'PRES', 'name' => modalityOf('PRES')->name]);
 });
 
 it('normalize deja igual una foto v2', function () {

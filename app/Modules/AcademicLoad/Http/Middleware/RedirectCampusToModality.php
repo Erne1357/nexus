@@ -13,7 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
  * a la de su modalidad con el campus como filtro (`/horarios/{periodo}/pres/…?campus=C2`; M1: lo publicado es por
  * modalidad). Así siguen sirviendo las ligas guardadas o impresas de antes. La modalidad del campus sale del puente
  * `campuses.modality_id`. Si el segmento ya es una modalidad activa, o no es un campus activo con modalidad activa, la
- * petición sigue igual (y la página da 404 si no existe). Conserva los demás parámetros de la URL.
+ * petición sigue igual (y la página da 404 si no existe). Conserva los demás parámetros de la consulta, salvo los que
+ * se llaman como uno del camino.
  */
 final class RedirectCampusToModality
 {
@@ -33,11 +34,12 @@ final class RedirectCampusToModality
             return $next($request);
         }
 
+        // La consulta no puede pisar los parámetros del camino (`?docente=x` en `/docente/<uuid>`): se descartan los suyos.
         return redirect()->route($route->getName(), [
             ...$route->parameters(),
             'modalidad' => PublishedContextQuery::modalityKey($modality),
             'campus' => $campus->code,
-            ...collect($request->query())->except('campus')->all(),
+            ...collect($request->query())->except(['campus', 'modalidad', ...array_keys($route->parameters())])->all(),
         ], 301);
     }
 }

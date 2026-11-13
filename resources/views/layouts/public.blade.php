@@ -20,7 +20,8 @@
         @livewireStyles
     </head>
     <body class="min-h-screen bg-base-200 font-sans text-base-content antialiased">
-        <livewire:academic-load::components.published-band :term-code="request()->route('periodo') ?? request()->query('periodo')" :modality-code="request()->route('modalidad') ?? request()->query('modalidad')" :campus-code="request()->query('campus')" />
+        @php($queryText = fn (string $key): ?string => is_string(request()->query($key)) ? request()->query($key) : null)
+        <livewire:academic-load::components.published-band :term-code="request()->route('periodo') ?? $queryText('periodo')" :modality-code="request()->route('modalidad') ?? $queryText('modalidad')" :campus-code="$queryText('campus')" />
 
         <main id="nexus-content" class="mx-auto min-h-[calc(100vh_-_200px)] max-w-[calc(1680px_+_4rem)] px-8 pt-6.5 pb-6 max-desktop:px-6 max-desktop:pt-6 max-md:px-4 max-md:pt-[18px] max-md:pb-6">
             {{ $slot }}
