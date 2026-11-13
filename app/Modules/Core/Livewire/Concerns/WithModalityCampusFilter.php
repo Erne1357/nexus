@@ -5,6 +5,7 @@ namespace App\Modules\Core\Livewire\Concerns;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Queries\CampusQuery;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Collection;
 
@@ -65,16 +66,14 @@ trait WithModalityCampusFilter
     }
 
     /**
-     * Los campus donde se dan los grupos de una modalidad (MS4): con salones, los activos por código; sin salones,
-     * ninguno.
+     * Los campus donde se dan los grupos de una modalidad (MS4; CampusQuery::of): con salones, los activos por código;
+     * sin salones, ninguno.
      *
      * @return EloquentCollection<int, Campus>
      */
     protected function campusesOf(Modality $modality): EloquentCollection
     {
-        return $this->campusesOfModality[$modality->getKey()] ??= $modality->profile->usesRooms
-            ? Campus::query()->where('is_active', true)->orderBy('code')->get()
-            : new EloquentCollection;
+        return $this->campusesOfModality[$modality->getKey()] ??= app(CampusQuery::class)->of($modality);
     }
 
     /**

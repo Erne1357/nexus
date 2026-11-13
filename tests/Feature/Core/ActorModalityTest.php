@@ -21,7 +21,8 @@ use Tests\Fixtures\Authorization\FakePermission;
 /*
 | AZ-S17: el alcance por modalidad, con el campus opcional (M5, M7 y M9, confirmados el 12 de noviembre de 2026; MS6 y
 | MS8, supuestos por confirmar). Un nombramiento sin modalidad cubre todas las activas; uno con modalidad, solo esa y
-| solo si está activa y sin borrar (MS8); uno sin modalidad cubre también las inactivas . Lo que se lee declara la modalidad sin el campus; lo que se escribe sobre algo con
+| solo si está activa y sin borrar (MS8); uno sin modalidad cubre también las inactivas no borradas, pero solo para
+| ver alumnos (M10). Lo que se lee declara la modalidad sin el campus; lo que se escribe sobre algo con
 | campus declara también el campus. Permisos de prueba: FakePermission::ViewModality*. Carreras X (20) e Y (21),
 | departamento 10. EAD se activa en estas pruebas; En línea sigue inactiva.
 */

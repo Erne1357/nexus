@@ -22,8 +22,7 @@ use Spatie\Activitylog\Models\Activity;
 | Modalidades (`/modalidades`, core::pages.modalities): el catálogo con el perfil de flujo de cada una (MS1, supuesto por
 | confirmar; M3), con la forma de Campus: tabla y un panel lateral (x-drawer) con el perfil. El admin da de alta, edita,
 | activa y desactiva; la subdirección ve y edita solo el perfil de flujo; los demás roles no entran. Cada acción del
-| componente vuelve a autorizar. Mientras Scheduling lea `campuses.settings`, guardar el perfil de una modalidad lo
-| escribe también en sus campus por el puente `modality_id` (temporal, hasta el paso de contracción).
+| componente vuelve a autorizar. El perfil es solo de la modalidad: el campus es el lugar y no lo tiene (MS3).
 */
 
 beforeEach(function () {
@@ -225,8 +224,7 @@ describe('admin', function () {
 
         expect($this->pres->fresh()->code)->toBe('PRES')
             ->and(fn () => app(UpdateModality::class)->handle($this->pres, ['code' => 'otra']))->toThrow(ValidationException::class)
-            ->and(app(UpdateModality::class)->handle($this->pres, ['code' => ' pres ', 'name' => 'Presencial 2'])->code)->toBe('PRES')
-            ->and($this->c1->fresh()->modality_id)->toBe($this->pres->id);
+            ->and(app(UpdateModality::class)->handle($this->pres, ['code' => ' pres ', 'name' => 'Presencial 2'])->code)->toBe('PRES');
     });
 
     it('M11: no desactiva la única modalidad activa', function () {
@@ -278,7 +276,7 @@ describe('admin', function () {
         $this->ead->update(['is_active' => true]);
         $term = Term::factory()->create(['code' => '20271']);
         TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
-        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->c1->modality_id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Closed]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Closed]);
 
         $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
 
@@ -309,7 +307,7 @@ describe('admin', function () {
         $this->ead->update(['is_active' => true]);
         $term = Term::factory()->create(['code' => '20271']);
         TermOpening::factory()->for($term)->for($this->pres)->create(['opened_by' => $this->admin->id]);
-        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->c1->modality_id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Published]);
+        AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => $this->pres->id, 'status' => LoadStatus::Published]);
 
         $page = Livewire::actingAs($this->admin)->test('core::pages.modalities')->call('toggleActive', $this->pres->id);
 
@@ -333,9 +331,7 @@ describe('admin', function () {
             ->toContain('Está abierta en 20271')->toContain('1 nombramiento vigente');
     });
 
-    it('guardar el perfil de Presencial lo escribe también en los campus presenciales, en la misma operación (temporal)', function () {
-        $other = Campus::factory()->create(['code' => 'XX', 'modality_id' => $this->ead->id]);
-
+    it('MS3: guardar el perfil de Presencial no toca los campus, que no tienen perfil', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.modalities')
             ->call('edit', $this->pres->id)
@@ -344,28 +340,8 @@ describe('admin', function () {
             ->call('save')
             ->assertHasNoErrors();
 
-        expect($this->pres->fresh()->profile)->dayEnd->toBe('22:00')
-            ->and($this->c1->fresh()->profile)->dayEnd->toBe('22:00')->days->toBe([1, 2, 3, 4, 5, 6])
-            ->and($this->c2->fresh()->profile)->dayEnd->toBe('22:00')
-            ->and($other->fresh()->profile->dayEnd)->toBe('21:00');
-    });
-
-    it('si un campus rechaza el perfil, no queda nada guardado: ni la modalidad ni los otros campus', function () {
-        $this->c2->update(['modality_id' => $this->pres->id]);
-        $before = $this->pres->fresh()->settings;
-
-        Campus::saving(function (Campus $campus): void {
-            if ($campus->code === 'C2') {
-                throw new RuntimeException('falla simulada');
-            }
-        });
-
-        expect(fn () => app(UpdateModality::class)->handle($this->pres, ['settings' => [...ModalityProfile::DEFAULTS, 'day_end' => '22:00']]))
-            ->toThrow(RuntimeException::class);
-
-        expect($this->pres->fresh()->settings)->toBe($before)
-            ->and($this->c1->fresh()->profile->dayEnd)->toBe('21:00')
-            ->and(Activity::count())->toBe(0);
+        expect($this->pres->fresh()->profile)->dayEnd->toBe('22:00')->days->toBe([1, 2, 3, 4, 5, 6])
+            ->and(Activity::query()->where('subject_type', (new Campus)->getMorphClass())->exists())->toBeFalse();
     });
 });
 

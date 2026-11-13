@@ -5,6 +5,7 @@ namespace App\Modules\Core\Queries;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\TermOpening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -79,6 +80,21 @@ final class ModalityQuery
     public function active(): Collection
     {
         return Modality::query()->where('is_active', true)->orderBy('code')->get();
+    }
+
+    /**
+     * La jornada de los salones: la ventana que cubre a las modalidades activas con salones (ModalityProfile::covering;
+     * MS34, supuesto por confirmar). Un salón es de un campus, que es solo el lugar (MS3), y lo usan los grupos de toda
+     * modalidad con salones (MS4), así que su jornada es la de todas ellas. Con solo Presencial activa es lunes a
+     * viernes de 7:00 a 21:00; sin ninguna, el perfil presencial por omisión.
+     */
+    public function roomsWindow(): ModalityProfile
+    {
+        return ModalityProfile::covering(
+            Modality::query()->where('is_active', true)->get()
+                ->map(fn (Modality $modality): ModalityProfile => $modality->profile)
+                ->filter(fn (ModalityProfile $profile): bool => $profile->usesRooms),
+        );
     }
 
     /**

@@ -215,7 +215,7 @@ describe('con el módulo que lo escucha (AcademicLoad)', function () {
 
     it('las cargas son de la modalidad que se abre, no de otra', function () {
         $other = Modality::factory()->create();
-        Campus::factory()->create(['code' => 'C8', 'modality_id' => $other->id]);
+        Campus::factory()->create(['code' => 'C8']);
 
         openTerm($this->term, $this->presencial);
 

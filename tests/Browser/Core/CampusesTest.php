@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -43,7 +42,7 @@ it('el admin da de alta un campus y luego lo edita desde la UI', function () {
         ->assertSee('Campus III')
         ->assertNoJavaScriptErrors();
 
-    expect(Campus::where('code', 'C3')->sole()->modality)->toBe(Modality::Presencial);
+    expect(Campus::where('code', 'C3')->sole()->is_active)->toBeTrue();
 
     $page->click('@edit-C3')
         ->assertValue('code', 'C3')

@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Support\WeekGrid;
 
 /*
@@ -11,7 +11,7 @@ use App\Modules\Core\Support\WeekGrid;
 
 function weekGrid(array $settings = []): WeekGrid
 {
-    return WeekGrid::of(CampusProfile::fromArray($settings));
+    return WeekGrid::of(ModalityProfile::fromArray($settings));
 }
 
 /**

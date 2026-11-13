@@ -17,6 +17,7 @@ use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\Fixtures\Authorization\FakePermission;
+use Tests\Support\Authorization\CampusBoundWrites;
 
 /*
 | Spec §7.1 (Autorización por permisos): un nombramiento con una dimensión vacía cubre cualquier valor, así que un
@@ -31,7 +32,7 @@ use Tests\Fixtures\Authorization\FakePermission;
  * Recurso (`modulo.recurso`) o clave completa de un permiso -> tabla que lo respalda.
  *
  * Nota: `academic.career.update` también escribe `career_campus` (careers.php, toggleOffering, vía SetCareerOffering),
- * con el campus de Actor::activeCampus(). Hoy es solo del admin; el día que se conceda a otro puesto, esa oferta por
+ * con el campus que elige la pantalla. Hoy es solo del admin; el día que se conceda a otro puesto, esa oferta por
  * campus necesita su propio permiso con la dimensión campus.
  *
  * @return array<string, string>
@@ -132,12 +133,33 @@ function dimensionHasCampus(Permission $permission): bool
 }
 
 /**
- * AZ-S17: lo que se lee, y lo que actúa sobre una carga entera, declara la modalidad en lugar del campus; el
- * nombramiento sin modalidad cubre todas las activas y uno con modalidad, solo esa, así que no queda sin límite.
+ * AZ-S17 (MS6): lo que se lee, y lo que actúa sobre una carga entera, declara la modalidad en lugar del campus; el
+ * nombramiento sin modalidad cubre todas las activas y uno con modalidad, solo esa, así que no queda sin límite. Lo que
+ * escribe algo con campus (CampusBoundWrites, la lista de cada módulo) no se salva por la modalidad: declara el campus.
  */
 function dimensionBoundsByModality(Permission $permission, string $table): bool
 {
-    return in_array(Dimension::Modality, $permission->dimensions(), true) && Schema::hasColumn($table, 'modality_id');
+    return in_array(Dimension::Modality, $permission->dimensions(), true)
+        && Schema::hasColumn($table, 'modality_id')
+        && ! in_array($permission, CampusBoundWrites::all(), true);
+}
+
+/**
+ * Permisos que, sobre una tabla con `modality_id`, pueden no declarar la modalidad, con su motivo.
+ *
+ * @return array<string, string>
+ */
+function modalityDimensionExceptions(): array
+{
+    $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
+    $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección), que cubren todas las modalidades; `term_stages.modality_id` nulo es el calendario general del periodo, que no es de ninguna modalidad (M4).';
+
+    return [
+        'core.assignment.view' => $admin,
+        'core.assignment.appoint' => $admin,
+        'core.assignment.end' => $admin,
+        'core.term.manage_calendar' => $tec,
+    ];
 }
 
 /**
@@ -219,6 +241,37 @@ it('spec §7.1: ningún permiso del módulo sobre un recurso con campus_id omite
 
     expect($problems)->toBe([]);
 })->with($enums);
+
+it('AZ-S17: ningún permiso del módulo sobre un recurso con modality_id omite la dimensión modalidad', function (string $enum) {
+    $problems = [];
+
+    foreach ($enum::cases() as $permission) {
+        $table = dimensionTableFor($permission);
+
+        if ($permission->isPersonal() || $table === null || ! Schema::hasTable($table)) {
+            continue;
+        }
+
+        if (Schema::hasColumn($table, 'modality_id') && ! in_array(Dimension::Modality, $permission->dimensions(), true) && ! isset(modalityDimensionExceptions()[$permission->value])) {
+            $problems[] = "{$permission->value}: {$table}.modality_id sin la dimensión modalidad";
+        }
+    }
+
+    expect($problems)->toBe([]);
+})->with($enums);
+
+it('AZ-S17: cada excepción de modalidad es solo del admin (D5) o solo de puestos de todo el Tec (D6), y sigue siendo necesaria', function (string $key, string $reason) {
+    $registry = app(PermissionRegistry::class);
+    $permission = collect($registry->permissions())->firstWhere('value', $key);
+
+    expect($permission)->not->toBeNull()
+        ->and(Schema::hasColumn(dimensionTableFor($permission), 'modality_id'))->toBeTrue()
+        ->and($permission->dimensions())->not->toContain(Dimension::Modality);
+
+    foreach ($registry->rolesGranting($permission) as $role) {
+        expect(str_starts_with($reason, 'D6') && in_array($role, dimensionWholeTecRoles(), true))->toBeTrue("{$role->value} tiene {$key}");
+    }
+})->with(fn (): array => collect(modalityDimensionExceptions())->map(fn (string $reason, string $key): array => [$key, $reason])->all());
 
 it('cada excepción es solo del admin (D5), solo de puestos de todo el Tec (D6) o de revisiones sin campus (RV)', function (string $key, string $reason) {
     $registry = app(PermissionRegistry::class);

@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Rules\CampusRules;
 use Illuminate\Validation\ValidationException;
 
@@ -48,12 +47,6 @@ it('rechaza un código ya usado, también por un campus borrado, y acepta el pro
     $rules->ensureCodeIsFree('C2', $own);
 });
 
-it('devuelve el perfil completo y normalizado', function () {
-    expect(app(CampusRules::class)->profile(['days' => [5, 1, 1]]))
-        ->toBe([...CampusProfile::DEFAULTS, 'days' => [1, 5]]);
-});
-
-it('convierte un perfil que CampusProfile no acepta en un error sobre settings', function () {
-    expect(rejectionOf(fn () => app(CampusRules::class)->profile(['block_minutes' => 45])))
-        ->toBe(['settings' => ['Perfil de campus inválido: block_minutes debe dividir exacto la jornada de day_start a day_end.']]);
+it('MS3: no valida un perfil de flujo: el campus no lo tiene', function () {
+    expect(method_exists(CampusRules::class, 'profile'))->toBeFalse();
 });

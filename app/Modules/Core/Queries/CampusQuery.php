@@ -5,8 +5,12 @@ namespace App\Modules\Core\Queries;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 
@@ -56,6 +60,36 @@ final class CampusQuery
     public function active(): Collection
     {
         return Campus::query()->where('is_active', true)->orderBy('code')->get();
+    }
+
+    /**
+     * Los campus donde se dan los grupos de una modalidad (MS4, supuesto por confirmar): con salones, los activos por
+     * código, porque un grupo de esa modalidad se da en cualquiera; sin salones, ninguno (sus grupos van sin campus). El
+     * campus es solo el lugar (MS3): no dice de qué modalidad es.
+     *
+     * @return EloquentCollection<int, Campus>
+     */
+    public function of(Modality $modality): EloquentCollection
+    {
+        return $modality->profile->usesRooms
+            ? Campus::query()->where('is_active', true)->orderBy('code')->get()
+            : new EloquentCollection;
+    }
+
+    /**
+     * Los campus donde el periodo está abierto (M4): los de las modalidades sin borrar donde se abrió (of()), activos y por
+     * código. Sin ninguna con salones, ninguno.
+     *
+     * @return EloquentCollection<int, Campus>
+     */
+    public function openIn(Term|string $term): EloquentCollection
+    {
+        $hasRooms = Modality::query()
+            ->whereIn('id', TermOpening::query()->where('term_id', $term instanceof Term ? $term->getKey() : $term)->select('modality_id'))
+            ->get()
+            ->contains(fn (Modality $modality): bool => $modality->profile->usesRooms);
+
+        return $hasRooms ? Campus::query()->where('is_active', true)->orderBy('code')->get() : new EloquentCollection;
     }
 
     /**

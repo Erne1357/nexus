@@ -1,9 +1,6 @@
 <?php
 
-use App\Modules\Core\Enums\Modality as ModalityEnum;
 use App\Modules\Core\Enums\StaffingMode;
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use Illuminate\Database\UniqueConstraintViolationException;
@@ -21,7 +18,10 @@ use Illuminate\Support\Str;
 
 beforeEach(function () {
     // Las tablas de la carga, la apertura y el calendario del periodo, los nombramientos y la modalidad del alumno
-    // apuntan al catálogo: sus migraciones, posteriores, se deshacen primero, de la última a la primera.
+    // apuntan al catálogo: sus migraciones, posteriores, se deshacen primero, de la última a la primera (la primera, la
+    // contracción, que devuelve a los campus su modalidad y su perfil).
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
+    DB::table('campuses')->delete();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210501_make_academic_loads_per_modality.php'))->down();
     (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210403_add_modality_to_staffing_tables.php'))->down();
@@ -71,8 +71,8 @@ it('siembra Presencial, EAD, En línea y TecNM Virtual', function () {
 });
 
 it('el perfil de Presencial es el de los campus presenciales sin heads_edit_rooms', function () {
-    campusBeforeModalities('C1', 'presencial', [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => true, 'heads_edit_rooms' => true]);
-    campusBeforeModalities('C2', 'presencial', [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => true, 'heads_edit_rooms' => false]);
+    campusBeforeModalities('C1', 'presencial', [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true, 'heads_edit_rooms' => true]);
+    campusBeforeModalities('C2', 'presencial', [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true, 'heads_edit_rooms' => false]);
     campusBeforeModalities('C3', 'presencial', ['day_end' => '20:00'], active: false);
     campusBeforeModalities('C4', 'presencial', ['day_end' => '19:00'], deletedAt: '2026-11-01');
     campusBeforeModalities('EAD', 'mixta', ['days' => [1, 2, 3, 4, 5, 6]], active: false);
@@ -144,7 +144,7 @@ it('llena campuses.modality_id por la modalidad de cada campus', function () {
 
     $this->migration->up();
 
-    expect(Campus::withTrashed()->with('catalogModality')->get()->mapWithKeys(fn (Campus $campus): array => [$campus->code => $campus->catalogModality->code])->all())
+    expect(DB::table('campuses')->join('modalities', 'modalities.id', '=', 'campuses.modality_id')->select(['campuses.code as campus', 'modalities.code as modality'])->pluck('modality', 'campus')->all())
         ->toEqualCanonicalizing(['C1' => 'PRES', 'C2' => 'PRES', 'EAD' => 'EAD', 'ENL' => 'ENL', 'TNMV' => 'TNMV']);
 });
 
@@ -171,12 +171,3 @@ it('expone el perfil de settings y lee el nuevo en la misma instancia', function
 
     expect($modality->profile->usesRooms)->toBeFalse();
 });
-
-it('cada modalidad del enum apunta a su clave del catálogo (puente hasta contraer)', function (ModalityEnum $modality, string $code) {
-    expect($modality->catalogCode())->toBe($code);
-})->with([
-    'presencial' => [ModalityEnum::Presencial, 'PRES'],
-    'mixta' => [ModalityEnum::Mixta, 'EAD'],
-    'en línea' => [ModalityEnum::EnLinea, 'ENL'],
-    'TecNM Virtual' => [ModalityEnum::VirtualTecnm, 'TNMV'],
-]);

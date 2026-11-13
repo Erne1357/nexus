@@ -28,8 +28,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * Las reglas de alcance son de RoleAssignmentRules, y el puesto Subdirección Académica solo va sobre la unidad
  * Subdirección Académica (AZ-S10). Fuera de la transacción revisa las columnas y las fechas. Dentro bloquea al usuario
- * (inactivo no se nombra), a la unidad y a la modalidad, que relee activas para que una desactivación concurrente
- * espere (MS8: un nombramiento no nace en una modalidad que se acaba de desactivar), y revisa a la misma persona dos
+ * (inactivo no se nombra) y a la unidad, y relee la modalidad con bloqueo compartido (FOR SHARE: basta para que una
+ * desactivación concurrente, que la bloquea FOR UPDATE, espere; MS8: un nombramiento no nace en una modalidad que se
+ * acaba de desactivar), y revisa a la misma persona dos
  * veces y el puesto exclusivo ocupado (AZ-S7), cuyo error dice quién lo ocupa. Si otra sesión gana
  * el puesto entre la revisión y la escritura, la exclusión de la base (SQLSTATE 23P01) responde con el mismo error sin
  * nombre; si escribe el mismo jefe de proyecto docente, con el de duplicado. Cualquier otro error de la base sigue
@@ -67,7 +68,7 @@ final class AppointRole
             }
 
             if ($modality !== null) {
-                $modality = Modality::withTrashed()->whereKey($modality->getKey())->lockForUpdate()->first() ?? $modality;
+                $modality = Modality::withTrashed()->whereKey($modality->getKey())->sharedLock()->first() ?? $modality;
             }
 
             if ($unit !== null || $modality !== null) {
