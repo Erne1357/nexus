@@ -80,7 +80,7 @@ class DemoSeeder extends Seeder
     public function showcase(): void
     {
         if (config('demo.showcase', false)) {
-            $this->callWith(PublicationShowcaseDemoSeeder::class, ['campus' => 'C2', 'department' => 'CEA', 'versions' => 3]);
+            $this->callWith(PublicationShowcaseDemoSeeder::class, ['department' => 'CEA', 'versions' => 3]);
         }
     }
 }

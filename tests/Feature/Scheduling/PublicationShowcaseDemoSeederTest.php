@@ -51,7 +51,7 @@ beforeEach(function () {
 });
 
 it('publica la carga cerrada en tres versiones y cada una cambia de salón alguna sesión', function () {
-    app(PublicationShowcaseDemoSeeder::class)->run('C2', 'CEA', '20271', 3);
+    app(PublicationShowcaseDemoSeeder::class)->run('CEA', 'PRES', '20271', 3);
 
     $load = $this->load->fresh();
     $rooms = $load->snapshots->map(fn ($snapshot): array => collect($snapshot->payload['groups'])
@@ -65,7 +65,7 @@ it('publica la carga cerrada en tres versiones y cada una cambia de salón algun
 });
 
 it('con reopenAtEnd deja la carga en ajustes con su última versión publicada', function () {
-    app(PublicationShowcaseDemoSeeder::class)->run('C2', 'CEA', '20271', 2, reopenAtEnd: true);
+    app(PublicationShowcaseDemoSeeder::class)->run('CEA', 'PRES', '20271', 2, reopenAtEnd: true);
 
     $load = $this->load->fresh();
 
@@ -77,18 +77,18 @@ it('una carga en asignación con un grupo sin docente lo justifica, la cierra y 
     $this->load->update(['status' => LoadStatus::Staffing]);
     $this->groups[0]->update(['teacher_id' => null]);
 
-    app(PublicationShowcaseDemoSeeder::class)->run('C2', 'CEA', '20271', 1);
+    app(PublicationShowcaseDemoSeeder::class)->run('CEA', 'PRES', '20271', 1);
 
     expect($this->load->fresh()->status)->toBe(LoadStatus::Published)
         ->and($this->groups[0]->fresh()->close_justification)->not->toBeNull()
         ->and(collect($this->load->fresh()->snapshots->sole()->payload['groups'])->firstWhere('id', $this->groups[0]->id)['teacher'])->toBeNull();
 });
 
-it('se niega con una carga que no está en asignación ni cerrada', function () {
+it('se niega con una carga que no está en asignación ni cerrada y la nombra por departamento y modalidad', function () {
     $this->load->update(['status' => LoadStatus::Draft]);
 
-    app(PublicationShowcaseDemoSeeder::class)->run('C2', 'CEA', '20271', 3);
-})->throws(RuntimeException::class, 'la demo de versiones empieza en asignación o cerrada');
+    app(PublicationShowcaseDemoSeeder::class)->run('CEA', 'PRES', '20271', 3);
+})->throws(RuntimeException::class, 'La carga de CEA en Presencial está en Borrador: la demo de versiones empieza en asignación o cerrada.');
 
 /**
  * Un seeder que solo anota con qué parámetros lo llamaron, en lugar del showcase.
@@ -100,9 +100,9 @@ function fakeShowcase(): Seeder
         /** @var list<array<string, mixed>> */
         public array $calls = [];
 
-        public function run(string $campus, string $department, int $versions, bool $reopenAtEnd = false): void
+        public function run(string $department, int $versions, bool $reopenAtEnd = false): void
         {
-            $this->calls[] = compact('campus', 'department', 'versions', 'reopenAtEnd');
+            $this->calls[] = compact('department', 'versions', 'reopenAtEnd');
         }
     };
     app()->instance(PublicationShowcaseDemoSeeder::class, $fake);
@@ -119,7 +119,7 @@ it('DemoSeeder y MassiveSeeder no corren el showcase con demo.showcase apagada',
     expect($fake->calls)->toBe([]);
 });
 
-it('con demo.showcase prendida, DemoSeeder publica CEA en tres versiones y MassiveSeeder CB en dos y reabierta', function () {
+it('con demo.showcase prendida, DemoSeeder publica CEA en tres versiones y MassiveSeeder EE, la que cierra la demo mezclada, en dos y reabierta', function () {
     $fake = fakeShowcase();
     config(['demo.showcase' => true]);
 
@@ -127,7 +127,7 @@ it('con demo.showcase prendida, DemoSeeder publica CEA en tres versiones y Massi
     app(MassiveSeeder::class)->setContainer(app())->showcase();
 
     expect($fake->calls)->toBe([
-        ['campus' => 'C2', 'department' => 'CEA', 'versions' => 3, 'reopenAtEnd' => false],
-        ['campus' => 'C2', 'department' => 'CB', 'versions' => 2, 'reopenAtEnd' => true],
+        ['department' => 'CEA', 'versions' => 3, 'reopenAtEnd' => false],
+        ['department' => 'EE', 'versions' => 2, 'reopenAtEnd' => true],
     ]);
 });

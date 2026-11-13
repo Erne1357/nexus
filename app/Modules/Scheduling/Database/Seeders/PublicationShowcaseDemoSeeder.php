@@ -10,7 +10,6 @@ use App\Modules\AcademicLoad\Actions\Transitions\ReturnToStaffing;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -40,12 +39,12 @@ use RuntimeException;
  * muestra «N grupos cambiaron de salón» contra la anterior.
  *
  * Corre después del cierre de la demo mezclada (LoadClosingDemoSeeder en modo `mixed`, Riel C), sobre la carga que ese
- * paso deja cerrada: con el volumen demo, CEA de Campus II en tres versiones; con el masivo, CB de Campus II en dos
- * versiones y reabierta al final (`reopenAtEnd`), el caso «reabierta después de publicar»: el público sigue viendo la
- * versión 2 y la pantalla de cierre la ve en ajustes con su historial. Una carga en asignación también sirve (la
- * justifica y la cierra antes). Si un veto lo detiene, la demo se detiene con su motivo. Corre una vez sobre la base
- * recién sembrada (`demo:seed` hace `migrate:fresh`): una segunda corrida se niega, porque la carga ya no está en
- * asignación ni cerrada.
+ * paso deja cerrada, una por departamento y modalidad (M1): con el volumen demo, CEA en Presencial en tres versiones;
+ * con el masivo, EE en Presencial en dos versiones y reabierta al final (`reopenAtEnd`), el caso «reabierta después de
+ * publicar»: el público sigue viendo la versión 2 y la pantalla de cierre la ve en ajustes con su historial. Una carga
+ * en asignación también sirve (la justifica y la cierra antes). Si un veto lo detiene, la demo se detiene con su motivo.
+ * Corre una vez sobre la base recién sembrada (`demo:seed` hace `migrate:fresh`): una segunda corrida se niega, porque
+ * la carga ya no está en asignación ni cerrada.
  */
 final class PublicationShowcaseDemoSeeder extends Seeder
 {
@@ -63,17 +62,23 @@ final class PublicationShowcaseDemoSeeder extends Seeder
         'Cambio de salones por el mantenimiento del edificio',
     ];
 
-    public function run(string $campus = 'C2', string $department = 'CEA', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false, string $modality = 'PRES'): void
+    /**
+     * @param  string  $department  el código del departamento de la carga
+     * @param  string  $modality  la clave de su modalidad: la carga es por departamento y modalidad, con los grupos de
+     *                            todos sus campus (M1)
+     */
+    public function run(string $department = 'CEA', string $modality = 'PRES', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false): void
     {
         $this->refuseProduction();
 
-        Campus::query()->where('code', $campus)->firstOrFail();
+        $modalityModel = Modality::query()->where('code', $modality)->firstOrFail();
         $load = AcademicLoad::query()
-            ->ofDepartment(Term::query()->where('code', $term)->firstOrFail()->id, Modality::query()->where('code', $modality)->firstOrFail()->id, Department::query()->where('code', $department)->firstOrFail()->id)
+            ->ofDepartment(Term::query()->where('code', $term)->firstOrFail()->id, $modalityModel->id, Department::query()->where('code', $department)->firstOrFail()->id)
             ->firstOrFail();
+        $where = "{$department} en {$modalityModel->name}";
 
         if (! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Closed], true)) {
-            throw new RuntimeException("La carga de {$department} en {$campus} está en {$load->status->label()}: la demo de versiones empieza en asignación o cerrada.");
+            throw new RuntimeException("La carga de {$where} está en {$load->status->label()}: la demo de versiones empieza en asignación o cerrada.");
         }
 
         $admin = User::query()->where('username', 'admin')->firstOrFail();
@@ -102,7 +107,7 @@ final class PublicationShowcaseDemoSeeder extends Seeder
             app(ReopenLoad::class)->handle($load->fresh(), $subdireccion, self::LAST_REOPENING);
         }
 
-        $this->command?->info("Carga de {$department} en {$campus} publicada en ".$load->fresh()->current_version.' versiones'.($reopenAtEnd ? ' y reabierta.' : '.'));
+        $this->command?->info("Carga de {$where} publicada en ".$load->fresh()->current_version.' versiones'.($reopenAtEnd ? ' y reabierta.' : '.'));
     }
 
     private function closeAndPublish(AcademicLoad $load, User $head, ?string $closing, string $publishing): void
