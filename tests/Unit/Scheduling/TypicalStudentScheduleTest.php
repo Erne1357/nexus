@@ -52,10 +52,10 @@ it('HC-03: si la materia tiene otro grupo que no choca, el alumno tipo tiene com
         ->session('B', 1, '09:00', '11:00')
         ->build();
 
-    expect(typicalStudentViolations($state, ValidationScope::load($state, 'C2')))->toBe([]);
+    expect(typicalStudentViolations($state, ValidationScope::load($state, 'PRES')))->toBe([]);
 });
 
-it('HC-03: otro semestre, otro plan, otro campus, un grupo cancelado o uno sin sesiones no cuentan', function () {
+it('HC-03: otro semestre, otro plan, otro campus, otra modalidad, un grupo cancelado o uno sin sesiones no cuentan', function () {
     $state = States::builder()
         ->group(States::group('A', subject: 'CAL'))
         ->group(States::group('B', subject: 'QUI', semester: 2))
@@ -63,14 +63,16 @@ it('HC-03: otro semestre, otro plan, otro campus, un grupo cancelado o uno sin s
         ->group(States::group('D', subject: 'ETI', campus: 'C1'))
         ->group(States::group('E', subject: 'ALG', active: false))
         ->group(States::group('F', subject: 'PRO'))
+        ->group(States::group('G', subject: 'MAT', modality: 'EAD'))
         ->session('A', 1, '08:00', '10:00')
         ->session('B', 1, '08:00', '10:00')
         ->session('C', 1, '08:00', '10:00')
         ->session('D', 1, '08:00', '10:00')
         ->session('E', 1, '08:00', '10:00')
+        ->session('G', 1, '08:00', '10:00')
         ->build();
 
-    expect(typicalStudentViolations($state, ValidationScope::groups('A', 'B', 'C', 'D', 'E', 'F')))->toBe([]);
+    expect(typicalStudentViolations($state, ValidationScope::groups('A', 'B', 'C', 'D', 'E', 'F', 'G')))->toBe([]);
 });
 
 it('HC-03: sin choques de grupos únicos pero sin combinación, marca los grupos de las materias que se estorban', function () {
@@ -109,4 +111,22 @@ it('HC-03: solo revisa los semestres de los grupos del alcance', function () {
 
     expect(typicalStudentViolations($state, ValidationScope::groups('C')))->toBe([])
         ->and(typicalStudentViolations($state, ValidationScope::groups('B')))->toHaveCount(2);
+});
+
+it('HC-03 sigue por campus dentro de la carga de una modalidad (MS10): el grupo de C1 no le sirve al alumno tipo de C2', function () {
+    $state = States::builder()
+        ->subject(States::subject('CAL', 'Cálculo Diferencial'))
+        ->subject(States::subject('QUI', 'Química'))
+        ->group(States::group('A', subject: 'CAL', campus: 'C2', code: 'B'))
+        ->group(States::group('A1', subject: 'CAL', campus: 'C1', code: 'E'))
+        ->group(States::group('B', subject: 'QUI', campus: 'C2', code: 'C'))
+        ->session('A', 1, '08:00', '10:00')
+        ->session('A1', 2, '08:00', '10:00')
+        ->session('B', 1, '09:00', '11:00')
+        ->build();
+
+    $violations = typicalStudentViolations($state, ValidationScope::load($state, 'PRES'));
+
+    expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $violations))->toEqualCanonicalizing(['A', 'B'])
+        ->and(array_column(array_map(fn (Violation $violation): array => $violation->related, $violations), 'other_group_id'))->not->toContain('A1');
 });

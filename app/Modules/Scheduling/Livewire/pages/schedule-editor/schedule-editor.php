@@ -174,11 +174,11 @@ new #[Title('Horarios')] class extends Component
         $group = $editor->groupOrFail($term, $campus, $groupId);
         $this->authorize('editSessions', $group);
 
-        $grid = WeekGrid::of($campus->profile);
+        $grid = WeekGrid::of($group->modality()->withTrashed()->firstOrFail()->profile);
         $block = collect($grid->blocks)->firstWhere('starts_at', $startsAt);
 
         if ($block === null || ! in_array($day, array_column($grid->days, 'day'), true)) {
-            $this->error('No se colocó', e('Esa hora no está en el horario del campus.'));
+            $this->error('No se colocó', e('Esa hora no está en el horario de la modalidad.'));
 
             return;
         }

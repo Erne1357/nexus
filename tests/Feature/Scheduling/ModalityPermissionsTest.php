@@ -38,11 +38,11 @@ function scheduleGroupIn(Campus $campus): Group
     ]);
 }
 
-/** @return list<string> los grupos del tablero de un campus que el actor ve */
+/** @return list<string> los grupos del tablero de la modalidad, filtrado a un campus, que el actor ve */
 function boardGroupIds(User $user, Campus $campus): array
 {
     return app(ConflictBoardQuery::class)
-        ->statuses(app(Actor::class)->forUser($user), test()->term, $campus)
+        ->statuses(app(Actor::class)->forUser($user), test()->term, test()->pres, $campus)
         ->map(fn ($status) => $status->id)->values()->all();
 }
 

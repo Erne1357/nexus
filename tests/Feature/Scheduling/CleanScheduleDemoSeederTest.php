@@ -76,7 +76,7 @@ it('da a todo grupo activo sus horas exactas, sin choques duros, sin docente y s
 
     $groups = Group::query()->with(['subject', 'sessions'])->where('status', '!=', GroupStatus::Cancelled)->get();
     $hard = array_filter(
-        app(ScheduleValidator::class)->validateLoad($this->term, $this->campus)->violations(),
+        app(ScheduleValidator::class)->validateLoad($this->term, modalityOf('PRES'))->violations(),
         fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
     );
 

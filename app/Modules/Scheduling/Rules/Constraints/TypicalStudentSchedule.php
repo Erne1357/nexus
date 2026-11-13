@@ -12,6 +12,8 @@ use App\Modules\Scheduling\Validation\Violation;
 /**
  * HC-03: dos grupos de materias del mismo semestre reticular del mismo plan y campus no deben empalmarse si son los
  * únicos grupos de esas materias para esa carrera: el alumno tipo debe tener al menos una combinación sin empalme.
+ * Sigue por campus dentro de la carga de una modalidad (MS10, supuesto por confirmar): el alumno tipo es de un campus y
+ * de una modalidad, así que en la carga presencial los grupos de C1 no le sirven a un alumno de C2.
  *
  * Revisa cada plan y semestre de los grupos activos del alcance (el plan y semestre propios de cada grupo; una carrera
  * con varias retículas activas se revisa en cada una). Si TypicalStudentCombination encuentra combinación, no hay
@@ -27,10 +29,10 @@ final class TypicalStudentSchedule implements Constraint
 
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
-        foreach ($this->semestersIn($state, $scope) as [$campusId, $studyPlanId, $semester]) {
+        foreach ($this->semestersIn($state, $scope) as [$modalityId, $campusId, $studyPlanId, $semester]) {
             $bySubject = [];
 
-            foreach ($state->groupsOfSemester($campusId, $studyPlanId, $semester) as $group) {
+            foreach ($state->groupsOfSemester($modalityId, $campusId, $studyPlanId, $semester) as $group) {
                 $bySubject[$group->subjectId][] = $group;
             }
 
@@ -51,9 +53,9 @@ final class TypicalStudentSchedule implements Constraint
     }
 
     /**
-     * Los [campus, plan, semestre] de los grupos activos del alcance, sin repetir.
+     * Los [modalidad, campus, plan, semestre] de los grupos activos del alcance, sin repetir.
      *
-     * @return list<array{string, string, int}>
+     * @return list<array{string, string, string, int}>
      */
     private function semestersIn(ScheduleState $state, ValidationScope $scope): array
     {
@@ -63,7 +65,7 @@ final class TypicalStudentSchedule implements Constraint
             $group = $state->group($groupId);
 
             if ($group !== null && $group->isActive) {
-                $semesters["{$group->campusId}|{$group->studyPlanId}|{$group->semester}"] = [$group->campusId, $group->studyPlanId, $group->semester];
+                $semesters["{$group->modalityId}|{$group->campusId}|{$group->studyPlanId}|{$group->semester}"] = [$group->modalityId, $group->campusId, $group->studyPlanId, $group->semester];
             }
         }
 

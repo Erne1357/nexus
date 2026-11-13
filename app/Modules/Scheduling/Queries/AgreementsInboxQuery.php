@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
@@ -287,7 +288,6 @@ final class AgreementsInboxQuery
     {
         $room = $agreement->room()->withTrashed()->firstOrFail();
         $term = KeyLookup::findOrFail(Term::query(), $agreement->term_id);
-        $campus = KeyLookup::findOrFail(Campus::query(), $agreement->campus_id);
         $schedule = $this->rooms->for($room, $term);
 
         $busy = [];
@@ -309,7 +309,7 @@ final class AgreementsInboxQuery
         $clash = $slot === null ? null : ['day' => $slot['day'], 'starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at'], 'label' => $slot['label'], 'rule' => $slot['rule']];
         $busy = array_map(fn (array $slot): array => ['day' => $slot['day'], 'starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at'], 'label' => $slot['label'], 'rule' => $slot['rule']], $busy);
 
-        return [...$this->frame($campus, [$requested, ...$busy]), 'busy' => $busy, 'requested' => $requested, 'clash' => $clash];
+        return [...$this->frame($this->modalityOf($agreement), [$requested, ...$busy]), 'busy' => $busy, 'requested' => $requested, 'clash' => $clash];
     }
 
     /**
@@ -335,7 +335,7 @@ final class AgreementsInboxQuery
             ])
             ->all();
 
-        return [...$this->frame(KeyLookup::findOrFail(Campus::query(), $agreement->campus_id), $sessions), 'sessions' => $sessions];
+        return [...$this->frame($this->modalityOf($agreement), $sessions), 'sessions' => $sessions];
     }
 
     /**
@@ -362,15 +362,21 @@ final class AgreementsInboxQuery
         return ['semester' => (int) $group->semester, 'plan' => (string) $group->studyPlan?->code, 'owner' => (string) $group->ownerCareer?->code, 'career' => $career];
     }
 
+    private function modalityOf(InterdepartmentalAgreement $agreement): Modality
+    {
+        return Modality::query()->withTrashed()->findOrFail($agreement->modality_id);
+    }
+
     /**
-     * Las horas y los días de una mini semana: los del perfil del campus, extendidos a lo que se pinta fuera de ellos.
+     * Las horas y los días de una mini semana: los del perfil de la modalidad del acuerdo, extendidos a lo que se pinta
+     * fuera de ellos.
      *
      * @param  list<array{day: int, starts_at: string, ends_at: string}>  $slots
      * @return array{hours: list<int>, days: list<int>, day_labels: array<int, string>}
      */
-    private function frame(Campus $campus, array $slots): array
+    private function frame(Modality $modality, array $slots): array
     {
-        $profile = $campus->profile;
+        $profile = $modality->profile;
         $starts = [Minutes::of($profile->dayStart), ...array_map(fn (array $slot): int => Minutes::of($slot['starts_at']), $slots)];
         $ends = [Minutes::of($profile->dayEnd), ...array_map(fn (array $slot): int => Minutes::of($slot['ends_at']), $slots)];
         $first = intdiv(min($starts), 60);

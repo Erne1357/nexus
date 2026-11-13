@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
@@ -22,33 +23,34 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 
 /**
- * Lo que lee el tablero de choques y avance (tarea 3.4): qué le falta a cada grupo activo de un campus en un periodo
- * para cerrar la carga (HC-15), contado por carrera, retícula y semestre (la vista principal, decidida por el usuario
- * el 7 de noviembre de 2026) y por departamento o carrera (la vista de matriz).
+ * Lo que lee el tablero de choques y avance (tarea 3.4): qué le falta a cada grupo activo de una modalidad en un
+ * periodo para cerrar la carga (HC-15; M1: la carga junta los grupos de todos sus campus), con el campus como filtro
+ * opcional, contado por carrera, retícula y semestre (la vista principal, decidida por el usuario el 7 de noviembre de
+ * 2026) y por departamento o carrera (la vista de matriz).
  *
- * A un grupo le falta algo si tiene un choque duro vigente en `schedule_conflicts`, si no tiene sesiones (solo en un
- * campus con bloques de tiempo), si no tiene docente o su docente está dado de baja (P10), o si alguna sesión presencial no tiene salón (solo en un campus
- * que usa salones). Solo cuenta lo que el usuario puede ver (`scheduling.schedule.view` con su alcance: el jefe, su
+ * A un grupo le falta algo si tiene un choque duro vigente en `schedule_conflicts`, si no tiene sesiones (solo en una
+ * modalidad con bloques de tiempo), si no tiene docente o su docente está dado de baja (P10), o si alguna sesión
+ * presencial no tiene salón (solo en una modalidad que usa salones). Solo cuenta lo que el usuario puede ver (`scheduling.schedule.view` con su alcance: el jefe, su
  * departamento; el coordinador, su carrera; en toda la modalidad aunque el puesto tenga un campus, MS6), filtrado en SQL con `Actor::constrain()`. Lee el estado de
- * todos los grupos del alcance en una consulta y cuenta en memoria: una carga de un campus son cientos de grupos.
+ * todos los grupos del alcance en una consulta y cuenta en memoria: una carga de una modalidad son cientos de grupos.
  *
  * Un grupo compartido (con cupo de otra carrera) cuenta también en esa carrera, en cada retícula suya donde está la
  * materia y en el semestre que ahí tiene, como en el editor de horarios; y el coordinador de esa carrera lo ve. En
- * cada carrera un grupo cuenta una vez; los totales del campus y por departamento no lo repiten.
+ * cada carrera un grupo cuenta una vez; los totales de la carga y por departamento no lo repiten.
  */
 final class ConflictBoardQuery
 {
     /**
-     * El estado de cada grupo activo del alcance.
+     * El estado de cada grupo activo del alcance en la modalidad; con campus, solo los grupos de ese campus.
      *
      * @return Collection<int, GroupBoardStatus>
      */
-    public function statuses(Actor $actor, Term $term, Campus $campus): Collection
+    public function statuses(Actor $actor, Term $term, Modality $modality, ?Campus $campus = null): Collection
     {
-        $profile = $campus->profile;
-        $shared = $this->sharedPlacements($term, $campus);
+        $profile = $modality->profile;
+        $shared = $this->sharedPlacements($term, $modality, $campus);
 
-        return $this->scoped($actor, $term, $campus)
+        return $this->scoped($actor, $term, $modality, $campus)
             ->select(['groups.id', 'groups.code', 'groups.subject_id', 'groups.department_id', 'groups.owner_career_id', 'groups.study_plan_id', 'groups.semester', 'groups.teacher_id'])
             ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.is_active) as has_sessions')
             ->selectRaw('exists (select 1 from group_sessions s where s.group_id = groups.id and s.room_id is null and s.kind <> ?) as missing_room', [SessionKind::Virtual->value])
@@ -157,7 +159,8 @@ final class ConflictBoardQuery
 
     /**
      * Lo que le falta a un conjunto de grupos, para el detalle: sus choques duros vigentes y los grupos sin horario,
-     * sin docente y sin salón, con la clave y el nombre de su materia.
+     * sin docente y sin salón, con la clave y el nombre de su materia y la clave de su campus (el editor que lo corrige
+     * es de un campus).
      *
      * @param  Collection<int, GroupBoardStatus>  $statuses
      *                                                       Los choques van agrupados por grupo (un grupo con varios choques es una sola entrada), por semestre, materia y
@@ -170,7 +173,8 @@ final class ConflictBoardQuery
         $groups = Group::query()->whereIn('groups.id', $missing->pluck('id')->all())
             ->join('subjects', 'subjects.id', '=', 'groups.subject_id')
             ->join('careers', 'careers.id', '=', 'groups.owner_career_id')
-            ->get(['groups.id', 'groups.code', 'groups.semester', 'subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code'])
+            ->join('campuses', 'campuses.id', '=', 'groups.campus_id')
+            ->get(['groups.id', 'groups.code', 'groups.semester', 'subjects.code as subject_code', 'subjects.name as subject_name', 'careers.code as career_code', 'campuses.code as campus_code'])
             ->keyBy('id');
 
         $describe = fn (GroupBoardStatus $status): array => [
@@ -180,6 +184,7 @@ final class ConflictBoardQuery
             'subject_code' => $groups[$status->id]->subject_code ?? '',
             'subject_name' => $groups[$status->id]->subject_name ?? '',
             'career_code' => $groups[$status->id]->career_code ?? '',
+            'campus_code' => $groups[$status->id]->campus_code ?? '',
             'inactive_teacher' => $status->inactiveTeacher,
         ];
 
@@ -209,33 +214,34 @@ final class ConflictBoardQuery
     }
 
     /**
-     * Cuándo se recalcularon por última vez los choques de la carga del campus; null si nunca.
+     * Cuándo se recalcularon por última vez los choques de la carga de la modalidad; null si nunca.
      */
-    public function lastSyncedAt(Term $term, Campus $campus): ?CarbonImmutable
+    public function lastSyncedAt(Term $term, Modality $modality): ?CarbonImmutable
     {
-        $at = Cache::get(SyncScheduleConflicts::stampKey($term->id, $campus->id));
+        $at = Cache::get(SyncScheduleConflicts::stampKey($term->id, $modality->id));
 
         return $at === null ? null : CarbonImmutable::parse($at)->setTimezone(config('app.timezone'));
     }
 
     /**
-     * Si el usuario ve grupos activos de ese departamento en el campus y periodo.
+     * Si el usuario ve grupos activos de ese departamento en la modalidad y periodo (y en el campus, si se da).
      */
-    public function hasDepartment(Actor $actor, Term $term, Campus $campus, string $departmentId): bool
+    public function hasDepartment(Actor $actor, Term $term, Modality $modality, ?Campus $campus, string $departmentId): bool
     {
-        return $this->scoped($actor, $term, $campus)->where('groups.department_id', $departmentId)->exists();
+        return $this->scoped($actor, $term, $modality, $campus)->where('groups.department_id', $departmentId)->exists();
     }
 
     /**
-     * Los grupos activos del campus y periodo que el usuario puede ver.
+     * Los grupos activos de la modalidad y periodo (y del campus, si se da) que el usuario puede ver.
      *
      * @return Builder<Group>
      */
-    private function scoped(Actor $actor, Term $term, Campus $campus): Builder
+    private function scoped(Actor $actor, Term $term, Modality $modality, ?Campus $campus): Builder
     {
         $query = Group::query()
             ->where('groups.term_id', $term->id)
-            ->where('groups.campus_id', $campus->id)
+            ->where('groups.modality_id', $modality->id)
+            ->when($campus !== null, fn (Builder $inCampus) => $inCampus->where('groups.campus_id', $campus?->id))
             ->where('groups.status', '<>', GroupStatus::Cancelled->value);
 
         return $actor->constrain($query, SchedulingPermission::ScheduleView, [
@@ -247,12 +253,12 @@ final class ConflictBoardQuery
     }
 
     /**
-     * Dónde cuenta cada grupo compartido del campus y periodo en las carreras que le dan cupo: cada retícula de esa
-     * carrera donde está la materia, con el semestre que ahí tiene.
+     * Dónde cuenta cada grupo compartido de la modalidad y periodo (y del campus, si se da) en las carreras que le dan
+     * cupo: cada retícula de esa carrera donde está la materia, con el semestre que ahí tiene.
      *
      * @return array<string, list<array{career: string, plan: string, semester: int}>>
      */
-    private function sharedPlacements(Term $term, Campus $campus): array
+    private function sharedPlacements(Term $term, Modality $modality, ?Campus $campus): array
     {
         $placements = [];
 
@@ -263,7 +269,8 @@ final class ConflictBoardQuery
                 ->on('study_plan_subjects.subject_id', '=', 'groups.subject_id')
                 ->whereNull('study_plan_subjects.deleted_at'))
             ->where('groups.term_id', $term->id)
-            ->where('groups.campus_id', $campus->id)
+            ->where('groups.modality_id', $modality->id)
+            ->when($campus !== null, fn ($inCampus) => $inCampus->where('groups.campus_id', $campus?->id))
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
             ->whereColumn('group_quotas.career_id', '<>', 'groups.owner_career_id')
             ->orderBy('study_plans.code')

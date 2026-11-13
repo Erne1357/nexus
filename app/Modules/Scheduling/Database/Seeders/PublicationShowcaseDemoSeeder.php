@@ -89,10 +89,10 @@ final class PublicationShowcaseDemoSeeder extends Seeder
         foreach (array_slice(self::REOPENINGS, 0, max(0, $versions - 1)) as $index => $reason) {
             app(ReopenLoad::class)->handle($load->fresh(), $subdireccion, $reason);
             app(ReturnToStaffing::class)->handle($load->fresh(), $head, 'Se corrigen los salones');
-            // Cada cambio de salón recalcularía los choques de todo el campus (GroupScheduleChanged); se recalculan una vez
-            // por versión. El cambio de salón no mueve la hora de inicio, así que la clave del grupo no cambia.
+            // Cada cambio de salón recalcularía los choques de toda la modalidad (GroupScheduleChanged); se recalculan una
+            // vez por versión. El cambio de salón no mueve la hora de inicio, así que la clave del grupo no cambia.
             Event::fakeFor(fn () => $this->moveRooms($load, $head, $index), [GroupScheduleChanged::class]);
-            app(SyncScheduleConflicts::class)->handle($load->term, $campusModel);
+            app(SyncScheduleConflicts::class)->handle($load->term, $load->modality);
             $this->justifyMissing($load, $head);
             $this->closeAndPublish($load, $head, null, $reason);
         }

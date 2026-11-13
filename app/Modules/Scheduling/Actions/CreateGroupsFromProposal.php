@@ -66,7 +66,7 @@ final class CreateGroupsFromProposal
             }
 
             if ($created->isNotEmpty()) {
-                GroupsCreated::dispatch($proposal->term_id, $proposal->campus_id, $created->pluck('id')->all());
+                GroupsCreated::dispatch($proposal->term_id, $proposal->modality_id, $created->pluck('id')->all());
             }
 
             return $created->values();

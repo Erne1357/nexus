@@ -8,13 +8,16 @@
     <x-header title="Choques y avance" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             @if ($term)
-                Lo que le falta a la carga de {{ $shownCampus->name }} para cerrar en {{ $term->name }}: choques duros, grupos sin horario, sin docente y sin salón.
+                Lo que le falta a la carga de {{ $shownModality->name }}{{ $shownCampus ? ' en '.$shownCampus->name : '' }} para cerrar en {{ $term->name }}: choques duros, grupos sin horario, sin docente y sin salón.
             @else
                 Lo que le falta a cada carga para cerrar: choques duros, grupos sin horario, sin docente y sin salón.
             @endif
         </x-slot:subtitle>
         <x-slot:actions>
-            <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" />
+            <div class="flex flex-wrap items-center gap-2">
+                <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" />
+                <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
+            </div>
         </x-slot:actions>
     </x-header>
 
@@ -22,7 +25,7 @@
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="conflicts-no-context">
             <x-icon name="o-map-pin" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
             <p class="font-semibold">No hay un periodo activo.</p>
-            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">El tablero muestra la carga de un campus en un periodo: elige el periodo en tu credencial, arriba a la derecha.</p>
+            <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">El tablero muestra la carga de una modalidad en un periodo: elige el periodo en tu credencial, arriba a la derecha.</p>
         </div>
     @else
         <div class="mb-4 flex flex-wrap items-center gap-3">
@@ -42,7 +45,7 @@
         @if ($summary->groups === 0)
             <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="conflicts-empty">
                 <x-icon name="o-squares-2x2" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
-                <p class="font-semibold">Todavía no hay grupos que puedas ver en {{ $shownCampus->name }}.</p>
+                <p class="font-semibold">Todavía no hay grupos que puedas ver en {{ $shownCampus?->name ?? $shownModality->name }}.</p>
                 <p class="mx-auto mt-1 max-w-prose text-sm text-neutral">Los grupos nacen cuando un jefe acepta la parte de su departamento en una propuesta de carrera.</p>
             </div>
         @elseif ($view !== 'departamentos')
@@ -210,7 +213,7 @@
                         </tbody>
                         <tfoot class="border-t border-base-300 bg-base-200/60">
                             <tr class="font-semibold">
-                                <th scope="row" class="px-4 py-2.5 text-start">{{ $shownCampus->name }} · {{ count($departments) }} {{ count($departments) === 1 ? 'departamento' : 'departamentos' }}</th>
+                                <th scope="row" class="px-4 py-2.5 text-start">{{ $shownCampus?->name ?? $shownModality->name }} · {{ count($departments) }} {{ count($departments) === 1 ? 'departamento' : 'departamentos' }}</th>
                                 <td class="px-2 py-2.5 text-end font-mono">{{ $summary->groups }}</td>
                                 <td class="px-2 py-2.5 text-center font-mono">{{ $summary->hard }}</td>
                                 <td class="px-2 py-2.5 text-center font-mono">{{ $summary->unscheduled }}</td>

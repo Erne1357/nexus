@@ -12,17 +12,17 @@ use App\Modules\Scheduling\Validation\State\StateSession;
 use App\Modules\Scheduling\Validation\Violation;
 
 /**
- * «Dónde cabe» un grupo en el editor de horarios (tarea 3.5): por cada día y bloque del perfil del campus, sin las
- * horas donde el grupo ya tiene sesión, una sesión candidata de un bloque, sin salón, que el validador revisa en un solo
- * checkSessions() con la foto del periodo y campus (leída una vez).
+ * «Dónde cabe» un grupo en el editor de horarios (tarea 3.5): por cada día y bloque del perfil de la modalidad del
+ * grupo, sin las horas donde el grupo ya tiene sesión, una sesión candidata de un bloque, sin salón, que el validador
+ * revisa en un solo checkSessions() con la foto del periodo y la modalidad (leída una vez).
  *
  * Una celda cabe si la candidata no agrega violaciones duras: las que el grupo ya tenía sin ella (validateGroup()) no
  * cuentan, ni las de sus totales (HC-12, las horas semanales del grupo), que una celda sola no cumple ni rompe. Así
  * HC-08 (horas del docente) no marca celdas y HC-01, HC-03 y HC-09 sí. Un grupo que no se edita (cancelado, o con la
- * carga fuera de propuesta, asignación o ajustes; LoadEditability::blockedReasons()) y un campus sin bloques de tiempo
- * no tienen celdas.
+ * carga fuera de propuesta, asignación o ajustes; LoadEditability::blockedReasons()) y una modalidad sin bloques de
+ * tiempo no tienen celdas.
  *
- * Rendimiento (200 grupos en el campus, 70 celdas, las 13 reglas): leer la foto cuesta unos 50 ms y las 70 celdas unos
+ * Rendimiento (200 grupos en la modalidad, 70 celdas, las 13 reglas): leer la foto cuesta unos 50 ms y las 70 celdas unos
  * 14 ms, porque ScheduleState::withSession() todavía rehace los índices de la foto por celda.
  */
 final class GroupFitQuery
@@ -44,8 +44,8 @@ final class GroupFitQuery
             return [];
         }
 
-        $state = $this->validator->stateFor($group->term_id, $group->campus_id);
-        $profile = $state->profile($group->campus_id);
+        $state = $this->validator->stateFor($group->term_id, $group->modality_id);
+        $profile = $state->profile($group->modality_id);
 
         if (! $profile->usesTimeBlocks) {
             return [];

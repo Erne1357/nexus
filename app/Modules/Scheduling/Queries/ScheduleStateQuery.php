@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\RoomLoansQuery;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Room;
@@ -39,17 +40,19 @@ use App\Modules\Scheduling\Validation\State\StateTeacher;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
- * Lee de la base el ScheduleState de un periodo visto desde un campus (tarea 3.2), en pocas consultas agregadas:
+ * Lee de la base el ScheduleState de un periodo visto desde una modalidad (tarea 3.2; M1: la carga es por departamento
+ * y modalidad, con los grupos de todos sus campus), en pocas consultas agregadas:
  *
- * - todos los grupos del campus (los cancelados, inactivos) con sus sesiones y cupos;
- * - los grupos activos con docente de los otros campus del periodo, con sus sesiones, porque HC-01 cruza campus;
- * - las materias de esos grupos, los salones del campus y los que usan esas sesiones, y los bloqueos vigentes;
+ * - todos los grupos de la modalidad, de todos sus campus (los cancelados, inactivos), con sus sesiones y cupos;
+ * - los grupos activos con docente de las otras modalidades del periodo, porque HC-01 cruza campus y modalidades, y
+ *   los que tienen alguna sesión con salón, porque un salón lo comparten las modalidades de su campus (HC-02);
+ * - las materias de esos grupos, los salones de los campus donde la modalidad tiene grupos y los que usan esas
+ *   sesiones, y los bloqueos vigentes;
  * - los docentes de esos grupos: nombre, horas base (TeacherBaseHoursQuery), horas externas del periodo, bloques no
  *   disponibles y si es de honorarios;
- * - los perfiles de los campus, las carreras ofrecidas, los planes activos y los parámetros `staffing.*` y
- *   `scheduling.*`.
- *
- * - los préstamos de salón vivos (aceptados o propuestos) del campus, de RoomLoansQuery de AcademicLoad (HC-10).
+ * - los perfiles de las modalidades, las claves de los campus, las carreras ofrecidas, los planes activos y los
+ *   parámetros `staffing.*` y `scheduling.*`;
+ * - los préstamos de salón vivos (aceptados o propuestos) de esos campus, de RoomLoansQuery de AcademicLoad (HC-10).
  */
 final class ScheduleStateQuery
 {
@@ -61,18 +64,21 @@ final class ScheduleStateQuery
     ) {}
 
     /**
-     * La foto del periodo vista desde un campus; sin campus, solo los grupos activos con docente de todo el periodo
-     * (lo que necesita validar a un docente).
+     * La foto del periodo vista desde una modalidad (su id); sin modalidad, solo los grupos activos con docente de todo
+     * el periodo (lo que necesita validar a un docente).
      */
-    public function forCampus(Term $term, ?Campus $campus = null): ScheduleState
+    public function forModality(Term $term, ?string $modalityId = null): ScheduleState
     {
         $builder = new ScheduleStateBuilder($term->id);
 
         $groups = Group::query()
             ->where('term_id', $term->id)
-            ->where(fn (Builder $query) => $query->when($campus !== null, fn (Builder $focus) => $focus->where('campus_id', $campus->id))
-                ->orWhere(fn (Builder $other) => $other->whereNotNull('teacher_id')->where('status', '<>', GroupStatus::Cancelled->value)))
-            ->get(['id', 'campus_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status']);
+            ->where(fn (Builder $query) => $query->when($modalityId !== null, fn (Builder $focus) => $focus->where('modality_id', $modalityId))
+                ->orWhere(fn (Builder $other) => $other->where('status', '<>', GroupStatus::Cancelled->value)
+                    ->where(fn (Builder $reason) => $reason->whereNotNull('teacher_id')
+                        ->when($modalityId !== null, fn (Builder $rooms) => $rooms->orWhereExists(GroupSession::query()->toBase()
+                            ->whereColumn('group_sessions.group_id', 'groups.id')->whereNotNull('group_sessions.room_id'))))))
+            ->get(['id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status']);
 
         foreach ($groups as $group) {
             $builder->group(self::stateGroup($group));
@@ -93,7 +99,9 @@ final class ScheduleStateQuery
                 }
             });
 
-        $focusIds = $campus === null ? [] : $groups->where('campus_id', $campus->id)->pluck('id')->all();
+        $focus = $modalityId === null ? collect() : $groups->where('modality_id', $modalityId);
+        $focusIds = $focus->pluck('id')->all();
+        $campusIds = $focus->pluck('campus_id')->unique()->values()->all();
 
         GroupQuota::query()->whereIn('group_id', $focusIds)
             ->get(['group_id', 'career_id', 'max_seats', 'is_owner'])
@@ -104,17 +112,22 @@ final class ScheduleStateQuery
             ->each(fn (Subject $subject) => $builder->subject(new StateSubject($subject->id, $subject->code, $subject->name,
                 $subject->theory_hours, $subject->practice_hours, $subject->needs_lab, $subject->is_active && ! $subject->trashed())));
 
-        $this->addRooms($builder, $term, $campus, array_keys($roomIds));
+        $this->addRooms($builder, $term, $campusIds, array_keys($roomIds));
 
-        if ($campus !== null) {
-            $this->roomLoans->liveFor($term->id, $campus->id)
+        foreach ($campusIds as $campusId) {
+            $this->roomLoans->liveFor($term->id, $campusId)
                 ->each(fn (InterdepartmentalAgreement $loan) => $builder->loan(new StateRoomLoan($loan->group_id, $loan->room_id, (int) $loan->day,
                     Minutes::of($loan->starts_at), Minutes::of($loan->ends_at), $loan->status === AgreementStatus::Accepted)));
         }
+
         $this->addTeachers($builder, $term, $groups->pluck('teacher_id')->filter()->unique()->values()->all());
 
-        foreach (Campus::query()->get(['id', 'code', 'settings']) as $each) {
-            $builder->profile($each->id, $each->profile)->campusCode($each->id, $each->code);
+        foreach (Modality::query()->withTrashed()->get(['id', 'settings']) as $each) {
+            $builder->profile($each->id, $each->profile);
+        }
+
+        foreach (Campus::query()->withTrashed()->get(['id', 'code']) as $each) {
+            $builder->campusCode($each->id, $each->code);
         }
 
         CareerCampus::query()->where('is_active', true)->get(['career_id', 'campus_id'])
@@ -190,14 +203,16 @@ final class ScheduleStateQuery
     }
 
     /**
-     * Los salones del campus y los de otros campus que usan las sesiones cargadas, con sus bloqueos del periodo.
+     * Los salones de los campus indicados y los de otros campus que usan las sesiones cargadas, con sus bloqueos del
+     * periodo.
      *
+     * @param  list<string>  $campusIds
      * @param  list<string>  $usedRoomIds
      */
-    private function addRooms(ScheduleStateBuilder $builder, Term $term, ?Campus $campus, array $usedRoomIds): void
+    private function addRooms(ScheduleStateBuilder $builder, Term $term, array $campusIds, array $usedRoomIds): void
     {
         $rooms = Room::query()->withTrashed()
-            ->where(fn (Builder $query) => $query->when($campus !== null, fn (Builder $focus) => $focus->where('campus_id', $campus->id))->orWhereIn('id', $usedRoomIds))
+            ->where(fn (Builder $query) => $query->whereIn('campus_id', $campusIds)->orWhereIn('id', $usedRoomIds))
             ->get(['id', 'campus_id', 'code', 'capacity', 'type', 'department_id', 'is_active', 'deleted_at']);
 
         foreach ($rooms as $room) {
@@ -217,6 +232,7 @@ final class ScheduleStateQuery
         return new StateGroup(
             $group->id,
             $group->campus_id,
+            $group->modality_id,
             $group->subject_id,
             $group->department_id,
             $group->owner_career_id,

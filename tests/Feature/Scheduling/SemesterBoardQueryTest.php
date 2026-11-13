@@ -125,6 +125,7 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
     expect($row)->toBe([
         'id' => $group->id,
         'code' => 'D',
+        'modality_id' => $group->modality_id,
         'status' => GroupStatus::Planned,
         'shared' => false,
         'context' => false,
@@ -144,6 +145,7 @@ it('por grupo da la materia con su departamento, el docente, la capacidad, los c
         'required_hours' => 5,
         'placed_hours' => 3.5,
         'can' => ['editSessions' => true, 'assignRoom' => true, 'manageQuotas' => true],
+        'campus_bound' => false,
         'editBlockedReason' => null,
     ]);
 });

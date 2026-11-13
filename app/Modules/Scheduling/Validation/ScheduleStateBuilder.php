@@ -2,7 +2,7 @@
 
 namespace App\Modules\Scheduling\Validation;
 
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Scheduling\Validation\State\StateGroup;
 use App\Modules\Scheduling\Validation\State\StateQuota;
 use App\Modules\Scheduling\Validation\State\StateRoom;
@@ -42,7 +42,7 @@ final class ScheduleStateBuilder
     /** @var array<string, list<StateRoomLoan>> */
     private array $loans = [];
 
-    /** @var array<string, CampusProfile> */
+    /** @var array<string, ModalityProfile> por modalidad */
     private array $profiles = [];
 
     /** @var array<string, true> */
@@ -123,9 +123,12 @@ final class ScheduleStateBuilder
         return $this;
     }
 
-    public function profile(string $campusId, CampusProfile $profile): self
+    /**
+     * El perfil de flujo de una modalidad: el que leen las reglas para los grupos de esa modalidad.
+     */
+    public function profile(string $modalityId, ModalityProfile $profile): self
     {
-        $this->profiles[$campusId] = $profile;
+        $this->profiles[$modalityId] = $profile;
 
         return $this;
     }

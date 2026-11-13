@@ -16,6 +16,7 @@ use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
@@ -45,6 +46,7 @@ use App\Modules\Scheduling\Validation\State\StateGroup;
 use App\Modules\Scheduling\Validation\State\StateRoom;
 use App\Modules\Scheduling\Validation\State\StateSession;
 use Closure;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -64,7 +66,7 @@ use RuntimeException;
  * AcceptSharedGroup, RejectSharedGroup, WithdrawGroupQuotaProposal) y por el jefe que corresponde en cada paso (quien
  * pide, quien decide), para que la bitácora y los avisos digan quién fue; sin jefe en el departamento, la pide `admin`.
  * La cola va en `sync` mientras siembra (los avisos salen en el momento) y los eventos GroupScheduleChanged y
- * GroupQuotasChanged se descartan; al final corre SyncScheduleConflicts una vez por campus.
+ * GroupQuotasChanged se descartan; al final corre SyncScheduleConflicts una vez por modalidad (M1).
  *
  * Por campus, solo en grupos editables (no cancelados, con la carga del departamento en proposed, staffing o
  * adjusting) y sin tocar los departamentos limpios de SchedulingDemoSeeder (sin salones ajenos ni choques; sus cupos
@@ -211,8 +213,12 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             config(['queue.default' => $previousQueue]);
         }
 
-        foreach ($found as $campus) {
-            app(SyncScheduleConflicts::class)->handle($termModel, $campus);
+        $modalities = Modality::query()->withTrashed()
+            ->whereIn('id', Group::query()->where('term_id', $termModel->id)->whereIn('campus_id', $found->modelKeys())->select('modality_id'))
+            ->orderBy('code')->get();
+
+        foreach ($modalities as $modality) {
+            app(SyncScheduleConflicts::class)->handle($termModel, $modality);
         }
     }
 
@@ -290,13 +296,42 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      */
     private function seedCampusRooms(Term $term, Campus $campus): void
     {
-        if (! $campus->profile->usesRooms) {
-            $this->command?->info("Salones en {$campus->code}: el campus no usa salones, no se hace nada.");
+        $modalities = $this->roomModalities($term, $campus);
+
+        if ($modalities->isEmpty()) {
+            $this->command?->info("Salones en {$campus->code}: ninguna modalidad con grupos aquí usa salones, no se hace nada.");
 
             return;
         }
 
-        ['plan' => $plan, 'missing' => $missing] = $this->roomPlan($term, $campus);
+        foreach ($modalities as $modality) {
+            $this->seedModalityRooms($term, $campus, $modality);
+        }
+    }
+
+    /**
+     * Las modalidades con grupos en el campus que usan salones (su perfil), por clave.
+     *
+     * @return EloquentCollection<int, Modality>
+     */
+    private function roomModalities(Term $term, Campus $campus): EloquentCollection
+    {
+        return Modality::query()->withTrashed()
+            ->whereIn('id', Group::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->select('modality_id'))
+            ->orderBy('code')->get()
+            ->filter(fn (Modality $modality): bool => $modality->profile->usesRooms)
+            ->values();
+    }
+
+    /**
+     * El paso de salones de una modalidad en el campus. Las modalidades van una tras otra: la foto de la siguiente ya
+     * trae los salones que esta asignó (ScheduleStateQuery carga los grupos con sesión en salón de toda modalidad).
+     *
+     * @throws RuntimeException si alguna sesión no tiene salón posible o una Action rechaza un paso
+     */
+    private function seedModalityRooms(Term $term, Campus $campus, Modality $modality): void
+    {
+        ['plan' => $plan, 'missing' => $missing] = $this->roomPlan($term, $campus, $modality);
 
         if ($missing !== []) {
             throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
@@ -370,16 +405,16 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      *
      * @return array{plan: list<array{session: StateSession, group: StateGroup, room: StateRoom, label: string}>, missing: list<string>}
      */
-    private function roomPlan(Term $term, Campus $campus): array
+    private function roomPlan(Term $term, Campus $campus, Modality $modality): array
     {
         $editable = $this->editableDepartments($term, $campus);
-        $state = app(ScheduleStateQuery::class)->forCampus($term, $campus);
+        $state = app(ScheduleStateQuery::class)->forModality($term, $modality->id);
         $defaults = SubjectRoomDefault::query()->where('campus_id', $campus->id)->orderBy('priority')->orderBy('room_id')->get(['subject_id', 'room_id'])
             ->groupBy('subject_id')->map(fn (Collection $rows): array => $rows->pluck('room_id')->all())->all();
         $pending = [];
 
         foreach ($state->groups() as $group) {
-            if (! $group->isActive || $group->campusId !== $campus->id || ! isset($editable[$group->departmentId])) {
+            if (! $group->isActive || $group->campusId !== $campus->id || $group->modalityId !== $modality->id || ! isset($editable[$group->departmentId])) {
                 continue;
             }
 
@@ -421,13 +456,15 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     /**
      * Las sesiones presenciales sin salón del campus a las que el paso de salones (modo `rooms`) no podría darles uno
      * sin choque, descritas («Cálculo Integral, grupo A3 el lunes de 7:00 a 9:00»). La usa la revisión del punto 5 de
-     * la demo, «la oferta de salones alcanza para el horario». No escribe nada.
+     * la demo, «la oferta de salones alcanza para el horario»; solo de las modalidades que usan salones. No escribe nada.
      *
      * @return list<string>
      */
     public function missingRooms(Term $term, Campus $campus): array
     {
-        return $this->roomPlan($term, $campus)['missing'];
+        return $this->roomModalities($term, $campus)
+            ->flatMap(fn (Modality $modality): array => $this->roomPlan($term, $campus, $modality)['missing'])
+            ->all();
     }
 
     /**
