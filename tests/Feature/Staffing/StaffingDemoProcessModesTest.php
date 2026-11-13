@@ -182,3 +182,15 @@ it('la revisión del punto 5 compara cada carga con sus grupos en los campus de 
 
     expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con grupos no están en asignación.');
 });
+
+it('en modo mixed no se salta la modalidad pedida porque otra modalidad ya tenga asignaciones en el campus', function () {
+    ($this->group)('A1', 1, '07:00', '09:00', 1);
+    ($this->teacher)('Ana', 4);
+    $distance = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => modalityOf('EAD')->id]);
+    GroupTeacherAssignment::factory()->create(['group_id' => $distance->id]);
+
+    (new DatabaseSeeder)->setContainer(app())
+        ->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'mode' => 'mixed', 'modality' => 'PRES']);
+
+    expect($this->load->refresh()->status)->not->toBe(LoadStatus::Proposed);
+});

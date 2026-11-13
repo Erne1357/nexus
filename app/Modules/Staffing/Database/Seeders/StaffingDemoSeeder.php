@@ -121,8 +121,8 @@ use RuntimeException;
  * Determinista con `$seed` sobre los mismos datos: todo lo que se ordena antes de barajar o de escoger va por llaves
  * naturales (claves de materia y de grupo, RFC, códigos), no por los UUIDv7, que dentro del mismo milisegundo traen
  * bits al azar. `$overrides` cambia valores del perfil (las pruebas siembran traslados justos con el perfil demo). Si
- * el periodo ya tiene asignaciones en esos campus no hace nada, así que volver a correrlo no duplica. Se niega a
- * correr en producción.
+ * el periodo ya tiene asignaciones de `$modality` en esos campus no hace nada, así que volver a correrlo no duplica (las
+ * de otra modalidad no cuentan). Se niega a correr en producción.
  */
 final class StaffingDemoSeeder extends Seeder
 {
@@ -352,8 +352,8 @@ final class StaffingDemoSeeder extends Seeder
             return;
         }
 
-        if (GroupTeacherAssignment::query()->where('term_id', $termModel->id)->whereIn('group_id', $this->groupsIn($found))->exists()) {
-            $this->command?->info("Asignación docente: {$term} ya tiene asignaciones en ".$found->pluck('code')->implode(', ').'; no se toca.');
+        if (GroupTeacherAssignment::query()->where('term_id', $termModel->id)->whereIn('group_id', $this->groupsIn($found)->where('modality_id', $this->modalityId()))->exists()) {
+            $this->command?->info("Asignación docente: {$term} ya tiene asignaciones de {$modality} en ".$found->pluck('code')->implode(', ').'; no se toca.');
 
             return;
         }
