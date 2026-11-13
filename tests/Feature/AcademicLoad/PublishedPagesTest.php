@@ -482,6 +482,40 @@ describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
         }
     });
 
+    it('MS16: con una sola modalidad publicada en el periodo la banda no tiene selector de modalidad', function () {
+        $this->get($this->indexUrl)->assertOk()->assertDontSeeHtml('data-testid="published-modality"');
+    });
+
+    it('MS16: con dos modalidades publicadas en el periodo, la banda ofrece las dos y cambiar lleva a la otra, con el campus si ella lo tiene', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD', 'modality_id' => modalityOf('EAD')->id]);
+        publishedPagesSnapshot($this->term, $ead, 'SC', [publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]])]);
+
+        $band = Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => 'pres', 'campusCode' => 'C2']);
+        $options = iterator_to_array(domOf($band->html())->querySelectorAll('[data-testid="published-modality"] option'));
+
+        expect(array_map(fn ($option): string => $option->getAttribute('value'), $options))->toBe(['ead', 'pres'])
+            ->and(array_map(fn ($option): string => textOf($option), $options))->toBe(['EAD', 'Presencial']);
+
+        $band->set('modalidad', 'ead')->assertRedirect(route('published.index', ['periodo' => '20271', 'modalidad' => 'ead']));
+        Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => 'ead', 'campusCode' => 'C9'])
+            ->set('modalidad', 'pres')
+            ->assertRedirect(route('published.index', ['periodo' => '20271', 'modalidad' => 'pres']));
+    });
+
+    it('el campus de la banda sale de la modalidad elegida: en EAD solo los campus de sus grupos publicados', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD', 'modality_id' => modalityOf('EAD')->id]);
+        publishedPagesSnapshot($this->term, $ead, 'SC', [publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]])]);
+
+        $values = fn (string $modality): array => array_map(fn ($option): string => $option->getAttribute('value'), iterator_to_array(domOf(
+            Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => $modality])->html(),
+        )->querySelectorAll('[data-testid="published-campus"] option')));
+
+        expect($values('ead'))->toBe(['', 'C9'])
+            ->and($values('pres'))->toBe(['', 'C1', 'C2']);
+    });
+
     it('la redirección no deja que la consulta pise un parámetro del camino', function () {
         $this->get('/horarios/20271/C2/docente/'.$this->laura['id'].'?docente=x&periodo=29999&modalidad=ead&dia=3')
             ->assertRedirect(route('published.teacher', ['periodo' => '20271', 'modalidad' => 'pres', 'docente' => $this->laura['id'], 'campus' => 'C2', 'dia' => '3']));

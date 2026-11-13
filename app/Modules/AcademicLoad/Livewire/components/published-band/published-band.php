@@ -15,8 +15,10 @@ use Livewire\Component;
  * `/horarios?periodo=&modalidad=&campus=`.
  *
  * Lo publicado es por modalidad (M1) y el campus es un filtro: el selector de Campus ofrece «Todos los campus» y los
- * campus activos donde se dan los grupos publicados de la modalidad en el periodo. La modalidad no tiene selector todavía (con
- * solo Presencial activa no aparecería, MS16): va en la URL y se conserva al cambiar de periodo si publicó en él.
+ * campus activos donde se dan los grupos publicados de la modalidad elegida en el periodo. El selector de Modalidad
+ * ofrece las que publicaron en el periodo y solo se ve con más de una (MS16; con solo Presencial no aparece): va en la
+ * URL y se conserva al cambiar de periodo si publicó en él. Cambiar de modalidad conserva el campus del filtro si la
+ * otra tiene grupos publicados ahí; si no, todos.
  *
  * Los códigos que se ven son los de la página que pinta el layout, aunque no estén entre las opciones publicadas
  * (entonces se agregan, elegidos); si faltan, el primer contexto publicado.
@@ -62,6 +64,22 @@ new class extends Component
     }
 
     /**
+     * Otra modalidad del mismo periodo: el campus del filtro se conserva si ella tiene grupos publicados ahí.
+     */
+    public function updatedModalidad(PublishedScheduleQuery $published): void
+    {
+        $term = PublishedContextQuery::isCode($this->periodo) ? Term::query()->where('code', $this->periodo)->first() : null;
+        $modality = PublishedContextQuery::isCode($this->modalidad) ? PublishedContextQuery::modality($this->modalidad) : null;
+        $campuses = $term === null || $modality === null ? [] : array_column($published->schedule($term, $modality)->campuses(), 'code');
+
+        if (! in_array($this->campus, $campuses, true)) {
+            $this->campus = '';
+        }
+
+        $this->go();
+    }
+
+    /**
      * Otro periodo: se conserva la modalidad si publicó en él, si no la primera que sí; el campus del filtro se conserva.
      */
     public function updatedPeriodo(PublishedScheduleQuery $published): void
@@ -90,12 +108,16 @@ new class extends Component
     }
 
     /**
-     * @return array{terms: list<array{id: string, name: string}>, campuses: list<array{id: string, name: string}>}
+     * @return array{terms: list<array{id: string, name: string}>, modalities: list<array{id: string, name: string}>, campuses: list<array{id: string, name: string}>}
      */
     public function with(PublishedScheduleQuery $published): array
     {
         $contexts = $this->contexts($published);
         $terms = array_map(fn (array $entry): array => ['id' => $entry['term']->code, 'name' => $entry['term']->name], $contexts);
+        $modalities = array_map(
+            fn (Modality $item): array => ['id' => PublishedContextQuery::modalityKey($item), 'name' => $item->name],
+            array_find($contexts, fn (array $entry): bool => $entry['term']->code === $this->periodo)['modalities'] ?? [],
+        );
         $term = PublishedContextQuery::isCode($this->periodo) ? Term::query()->where('code', $this->periodo)->first() : null;
         $modality = PublishedContextQuery::isCode($this->modalidad) ? PublishedContextQuery::modality($this->modalidad) : null;
         $withGroups = $term === null || $modality === null ? [] : $published->schedule($term, $modality)->campuses();
@@ -113,6 +135,10 @@ new class extends Component
             $campuses[] = ['id' => $campus->code, 'name' => $campus->name];
         }
 
-        return ['terms' => $terms, 'campuses' => $campuses];
+        if ($modality !== null && $modalities !== [] && ! in_array($this->modalidad, array_column($modalities, 'id'), true)) {
+            $modalities[] = ['id' => PublishedContextQuery::modalityKey($modality), 'name' => $modality->name];
+        }
+
+        return ['terms' => $terms, 'modalities' => $modalities, 'campuses' => $campuses];
     }
 };
