@@ -187,6 +187,10 @@ final class AgreementsInboxQuery
     }
 
     /**
+     * Los acuerdos del periodo y la modalidad (y del campus del filtro, si hay) que el actor ve: `agreement.view` sobre la
+     * modalidad y el departamento que lo pide o el que lo decide, sin el campus. El jefe ve y decide los de toda la
+     * modalidad de su departamento, de cualquier campus: ningún jefe de departamento está limitado a un campus (M12).
+     *
      * @return Builder<InterdepartmentalAgreement>
      */
     private function visible(Actor $actor, Term $term, Modality $modality, ?Campus $campus): Builder

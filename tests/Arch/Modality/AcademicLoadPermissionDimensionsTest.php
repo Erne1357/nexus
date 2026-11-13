@@ -53,3 +53,7 @@ it('AZ-S17: lo que se lee en AcademicLoad no declara el campus', function () {
         expect($permission->dimensions())->not->toContain(Dimension::Campus);
     }
 });
+
+it('M12: decidir un acuerdo declara la modalidad y el departamento, sin el campus: el jefe decide los de toda su modalidad', function () {
+    expect(AcademicLoadPermission::AgreementDecide->dimensions())->toBe([Dimension::Modality, Dimension::Unit]);
+});

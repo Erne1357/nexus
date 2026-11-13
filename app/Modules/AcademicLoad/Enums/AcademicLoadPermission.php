@@ -62,6 +62,11 @@ enum AcademicLoadPermission: string implements Permission
         };
     }
 
+    /**
+     * Pedir un préstamo y corregir la fila de un campus declaran el campus (MS6). Decidir un acuerdo no: el jefe decide
+     * los de toda la modalidad de su departamento, de cualquier campus, porque ningún jefe de departamento está limitado
+     * a un campus (M12, confirmado el 12 de noviembre de 2026).
+     */
     public function dimensions(): array
     {
         return match ($this) {
