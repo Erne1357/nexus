@@ -40,7 +40,7 @@ use RuntimeException;
 /**
  * Horarios, docentes y salones de prueba para los grupos que ya creó la aceptación de las propuestas (tarea 3.4).
  * Corre después de AcademicLoadDemoSeeder. Escribe las sesiones directo con el modelo (las Actions del editor de
- * horarios todavía no existen); el docente se escribe directo contra una foto del campus que se va actualizando (ver
+ * horarios todavía no existen); el docente se escribe directo contra una foto de la modalidad que se va actualizando (ver
  * assignTeacher()) y la clave pasa por AssignGroupCode. Mientras
  * siembra, los eventos que encolarían un recálculo por cada cambio (GroupScheduleChanged, GroupTeacherChanged,
  * GroupCancelled, GroupsCreated) se descartan; al final corre SyncScheduleConflicts una vez por modalidad (M1).
@@ -750,7 +750,7 @@ final class SchedulingDemoSeeder extends Seeder
      * Le da a un grupo un docente adscrito a su departamento que no rompa HC-08 ni HC-09; solo una parte pequeña
      * (`teacher_conflict_groups`) puede romperlos a propósito. Si ninguno sirve, el grupo se queda sin docente.
      *
-     * Pregunta contra la foto del campus que se leyó una sola vez y que va actualizando con cada asignación
+     * Pregunta contra la foto de la modalidad que se leyó una sola vez y que va actualizando con cada asignación
      * (`withTeacher()`), y escribe `teacher_id` directo, sin SetGroupTeacher: con cientos de grupos, la Action relee la
      * foto completa en cada asignación (correcto para una persona, demasiado lento para sembrar el masivo). HC-01 lo
      * sigue cuidando la exclusión de la base; los eventos de Scheduling están apagados durante la siembra.

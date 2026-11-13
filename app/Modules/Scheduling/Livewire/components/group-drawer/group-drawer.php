@@ -105,7 +105,7 @@ new class extends Component
         $campuses = $editor->campusOptions(app(Actor::class), $group);
 
         return [
-            'panel' => $editor->groupPanel($group, $campus),
+            'panel' => $editor->groupPanel($group),
             'campusOptions' => $campuses->map(fn ($option): array => ['id' => $option->code, 'name' => $option->name])->values()->all(),
             'currentCampus' => $campus,
         ];

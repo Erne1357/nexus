@@ -319,7 +319,7 @@ final class ScheduleEditorQuery
      *
      * @return array<string, mixed>
      */
-    public function groupPanel(Group $group, Campus $campus): array
+    public function groupPanel(Group $group): array
     {
         $withTrashed = fn (Relation $query) => $query->withTrashed();
         $group->load(['modality' => $withTrashed, 'subject' => $withTrashed, 'subject.department' => $withTrashed, 'teacher' => $withTrashed, 'sessions' => fn (Relation $query) => $query->orderBy('day')->orderBy('starts_at'), 'sessions.room' => $withTrashed]);
