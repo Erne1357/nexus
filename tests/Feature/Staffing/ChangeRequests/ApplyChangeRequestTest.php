@@ -82,7 +82,7 @@ it('una aprobada de otro departamento no retiene la carga', function () {
     Event::forget(LoadTransitioning::class);
     $s = changeScenario(LoadStatus::Adjusting);
     $other = changeScenario(LoadStatus::Adjusting);
-    requestFor($other['group'], 'approved', ['term_id' => $s['group']->term_id, 'campus_id' => $s['group']->campus_id]);
+    requestFor($other['group'], 'approved', ['term_id' => $s['group']->term_id]);
 
     $result = app(MarkChangeRequestApplied::class)->handle(requestFor($s['group'], 'approved'), $s['coordinador']);
 

@@ -405,7 +405,7 @@ final class LoadClosingDemoSeeder extends Seeder
         $head = $this->head($this->campusOf($load), $load->department_id);
 
         ChangeRequest::query()->join('groups', 'groups.id', '=', 'change_requests.group_id')->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->where('change_requests.term_id', $load->term_id)->whereIn('change_requests.campus_id', $this->campusIds())
+            ->where('change_requests.term_id', $load->term_id)->whereIn('groups.campus_id', $this->campusIds())
             ->where('change_requests.department_id', $load->department_id)->where('change_requests.status', ChangeRequestStatus::Pending)
             ->orderBy('subjects.code')->orderBy('groups.code')->orderBy('change_requests.kind')->select('change_requests.*')->get()
             ->each(function (ChangeRequest $request) use ($head): void {

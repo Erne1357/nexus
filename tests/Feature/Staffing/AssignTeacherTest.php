@@ -63,7 +63,7 @@ it('asigna al primer lugar sin motivo, deja el historial y la bitácora', functi
         ->group_id->toBe($this->group->id)
         ->teacher_id->toBe($this->teachers[0]->id)
         ->term_id->toBe($this->group->term_id)
-        ->campus_id->toBe($this->group->campus_id)
+        ->modality_id->toBe($this->group->modality_id)
         ->assigned_by->toBe($this->actor->id)
         ->ranking_position_at_assignment->toBe(1)
         ->ranking_size_at_assignment->toBe(3)

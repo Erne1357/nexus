@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Primer lugar de un grupo nuevo, con el periodo y el campus del grupo.
+ * Primer lugar de un grupo nuevo, con el periodo y la modalidad del grupo (el campus se lee del grupo).
  *
  * @extends Factory<StaffingRanking>
  */
@@ -24,7 +24,6 @@ class StaffingRankingFactory extends Factory
         return [
             'group_id' => Group::factory(),
             'term_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->term_id,
-            'campus_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->campus_id,
             'modality_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->modality_id,
             'teacher_id' => Teacher::factory(),
             'rank' => 1,

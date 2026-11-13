@@ -106,7 +106,7 @@ it('Ranking docente: la evaluación es el promedio simple de los últimos semest
         ->and($inputs[$unrated->id]->evaluation)->toBeNull();
 });
 
-it('Ranking docente: el puesto anterior es el mejor de la misma materia y campus en el semestre previo', function () {
+it('Ranking docente (MS27): el puesto anterior es el mejor de la misma materia, modalidad y campus en el semestre previo', function () {
     $teacher = ($this->adscribed)();
     $none = ($this->adscribed)();
     $previousGroup = fn (array $attributes = []) => Group::factory()->create($attributes + [
@@ -114,6 +114,7 @@ it('Ranking docente: el puesto anterior es el mejor de la misma materia y campus
     ]);
     StaffingRanking::factory()->create(['group_id' => $previousGroup()->id, 'teacher_id' => $teacher->id, 'rank' => 3]);
     StaffingRanking::factory()->create(['group_id' => $previousGroup()->id, 'teacher_id' => $teacher->id, 'rank' => 2]);
+    StaffingRanking::factory()->create(['group_id' => $previousGroup(['modality_id' => modalityOf('EAD')->id])->id, 'teacher_id' => $teacher->id, 'rank' => 1]);
     StaffingRanking::factory()->create([
         'group_id' => $previousGroup(['campus_id' => Campus::factory()->create()->id])->id,
         'teacher_id' => $none->id, 'rank' => 1,

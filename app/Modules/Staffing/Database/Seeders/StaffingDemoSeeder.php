@@ -57,6 +57,7 @@ use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Arr;
@@ -105,7 +106,8 @@ use RuntimeException;
  * AssignTeacher, con su bitácora; las demás se escriben en bloque (el docente del grupo y su fila del historial, con el
  * lugar que tendría en un ranking recién calculado), porque AssignTeacher relee la foto completa del campus dos veces
  * por grupo y con el masivo tardaría más de diez minutos. Por lo mismo, con el perfil massive los rankings se calculan
- * en paralelo con `staffing:rank`, un proceso por departamento y campus, de seis en seis.
+ * en paralelo con `staffing:rank`, un proceso por departamento y modalidad (M1), de seis en seis. Las solicitudes de
+ * horario aplicadas las aplica un coordinador cuyo nombramiento cubre el campus del grupo (MS6).
  *
  * `$mode` (demo por puntos, docs/arquitectura/testing.md): `mixed` hace todo lo anterior. `start` (lleva al punto 5)
  * solo pasa a asignación cada carga en propuesta, como su jefe (un veto de Scheduling falla con su motivo), y calcula
@@ -342,7 +344,7 @@ final class StaffingDemoSeeder extends Seeder
             return;
         }
 
-        if (GroupTeacherAssignment::query()->where('term_id', $termModel->id)->whereIn('campus_id', $found->modelKeys())->exists()) {
+        if (GroupTeacherAssignment::query()->where('term_id', $termModel->id)->whereIn('group_id', $this->groupsIn($found))->exists()) {
             $this->command?->info("Asignación docente: {$term} ya tiene asignaciones en ".$found->pluck('code')->implode(', ').'; no se toca.');
 
             return;
@@ -713,37 +715,39 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
-     * El ranking de cada departamento con grupos activos de los campus (`$assignedOnly`: solo de los que reciben
-     * docentes), en serie o, con el perfil massive, en paralelo.
+     * El ranking de cada departamento con grupos activos de los campus, en la modalidad de esos grupos (M1: el ranking es
+     * del departamento en la modalidad, con los grupos de todos sus campus; `$assignedOnly`: solo de las cargas que
+     * reciben docentes), en serie o, con el perfil massive, en paralelo.
      *
      * @param  Collection<int, Campus>  $campuses
      */
     private function rank(Term $term, Collection $campuses, bool $assignedOnly = false): void
     {
-        $byId = $campuses->keyBy('id');
         $scopes = Group::query()->active()->where('term_id', $term->id)->whereIn('campus_id', $campuses->modelKeys())
-            ->selectRaw('campus_id, department_id, count(*) as total')->groupBy('campus_id', 'department_id')
-            ->orderByDesc('total')->orderBy('campus_id')->orderBy('department_id')->get()
-            ->filter(fn (Group $scope): bool => ! $assignedOnly || ($this->roles[$byId[$scope->campus_id]->code][$scope->department_id] ?? self::UNTOUCHED) !== self::UNTOUCHED)
+            ->selectRaw('modality_id, department_id, count(*) as total')->groupBy('modality_id', 'department_id')
+            ->orderByDesc('total')->orderBy('modality_id')->orderBy('department_id')->get()
+            ->filter(fn (Group $scope): bool => ! $assignedOnly || ($this->modalityRoles[$scope->modality_id][$scope->department_id] ?? self::UNTOUCHED) !== self::UNTOUCHED)
             ->values();
+        $modalities = Modality::query()->withTrashed()->whereIn('id', $scopes->pluck('modality_id')->unique()->all())->get()->keyBy('id');
         $departments = Department::query()->withTrashed()->whereIn('id', $scopes->pluck('department_id')->unique()->all())->get()->keyBy('id');
 
         if ($this->profile['parallel']) {
-            $this->rankInParallel($term, $scopes->map(fn (Group $scope): array => [$byId[$scope->campus_id]->code, $departments[$scope->department_id]->code])->all());
+            $this->rankInParallel($term, $scopes->map(fn (Group $scope): array => [$modalities[$scope->modality_id]->code, $departments[$scope->department_id]->code])->all());
 
             return;
         }
 
         foreach ($scopes as $scope) {
-            app(RankGroups::class)->handle($term, $byId[$scope->campus_id], $departments[$scope->department_id]);
+            app(RankGroups::class)->handle($term, $modalities[$scope->modality_id], $departments[$scope->department_id]);
         }
     }
 
     /**
-     * Un `staffing:rank` por departamento y campus contra la misma base que este proceso, hasta `PARALLEL_RANKINGS` a la
-     * vez: en cuanto uno termina entra el siguiente, y los de más grupos van primero, así el más largo no espera a nadie.
+     * Un `staffing:rank` por departamento y modalidad contra la misma base que este proceso, hasta `PARALLEL_RANKINGS` a
+     * la vez: en cuanto uno termina entra el siguiente, y los de más grupos van primero, así el más largo no espera a
+     * nadie.
      *
-     * @param  list<array{0: string, 1: string}>  $scopes  campus y departamento
+     * @param  list<array{0: string, 1: string}>  $scopes  clave de la modalidad y del departamento
      */
     private function rankInParallel(Term $term, array $scopes): void
     {
@@ -771,10 +775,10 @@ final class StaffingDemoSeeder extends Seeder
             }
         };
 
-        foreach ($scopes as [$campus, $department]) {
+        foreach ($scopes as [$modality, $department]) {
             $settle(self::PARALLEL_RANKINGS);
             $running[] = Process::path(base_path())->env($env)->timeout(900)
-                ->start([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--campus={$campus}", "--department={$department}"]);
+                ->start([PHP_BINARY, '-d', 'memory_limit=1G', 'artisan', 'staffing:rank', $term->code, "--modality={$modality}", "--department={$department}"]);
         }
 
         $settle(1);
@@ -1045,7 +1049,6 @@ final class StaffingDemoSeeder extends Seeder
 
                 GroupTeacherAssignment::query()->create([
                     'term_id' => $group->term_id,
-                    'campus_id' => $group->campus_id,
                     'modality_id' => $group->modality_id,
                     'group_id' => $group->id,
                     'teacher_id' => $teacherId,
@@ -1166,7 +1169,7 @@ final class StaffingDemoSeeder extends Seeder
         }
 
         foreach ($requests as [$request, $status]) {
-            $this->decide($campus, $request, $status, $head);
+            $this->decide($request, $status, $head);
         }
     }
 
@@ -1182,7 +1185,7 @@ final class StaffingDemoSeeder extends Seeder
         return [isset($this->travelTeachers[$group->teacher_id]), (int) $loads[$group->teacher_id]?->campuses, (int) $loads[$group->teacher_id]?->total];
     }
 
-    private function decide(Campus $campus, ChangeRequest $request, string $status, User $head): void
+    private function decide(ChangeRequest $request, string $status, User $head): void
     {
         try {
             if ($status === 'rejected') {
@@ -1194,7 +1197,7 @@ final class StaffingDemoSeeder extends Seeder
             }
 
             if ($status === 'applied') {
-                $result = app(MarkChangeRequestApplied::class)->handle($request, $this->applier($campus, $request, $head));
+                $result = app(MarkChangeRequestApplied::class)->handle($request, $this->applier($request, $head));
 
                 if ($result->vetoReasons !== []) {
                     $this->command?->warn('La carga se queda en ajustes: '.implode(' ', $result->vetoReasons));
@@ -1205,12 +1208,16 @@ final class StaffingDemoSeeder extends Seeder
         }
     }
 
-    private function applier(Campus $campus, ChangeRequest $request, User $head): User
+    /**
+     * Quien aplica la solicitud: la de horario, el coordinador de la carrera dueña cuyo nombramiento cubre el campus del
+     * grupo (MS6: uno de C1 no aplica la de un grupo de C2), o el jefe si no hay; la de salón, el jefe.
+     */
+    private function applier(ChangeRequest $request, User $head): User
     {
         $request->loadMissing('group');
 
         return $request->kind === ChangeRequestKind::Schedule
-            ? $this->holder(StaffingPermission::ChangeRequestApplySchedule, $campus->id, career: $request->group->owner_career_id) ?? $head
+            ? $this->holder(StaffingPermission::ChangeRequestApplySchedule, $request->group->campus_id, career: $request->group->owner_career_id) ?? $head
             : $head;
     }
 
@@ -1319,6 +1326,18 @@ final class StaffingDemoSeeder extends Seeder
     }
 
     /**
+     * Los grupos de los campus de la demo, para acotar rankings, asignaciones y solicitudes, que no copian el campus de
+     * su grupo (M8).
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @return Builder<Group>
+     */
+    private function groupsIn(Collection $campuses): Builder
+    {
+        return Group::query()->whereIn('campus_id', $campuses->modelKeys())->select('id');
+    }
+
+    /**
      * @param  Collection<int, Campus>  $campuses
      */
     private function summary(Term $term, Collection $campuses, string $profile, float $seconds): void
@@ -1327,7 +1346,6 @@ final class StaffingDemoSeeder extends Seeder
             return;
         }
 
-        $campusIds = $campuses->modelKeys();
         $this->command->info(sprintf('Asignación docente (%s) en %.1f s: %s.', $profile, $seconds,
             implode(', ', array_map(fn (string $step, float $time): string => sprintf('%s %.1f s', $step, $time), array_keys($this->timings), $this->timings))));
 
@@ -1342,7 +1360,7 @@ final class StaffingDemoSeeder extends Seeder
                 $vetoed === [] ? 'ninguna' : implode(', ', array_keys($vetoed))));
         }
 
-        $assignments = GroupTeacherAssignment::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)
+        $assignments = GroupTeacherAssignment::query()->where('term_id', $term->id)->whereIn('group_id', $this->groupsIn($campuses))
             ->orderBy('assigned_at')->orderBy('id')->get(['id', 'group_id', 'ranking_position_at_assignment', 'reason', 'replaced_at']);
         $latest = $assignments->groupBy('group_id')->map(fn (Collection $rows): string => $rows->last()->id);
         $current = $assignments->whereNull('replaced_at');
@@ -1350,13 +1368,13 @@ final class StaffingDemoSeeder extends Seeder
         $removed = $closed->filter(fn (GroupTeacherAssignment $row): bool => $latest[$row->group_id] === $row->id)->count();
 
         $this->command->line(sprintf('  Rankings: %d renglones de %d grupos.',
-            StaffingRanking::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)->count(),
-            StaffingRanking::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)->distinct()->count('group_id')));
+            StaffingRanking::query()->where('term_id', $term->id)->whereIn('group_id', $this->groupsIn($campuses))->count(),
+            StaffingRanking::query()->where('term_id', $term->id)->whereIn('group_id', $this->groupsIn($campuses))->distinct()->count('group_id')));
         $this->command->line(sprintf('  Asignaciones: %d vigentes (%d al primer lugar, %d con motivo), %d reemplazadas, %d quitadas, %d con traslado justo (SC-09); %d por AssignTeacher, %d en bloque, %d grupos sin candidato que pase.',
             $current->count(), $current->where('ranking_position_at_assignment', 1)->whereNull('reason')->count(), $current->whereNotNull('reason')->count(),
             $closed->count() - $removed, $removed, $this->counts['traslado justo'] ?? 0, $this->counts['por AssignTeacher'] ?? 0, $this->counts['en bloque'] ?? 0, $this->counts['sin candidato'] ?? 0));
 
-        $requests = ChangeRequest::query()->where('term_id', $term->id)->whereIn('campus_id', $campusIds)->get(['status'])->countBy(fn (ChangeRequest $request): string => $request->status->value);
+        $requests = ChangeRequest::query()->where('term_id', $term->id)->whereIn('group_id', $this->groupsIn($campuses))->get(['status'])->countBy(fn (ChangeRequest $request): string => $request->status->value);
         $this->command->line('  Solicitudes de cambio: '.implode(', ', array_map(fn (ChangeRequestStatus $status): string => ($requests[$status->value] ?? 0).' '.mb_strtolower($status->label()).'s', ChangeRequestStatus::cases())).'.');
 
         $honorarios = TeacherPosition::query()->currentOn($term->starts_on)->where('kind', PositionKind::Honorarios)->pluck('teacher_id')->flip();
@@ -1404,10 +1422,10 @@ final class StaffingDemoSeeder extends Seeder
 
         $pending = ChangeRequest::query()->with('group')
             ->join('groups', 'groups.id', '=', 'change_requests.group_id')->join('subjects', 'subjects.id', '=', 'groups.subject_id')
-            ->where('change_requests.term_id', $term->id)->whereIn('change_requests.campus_id', $campuses->modelKeys())
+            ->where('change_requests.term_id', $term->id)->whereIn('groups.campus_id', $campuses->modelKeys())
             ->where('change_requests.status', ChangeRequestStatus::Approved)->where('change_requests.kind', ChangeRequestKind::Schedule)
             ->orderBy('subjects.code')->orderBy('groups.code')->select('change_requests.*')->first();
-        $coordinator = $pending === null ? null : $this->holder(StaffingPermission::ChangeRequestApplySchedule, $pending->campus_id, career: $pending->group->owner_career_id);
+        $coordinator = $pending === null ? null : $this->holder(StaffingPermission::ChangeRequestApplySchedule, $pending->group->campus_id, career: $pending->group->owner_career_id);
 
         if ($coordinator !== null) {
             $logins[] = "{$coordinator->username} (aplica la solicitud de horario del grupo {$pending->group->code})";

@@ -30,6 +30,7 @@ use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
@@ -246,6 +247,9 @@ it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma 
     $first = staffingSnapshot();
     preg_match('/(\d+) con traslado justo/', $output->fetch(), $picked);
 
+    // MS6: la solicitud de horario de un grupo la aplica un coordinador que cubre el campus del grupo, no el del primer campus.
+    $appliedSchedules = ChangeRequest::query()->with(['group', 'appliedBy'])->where('status', ChangeRequestStatus::Applied)->where('kind', ChangeRequestKind::Schedule)->get();
+    $appliedByOutsider = $appliedSchedules->reject(fn (ChangeRequest $request): bool => $request->appliedBy->can('apply', $request))->count();
     $seededGroups = GroupTeacherAssignment::query()->current()->pluck('group_id')->flip();
     app(ScheduleValidator::class)->forget();
     $travel = GroupTeacherAssignment::query()->current()->distinct()->pluck('teacher_id')
@@ -256,6 +260,8 @@ it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma 
     $seed();
 
     expect((int) ($picked[1] ?? 0))->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(4)
+        ->and($appliedSchedules)->not->toBeEmpty()
+        ->and($appliedByOutsider)->toBe(0)
         ->and($travel)->not->toBeEmpty()
         ->and($first['groups'])->not->toBeEmpty()
         ->and(staffingSnapshot())->toBe($first);

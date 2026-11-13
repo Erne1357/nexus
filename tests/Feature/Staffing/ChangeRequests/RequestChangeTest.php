@@ -40,7 +40,7 @@ it('el docente del grupo lo pide: queda pendiente con su docente y la foto de la
         ->and($request->teacher_id)->toBe($s['teacher']->id)
         ->and($request->requested_by)->toBe($s['teacherUser']->id)
         ->and($request->department_id)->toBe($s['group']->department_id)
-        ->and($request->campus_id)->toBe($s['group']->campus_id)
+        ->and($request->modality_id)->toBe($s['group']->modality_id)
         ->and($request->reason)->toBe('Doy clase en otro campus')
         ->and($request->proposed['description'])->toBe('Los martes de 7 a 9')
         ->and($request->current)->toHaveCount(1)
