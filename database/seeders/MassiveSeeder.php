@@ -104,8 +104,8 @@ class MassiveSeeder extends Seeder
 
         $started = hrtime(true);
         // Cargas cerradas con justificaciones y una reabierta (tarea 4.1), una por departamento y modalidad con los grupos de
-        // los dos campus (M1); SC no se toca. La que este paso deja cerrada (EE, medido) la publica con sus versiones el
-        // paso de la publicación (tarea 4.3).
+        // los dos campus (M1); SC no se toca. La que este paso deja cerrada (EE, medido el 13 de noviembre de 2026) la
+        // publica con sus versiones el paso de la publicación (tarea 4.3).
         $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'massive', 'campuses' => ['C1', 'C2'], 'keepOpen' => ['SC']]);
 
         $this->command?->info(sprintf('Cargas cerradas y reabiertas: %.1f s.', (hrtime(true) - $started) / 1e9));
@@ -116,8 +116,8 @@ class MassiveSeeder extends Seeder
     }
 
     /**
-     * EE en Presencial, cerrada por el paso anterior, publicada en dos versiones y reabierta al final (tarea 4.3). Solo
-     * con `demo:seed --hasta=todo`, que prende `demo.showcase`.
+     * La carga que deja cerrada el paso anterior (la escoge PublicationShowcaseDemoSeeder; EE, medido), publicada en dos
+     * versiones y reabierta al final (tarea 4.3). Solo con `demo:seed --hasta=todo`, que prende `demo.showcase`.
      */
     public function showcase(): void
     {
@@ -126,7 +126,7 @@ class MassiveSeeder extends Seeder
         }
 
         $started = hrtime(true);
-        $this->callWith(PublicationShowcaseDemoSeeder::class, ['department' => 'EE', 'versions' => 2, 'reopenAtEnd' => true]);
+        $this->callWith(PublicationShowcaseDemoSeeder::class, ['versions' => 2, 'reopenAtEnd' => true]);
         $this->command?->info(sprintf('Carga publicada en varias versiones: %.1f s.', (hrtime(true) - $started) / 1e9));
     }
 }

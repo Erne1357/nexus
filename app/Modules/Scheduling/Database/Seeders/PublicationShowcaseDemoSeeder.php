@@ -39,12 +39,14 @@ use RuntimeException;
  * muestra «N grupos cambiaron de salón» contra la anterior.
  *
  * Corre después del cierre de la demo mezclada (LoadClosingDemoSeeder en modo `mixed`, Riel C), sobre la carga que ese
- * paso deja cerrada, una por departamento y modalidad (M1): con el volumen demo, CEA en Presencial en tres versiones;
- * con el masivo, EE en Presencial en dos versiones y reabierta al final (`reopenAtEnd`), el caso «reabierta después de
- * publicar»: el público sigue viendo la versión 2 y la pantalla de cierre la ve en ajustes con su historial. Una carga
- * en asignación también sirve (la justifica y la cierra antes). Si un veto lo detiene, la demo se detiene con su motivo.
- * Corre una vez sobre la base recién sembrada (`demo:seed` hace `migrate:fresh`): una segunda corrida se niega, porque
- * la carga ya no está en asignación ni cerrada.
+ * paso deja cerrada, una por departamento y modalidad (M1). Sin `$department` la escoge de lo que dejó ese paso: la
+ * cerrada (con varias, la de más grupos activos y luego por código) o, si no dejó ninguna, la de asignación con más
+ * grupos; así un cambio en la demo no deja apuntando a una carga que ya no se cierra. Con el volumen demo sale CEA en
+ * tres versiones; con el masivo, EE (medido el 13 de noviembre de 2026) en dos versiones y reabierta al final
+ * (`reopenAtEnd`), el caso «reabierta después de publicar»: el público sigue viendo la versión 2 y la pantalla de cierre
+ * la ve en ajustes con su historial. Una carga en asignación la justifica y la cierra antes. Si un veto lo detiene, la
+ * demo se detiene con su motivo. Corre una vez sobre la base recién sembrada (`demo:seed` hace `migrate:fresh`): una
+ * segunda corrida se niega, porque la carga ya no está en asignación ni cerrada.
  */
 final class PublicationShowcaseDemoSeeder extends Seeder
 {
@@ -63,18 +65,21 @@ final class PublicationShowcaseDemoSeeder extends Seeder
     ];
 
     /**
-     * @param  string  $department  el código del departamento de la carga
+     * @param  string|null  $department  el código del departamento de la carga; sin él, la que dejó el cierre mezclado
+     *                                   (showcaseLoad())
      * @param  string  $modality  la clave de su modalidad: la carga es por departamento y modalidad, con los grupos de
      *                            todos sus campus (M1)
      */
-    public function run(string $department = 'CEA', string $modality = 'PRES', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false): void
+    public function run(?string $department = null, string $modality = 'PRES', string $term = '20271', int $versions = 3, bool $reopenAtEnd = false): void
     {
         $this->refuseProduction();
 
+        $termModel = Term::query()->where('code', $term)->firstOrFail();
         $modalityModel = Modality::query()->where('code', $modality)->firstOrFail();
-        $load = AcademicLoad::query()
-            ->ofDepartment(Term::query()->where('code', $term)->firstOrFail()->id, $modalityModel->id, Department::query()->where('code', $department)->firstOrFail()->id)
-            ->firstOrFail();
+        $load = $department === null
+            ? $this->showcaseLoad($termModel, $modalityModel)
+            : AcademicLoad::query()->ofDepartment($termModel->id, $modalityModel->id, Department::query()->where('code', $department)->firstOrFail()->id)->firstOrFail();
+        $department = $load->department->code;
         $where = "{$department} en {$modalityModel->name}";
 
         if (! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Closed], true)) {
@@ -108,6 +113,34 @@ final class PublicationShowcaseDemoSeeder extends Seeder
         }
 
         $this->command?->info("Carga de {$where} publicada en ".$load->fresh()->current_version.' versiones'.($reopenAtEnd ? ' y reabierta.' : '.'));
+    }
+
+    /**
+     * La carga que deja el cierre mezclado para la demo de versiones: la cerrada o, si no hay, la que sigue en asignación;
+     * entre varias, la de más grupos activos y luego por código de departamento.
+     *
+     * @throws RuntimeException si ninguna carga de la modalidad está cerrada ni en asignación, con el estado de cada una
+     */
+    private function showcaseLoad(Term $term, Modality $modality): AcademicLoad
+    {
+        $loads = AcademicLoad::query()->with('department')->where('term_id', $term->id)->where('modality_id', $modality->id)->get();
+        $groups = Group::query()->where('term_id', $term->id)->where('modality_id', $modality->id)->where('status', '!=', GroupStatus::Cancelled->value)
+            ->selectRaw('department_id, count(*) as total')->groupBy('department_id')->pluck('total', 'department_id');
+
+        foreach ([LoadStatus::Closed, LoadStatus::Staffing] as $status) {
+            $picked = $loads->filter(fn (AcademicLoad $load): bool => $load->status === $status)
+                ->sortBy(fn (AcademicLoad $load): array => [-(int) ($groups[$load->department_id] ?? 0), $load->department->code])
+                ->first();
+
+            if ($picked !== null) {
+                return $picked;
+            }
+        }
+
+        $left = $loads->sortBy(fn (AcademicLoad $load): string => $load->department->code)
+            ->map(fn (AcademicLoad $load): string => "{$load->department->code} en {$load->status->label()}")->implode(', ');
+
+        throw new RuntimeException("Ninguna carga de {$modality->name} en {$term->code} quedó cerrada ni en asignación para la demo de versiones; el cierre mezclado dejó: ".($left === '' ? 'ninguna carga' : $left).'.');
     }
 
     private function closeAndPublish(AcademicLoad $load, User $head, ?string $closing, string $publishing): void

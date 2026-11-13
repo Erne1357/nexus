@@ -74,13 +74,14 @@ class DemoSeeder extends Seeder
     }
 
     /**
-     * CEA, la que deja cerrada el paso anterior, publicada en tres versiones (tarea 4.3). Solo con `demo:seed
-     * --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la demo no lo necesitan.
+     * La carga que deja cerrada el paso anterior (la escoge PublicationShowcaseDemoSeeder: CEA), publicada en tres
+     * versiones (tarea 4.3). Solo con `demo:seed --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la
+     * demo no lo necesitan.
      */
     public function showcase(): void
     {
         if (config('demo.showcase', false)) {
-            $this->callWith(PublicationShowcaseDemoSeeder::class, ['department' => 'CEA', 'versions' => 3]);
+            $this->callWith(PublicationShowcaseDemoSeeder::class, ['versions' => 3]);
         }
     }
 }

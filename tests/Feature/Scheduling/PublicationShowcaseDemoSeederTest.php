@@ -90,6 +90,24 @@ it('se niega con una carga que no está en asignación ni cerrada y la nombra po
     app(PublicationShowcaseDemoSeeder::class)->run('CEA', 'PRES', '20271', 3);
 })->throws(RuntimeException::class, 'La carga de CEA en Presencial está en Borrador: la demo de versiones empieza en asignación o cerrada.');
 
+it('sin departamento sigue a la carga que dejó cerrada el cierre mezclado (la de más grupos), no a un código fijo', function () {
+    $this->department->update(['code' => 'MM']);
+    $fewer = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => Department::factory()->create(['code' => 'AA'])->id, 'status' => LoadStatus::Closed]);
+    $staffing = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => Department::factory()->create(['code' => 'CEA'])->id, 'status' => LoadStatus::Staffing]);
+
+    app(PublicationShowcaseDemoSeeder::class)->run(versions: 1);
+
+    expect($this->load->fresh()->status)->toBe(LoadStatus::Published)
+        ->and($fewer->fresh()->status)->toBe(LoadStatus::Closed)
+        ->and($staffing->fresh()->status)->toBe(LoadStatus::Staffing);
+});
+
+it('sin departamento ni carga cerrada o en asignación falla con lo que dejó el cierre mezclado', function () {
+    $this->load->update(['status' => LoadStatus::Proposed]);
+
+    app(PublicationShowcaseDemoSeeder::class)->run(versions: 1);
+})->throws(RuntimeException::class, 'Ninguna carga de Presencial en 20271 quedó cerrada ni en asignación para la demo de versiones; el cierre mezclado dejó: CEA en Propuesta.');
+
 /**
  * Un seeder que solo anota con qué parámetros lo llamaron, en lugar del showcase.
  */
@@ -100,7 +118,7 @@ function fakeShowcase(): Seeder
         /** @var list<array<string, mixed>> */
         public array $calls = [];
 
-        public function run(string $department, int $versions, bool $reopenAtEnd = false): void
+        public function run(int $versions, bool $reopenAtEnd = false, ?string $department = null): void
         {
             $this->calls[] = compact('department', 'versions', 'reopenAtEnd');
         }
@@ -119,7 +137,7 @@ it('DemoSeeder y MassiveSeeder no corren el showcase con demo.showcase apagada',
     expect($fake->calls)->toBe([]);
 });
 
-it('con demo.showcase prendida, DemoSeeder publica CEA en tres versiones y MassiveSeeder EE, la que cierra la demo mezclada, en dos y reabierta', function () {
+it('con demo.showcase prendida, DemoSeeder publica en tres versiones y MassiveSeeder en dos y reabierta la carga que deja cerrada la demo mezclada, sin nombrarla', function () {
     $fake = fakeShowcase();
     config(['demo.showcase' => true]);
 
@@ -127,7 +145,7 @@ it('con demo.showcase prendida, DemoSeeder publica CEA en tres versiones y Massi
     app(MassiveSeeder::class)->setContainer(app())->showcase();
 
     expect($fake->calls)->toBe([
-        ['department' => 'CEA', 'versions' => 3, 'reopenAtEnd' => false],
-        ['department' => 'EE', 'versions' => 2, 'reopenAtEnd' => true],
+        ['department' => null, 'versions' => 3, 'reopenAtEnd' => false],
+        ['department' => null, 'versions' => 2, 'reopenAtEnd' => true],
     ]);
 });
