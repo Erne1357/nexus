@@ -27,6 +27,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
+use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
@@ -91,10 +92,13 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      */
     public function navigation(): array
     {
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $loadInProgress = LoadProgressQuery::menuCondition();
+
         return [
-            new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico, group: NavigationGroup::Propuesta,
+            new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView)),
-            new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico, group: NavigationGroup::Propuesta,
+            new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalReviewView)),
             new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),

@@ -38,6 +38,7 @@
                 id="nexus-content"
                 class="ms-(--menu-w) min-h-[calc(100vh_-_var(--shell-top))] max-w-[calc(1680px_+_4rem)] border-s border-base-300 px-8 pt-6.5 pb-10 max-desktop:px-6 max-desktop:pt-6 max-md:border-s-0 max-md:px-4 max-md:pt-[18px] max-md:pb-8"
             >
+                <livewire:core::components.hidden-notice />
                 {{ $slot }}
             </main>
 

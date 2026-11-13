@@ -9,6 +9,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
@@ -372,6 +373,8 @@ describe('ruta y menú', function () {
         );
 
         $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])->create();
+        // MN-04: la entrada solo sale con carga en curso en el periodo; aquí se prueba quién la ve.
+        AcademicLoad::factory()->for($this->term)->create();
 
         expect($labels($this->coordinator))->toContain('Propuesta de carrera')
             ->and($labels($this->subdirection))->toContain('Propuesta de carrera')

@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -19,7 +20,9 @@ beforeEach(function () {
 
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    // Carga en curso (MN-04): el coordinador ve las pantallas de la carga y el admin, sin la insignia «Oculta».
+    AcademicLoad::factory()->for($term)->create(['campus_id' => $this->c2->id]);
 
     User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
     User::factory()

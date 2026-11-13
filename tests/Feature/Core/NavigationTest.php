@@ -1,11 +1,14 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\MenuEntry;
 use App\Modules\Core\Navigation\Navigation;
@@ -185,7 +188,7 @@ describe('agrupado por área', function () {
             ->recursos_humanos->toContain('Elementos')
             ->administracion->toContain('Campus', 'Periodos', 'Importaciones')
             ->and(navigationAreasFor($coordinador))
-            ->academico->toContain('Propuesta de carrera')
+            ->academico->toContain('Horarios publicados')
             ->servicios_escolares->toContain('Saludo')
             ->not->toHaveKey('administracion');
     });
@@ -465,6 +468,14 @@ function menuRowsIn(HTMLDocument $page, string $area): array
 }
 
 describe('menú', function () {
+    beforeEach(function () {
+        // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto y
+        // no lleva la insignia «Oculta»; lo oculto para los demás lo prueba MenuHiddenMarkTest.
+        $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+        CatalogReview::factory()->for($term)->create();
+        AcademicLoad::factory()->for($term)->create(['campus_id' => $this->campus->id]);
+    });
+
     it('muestra al coordinador sus entradas con su enlace, y no las del admin', function () {
         withDemoCatalogNavigation();
         $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());

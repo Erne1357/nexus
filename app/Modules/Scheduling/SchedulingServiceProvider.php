@@ -15,6 +15,7 @@ use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -134,12 +135,15 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
      */
     public function navigation(): array
     {
+        // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
+        $loadInProgress = LoadProgressQuery::menuCondition();
+
         return [
-            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico, group: NavigationGroup::Horarios,
+            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
-            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico, group: NavigationGroup::Horarios,
+            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
-            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico, group: NavigationGroup::Horarios,
+            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
         ];
     }

@@ -92,6 +92,29 @@ const placeOf = (item) => {
 
 const numberFrom = (element, property) => Number(element.style.getPropertyValue(property)) || 0;
 
+/** El motivo flotante de lo oculto para los demás: uno solo, junto al menú (MN-02). */
+const whyTip = () => document.querySelector('[data-menu-why-tip]');
+
+/** Lo que lleva motivo (data-why) en lo que tocó el cursor o el foco, o null. */
+const whySourceOf = (target) => (target instanceof Element ? target.closest('[data-why]') : null);
+
+/**
+ * Los renglones con el motivo escrito de un encabezado o una entrada, que solo se ven en la hoja del celular
+ * (data-menu-note): van justo después de él, antes del siguiente elemento del menú. El buscador los esconde
+ * junto con lo suyo.
+ */
+const notesOf = (row) => {
+    const notes = [];
+
+    for (let next = row.nextElementSibling; next && !next.hasAttribute('data-menu-flip'); next = next.nextElementSibling) {
+        if (next.hasAttribute('data-menu-note')) {
+            notes.push(next);
+        }
+    }
+
+    return notes;
+};
+
 /** Columnas del menú abierto en escritorio y en tableta (las de --menu-cols-open del menú). */
 const DESKTOP_COLUMNS = 5;
 const TABLET_COLUMNS = 3;
@@ -215,6 +238,9 @@ document.addEventListener('alpine:init', () => {
         queued: null,
         timers: [],
 
+        /** Quién abrió el motivo flotante: 'pointer', 'focus' o null. */
+        whyOwner: null,
+
         /** Dónde estaba la columna cerrada al abrir el menú, para regresarla ahí al cerrar. */
         columnScroll: 0,
 
@@ -287,12 +313,18 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        /** Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el menú. */
+        /**
+         * Esc cierra solo la capa de arriba: la tarjeta si está abierta; si no, el motivo flotante que abrió el foco;
+         * si no, el menú (y con él el motivo que abrió el cursor).
+         */
         onKeydown(event) {
             if (event.key === 'Escape') {
                 if (this.cardOpen) {
                     this.closeCard();
+                } else if (this.whyOwner === 'focus') {
+                    this.hideWhy();
                 } else {
+                    this.hideWhy();
                     this.closeMenu();
                 }
             }
@@ -341,6 +373,7 @@ document.addEventListener('alpine:init', () => {
 
             this.busy = true;
             this.menuTarget = open;
+            this.hideWhy();
             this.cardOpen = false;
 
             const reduce = reducedMotion();
@@ -376,6 +409,86 @@ document.addEventListener('alpine:init', () => {
             }
 
             this.later(() => this.settle(), reduce ? 0 : SETTLE_MS);
+        },
+
+        /**
+         * El motivo flotante de lo oculto para los demás (MN-02) tiene dueño: el cursor o el foco, el que lo abrió, y
+         * solo ese lo cierra. Lo abierto por el foco manda: mientras lo tenga, el cursor no lo mueve ni lo cierra.
+         */
+        onWhyPointer(target) {
+            if (this.whyOwner === 'focus') {
+                return;
+            }
+
+            const source = whySourceOf(target);
+
+            if (source) {
+                this.showWhy(source, 'pointer');
+            } else {
+                this.hideWhy('pointer');
+            }
+        },
+
+        onWhyFocus(target) {
+            const source = whySourceOf(target);
+
+            if (source) {
+                this.showWhy(source, 'focus');
+            } else {
+                this.hideWhy('focus');
+            }
+        },
+
+        /**
+         * Muestra el motivo de algo con data-why junto a su entrada, su encabezado o el nombre de su área: a la
+         * derecha con el menú cerrado; abierto o en el celular, debajo, o arriba si abajo no cabe.
+         */
+        showWhy(source, owner) {
+            const tip = whyTip();
+            const anchor = source.closest('[data-menu-entry], [data-menu-group], [data-menu-flip="name"]') ?? source;
+            const box = anchor.getBoundingClientRect();
+
+            if (!tip || box.width === 0) {
+                this.hideWhy();
+
+                return;
+            }
+
+            tip.querySelector('[data-menu-why-text]').textContent = source.dataset.why;
+
+            const size = tip.getBoundingClientRect();
+            const below = this.menuOpen || isPhone();
+            const left = below ? Math.min(box.left + 10, window.innerWidth - size.width - 12) : box.right + 10;
+            let top = below ? box.bottom + 4 : box.top + box.height / 2 - size.height / 2;
+
+            if (below && top + size.height > window.innerHeight - 8) {
+                top = box.top - size.height - 4;
+            }
+
+            const shellTop = parseFloat(getComputedStyle(document.body).getPropertyValue('--shell-top')) || 0;
+
+            tip.style.left = `${Math.max(8, left)}px`;
+            tip.style.top = `${Math.max(shellTop + 4, top)}px`;
+            tip.toggleAttribute('data-on', true);
+            this.whyOwner = owner;
+        },
+
+        /**
+         * Esconde el motivo flotante. Con dueño, solo si es suyo (el cursor al salir, el foco al irse); sin dueño,
+         * siempre: al desplazar, al mover el menú y con Esc.
+         */
+        hideWhy(owner = null) {
+            if (owner !== null && this.whyOwner !== owner) {
+                return;
+            }
+
+            const tip = whyTip();
+
+            if (tip?.hasAttribute('data-on')) {
+                tip.removeAttribute('data-on');
+            }
+
+            this.whyOwner = null;
         },
 
         /** Termina un movimiento y hace el que se pidió mientras corría, si cambia algo. */
@@ -630,13 +743,19 @@ document.addEventListener('alpine:init', () => {
                     const match = needle === '' || searchableLabel(row).includes(needle);
 
                     row.hidden = !match;
+                    notesOf(row).forEach((note) => { note.hidden = !match; });
 
                     if (match) {
                         group.entries.push(row);
                     }
                 });
 
-                groups.forEach(({ heading, entries }) => heading?.toggleAttribute('hidden', entries.length === 0));
+                groups.forEach(({ heading, entries }) => {
+                    if (heading) {
+                        heading.hidden = entries.length === 0;
+                        notesOf(heading).forEach((note) => { note.hidden = entries.length === 0; });
+                    }
+                });
 
                 const kept = groups.filter(({ entries }) => entries.length > 0);
                 const slot = menu.querySelector(`[data-menu-rail] [data-menu-area="${area.dataset.menuArea}"]`);

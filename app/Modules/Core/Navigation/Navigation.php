@@ -178,4 +178,18 @@ final readonly class Navigation
 
         return null;
     }
+
+    /**
+     * El motivo por el que los demás no ven una entrada en el periodo activo, si el usuario del contexto la ve
+     * marcada (MN-02): la puede ver, tiene `core.navigation.view_unavailable` y la entrada no está disponible. En
+     * cualquier otro caso, null. Es lo que el aviso de la pantalla le dice al admin.
+     */
+    public function hiddenReasonFor(NavigationItem $item, Actor $context): ?string
+    {
+        if ($item->whyUnavailable === null || ! $item->isVisibleTo($context) || ! $context->allowsAny(CorePermission::NavigationViewUnavailable)) {
+            return null;
+        }
+
+        return ($item->whyUnavailable)($context);
+    }
 }
