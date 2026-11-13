@@ -5,10 +5,10 @@ namespace App\Modules\Scheduling\Events;
 use Illuminate\Foundation\Events\Dispatchable;
 
 /**
- * Un grupo cambió de campus (MoveGroupToCampus; M8, MS9). Sale DENTRO de la transacción del cambio, a propósito: los
- * módulos de la derecha que guardan una copia del campus del grupo (Staffing: `staffing_rankings`, `change_requests`)
- * la cambian en la misma transacción con un listener síncrono, así ninguna copia queda con el campus de antes si algo
- * falla. Lo que va a la cola (recalcular el ranking, los choques) lo encola cada quien después del commit; el aviso de
+ * Un grupo cambió de campus (MoveGroupToCampus; M8, MS9). Sale DENTRO de la transacción del cambio, a propósito: un
+ * módulo de la derecha que guardara una copia del campus del grupo la cambiaría en la misma transacción con un listener
+ * síncrono, así ninguna copia quedaría con el campus de antes si algo falla (Staffing ya no copia el campus: lo lee del
+ * grupo). Lo que va a la cola (recalcular el ranking, los choques) lo encola cada quien después del commit; el aviso de
  * siempre, GroupScheduleChanged, sale después del commit.
  */
 final class GroupMovedToCampus

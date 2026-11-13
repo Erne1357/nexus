@@ -23,7 +23,7 @@
                     <span><span class="font-mono">{{ $group->ownerCareer?->code }}</span> · semestre {{ $group->semester }}</span>
                     <span class="font-mono">{{ $row->schedule }}</span>
                     <span><span class="font-mono tabular-nums">{{ $row->hours }}</span> h por semana</span>
-                    <span>{{ $board->campus->name }}</span>
+                    <span>{{ $board->campus?->name }}</span>
                 </p>
             </div>
             <div class="grid justify-items-start gap-1.5 text-sm md:justify-items-end md:text-right">

@@ -5,7 +5,6 @@ use App\Modules\AcademicLoad\Actions\Transitions\CloseLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use Illuminate\Validation\ValidationException;
 
@@ -79,10 +78,9 @@ it('no bloquea con solicitudes rechazadas o aplicadas', function () {
 
 it('no bloquea con solicitudes de otro departamento, modalidad o periodo', function () {
     $s = changeScenario();
-    $ead = Campus::factory()->create(['modality_id' => modalityOf('EAD')->id]);
     $others = [
         ['department_id' => Department::factory()->create()->id],
-        ['campus_id' => $ead->id, 'modality_id' => $ead->modality_id],
+        ['modality_id' => modalityOf('EAD')->id],
         ['term_id' => Term::factory()->create()->id],
     ];
 

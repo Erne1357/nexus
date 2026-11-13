@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Faculty\Models\Teacher;
@@ -22,9 +23,11 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * Lecturas de la pantalla «Asignación docente» (tarea 3.9): los grupos de un departamento en un periodo y campus, con
- * su horario, su docente vigente y los primeros lugares de su ranking (reglas-de-negocio.md, «Ranking docente
- * (desempate)», HC-16). Quién la ve lo decide StaffingRankingPolicy en el componente.
+ * Lecturas de la pantalla «Asignación docente» (tarea 3.9): los grupos de un departamento en un periodo y modalidad, de
+ * todos sus campus y cada uno con el suyo (M1; el campus es un filtro opcional), con su horario, su docente vigente y
+ * los primeros lugares de su ranking (reglas-de-negocio.md, «Ranking docente (desempate)», HC-16). Quién la ve lo decide
+ * StaffingRankingPolicy en el componente; quién asigna en cada grupo, GroupTeacherAssignmentPolicy con el campus del
+ * grupo (MS6).
  */
 final class AssignmentBoardQuery
 {
@@ -34,9 +37,9 @@ final class AssignmentBoardQuery
     public function __construct(private readonly GroupRankingQuery $rankings) {}
 
     /**
-     * El tablero completo, con un número fijo de consultas sin importar cuántos grupos haya: el periodo, el campus,
-     * el departamento y su carga; los grupos no cancelados con su materia, su carrera dueña, su docente y sus
-     * sesiones; las asignaciones vigentes con quién las hizo; los primeros lugares de cada ranking con su docente;
+     * El tablero completo, con un número fijo de consultas sin importar cuántos grupos haya: el periodo, la modalidad,
+     * el campus del filtro, el departamento y su carga; los grupos no cancelados con su campus, su materia, su carrera
+     * dueña, su docente y sus sesiones; las asignaciones vigentes con quién las hizo; los primeros lugares de cada ranking con su docente;
      * el tamaño de cada ranking, y las plazas de esos docentes. Los grupos van por el semestre más bajo de su materia,
      * la materia, la carrera dueña y la clave.
      *
@@ -44,18 +47,21 @@ final class AssignmentBoardQuery
      * después de que el grupo nació; si ya se recalculó, nadie entró a su ranking (RankingState::Empty). El recálculo
      * reescribe de una vez todos los grupos del departamento (RankGroups).
      */
-    public function board(string $termId, string $campusId, string $departmentId): AssignmentBoard
+    public function board(string $termId, string $modalityId, string $departmentId, ?string $campusId = null): AssignmentBoard
     {
         /** @var Term $term */
         $term = KeyLookup::findOrFail(Term::query(), $termId);
-        /** @var Campus $campus */
-        $campus = KeyLookup::findOrFail(Campus::query(), $campusId);
+        /** @var Modality $modality */
+        $modality = KeyLookup::findOrFail(Modality::query()->withTrashed(), $modalityId);
+        /** @var Campus|null $campus */
+        $campus = $campusId === null ? null : KeyLookup::findOrFail(Campus::query()->withTrashed(), $campusId);
         /** @var Department $department */
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId);
-        $load = $this->load($termId, $campusId, $departmentId);
+        $load = $this->load($termId, $modalityId, $departmentId);
 
-        $groups = $this->groupsQuery($termId, $campusId, $departmentId)
+        $groups = $this->groupsQuery($termId, $modalityId, $departmentId, $campusId)
             ->with([
+                'campus' => fn ($query) => $query->withTrashed()->select(['id', 'code', 'name']),
                 'subject' => fn ($query) => $query->withTrashed()->select(['id', 'code', 'name']),
                 'ownerCareer' => fn ($query) => $query->withTrashed()->select(['id', 'code', 'name']),
                 'teacher' => fn ($query) => $query->withTrashed()->select(['id', 'name']),
@@ -107,71 +113,70 @@ final class AssignmentBoardQuery
             );
         });
 
-        return new AssignmentBoard($term, $campus, $department, $load, $rows->values()->all());
+        return new AssignmentBoard($term, $modality, $campus, $department, $load, $rows->values()->all());
     }
 
     /**
-     * La carga del departamento en el periodo y en la modalidad del campus de la pantalla (M1; por el puente
-     * `campuses.modality_id` mientras la pantalla sea por campus), o null si no tiene (también si el campus no tiene
-     * modalidad en el puente).
+     * La carga del departamento en el periodo y la modalidad (M1), o null si no tiene.
      */
-    public function load(string $termId, string $campusId, string $departmentId): ?AcademicLoad
+    public function load(string $termId, string $modalityId, string $departmentId): ?AcademicLoad
     {
-        $modalityId = Campus::withTrashed()->whereKey($campusId)->value('modality_id');
-
-        return $modalityId === null ? null : AcademicLoad::query()->ofDepartment($termId, $modalityId, $departmentId)->first();
+        return AcademicLoad::query()->ofDepartment($termId, $modalityId, $departmentId)->first();
     }
 
     /**
-     * Si algún grupo no cancelado del departamento en el periodo y campus está sin docente.
+     * Si algún grupo no cancelado del departamento en el periodo y la modalidad (y en el campus, si se filtra) está sin
+     * docente.
      */
-    public function hasGroupWithoutTeacher(string $termId, string $campusId, string $departmentId): bool
+    public function hasGroupWithoutTeacher(string $termId, string $modalityId, string $departmentId, ?string $campusId = null): bool
     {
-        return $this->groupsQuery($termId, $campusId, $departmentId)->whereNull('groups.teacher_id')->exists();
+        return $this->groupsQuery($termId, $modalityId, $departmentId, $campusId)->whereNull('groups.teacher_id')->exists();
     }
 
     /**
-     * Los departamentos activos cuyo ranking puede ver el usuario en la modalidad del campus, por clave: el suyo para el jefe y el
-     * jefe de proyecto docente; todos para Subdirección y el admin.
+     * Los departamentos activos cuyo ranking puede ver el usuario en la modalidad, por clave: el suyo para el jefe y el
+     * jefe de proyecto docente (con o sin campus en su nombramiento: se lee a nivel de modalidad, MS6); todos para
+     * Subdirección y el admin.
      *
      * @return Collection<int, Department>
      */
-    public function departmentsFor(Actor $actor, Campus $campus): Collection
+    public function departmentsFor(Actor $actor, string $modalityId): Collection
     {
         return Department::query()
             ->where('is_active', true)
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => $actor->allows(StaffingPermission::RankingView, Target::of(modality: $campus->modality_id, unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $actor->allows(StaffingPermission::RankingView, Target::of(modality: $modalityId, unit: $department->getKey())))
             ->values();
     }
 
     /**
-     * Un grupo no cancelado del departamento en el periodo y campus, por un id del cliente; 404 si no es de ahí.
+     * Un grupo no cancelado del departamento en el periodo y la modalidad (y en el campus, si se filtra), por un id del
+     * cliente; 404 si no es de ahí.
      */
-    public function groupOrFail(string $termId, string $campusId, string $departmentId, string $groupId): Group
+    public function groupOrFail(string $termId, string $modalityId, string $departmentId, string $groupId, ?string $campusId = null): Group
     {
         /** @var Group */
-        return KeyLookup::findOrFail($this->groupsQuery($termId, $campusId, $departmentId), $groupId);
+        return KeyLookup::findOrFail($this->groupsQuery($termId, $modalityId, $departmentId, $campusId), $groupId);
     }
 
     /**
-     * Como groupOrFail(), pero null si el grupo no es del departamento en el periodo y campus.
+     * Como groupOrFail(), pero null si el grupo no es de ahí.
      */
-    public function findGroup(string $termId, string $campusId, string $departmentId, string $groupId): ?Group
+    public function findGroup(string $termId, string $modalityId, string $departmentId, string $groupId, ?string $campusId = null): ?Group
     {
         /** @var Group|null */
-        return KeyLookup::find($this->groupsQuery($termId, $campusId, $departmentId), $groupId);
+        return KeyLookup::find($this->groupsQuery($termId, $modalityId, $departmentId, $campusId), $groupId);
     }
 
     /**
-     * El departamento de un grupo del periodo y campus, por un id del cliente (`?grupo=` sin `?depto=`); null si no
-     * existe o no es de ese periodo y campus. Quién lo puede ver lo decide la página.
+     * El departamento de un grupo del periodo y la modalidad (y del campus, si se filtra), por un id del cliente
+     * (`?grupo=` sin `?depto=`); null si no existe o no es de ahí. Quién lo puede ver lo decide la página.
      */
-    public function departmentIdOfGroup(string $termId, string $campusId, string $groupId): ?string
+    public function departmentIdOfGroup(string $termId, string $modalityId, string $groupId, ?string $campusId = null): ?string
     {
         /** @var Group|null $group */
-        $group = KeyLookup::find(Group::query()->where('term_id', $termId)->where('campus_id', $campusId), $groupId);
+        $group = KeyLookup::find(Group::query()->where('term_id', $termId)->where('modality_id', $modalityId)->when($campusId !== null, fn (Builder $query) => $query->where('campus_id', $campusId)), $groupId);
 
         return $group?->department_id;
     }
@@ -188,12 +193,13 @@ final class AssignmentBoardQuery
     /**
      * @return Builder<Group>
      */
-    private function groupsQuery(string $termId, string $campusId, string $departmentId): Builder
+    private function groupsQuery(string $termId, string $modalityId, string $departmentId, ?string $campusId): Builder
     {
         return Group::query()->active()
             ->where('groups.term_id', $termId)
-            ->where('groups.campus_id', $campusId)
-            ->where('groups.department_id', $departmentId);
+            ->where('groups.modality_id', $modalityId)
+            ->where('groups.department_id', $departmentId)
+            ->when($campusId !== null, fn (Builder $query) => $query->where('groups.campus_id', $campusId));
     }
 
     /**

@@ -45,9 +45,10 @@ it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve el tablero con 
 
     $actor = app(Actor::class)->forUser($jpd);
     $query = app(AssignmentBoardQuery::class);
+    $board = $query->board($this->world->term->id, $this->pres->id, $this->department->id);
 
-    expect($query->departmentsFor($actor, $this->c1)->modelKeys())->toBe([$this->department->id])
-        ->and($query->departmentsFor($actor, $this->c2)->modelKeys())->toBe([$this->department->id]);
+    expect($query->departmentsFor($actor, $this->pres->id)->modelKeys())->toBe([$this->department->id])
+        ->and(array_map(fn ($row): string => $row->group->campus->code, $board->groups))->toEqualCanonicalizing(['C1', 'C2']);
 
     onCampusPage($this->c2);
     $page = Livewire::withQueryParams(['depto' => 'SC'])->actingAs($jpd)->test('staffing::pages.assign');
@@ -56,6 +57,19 @@ it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve el tablero con 
 
     expect($this->groupC2->fresh()->teacher_id)->toBe($this->teacher->id)
         ->and($this->groupC1->fresh()->teacher_id)->toBeNull();
+});
+
+it('AZ-S17: el jefe de proyecto docente de PRES limitado a C2 no asigna docente a un grupo de C1 aunque lo pida por su id', function () {
+    $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => $this->pres->id, 'campus_id' => $this->c2->id, 'department_id' => $this->department->id])->create();
+
+    onCampusPage($this->c2);
+    Livewire::withQueryParams(['depto' => 'SC'])->actingAs($jpd)->test('staffing::pages.assign')
+        ->assertOk()
+        ->call('assign', $this->groupC1->id, $this->teacher->id, 'tarjetas')
+        ->assertNotFound();
+
+    expect($this->groupC1->fresh()->teacher_id)->toBeNull()
+        ->and(GroupTeacherAssignment::query()->where('group_id', $this->groupC1->id)->exists())->toBeFalse();
 });
 
 it('AZ-S17: un jefe de proyecto docente de EAD no ve nada de PRES', function () {

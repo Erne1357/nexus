@@ -9,7 +9,7 @@ use App\Modules\Staffing\Models\ChangeRequest;
 
 /**
  * Guarda de Staffing para «Volver a asignación» (`adjusting` → `staffing`, tarea 4.2): no se vuelve con solicitudes de
- * cambio aprobadas sin aplicar del departamento en el campus y el periodo, porque su cambio sigue pendiente en el
+ * cambio aprobadas sin aplicar del departamento en la modalidad y el periodo, porque su cambio sigue pendiente en el
  * horario. No estorba a MarkChangeRequestApplied, que solo regresa la carga cuando ya no queda ninguna aprobada.
  */
 final class BlockReturnWithApprovedChangeRequests

@@ -27,8 +27,9 @@ use Illuminate\Support\Collection;
  *   tamaño de `staffing.history_terms`; de cualquier campus y origen (supuesto por confirmar, ya documentado).
  * - Evaluación: promedio simple de todas las evaluaciones de la ventana de `staffing.evaluation_terms` (supuesto
  *   por confirmar, ya documentado); null si no hay.
- * - Puesto anterior: el mejor puesto del docente en los grupos de la misma materia y el mismo campus del semestre
- *   anterior (mismo campus: supuesto por confirmar); null si ese periodo o ese ranking no existen.
+ * - Puesto anterior: el mejor puesto del docente en los grupos de la misma materia, la misma modalidad y el mismo
+ *   campus del semestre anterior (MS27, supuesto por confirmar; el campus y la modalidad son los de los grupos); null
+ *   si ese periodo o ese ranking no existen.
  * - Los grupos cancelados no tienen entrada.
  */
 final class RankingInputsQuery
@@ -36,7 +37,7 @@ final class RankingInputsQuery
     public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
-     * @param  Collection<int, Group>  $groups  grupos de un mismo periodo y campus
+     * @param  Collection<int, Group>  $groups  grupos de un mismo periodo
      * @return array<string, list<RankingInput>> por id de grupo
      */
     public function forGroups(Term $term, Collection $groups): array
@@ -49,7 +50,6 @@ final class RankingInputsQuery
 
         $departmentIds = $groups->pluck('department_id')->unique()->values()->all();
         $subjectIds = $groups->pluck('subject_id')->unique()->values()->all();
-        $campusIds = $groups->pluck('campus_id')->unique()->values()->all();
         $sizes = RankingWindowSizes::fromSettings();
 
         /** @var array<string, list<string>> $adscribed department id => teacher ids */
@@ -107,7 +107,7 @@ final class RankingInputsQuery
             ->groupBy('teacher_id')
             ->pluck('average', 'teacher_id');
 
-        $previousRanks = $this->previousRanks($term, $subjectIds, $campusIds, $teacherIds);
+        $previousRanks = $this->previousRanks($term, $groups, $teacherIds);
 
         return $groups->mapWithKeys(function (Group $group) use ($adscribed, $preferred, $names, $hours, $history, $evaluations, $levels, $previousRanks): array {
             $own = $adscribed[$group->department_id] ?? [];
@@ -125,7 +125,7 @@ final class RankingInputsQuery
                         $history[$key] ?? 0,
                         $levels[$key] ?? null,
                         $average === null ? null : round((float) $average, 2),
-                        $previousRanks[$group->campus_id.'|'.$key] ?? null,
+                        $previousRanks[$group->modality_id.'|'.$group->campus_id.'|'.$key] ?? null,
                         $fromOther,
                     );
                 }
@@ -136,12 +136,11 @@ final class RankingInputsQuery
     }
 
     /**
-     * @param  list<string>  $subjectIds
-     * @param  list<string>  $campusIds
+     * @param  Collection<int, Group>  $groups
      * @param  list<string>  $teacherIds
-     * @return array<string, int> "campus|subject|teacher" => mejor puesto
+     * @return array<string, int> "modality|campus|subject|teacher" => mejor puesto
      */
-    private function previousRanks(Term $term, array $subjectIds, array $campusIds, array $teacherIds): array
+    private function previousRanks(Term $term, Collection $groups, array $teacherIds): array
     {
         $previousCode = RankingWindow::semestersBefore($term->code, 1)[0];
         $previousTermId = Term::query()->where('code', $previousCode)->value('id');
@@ -153,13 +152,14 @@ final class RankingInputsQuery
         return StaffingRanking::query()
             ->join('groups', 'groups.id', '=', 'staffing_rankings.group_id')
             ->where('staffing_rankings.term_id', $previousTermId)
-            ->whereIn('staffing_rankings.campus_id', $campusIds)
-            ->whereIn('groups.subject_id', $subjectIds)
+            ->whereIn('groups.modality_id', $groups->pluck('modality_id')->unique()->values()->all())
+            ->whereIn('groups.campus_id', $groups->pluck('campus_id')->unique()->values()->all())
+            ->whereIn('groups.subject_id', $groups->pluck('subject_id')->unique()->values()->all())
             ->whereIn('staffing_rankings.teacher_id', $teacherIds)
-            ->selectRaw('staffing_rankings.campus_id, groups.subject_id, staffing_rankings.teacher_id, min(staffing_rankings.rank) as best')
-            ->groupBy('staffing_rankings.campus_id', 'groups.subject_id', 'staffing_rankings.teacher_id')
+            ->selectRaw('groups.modality_id, groups.campus_id, groups.subject_id, staffing_rankings.teacher_id, min(staffing_rankings.rank) as best')
+            ->groupBy('groups.modality_id', 'groups.campus_id', 'groups.subject_id', 'staffing_rankings.teacher_id')
             ->get()
-            ->mapWithKeys(fn ($row): array => [$row->campus_id.'|'.$row->subject_id.'|'.$row->teacher_id => (int) $row->best])
+            ->mapWithKeys(fn ($row): array => [$row->modality_id.'|'.$row->campus_id.'|'.$row->subject_id.'|'.$row->teacher_id => (int) $row->best])
             ->all();
     }
 }

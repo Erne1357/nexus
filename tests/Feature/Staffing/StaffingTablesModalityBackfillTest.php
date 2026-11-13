@@ -14,11 +14,12 @@ use Illuminate\Support\Str;
 | Ampliar (ronda 2 de la carga por modalidad, ADR-0025): `staffing_rankings`, `group_teacher_assignments` y
 | `change_requests` reciben `modality_id`, obligatoria y copiada de su grupo, como ya copian el periodo y el campus.
 | El historial de asignaciones es de solo agregar: la migración apaga su trigger solo para llenar la columna, dentro de
-| su transacción, y lo deja como estaba. Ningún lector cambia todavía. Se prueba sobre la forma vieja: `down()`, filas
-| con `DB::table()` y `up()`.
+| su transacción, y lo deja como estaba. Ningún lector cambia todavía. Se prueba sobre la forma vieja: el `down()` de
+| la migración que después quitó el campus (2026_11_12_210801), el `down()` de esta, filas con `DB::table()` y `up()`.
 */
 
 beforeEach(function () {
+    (require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210801_drop_campus_from_staffing_tables.php'))->down();
     $this->migration = require base_path('app/Modules/Staffing/Database/Migrations/2026_11_12_210403_add_modality_to_staffing_tables.php');
     $this->migration->down();
     $this->user = User::factory()->create();

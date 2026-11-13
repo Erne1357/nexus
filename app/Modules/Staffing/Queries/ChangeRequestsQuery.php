@@ -24,7 +24,8 @@ use Illuminate\Support\Facades\DB;
  * Lo que lee la pantalla «Solicitudes de cambio» (tarea 3.11, maqueta A): las solicitudes de un departamento en el
  * periodo y el campus de la credencial que la persona puede ver, en el orden de la lista (pendientes, luego aprobadas
  * por aplicar, luego el resto; las más recientes primero), los departamentos que puede elegir y la carga del
- * departamento.
+ * departamento. El campus de una solicitud es el de hoy de su grupo: la solicitud no lo copia (M8), así que la de un
+ * grupo que cambió de campus se lista y se aplica donde ahora está.
  *
  * Quién ve una solicitud es ChangeRequestPolicy::view en SQL (visible()): quien la pidió; quien tiene ver, decidir o
  * aplicar las de salón sobre la modalidad y el departamento del grupo (jefes, jefe de proyecto docente, Subdirección;
@@ -42,7 +43,7 @@ final class ChangeRequestsQuery
      */
     public function departmentsFor(Actor $context, Campus $campus, Term $term): Collection
     {
-        $withRequests = $this->visible($context, ChangeRequest::query()->where('term_id', $term->id)->where('campus_id', $campus->id))
+        $withRequests = $this->visible($context, $this->inCampus($term->id, $campus->id))
             ->distinct()
             ->pluck('department_id');
 
@@ -62,7 +63,7 @@ final class ChangeRequestsQuery
      */
     public function departmentOf(Actor $context, string $id, string $termId, string $campusId): ?string
     {
-        $request = KeyLookup::find($this->visible($context, ChangeRequest::query()->where('term_id', $termId)->where('campus_id', $campusId)), $id);
+        $request = KeyLookup::find($this->visible($context, $this->inCampus($termId, $campusId)), $id);
 
         return $request?->department_id;
     }
@@ -153,7 +154,9 @@ final class ChangeRequestsQuery
 
     /**
      * Deja en `$query` solo las solicitudes que ve (ChangeRequestPolicy::view). Cada permiso va en su propio grupo,
-     * que arranca con `true` para que el admin, con quien constrain() no agrega nada, lo vea todo.
+     * que arranca con `true` para que el admin, con quien constrain() no agrega nada, lo vea todo. Los permisos de
+     * aplicar declaran el campus, que es el del grupo (MS6): se acotan los grupos y la solicitud entra si su grupo es de
+     * los que quedan.
      *
      * @param  Builder<ChangeRequest>  $query
      * @return Builder<ChangeRequest>
@@ -162,7 +165,7 @@ final class ChangeRequestsQuery
     {
         $userId = $context->user()?->getKey();
         $unit = ['modality' => 'modality_id', 'unit' => 'department_id'];
-        $room = ['modality' => 'modality_id', 'campus' => 'campus_id', 'unit' => 'department_id'];
+        $groups = fn (StaffingPermission $permission, array $columns): Builder => $context->constrain(Group::query()->select('groups.id'), $permission, $columns);
 
         if ($userId === null) {
             return $query->whereRaw('false');
@@ -172,12 +175,12 @@ final class ChangeRequestsQuery
             ->where('requested_by', $userId)
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->whereRaw('true'), StaffingPermission::ChangeRequestView, $unit))
             ->orWhere(fn (Builder $clause) => $context->constrain($clause->whereRaw('true'), StaffingPermission::ChangeRequestDecide, $unit))
-            ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Room), StaffingPermission::ChangeRequestApplyRoom, $room))
-            ->orWhere(fn (Builder $clause) => $context->constrain($clause->where('kind', ChangeRequestKind::Schedule), StaffingPermission::ChangeRequestApplySchedule, [
-                'modality' => 'modality_id',
-                'campus' => 'campus_id',
-                'career' => fn (Builder $groups, array $careers) => $groups->whereIn('group_id', Group::query()->select('id')->whereIn('owner_career_id', $careers)),
-            ])));
+            ->orWhere(fn (Builder $clause) => $clause->where('kind', ChangeRequestKind::Room)->whereIn('group_id', $groups(StaffingPermission::ChangeRequestApplyRoom, [
+                'modality' => 'groups.modality_id', 'campus' => 'groups.campus_id', 'unit' => 'groups.department_id',
+            ])))
+            ->orWhere(fn (Builder $clause) => $clause->where('kind', ChangeRequestKind::Schedule)->whereIn('group_id', $groups(StaffingPermission::ChangeRequestApplySchedule, [
+                'modality' => 'groups.modality_id', 'campus' => 'groups.campus_id', 'career' => 'groups.owner_career_id',
+            ]))));
     }
 
     /**
@@ -199,11 +202,21 @@ final class ChangeRequestsQuery
     }
 
     /**
+     * Las solicitudes del periodo cuyo grupo está hoy en el campus.
+     *
+     * @return Builder<ChangeRequest>
+     */
+    private function inCampus(string $termId, string $campusId): Builder
+    {
+        return ChangeRequest::query()->where('term_id', $termId)->whereIn('group_id', Group::query()->select('id')->where('campus_id', $campusId));
+    }
+
+    /**
      * @return Builder<ChangeRequest>
      */
     private function ofDepartment(string $termId, string $campusId, string $departmentId): Builder
     {
-        return ChangeRequest::query()->where('term_id', $termId)->where('campus_id', $campusId)->where('department_id', $departmentId);
+        return $this->inCampus($termId, $campusId)->where('department_id', $departmentId);
     }
 
     /**
