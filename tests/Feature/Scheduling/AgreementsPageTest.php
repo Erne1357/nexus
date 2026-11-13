@@ -632,6 +632,21 @@ describe('otros puestos', function () {
         expect($this->loan->fresh()->status)->toBe(AgreementStatus::Proposed);
     });
 
+    it('M12: el jefe decide los acuerdos de toda la modalidad, de cualquier campus', function () {
+        $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+        $inC1 = Group::factory()->withQuota(20)->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'code' => '3B', 'capacity' => 40, 'subject_id' => $this->group->subject_id]);
+        $share = InterdepartmentalAgreement::factory()->sharedGroup(4)->create([
+            'term_id' => $this->term->id, 'campus_id' => $c1->id, 'group_id' => $inC1->id,
+            'from_department_id' => $this->ii->id, 'to_department_id' => $this->sc->id, 'career_id' => $this->career->id,
+        ]);
+        vacate(Role::JefeDepartamento, $this->sc->id);
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id, 'valid_from' => today()->toDateString()])->create();
+
+        agreementsAs($jefe, ['acuerdo' => $share->id])->assertSeeHtml('data-testid="agreement-accept"')->call('accept', $share->id)->assertOk();
+
+        expect($share->fresh()->status)->toBe(AgreementStatus::Accepted);
+    });
+
     it('otra modalidad: el jefe de proyecto docente de EAD no ve los acuerdos presenciales aunque pida ?modalidad=PRES', function () {
         modalityOf('EAD')->update(['is_active' => true]);
         $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->sc->id])->create();
@@ -667,4 +682,13 @@ describe('otros puestos', function () {
 it('la ruta pide entrar y muestra la pantalla a quien ve acuerdos', function () {
     $this->get(route('scheduling.agreements'))->assertRedirect();
     $this->actingAs($this->jefeSc)->get(route('scheduling.agreements'))->assertOk()->assertSee('Acuerdos');
+});
+
+it('fija la modalidad que resolvió: si después se abre otra antes por clave, la pantalla no cambia de modalidad', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $page = agreementsAs($this->jefeSc)->assertSet('modalidad', 'PRES')->assertSee('LC-201');
+
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id]);
+
+    $page->set('search', 'LC')->assertSet('modalidad', 'PRES')->assertSee('LC-201');
 });

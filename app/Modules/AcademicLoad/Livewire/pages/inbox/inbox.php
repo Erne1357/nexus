@@ -360,6 +360,7 @@ new #[Title('Bandeja del departamento')] class extends Component
         $this->departments = [];
 
         $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
 
         $term = $context->activeTerm();
 

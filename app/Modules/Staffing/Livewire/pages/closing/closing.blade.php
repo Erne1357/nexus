@@ -3,10 +3,10 @@
     de 2026; el alcance, maqueta U2, opción A «Selectores en la página», 12 de noviembre). El título con el departamento,
     la modalidad (como dato con una sola) y el periodo; a la derecha, la insignia del estado de la carga y, con más de
     una modalidad, el select «Modalidad» (M1: la carga es por departamento y modalidad; MS16). A quien ve varios, el
-    selector «Departamento». Debajo, el filtro de campus con los grupos de la carga en cada uno: deja en las
-    justificaciones solo los grupos de ese campus; el cierre es de toda la carga. De la carga elegida: la línea de estados
-    con la línea del estado, el reparto por campus y sus acciones; debajo, a todo el ancho, la publicación con su línea de
-    versiones (staffing::closing.publication); «Para cerrar» en cifras; el historial y las justificaciones
+    selector «Departamento». De la carga elegida: la línea de estados con la línea del estado, el reparto por campus y sus
+    acciones; debajo, a todo el ancho, la publicación con su línea de versiones (staffing::closing.publication); el filtro
+    de campus con los grupos de la carga en cada uno, que deja en las justificaciones solo los grupos de ese campus (el
+    cierre es de toda la carga); «Para cerrar» en cifras; el historial y las justificaciones
     (staffing::components.closing-justifications, con su drawer aparte). Desde 1280 px el historial es una columna
     lateral; antes, va entre «Para cerrar» y las justificaciones, que son largas.
 --}}
@@ -41,13 +41,6 @@
         </div>
     @endif
 
-    @if ($campusOptions->count() > 1)
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="closing-campus">
-            <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
-            <x-core::campus-filter :options="$campusOptions" :selected="$campusFilter?->code" :counts="$campusCounts" all />
-            <span class="text-sm text-neutral">Filtra las justificaciones; el cierre es de toda la carga.</span>
-        </div>
-    @endif
 
     @if ($closing === null)
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="closing-empty">
@@ -72,6 +65,14 @@
         </section>
 
         @include('staffing::closing.publication', ['load' => $load, 'visible' => $canViewLoad, 'key' => 'publish'])
+
+        @if ($campusOptions->count() > 1)
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="closing-campus">
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
+                <x-core::campus-filter :options="$campusOptions" :selected="$campusFilter?->code" :counts="$campusCounts" all />
+                <span class="text-sm text-neutral">Filtra las justificaciones; el cierre es de toda la carga.</span>
+            </div>
+        @endif
 
         {{-- Desde 1280 px el historial va a la derecha, pegado arriba; antes, entre «Para cerrar» y «Justificaciones». --}}
         <div class="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-[auto_1fr]">

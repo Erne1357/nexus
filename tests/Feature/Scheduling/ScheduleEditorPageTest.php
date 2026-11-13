@@ -11,6 +11,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -695,7 +696,7 @@ describe('modalidad', function () {
         modalityOf('EAD')->update(['is_active' => true]);
         $ead = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->isc->id])->create();
 
-        $page = editorAs($ead, ['carrera' => $this->isc->id, 'modalidad' => 'PRES'])->assertSet('modalidad', 'PRES')->assertDontSee('ACF-0904');
+        $page = editorAs($ead, ['carrera' => $this->isc->id, 'modalidad' => 'PRES'])->assertSet('modalidad', 'EAD')->assertDontSee('ACF-0904');
 
         expect($page->viewData('shownModality')->code)->toBe('EAD');
         $page->call('place', $this->calcGroup->id, 1, '07:00')->assertForbidden();
@@ -710,6 +711,37 @@ describe('modalidad', function () {
             ->and($dom->querySelector('[data-testid="campus-filter-C2"]')?->getAttribute('aria-pressed'))->toBe('true')
             ->and($dom->querySelectorAll('[data-testid="tray-campus"]'))->toHaveCount(2)
             ->and(textOf($dom->querySelector('[data-testid="editor-modality"]')))->toBe('Presencial');
+    });
+
+    it('MS4: con En línea activa y abierta junto a Presencial, abre en Presencial; elegir En línea lo dice en lugar de dar 403', function () {
+        modalityOf('ENL')->update(['is_active' => true]);
+        $admin = User::factory()->admin()->create();
+
+        foreach (['ENL', 'PRES'] as $code) {
+            TermOpening::query()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf($code)->id, 'opened_by' => $admin->id, 'opened_at' => now()]);
+        }
+
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+        onCampusPage($this->campus);
+
+        Livewire::withQueryParams(['semestre' => '3', 'carrera' => $this->isc->id])->actingAs($subdireccion)->test(SCHEDULE_EDITOR)
+            ->assertOk()->assertSet('modalidad', 'PRES')->assertSee('ACF-0904 · A');
+        Livewire::withQueryParams(['modalidad' => 'ENL'])->actingAs($subdireccion)->test(SCHEDULE_EDITOR)
+            ->assertOk()
+            ->assertSee('En línea no usa salones: sus grupos no se dan en un campus, y el editor acomoda las sesiones de un campus a la vez.')
+            ->assertSeeHtml('data-testid="modality-scope"')
+            ->set('modalidad', 'PRES')
+            ->assertRedirect(route('scheduling.editor', ['modalidad' => 'PRES']));
+    });
+
+    it('fija la modalidad que resolvió: si después se abre otra antes por clave, la página no cambia de modalidad', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+        $page = editorAs($subdireccion)->assertSet('modalidad', 'EAD');
+
+        TermOpening::query()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'opened_by' => $subdireccion->id, 'opened_at' => now()]);
+
+        $page->call('clearSelection')->assertSet('modalidad', 'EAD');
     });
 
     it('?grupo= abre el campus y la modalidad del grupo, aunque la sesión recuerde otro campus', function () {

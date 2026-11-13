@@ -63,6 +63,17 @@ trait WithModalityScope
      */
     protected function defaultModality(Collection $options): ?Modality
     {
+        return $this->firstOpenModality($options);
+    }
+
+    /**
+     * De `$options`, la única; con varias, la primera por clave donde el periodo activo está abierto, o la primera por
+     * clave (MS30). Se recuerda en la petición.
+     *
+     * @param  Collection<int, Modality>  $options
+     */
+    protected function firstOpenModality(Collection $options): ?Modality
+    {
         $sorted = $options->sortBy('code')->values();
 
         if ($sorted->count() < 2) {

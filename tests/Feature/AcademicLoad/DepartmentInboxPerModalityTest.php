@@ -152,6 +152,16 @@ describe('alcance de la bandeja (maqueta U2, opción A)', function () {
         expect($html)->toContain('data-campus="C1"');
     });
 
+    it('fija la modalidad que resolvió: si después se abre otra antes por clave, la bandeja no cambia de modalidad', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $page = Livewire::actingAs($this->jefe)->test('academic-load::pages.inbox')->assertSet('modalidad', 'PRES');
+
+        TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id]);
+
+        $page->set('filter', 'pendientes')->assertSet('modalidad', 'PRES');
+        expect(domOf($page->html())->querySelector('[data-testid="modality-scope"] option[value="PRES"]')?->hasAttribute('selected'))->toBeTrue();
+    });
+
     it('otra modalidad: el jefe de proyecto docente de EAD no ve la bandeja presencial aunque pida ?modalidad=PRES', function () {
         modalityOf('EAD')->update(['is_active' => true]);
         $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id])->create();

@@ -19,7 +19,8 @@ use Mary\Traits\Toast;
  * Tablero de choques y avance (tarea 3.4): qué le falta a la carga de la modalidad de la página (`?modalidad=`,
  * WithModalityCampusFilter; M1: con los grupos de todos sus campus) en el periodo activo para cerrar (HC-15), con el campus
  * como filtro opcional (`?campus=`, «Todos» sin él): los campus de la modalidad, cada uno con los grupos que el usuario ve
- * ahí (maqueta U2, opción A). La vista principal es por carrera, retícula y semestre, y la otra, la matriz por departamento con su
+ * ahí (maqueta U2, opción A). La modalidad que resuelve al abrir queda fija en la URL, para que no cambie si se abre otra
+ * a media sesión (MS30). La vista principal es por carrera, retícula y semestre, y la otra, la matriz por departamento con su
  * drawer (decidido por el usuario el 7 de noviembre de 2026). Lo ven quienes ven la carga y el coordinador de su
  * carrera, de toda la modalidad aunque el puesto tenga un campus (MS6; `scheduling.schedule.view`); ConflictBoardQuery filtra por ese alcance. Cada método público
  * vuelve a autorizar, porque la petición puede llegar con una pantalla que abrió otra sesión.
@@ -58,6 +59,7 @@ new #[Title('Choques y avance')] class extends Component
     {
         $this->authorizeView($context);
         $this->view = $this->normalizedView();
+        $this->modalidad = $this->requiredModality()->code;
     }
 
     /**

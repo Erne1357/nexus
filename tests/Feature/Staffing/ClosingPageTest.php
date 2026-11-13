@@ -195,6 +195,13 @@ describe('modalidad y filtro de campus (M1; maqueta U2, opción A)', function ()
         $this->world->group();
 
         closingPage($this->jefe, ['modalidad' => 'ENL'])->assertSet('modalidad', 'PRES')->assertSee('Lista para cerrar');
+
+        // Ajena: EAD activa, pero el nombramiento es solo de Presencial.
+        modalityOf('EAD')->update(['is_active' => true]);
+        vacate(Role::JefeDepartamento, $this->world->department->id);
+        $presencial = User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('PRES')->id, 'department_id' => $this->world->department->id, 'valid_from' => today()->toDateString()])->create();
+
+        closingPage($presencial, ['modalidad' => 'EAD'])->assertSet('modalidad', 'PRES')->assertSee('Lista para cerrar')->assertDontSeeHtml('data-testid="modality-scope"');
     });
 
     it('MS6: el filtro ofrece los campus de la modalidad con los grupos de la carga en cada uno, y dice que el cierre es de toda la carga', function () {
@@ -415,6 +422,31 @@ it('«Ir a …» con un campus en el filtro donde no trabaja no agrega ?campus='
     closingPage(User::factory()->admin()->create(), ['departamento' => $this->world->department->id, 'campus' => 'C1'])
         ->call('goTo', 'assign')
         ->assertRedirect(route('staffing.assign', ['depto' => 'SC']));
+});
+
+it('«Ir a …» abre choques, horarios y acuerdos en la modalidad de la carga, con el campus del filtro', function (string $screen, string $route, array $parameters) {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+    $this->world->group();
+
+    closingPage($this->jefe, ['campus' => 'C1'])->call('goTo', $screen)
+        ->assertRedirect(route($route, [...$parameters, 'modalidad' => 'PRES', 'campus' => 'C1']));
+    closingPage($this->jefe)->call('goTo', $screen)
+        ->assertRedirect(route($route, [...$parameters, 'modalidad' => 'PRES']));
+})->with([
+    'choques' => ['conflicts', 'scheduling.conflicts', ['vista' => 'departamentos']],
+    'horarios' => ['editor', 'scheduling.editor', []],
+    'acuerdos' => ['agreements', 'scheduling.agreements', []],
+]);
+
+it('MS6: «Ir a …» copia el campus del filtro si es de la modalidad de la carga, aunque el nombramiento sea de otro campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group(teacher: false, load: $this->world->loadIn($c1));
+    vacate(Role::JefeDepartamento, $this->world->department->id);
+    $limited = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->world->campus->id, 'department_id' => $this->world->department->id, 'valid_from' => today()->toDateString()])->create();
+
+    closingPage($limited, ['campus' => 'C1'])->call('goTo', 'editor')
+        ->assertRedirect(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => 'C1']));
 });
 
 it('el aviso del cierre abre la pantalla con el departamento', function () {

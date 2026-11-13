@@ -7,6 +7,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
@@ -206,4 +207,13 @@ it('Recalcular encola el recálculo de la carga de la modalidad, aunque haya un 
 
     $this->travel(31)->seconds();
     $component->call('refreshBoard')->assertSet('pollUntil', 0)->assertDontSeeHtml('wire:poll.3s="refreshBoard"');
+});
+
+it('fija la modalidad que resolvió: si después se abre otra antes por clave, el tablero no cambia de modalidad', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $page = conflictsPage($this->admin)->assertSet('modalidad', 'EAD');
+
+    TermOpening::query()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'opened_by' => $this->admin->id, 'opened_at' => now()]);
+
+    $page->call('refreshBoard')->assertSet('modalidad', 'EAD')->assertSee('Lo que le falta a la carga de EAD');
 });

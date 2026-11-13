@@ -10,7 +10,8 @@
 
     `counts` (opcional, las pantallas de la carga; maqueta U2, opción A): cuánto hay en cada campus, por código; cada
     botón lleva entonces la etiqueta del campus (x-core::campus-tag) y su cifra en Mono, y «Todos» la de `total` (sin
-    ella, la suma). Un campus que no está en `counts` lleva 0.
+    ella, la suma). Un campus que no está en `counts` lleva 0. Debajo de 768 px son columnas iguales, el nombre sobre la
+    cifra y sin la etiqueta, para que ningún nombre se corte.
 
     Con WithCampusFilter, `$campus` es la propiedad pública (el código que pide la URL), así que la pantalla pasa el
     campus que muestra con otro nombre:
@@ -30,18 +31,25 @@
 
 @if ($campuses->count() > 1)
     @if (! $compact && count($segments) <= 4)
-        <div {{ $attributes->class(['relative min-w-0 max-w-full overflow-x-auto overscroll-x-contain']) }}>
-            <div role="group" aria-label="Campus" class="join" data-testid="campus-filter">
+        {{-- Con cuentas, debajo de 768 px son columnas iguales con el nombre sobre la cifra y sin la etiqueta (como el
+             filtro de referencia de DESIGN.md), para que ningún nombre se corte; sin cuentas, se desplaza de lado. --}}
+        <div {{ $attributes->class(['relative min-w-0 max-w-full', 'overflow-x-auto overscroll-x-contain' => ! $counted, 'max-md:w-full' => $counted]) }}>
+            <div role="group" aria-label="Campus" @class(['join', 'max-md:grid max-md:w-full' => $counted]) @if ($counted) style="grid-template-columns: repeat({{ count($segments) }}, minmax(0, 1fr))" @endif data-testid="campus-filter">
                 @foreach ($segments as $segment)
                     <button type="button"
                         wire:click="$set('{{ $property }}', {{ \Illuminate\Support\Js::from($segment['id']) }})"
                         aria-pressed="{{ $selected === $segment['id'] ? 'true' : 'false' }}"
                         data-testid="campus-filter-{{ $segment['id'] ?? 'todos' }}"
-                        @class(['btn join-item flex-none flex-nowrap whitespace-nowrap px-3 max-md:h-11', 'gap-2' => $counted, 'btn-primary' => $selected === $segment['id']])>
+                        @class([
+                            'btn join-item flex-nowrap whitespace-nowrap px-3',
+                            'flex-none max-md:h-11' => ! $counted,
+                            'gap-2 md:flex-none max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-col max-md:gap-0 max-md:px-2 max-md:py-1 max-md:leading-tight' => $counted,
+                            'btn-primary' => $selected === $segment['id'],
+                        ])>
                         @if ($counted && $segment['campus'] !== null)
-                            <x-core::campus-tag :campus="$segment['campus']" decorative @class(['border-primary-content/60 bg-transparent text-primary-content' => $selected === $segment['id']]) />
+                            <x-core::campus-tag :campus="$segment['campus']" decorative @class(['max-md:hidden', 'border-primary-content/60 bg-transparent text-primary-content' => $selected === $segment['id']]) />
                         @endif
-                        <span>{{ $segment['name'] }}</span>
+                        <span @class(['max-md:max-w-full max-md:truncate' => $counted])>{{ $segment['name'] }}</span>
                         @if ($counted)
                             <span @class(['font-mono text-xs tabular-nums', 'text-neutral' => $selected !== $segment['id']]) data-testid="campus-count-{{ $segment['id'] ?? 'todos' }}">{{ $segment['count'] }}</span>
                         @endif

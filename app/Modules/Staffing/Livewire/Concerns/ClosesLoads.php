@@ -191,7 +191,8 @@ trait ClosesLoads
 
     /**
      * Lleva a la pantalla donde se arregla un faltante, con la credencial en el periodo de la carga y, si esta pantalla
-     * filtra un campus (`?campus=`), la otra en ese campus; si no, la otra elige el suyo. Choques, horarios y acuerdos son
+     * filtra un campus de la modalidad de la carga que el usuario lee (`?campus=`; WithModalityCampusFilter, MS6), la otra
+     * en ese campus; si no, la otra elige el suyo. Choques, horarios y acuerdos son
      * por modalidad (M1, maqueta U2): van en la de la carga (`?modalidad=`). `$screen`: conflicts, editor, assign,
      * change-requests o agreements.
      */
@@ -209,8 +210,9 @@ trait ClosesLoads
 
         $context->handle($load->term);
         $campus = property_exists($this, 'campus') ? (string) ($this->campus ?? '') : '';
+        $readable = method_exists($this, 'campusesOf') ? $this->campusesOf($load->modality) : app(Actor::class)->campuses();
 
-        if ($campus !== '' && app(Actor::class)->campuses()->contains('code', $campus)) {
+        if ($campus !== '' && $readable->contains('code', $campus)) {
             $route[1]['campus'] = $campus;
         }
 

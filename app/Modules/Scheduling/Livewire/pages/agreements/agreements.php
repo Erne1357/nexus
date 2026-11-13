@@ -556,12 +556,12 @@ new #[Title('Acuerdos')] class extends Component
     }
 
     /**
-     * Resuelve con la credencial el periodo (y la modalidad de la página, que da 403 sin ninguna), o deja por qué no
-     * hay pantalla que mostrar.
+     * Resuelve con la credencial el periodo y fija la modalidad de la página (403 sin ninguna; fija, para que no cambie si
+     * se abre otra a media sesión, MS30), o deja por qué no hay pantalla que mostrar.
      */
     private function resolve(Actor $context): void
     {
-        $this->requiredModality();
+        $this->modalidad = $this->requiredModality()->code;
 
         $term = $context->activeTerm();
 

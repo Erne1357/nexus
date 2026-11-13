@@ -33,6 +33,28 @@ trait WithModalityCampusFilter
     protected array $campusesOfModality = [];
 
     /**
+     * Si la pantalla trabaja un campus a la vez (el editor de horarios): entonces no tiene qué mostrar en una modalidad
+     * sin salones, cuyos grupos van sin campus (MS4). La pantalla que lo necesita la sobreescribe.
+     */
+    protected function needsCampus(): bool
+    {
+        return false;
+    }
+
+    /**
+     * La modalidad de omisión (MS30); en una pantalla de un campus a la vez, entre las que usan salones si hay alguna, para
+     * que no abra en una sin campus.
+     *
+     * @param  Collection<int, Modality>  $options
+     */
+    protected function defaultModality(Collection $options): ?Modality
+    {
+        $withCampuses = $this->needsCampus() ? $options->filter(fn (Modality $modality): bool => $modality->profile->usesRooms) : $options;
+
+        return $this->firstOpenModality($withCampuses->isNotEmpty() ? $withCampuses : $options);
+    }
+
+    /**
      * Los campus del filtro: los de la modalidad de la pantalla, por código.
      *
      * @return Collection<int, Campus>

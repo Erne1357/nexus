@@ -45,6 +45,8 @@ use Mary\Traits\Toast;
  * campus distintos a la misma hora no chocan. Sus opciones son los campus de la modalidad, con los grupos del semestre
  * en cada uno; quien tiene un nombramiento con campus lee los demás de solo lectura y abre en el suyo (MS6). Un
  * `?grupo=` abre la modalidad y el campus del grupo. Cambiar de modalidad o de campus reabre la página sin lo elegido.
+ * Sin elegir, abre en una modalidad con salones; una sin salones (sus grupos van sin campus, MS4) lo dice en lugar del
+ * editor.
  */
 new #[Title('Horarios')] class extends Component
 {
@@ -103,8 +105,16 @@ new #[Title('Horarios')] class extends Component
             $this->followGroup($editor->groupInTerm($term, $this->groupId));
         }
 
-        $campus = $this->requiredCampus();
         $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
+
+        if (! $modality->profile->usesRooms) {
+            $this->message = "{$modality->name} no usa salones: sus grupos no se dan en un campus, y el editor acomoda las sesiones de un campus a la vez.";
+
+            return;
+        }
+
+        $campus = $this->requiredCampus();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';
@@ -127,6 +137,14 @@ new #[Title('Horarios')] class extends Component
     }
 
     /**
+     * El editor acomoda un campus a la vez: abre en una modalidad con salones (WithModalityCampusFilter).
+     */
+    protected function needsCampus(): bool
+    {
+        return true;
+    }
+
+    /**
      * Otro campus: la página se abre en él, con la misma modalidad, sin la carrera ni el grupo del anterior.
      */
     public function updatedCampus(): void
@@ -141,7 +159,7 @@ new #[Title('Horarios')] class extends Component
     {
         $modality = $this->requiredModality();
 
-        if ($modality->id === $this->modalityId) {
+        if ($this->modalityId !== null && $modality->id === $this->modalityId) {
             return;
         }
 

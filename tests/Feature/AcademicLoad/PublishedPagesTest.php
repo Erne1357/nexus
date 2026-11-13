@@ -503,6 +503,20 @@ describe('modalidad, campus y fotos viejas (M1, MS13)', function () {
             ->assertRedirect(route('published.index', ['periodo' => '20271', 'modalidad' => 'pres']));
     });
 
+    it('cambiar de modalidad conserva el campus del filtro cuando la otra tiene grupos publicados ahí', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('EAD')->id])
+            ->for(Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']))->inStatus(LoadStatus::Published)->create();
+        LoadSnapshot::factory()->for($load)->publishedAt(CarbonImmutable::parse('2026-12-12 10:30'))->withGroups([
+            [...publishedPagesGroup('EAD-0001', 'Materia a distancia', 'E', ['placements' => [($this->placement)(1)]]), 'campus' => ['id' => $this->c2->id, 'code' => 'C2', 'name' => 'Campus II']],
+        ])->create();
+
+        Livewire::test('academic-load::components.published-band', ['termCode' => '20271', 'modalityCode' => 'pres', 'campusCode' => 'C2'])
+            ->set('modalidad', 'ead')
+            ->assertSet('campus', 'C2')
+            ->assertRedirect(route('published.index', ['periodo' => '20271', 'modalidad' => 'ead', 'campus' => 'C2']));
+    });
+
     it('el campus de la banda sale de la modalidad elegida: en EAD solo los campus de sus grupos publicados', function () {
         modalityOf('EAD')->update(['is_active' => true]);
         $ead = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus de EAD', 'modality_id' => modalityOf('EAD')->id]);
