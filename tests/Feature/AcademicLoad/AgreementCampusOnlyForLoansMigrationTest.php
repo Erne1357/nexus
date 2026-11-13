@@ -50,6 +50,19 @@ it('quita los índices de alcance por campus', function () {
     expect($indexes->filter(fn (string $name): bool => str_contains($name, 'campus_id'))->values()->all())->toBe([]);
 });
 
+it('deja un índice parcial (term_id, campus_id) solo de los préstamos, el que usa RoomLoansQuery::liveFor, y down() lo quita', function () {
+    $definition = fn (): ?string => DB::table('pg_indexes')->where('tablename', 'interdepartmental_agreements')
+        ->where('indexname', 'interdepartmental_agreements_room_loan_term_campus_index')->value('indexdef');
+
+    $this->migration->up();
+
+    expect($definition())->toContain('(term_id, campus_id)')->toContain("'room_loan'");
+
+    $this->migration->down();
+
+    expect($definition())->toBeNull();
+});
+
 it('down() devuelve a cada grupo compartido el campus de su grupo y se niega si el grupo no tiene campus', function () {
     $this->migration->up();
     $this->migration->down();

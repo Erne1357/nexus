@@ -9,10 +9,11 @@ use Illuminate\Support\Facades\DB;
  * lo amarra). El acuerdo de un grupo compartido es de la modalidad (`modality_id`) y su lugar es el del grupo, así que
  * la columna queda nula: se vacía en los que ya existen y el CHECK de forma lo exige (y exige el campus en el préstamo:
  * sin él, la llave compuesta no se revisaría). Se quitan los índices de alcance por campus; los de modalidad
- * (2026_11_12_210401) ya los reemplazan.
+ * (2026_11_12_210401) ya los reemplazan. Queda uno parcial `(term_id, campus_id)` de los préstamos: el lugar del
+ * salón, con el que RoomLoansQuery::liveFor junta los préstamos vivos de un campus al validar una carga.
  *
  * down() devuelve a cada grupo compartido el campus de su grupo y la columna obligatoria, con el CHECK y los índices de
- * antes. Se niega, sin cambiar nada, si un grupo compartido es de un grupo sin campus o que ya no existe, y nombra esos
+ * antes, sin el parcial. Se niega, sin cambiar nada, si un grupo compartido es de un grupo sin campus o que ya no existe, y nombra esos
  * acuerdos.
  */
 return new class extends Migration
@@ -23,6 +24,8 @@ return new class extends Migration
         or (kind = 'shared_group' and career_id is not null and max_seats is not null
             and room_id is null and day is null and starts_at is null and ends_at is null)
         SQL;
+
+    private const string ROOM_LOAN_INDEX = 'interdepartmental_agreements_room_loan_term_campus_index';
 
     /**
      * Los índices de alcance por campus de 2026_11_07_000001 (PostgreSQL recorta los nombres a 63 caracteres).
@@ -44,6 +47,8 @@ return new class extends Migration
         foreach (array_keys(self::CAMPUS_INDEXES) as $index) {
             DB::statement("drop index if exists {$index}");
         }
+
+        DB::statement('create index if not exists '.self::ROOM_LOAN_INDEX." on interdepartmental_agreements (term_id, campus_id) where kind = 'room_loan'");
     }
 
     public function down(): void
@@ -59,6 +64,7 @@ return new class extends Migration
             throw new RuntimeException('Estos acuerdos de grupo compartido son de un grupo sin campus o que ya no existe y no se pueden regresar a un acuerdo con campus: '.$orphans->implode(', ').'.');
         }
 
+        DB::statement('drop index if exists '.self::ROOM_LOAN_INDEX);
         DB::statement('alter table interdepartmental_agreements drop constraint interdepartmental_agreements_shape_check');
         DB::statement("update interdepartmental_agreements set campus_id = groups.campus_id from groups where groups.id = interdepartmental_agreements.group_id and interdepartmental_agreements.kind = 'shared_group' and interdepartmental_agreements.campus_id is null");
         DB::statement('alter table interdepartmental_agreements add constraint interdepartmental_agreements_shape_check check ('.self::SHAPE.')');
