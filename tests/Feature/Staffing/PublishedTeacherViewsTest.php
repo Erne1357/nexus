@@ -24,13 +24,15 @@ use Livewire\Livewire;
 /*
 | Lo que ve el docente con la carga publicada (P8, confirmado el 10 de noviembre de 2026): con la carga de un
 | departamento publicada, «Mi carga» y la «Oferta del departamento» muestran su última versión publicada, también si se
-| reabrió; antes de publicar, lo vivo. Se decide por carga (periodo, campus y departamento), así que un docente puede
-| ver una carga publicada y otra viva. El ranking de la oferta sigue vivo, unido por el id del grupo.
+| reabrió; antes de publicar, lo vivo. Se decide por carga (periodo, modalidad y departamento, M1), así que un docente
+| puede ver una carga publicada y otra viva (aquí, Campus I es de otra modalidad para tener dos cargas de Sistemas). El ranking de la oferta sigue vivo, unido por el id del grupo.
 */
 
 beforeEach(function () {
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    modalityOf('EAD')->update(['is_active' => true]);
+    // Los grupos de Campus I son de EAD en estas pruebas (publishedViewGroup): el campus es solo el lugar (MS3).
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->me = Teacher::factory()->adscribedTo($this->sc)->create(['name' => 'Marisol Quiñones']);
@@ -38,8 +40,8 @@ beforeEach(function () {
     $this->me->update(['user_id' => $this->user->id]);
     $this->colleague = Teacher::factory()->adscribedTo($this->sc)->create(['name' => 'Óscar Nájera']);
 
-    $this->scC2 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
-    $this->scC1 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->c1->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
+    $this->scC2 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
+    $this->scC1 = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Staffing]);
 
     $buildingC2 = Building::factory()->create(['campus_id' => $this->c2->id]);
     $buildingC1 = Building::factory()->create(['campus_id' => $this->c1->id]);
@@ -60,6 +62,7 @@ function publishedViewGroup(Campus $campus, string $code, string $subject, ?Teac
     $group = Group::factory()->create([
         'term_id' => test()->term->id,
         'campus_id' => $campus->id,
+        'modality_id' => modalityOf($campus->is(test()->c1) ? 'EAD' : 'PRES')->id,
         'subject_id' => Subject::factory()->create(['department_id' => test()->sc->id, 'name' => $subject, 'theory_hours' => 4, 'practice_hours' => 0])->id,
         'code' => $code,
         'teacher_id' => $teacher?->id,
@@ -73,7 +76,7 @@ function publishedViewGroup(Campus $campus, string $code, string $subject, ?Teac
 }
 
 /**
- * Un grupo vivo tal como lo congela la publicación en el payload v1: su id, clave, materia, docente, carrera dueña y
+ * Un grupo vivo tal como lo congela la publicación en el payload, con su campus: su id, clave, materia, docente, carrera dueña y
  * sesiones con su salón de ahora.
  *
  * @return array<string, mixed>
@@ -82,9 +85,12 @@ function publishedViewFreeze(Group $group): array
 {
     $group->load(['subject', 'teacher', 'ownerCareer', 'studyPlan', 'sessions.room.building']);
 
+    $group->load('campus');
+
     return LoadSnapshotFactory::group([
         'id' => $group->id,
         'code' => $group->code,
+        'campus' => ['id' => $group->campus->id, 'code' => $group->campus->code, 'name' => $group->campus->name],
         'capacity' => $group->capacity,
         'subject' => [
             'id' => $group->subject->id, 'code' => $group->subject->code, 'name' => $group->subject->name, 'credits' => $group->subject->credits,
@@ -122,7 +128,7 @@ function publishedViewPublish(AcademicLoad $load, int $version, string $at, Load
 {
     $groups = Group::query()->active()
         ->where('term_id', $load->term_id)
-        ->where('campus_id', $load->campus_id)
+        ->where('modality_id', $load->modality_id)
         ->where('department_id', $load->department_id)
         ->orderBy('code')
         ->get()

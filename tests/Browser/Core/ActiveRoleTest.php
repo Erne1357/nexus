@@ -17,7 +17,7 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
     $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
     // Carga en curso (MN-04): sin ella, nadie más que el admin ve la bandeja ni la propuesta en el menú.
-    AcademicLoad::factory()->for($term)->create(['campus_id' => $c2->id]);
+    AcademicLoad::factory()->for($term)->create();
     $department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
 
@@ -46,7 +46,7 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
     $page->resize(1440, 900)->screenshot(filename: 'active-role-1440');
 
     $page->click('[data-testid="role-switcher"] input[value="coordinador"]')
-        ->assertSeeIn('[data-testid="role-block"]', 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.')
+        ->assertSeeIn('[data-testid="role-block"]', 'Analizas el avance de los alumnos de tu carrera en tu modalidad, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre; si tu nombramiento es de un campus, ves toda la propuesta y cambias lo de tu campus.')
         ->assertPathIs('/')
         ->assertSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
         ->assertDontSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')

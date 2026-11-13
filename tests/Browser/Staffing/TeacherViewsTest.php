@@ -22,7 +22,7 @@ beforeEach(function () {
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-    AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $department->id, 'status' => LoadStatus::Staffing]);
+    AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id, 'status' => LoadStatus::Staffing]);
 
     $me = Teacher::factory()->adscribedTo($department)->create(['name' => 'Marisol Quiñones']);
     $colleague = Teacher::factory()->adscribedTo($department)->create(['name' => 'Óscar Nájera']);

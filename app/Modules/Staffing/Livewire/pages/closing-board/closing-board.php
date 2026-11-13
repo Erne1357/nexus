@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Staffing\Livewire\Concerns\ClosesLoads;
 use App\Modules\Staffing\Queries\ClosingBoardQuery;
@@ -19,12 +20,15 @@ use Mary\Traits\Toast;
 
 /**
  * Avance del cierre (tarea 4.2; maqueta E, elegida por el usuario el 10 de noviembre de 2026): el cierre de todas las
- * cargas del Tec en el periodo activo, con la forma del avance de validación. Cuatro cifras de todo el Tec (con
- * faltantes, listas para cerrar, cerradas y publicadas), que filtran la matriz como el filtro de estado (`?estado=`),
- * la búsqueda, y un renglón por departamento con su jefe (ClosingBoardQuery::heads), una insignia por carga y los
- * faltantes sumados por columna (ClosingBoardQuery, con los choques duros
- * vigentes de `schedule_conflicts`; por eso dice cuándo se recalcularon). Tocar un renglón o una insignia abre el
- * drawer de esa carga: el selector de campus, la línea de estados, la publicación con su línea de versiones
+ * cargas del Tec en el periodo activo y en la modalidad de la página (`?modalidad=`, WithModalityScope; M1: una carga
+ * por departamento y modalidad, con los grupos de todos sus campus), que se elige con el select «Modalidad» (maqueta
+ * U2, opción A; sin select con una sola, MS16), con la forma del avance de validación. Cuatro cifras de todo el Tec en
+ * esa modalidad (con faltantes, listas para cerrar, cerradas y publicadas), que filtran la matriz como el filtro de
+ * estado (`?estado=`), la búsqueda, y un renglón por departamento con su jefe (ClosingBoardQuery::heads), la insignia de
+ * su carga y los faltantes sumados por columna (ClosingBoardQuery, con los choques duros vigentes de
+ * `schedule_conflicts`; por eso dice cuándo se recalcularon). Tocar un renglón o una insignia abre el
+ * drawer de esa carga: el selector de modalidad con las cargas del departamento que el usuario reabre (elegir otra lleva
+ * la página a esa modalidad), la línea de estados, la publicación con su línea de versiones
  * (academic-load::components.publish-load, que avisa con `load-published`), «Para cerrar», «Justificaciones» e
  * «Historial», sus acciones (ClosesLoads; ahí el validador sí corre, para esa carga) y «Abrir en Cierre de la carga».
  *
@@ -33,7 +37,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Avance del cierre')] class extends Component
 {
-    use ClosesLoads, Toast;
+    use ClosesLoads, Toast, WithModalityScope;
 
     /** Valores de `?estado=` y la cubeta que filtran (LoadProgress::bucket). */
     private const array STATES = ['faltantes' => 'missing', 'listas' => 'ready', 'cerradas' => 'closed', 'publicadas' => 'published'];
@@ -50,37 +54,55 @@ new #[Title('Avance del cierre')] class extends Component
     public function mount(): void
     {
         abort_unless(app(Actor::class)->allowsAny(AcademicLoadPermission::LoadReopen), 403);
+
+        $this->modalidad = $this->requiredModality()->code;
     }
 
     /**
-     * Abre el drawer con la carga de un departamento: la del campus pedido o, si no, la primera que sigue sin cerrar
-     * (ni cerrada, ni aprobada, ni publicada o en re-análisis) y, si todas pasaron el cierre, la primera.
+     * Otra modalidad en el select: la matriz de esa modalidad, con el drawer cerrado.
      */
-    public function open(string $departmentId, LoadClosingQuery $query, string $campusCode = ''): void
+    public function updatedModalidad(): void
+    {
+        $this->modalidad = $this->requiredModality()->code;
+        $this->closeDrawer();
+    }
+
+    /**
+     * Abre el drawer con la carga de un departamento, entre las que el usuario reabre (`reopen`; nunca otra): la de la
+     * modalidad pedida (por clave; sin ella, la de la página; M1) o, si no tiene, la primera que sigue sin cerrar (ni
+     * cerrada, ni aprobada, ni publicada o en re-análisis) y, si todas pasaron el cierre, la primera. La página pasa a la
+     * modalidad de la carga abierta. Sin cargas, 404; con cargas pero ninguna que reabra, 403.
+     */
+    public function open(string $departmentId, LoadClosingQuery $query, string $modalityCode = ''): void
     {
         abort_unless(app(Actor::class)->allowsAny(AcademicLoadPermission::LoadReopen), 403);
 
         $department = KeyLookup::findOrFail(Department::query()->withTrashed(), $departmentId);
         $term = app(Actor::class)->activeTerm() ?? abort(404);
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
-        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === $campusCode)
-            ?? $loads->first(fn (AcademicLoad $candidate): bool => ! in_array($candidate->status, [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published, LoadStatus::Reanalysis], true))
-            ?? $loads->first();
+        abort_if($loads->isEmpty(), 404);
 
-        abort_if($load === null, 404);
+        $reopenable = $loads->filter(fn (AcademicLoad $candidate): bool => Gate::allows('reopen', $candidate))->values();
+        $wanted = $modalityCode !== '' ? $modalityCode : (string) $this->modalidad;
+        $load = $reopenable->first(fn (AcademicLoad $candidate): bool => $candidate->modality->code === $wanted)
+            ?? $reopenable->first(fn (AcademicLoad $candidate): bool => ! in_array($candidate->status, [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published, LoadStatus::Reanalysis], true))
+            ?? $reopenable->first()
+            ?? abort(403);
+
         $this->authorizeLoad($load);
+        $this->modalidad = $this->modalityOptions()->contains('code', $load->modality->code) ? $load->modality->code : $this->modalidad;
 
         $this->showLoad($load, $query);
         $this->showDrawer = true;
     }
 
     /**
-     * Cambia el drawer a la carga del mismo departamento en otro campus.
+     * Cambia el drawer a la carga del mismo departamento en otra modalidad (y la página con ella).
      */
-    public function selectCampus(string $campusCode, LoadClosingQuery $query): void
+    public function selectModality(string $modalityCode, LoadClosingQuery $query): void
     {
         $current = $this->closingLoad($query);
-        $this->open($current->department_id, $query, $campusCode);
+        $this->open($current->department_id, $query, $modalityCode);
     }
 
     /**
@@ -135,12 +157,15 @@ new #[Title('Avance del cierre')] class extends Component
         if ($this->showDrawer && $this->loadId !== null) {
             $load = $this->closingLoad($query);
             $closing = $query->of($load, $this->cachedBlockers());
-            $tabs = $query->loadsOf($load->term_id, $load->department_id);
+            $tabs = $query->loadsOf($load->term_id, $load->department_id)->filter(fn (AcademicLoad $candidate): bool => Gate::allows('reopen', $candidate))->values();
         }
 
-        $data = $term === null ? null : $board->board($term, $this->search, self::STATES[$this->state] ?? '');
+        $modality = $this->requiredModality();
+        $data = $term === null ? null : $board->board($term, $this->search, self::STATES[$this->state] ?? '', $modality);
 
         return [
+            'modalityOptions' => $this->modalityOptions(),
+            'shownModality' => $modality,
             'term' => $term,
             'board' => $data,
             'heads' => $data === null ? [] : $board->heads($data['rows']),

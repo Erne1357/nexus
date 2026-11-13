@@ -53,7 +53,7 @@ describe('vista por materia', function () {
         assignPage($this->jefe, ['estado' => 'todos'])
             ->assertOk()
             ->assertSeeHtml('data-testid="assign-by-subject"')
-            ->assertSeeInOrder(['Asignación docente', 'Sistemas y Computación', 'Campus II', 'Ene-Jun 2027', 'Asignación'])
+            ->assertSeeInOrder(['Asignación docente', 'Sistemas y Computación', 'Presencial', 'Ene-Jun 2027', 'Asignación'])
             ->assertSeeText('1 de 3 con docente')
             ->assertSeeInOrder(['Programación Orientada a Objetos', 'SCC-1013', 'L/Mi 10:00–11:00', 'Ana Ruiz', 'Beto Salas', 'Carla Díaz', 'Beto Salas', 'Rosa Villalobos', 'Redes de Computadoras', 'SCD-1021'])
             ->assertSeeText(['1 de 2 con docente', '0 de 1 con docente', 'Lugar 2 de 4'])

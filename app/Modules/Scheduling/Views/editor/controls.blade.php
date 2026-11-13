@@ -1,8 +1,9 @@
 {{--
-    Selectores del editor de horarios: Carrera; Retícula, un segmentado con la vigente («Vigente») y cada vieja
+    Selectores del editor de horarios: Modalidad (solo con más de una, MS16; maqueta U2, opción A); Carrera; Retícula, un segmentado con la vigente («Vigente») y cada vieja
     («Prioridad» y cuántos grupos tiene sin acomodar; «Inactiva» si el plan ya no está activo pero tiene grupos), o su
     clave como texto si la carrera tiene una sola (un segmentado de una opción no elige nada); Semestre («Semestre 3 · 4
-    sin acomodar»); el docente o el salón en esas vistas, y «Ver por». El semestre, el docente o el salón y «Ver por» se
+    sin acomodar»); el docente o el salón en esas vistas; Campus (un campus a la vez, con los grupos del semestre en cada
+    uno; solo con más de uno), y «Ver por». El semestre, el docente o el salón y «Ver por» se
     parten juntos, así «Ver por» nunca queda solo en un renglón. Debajo de 768 px cada control ocupa el ancho.
 --}}
 @php
@@ -15,6 +16,8 @@
     $segment = 'btn join-item h-10 gap-2 border-base-300 font-medium whitespace-nowrap shadow-none aria-pressed:btn-primary not-aria-pressed:bg-base-100 not-aria-pressed:hover:bg-base-200 max-md:flex-1 max-md:px-2';
 @endphp
 <div class="flex flex-wrap items-end gap-x-4 gap-y-3" data-testid="editor-controls">
+    <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" class="max-md:w-full md:w-56" />
+
     <div class="max-md:w-full md:min-w-72">
         <x-select label="Carrera" wire:model.live="careerId" :options="$careerOptions" data-testid="editor-career" />
     </div>
@@ -75,6 +78,13 @@
                 <x-select label="Salón" wire:model.live="roomId" class="font-mono" data-testid="editor-room"
                     :options="array_map(fn (string $id, string $code): array => ['id' => $id, 'name' => $code], array_keys($roomOptions), $roomOptions)" />
             </div>
+        @endif
+
+        @if ($campusOptions->count() > 1)
+            <fieldset class="fieldset min-w-0 py-0 max-md:w-full" data-testid="editor-campus">
+                <legend class="fieldset-legend mb-0.5">Campus</legend>
+                <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" :counts="$campusCounts" />
+            </fieldset>
         @endif
 
         <fieldset class="fieldset py-0 max-md:w-full md:ms-auto">

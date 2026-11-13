@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -17,8 +18,9 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * Préstamo propuesto: un salón del dueño (`to`) en el campus del acuerdo, el lunes de 9:00 a 11:00, para un grupo
- * del departamento que lo pide (`from`). `sharedGroup()` lo vuelve el cupo de una carrera del departamento `to`.
+ * Préstamo propuesto en Presencial: un salón del dueño (`to`) en el campus del acuerdo, el lunes de 9:00 a 11:00, para
+ * un grupo del departamento que lo pide (`from`). `sharedGroup()` lo vuelve el cupo de una carrera del departamento `to`,
+ * sin campus (su lugar es el del grupo).
  *
  * @extends Factory<InterdepartmentalAgreement>
  */
@@ -33,6 +35,7 @@ class InterdepartmentalAgreementFactory extends Factory
         return [
             'term_id' => Term::factory(),
             'campus_id' => Campus::factory(),
+            'modality_id' => fn (): string => Modality::withTrashed()->where('code', 'PRES')->value('id') ?? Modality::factory()->create()->id,
             'kind' => AgreementKind::RoomLoan,
             'from_department_id' => Department::factory(),
             'to_department_id' => Department::factory(),
@@ -59,6 +62,7 @@ class InterdepartmentalAgreementFactory extends Factory
     {
         return $this->state([
             'kind' => AgreementKind::SharedGroup,
+            'campus_id' => null,
             'room_id' => null,
             'day' => null,
             'starts_at' => null,

@@ -7,6 +7,7 @@ use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
@@ -18,8 +19,8 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Ficha del periodo (`/terms/{term}`, core::pages.term, la maqueta B «Línea de tiempo»): encabezado con «Editar» y
-| «Marcar como actual», y el calendario de las 8 etapas como línea de tiempo, con el panel lateral de cada etapa
-| (fechas generales y una ventana propia opcional por campus activo). Lo administran el `admin` y la
+| «Marcar como actual», la apertura por modalidad (M4) y el calendario de las 8 etapas como línea de tiempo, con el
+| panel lateral de cada etapa (fechas generales y una ventana propia opcional por modalidad activa). Lo administran el `admin` y la
 | `subdireccion`; los demás roles no entran. Cada método público vuelve a autorizar aunque se llame directo con
 | una página que abrió otra sesión.
 */
@@ -27,25 +28,27 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->travelTo('2026-11-12 10:00:00');
 
-    $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
-    $this->c3 = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+    // Presencial tiene un campus para que abrirla cree sus cargas; las otras dos modalidades, ninguno.
+    $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $this->m2 = modalityOf('PRES');
+    $this->m1 = Modality::factory()->create(['code' => 'A1', 'name' => 'Modalidad A']);
+    $this->m3 = Modality::factory()->create(['code' => 'Z3', 'name' => 'Modalidad Z']);
     $this->term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
     $this->other = Term::factory()->create(['code' => '20263', 'name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
 
     $this->admin = User::factory()->admin()->create();
-    $this->subdireccion = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])->create();
+    $this->subdireccion = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->campus->id])->create();
 });
 
-function termPageStage(Term $term, Stage $stage, ?Campus $campus, string $from, string $to): TermStage
+function termPageStage(Term $term, Stage $stage, ?Modality $modality, string $from, string $to): TermStage
 {
-    return app(SetTermStage::class)->handle($term, $stage, $campus, $from, $to);
+    return app(SetTermStage::class)->handle($term, $stage, $modality, $from, $to);
 }
 
 function termPageWindows(Term $term, Stage $stage): array
 {
     return TermStage::where('term_id', $term->id)->where('stage', $stage->value)->get()
-        ->mapWithKeys(fn (TermStage $window): array => [($window->campus?->code ?? 'general') => $window->starts_on->toDateString().'/'.$window->ends_on->toDateString()])
+        ->mapWithKeys(fn (TermStage $window): array => [($window->modality?->code ?? 'general') => $window->starts_on->toDateString().'/'.$window->ends_on->toDateString()])
         ->sortKeys()
         ->all();
 }
@@ -74,14 +77,14 @@ describe('admin y subdirección', function () {
                 && $timeline->to->toDateString() === '2026-11-29');
     });
 
-    it('pinta una barra delgada por campus con ventana propia, con su código', function () {
+    it('M4: pinta una barra delgada por modalidad con ventana propia, con su clave', function () {
         termPageStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
-        termPageStage($this->term, Stage::Scheduling, $this->c1, '2026-11-24', '2026-12-09');
+        termPageStage($this->term, Stage::Scheduling, $this->m1, '2026-11-24', '2026-12-09');
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->assertSeeInOrder(['20 nov – 4 dic', 'C1', '24 nov – 9 dic'])
-            ->assertViewHas('timeline', fn ($timeline): bool => count($timeline->rows[2]['campuses']) === 1 && $timeline->rows[2]['campuses'][0]['code'] === 'C1');
+            ->assertSeeInOrder(['20 nov – 4 dic', 'A1', '24 nov – 9 dic'])
+            ->assertViewHas('timeline', fn ($timeline): bool => count($timeline->rows[2]['modalities']) === 1 && $timeline->rows[2]['modalities'][0]['code'] === 'A1');
     });
 
     it('sin ninguna fecha dice que no hay calendario y lista las 8 etapas con «Poner fechas»', function () {
@@ -148,13 +151,13 @@ describe('admin y subdirección', function () {
     });
 
     it('deshabilita el código con su motivo cuando el periodo ya se abrió y no deja cambiarlo', function () {
-        TermOpening::factory()->for($this->term)->for($this->c2)->create();
+        TermOpening::factory()->for($this->term)->for($this->m2)->create();
 
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('edit')
             ->assertSee('data-testid="term-code-locked"', false)
-            ->assertSee('El código ya no se puede cambiar: el periodo se abrió en C2.')
+            ->assertSee('El código ya no se puede cambiar: el periodo se abrió en Presencial.')
             ->set('form.code', '20272')
             ->call('save')
             ->assertHasErrors('form.code')
@@ -207,142 +210,213 @@ describe('admin y subdirección', function () {
     });
 });
 
-describe('sección «Campus»', function () {
-    it('lista los campus activos por código con su estado y no ofrece uno inactivo', function () {
-        $this->c3->update(['is_active' => false]);
+describe('sección «Modalidades»', function () {
+    it('M4: lista las modalidades activas por clave con su estado y no ofrece una inactiva', function () {
+        $this->m3->update(['is_active' => false]);
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->assertSeeInOrder(['Abierto en', 'Abrir en Campus I', 'Abrir en Campus II', 'Calendario', 'Campus', 'C1', 'Campus I', 'No abierto en este periodo', 'C2', 'Campus II'])
-            ->assertSee('Abrir en Campus I')
-            ->assertDontSee('Abrir en Campus III')
-            ->assertSee('¿Abrir el periodo 20271 en Campus II?');
+            ->assertSeeInOrder(['Abierto en', 'Abrir en Modalidad A', 'Abrir en Presencial', 'Calendario', 'Modalidades', 'A1', 'Modalidad A', 'No abierto en este periodo', 'PRES', 'Presencial'])
+            ->assertSee('Abrir en Modalidad A')
+            ->assertDontSee('Abrir en Modalidad Z')
+            ->assertSeeHtml('wire:click="prepareOpen(');
     });
 
-    it('el resumen muestra los códigos abiertos y un botón por campus pendiente', function () {
-        $this->c3->update(['is_active' => false]);
-        TermOpening::factory()->for($this->term)->for($this->c2)->create(['opened_by' => $this->admin->id]);
+    it('el resumen muestra las claves abiertas y un botón por modalidad pendiente', function () {
+        $this->m3->update(['is_active' => false]);
+        TermOpening::factory()->for($this->term)->for($this->m2)->create(['opened_by' => $this->admin->id]);
 
         $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
 
-        expect(preg_match('/data-testid="campus-summary".*?<\/section>/s', $page->html(), $match))->toBe(1)
-            ->and($match[0])->toContain('data-testid="opened-C2"')->toContain('Abrir en Campus I')
-            ->not->toContain('Abrir en Campus II')->not->toContain('data-testid="open-menu"');
+        expect(preg_match('/data-testid="modality-summary".*?<\/section>/s', $page->html(), $match))->toBe(1)
+            ->and($match[0])->toContain('data-testid="opened-PRES"')->toContain('Abrir en Modalidad A')
+            ->not->toContain('Abrir en Presencial')->not->toContain('data-testid="open-menu"');
     });
 
-    it('con más de dos campus pendientes el resumen ofrece un solo menú «Abrir en…»', function () {
-        Campus::factory()->create(['code' => 'C4', 'name' => 'Campus IV']);
+    it('con más de dos modalidades pendientes el resumen ofrece un solo menú «Abrir en…»', function () {
+        Modality::factory()->create(['code' => 'B4', 'name' => 'Modalidad B']);
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSeeHtml('data-testid="open-menu"')
             ->assertSee('Abrir en…')
-            ->assertSee('ningún campus')
-            ->assertDontSee('Abrir en Campus I');
+            ->assertSee('ninguna modalidad')
+            ->assertDontSee('Abrir en Modalidad A');
     });
 
-    it('abre el periodo en Campus II, crea sus cargas y lo dice en un toast', function (string $who) {
+    it('M4: abre el periodo en Presencial, crea sus cargas y lo dice en un toast', function (string $who) {
         Department::factory()->create(['code' => 'D1']);
         Department::factory()->create(['code' => 'D2']);
 
         $page = Livewire::actingAs($this->{$who})
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->call('openIn', $this->c2->id)
+            ->call('openIn', $this->m2->id)
             ->assertSee('Abierto el 12 nov 2026 por '.$this->{$who}->name)
             ->assertSee('Completar apertura')
-            ->assertDontSee('data-testid="open-C2"', false);
+            ->assertDontSee('data-testid="open-PRES"', false);
 
         $toast = lastToastOf($page);
 
-        expect($toast['title'])->toBe('Periodo abierto en C2')
+        expect($toast['title'])->toBe('Periodo abierto en Presencial')
             ->and($toast['description'])->toBe('2 cargas académicas nuevas')
-            ->and(TermOpening::where('term_id', $this->term->id)->pluck('campus_id')->all())->toBe([$this->c2->id])
+            ->and(TermOpening::where('term_id', $this->term->id)->pluck('modality_id')->all())->toBe([$this->m2->id])
             ->and(AcademicLoad::count())->toBe(2)
             ->and(CatalogReview::count())->toBe(0);
     })->with(['admin', 'subdireccion']);
 
-    it('«Completar apertura» crea lo que falte y la segunda vez dice que no faltaba nada', function () {
+    it('«Abrir en Presencial» abre el panel con lo que se crea y no escribe nada hasta confirmar', function () {
+        Department::factory()->create(['code' => 'D1']);
+        Department::factory()->create(['code' => 'D2']);
+        Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSet('showOpen', false)
+            ->call('prepareOpen', $this->m2->id)
+            ->assertSet('showOpen', true)
+            ->assertSee('Abrir Ene-Jun 2027 en Presencial')
+            ->assertSee('Revisa lo que se crea antes de abrir.')
+            ->assertSee('4')
+            ->assertSee('cargas académicas en borrador')
+            ->assertSeeInOrder(['D1', 'D2'])
+            ->assertSee('C1 · Campus I')
+            ->assertSee('C2 · Campus II')
+            ->assertSee('Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00')
+            ->assertSee('Usa el calendario general del periodo')
+            ->assertSeeHtml('wire:click="openIn(')
+            ->assertSee('Queda en la bitácora con tu nombre.')
+            ->assertSee('Abrir en Presencial');
+
+        expect(TermOpening::count())->toBe(0)->and(AcademicLoad::count())->toBe(0);
+    });
+
+    it('confirmar en el panel abre el periodo, cierra el panel y lo dice en un toast', function () {
+        Department::factory()->create(['code' => 'D1']);
+
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->call('openIn', $this->c2->id);
+            ->call('prepareOpen', $this->m2->id)
+            ->call('openIn', $this->m2->id)
+            ->assertSet('showOpen', false);
 
-        Department::factory()->create(['code' => 'D3']);
-
-        $page->call('completeIn', $this->c2->id);
-        expect(lastToastOf($page))->title->toBe('Apertura completada en C2')->description->toContain('1 carga');
-
-        $page->call('completeIn', $this->c2->id);
-        expect(lastToastOf($page))->title->toBe('Apertura completada en C2')->description->toBe('No faltaba nada.')
+        expect(lastToastOf($page)['title'])->toBe('Periodo abierto en Presencial')
             ->and(TermOpening::count())->toBe(1);
     });
 
-    it('un campus abierto y desactivado después se lista solo lectura, sin acciones', function () {
-        TermOpening::factory()->for($this->term)->for($this->c3)->create(['opened_by' => $this->admin->id]);
-        $this->c3->update(['is_active' => false]);
+    it('en una modalidad ya abierta, el panel es «Completar apertura» y cuenta solo lo que falta', function () {
+        Department::factory()->create(['code' => 'D1']);
+        Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('openIn', $this->m2->id);
+        Department::factory()->create(['code' => 'D2']);
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->assertSee('C3')
-            ->assertSee('Campus inactivo')
+            ->call('prepareOpen', $this->m2->id)
+            ->assertSee('Completar la apertura de Ene-Jun 2027 en Presencial')
+            ->assertSee('carga académica en borrador')
+            ->assertSeeHtml('wire:click="completeIn(')
+            ->assertSee('Completar apertura');
+    });
+
+    it('el panel dice cuando la modalidad ya tiene ventanas propias en el calendario', function () {
+        termPageStage($this->term, Stage::Staffing, $this->m2, '2026-11-24', '2026-12-04');
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('prepareOpen', $this->m2->id)
+            ->assertSee('Tiene ventana propia en 1 etapa');
+    });
+
+    it('no abre el panel de una modalidad inactiva', function () {
+        $this->m3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('prepareOpen', $this->m3->id)
+            ->assertNotFound();
+    });
+
+    it('«Completar apertura» crea lo que falte y la segunda vez dice que no faltaba nada', function () {
+        $page = Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->call('openIn', $this->m2->id);
+
+        Department::factory()->create(['code' => 'D3']);
+
+        $page->call('completeIn', $this->m2->id);
+        expect(lastToastOf($page))->title->toBe('Apertura completada en Presencial')->description->toContain('1 carga');
+
+        $page->call('completeIn', $this->m2->id);
+        expect(lastToastOf($page))->title->toBe('Apertura completada en Presencial')->description->toBe('No faltaba nada.')
+            ->and(TermOpening::count())->toBe(1);
+    });
+
+    it('una modalidad abierta y desactivada después se lista solo lectura, sin acciones', function () {
+        TermOpening::factory()->for($this->term)->for($this->m3)->create(['opened_by' => $this->admin->id]);
+        $this->m3->update(['is_active' => false]);
+
+        Livewire::actingAs($this->admin)
+            ->test('core::pages.term', ['term' => $this->term->id])
+            ->assertSee('Z3')
+            ->assertSee('Modalidad inactiva')
             ->assertSeeHtml('badge-neutral badge-soft')
-            ->assertDontSee('data-testid="complete-C3"', escape: false)
-            ->assertDontSee('data-testid="open-C3"', escape: false);
+            ->assertDontSee('data-testid="complete-Z3"', escape: false)
+            ->assertDontSee('data-testid="open-Z3"', escape: false);
     });
 
-    it('un campus abierto y borrado después también se lista', function () {
-        TermOpening::factory()->for($this->term)->for($this->c3)->create(['opened_by' => $this->admin->id]);
-        $this->c3->delete();
+    it('una modalidad abierta y borrada después también se lista', function () {
+        TermOpening::factory()->for($this->term)->for($this->m3)->create(['opened_by' => $this->admin->id]);
+        $this->m3->delete();
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->assertSee('Campus III')
-            ->assertSee('Campus borrado');
+            ->assertSee('Modalidad Z')
+            ->assertSee('Modalidad borrada');
     });
 
-    it('rechaza abrir en un campus inactivo con un toast de error y sin crear nada', function () {
-        $this->c3->update(['is_active' => false]);
+    it('rechaza abrir en una modalidad inactiva con un toast de error y sin crear nada', function () {
+        $this->m3->update(['is_active' => false]);
 
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->call('openIn', $this->c3->id);
+            ->call('openIn', $this->m3->id);
 
-        expect(lastToastOf($page))->title->toBe('No se abrió el periodo')->description->toContain('C3')
+        expect(lastToastOf($page))->title->toBe('No se abrió el periodo')->description->toContain('Z3')
             ->and(TermOpening::count())->toBe(0);
     });
 
-    it('la Subdirección que fuerza un campus desactivado recibe 403 y no se abre nada', function () {
-        $this->c3->update(['is_active' => false]);
+    it('la Subdirección que fuerza una modalidad desactivada recibe 403 y no se abre nada', function () {
+        $this->m3->update(['is_active' => false]);
 
         Livewire::actingAs($this->subdireccion)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->call('openIn', $this->c3->id)
+            ->call('openIn', $this->m3->id)
             ->assertForbidden();
 
         expect(TermOpening::count())->toBe(0);
     });
 
-    it('un campus inexistente o manipulado da 404, no 500', function (string $id) {
+    it('una modalidad inexistente o manipulada da 404, no 500', function (string $id) {
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('openIn', $id)
             ->assertNotFound();
-    })->with(['uuid sin campus' => fakeKey(999), 'no es uuid' => 'no-es-un-uuid', 'número' => '999999']);
+    })->with(['uuid sin modalidad' => fakeKey(999), 'no es uuid' => 'no-es-un-uuid', 'número' => '999999']);
 
-    it('un campus borrado no se abre', function () {
-        $this->c3->delete();
+    it('una modalidad borrada no se abre', function () {
+        $this->m3->delete();
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
-            ->call('openIn', $this->c3->id)
+            ->call('openIn', $this->m3->id)
             ->assertNotFound();
     });
 });
 
 describe('panel de una etapa', function () {
-    it('abre con las fechas guardadas: la general y la propia de cada campus activo', function () {
+    it('abre con las fechas guardadas: la general y la propia de cada modalidad activa', function () {
         termPageStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
-        termPageStage($this->term, Stage::Scheduling, $this->c1, '2026-11-24', '2026-12-09');
-        termPageStage($this->term, Stage::Proposal, $this->c2, '2026-11-01', '2026-11-05');
+        termPageStage($this->term, Stage::Scheduling, $this->m1, '2026-11-24', '2026-12-09');
+        termPageStage($this->term, Stage::Proposal, $this->m2, '2026-11-01', '2026-11-05');
 
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
@@ -350,19 +424,19 @@ describe('panel de una etapa', function () {
             ->assertSet('showDrawer', true)
             ->assertSet('stage', 'scheduling')
             ->assertSet('general', ['starts_on' => '2026-11-20', 'ends_on' => '2026-12-04'])
-            ->assertSet('own', [$this->c1->id => ['starts_on' => '2026-11-24', 'ends_on' => '2026-12-09']])
-            ->assertSeeInOrder(['Etapa 3 de 8', 'Horarios y cupos', 'General', 'Campus I', 'Quitar ventana propia', 'Campus II', 'Agregar ventana propia', 'Usa las fechas generales'])
-            ->assertSee('Por campus');
+            ->assertSet('own', [$this->m1->id => ['starts_on' => '2026-11-24', 'ends_on' => '2026-12-09']])
+            ->assertSeeInOrder(['Etapa 3 de 8', 'Horarios y cupos', 'General', 'Modalidad A', 'Quitar ventana propia', 'Presencial', 'Agregar ventana propia', 'Usa las fechas generales'])
+            ->assertSee('Por modalidad');
 
         $page->call('editStage', 'proposal')
             ->assertSet('general', ['starts_on' => '', 'ends_on' => ''])
-            ->assertSet('own', [$this->c2->id => ['starts_on' => '2026-11-01', 'ends_on' => '2026-11-05']])
+            ->assertSet('own', [$this->m2->id => ['starts_on' => '2026-11-01', 'ends_on' => '2026-11-05']])
             ->assertSee('Sin fechas generales.');
     });
 
-    it('muestra en los campus sin ventana propia las fechas generales que se editan, no las guardadas', function () {
+    it('muestra en las modalidades sin ventana propia las fechas generales que se editan, no las guardadas', function () {
         termPageStage($this->term, Stage::Scheduling, null, '2026-11-20', '2026-12-04');
-        $previewOf = fn ($page): string => preg_match('/data-testid="general-preview-C2".*?<\/p>/s', $page->html(), $match) === 1 ? preg_replace('/\s+/', ' ', $match[0]) : '';
+        $previewOf = fn ($page): string => preg_match('/data-testid="general-preview-PRES".*?<\/p>/s', $page->html(), $match) === 1 ? preg_replace('/\s+/', ' ', $match[0]) : '';
 
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
@@ -381,16 +455,16 @@ describe('panel de una etapa', function () {
         expect($previewOf($page))->toContain('Sin fechas generales.')->not->toContain('Usa las fechas generales');
     });
 
-    it('no ofrece un campus inactivo', function () {
-        termPageStage($this->term, Stage::Scheduling, $this->c3, '2026-11-24', '2026-12-09');
-        $this->c3->update(['is_active' => false]);
+    it('no ofrece una modalidad inactiva', function () {
+        termPageStage($this->term, Stage::Scheduling, $this->m3, '2026-11-24', '2026-12-09');
+        $this->m3->update(['is_active' => false]);
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('editStage', 'scheduling')
             ->assertSet('own', [])
-            ->assertDontSee('Campus III')
-            ->call('addCampusWindow', $this->c3->id)
+            ->assertDontSee('Modalidad Z')
+            ->call('addModalityWindow', $this->m3->id)
             ->assertNotFound();
     });
 
@@ -416,31 +490,31 @@ describe('panel de una etapa', function () {
             ->and(lastToastOf($page))->title->toBe('Etapa actualizada')->description->toBe('Asignación docente');
     });
 
-    it('cambia la ventana general y agrega la propia de un campus en un solo guardado', function () {
+    it('M4: cambia la ventana general y agrega la propia de una modalidad en un solo guardado', function () {
         termPageStage($this->term, Stage::Staffing, null, '2026-11-24', '2026-12-04');
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('editStage', 'staffing')
             ->set('general.ends_on', '2026-12-11')
-            ->call('addCampusWindow', $this->c2->id)
-            ->assertSet('own', [$this->c2->id => ['starts_on' => '2026-11-24', 'ends_on' => '2026-12-11']])
-            ->set("own.{$this->c2->id}.starts_on", '2026-11-30')
+            ->call('addModalityWindow', $this->m2->id)
+            ->assertSet('own', [$this->m2->id => ['starts_on' => '2026-11-24', 'ends_on' => '2026-12-11']])
+            ->set("own.{$this->m2->id}.starts_on", '2026-11-30')
             ->call('saveStage')
             ->assertHasNoErrors()
             ->assertSet('showDrawer', false);
 
-        expect(termPageWindows($this->term, Stage::Staffing))->toBe(['C2' => '2026-11-30/2026-12-11', 'general' => '2026-11-24/2026-12-11']);
+        expect(termPageWindows($this->term, Stage::Staffing))->toBe(['PRES' => '2026-11-30/2026-12-11', 'general' => '2026-11-24/2026-12-11']);
     });
 
-    it('quita la ventana propia de un campus al guardar, y el campus vuelve a la general', function () {
+    it('quita la ventana propia de una modalidad al guardar, y la modalidad vuelve a la general', function () {
         termPageStage($this->term, Stage::Staffing, null, '2026-11-24', '2026-12-04');
-        termPageStage($this->term, Stage::Staffing, $this->c2, '2026-11-30', '2026-12-11');
+        termPageStage($this->term, Stage::Staffing, $this->m2, '2026-11-30', '2026-12-11');
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('editStage', 'staffing')
-            ->call('removeCampusWindow', $this->c2->id)
+            ->call('removeModalityWindow', $this->m2->id)
             ->assertSet('own', [])
             ->assertSee('Agregar ventana propia');
 
@@ -449,7 +523,7 @@ describe('panel de una etapa', function () {
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('editStage', 'staffing')
-            ->call('removeCampusWindow', $this->c2->id)
+            ->call('removeModalityWindow', $this->m2->id)
             ->call('saveStage')
             ->assertHasNoErrors();
 
@@ -489,10 +563,10 @@ describe('panel de una etapa', function () {
             ->call('editStage', 'staffing')
             ->set('general.starts_on', '2026-12-04')
             ->set('general.ends_on', '2026-11-24')
-            ->call('addCampusWindow', $this->c2->id)
-            ->set("own.{$this->c2->id}.starts_on", '')
+            ->call('addModalityWindow', $this->m2->id)
+            ->set("own.{$this->m2->id}.starts_on", '')
             ->call('saveStage')
-            ->assertHasErrors(['general.ends_on', "own.{$this->c2->id}.starts_on"])
+            ->assertHasErrors(['general.ends_on', "own.{$this->m2->id}.starts_on"])
             ->assertSee('La fecha de fin no puede ser anterior a la de inicio.')
             ->assertSee('Escribe la fecha.')
             ->assertSet('showDrawer', true);
@@ -512,18 +586,18 @@ describe('panel de una etapa', function () {
         expect(TermStage::count())->toBe(0);
     });
 
-    it('no guarda nada si la ventana de un campus falla, ni la general ni otros campus', function () {
+    it('no guarda nada si la ventana de una modalidad falla, ni la general ni otras modalidades', function () {
         termPageStage($this->term, Stage::Staffing, null, '2026-11-24', '2026-12-04');
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('editStage', 'staffing')
             ->set('general.ends_on', '2026-12-11')
-            ->call('addCampusWindow', $this->c1->id)
-            ->call('addCampusWindow', $this->c2->id)
-            ->set("own.{$this->c2->id}.ends_on", '2026-11-01')
+            ->call('addModalityWindow', $this->m1->id)
+            ->call('addModalityWindow', $this->m2->id)
+            ->set("own.{$this->m2->id}.ends_on", '2026-11-01')
             ->call('saveStage')
-            ->assertHasErrors("own.{$this->c2->id}.ends_on")
+            ->assertHasErrors("own.{$this->m2->id}.ends_on")
             ->assertSet('showDrawer', true);
 
         expect(termPageWindows($this->term, Stage::Staffing))->toBe(['general' => '2026-11-24/2026-12-04']);
@@ -535,10 +609,10 @@ describe('panel de una etapa', function () {
             ->call('editStage', 'staffing')
             ->set('general.starts_on', '2026-11-24')
             ->set('general.ends_on', '2026-12-04')
-            ->call('addCampusWindow', $this->c2->id)
-            ->set("own.{$this->c2->id}", $own)
+            ->call('addModalityWindow', $this->m2->id)
+            ->set("own.{$this->m2->id}", $own)
             ->call('saveStage')
-            ->assertHasErrors("own.{$this->c2->id}.{$field}")
+            ->assertHasErrors("own.{$this->m2->id}.{$field}")
             ->assertSet('showDrawer', true);
 
         expect(TermStage::count())->toBe(0);
@@ -558,26 +632,26 @@ describe('panel de una etapa', function () {
             ->assertHasErrors('general.ends_on');
 
         $page->set('general', ['starts_on' => '', 'ends_on' => ''])
-            ->set("own.{$this->c2->id}", 'texto')
+            ->set("own.{$this->m2->id}", 'texto')
             ->call('saveStage')
-            ->assertHasErrors("own.{$this->c2->id}");
+            ->assertHasErrors("own.{$this->m2->id}");
 
         expect(TermStage::count())->toBe(0);
     });
 
-    it('ignora la ventana de un campus que se desactivó mientras el panel estaba abierto', function () {
+    it('ignora la ventana de una modalidad que se desactivó mientras el panel estaba abierto', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('editStage', 'staffing')
             ->set('general.starts_on', '2026-11-24')
             ->set('general.ends_on', '2026-12-04')
-            ->call('addCampusWindow', $this->c2->id);
+            ->call('addModalityWindow', $this->m2->id);
 
-        $this->c2->update(['is_active' => false]);
+        $this->m2->update(['is_active' => false]);
 
         $page->call('saveStage');
 
-        expect(TermStage::where('campus_id', $this->c2->id)->count())->toBe(0);
+        expect(TermStage::where('modality_id', $this->m2->id)->count())->toBe(0);
     });
 });
 
@@ -585,7 +659,7 @@ describe('copiar el calendario de otro periodo', function () {
     beforeEach(function () {
         termPageStage($this->other, Stage::CatalogValidation, null, '2026-08-17', '2026-08-28');
         termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
-        termPageStage($this->other, Stage::Proposal, $this->c1, '2026-08-26', '2026-09-08');
+        termPageStage($this->other, Stage::Proposal, $this->m1, '2026-08-26', '2026-09-08');
     });
 
     it('el admin copia el calendario a un periodo vacío y lo dice en un toast', function () {
@@ -625,17 +699,17 @@ describe('copiar el calendario de otro periodo', function () {
             ->and(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
     });
 
-    it('dice cuántas de las ventanas que reemplaza son de campus inactivos', function () {
-        termPageStage($this->term, Stage::Staffing, $this->c3, '2027-02-01', '2027-02-05');
-        termPageStage($this->term, Stage::Rooms, $this->c3, '2027-02-08', '2027-02-12');
-        $this->c3->update(['is_active' => false]);
+    it('dice cuántas de las ventanas que reemplaza son de modalidades inactivas', function () {
+        termPageStage($this->term, Stage::Staffing, $this->m3, '2027-02-01', '2027-02-05');
+        termPageStage($this->term, Stage::Rooms, $this->m3, '2027-02-08', '2027-02-12');
+        $this->m3->update(['is_active' => false]);
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->assertSee('Este periodo no tiene calendario.')
             ->call('openCopy')
             ->set('sourceId', $this->other->id)
-            ->assertSeeHtml('x-confirm="Se reemplazarán las 2 ventanas actuales del periodo, 2 de ellas de campus inactivos."')
+            ->assertSeeHtml('x-confirm="Se reemplazarán las 2 ventanas actuales del periodo, 2 de ellas de modalidades inactivas."')
             ->call('copyCalendar');
 
         expect(TermStage::where('term_id', $this->term->id)->count())->toBe(3);
@@ -655,14 +729,14 @@ describe('copiar el calendario de otro periodo', function () {
         expect($queries)->toBe(0);
     });
 
-    it('lista lo que no se copia por un campus inactivo', function () {
-        $this->c1->update(['is_active' => false]);
+    it('lista lo que no se copia por una modalidad inactiva', function () {
+        $this->m1->update(['is_active' => false]);
 
         Livewire::actingAs($this->admin)
             ->test('core::pages.term', ['term' => $this->term->id])
             ->call('openCopy')
             ->set('sourceId', $this->other->id)
-            ->assertSee('No se copian: C1 · Propuesta por carrera (campus inactivo)');
+            ->assertSee('No se copian: A1 · Propuesta por carrera (modalidad inactiva)');
     });
 
     it('queda deshabilitado con su motivo si ningún otro periodo tiene calendario', function () {
@@ -705,19 +779,19 @@ describe('otros roles e invitados', function () {
     ];
 
     it('reciben 403 en la página', function (Role $role, array $scope) {
-        $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, ...$scope])->create();
+        $user = User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create();
 
         $this->actingAs($user)->get(route('core.terms.show', $this->term->id))->assertForbidden();
     })->with($roles);
 
     it('reciben 403 en cada método del componente aunque lo llamen directo con una página que abrió el admin', function (Role $role, array $scope, string $method) {
-        $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, ...$scope])->create();
+        $user = User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create();
         $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id]);
 
         match ($method) {
             'save' => $page->call('edit')->set('form.name', 'Otro'),
             'saveStage' => $page->call('editStage', 'staffing')->set('general.starts_on', '2026-11-24')->set('general.ends_on', '2026-12-04'),
-            'removeCampusWindow' => $page->call('editStage', 'staffing')->call('addCampusWindow', $this->c2->id),
+            'removeModalityWindow' => $page->call('editStage', 'staffing')->call('addModalityWindow', $this->m2->id),
             default => null,
         };
 
@@ -725,7 +799,7 @@ describe('otros roles e invitados', function () {
 
         $arguments = match ($method) {
             'editStage' => ['staffing'],
-            'addCampusWindow', 'removeCampusWindow', 'openIn', 'completeIn' => [$this->c2->id],
+            'addModalityWindow', 'removeModalityWindow', 'openIn', 'completeIn', 'prepareOpen' => [$this->m2->id],
             default => [],
         };
 
@@ -735,11 +809,11 @@ describe('otros roles e invitados', function () {
             ->and(TermOpening::count())->toBe(0)
             ->and($this->term->fresh())->name->toBe('Ene-Jun 2027')->is_current->toBeTrue()
             ->and(Activity::count())->toBe(0);
-    })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addCampusWindow', 'removeCampusWindow', 'saveStage', 'openIn', 'completeIn']);
+    })->with($roles)->with(['edit', 'save', 'makeCurrent', 'editStage', 'clearGeneral', 'addModalityWindow', 'removeModalityWindow', 'saveStage', 'openIn', 'completeIn', 'prepareOpen']);
 
     it('no pueden elegir el periodo de origen ni copiar aunque la página la abriera el admin', function () {
         termPageStage($this->other, Stage::Proposal, null, '2026-08-24', '2026-09-04');
-        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();
+        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
         $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('openCopy');
 
         $this->actingAs($user);
@@ -754,7 +828,7 @@ describe('otros roles e invitados', function () {
     });
 
     it('no pueden cambiar el código aunque la página la abriera el admin', function () {
-        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();
+        $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
         $page = Livewire::actingAs($this->admin)->test('core::pages.term', ['term' => $this->term->id])->call('edit');
 
         $this->actingAs($user);

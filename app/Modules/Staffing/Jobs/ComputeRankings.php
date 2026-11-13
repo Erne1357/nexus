@@ -3,7 +3,7 @@
 namespace App\Modules\Staffing\Jobs;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Staffing\Actions\RankGroups;
 use DateTimeInterface;
@@ -13,15 +13,21 @@ use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 
 /**
- * Recalcula en la cola el ranking docente de un departamento en un periodo y campus (RankGroups). Lo encola
- * QueueRankings desde los listeners de Staffing cuando cambia una entrada del ranking: grupos de Scheduling o datos
- * del docente en Faculty.
+ * Recalcula en la cola el ranking docente de un departamento en un periodo y modalidad, con los grupos de todos sus
+ * campus (RankGroups, M1). Lo encola QueueRankings desde los listeners de Staffing cuando cambia una entrada del
+ * ranking: grupos de Scheduling o datos del docente en Faculty.
  *
- * Espera uno solo por alcance en la cola (`term:campus:department`), con un candado que vence en una hora por si nunca
+ * Espera uno solo por alcance en la cola (`term:modality:department`), con un candado que vence en una hora por si nunca
  * llega a correr; como se encola con unos segundos de retraso, una ráfaga de cambios espera un solo recálculo. Si llega
  * otro cambio mientras corre, se encola de nuevo, pero no se encima con la corrida en curso del mismo alcance: espera
  * a que termine y se reintenta cada 10 segundos durante una hora. Recalcular es idempotente; un error de verdad lo
- * deja fallido a la primera (`maxExceptions`). Si el periodo, el campus o el departamento ya no existen, no hace nada.
+ * deja fallido a la primera (`maxExceptions`). Si el periodo, la modalidad o el departamento ya no existen (borrados),
+ * no hace nada.
+ *
+ * Tiempo límite: 900 s, más del doble de lo que tardó el departamento × modalidad más grande del masivo como un solo job
+ * (CEA presencial, 1 139 grupos de C1 y C2: 403 s, 12 de noviembre de 2026), y menos que el `retry_after` de Redis
+ * (1 860 s, config/queue.php), para que la cola no entregue otra vez un job que sigue corriendo. El candado de
+ * WithoutOverlapping vence a la par.
  */
 final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
@@ -29,7 +35,7 @@ final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueu
 
     public int $maxExceptions = 1;
 
-    public int $timeout = 600;
+    public int $timeout = 900;
 
     public bool $failOnTimeout = true;
 
@@ -37,26 +43,26 @@ final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueu
 
     public function __construct(
         public string $termId,
-        public string $campusId,
+        public string $modalityId,
         public string $departmentId,
     ) {}
 
     public function uniqueId(): string
     {
-        return "{$this->termId}:{$this->campusId}:{$this->departmentId}";
+        return "{$this->termId}:{$this->modalityId}:{$this->departmentId}";
     }
 
     public function handle(RankGroups $rank): void
     {
         $term = Term::query()->find($this->termId);
-        $campus = Campus::query()->find($this->campusId);
+        $modality = Modality::query()->find($this->modalityId);
         $department = Department::query()->find($this->departmentId);
 
-        if ($term === null || $campus === null || $department === null) {
+        if ($term === null || $modality === null || $department === null) {
             return;
         }
 
-        $rank->handle($term, $campus, $department);
+        $rank->handle($term, $modality, $department);
     }
 
     /**

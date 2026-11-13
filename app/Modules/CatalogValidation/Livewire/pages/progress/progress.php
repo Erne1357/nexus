@@ -89,7 +89,7 @@ new #[Title('Avance de validación')] class extends Component
             'open' => $open,
             'campuses' => $campuses,
             'board' => $board,
-            'window' => $this->window($calendar, $term, $campuses),
+            'window' => $this->window($calendar, $term, $progress->openModalities($term)->modelKeys()),
             'detail' => $this->showDrawer && $this->detailId !== null ? $this->detail($progress, $term, $campuses, $board) : null,
             'canOpen' => $canOpen,
             'options' => $reviews->openingOptions($term),
@@ -143,7 +143,7 @@ new #[Title('Avance de validación')] class extends Component
         $chosen = collect($reviews->openingOptions($term))->filter(fn (array $option): bool => in_array($option['catalog'], $catalogs, true));
         $this->info('No se abrió nada', match (true) {
             $chosen->every(fn (array $option): bool => $option['open']) => 'Esos catálogos ya estaban abiertos.',
-            $chosen->contains(fn (array $option): bool => $option['blocked'] !== null) => 'Ningún campus abierto en este periodo usa salones.',
+            $chosen->contains(fn (array $option): bool => $option['blocked'] !== null) => 'Ninguna modalidad abierta en este periodo usa salones.',
             default => 'No hay departamentos activos a los que abrirles la validación.',
         });
     }
@@ -231,15 +231,15 @@ new #[Title('Avance de validación')] class extends Component
     }
 
     /**
-     * La ventana de la etapa de validación de catálogos y cuánto de ella pasó, si tiene fechas; con un solo campus,
-     * la suya si la tiene propia.
+     * La ventana de la etapa de validación de catálogos y cuánto de ella pasó, si tiene fechas; si el periodo se abrió en
+     * una sola modalidad con campus (ValidationProgressQuery::openModalities), la de esa modalidad si la tiene propia (M4).
      *
-     * @param  Collection<int, Campus>  $campuses
+     * @param  list<string>  $modalityIds
      * @return array{window: StageWindow, elapsed: int}|null
      */
-    private function window(TermCalendarQuery $calendar, Term $term, Collection $campuses): ?array
+    private function window(TermCalendarQuery $calendar, Term $term, array $modalityIds): ?array
     {
-        $window = collect($calendar->for($term, $campuses->count() === 1 ? $campuses->first() : null))
+        $window = collect($calendar->for($term, count($modalityIds) === 1 ? $modalityIds[0] : null))
             ->first(fn (StageWindow $candidate): bool => $candidate->stage === Stage::CatalogValidation);
 
         if ($window === null || $window->startsOn === null) {

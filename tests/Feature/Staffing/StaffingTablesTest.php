@@ -2,7 +2,7 @@
 
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -20,7 +20,7 @@ function assignmentRow(array $overrides = []): array
 
     return [
         'term_id' => $group->term_id,
-        'campus_id' => $group->campus_id,
+        'modality_id' => $group->modality_id,
         'group_id' => $group->id,
         'teacher_id' => Teacher::factory()->create()->id,
         'assigned_by' => User::factory()->create()->id,
@@ -102,13 +102,13 @@ describe('group_teacher_assignments', function () {
             ->and($replaced->replacedBy)->toBeInstanceOf(User::class);
     });
 
-    it('relaciona grupo, docente, periodo, campus y usuario', function () {
+    it('relaciona grupo, docente, periodo, modalidad y usuario', function () {
         $assignment = GroupTeacherAssignment::factory()->create();
 
         expect($assignment->group)->toBeInstanceOf(Group::class)
             ->and($assignment->teacher)->toBeInstanceOf(Teacher::class)
             ->and($assignment->term)->toBeInstanceOf(Term::class)
-            ->and($assignment->campus)->toBeInstanceOf(Campus::class)
+            ->and($assignment->modality)->toBeInstanceOf(Modality::class)
             ->and($assignment->assignedBy)->toBeInstanceOf(User::class);
     });
 });
@@ -135,7 +135,7 @@ describe('staffing_rankings', function () {
             ->and($fresh->group)->toBeInstanceOf(Group::class)
             ->and($fresh->teacher)->toBeInstanceOf(Teacher::class)
             ->and($fresh->term)->toBeInstanceOf(Term::class)
-            ->and($fresh->campus)->toBeInstanceOf(Campus::class);
+            ->and($fresh->modality)->toBeInstanceOf(Modality::class);
     });
 
     it('se borra con su grupo o su docente (tabla derivada)', function () {

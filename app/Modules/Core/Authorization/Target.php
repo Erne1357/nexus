@@ -5,7 +5,7 @@ namespace App\Modules\Core\Authorization;
 use LogicException;
 
 /**
- * Sobre qué se pide un permiso: los valores por dimensión (campus, unidad, carrera) del registro
+ * Sobre qué se pide un permiso: los valores por dimensión (campus, unidad, carrera, modalidad) del registro
  * evaluado, o el dueño si el permiso es personal. Un valor nulo es «sin valor»: lo general.
  * Una lista vacía es lo mismo que no tener valor: solo lo cubre un nombramiento sin límite en esa
  * dimensión. Inmutable.
@@ -21,12 +21,19 @@ final readonly class Target
      * @param  string|list<string>|null  $campus
      * @param  string|list<string>|null  $unit
      * @param  string|list<string>|null  $career
+     * @param  string|list<string>|null  $modality
      */
-    public static function of(string|array|null $campus = null, string|array|null $unit = null, string|array|null $career = null): self
+    public static function of(string|array|null $campus = null, string|array|null $unit = null, string|array|null $career = null, string|array|null $modality = null): self
     {
         $dimensions = [];
+        $byDimension = [
+            Dimension::Campus->value => $campus,
+            Dimension::Unit->value => $unit,
+            Dimension::Career->value => $career,
+            Dimension::Modality->value => $modality,
+        ];
 
-        foreach ([Dimension::Campus->value => $campus, Dimension::Unit->value => $unit, Dimension::Career->value => $career] as $name => $value) {
+        foreach ($byDimension as $name => $value) {
             $values = array_values((array) $value);
 
             if (in_array('', $values, true)) {

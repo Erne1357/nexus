@@ -8,6 +8,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Livewire\Concerns\AppointsRoles;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\PersonRecordQuery;
@@ -55,8 +56,10 @@ new #[Title('Ficha de la persona')] class extends Component
 
     public string $lastDay = '';
 
-    /** El panel «¿Quién ocupa un puesto?». */
+    /** El panel «¿Quién ocupa un puesto?». La modalidad empieza en la única activa (AZ-S17). */
     public string $whoRole = 'coordinador';
+
+    public string $whoModality = '';
 
     public string $whoCampus = '';
 
@@ -72,6 +75,7 @@ new #[Title('Ficha de la persona')] class extends Component
         $this->authorize('viewAny', RoleAssignment::class);
 
         $this->personId = $people->findOrFail($user)->id;
+        $this->whoModality = $people->defaultModalityId() ?? '';
     }
 
     /**
@@ -92,10 +96,12 @@ new #[Title('Ficha de la persona')] class extends Component
             'canAppoint' => $person->is_active,
             'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
-            'options' => $role === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus)),
+            'isCoordinator' => $role === Role::Coordinador,
+            'careerGroups' => $role === Role::Coordinador && $this->showModal ? $people->careerChecklist($this->uuid($this->campus), $this->uuid($this->modality), $person, $this->careerSearch) : [],
+            'options' => $role === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($role, $this->uuid($this->campus), $this->uuid($this->modality)),
             'whoRoles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], array_filter(Role::cases(), fn (Role $role): bool => $role !== Role::Docente && $role !== Role::Alumno)),
             'whoRoleCase' => $whoRole,
-            'whoOptions' => $whoRole === null ? ['campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($whoRole, $this->uuid($this->whoCampus)),
+            'whoOptions' => $whoRole === null ? ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []] : $people->scopeOptions($whoRole, $this->uuid($this->whoCampus)),
             'who' => $whoRole === null ? null : $this->who($people, $labels, $whoRole),
             'found' => $people->search($this->find)->reject(fn ($found): bool => $found->id === $person->id)->values(),
         ];
@@ -145,6 +151,7 @@ new #[Title('Ficha de la persona')] class extends Component
 
         if ($property === 'whoRole') {
             $this->reset('whoCampus', 'whoUnit', 'whoCareer');
+            $this->whoModality = app(PeopleQuery::class)->defaultModalityId() ?? '';
         } elseif ($property === 'whoCampus') {
             $this->reset('whoCareer');
         }
@@ -164,10 +171,38 @@ new #[Title('Ficha de la persona')] class extends Component
 
         $person = $people->findOrFail($this->personId);
 
-        $assignment = $this->appointPerson($appointRole, $people, $person, $this->offeredOptions($rules));
+        $assignments = $this->appointPerson($appointRole, $people, $person, $this->offeredOptions($rules));
 
-        $this->success('Nombramiento creado', e($labels->one($assignment)->summary));
+        if (count($assignments) === 1) {
+            $this->success('Nombramiento creado', e($labels->one($assignments[0])->summary));
+        } else {
+            $this->success('Nombramientos creados', e($this->severalSummary($labels, $assignments)));
+        }
+
         $this->showModal = false;
+    }
+
+    /**
+     * La persona de la ficha, para no volver a nombrarla en las carreras que ya coordina.
+     */
+    protected function appointee(): ?User
+    {
+        return app(PeopleQuery::class)->findOrFail($this->personId);
+    }
+
+    /**
+     * «Coordinador de carrera · 2 carreras (ISC, IIND) · Presencial · Campus II»: el resumen de varios nombramientos
+     * del mismo puesto, modalidad y campus.
+     *
+     * @param  list<RoleAssignment>  $assignments
+     */
+    private function severalSummary(AssignmentLabels $labels, array $assignments): string
+    {
+        $described = $labels->describe($assignments);
+        $first = $described[$assignments[0]->getKey()];
+        $codes = collect($assignments)->map(fn (RoleAssignment $assignment): ?string => $described[$assignment->getKey()]->careerCode)->filter();
+
+        return implode(' · ', array_filter([$first->title, count($assignments).' carreras ('.$codes->implode(', ').')', $first->modalityName, $first->campusName]));
     }
 
     /**
@@ -262,7 +297,8 @@ new #[Title('Ficha de la persona')] class extends Component
     /**
      * Quién ocupa el puesto sobre el alcance elegido en el panel: `incomplete` si falta elegir una columna del
      * puesto, `none` si nadie lo ocupa hoy, `found` con los titulares. `title` es el nombre del puesto sobre esa unidad
-     * (AssignmentLabels: «Jefe del Departamento de Servicios Escolares», AZ-02).
+     * (AssignmentLabels: «Jefe del Departamento de Servicios Escolares», AZ-02). El campus opcional del coordinador y
+     * del jefe de proyecto docente (AZ-S17) acota si se elige (PeopleQuery::holders()).
      *
      * @return array{state: string, title: string, summary: string, holders: Collection<int, RoleAssignment>}
      */
@@ -272,18 +308,19 @@ new #[Title('Ficha de la persona')] class extends Component
             'campus_id' => $this->uuid($this->whoCampus),
             'org_unit_id' => $this->uuid($this->whoUnit),
             'career_id' => $this->uuid($this->whoCareer),
+            'modality_id' => $this->uuid($this->whoModality),
         ];
         $columns = $role->scopeColumns();
         $label = $labels->one(new RoleAssignment([
             'role' => $role,
-            ...array_intersect_key($values, array_flip($columns)),
+            ...array_intersect_key($values, array_flip([...$columns, ...$role->optionalScopeColumns()])),
         ]));
 
         if (array_filter($columns, fn (string $column): bool => $values[$column] === null) !== []) {
             return ['state' => 'incomplete', 'title' => $label->title, 'summary' => $label->summary, 'holders' => collect()];
         }
 
-        $holders = $people->holders($role, $values['campus_id'], $values['org_unit_id'], $values['career_id']);
+        $holders = $people->holders($role, $values['campus_id'], $values['org_unit_id'], $values['career_id'], $values['modality_id']);
 
         return ['state' => $holders->isEmpty() ? 'none' : 'found', 'title' => $label->title, 'summary' => $label->summary, 'holders' => $holders];
     }

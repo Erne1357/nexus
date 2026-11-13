@@ -33,13 +33,13 @@ beforeEach(function () {
         'capacity' => 40,
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 function proposedFor(int $seats = 8, AgreementStatus $status = AgreementStatus::Proposed): InterdepartmentalAgreement
 {
     return InterdepartmentalAgreement::factory()->sharedGroup($seats)->inStatus($status)->create([
-        'term_id' => test()->group->term_id, 'campus_id' => test()->group->campus_id, 'group_id' => test()->group->id,
+        'term_id' => test()->group->term_id, 'group_id' => test()->group->id,
         'from_department_id' => test()->imparte->id, 'to_department_id' => test()->otro->id, 'career_id' => test()->foreign->id,
     ]);
 }
@@ -74,7 +74,7 @@ it('HC-07 (red de seguridad): no acepta si los lugares ya no caben, sin dejar na
 
 it('HC-07 (red de seguridad): al aceptar cuenta también lo que apartan las demás propuestas del grupo', function () {
     InterdepartmentalAgreement::factory()->sharedGroup(5)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id,
         'career_id' => Career::factory()->create(['department_id' => $this->otro->id])->id,
     ]);

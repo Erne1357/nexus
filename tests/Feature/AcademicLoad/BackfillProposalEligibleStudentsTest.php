@@ -17,8 +17,12 @@ use Illuminate\Support\Facades\DB;
 | los alumnos borrados, inactivos o que no son elegibles para ninguna de sus materias.
 */
 it('calcula los alumnos posibles de las propuestas que ya existen como EligibleStudentsQuery::distinctFor', function () {
+    // La propuesta por carrera y modalidad (posterior) quita career_proposals.campus_id y lee el puente de campus a
+    // modalidad, que quitó la contracción: se deshacen primero, de la última a la primera.
+    (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
+    (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
     $plan = StudyPlan::factory()->create();
-    $campus = Campus::factory()->create();
+    $campus = campusBeforeContraction('C9');
     $calculo = Subject::factory()->create();
     $fisica = Subject::factory()->create();
     $outside = Subject::factory()->create();
@@ -40,7 +44,7 @@ it('calcula los alumnos posibles de las propuestas que ya existen como EligibleS
     $migration->down();
     $migration->up();
 
-    $expected = app(EligibleStudentsQuery::class)->distinctFor($proposal->career, $campus, [$calculo->id, $fisica->id]);
+    $expected = app(EligibleStudentsQuery::class)->distinctFor($proposal->career, modalityOf('PRES'), $campus, [$calculo->id, $fisica->id]);
 
     expect($expected)->toBe(2)
         ->and(DB::table('career_proposals')->where('id', $proposal->id)->value('eligible_students'))->toBe($expected)

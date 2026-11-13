@@ -14,7 +14,7 @@ use App\Modules\Core\Models\User;
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
-    $this->load = AcademicLoad::factory()->create(['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)]);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
 });
 
 it('permite según el rol y su alcance en la propia carga', function (Role $role, array $scope, bool $view, bool $propose) {
@@ -44,8 +44,15 @@ it('niega al jefe de otro departamento', function () {
         ->and($jefe->can('propose', $this->load))->toBeFalse();
 });
 
-it('niega al jefe de proyecto docente y al jefe de departamento de otro campus', function (Role $role) {
+it('AZ-S17: el jefe de proyecto docente y el jefe de departamento de otro campus ven la carga de su modalidad', function (Role $role) {
     $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
+
+    expect($user->can('view', $this->load))->toBeTrue();
+})->with([Role::JefeProyectoDocente, Role::JefeDepartamento]);
+
+it('AZ-S17: niega al jefe de proyecto docente y al jefe de departamento de otra modalidad', function (Role $role) {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $user = User::factory()->withRole($role, ['modality_id' => modalityOf('EAD')->id, 'department_id' => departmentKey(10)])->create();
 
     expect($user->can('view', $this->load))->toBeFalse()
         ->and($user->can('propose', $this->load))->toBeFalse();

@@ -29,4 +29,15 @@ enum DemoVolume: string
             self::Massive => ['C1', 'C2'],
         };
     }
+
+    /**
+     * Las modalidades de su carga, por clave: Presencial, la de los grupos de sus campus (M1, M4). El campus es solo el
+     * lugar (MS3) y no dice su modalidad, así que el volumen la nombra como nombra sus campus.
+     *
+     * @return list<string>
+     */
+    public function modalities(): array
+    {
+        return ['PRES'];
+    }
 }

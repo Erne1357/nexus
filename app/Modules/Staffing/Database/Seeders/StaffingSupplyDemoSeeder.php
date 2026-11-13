@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Actions\AddPosition;
 use App\Modules\Faculty\Actions\CreateTeacher;
@@ -57,16 +58,17 @@ final class StaffingSupplyDemoSeeder extends Seeder
 
     /**
      * @param  list<string>  $campuses  claves de campus
+     * @param  string  $modality  la clave de la modalidad de la carga de la demo (Presencial)
      *
      * @throws RuntimeException en producción o si el periodo no existe
      */
-    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027): void
+    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, string $modality = 'PRES'): void
     {
         $this->refuseProduction();
         $started = hrtime(true);
 
         $termModel = Term::query()->where('code', $term)->first() ?? throw new RuntimeException("El periodo {$term} no existe.");
-        $demand = $this->demand(Campus::query()->whereIn('code', $campuses)->orderBy('code')->get());
+        $demand = $this->demand(Campus::query()->whereIn('code', $campuses)->orderBy('code')->get(), Modality::query()->where('code', $modality)->firstOrFail());
         $capacity = $this->capacity($termModel);
         $faker = fake('es_MX');
         $faker->seed($seed);
@@ -107,7 +109,7 @@ final class StaffingSupplyDemoSeeder extends Seeder
      * @param  iterable<Campus>  $campuses
      * @return array<string, int>
      */
-    private function demand(iterable $campuses): array
+    private function demand(iterable $campuses, Modality $modality): array
     {
         $suggested = SuggestedGroups::fromSettings();
         $demand = [];
@@ -116,7 +118,7 @@ final class StaffingSupplyDemoSeeder extends Seeder
             $offered = DB::table('career_campus')->where('campus_id', $campus->id)->where('is_active', true)->whereNull('deleted_at')->pluck('career_id');
 
             foreach (Career::query()->where('is_active', true)->whereIn('id', $offered)->orderBy('code')->get() as $career) {
-                $eligible = app(EligibleStudentsQuery::class)->countsFor($career, $campus);
+                $eligible = app(EligibleStudentsQuery::class)->countsFor($career, $modality, $campus);
 
                 foreach ($this->placements($career) as $subject) {
                     $groups = $suggested->for($eligible[$subject->id] ?? 0, (bool) $subject->needs_lab);

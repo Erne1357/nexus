@@ -2,6 +2,9 @@
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
@@ -12,8 +15,11 @@ use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
@@ -30,6 +36,7 @@ use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
@@ -78,7 +85,7 @@ function seedTwoCampusWorld(): void
             $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
             $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C1' => 30, 'C2' => 40]]);
             $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 6, 'C2' => 10]]);
-            $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C1', 'C2']]]);
+            $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES']]]);
             $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
             $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
             Event::fakeFor(fn () => $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C1', 'C2']]), [GroupsCreated::class]);
@@ -149,7 +156,7 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
         ->and($removed)->not->toBeEmpty();
 
     $openLoads = AcademicLoad::query()->where('term_id', $this->term->id)->whereIn('status', [LoadStatus::Staffing, LoadStatus::Adjusting])->get();
-    $groupsOf = fn (AcademicLoad $load) => Group::query()->active()->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id);
+    $groupsOf = fn (AcademicLoad $load) => Group::query()->active()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id);
 
     foreach ($openLoads as $load) {
         expect($groupsOf($load)->whereNull('teacher_id')->count())->toBeGreaterThan(0, "Todos los grupos de la carga {$load->department_id} tienen docente.");
@@ -169,8 +176,10 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
         ->and($requests->whereNotNull('teacher_id')->count())->toBe($requests->count())
         ->and($requests->pluck('department_id')->unique()->count())->toBeGreaterThanOrEqual(2);
 
-    $appliedLoad = AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $applied->first()->department_id)->first();
-    $approvedLoad = AcademicLoad::query()->where('term_id', $this->term->id)->where('department_id', $requests->firstWhere('status', ChangeRequestStatus::Approved)->department_id)->first();
+    // La carga de la solicitud es la de su departamento en su modalidad (M1).
+    $loadOf = fn (ChangeRequest $request): AcademicLoad => AcademicLoad::query()->ofDepartment($this->term->id, $request->modality_id, $request->department_id)->sole();
+    $appliedLoad = $loadOf($applied->first());
+    $approvedLoad = $loadOf($requests->firstWhere('status', ChangeRequestStatus::Approved));
 
     // La carga de las solicitudes aplicadas regresó sola a asignación; después LoadClosingDemoSeeder pudo cerrarla.
     expect($appliedLoad->transitions()->where('from_status', LoadStatus::Adjusting)->where('to_status', LoadStatus::Staffing)->exists())->toBeTrue()
@@ -178,7 +187,7 @@ it('deja cada pantalla de Staffing con sus casos: cargas en cada estado y rankea
 
     // Casos de cierre (tarea 4.1, LoadClosingDemoSeeder en modo mixed): una carga cerrada por su jefe, sin pendientes de
     // cierre, con sus grupos confirmados y justificaciones; sin solicitudes pendientes. SC se queda en asignación.
-    $closed = AcademicLoad::query()->where('term_id', $this->term->id)->where('status', LoadStatus::Closed)->with(['department', 'campus', 'term'])->get();
+    $closed = AcademicLoad::query()->where('term_id', $this->term->id)->where('status', LoadStatus::Closed)->with(['department', 'modality', 'term'])->get();
 
     expect($closed)->not->toBeEmpty()
         ->and($closed->pluck('department.code')->all())->not->toContain('SC')
@@ -244,6 +253,9 @@ it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma 
     $first = staffingSnapshot();
     preg_match('/(\d+) con traslado justo/', $output->fetch(), $picked);
 
+    // MS6: la solicitud de horario de un grupo la aplica un coordinador que cubre el campus del grupo, no el del primer campus.
+    $appliedSchedules = ChangeRequest::query()->with(['group', 'appliedBy'])->where('status', ChangeRequestStatus::Applied)->where('kind', ChangeRequestKind::Schedule)->get();
+    $appliedByOutsider = $appliedSchedules->reject(fn (ChangeRequest $request): bool => $request->appliedBy->can('apply', $request))->count();
     $seededGroups = GroupTeacherAssignment::query()->current()->pluck('group_id')->flip();
     app(ScheduleValidator::class)->forget();
     $travel = GroupTeacherAssignment::query()->current()->distinct()->pluck('teacher_id')
@@ -254,9 +266,34 @@ it('con dos campus siembra traslados justos entre campus (SC-09) y con la misma 
     $seed();
 
     expect((int) ($picked[1] ?? 0))->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(4)
+        ->and($appliedSchedules)->not->toBeEmpty()
+        ->and($appliedByOutsider)->toBe(0)
         ->and($travel)->not->toBeEmpty()
         ->and($first['groups'])->not->toBeEmpty()
         ->and(staffingSnapshot())->toBe($first);
+});
+
+it('MS6: la solicitud de horario de un grupo de C2 la aplica el coordinador que cubre C2, aunque el primero de la carrera sea de C1', function () {
+    $pres = modalityOf('PRES');
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $department = Department::factory()->create(['code' => 'SC']);
+    $career = Career::factory()->create(['code' => 'ISC']);
+    $term = Term::factory()->create();
+    $group = Group::factory()->create(['term_id' => $term->id, 'campus_id' => $c2->id, 'modality_id' => $pres->id, 'subject_id' => Subject::factory()->create(['department_id' => $department->id])->id, 'owner_career_id' => $career->id]);
+    // El de C1 se nombra primero: el seeder de antes tomaba al primer titular del primer campus.
+    $ofC1 = User::factory()->withRole(Role::Coordinador, ['modality_id' => $pres->id, 'campus_id' => $c1->id, 'career_id' => $career->id])->create();
+    $ofC2 = User::factory()->withRole(Role::Coordinador, ['modality_id' => $pres->id, 'campus_id' => $c2->id, 'career_id' => $career->id])->create();
+    $head = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $department->id])->create();
+    $schedule = ChangeRequest::factory()->forGroup($group)->schedule()->approved()->create();
+    $room = ChangeRequest::factory()->forGroup($group)->approved()->create(['kind' => ChangeRequestKind::Room]);
+    $applier = new ReflectionMethod(StaffingDemoSeeder::class, 'applier');
+    $seeder = new StaffingDemoSeeder;
+
+    expect($applier->invoke($seeder, $schedule, $head)->is($ofC2))->toBeTrue()
+        ->and($ofC1->can('apply', $schedule))->toBeFalse()
+        ->and($ofC2->can('apply', $schedule))->toBeTrue()
+        ->and($applier->invoke($seeder, $room, $head)->is($head))->toBeTrue();
 });
 
 it('no corre en producción', function () {

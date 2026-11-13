@@ -73,7 +73,7 @@ final class AssignTeacher
 
             $assignment = GroupTeacherAssignment::query()->create([
                 'term_id' => $group->term_id,
-                'campus_id' => $group->campus_id,
+                'modality_id' => $group->modality_id,
                 'group_id' => $group->id,
                 'teacher_id' => $teacher->id,
                 'assigned_by' => $actor->getKey(),
@@ -108,9 +108,7 @@ final class AssignTeacher
     private function ensureLoadAllowsChanges(Group $group): void
     {
         $load = AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
+            ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
             ->first();
 
         if ($load === null || ! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true)) {

@@ -3,16 +3,17 @@
 namespace App\Modules\Scheduling\Validation;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
-use App\Modules\Scheduling\Rules\Constraints\CampusWindow;
 use App\Modules\Scheduling\Rules\Constraints\Constraint;
 use App\Modules\Scheduling\Rules\Constraints\LabRoom;
+use App\Modules\Scheduling\Rules\Constraints\ModalityWindow;
 use App\Modules\Scheduling\Rules\Constraints\OfferableGroup;
 use App\Modules\Scheduling\Rules\Constraints\QuotasWithinCapacity;
 use App\Modules\Scheduling\Rules\Constraints\RoomBlocked;
@@ -33,7 +34,10 @@ use Illuminate\Contracts\Container\Container;
  * editor) o con otro docente (el ranking). Lo usan el editor de horarios (3.5), la asignación (3.8, 3.9), el job que
  * recalcula `schedule_conflicts` y el tablero de choques.
  *
- * Guarda la foto de cada periodo y campus que ya leyó mientras viva la instancia: varias preguntas seguidas (una por
+ * La foto es de un periodo y una modalidad, con los grupos de todos sus campus (M1): la carga presencial de un
+ * departamento se valida una vez, con C1 y C2 juntos. Cada regla lee el perfil de la modalidad del grupo.
+ *
+ * Guarda la foto de cada periodo y modalidad que ya leyó mientras viva la instancia: varias preguntas seguidas (una por
  * celda del editor, una por docente candidato) leen la base una sola vez. No es singleton (Octane): cada petición o
  * job resuelve la suya; después de escribir, forget() la olvida.
  */
@@ -48,7 +52,7 @@ final class ScheduleValidator
         TeacherOverlap::class,
         RoomOverlap::class,
         TypicalStudentSchedule::class,
-        CampusWindow::class,
+        ModalityWindow::class,
         RoomCapacity::class,
         LabRoom::class,
         QuotasWithinCapacity::class,
@@ -107,7 +111,7 @@ final class ScheduleValidator
      */
     public function validateGroup(Group $group): ValidationResult
     {
-        return self::of($group->id, $this->validate($this->stateFor($group->term_id, $group->campus_id), ValidationScope::groups($group->id)));
+        return self::of($group->id, $this->validate($this->stateFor($group->term_id, $group->modality_id), ValidationScope::groups($group->id)));
     }
 
     /**
@@ -124,19 +128,25 @@ final class ScheduleValidator
         return $this->validate($state, ValidationScope::teacher($teacher->id));
     }
 
+    /**
+     * Todo lo del salón en el periodo. La foto de cualquier modalidad trae todos los grupos con sesión en un salón, así
+     * que basta la de la modalidad de uno de los grupos que lo usan; sin ninguno, no hay nada que revisar.
+     */
     public function validateRoom(Room $room, Term $term): ValidationResult
     {
-        return $this->validate($this->stateFor($term->id, $room->campus_id), ValidationScope::room($room->id));
+        $modalityId = GroupSession::query()->where('term_id', $term->id)->where('room_id', $room->id)->orderBy('modality_id')->value('modality_id');
+
+        return $modalityId === null ? new ValidationResult([]) : $this->validate($this->stateFor($term->id, $modalityId), ValidationScope::room($room->id));
     }
 
     /**
-     * La carga de un campus completo, o la de un departamento en él.
+     * La carga de una modalidad completa, con los grupos de todos sus campus (M1), o la de un departamento en ella.
      */
-    public function validateLoad(Term $term, Campus $campus, ?Department $department = null): ValidationResult
+    public function validateLoad(Term $term, Modality $modality, ?Department $department = null): ValidationResult
     {
-        $state = $this->stateFor($term->id, $campus->id);
+        $state = $this->stateFor($term->id, $modality->id);
 
-        return $this->validate($state, ValidationScope::load($state, $campus->id, $department?->id));
+        return $this->validate($state, ValidationScope::load($state, $modality->id, $department?->id));
     }
 
     /**
@@ -144,7 +154,7 @@ final class ScheduleValidator
      */
     public function checkSession(Group $group, SessionCandidate $candidate): ValidationResult
     {
-        $state = $this->stateFor($group->term_id, $group->campus_id);
+        $state = $this->stateFor($group->term_id, $group->modality_id);
 
         return self::of($group->id, $this->validate($state->withSession($group->id, $candidate), ValidationScope::groups($group->id)));
     }
@@ -221,7 +231,7 @@ final class ScheduleValidator
      */
     private function withCandidates(Group $group, iterable $teachers): array
     {
-        $state = $this->stateFor($group->term_id, $group->campus_id);
+        $state = $this->stateFor($group->term_id, $group->modality_id);
         $ids = [];
 
         foreach ($teachers as $teacher) {
@@ -232,22 +242,19 @@ final class ScheduleValidator
 
         if ($missing !== []) {
             $state = $state->withTeachers($this->query->teachers(Term::query()->findOrFail($group->term_id), $missing));
-            $this->states[self::key($group->term_id, $group->campus_id)] = $state;
+            $this->states[self::key($group->term_id, $group->modality_id)] = $state;
         }
 
         return [$state, $ids];
     }
 
     /**
-     * La foto del periodo vista desde un campus (sin campus: los grupos con docente de todo el periodo), leída una sola
-     * vez por instancia.
+     * La foto del periodo vista desde una modalidad (sin modalidad: los grupos con docente de todo el periodo), leída
+     * una sola vez por instancia.
      */
-    public function stateFor(string $termId, ?string $campusId): ScheduleState
+    public function stateFor(string $termId, ?string $modalityId): ScheduleState
     {
-        return $this->states[self::key($termId, $campusId)] ??= $this->query->forCampus(
-            Term::query()->findOrFail($termId),
-            $campusId === null ? null : Campus::query()->findOrFail($campusId),
-        );
+        return $this->states[self::key($termId, $modalityId)] ??= $this->query->forModality(Term::query()->findOrFail($termId), $modalityId);
     }
 
     /**
@@ -263,8 +270,8 @@ final class ScheduleValidator
         return new ValidationResult($result->forGroup($groupId));
     }
 
-    private static function key(string $termId, ?string $campusId): string
+    private static function key(string $termId, ?string $modalityId): string
     {
-        return $termId.'|'.($campusId ?? '*');
+        return $termId.'|'.($modalityId ?? '*');
     }
 }

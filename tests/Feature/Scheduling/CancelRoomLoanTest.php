@@ -31,7 +31,7 @@ beforeEach(function () {
     $this->from = Department::factory()->create();
     $this->to = Department::factory()->create();
     $this->group = Group::factory()->create(['code' => 'D', 'subject_id' => Subject::factory()->create(['department_id' => $this->from->id])->id]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->from->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Adjusting)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->from->id]);
     $this->room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->group->campus_id])->id, 'department_id' => $this->to->id]);
     $this->loan = InterdepartmentalAgreement::factory()->create([
         'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id, 'room_id' => $this->room->id,
@@ -75,7 +75,7 @@ it('la carrera: aceptado entre la lectura y la cancelación da un error claro y 
 
 it('la carrera en un grupo compartido: aceptado entre la lectura y retirar no deja cupo huérfano', function () {
     $shared = InterdepartmentalAgreement::factory()->sharedGroup(5)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->from->id, 'to_department_id' => $this->to->id,
     ]);
     $stale = InterdepartmentalAgreement::query()->find($shared->id);

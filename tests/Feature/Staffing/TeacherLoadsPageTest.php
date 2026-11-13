@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
@@ -10,6 +11,7 @@ use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Faculty\Models\Teacher;
@@ -19,6 +21,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\RefreshTeacherTermLoads;
 use App\Modules\Staffing\Jobs\RefreshTeacherLoads;
+use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Queries\TeacherLoadsBoardQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -217,6 +220,62 @@ describe('alcance', function () {
 
         $teacherUser = User::factory()->withRole(Role::Docente)->create();
         $this->actingAs($teacherUser)->get(route('staffing.teacher-loads'))->assertForbidden();
+    });
+
+    it('M1, MS16: la página es de una modalidad: sin select con una sola, dice «Presencial» y su carga; con EAD activa el select la cambia', function () {
+        boardSeed();
+        AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sc->id]);
+
+        loadsPage($this->jefe)
+            ->assertSet('modalidad', 'PRES')
+            ->assertDontSeeHtml('data-testid="modality-scope"')
+            ->assertSeeHtml('data-testid="loads-modality">Presencial<')
+            ->assertSeeInOrder(['Carga del departamento', 'Asignación']);
+
+        modalityOf('EAD')->update(['is_active' => true]);
+        TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
+        app()->forgetScopedInstances();
+
+        loadsPage($this->jefe)
+            ->assertSeeHtml('data-testid="modality-scope"')
+            ->set('modalidad', 'EAD')
+            ->assertSet('modalidad', 'EAD')
+            ->assertSee('Sin carga')
+            ->assertSee('Olga Excedida');
+    });
+
+    it('otra modalidad: un jefe de proyecto docente de EAD no ve la carga por docente en PRES aunque la pida en la URL', function () {
+        boardSeed();
+        modalityOf('EAD')->update(['is_active' => true]);
+        $jpdEad = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->sc->id])->create();
+
+        loadsPage($jpdEad, ['modalidad' => 'PRES'])->assertSet('modalidad', 'EAD');
+        $this->actingAs($jpdEad);
+
+        expect($jpdEad->can('viewAny', [TeacherTermLoad::class, $this->sc, modalityOf('PRES')]))->toBeFalse()
+            ->and($jpdEad->can('viewAny', [TeacherTermLoad::class, $this->sc, modalityOf('EAD')]))->toBeTrue();
+    });
+
+    it('MS6: un jefe de proyecto docente de PRES limitado a C1 ve la carga de todos los campus del departamento', function () {
+        boardSeed();
+        $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('PRES')->id, 'campus_id' => $this->c1->id, 'department_id' => $this->sc->id])->create();
+
+        loadsPage($jpd)->assertSee('Olga Excedida')->assertSee('Fabiola Completa')->assertSee('Todos los campus');
+    });
+
+    it('MS32: en Presencial, las horas de cada docente suman también sus grupos de otra modalidad (el tope es del docente)', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
+        $teacher = boardTeacher('Elena Mixta', 'tiempoCompleto');
+        teacherLoadsGroup($teacher, $this->c2, 10, 'P1');
+        teacherLoadsGroup($teacher, $this->c1, 4, 'E1')->update(['modality_id' => modalityOf('EAD')->id]);
+        app(RefreshTeacherTermLoads::class)->handle($this->term);
+        app()->forgetScopedInstances();
+
+        $page = loadsPage($this->jefe, ['modalidad' => 'PRES'])->assertSet('modalidad', 'PRES');
+        $row = collect($page->viewData('board')->rows)->firstWhere('teacherId', $teacher->id);
+
+        expect($row->assignedHours)->toBe(14);
+        $page->call('open', $teacher->id)->assertSee('Materia P1')->assertSee('Materia E1');
     });
 
     it('Subdirección elige el departamento con ?depto', function () {

@@ -158,7 +158,12 @@ new #[Title('Ficha del docente')] class extends Component
 
     public string $headDepartmentId = '';
 
-    /** Solo para el jefe de proyecto docente; el jefe es de todo el Tec. */
+    /**
+     * Solo para el jefe de proyecto docente (AZ-S17): su modalidad, que empieza en la única activa, y su campus, opcional
+     * (vacío es todos los campus de la modalidad). El jefe es de todo el Tec.
+     */
+    public string $headModalityId = '';
+
     public string $headCampusId = '';
 
     public string $headFrom = '';
@@ -187,6 +192,16 @@ new #[Title('Ficha del docente')] class extends Component
     public function updatedTab(): void
     {
         $this->tab = in_array($this->tab, self::TABS, true) ? $this->tab : 'datos';
+    }
+
+    /**
+     * Una modalidad sin salones suelta el campus de la jefatura: ahí el jefe de proyecto docente va sin campus (MS4).
+     */
+    public function updatedHeadModalityId(PeopleQuery $people): void
+    {
+        if (! $people->usesCampuses($this->headModalityId)) {
+            $this->headCampusId = '';
+        }
     }
 
     /**
@@ -238,14 +253,14 @@ new #[Title('Ficha del docente')] class extends Component
             'perfil' => $this->profileData($teacher, $records, $teachers, $context, $record->term),
             'historial' => ['history' => $records->history($teacher)],
             'disponibilidad' => [
-                'availability' => $record->term === null ? null : $grids->for($teacher, $record->term, $grids->profile($context->activeCampus())),
+                'availability' => $record->term === null ? null : $grids->for($teacher, $record->term, $grids->profile()),
                 'availabilityReason' => Gate::allows('manageAvailability', $teacher) ? null : 'Solo quien administra al docente edita su disponibilidad.',
             ],
             default => [],
         };
 
         $canAppoint = Gate::allows('viewAny', RoleAssignment::class);
-        $headOptions = $canAppoint && $this->showHeadshipModal ? $people->scopeOptions(Role::JefeProyectoDocente, null) : ['campuses' => [], 'units' => []];
+        $headOptions = $canAppoint && $this->showHeadshipModal ? $people->scopeOptions(Role::JefeProyectoDocente, null, $this->headModalityId) : ['modalities' => [], 'campuses' => [], 'units' => []];
 
         $removing = $this->removingAdscriptionId === null ? null : $record->adscriptions->firstWhere('id', $this->removingAdscriptionId);
 
@@ -258,6 +273,7 @@ new #[Title('Ficha del docente')] class extends Component
             'headKinds' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], Role::HEADSHIPS),
             'departmentOptions' => $headOptions['units'],
             'campusOptions' => $headOptions['campuses'],
+            'modalityOptions' => $headOptions['modalities'],
             'record' => $record,
             'removal' => $removal,
             'primaryReasons' => $primaryReasons,
@@ -412,20 +428,21 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * Abre el formulario de «Nombrar jefatura». Solo quien nombra puestos (el administrador).
      */
-    public function createHeadship(TeacherQuery $teachers): void
+    public function createHeadship(TeacherQuery $teachers, PeopleQuery $people): void
     {
         $this->authorize('create', RoleAssignment::class);
         $teachers->findOrFail($this->teacherId);
 
         $this->resetValidation();
         $this->reset('headKind', 'headDepartmentId', 'headCampusId', 'headTo');
+        $this->headModalityId = $people->defaultModalityId() ?? '';
         $this->headFrom = today()->toDateString();
         $this->showHeadshipModal = true;
     }
 
     /**
-     * Nombra al docente jefe de departamento (de todo el Tec) o jefe de proyecto docente (de un campus) con
-     * AppointRole. Si no tiene usuario, se le crea antes con SyncTeacherAccess; un inactivo no se nombra. Los rechazos
+     * Nombra al docente jefe de departamento (de todo el Tec) o jefe de proyecto docente (de una modalidad y,
+     * opcionalmente, de un campus; AZ-S17) con AppointRole. Si no tiene usuario, se le crea antes con SyncTeacherAccess; un inactivo no se nombra. Los rechazos
      * de la Action salen en el campo que corresponde.
      */
     public function saveHeadship(TeacherQuery $teachers, PeopleQuery $people, AssignmentLabels $labels, SyncTeacherAccess $syncTeacherAccess, AppointRole $appointRole): void
@@ -436,14 +453,24 @@ new #[Title('Ficha del docente')] class extends Component
         $data = $this->validate([
             'headKind' => ['required', Rule::in(array_map(fn (Role $role): string => $role->value, Role::HEADSHIPS))],
             'headDepartmentId' => ['required', 'string'],
+            'headModalityId' => ['nullable', 'string'],
             'headCampusId' => ['nullable', 'string'],
             'headFrom' => ['required', 'date_format:Y-m-d'],
             'headTo' => ['nullable', 'date_format:Y-m-d'],
         ], ['headKind.in' => 'Elige un cargo de la lista.']);
         $role = Role::from($data['headKind']);
+        $campus = $role === Role::JefeProyectoDocente ? $people->campus($data['headCampusId']) : null;
 
         if (! $teacher->is_active) {
             $this->addError('headKind', 'El docente está inactivo: reactívalo antes de nombrarlo.');
+
+            return;
+        }
+
+        // Solo el campo vacío es «Todos los campus» (AZ-S17): un id que no es de un campus es un error, no un jefe de
+        // proyecto docente de todos los campus.
+        if ($role === Role::JefeProyectoDocente && filled($data['headCampusId'] ?? null) && $campus === null) {
+            $this->addError('headCampusId', 'Elige el campus.');
 
             return;
         }
@@ -465,14 +492,15 @@ new #[Title('Ficha del docente')] class extends Component
             $assignment = $appointRole->handle(
                 $user,
                 $role,
-                $role === Role::JefeProyectoDocente ? $people->campus($data['headCampusId']) : null,
+                $campus,
                 $people->unit($data['headDepartmentId']),
                 null,
                 CarbonImmutable::parse($data['headFrom']),
                 $data['headTo'] === '' ? null : CarbonImmutable::parse($data['headTo']),
+                $role === Role::JefeProyectoDocente ? $people->modality($data['headModalityId']) : null,
             );
         } catch (ValidationException $exception) {
-            $fields = ['user' => 'headKind', 'role' => 'headDepartmentId', 'unit' => 'headDepartmentId', 'campus' => 'headCampusId', 'to' => 'headTo'];
+            $fields = ['user' => 'headKind', 'role' => 'headDepartmentId', 'unit' => 'headDepartmentId', 'modality' => 'headModalityId', 'campus' => 'headCampusId', 'to' => 'headTo'];
 
             foreach ($exception->errors() as $field => $messages) {
                 $this->addError($fields[$field] ?? 'headKind', (string) $messages[0]);
@@ -829,6 +857,7 @@ new #[Title('Ficha del docente')] class extends Component
             'loadNotes' => 'notas',
             'headKind' => 'cargo',
             'headDepartmentId' => 'departamento',
+            'headModalityId' => 'modalidad',
             'headCampusId' => 'campus',
             'headFrom' => 'inicio',
             'headTo' => 'fin',

@@ -55,14 +55,15 @@ it('justifica varios grupos con un motivo: cada uno con quién, cuándo y su bit
 it('devuelve con su motivo los que no aplican y justifica los demás: uno completo y uno de una carga cerrada', function () {
     $pending = $this->world->group(teacher: false);
     $complete = $this->world->group();
-    $closed = $this->world->group(teacher: false, load: $this->world->loadIn(Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']), LoadStatus::Closed));
+    modalityOf('EAD')->update(['is_active' => true]);
+    $closed = $this->world->group(teacher: false, load: $this->world->loadIn(Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']), LoadStatus::Closed, modality: modalityOf('EAD')));
 
     $result = justifyGroupsOf([$pending, $complete, $closed]);
 
     expect($result['justified'])->toBe([$pending->id])
         ->and($result['skipped'])->toBe([
             ['code' => $complete->code, 'reason' => 'El grupo ya tiene docente y salón: no necesita justificación.'],
-            ['code' => $closed->code, 'reason' => 'La carga de Sistemas y Computación en Campus I está en cerrada: no se editan justificaciones.'],
+            ['code' => $closed->code, 'reason' => 'La carga de Sistemas y Computación en EAD está en cerrada: no se editan justificaciones.'],
         ])
         ->and($complete->fresh()->close_justification)->toBeNull()
         ->and($closed->fresh()->close_justification)->toBeNull();

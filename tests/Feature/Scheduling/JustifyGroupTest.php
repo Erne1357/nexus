@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -25,7 +26,7 @@ beforeEach(function () {
     $this->load = AcademicLoad::factory()->create(['status' => LoadStatus::Staffing, 'department_id' => departmentKey(10)]);
     $this->group = Group::factory()->create([
         'term_id' => $this->load->term_id,
-        'campus_id' => $this->load->campus_id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10)])->id,
     ]);
 });
@@ -53,13 +54,27 @@ it('la quita con un texto vacío', function () {
 });
 
 it('no justifica un grupo que ya tiene docente y salón en cada sesión presencial', function () {
-    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->load->campus_id])->id]);
+    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id]);
     $this->group->update(['teacher_id' => Teacher::factory()->create()->id]);
     GroupSession::factory()->for($this->group)->inRoom($room)->on(1, '07:00', '09:00')->create();
 
     expect(fn () => app(JustifyGroup::class)->handle($this->group, 'Por si acaso', $this->user))->toThrow(
         fn (ValidationException $e) => expect($e->errors())->toBe(['justification' => ['El grupo ya tiene docente y salón: no necesita justificación.']]),
     );
+});
+
+it('M1: el perfil de la modalidad decide si cuenta la sesión sin salón (el campus no tiene perfil, MS3)', function () {
+    $this->group->update(['teacher_id' => Teacher::factory()->create()->id]);
+    GroupSession::factory()->for($this->group)->on(1, '07:00', '09:00')->create();
+    $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
+
+    expect(fn () => app(JustifyGroup::class)->handle($this->group->fresh(), 'Por si acaso', $this->user))->toThrow(
+        fn (ValidationException $e) => expect($e->errors())->toBe(['justification' => ['El grupo ya tiene docente y salón: no necesita justificación.']]),
+    );
+
+    $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => true]]);
+
+    expect(app(JustifyGroup::class)->handle($this->group->fresh(), 'Laboratorio en remodelación', $this->user)->close_justification)->toBe('Laboratorio en remodelación');
 });
 
 it('no se escribe con la carga cerrada', function () {
@@ -74,7 +89,7 @@ it('la policy deja justificar a quien cierra la carga del departamento: el jefe 
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [
-            'campus_id' => $this->load->campus_id,
+            'campus_id' => loadCampus()->id,
             ...($role === Role::Coordinador ? ['career_id' => $this->group->owner_career_id] : ($role === Role::Subdireccion ? [] : ['department_id' => departmentKey($department)])),
         ])->create();
 

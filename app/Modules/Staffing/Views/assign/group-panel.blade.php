@@ -5,6 +5,9 @@
 --}}
 @php($group = $row->group)
 @php($ranking = $rankings[$group->id] ?? null)
+@php($groupWritable = $canAssign && in_array((string) $group->campus_id, $assignableCampuses, true))
+@php($readOnlyReason = $groupWritable || ! $canAssign ? $readOnlyReason : ($campusReadOnly ?? $readOnlyReason))
+@php($canAssign = $groupWritable)
 <section aria-labelledby="group-title" data-testid="group-panel" data-selected-group="{{ $group->id }}"
     @if ($sheet) x-on:keydown.escape.window="if (window.innerWidth < 1024) { $wire.closeSheet() }" @endif
     @class([
@@ -23,7 +26,9 @@
                     <span><span class="font-mono">{{ $group->ownerCareer?->code }}</span> · semestre {{ $group->semester }}</span>
                     <span class="font-mono">{{ $row->schedule }}</span>
                     <span><span class="font-mono tabular-nums">{{ $row->hours }}</span> h por semana</span>
-                    <span>{{ $board->campus->name }}</span>
+                    @if ($group->campus !== null)
+                        <span class="inline-flex items-center gap-1.5">@if ($multiCampus)<x-core::campus-tag :campus="$group->campus" decorative />@endif{{ $group->campus->name }}</span>
+                    @endif
                 </p>
             </div>
             <div class="grid justify-items-start gap-1.5 text-sm md:justify-items-end md:text-right">

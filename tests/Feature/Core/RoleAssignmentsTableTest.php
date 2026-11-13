@@ -50,13 +50,14 @@ function oldShapeRoleScope(User $user, Role $role, array $attributes = []): stri
     ]);
 }
 
-it('guarda el nombramiento de un puesto en un campus, una unidad y una carrera', function () {
+it('guarda el nombramiento de un puesto en una modalidad, un campus, una unidad y una carrera', function () {
     $user = User::factory()->create();
     $campus = Campus::factory()->create();
 
     DB::table('role_assignments')->insert([
         'user_id' => $user->id,
         'role' => Role::Coordinador->value,
+        'modality_id' => modalityOf('PRES')->id,
         'campus_id' => $campus->id,
         'org_unit_id' => departmentKey(7),
         'career_id' => careerKey(12),
@@ -65,16 +66,18 @@ it('guarda el nombramiento de un puesto en un campus, una unidad y una carrera',
     ]);
 
     expect(DB::table('role_assignments')->where('user_id', $user->id)->first())
+        ->modality_id->toBe(modalityOf('PRES')->id)
         ->campus_id->toBe($campus->id)
         ->org_unit_id->toBe(fakeKey(7))
         ->career_id->toBe(fakeKey(12))
         ->valid_to->toBeNull();
 });
 
-it('rechaza un nombramiento de un usuario, campus, unidad o carrera que no existe', function (string $column) {
+it('rechaza un nombramiento de un usuario, modalidad, campus, unidad o carrera que no existe', function (string $column) {
     $row = [
         'user_id' => User::factory()->create()->id,
         'role' => Role::JefeProyectoDocente->value,
+        'modality_id' => modalityOf('PRES')->id,
         'campus_id' => Campus::factory()->create()->id,
         'org_unit_id' => departmentKey(10),
         'valid_from' => '2026-08-01',
@@ -82,7 +85,7 @@ it('rechaza un nombramiento de un usuario, campus, unidad o carrera que no exist
 
     expect(fn () => DB::table('role_assignments')->insert([...$row, $column => fakeKey(999_999)]))
         ->toThrow(QueryException::class, 'foreign key');
-})->with(['user_id', 'campus_id', 'org_unit_id', 'career_id']);
+})->with(['user_id', 'modality_id', 'campus_id', 'org_unit_id', 'career_id']);
 
 it('acepta una unidad que no es un departamento académico', function () {
     DB::table('role_assignments')->insert([
@@ -168,6 +171,7 @@ describe('columnas de alcance por puesto (role_assignments_scope_complete)', fun
             'campus_id' => Campus::factory()->create()->id,
             'org_unit_id' => $role === Role::Subdireccion ? academicUnit() : departmentKey(10),
             'career_id' => careerKey(20),
+            'modality_id' => modalityOf('PRES')->id,
         ];
 
         return [
@@ -206,13 +210,13 @@ describe('columnas de alcance por puesto (role_assignments_scope_complete)', fun
 
     it('Role::scopeColumns() sigue siendo lo que congeló la migración del CHECK (si cambia, va otra migración)', function () {
         // Cada puesto, con exactamente sus columnas, pasa; con una menos, no (arriba). Aquí, las columnas que pide el
-        // enum contra las que la migración congeló.
+        // enum contra las que congeló la última migración del CHECK (2026_11_12_210201, AZ-S17).
         expect(collect(Role::cases())->mapWithKeys(fn (Role $role): array => [$role->value => $role->scopeColumns()])->all())->toBe([
             'admin' => [],
             'subdireccion' => ['org_unit_id'],
             'jefe_departamento' => ['org_unit_id'],
-            'jefe_proyecto_docente' => ['campus_id', 'org_unit_id'],
-            'coordinador' => ['campus_id', 'career_id'],
+            'jefe_proyecto_docente' => ['modality_id', 'org_unit_id'],
+            'coordinador' => ['modality_id', 'career_id'],
             'docente' => [],
             'alumno' => [],
         ]);

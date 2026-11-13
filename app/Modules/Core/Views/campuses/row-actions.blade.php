@@ -6,16 +6,24 @@
     el data-testid. Lo que el rol no permite se muestra deshabilitado, en el menú, con su motivo escrito.
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
-    <x-button
-        icon="o-pencil-square"
-        wire:click="edit('{{ $campus->id }}')"
-        aria-label="Editar {{ $campus->code }}"
-        :data-testid="$inTable ? 'edit-'.$campus->code : null"
-        class="btn-ghost btn-sm"
-        spinner="edit('{{ $campus->id }}')"
-    >
-        <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
-    </x-button>
+    @can('update', $campus)
+        <x-button
+            icon="o-pencil-square"
+            wire:click="edit('{{ $campus->id }}')"
+            aria-label="Editar {{ $campus->code }}"
+            :data-testid="$inTable ? 'edit-'.$campus->code : null"
+            class="btn-ghost btn-sm"
+            spinner="edit('{{ $campus->id }}')"
+        >
+            <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
+        </x-button>
+    @else
+        <span class="tooltip tooltip-left" data-tip="Solo el administrador edita campus.">
+            <x-button icon="o-pencil-square" aria-label="Editar {{ $campus->code }}" class="btn-ghost btn-sm" disabled>
+                <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
+            </x-button>
+        </span>
+    @endcan
 
     <x-core::row-menu :name="$campus->code" :compact="$inTable">
         @can('update', $campus)

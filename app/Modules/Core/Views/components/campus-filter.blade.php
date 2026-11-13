@@ -8,28 +8,52 @@
     o requiredCampus()), null para «todos»; `all`: si la pantalla puede mostrar todos los campus juntos (ofrece
     «Todos»); `property`: la propiedad que fija, `campus` por omisión.
 
+    `counts` (opcional, las pantallas de la carga; maqueta U2, opción A): cuánto hay en cada campus, por código; cada
+    botón lleva entonces la etiqueta del campus (x-core::campus-tag) y su cifra en Mono, y «Todos» la de `total` (sin
+    ella, la suma). Un campus que no está en `counts` lleva 0. Debajo de 768 px son columnas iguales, el nombre sobre la
+    cifra y sin la etiqueta, para que ningún nombre se corte.
+
     Con WithCampusFilter, `$campus` es la propiedad pública (el código que pide la URL), así que la pantalla pasa el
     campus que muestra con otro nombre:
 
     <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" all />
 --}}
-@props(['options', 'selected' => null, 'all' => false, 'property' => 'campus', 'compact' => false, 'allLabel' => 'Todos los campus'])
+@props(['options', 'selected' => null, 'all' => false, 'property' => 'campus', 'compact' => false, 'allLabel' => 'Todos los campus', 'counts' => null, 'total' => null])
 
 @php
-    $choices = collect($options)->map(fn ($campus): array => ['id' => $campus->code, 'name' => $campus->name])->values();
-    $segments = $all ? [['id' => null, 'name' => 'Todos'], ...$choices->all()] : $choices->all();
+    $campuses = collect($options)->values();
+    $counted = is_array($counts);
+    $segments = [
+        ...($all ? [['id' => null, 'name' => 'Todos', 'campus' => null, 'count' => $counted ? ($total ?? array_sum($counts)) : null]] : []),
+        ...$campuses->map(fn ($campus): array => ['id' => $campus->code, 'name' => $campus->name, 'campus' => $campus, 'count' => $counted ? (int) ($counts[$campus->code] ?? 0) : null])->all(),
+    ];
 @endphp
 
-@if ($choices->count() > 1)
+@if ($campuses->count() > 1)
     @if (! $compact && count($segments) <= 4)
-        <div {{ $attributes->class(['relative min-w-0 max-w-full overflow-x-auto overscroll-x-contain']) }}>
-            <div role="group" aria-label="Campus" class="join" data-testid="campus-filter">
+        {{-- Con cuentas, debajo de 768 px son columnas iguales con el nombre sobre la cifra y sin la etiqueta (como el
+             filtro de referencia de DESIGN.md), para que ningún nombre se corte; sin cuentas, se desplaza de lado. --}}
+        <div {{ $attributes->class(['relative min-w-0 max-w-full', 'overflow-x-auto overscroll-x-contain' => ! $counted, 'max-md:w-full' => $counted]) }}>
+            <div role="group" aria-label="Campus" @class(['join', 'max-md:grid max-md:w-full' => $counted]) @if ($counted) style="grid-template-columns: repeat({{ count($segments) }}, minmax(0, 1fr))" @endif data-testid="campus-filter">
                 @foreach ($segments as $segment)
                     <button type="button"
                         wire:click="$set('{{ $property }}', {{ \Illuminate\Support\Js::from($segment['id']) }})"
                         aria-pressed="{{ $selected === $segment['id'] ? 'true' : 'false' }}"
                         data-testid="campus-filter-{{ $segment['id'] ?? 'todos' }}"
-                        @class(['btn join-item flex-none flex-nowrap whitespace-nowrap px-3 max-md:h-11', 'btn-primary' => $selected === $segment['id']])>{{ $segment['name'] }}</button>
+                        @class([
+                            'btn join-item flex-nowrap whitespace-nowrap px-3',
+                            'flex-none max-md:h-11' => ! $counted,
+                            'gap-2 md:flex-none max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-col max-md:gap-0 max-md:px-2 max-md:py-1 max-md:leading-tight' => $counted,
+                            'btn-primary' => $selected === $segment['id'],
+                        ])>
+                        @if ($counted && $segment['campus'] !== null)
+                            <x-core::campus-tag :campus="$segment['campus']" decorative @class(['max-md:hidden', 'border-primary-content/60 bg-transparent text-primary-content' => $selected === $segment['id']]) />
+                        @endif
+                        <span @class(['max-md:max-w-full max-md:truncate' => $counted])>{{ $segment['name'] }}</span>
+                        @if ($counted)
+                            <span @class(['font-mono text-xs tabular-nums', 'text-neutral' => $selected !== $segment['id']]) data-testid="campus-count-{{ $segment['id'] ?? 'todos' }}">{{ $segment['count'] }}</span>
+                        @endif
+                    </button>
                 @endforeach
             </div>
         </div>
@@ -38,11 +62,12 @@
              propiedad puede traer un código que se ignora o venir vacía en una pantalla que muestra el primero. --}}
         <label {{ $attributes->class(['select w-full']) }}>
             <select aria-label="Campus" wire:change="$set('{{ $property }}', $event.target.value)" data-testid="campus-filter">
-                @if ($all)
-                    <option value="" @selected($selected === null)>{{ $allLabel }}</option>
-                @endif
-                @foreach ($choices as $choice)
-                    <option value="{{ $choice['id'] }}" @selected($selected === $choice['id'])>{{ $choice['name'] }}</option>
+                @foreach ($segments as $segment)
+                    @if ($segment['id'] === null)
+                        <option value="" @selected($selected === null)>{{ $allLabel }}{{ $counted ? " ({$segment['count']})" : '' }}</option>
+                    @else
+                        <option value="{{ $segment['id'] }}" @selected($selected === $segment['id'])>{{ $segment['name'] }}{{ $counted ? " ({$segment['count']})" : '' }}</option>
+                    @endif
                 @endforeach
             </select>
         </label>

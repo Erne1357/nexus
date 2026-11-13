@@ -146,7 +146,7 @@ it('no corre en producción', function () {
 function hardViolations(Department $department): array
 {
     return array_values(array_filter(
-        app(ScheduleValidator::class)->validateLoad(test()->term, test()->campus, $department)->violations(),
+        app(ScheduleValidator::class)->validateLoad(test()->term, modalityOf('PRES'), $department)->violations(),
         fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
     ));
 }
@@ -171,6 +171,31 @@ it('no encima a propósito grupos de un semestre que comparte un departamento li
     app(ScheduleValidator::class)->forget();
 
     expect(hardViolations($this->department))->toBe([]);
+});
+
+it('con dos campus, un departamento queda limpio en todos sus campus o en ninguno, y cada campus conserva uno con choques (M1)', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    CareerCampus::factory()->create(['career_id' => $this->career->id, 'campus_id' => $c1->id]);
+    Room::factory()->capacity(45)->count(8)->create(['building_id' => Building::factory()->create(['campus_id' => $c1->id])->id]);
+    $onlyInC1 = Department::factory()->create();
+
+    // En C1 el departamento con más grupos sería el que solo está ahí; contando los dos campus, el de la carga más grande.
+    foreach ([[$this->department, 3, 2], [$onlyInC1, 4, 6]] as [$department, $semester, $count]) {
+        foreach (range(1, $count) as $index) {
+            Group::factory()->create([
+                'term_id' => $this->term->id, 'campus_id' => $c1->id, 'owner_career_id' => $this->career->id, 'study_plan_id' => $this->plan->id,
+                'subject_id' => Subject::factory()->create(['department_id' => $department->id, 'theory_hours' => 2, 'practice_hours' => 1])->id,
+                'semester' => $semester, 'capacity' => 35,
+            ]);
+        }
+    }
+
+    $seeder = new SchedulingDemoSeeder;
+    app()->call([$seeder, 'run'], ['profile' => 'demo', 'campuses' => ['C1', 'C2'], 'ratios' => ['overlap_pairs' => 1, 'clean_departments' => 2]]);
+    app(ScheduleValidator::class)->forget();
+
+    expect($seeder->cleanDepartments())->toBe(['C1' => [$this->department->code], 'C2' => [$this->department->code]])
+        ->and(hardViolations($this->department))->toBe([]);
 });
 
 it('conserva los choques duros en los departamentos que no quedaron limpios', function () {

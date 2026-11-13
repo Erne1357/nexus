@@ -115,8 +115,8 @@ new class extends Component
             'offered' => $this->offeredOn($detail->unit, $detail->appointRoles),
             'roleCase' => Role::tryFrom($this->role),
             'options' => $this->showAppoint && Role::tryFrom($this->role) !== null
-                ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null)
-                : ['campuses' => [], 'units' => [], 'careers' => []],
+                ? $people->scopeOptions(Role::from($this->role), Str::isUuid($this->campus) ? $this->campus : null, Str::isUuid($this->modality) ? $this->modality : null)
+                : ['modalities' => [], 'campuses' => [], 'units' => [], 'careers' => []],
             'person' => $this->showAppoint && $this->appointUserId !== null ? $people->findOrFail($this->appointUserId) : null,
             'found' => $this->showAppoint && $this->appointUserId === null ? $people->search($this->findPerson) : collect(),
         ];
@@ -222,7 +222,7 @@ new class extends Component
         $this->authorize('viewAny', OrgUnit::class);
 
         $this->resetValidation();
-        $this->reset('showAppoint', 'findPerson', 'appointUserId', 'role', 'campus', 'unit', 'career', 'from', 'to');
+        $this->reset('showAppoint', 'findPerson', 'appointUserId', 'role', 'modality', 'campus', 'unit', 'career', 'from', 'to');
     }
 
     /**
@@ -274,9 +274,9 @@ new class extends Component
         $person = $people->findOrFail($this->appointUserId);
         $offered = $this->offeredOn($unit, $rules->rolesForUnit($unit));
 
-        $assignment = $this->appointPerson($appointRole, $people, $person, $offered, $unit);
+        $assignments = $this->appointPerson($appointRole, $people, $person, $offered, $unit);
 
-        $this->success('Nombramiento creado', e($labels->one($assignment)->summary));
+        $this->success('Nombramiento creado', e($labels->one($assignments[0])->summary));
         $this->closeAppoint();
         $this->dispatch('org-chart-changed', id: $unit->id);
     }

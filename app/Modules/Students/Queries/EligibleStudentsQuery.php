@@ -4,36 +4,30 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\Student;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Los alumnos elegibles por materia de una carrera en un campus (tarea 1.5): los que no la han aprobado y ya
- * pueden cursarla, según `student_progress`: aprobaron toda su seriación, está a su alcance (su semestre y dos
- * más) y cumplen el porcentaje de créditos que pide (reglas-de-negocio.md, "Elegibilidad y demanda"). Solo
- * cuentan los alumnos activos, y solo con el avance calculado con su plan actual: un alumno que cambió de plan
- * no cuenta mientras su avance no se recalcule. Si la carrera tiene varios planes, una materia suma a los
- * alumnos de todos. La usan la propuesta del coordinador y Demand.
+ * Los alumnos elegibles por materia de una carrera en una modalidad y un campus (tarea 1.5; M6): los que no la han
+ * aprobado y ya pueden cursarla, según `student_progress`: aprobaron toda su seriación, está a su alcance (su semestre
+ * y dos más) y cumplen el porcentaje de créditos que pide (reglas-de-negocio.md, "Elegibilidad y demanda"). Solo
+ * cuentan los alumnos activos de la modalidad, y solo con el avance calculado con su plan actual: un alumno que cambió
+ * de plan no cuenta mientras su avance no se recalcule. Si la carrera tiene varios planes, una materia suma a los
+ * alumnos de todos. Sin campus cuenta los de todos los campus: la columna única de una modalidad sin salones (MS5).
+ * La usan la propuesta del coordinador, por columna, y Demand.
  */
 final class EligibleStudentsQuery
 {
     /**
      * @return array<string, int> Número de alumnos elegibles por id de materia, solo de las que tienen alguno.
      */
-    public function countsFor(Career $career, Campus $campus): array
+    public function countsFor(Career $career, Modality $modality, ?Campus $campus): array
     {
-        return Student::query()
-            ->join('student_progress', function (JoinClause $join): void {
-                $join->on('student_progress.student_id', '=', 'students.id')
-                    ->on('student_progress.study_plan_id', '=', 'students.study_plan_id');
-            })
-            ->crossJoin(DB::raw('jsonb_array_elements_text(student_progress.subjects_available) as available(subject_id)'))
-            ->where('students.career_id', $career->id)
-            ->where('students.campus_id', $campus->id)
-            ->where('students.is_active', true)
-            ->where('students.status', StudentStatus::Activo)
+        return $this->eligible($career, $modality, $campus)
             ->groupBy('available.subject_id')
             ->toBase()
             ->selectRaw('available.subject_id, count(*) as eligible')
@@ -42,17 +36,32 @@ final class EligibleStudentsQuery
     }
 
     /**
-     * Cuántos alumnos distintos de la carrera en el campus son elegibles para al menos una de las materias dadas,
-     * con los mismos filtros que `countsFor`: cada alumno cuenta una vez aunque lo sea para varias.
+     * Cuántos alumnos distintos de la carrera en la modalidad y el campus son elegibles para al menos una de las
+     * materias dadas, con los mismos filtros que `countsFor`: cada alumno cuenta una vez aunque lo sea para varias.
      *
      * @param  list<string>  $subjectIds
      */
-    public function distinctFor(Career $career, Campus $campus, array $subjectIds): int
+    public function distinctFor(Career $career, Modality $modality, ?Campus $campus, array $subjectIds): int
     {
         if ($subjectIds === []) {
             return 0;
         }
 
+        return $this->eligible($career, $modality, $campus)
+            ->whereIn('available.subject_id', $subjectIds)
+            ->distinct()
+            ->toBase()
+            ->count('students.id');
+    }
+
+    /**
+     * Los alumnos activos de la carrera en la modalidad (y el campus, si lo hay), uno por cada materia que tienen a su
+     * alcance (`available.subject_id`), con el avance de su plan actual.
+     *
+     * @return Builder<Student>
+     */
+    private function eligible(Career $career, Modality $modality, ?Campus $campus): Builder
+    {
         return Student::query()
             ->join('student_progress', function (JoinClause $join): void {
                 $join->on('student_progress.student_id', '=', 'students.id')
@@ -60,12 +69,9 @@ final class EligibleStudentsQuery
             })
             ->crossJoin(DB::raw('jsonb_array_elements_text(student_progress.subjects_available) as available(subject_id)'))
             ->where('students.career_id', $career->id)
-            ->where('students.campus_id', $campus->id)
+            ->where('students.modality_id', $modality->id)
+            ->when($campus !== null, fn (Builder $query) => $query->where('students.campus_id', $campus->id))
             ->where('students.is_active', true)
-            ->where('students.status', StudentStatus::Activo)
-            ->whereIn('available.subject_id', $subjectIds)
-            ->distinct()
-            ->toBase()
-            ->count('students.id');
+            ->where('students.status', StudentStatus::Activo);
     }
 }

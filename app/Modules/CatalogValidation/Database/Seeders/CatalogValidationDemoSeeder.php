@@ -26,6 +26,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\UpdateRoom;
@@ -484,36 +485,29 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
+     * Los campus activos donde se dan los grupos de las modalidades donde se abrió el periodo (M4, MS4; CampusQuery::openIn;
+     * antes, los campus donde se abrió aunque después se desactivaran; MS15, supuesto por confirmar).
+     *
      * @return Collection<int, Campus>
      */
     private function openedCampuses(Term $term): Collection
     {
-        return Campus::query()->whereIn('id', DB::table('term_openings')->where('term_id', $term->getKey())->select('campus_id'))->orderBy('code')->get();
+        return app(CampusQuery::class)->openIn($term);
     }
 
     /**
-     * El jefe del departamento de la revisión (en el campus de salones, o en cualquier campus abierto); si no hay,
-     * el administrador.
+     * El jefe del departamento de la revisión (las revisiones no son de un campus); si no hay, el administrador.
      */
     private function headOf(CatalogReview $review): User
     {
-        $key = $review->term_id.'/'.$review->department_id.'/'.($review->campus_id ?? '');
+        $key = $review->term_id.'/'.$review->department_id;
 
         return $this->heads[$key] ??= $this->findHead($review);
     }
 
     private function findHead(CatalogReview $review): User
     {
-        $campuses = $review->campus_id === null ? $this->openedCampuses($review->term) : collect([$review->campus]);
-
-        foreach ($campuses as $campus) {
-            $head = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $review->department_id))[0]['user'] ?? null;
-
-            if ($head !== null) {
-                return $head;
-            }
-        }
-
-        return User::query()->where('username', 'admin')->firstOrFail();
+        return $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $review->department_id))[0]['user']
+            ?? User::query()->where('username', 'admin')->firstOrFail();
     }
 }

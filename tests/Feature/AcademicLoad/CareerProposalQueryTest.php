@@ -11,24 +11,27 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
+use App\Modules\AcademicLoad\Queries\ProposalSubject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 /*
 | CareerProposalQuery da a la página de la propuesta lo que muestra (reglas-de-negocio.md, "Propuesta de
-| carrera"): las filas por semestre con su materia y departamento, la parte de cada departamento con su
+| carrera"): sus columnas, una por campus (M6), las materias por semestre con su fila de cada campus, su materia y
+| departamento, la parte de cada departamento con su
 | comentario, los totales de lo que se pide y, para el aviso, los departamentos involucrados con catálogos sin
 | validar. Sin consultas por fila.
 */
 
 beforeEach(function () {
-    $this->campus = Campus::factory()->create(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-    $this->proposal = CareerProposal::factory()->create(['campus_id' => $this->campus->id]);
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
+    $this->proposal = CareerProposal::factory()->create();
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->sc = Department::factory()->create(['code' => 'SC']);
 });
@@ -47,6 +50,7 @@ function overviewRow(Department $department, string $code, int $semester, int $g
 {
     return ProposalItem::factory()->create([
         'career_proposal_id' => test()->proposal->id,
+        'campus_id' => test()->campus->id,
         'subject_id' => Subject::factory()->create(['code' => $code, 'department_id' => $department->id, ...$subject])->id,
         'semester' => $semester,
         'requested_groups' => $groups,
@@ -73,7 +77,7 @@ it('agrupa las filas por semestre, en orden, y por clave de materia, con su mate
     $overview = proposalOverview();
 
     expect(array_keys($overview->semesters))->toBe([1, 2, 5])
-        ->and(array_map(fn (array $rows): array => array_map(fn (ProposalItem $item): string => $item->subject->code, $rows), $overview->semesters))
+        ->and(array_map(fn (array $rows): array => array_map(fn (ProposalSubject $row): string => $row->subject->code, $rows), $overview->semesters))
         ->toBe([1 => ['ACF-0901'], 2 => ['ACF-0902', 'AED-1026'], 5 => ['SCD-1015']]);
 
     $redes = $overview->semesters[5][0];
@@ -98,12 +102,54 @@ it('da las partes de los departamentos por clave, con su estado y comentario', f
 });
 
 it('suma las materias con grupos, todas las materias y sus grupos, y trae los alumnos posibles congelados, sin sumar alumnos esperados entre materias', function () {
-    $this->proposal->update(['eligible_students' => 40]);
+    $this->proposal->update(['eligible_students' => 40, 'eligible_students_by_campus' => [$this->campus->id => 40]]);
     overviewRow($this->cb, 'ACF-0901', 1, 2, 70);
     overviewRow($this->sc, 'SCD-1015', 5, 1, 20);
     overviewRow($this->sc, 'AED-1026', 2, 0, 15);
 
-    expect(proposalOverview()->totals)->toBe(['subjects' => 2, 'subjects_total' => 3, 'groups' => 3, 'eligible_students' => 40]);
+    expect(proposalOverview()->totals)->toBe([
+        'subjects' => 2,
+        'subjects_total' => 3,
+        'subjects_by_campus' => [$this->campus->id => 2],
+        'groups' => 3,
+        'groups_by_campus' => [$this->campus->id => 3],
+        'eligible_students' => 40,
+        'eligible_by_campus' => [$this->campus->id => 40],
+    ]);
+});
+
+it('M6: una columna por campus de sus filas, por clave, y cada materia con su fila de cada campus y sus grupos por campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $calculo = overviewRow($this->cb, 'ACF-0901', 1, 1, 30);
+    $inC1 = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c1->id, 'subject_id' => $calculo->subject_id, 'semester' => 1, 'requested_groups' => 4, 'eligible_students' => 150, 'expected_students' => 140]);
+    overviewRow($this->sc, 'SCD-1015', 5, 0);
+
+    $overview = proposalOverview();
+    $row = $overview->subject($calculo->subject_id);
+
+    expect(array_map(fn (?Campus $campus): ?string => $campus?->code, $overview->columns))->toBe(['C1', 'C2'])
+        ->and(array_keys($row->cells))->toBe([$c1->id, $this->campus->id])
+        ->and($row->cell($c1)->id)->toBe($inC1->id)
+        ->and([$row->groups(), $row->eligible(), $row->expected()])->toBe([5, 180, 170])
+        ->and($overview->totals['subjects'])->toBe(1)
+        ->and($overview->totals['subjects_total'])->toBe(2)
+        ->and($overview->totals['groups_by_campus'])->toBe([$c1->id => 4, $this->campus->id => 1])
+        ->and($overview->totals['subjects_by_campus'])->toBe([$c1->id => 1, $this->campus->id => 1])
+        ->and($overview->groupsByColumn($overview->semesters[1]))->toBe([$c1->id => 4, $this->campus->id => 1])
+        ->and($overview->departments()[0]['groups'])->toBe(5);
+});
+
+it('dice quiénes coordinan la carrera y qué columnas cubre cada uno', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    overviewRow($this->cb, 'ACF-0901', 1, 1);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c1->id, 'subject_id' => Subject::factory()->create(['department_id' => $this->cb->id])->id]);
+    $ofC2 = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->proposal->career_id])->create(['name' => 'B de C2']);
+    $both = User::factory()->withRole(Role::Coordinador, ['career_id' => $this->proposal->career_id])->create(['name' => 'A sin campus']);
+
+    expect(array_map(fn (array $row): array => [$row['user']->name, $row['campuses']], proposalOverview()->coordinators))->toBe([
+        ['A sin campus', [$c1->id, $this->campus->id]],
+        ['B de C2', [$this->campus->id]],
+    ]);
 });
 
 it('una propuesta sin filas da semestres y totales vacíos', function () {
@@ -111,7 +157,8 @@ it('una propuesta sin filas da semestres y totales vacíos', function () {
 
     expect($overview->semesters)->toBe([])
         ->and($overview->reviews)->toBe([])
-        ->and($overview->totals)->toBe(['subjects' => 0, 'subjects_total' => 0, 'groups' => 0, 'eligible_students' => 0])
+        ->and($overview->columns)->toBe([])
+        ->and($overview->totals)->toBe(['subjects' => 0, 'subjects_total' => 0, 'subjects_by_campus' => [], 'groups' => 0, 'groups_by_campus' => [], 'eligible_students' => 0, 'eligible_by_campus' => []])
         ->and($overview->pendingCatalogs)->toBe([]);
 });
 
@@ -139,8 +186,7 @@ it('no avisa de un departamento al que no se le piden grupos', function () {
     expect(proposalOverview()->pendingCatalogs)->toBe([]);
 });
 
-it('en un campus que usa salones también avisa de los salones sin validar', function () {
-    $this->campus->update(['settings' => CampusProfile::DEFAULTS]);
+it('HC-14: en una modalidad que usa salones también avisa de los salones sin validar', function () {
     overviewRow($this->cb, 'ACF-0901', 1, 1);
     validateOverviewCatalogs($this->cb);
     CatalogReview::factory()->rooms()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->cb->id]);
@@ -197,11 +243,23 @@ it('dice si una fila se puede corregir: en borrador o regresada, y no si su depa
     expect(proposalOverview()->isEditable($redes))->toBeFalse();
 });
 
-it('encuentra la propuesta de una carrera en un campus y periodo, o ninguna', function () {
+it('M6: encuentra la propuesta de una carrera en una modalidad y periodo, o ninguna', function () {
     $query = app(CareerProposalQuery::class);
 
-    expect($query->findFor($this->proposal->term, $this->campus, $this->proposal->career)?->id)->toBe($this->proposal->id)
-        ->and($query->findFor(Term::factory()->create(), $this->campus, $this->proposal->career))->toBeNull();
+    expect($query->findFor($this->proposal->term, modalityOf('PRES'), $this->proposal->career)?->id)->toBe($this->proposal->id)
+        ->and($query->findFor($this->proposal->term, modalityOf('EAD'), $this->proposal->career))->toBeNull()
+        ->and($query->findFor(Term::factory()->create(), modalityOf('PRES'), $this->proposal->career))->toBeNull();
+});
+
+it('da las filas de una materia por su id, una por campus; la de otra propuesta no existe', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $calculo = overviewRow($this->cb, 'ACF-0901', 1, 1);
+    $inC1 = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $c1->id, 'subject_id' => $calculo->subject_id]);
+    $query = app(CareerProposalQuery::class);
+
+    expect($query->subjectItemsOrFail($this->proposal, $calculo->subject_id)->pluck('id')->all())->toBe([$inC1->id, $calculo->id])
+        ->and(fn () => $query->subjectItemsOrFail($this->proposal, ProposalItem::factory()->create()->subject_id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $query->subjectItemsOrFail($this->proposal, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
 });
 
 it('busca la propuesta y sus filas por id del cliente, sin fallar con un id que no es uuid', function () {
@@ -231,9 +289,9 @@ it('dice la especialidad de cada materia en su plan y acomoda el tronco común a
     $overview = proposalOverview();
 
     expect($overview->specialties)->toBe([['id' => $redes->id, 'name' => 'Redes', 'subjects' => 1], ['id' => $web->id, 'name' => 'Web', 'subjects' => 1]])
-        ->and($overview->specialtyFor($common->fresh()))->toBeNull()
-        ->and($overview->specialtyFor($inWeb->fresh()))->toBe($web->id)
-        ->and(array_map(fn (ProposalItem $item): string => $item->subject->code, $overview->gridSemesters()[5]))->toBe(['AAA-0001', 'AAA-0003', 'AAA-0002']);
+        ->and($overview->specialtyFor($overview->subject($common->subject_id)))->toBeNull()
+        ->and($overview->specialtyFor($overview->subject($inWeb->subject_id)))->toBe($web->id)
+        ->and(array_map(fn (ProposalSubject $row): string => $row->subject->code, $overview->gridSemesters()[5]))->toBe(['AAA-0001', 'AAA-0003', 'AAA-0002']);
 });
 
 it('empareja la especialidad por el plan de la fila, no por la materia en otro plan', function () {
@@ -251,8 +309,8 @@ it('empareja la especialidad por el plan de la fila, no por la materia en otro p
 
     $overview = proposalOverview();
 
-    expect($overview->specialtyFor($item->fresh()))->toBeNull()
-        ->and($overview->specialtyFor($other->fresh()))->toBe($inB->id)
+    expect($overview->specialtyFor($overview->subject($item->subject_id)))->toBeNull()
+        ->and($overview->specialtyFor($overview->subject($other->subject_id)))->toBe($inB->id)
         ->and($overview->specialties)->toBe([['id' => $inB->id, 'name' => 'De B', 'subjects' => 1]]);
 });
 
@@ -263,7 +321,9 @@ it('conserva la banda de una materia cuya colocación se quitó después', funct
     $item->update(['study_plan_id' => $plan->id]);
     placeInPlan($plan, $item->subject, 3, $redes)->delete();
 
-    expect(proposalOverview()->specialtyFor($item->fresh()))->toBe($redes->id);
+    $overview = proposalOverview();
+
+    expect($overview->specialtyFor($overview->subject($item->subject_id)))->toBe($redes->id);
 });
 
 it('arma las cadenas de seriación de la propuesta con la seriación del plan de cada fila, en el orden de la retícula', function () {

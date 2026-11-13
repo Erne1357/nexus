@@ -35,3 +35,21 @@ it('careerOptions da las carreras activas que se ofrecen en el campus, por códi
         $isc->id => 'ISC · Ingeniería en Sistemas Computacionales',
     ])->and(array_keys($options))->toBe([$ige->id, $isc->id]);
 });
+
+it('AZ-S17: sin campus, careerOptions da las carreras activas que se ofrecen en algún campus activo', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $closed = Campus::factory()->inactive()->create(['code' => 'C9']);
+
+    $isc = Career::factory()->create(['code' => 'ISC', 'name' => 'Ingeniería en Sistemas Computacionales']);
+    $mec = Career::factory()->create(['code' => 'MEC', 'name' => 'Ingeniería Mecánica']);
+    $onlyClosed = Career::factory()->create(['code' => 'IND']);
+    $nowhere = Career::factory()->create(['code' => 'ARQ']);
+
+    CareerCampus::factory()->create(['career_id' => $isc->id, 'campus_id' => $c2->id]);
+    CareerCampus::factory()->create(['career_id' => $mec->id, 'campus_id' => $c1->id]);
+    CareerCampus::factory()->create(['career_id' => $onlyClosed->id, 'campus_id' => $closed->id]);
+    CareerCampus::factory()->create(['career_id' => $nowhere->id, 'campus_id' => $c1->id, 'is_active' => false]);
+
+    expect(array_keys(app(ScopeLabels::class)->careerOptions(null)))->toBe([$isc->id, $mec->id]);
+});

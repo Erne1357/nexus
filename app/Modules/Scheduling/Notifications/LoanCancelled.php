@@ -42,9 +42,9 @@ final class LoanCancelled extends NexusNotification
             body: $agreement->decided_at === null ? 'Ya no tienes que decidirlo.' : 'Estaba aceptado: el salón ya no queda prestado a esa hora.',
             icon: $agreement->kind->icon(),
             route: 'scheduling.agreements',
-            parameters: ['acuerdo' => $agreement->getKey()],
+            parameters: AgreementText::parameters($agreement),
             termId: $agreement->term_id,
-            campusId: $agreement->campus_id,
+            modalityId: $agreement->modality_id,
             tone: 'neutral',
         );
     }
@@ -65,7 +65,7 @@ final class LoanCancelled extends NexusNotification
             return 'Ese acuerdo ya no existe.';
         }
 
-        if (! $context->allows(AcademicLoadPermission::AgreementView, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id))) {
+        if (! $context->allows(AcademicLoadPermission::AgreementView, Target::of(modality: $agreement->modality_id, unit: $agreement->to_department_id))) {
             return 'Ya no ves los acuerdos de ese departamento.';
         }
 

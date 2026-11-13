@@ -12,7 +12,7 @@ use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -34,7 +34,7 @@ beforeEach(function () {
     $this->d1 = Department::factory()->create(['code' => 'D1']);
     Department::factory()->create(['code' => 'D2']);
     $this->actingAs($this->admin);
-    app(OpenTerm::class)->handle($this->term, $this->c2);
+    app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
 });
 
 function openValidation(array $catalogs, ?User $actor = null): int
@@ -46,7 +46,7 @@ it('CV9: abrir el periodo ya no crea revisiones ni avisa a los jefes', function 
     Queue::fake();
     $term = Term::factory()->create();
 
-    app(OpenTerm::class)->handle($term, $this->c2);
+    app(OpenTerm::class)->handle($term, modalityOf('PRES'));
 
     expect(CatalogReview::query()->where('term_id', $term->id)->count())->toBe(0)
         ->and(CatalogReview::query()->where('term_id', $this->term->id)->count())->toBe(0);
@@ -82,15 +82,14 @@ it('CV9: sin catálogos, o con todos ya abiertos, no hace nada: sin bitácora ni
     expect(Activity::query()->where('event', 'validation_opened')->count())->toBe(1);
 });
 
-it('CV9: los salones solo se abren si algún campus abierto en el periodo usa salones, una revisión por departamento', function () {
-    $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+it('CV9: los salones solo se abren si alguna modalidad abierta en el periodo usa salones, una revisión por departamento', function () {
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 
     expect(openValidation([Catalog::Rooms]))->toBe(0)
         ->and(CatalogReview::count())->toBe(0);
 
-    $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => true]]);
-    $c1 = Campus::factory()->create(['code' => 'C1']);
-    app(OpenTerm::class)->handle($this->term, $c1);
+    modalityOf('PRES')->update(['settings' => ModalityProfile::DEFAULTS]);
+    Campus::factory()->create(['code' => 'C1']);
 
     expect(openValidation([Catalog::Rooms]))->toBe(2)
         ->and(CatalogReview::query()->where('catalog', Catalog::Rooms->value)->count())->toBe(2);
@@ -129,7 +128,7 @@ it('CV9: abrir la validación es solo del admin: Subdirección y el jefe no pued
 
 it('CatalogValidation ya no escucha TermOpened', function () {
     expect(Event::hasListeners(TermOpened::class))->toBeTrue(); // AcademicLoad sigue escuchando
-    $event = new TermOpened(Term::factory()->create(), $this->c2);
+    $event = new TermOpened(Term::factory()->create(), modalityOf('PRES'));
     event($event);
 
     expect(array_values(array_filter($event->lines(), fn (string $line): bool => str_contains($line, 'revisi'))))->toBe([]);
@@ -157,7 +156,8 @@ it('CV9: manda el aviso en cola después del commit, con los catálogos recién 
 it('CV9: un jefe de todo el Tec recibe un solo aviso aunque haya varios campus abiertos, con solo los catálogos recién abiertos', function () {
     Notification::fake();
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->d1->id])->create();
-    app(OpenTerm::class)->handle($this->term, Campus::factory()->create(['code' => 'C1']));
+    // C1 es de Presencial, donde el periodo ya está abierto (M4): hay dos campus abiertos.
+    Campus::factory()->create(['code' => 'C1']);
     openValidation([Catalog::Teachers]);
     Notification::fake();
 
@@ -182,7 +182,7 @@ describe('CV-S12: un departamento nuevo o reactivado', function () {
         $inactive = Department::factory()->inactive()->create(['code' => 'D9']);
         openValidation([Catalog::Teachers]);
         $past = Term::factory()->create(['code' => '20201', 'starts_on' => '2020-01-20', 'ends_on' => '2020-06-10']);
-        app(OpenTerm::class)->handle($past, $this->c2);
+        app(OpenTerm::class)->handle($past, modalityOf('PRES'));
         CatalogReview::factory()->general(Catalog::Teachers)->create(['term_id' => $past->id, 'department_id' => $this->d1->id]);
 
         app(UpdateDepartment::class)->handle($inactive, ['name' => 'Renombrado']);

@@ -13,11 +13,12 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -25,12 +26,12 @@ use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Vite;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Spatie\Activitylog\Models\Activity;
@@ -107,25 +108,13 @@ function validateAllReviewed(CatalogReview $review, User $actor): CatalogReview
 }
 
 /**
- * Las peticiones que siguen, hasta el final de la prueba, son de una página con `?campus=<código>` (o sin campus, con
- * null), como las manda el navegador: la primera con la consulta y las de Livewire con la página en Referer. Livewire::test
- * no manda ni una ni otro en sus llamadas, así que esto fija lo que lee el puente Actor::activeCampus() (#415) para las
- * pantallas que todavía no pasan a WithCampusFilter, en lugar del campus que antes guardaba la credencial en la sesión.
- * Para las que ya usan WithCampusFilter::requiredCampus() también deja ese campus como el último elegido de la sesión
- * (Campus::LAST_CHOSEN_KEY, AZ-02), porque Livewire::test tampoco lleva el `?campus=` de la URL.
+ * Las pantallas que siguen, hasta el final de la prueba, abren en `$campus` (o sin campus, con null): lo deja como el
+ * último elegido de la sesión (Campus::LAST_CHOSEN_KEY, AZ-02), que es el campus de omisión de WithCampusFilter y
+ * WithModalityCampusFilter, porque Livewire::test no lleva el `?campus=` de la URL.
  */
 function onCampusPage(?Campus $campus): void
 {
     $campus === null ? session()->forget(Campus::LAST_CHOSEN_KEY) : session()->put(Campus::LAST_CHOSEN_KEY, $campus->code);
-
-    app()->scoped(Actor::class, fn (Application $app): Actor => new Actor(
-        fn (): mixed => $app['auth']->user(),
-        $app->make(OrgTree::class),
-        $app->make(AuthorizationSnapshots::class),
-        $app->make(PermissionRegistry::class),
-        $app['session.store'],
-        fn (): Request => Request::create('/', 'GET', $campus === null ? [] : ['campus' => $campus->code]),
-    ));
     app()->forgetScopedInstances();
 }
 
@@ -157,24 +146,98 @@ function registerDemoCatalog(): void
  * Cambia el registro de permisos por uno con solo los de prueba (FakePermission) y olvida los servicios de la petición
  * para que Actor lo use. Lo que concede: Subdirección, jefe de proyecto docente y Coordinación, todos los de gestión
  * (Coordinación también el personal); el jefe de departamento, los de gestión que no declaran carrera, más
- * ViewCampusUnitCareer; Docente, solo el personal. El admin tiene todos menos ViewCampusCareer, su excepción.
+ * ViewCampusUnitCareer (de los de modalidad, ViewModality y ViewModalityUnit); Docente, solo el personal. El admin tiene todos menos ViewCampusCareer, su excepción.
  */
 function useFakePermissions(): void
 {
     $management = [
         FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCareer, FakePermission::ViewCampusUnit,
         FakePermission::ViewCampusCareer, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny,
+        FakePermission::ViewModality, FakePermission::ViewModalityUnit, FakePermission::ViewModalityCareer,
+        FakePermission::ViewModalityCampusCareer,
     ];
 
     app()->instance(PermissionRegistry::class, PermissionRegistry::fromDeclarations([FakePermission::class], [
         Role::Subdireccion->value => $management,
-        Role::JefeDepartamento->value => [FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCampusUnit, FakePermission::ViewCampusUnitCareer, FakePermission::ViewAny],
+        Role::JefeDepartamento->value => [
+            FakePermission::ViewCampus, FakePermission::ViewUnit, FakePermission::ViewCampusUnit, FakePermission::ViewCampusUnitCareer,
+            FakePermission::ViewAny, FakePermission::ViewModality, FakePermission::ViewModalityUnit,
+        ],
         Role::JefeProyectoDocente->value => $management,
         Role::Coordinador->value => [...$management, FakePermission::ViewOwn],
         Role::Docente->value => [FakePermission::ViewOwn],
     ], [FakePermission::ViewCampusCareer]));
 
     app()->forgetScopedInstances();
+}
+
+/**
+ * La modalidad del catálogo con esa clave (`PRES`, `EAD`, `ENL` o `TNMV`), aunque esté inactiva o borrada: la siembra
+ * la migración del catálogo.
+ */
+function modalityOf(string $code): Modality
+{
+    return Modality::withTrashed()->where('code', $code)->sole();
+}
+
+/**
+ * Un campus donde poner los grupos de una carga en una prueba: el primero activo por clave, o uno nuevo. La carga ya no
+ * tiene campus (M1) y el campus no sale de su modalidad: `groups.campus_id` sigue obligatoria, así que también lo lleva
+ * un grupo de una modalidad sin salones.
+ */
+function loadCampus(): Campus
+{
+    return Campus::query()->where('is_active', true)->orderBy('code')->first() ?? Campus::factory()->create();
+}
+
+/**
+ * Un campus con la forma de antes de contraer la carga por modalidad (2026_11_12_211102, ADR-0025): con su `modality`,
+ * su perfil en `settings` y el puente `modality_id` a la modalidad del catálogo que le corresponde. Para las pruebas de
+ * las migraciones de la ronda, que corren después del `down()` de la contracción.
+ *
+ * @param  array<string, mixed>  $settings
+ */
+function campusBeforeContraction(string $code, string $modality = 'presencial', bool $active = true, array $settings = ModalityProfile::DEFAULTS): Campus
+{
+    $catalog = ['presencial' => 'PRES', 'mixta' => 'EAD', 'en_linea' => 'ENL', 'virtual_tecnm' => 'TNMV'][$modality];
+    $id = (string) Str::uuid7();
+
+    DB::table('campuses')->insert([
+        'id' => $id,
+        'code' => $code,
+        'name' => "Campus {$code}",
+        'modality' => $modality,
+        'modality_id' => Modality::withTrashed()->where('code', $catalog)->value('id'),
+        'settings' => json_encode($settings),
+        'is_active' => $active,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return Campus::withTrashed()->findOrFail($id);
+}
+
+/**
+ * Una foto con la forma v1 (MS13): el campus en la raíz y los grupos sin campus, como las que se publicaron antes de la
+ * carga por modalidad. Sale de una v2 (la de LoadSnapshotFactory) quitándole la modalidad y el campus de cada grupo.
+ *
+ * @param  array<string, mixed>  $payload
+ * @return array<string, mixed>
+ */
+function legacySnapshotPayload(array $payload, Campus $campus): array
+{
+    $legacy = ['schema_version' => 1];
+
+    foreach ($payload as $key => $value) {
+        match ($key) {
+            'schema_version' => null,
+            'modality' => $legacy['campus'] = ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name],
+            'groups' => $legacy['groups'] = array_map(fn (array $group): array => array_diff_key($group, ['campus' => true]), $value),
+            default => $legacy[$key] = $value,
+        };
+    }
+
+    return $legacy;
 }
 
 /**

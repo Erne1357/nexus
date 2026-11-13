@@ -46,7 +46,7 @@ beforeEach(function () {
     User::factory()->create(['username' => 'admin']);
 
     foreach ([$this->imparte, $this->limpio] as $department) {
-        AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $department->id]);
+        AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id]);
     }
 
     $building = Building::factory()->create(['campus_id' => $this->campus->id]);

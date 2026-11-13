@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Queries;
 use App\Modules\AcademicLoad\Events\LoadSnapshotRequested;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 
 /**
  * Lo que publicaría la carga ahora, para confirmar antes de publicar (tarea 4.3): grupos, sesiones, docentes y salones
@@ -29,7 +30,7 @@ final class PublicationPreviewQuery
             ...self::count($request->groups() ?? []),
             'withoutTeacher' => count(array_filter($request->groups() ?? [], fn (array $group): bool => $group['teacher'] === null)),
             'nextVersion' => $load->current_version + 1,
-            'current' => $current === null ? null : self::count($current['groups']),
+            'current' => $current === null ? null : self::count(SnapshotPayload::normalize($current)['groups']),
         ];
     }
 

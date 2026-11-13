@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -16,8 +17,8 @@ use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Grupo planeado de primer semestre, de 35 lugares y sin docente, con el departamento de su materia y un plan de su
- * carrera dueña. Sin cupos: `withQuota()` le da el de su carrera dueña.
+ * Grupo planeado de primer semestre, de 35 lugares y sin docente, con el departamento de su materia, un plan de su
+ * carrera dueña, en Presencial (el campus es solo el lugar, MS3). Sin cupos: `withQuota()` le da el de su carrera dueña.
  *
  * @extends Factory<Group>
  */
@@ -32,6 +33,7 @@ class GroupFactory extends Factory
         return [
             'term_id' => Term::factory(),
             'campus_id' => Campus::factory(),
+            'modality_id' => fn (): string => Modality::withTrashed()->where('code', 'PRES')->value('id') ?? Modality::factory()->create()->id,
             'subject_id' => Subject::factory(),
             'department_id' => fn (array $attributes): string => Subject::query()->findOrFail($attributes['subject_id'])->department_id,
             'owner_career_id' => Career::factory(),
@@ -60,8 +62,8 @@ class GroupFactory extends Factory
     }
 
     /**
-     * El grupo que se crea desde una fila de la propuesta: su materia, plan, semestre, y el periodo, campus y carrera
-     * de la propuesta.
+     * El grupo que se crea desde una fila de la propuesta: su materia, plan, semestre y campus (M8), y el periodo,
+     * modalidad y carrera de la propuesta.
      */
     public function forProposalItem(ProposalItem $item): static
     {
@@ -70,7 +72,8 @@ class GroupFactory extends Factory
         return $this->state([
             'proposal_item_id' => $item->id,
             'term_id' => $proposal->term_id,
-            'campus_id' => $proposal->campus_id,
+            'campus_id' => $item->campus_id,
+            'modality_id' => $proposal->modality_id,
             'subject_id' => $item->subject_id,
             'owner_career_id' => $proposal->career_id,
             'study_plan_id' => $item->study_plan_id,

@@ -38,7 +38,7 @@ beforeEach(function () {
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto.
     CatalogReview::factory()->for($term)->create();
-    AcademicLoad::factory()->for($term)->create(['campus_id' => $this->c2->id]);
+    AcademicLoad::factory()->for($term)->create();
     $this->services = OrgUnit::factory()->create([
         'code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento,
         'parent_id' => app(OrgTree::class)->idOf(OrgTree::ACADEMIC),
@@ -71,11 +71,11 @@ describe('AZ-02: menú', function () {
         expect(menuOf($user($this)))->toBe($menu);
     })->with([
         'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Validar catálogos', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Horarios publicados', 'Alumnos', 'Docentes']],
-        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Periodos', 'Edificios', 'Salones']],
+        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Edificios', 'Salones']],
         'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Horarios publicados', 'Docentes']],
         'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Horarios publicados', 'Alumnos']],
         'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Mi carga', 'Oferta']],
-        'admin' => [fn () => User::factory()->admin()->create(), ['Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']],
+        'admin' => [fn () => User::factory()->admin()->create(), ['Validar catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']],
     ]);
 });
 

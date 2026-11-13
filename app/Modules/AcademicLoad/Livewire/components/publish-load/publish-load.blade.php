@@ -71,7 +71,7 @@
             <div class="grid">
                 <header class="px-5 pt-5 md:px-6">
                     <h3 id="{{ $titleId }}-confirm" class="text-xl font-bold leading-tight">Publicar la carga</h3>
-                    <p class="text-neutral mt-1">{{ $load->department->name }} · {{ $load->campus->name }} · {{ $load->term->name }}</p>
+                    <p class="text-neutral mt-1">{{ $load->department->name }} · {{ $load->modality->name }} · {{ $load->term->name }}</p>
                 </header>
 
                 <div class="px-5 py-4 md:px-6 grid gap-4">

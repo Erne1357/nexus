@@ -5,7 +5,7 @@ namespace App\Modules\AcademicLoad\Models;
 use App\Modules\Academic\Models\Career;
 use App\Modules\AcademicLoad\Database\Factories\CareerProposalFactory;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -17,16 +17,21 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Propuesta de carrera: las materias y los grupos que el coordinador pide abrir para su carrera en un campus y
- * un periodo (reglas-de-negocio.md, "Propuesta de carrera"). Una por periodo, campus y carrera. Se arma con
- * StartCareerProposal, se corrige con UpdateProposalItem y se envía con SubmitCareerProposal.
+ * Propuesta de carrera: las materias y los grupos que los coordinadores piden abrir para su carrera en una modalidad y
+ * un periodo (reglas-de-negocio.md, "Propuesta de carrera"). Una por periodo, modalidad y carrera (M6), con una fila
+ * por materia y campus (ProposalItem). Se arma con StartCareerProposal, se corrige con UpdateProposalItem y se envía
+ * con SubmitCareerProposal. Guarda sus alumnos posibles, congelados al armarla: el total (`eligible_students`) y los de
+ * cada campus (`eligible_students_by_campus`, por id del campus y `none` para la columna sin campus).
  */
-#[Fillable(['term_id', 'campus_id', 'career_id', 'eligible_students', 'status', 'submitted_by', 'submitted_at'])]
+#[Fillable(['term_id', 'modality_id', 'career_id', 'eligible_students', 'eligible_students_by_campus', 'status', 'submitted_by', 'submitted_at'])]
 #[UseFactory(CareerProposalFactory::class)]
 class CareerProposal extends Model
 {
     /** @use HasFactory<CareerProposalFactory> */
     use HasFactory, HasUuids;
+
+    /** La llave de la columna sin campus (MS5) en `eligible_students_by_campus`. */
+    public const string WITHOUT_CAMPUS = 'none';
 
     /**
      * @return array<string, string>
@@ -36,6 +41,7 @@ class CareerProposal extends Model
         return [
             'status' => ProposalStatus::class,
             'eligible_students' => 'integer',
+            'eligible_students_by_campus' => 'array',
             'submitted_at' => 'immutable_datetime',
         ];
     }
@@ -49,11 +55,13 @@ class CareerProposal extends Model
     }
 
     /**
-     * @return BelongsTo<Campus, $this>
+     * Su modalidad del catálogo (M6, ADR-0025), aunque esté borrada, como la de la carga: la propuesta la conserva.
+     *
+     * @return BelongsTo<Modality, $this>
      */
-    public function campus(): BelongsTo
+    public function modality(): BelongsTo
     {
-        return $this->belongsTo(Campus::class);
+        return $this->belongsTo(Modality::class)->withTrashed();
     }
 
     /**
@@ -75,7 +83,7 @@ class CareerProposal extends Model
     }
 
     /**
-     * Sus filas, una por materia.
+     * Sus filas, una por materia y campus (M6); sin campus en una modalidad sin salones (MS5).
      *
      * @return HasMany<ProposalItem, $this>
      */

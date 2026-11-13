@@ -37,7 +37,7 @@ beforeEach(function () {
     $this->department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->owner = Department::factory()->create(['code' => 'MM', 'name' => 'Metal-Mecánica']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     $this->subject = Subject::factory()->create(['code' => 'AED-1026', 'name' => 'Estructura de Datos', 'department_id' => $this->department->id, 'needs_lab' => true]);
     $this->group = Group::factory()->create([

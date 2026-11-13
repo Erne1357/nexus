@@ -2,6 +2,7 @@
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
@@ -24,7 +25,7 @@ beforeEach(function () {
     GroupSession::factory()->for($this->group)->on(1, '10:00', '12:00')->create();
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
         'term_id' => $this->group->term_id,
-        'campus_id' => $this->group->campus_id,
+        'modality_id' => $this->group->modality_id,
         'department_id' => $this->group->department_id,
     ]);
     $this->teachers = collect(range(1, 3))->map(function (int $rank): Teacher {
@@ -62,7 +63,7 @@ it('asigna al primer lugar sin motivo, deja el historial y la bitácora', functi
         ->group_id->toBe($this->group->id)
         ->teacher_id->toBe($this->teachers[0]->id)
         ->term_id->toBe($this->group->term_id)
-        ->campus_id->toBe($this->group->campus_id)
+        ->modality_id->toBe($this->group->modality_id)
         ->assigned_by->toBe($this->actor->id)
         ->ranking_position_at_assignment->toBe(1)
         ->ranking_size_at_assignment->toBe(3)
@@ -71,6 +72,17 @@ it('asigna al primer lugar sin motivo, deja el historial y la bitácora', functi
         ->and($entry->causer->is($this->actor))->toBeTrue()
         ->and($entry->subject->is($this->group))->toBeTrue()
         ->and($entry->properties['position'])->toBe('lugar 1 de 3');
+});
+
+it('la asignación copia la modalidad de su grupo (ampliación de la ronda 2)', function () {
+    $ead = Modality::query()->where('code', 'EAD')->sole();
+    $ead->update(['is_active' => true]);
+    $this->group->update(['modality_id' => $ead->id]);
+    $this->load->update(['modality_id' => $ead->id]);
+
+    $assignment = assignTeacher($this->group, $this->teachers[0], $this->actor);
+
+    expect($assignment->fresh()->modality->code)->toBe('EAD');
 });
 
 it('HC-16: rechaza al tercer lugar sin motivo y no escribe nada', function () {

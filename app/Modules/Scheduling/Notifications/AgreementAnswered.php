@@ -51,9 +51,9 @@ final class AgreementAnswered extends NexusNotification
             body: $body,
             icon: $rejected ? 'o-x-circle' : 'o-check-circle',
             route: 'scheduling.agreements',
-            parameters: ['acuerdo' => $agreement->getKey()],
+            parameters: AgreementText::parameters($agreement),
             termId: $agreement->term_id,
-            campusId: $agreement->campus_id,
+            modalityId: $agreement->modality_id,
             tone: $rejected ? 'warning' : 'success',
         );
     }
@@ -79,7 +79,7 @@ final class AgreementAnswered extends NexusNotification
             return 'Ese acuerdo ya no existe.';
         }
 
-        if (! $context->allows(AcademicLoadPermission::AgreementView, Target::of(campus: $agreement->campus_id, unit: $agreement->from_department_id))) {
+        if (! $context->allows(AcademicLoadPermission::AgreementView, Target::of(modality: $agreement->modality_id, unit: $agreement->from_department_id))) {
             return 'Ya no ves los acuerdos de ese departamento.';
         }
 

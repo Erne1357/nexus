@@ -40,7 +40,7 @@ beforeEach(function () {
 
 function agreementsInboxOf(User $user, Term $term, Campus $campus, ?AgreementKind $kind = null, string $search = ''): array
 {
-    return app(AgreementsInboxQuery::class)->inbox(app(Actor::class)->forUser($user), $term, $campus, $kind, $search);
+    return app(AgreementsInboxQuery::class)->inbox(app(Actor::class)->forUser($user), $term, modalityOf('PRES'), $campus, $kind, $search);
 }
 
 function loanOf(Department $from, Department $to, array $attributes = [], ?string $subjectCode = null): InterdepartmentalAgreement
@@ -64,9 +64,10 @@ function shareOf(Department $from, Department $to, array $attributes = []): Inte
     $status = $attributes['status'] ?? AgreementStatus::Proposed;
     unset($attributes['status']);
 
+    // El grupo compartido no guarda campus: su lugar es el de su grupo, aquí en el campus de la prueba.
     return InterdepartmentalAgreement::factory()->sharedGroup(6)->inStatus($status)->create([
-        'term_id' => test()->term->id, 'campus_id' => test()->campus->id,
-        'from_department_id' => $from->id, 'to_department_id' => $to->id,
+        'term_id' => test()->term->id, 'from_department_id' => $from->id, 'to_department_id' => $to->id,
+        'group_id' => Group::factory()->create(['term_id' => test()->term->id, 'campus_id' => test()->campus->id])->id,
         'career_id' => Career::factory()->create(['code' => Career::query()->where('code', 'ISC')->exists() ? 'K'.fake()->unique()->numerify('###') : 'ISC', 'name' => 'Sistemas Computacionales', 'department_id' => $to->id])->id, ...$attributes,
     ]);
 }
@@ -222,7 +223,7 @@ it('no hace una consulta por acuerdo: las mismas consultas con 1 que con 8 acuer
         $actor->allowsAny(AcademicLoadPermission::AgreementView);
         DB::flushQueryLog();
         DB::enableQueryLog();
-        app(AgreementsInboxQuery::class)->inbox($actor, $this->term, $this->campus);
+        app(AgreementsInboxQuery::class)->inbox($actor, $this->term, modalityOf('PRES'), $this->campus);
         $queries = count(DB::getQueryLog());
         DB::disableQueryLog();
 
@@ -233,6 +234,7 @@ it('no hace una consulta por acuerdo: las mismas consultas con 1 que con 8 acuer
     loanOf($this->ii, $this->sc);
     shareOf($this->cb, $this->sc);
     loanOf($this->ii, $this->sc, ['status' => AgreementStatus::Cancelled]);
+    $count();
     $one = $count();
     foreach (range(1, 4) as $i) {
         loanOf($this->ii, $this->sc);
@@ -303,9 +305,9 @@ it('findOrFail da el acuerdo visible y falla con el de otro departamento o campu
     $actor = app(Actor::class)->forUser($jefe);
     $query = app(AgreementsInboxQuery::class);
 
-    expect($query->findOrFail($actor, $this->term, $this->campus, $mine->id)->is($mine))->toBeTrue()
-        ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus, $foreign->id))->toThrow(ModelNotFoundException::class)
-        ->and(fn () => $query->findOrFail($actor, $this->term, $this->campus, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
+    expect($query->findOrFail($actor, $this->term, modalityOf('PRES'), $this->campus, $mine->id)->is($mine))->toBeTrue()
+        ->and(fn () => $query->findOrFail($actor, $this->term, modalityOf('PRES'), $this->campus, $foreign->id))->toThrow(ModelNotFoundException::class)
+        ->and(fn () => $query->findOrFail($actor, $this->term, modalityOf('PRES'), $this->campus, 'no-es-uuid'))->toThrow(ModelNotFoundException::class);
 });
 
 it('la semana incluye las horas de lo ocupado fuera de la ventana del campus', function () {

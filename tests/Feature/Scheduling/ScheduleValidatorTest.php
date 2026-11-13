@@ -1,7 +1,10 @@
 <?php
 
+use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -17,12 +20,14 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | ScheduleValidator contra la base (tarea 3.2): valida un grupo, un docente, un salón o una carga, y pregunta sin
-| escribir por una sesión candidata (editor) o por otro docente (ranking).
+| escribir por una sesión candidata (editor) o por otro docente (ranking). La foto es por periodo y modalidad (M1): la
+| carga presencial junta los grupos de C1 y C2, y cada regla lee el perfil de la modalidad del grupo.
 */
 
 beforeEach(function () {
     $this->term = Term::factory()->create();
     $this->campus = Campus::factory()->create();
+    $this->modality = Modality::query()->where('code', 'PRES')->sole();
     $this->room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $this->campus->id])->id, 'code' => 'LC-1']);
     $this->teacher = Teacher::factory()->create(['name' => 'Ana Pérez']);
     $this->validator = app(ScheduleValidator::class);
@@ -104,7 +109,7 @@ it('valida a un docente en todo el periodo, en cualquier campus', function () {
         ->and($this->validator->validateTeacher(Teacher::factory()->create(), $this->term)->isEmpty())->toBeTrue();
 });
 
-it('valida un salón y toda la carga de un campus o de un departamento', function () {
+it('valida un salón y toda la carga de una modalidad o de un departamento en ella', function () {
     $group = validatorGroup();
     $other = validatorGroup();
     GroupSession::factory()->for($group)->inRoom($this->room)->on(2, '07:00', '09:00')->create();
@@ -113,11 +118,11 @@ it('valida un salón y toda la carga de un campus o de un departamento', functio
     DB::table('group_sessions')->where('id', $session->id)->update(['room_id' => $this->room->id]);
 
     expect($this->validator->validateRoom($this->room, $this->term)->forRule('HC-02'))->toHaveCount(2)
-        ->and($this->validator->validateLoad($this->term, $this->campus)->forRule('HC-02'))->toHaveCount(2)
-        ->and((new ValidationResult($this->validator->validateLoad($this->term, $this->campus, $group->department)->forGroup($group->id)))->forRule('HC-02'))->toHaveCount(1);
+        ->and($this->validator->validateLoad($this->term, $this->modality)->forRule('HC-02'))->toHaveCount(2)
+        ->and((new ValidationResult($this->validator->validateLoad($this->term, $this->modality, $group->department)->forGroup($group->id)))->forRule('HC-02'))->toHaveCount(1);
 });
 
-it('lee la base una vez por periodo y campus hasta que se le pide olvidar', function () {
+it('lee la base una vez por periodo y modalidad hasta que se le pide olvidar', function () {
     $group = validatorGroup();
     $this->validator->validateGroup($group);
 
@@ -168,4 +173,85 @@ it('teacherHours da a cada candidato sus horas sin el grupo y con él', function
         ->and($hours[$this->teacher->id]['after']['assigned_hours'])->toBe(5)
         ->and($hours[$this->teacher->id]['after']['remaining_hours'])->toBe($hours[$this->teacher->id]['before']['remaining_hours'] - 5)
         ->and($hours)->toHaveKey($other->id);
+});
+
+it('la carga de una modalidad junta los grupos de todos sus campus en una sola foto (M1)', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $here = validatorGroup();
+    $there = validatorGroup(['campus_id' => $c1->id]);
+    $ead = validatorGroup(['modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+
+    $state = $this->validator->stateFor($this->term->id, $this->modality->id);
+    $load = $this->validator->validateLoad($this->term, $this->modality);
+
+    expect($state->group($here->id))->not->toBeNull()
+        ->and($state->group($there->id))->not->toBeNull()
+        ->and($state->group($ead->id))->toBeNull()
+        ->and($load->forGroup($ead->id))->toBe([]);
+});
+
+it('SC-09 avisa del traslado de C1 a C2 dentro de la misma carga presencial', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $morning = validatorGroup(['campus_id' => $c1->id, 'teacher_id' => $this->teacher->id]);
+    $noon = validatorGroup(['teacher_id' => $this->teacher->id]);
+    GroupSession::factory()->for($morning)->on(2, '07:00', '09:00')->create();
+    GroupSession::factory()->for($noon)->on(2, '09:30', '11:00')->create();
+
+    $travel = $this->validator->validateLoad($this->term, $this->modality)->forRule('SC-09');
+
+    expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $travel))->toEqualCanonicalizing([$morning->id, $noon->id])
+        ->and($travel[0]->severity)->toBe(ConflictSeverity::Soft)
+        ->and($travel[0]->message)->toContain("de C1 (9:00) a {$this->campus->code} (9:30)");
+});
+
+it('HC-03 se revisa por campus dentro de la carga presencial (MS10): el grupo de C1 no le sirve al alumno tipo de C2', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $calculus = Subject::factory()->create();
+    $chemistry = Subject::factory()->create();
+    $plan = StudyPlan::factory()->create();
+    $shared = ['owner_career_id' => $plan->career_id, 'study_plan_id' => $plan->id, 'semester' => 1];
+    $onlyHere = validatorGroup(['subject_id' => $calculus->id, ...$shared]);
+    $alternative = validatorGroup(['subject_id' => $calculus->id, 'campus_id' => $c1->id, ...$shared]);
+    $clash = validatorGroup(['subject_id' => $chemistry->id, ...$shared]);
+    GroupSession::factory()->for($onlyHere)->on(1, '08:00', '10:00')->create();
+    GroupSession::factory()->for($alternative)->on(2, '08:00', '10:00')->create();
+    GroupSession::factory()->for($clash)->on(1, '09:00', '11:00')->create();
+
+    $typical = $this->validator->validateLoad($this->term, $this->modality)->forRule('HC-03');
+
+    expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $typical))->toEqualCanonicalizing([$onlyHere->id, $clash->id]);
+});
+
+it('HC-04 usa la ventana de la modalidad: con sábado en su perfil, una sesión en sábado no es choque; sin él, sí', function () {
+    $this->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+    $group = validatorGroup();
+    GroupSession::factory()->for($group)->on(6, '08:00', '10:00')->create();
+
+    expect($this->validator->validateGroup($group)->forRule('HC-04'))->toBe([]);
+
+    $this->modality->update(['settings' => ModalityProfile::DEFAULTS]);
+    $this->validator->forget();
+
+    expect($this->validator->validateGroup($group)->forRule('HC-04'))->toHaveCount(1);
+});
+
+it('HC-12 usa el perfil de la modalidad del grupo: su tolerancia y sus bloques de tiempo (MS17)', function () {
+    $group = validatorGroup(['subject_id' => Subject::factory()->create(['theory_hours' => 3, 'practice_hours' => 2])->id]);
+    GroupSession::factory()->for($group)->on(1, '07:00', '11:00')->create();
+
+    expect($this->validator->validateGroup($group)->forRule('HC-12'))->toHaveCount(1);
+
+    $this->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'weekly_hours_tolerance' => 60]]);
+    $this->validator->forget();
+
+    expect($this->validator->validateGroup($group)->forRule('HC-12'))->toBe([]);
+});
+
+it('HC-02: dos salones de campus distintos a la misma hora dentro de una carga no se empalman', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $c1Room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $c1->id])->id, 'code' => 'LC-2']);
+    GroupSession::factory()->for(validatorGroup())->inRoom($this->room)->on(2, '07:00', '09:00')->create();
+    GroupSession::factory()->for(validatorGroup(['campus_id' => $c1->id]))->inRoom($c1Room)->on(2, '07:00', '09:00')->create();
+
+    expect($this->validator->validateLoad($this->term, $this->modality)->forRule('HC-02'))->toBe([]);
 });

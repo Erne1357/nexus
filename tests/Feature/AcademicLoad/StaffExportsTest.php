@@ -22,7 +22,7 @@ use Illuminate\Support\Str;
 use OpenSpout\Reader\XLSX\Reader;
 
 /*
-| Los exportes del personal de lo publicado (tarea 4.5): el PDF por departamento y el Excel del campus, solo con sesión
+| Los exportes del personal de lo publicado (tarea 4.5): el PDF por departamento y el Excel de la modalidad (M1, con el campus de cada grupo), solo con sesión
 | y `academic_load.load.export` (decisión del usuario del 10 de noviembre de 2026; Subdirección, jefes de departamento,
 | jefes de proyecto docente y Servicios Escolares, supuesto por confirmar). Sin el permiso no se encola nada.
 */
@@ -32,7 +32,7 @@ beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20271', 'name' => 'Enero–Junio 2027']);
     $this->campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $this->department = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
-    $this->load = AcademicLoad::factory()->for($this->term)->for($this->campus)->for($this->department)->inStatus(LoadStatus::Published)->create();
+    $this->load = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for($this->department)->inStatus(LoadStatus::Published)->create();
     $this->lent = ['id' => (string) Str::uuid7(), 'code' => 'LC-2', 'name' => 'Laboratorio 2', 'building' => ['id' => (string) Str::uuid7(), 'code' => 'L', 'name' => 'Edificio de Laboratorios'], 'owner_department_id' => (string) Str::uuid7()];
 
     LoadSnapshot::factory()->for($this->load)->publishedAt(CarbonImmutable::parse('2026-12-12 10:30'))->withGroups([
@@ -47,8 +47,8 @@ beforeEach(function () {
         ]),
     ])->create();
 
-    $this->excelUrl = route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'excel']);
-    $this->pdfUrl = route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => $this->department->id]);
+    $this->excelUrl = route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'excel']);
+    $this->pdfUrl = route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => $this->department->id]);
 });
 
 function staffExportsHead(Department $department, Campus $campus): User
@@ -56,11 +56,11 @@ function staffExportsHead(Department $department, Campus $campus): User
     return User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $campus->id, 'department_id' => $department->id])->create();
 }
 
-it('el jefe de departamento descarga el Excel del campus con un renglón por sesión', function () {
+it('el jefe de departamento descarga el Excel de la modalidad con un renglón por sesión y el campus de cada grupo', function () {
     $response = $this->actingAs(staffExportsHead($this->department, $this->campus))->get($this->excelUrl);
 
     $response->assertOk()->assertHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    expect($response->headers->get('Content-Disposition'))->toContain('Carga publicada 20271 C2.xlsx');
+    expect($response->headers->get('Content-Disposition'))->toContain('Carga publicada 20271 PRES.xlsx');
 
     $path = tempnam(sys_get_temp_dir(), 'xlsx-test-');
     file_put_contents($path, $response->streamedContent());
@@ -79,8 +79,8 @@ it('el jefe de departamento descarga el Excel del campus con un renglón por ses
 
     expect($rows[0])->toBe(CampusWorkbook::HEADER)
         ->and($rows)->toHaveCount(3)
-        ->and(array_slice($rows[1], 0, 7))->toBe(['SC', 'AED-1026', 'Estructura de Datos', 'C', 5, 33, 'Iván Castañeda Ortiz'])
-        ->and(array_slice($rows[2], 10))->toBe(['Martes', '9:00', '11:00', 'Práctica', 'LC-2', 'Edificio de Laboratorios', 'Sí'])
+        ->and(array_slice($rows[1], 0, 8))->toBe(['SC', 'C2', 'AED-1026', 'Estructura de Datos', 'C', 5, 33, 'Iván Castañeda Ortiz'])
+        ->and(array_slice($rows[2], 11))->toBe(['Martes', '9:00', '11:00', 'Práctica', 'LC-2', 'Edificio de Laboratorios', 'Sí'])
         ->and(json_encode($rows, JSON_UNESCAPED_UNICODE))->not->toContain('CAOI800101AB1');
 });
 
@@ -90,7 +90,7 @@ it('Subdirección y el jefe de proyecto docente también descargan el PDF del de
     $response = $this->actingAs($user)->get($this->pdfUrl);
 
     $response->assertOk()->assertHeader('Content-Type', 'application/pdf');
-    expect($response->headers->get('Content-Disposition'))->toContain('Carga SC - 20271 C2.pdf');
+    expect($response->headers->get('Content-Disposition'))->toContain('Carga SC - 20271 PRES.pdf');
 })->with([Role::Subdireccion, Role::JefeProyectoDocente]);
 
 it('sin sesión manda a iniciar sesión y no encola nada', function () {
@@ -119,13 +119,13 @@ it('a quien no tiene el permiso le responde 403 sin encolar nada', function (Rol
 it('responde 404 a un tipo o un departamento que no están publicados', function () {
     $this->actingAs(staffExportsHead($this->department, $this->campus));
 
-    $this->get(route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'otro']))->assertNotFound();
-    $this->get(route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => (string) Str::uuid7()]))->assertNotFound();
-    $this->get(route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => ['x']]))->assertNotFound();
+    $this->get(route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'otro']))->assertNotFound();
+    $this->get(route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => (string) Str::uuid7()]))->assertNotFound();
+    $this->get(route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => ['x']]))->assertNotFound();
 });
 
 it('el PDF del departamento lleva la capacidad y la marca de préstamo, que el público no ve', function () {
-    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus);
+    $schedule = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'));
     $data = [
         'title' => 'Sistemas y Computación', 'subtitle' => '1 grupo', 'updated' => '12 de diciembre de 2026',
         'days' => [['day' => 1, 'name' => 'Lunes'], ['day' => 2, 'name' => 'Martes']],
@@ -146,13 +146,13 @@ it('la consulta ofrece los exportes del personal solo a quien tiene el permiso',
     $this->get($index)->assertOk()->assertDontSee('Exportes del personal');
     $this->actingAs(User::factory()->withRole(Role::Docente)->create())->get($index)->assertOk()->assertDontSee('Exportes del personal');
     $this->actingAs(staffExportsHead($this->department, $this->campus))->get($index)
-        ->assertOk()->assertSee('Exportes del personal')->assertSee('Excel del campus')->assertSee('SC · Sistemas y Computación');
+        ->assertOk()->assertSee('Exportes del personal')->assertSee('Excel de la modalidad')->assertSee('SC · Sistemas y Computación');
 });
 
 it('en un campus sin salones el Excel deja vacías las columnas de salón, y sin bloques de tiempo da un renglón por grupo', function () {
-    $group = app(PublishedScheduleQuery::class)->schedule($this->term, $this->campus)->groups()[0];
+    $group = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'))->groups()[0];
 
-    expect(array_slice(CampusWorkbook::rows($group, 'SC', usesRooms: false)[1], 14))->toBe([null, null, null])
+    expect(array_slice(CampusWorkbook::rows($group, 'SC', usesRooms: false)[1], 15))->toBe([null, null, null])
         ->and(CampusWorkbook::rows($group, 'SC', usesTimeBlocks: false))->toHaveCount(1);
 });
 
@@ -170,13 +170,13 @@ it('el tope de exportes nuevos es por usuario con sesión, aparte del de la IP',
 it('sin el permiso en ningún alcance responde 403 antes de buscar, también para un tipo o departamento que no existen', function () {
     $this->actingAs(User::factory()->withRole(Role::Docente)->create());
 
-    $this->get(route('published.export', ['periodo' => '20271', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => (string) Str::uuid7()]))->assertForbidden();
-    $this->get(route('published.export', ['periodo' => '20999', 'campus' => 'C2', 'tipo' => 'excel']))->assertForbidden();
+    $this->get(route('published.export', ['periodo' => '20271', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'departamento', 'departamento' => (string) Str::uuid7()]))->assertForbidden();
+    $this->get(route('published.export', ['periodo' => '20999', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'excel']))->assertForbidden();
 });
 
-it('el jefe con alcance en otro campus no descarga el exporte de este', function () {
-    $c1 = Campus::factory()->create(['code' => 'C1']);
-    $this->actingAs(staffExportsHead($this->department, $c1));
+it('AZ-S17: el jefe con alcance en otra modalidad no descarga el exporte de esta', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $this->actingAs(User::factory()->withRole(Role::JefeDepartamento, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $this->department->id])->create());
 
     $this->get($this->excelUrl)->assertForbidden();
     $this->get($this->pdfUrl)->assertForbidden();
@@ -186,12 +186,12 @@ it('otro periodo sin nada publicado es 404 para el personal con permiso', functi
     Term::factory()->create(['code' => '20263']);
     $this->actingAs(staffExportsHead($this->department, $this->campus));
 
-    $this->get(route('published.export', ['periodo' => '20263', 'campus' => 'C2', 'tipo' => 'excel']))->assertNotFound();
+    $this->get(route('published.export', ['periodo' => '20263', 'modalidad' => 'pres', 'campus' => 'C2', 'tipo' => 'excel']))->assertNotFound();
 });
 
 it('el jefe de otro departamento que publicó descarga también el PDF de este (supuesto por confirmar)', function () {
     $other = Department::factory()->create(['code' => 'II', 'name' => 'Industrial']);
-    $otherLoad = AcademicLoad::factory()->for($this->term)->for($this->campus)->for($other)->inStatus(LoadStatus::Published)->create();
+    $otherLoad = AcademicLoad::factory()->for($this->term)->state(['modality_id' => modalityOf('PRES')->id])->for($other)->inStatus(LoadStatus::Published)->create();
     LoadSnapshot::factory()->for($otherLoad)->withGroups([LoadSnapshotFactory::group(['subject' => ['id' => (string) Str::uuid7(), 'code' => 'IND-1001', 'name' => 'Ergonomía', 'credits' => 4, 'theory_hours' => 2, 'practice_hours' => 2, 'department_id' => $other->id]])])->create();
 
     $this->actingAs(staffExportsHead($other, $this->campus))->get($this->pdfUrl)->assertOk()->assertHeader('Content-Type', 'application/pdf');

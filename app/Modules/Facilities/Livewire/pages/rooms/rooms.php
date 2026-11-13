@@ -4,6 +4,7 @@ use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Queries\ModalityQuery;
 use App\Modules\Facilities\Actions\AddRoomBlock;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\RemoveRoomBlock;
@@ -28,8 +29,8 @@ use Mary\Traits\Toast;
  * CRUD de Salones, con la forma de Campus: tabla con búsqueda y filtros por edificio, tipo, departamento
  * dueño y estado; alta y edición en un modal; activar o desactivar desde la tabla. Los salones no se
  * borran. «Bloqueos» abre un panel lateral (x-drawer) con los bloqueos del salón y el formulario para
- * agregar otro. Cada salón es de un campus; la credencial ya no lo elige (#415): el listado muestra los salones
- * de todos los campus del usuario cuyo perfil usa salones (`usesRooms`), con una columna «Campus» y el filtro de
+ * agregar otro. Cada salón es de un campus, que es el lugar (MS3); la credencial ya no lo elige (#415): el listado muestra
+ * los salones de todos los campus del usuario (todo campus tiene salones, MS34), con una columna «Campus» y el filtro de
  * campus con «Todos» (WithCampusFilter); el alta toma el campus del edificio elegido, y el select de edificios va
  * agrupado por campus. Lo administran el admin y la Subdirección del campus (RoomPolicy).
  *
@@ -118,11 +119,11 @@ new #[Title('Salones')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(RoomQuery $rooms, BuildingQuery $buildingQuery, DepartmentQuery $departmentQuery, Actor $context): array
+    public function with(RoomQuery $rooms, BuildingQuery $buildingQuery, DepartmentQuery $departmentQuery, ModalityQuery $modalities, Actor $context): array
     {
         $options = $this->campusOptions();
         $shown = $this->campusFilter();
-        $roomCampuses = ($shown === null ? $options : collect([$shown]))->filter(fn (Campus $campus): bool => $campus->profile->usesRooms)->values();
+        $roomCampuses = ($shown === null ? $options : collect([$shown]))->values();
         $buildings = $buildingQuery->options($roomCampuses);
         $buildingGroups = $this->buildingGroups($buildingQuery, $options);
         $departments = $departmentQuery->options();
@@ -131,12 +132,12 @@ new #[Title('Salones')] class extends Component
         $this->forgetFiltersOutside($buildings, $types, $ownerFilters);
 
         $blocksRoom = $this->openBlocksRoom($rooms);
+        $roomsWindow = $blocksRoom === null ? null : $modalities->roomsWindow();
 
         return [
             'campusOptions' => $options,
             'shownCampus' => $shown,
-            'usesRooms' => $roomCampuses->isNotEmpty(),
-            'rooms' => $roomCampuses->isEmpty() ? null : $rooms->forTable(
+            'rooms' => $rooms->forTable(
                 $context,
                 $roomCampuses,
                 $this->search,
@@ -175,9 +176,10 @@ new #[Title('Salones')] class extends Component
             'rowDecoration' => ['text-neutral' => fn (Room $room): bool => ! $room->is_active],
             'blocksRoom' => $blocksRoom,
             'blocks' => $blocksRoom === null ? collect() : $rooms->blocksOf($blocksRoom),
-            'dayOptions' => $blocksRoom === null ? [] : array_map(
+            'roomsWindow' => $roomsWindow,
+            'dayOptions' => $roomsWindow === null ? [] : array_map(
                 fn (int $day): array => ['id' => $day, 'name' => ucfirst(RoomRules::DAYS[$day])],
-                $blocksRoom->campus->profile->days,
+                $roomsWindow->days,
             ),
             'termOptions' => $blocksRoom === null ? [] : $rooms->termOptions(),
         ];
@@ -342,14 +344,14 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
-     * Los edificios de los campus que usan salones, agrupados por campus, para el filtro «Edificio» de la barra.
+     * Los edificios de los campus, agrupados por campus, para el filtro «Edificio» de la barra.
      *
      * @param  Collection<int, Campus>  $options
      * @return array<string, array{name: string, buildings: list<array{id: string, name: string}>}>
      */
     private function buildingGroups(BuildingQuery $buildingQuery, Collection $options): array
     {
-        $campuses = $options->filter(fn (Campus $campus): bool => $campus->profile->usesRooms)->values();
+        $campuses = $options->values();
 
         return $campuses->count() < 2 ? [] : collect($buildingQuery->options($campuses))->groupBy('campus')
             ->map(fn (Collection $group, string $code): array => ['name' => $campuses->firstWhere('code', $code)->name, 'buildings' => $group->map(fn (array $building): array => ['id' => $building['id'], 'name' => $building['name']])->all()])
@@ -357,15 +359,14 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
-     * Los campus donde el usuario puede dar de alta un salón: los que usan salones y donde RoomPolicy::create lo
-     * permite.
+     * Los campus donde el usuario puede dar de alta un salón: donde RoomPolicy::create lo permite.
      *
      * @return Collection<int, Campus>
      */
     private function creatableCampuses(): Collection
     {
         return $this->campusOptions()
-            ->filter(fn (Campus $campus): bool => $campus->profile->usesRooms && auth()->user()->can('create', [Room::class, $campus]))
+            ->filter(fn (Campus $campus): bool => auth()->user()->can('create', [Room::class, $campus]))
             ->values();
     }
 
@@ -443,7 +444,7 @@ new #[Title('Salones')] class extends Component
     }
 
     /**
-     * Los datos del bloqueo validados en forma; que el día y las horas quepan en el perfil del campus lo
+     * Los datos del bloqueo validados en forma; que el día y las horas quepan en la jornada de los salones lo
      * hace cumplir RoomRules.
      *
      * @return array{term_id: ?string, day: int, starts_at: string, ends_at: string, reason: string}

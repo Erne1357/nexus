@@ -206,7 +206,7 @@ arch('module policies authorize through AuthorizesActor')
     ->toUseTrait(AuthorizesActor::class);
 
 // ADR-0014: todo modelo de Nexus usa UUIDv7 como llave primaria. Models/ también tiene value
-// objects (CampusProfile), que no son modelos y no cuentan.
+// objects (ModalityProfile), que no son modelos y no cuentan.
 test('module models use UUIDv7 primary keys', function (string $module) use ($filesIn, $namespace, $root) {
     $violations = [];
 

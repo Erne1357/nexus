@@ -58,7 +58,7 @@ it('importa el catálogo académico, los alumnos y el kardex en orden, y el alum
     ];
 
     $student = Student::where('control_number', '24111234')->sole();
-    $counts = app(EligibleStudentsQuery::class)->countsFor(Career::where('code', 'ISIC')->sole(), $this->campus);
+    $counts = app(EligibleStudentsQuery::class)->countsFor(Career::where('code', 'ISIC')->sole(), modalityOf('PRES'), $this->campus);
 
     expect(collect($batches)->map(fn (ImportBatch $batch): array => [$batch->template, $batch->status, $batch->error_rows])->all())
         ->each->toMatchArray([1 => BatchStatus::Applied, 2 => 0])

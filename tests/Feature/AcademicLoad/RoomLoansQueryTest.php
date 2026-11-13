@@ -73,7 +73,7 @@ it('los préstamos vivos de un periodo en un campus, sin los de otro periodo o c
     roomLoan(['term_id' => $accepted->term_id, 'campus_id' => $accepted->campus_id, 'day' => 5], AgreementStatus::Rejected);
     roomLoan(['term_id' => Term::factory()->create()->id, 'campus_id' => $accepted->campus_id]);
     roomLoan(['term_id' => $accepted->term_id, 'campus_id' => Campus::factory()->create()->id]);
-    InterdepartmentalAgreement::factory()->sharedGroup()->accepted()->create(['term_id' => $accepted->term_id, 'campus_id' => $accepted->campus_id]);
+    InterdepartmentalAgreement::factory()->sharedGroup()->accepted()->create(['term_id' => $accepted->term_id]);
 
     expect(app(RoomLoansQuery::class)->liveFor($accepted->term_id, $accepted->campus_id)->modelKeys())
         ->toEqualCanonicalizing([$accepted->id, $pending->id]);

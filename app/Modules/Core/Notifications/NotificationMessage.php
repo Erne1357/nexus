@@ -7,9 +7,11 @@ use App\Modules\Core\Enums\Role;
 /**
  * Lo que la campana muestra de una notificación: título, una línea de detalle, el icono (heroicon de
  * MaryUI) con su tono (`info`, `warning`, `success` o `neutral`) y a dónde lleva, como nombre de ruta y parámetros para que el destino pueda llegar después que el
- * aviso (si la ruta no existe, la campana avisa que no está disponible y no lleva). `termId` y `campusId` son el periodo y el campus
- * del aviso: al abrirlo, si el usuario trabaja en ese campus, la credencial cambia al periodo y la pantalla se abre en
- * el campus (`?campus=<código>`; OpenNotification). `role` es el puesto al que va el aviso
+ * aviso (si la ruta no existe, la campana avisa que no está disponible y no lleva). `termId`, `modalityId` y `campusId` son
+ * el periodo, la modalidad y el campus del aviso: al abrirlo, si el usuario trabaja en esa modalidad y ese campus, la
+ * credencial cambia al periodo y la pantalla se abre en la modalidad (`?modalidad=<clave>`) y el campus
+ * (`?campus=<código>`; OpenNotification). Los avisos de la carga llevan la modalidad; el campus, solo los de algo de un
+ * campus, como un préstamo de salón (MS14, supuesto por confirmar). `role` es el puesto al que va el aviso
  * (`data.role`), o null si no va a uno: al abrirlo, la sesión actúa con ese puesto (OpenNotification).
  */
 final readonly class NotificationMessage
@@ -27,15 +29,16 @@ final readonly class NotificationMessage
         public ?string $campusId = null,
         public string $tone = 'info',
         public ?Role $role = null,
+        public ?string $modalityId = null,
     ) {}
 
     public function withRole(?Role $role): self
     {
-        return new self($this->title, $this->body, $this->icon, $this->route, $this->parameters, $this->termId, $this->campusId, $this->tone, $role);
+        return new self($this->title, $this->body, $this->icon, $this->route, $this->parameters, $this->termId, $this->campusId, $this->tone, $role, $this->modalityId);
     }
 
     /**
-     * @return array{title: string, body: string, icon: string, tone: string, route: ?string, parameters: array<string, string>, term_id: ?string, campus_id: ?string, role?: string}
+     * @return array{title: string, body: string, icon: string, tone: string, route: ?string, parameters: array<string, string>, term_id: ?string, campus_id: ?string, modality_id?: string, role?: string}
      */
     public function toArray(): array
     {
@@ -48,6 +51,7 @@ final readonly class NotificationMessage
             'parameters' => $this->parameters,
             'term_id' => $this->termId,
             'campus_id' => $this->campusId,
+            ...($this->modalityId === null ? [] : ['modality_id' => $this->modalityId]),
             ...($this->role === null ? [] : ['role' => $this->role->value]),
         ];
     }
@@ -69,6 +73,7 @@ final readonly class NotificationMessage
             campusId: $data['campus_id'] ?? null,
             tone: (string) ($data['tone'] ?? 'info'),
             role: is_string($data['role'] ?? null) ? Role::tryFrom($data['role']) : null,
+            modalityId: is_string($data['modality_id'] ?? null) ? $data['modality_id'] : null,
         );
     }
 }

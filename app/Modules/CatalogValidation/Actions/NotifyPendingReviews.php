@@ -19,7 +19,8 @@ use Illuminate\Database\Eloquent\Collection;
 /**
  * Avisa a los jefes que tienen catálogos por validar (tarea 2.9; reglas-de-negocio.md, «Periodo y
  * calendario»): a cada jefe de departamento vigente, el único que valida, de cada departamento activo con
- * revisiones pendientes del periodo en el campus, contadas igual que HC-14 (CatalogReviewQuery::pendingFor) pero solo las que el admin abrió en el periodo (CV9).
+ * revisiones pendientes del periodo, contadas igual que HC-14 (CatalogReviewQuery::pendingFor, sin modalidad: todo lo
+ * que el admin abrió en el periodo, CV9). El aviso lleva el campus para abrir la pantalla en él.
  * Con `$departmentId`, solo a los de ese departamento: el recordatorio del tablero de avance (tarea 2.5); un id
  * que no es de un departamento activo no avisa a nadie.
  * Lo llama NotifyPendingReviewsJob al abrir la validación (OpenCatalogValidation). `handle()` da a cuántos usuarios avisó y `notify()`, cuáles.
@@ -43,7 +44,8 @@ final class NotifyPendingReviews
     /**
      * El aviso de que el admin abrió la validación (CV9): un aviso por jefe y departamento, aunque el jefe cubra varios de
      * los campus dados (los jefes son de todo el Tec), con solo los catálogos recién abiertos que le faltan en ese
-     * departamento. Da los usuarios avisados.
+     * departamento. Lo pendiente y los jefes no dependen del campus: se leen una vez por departamento, y el aviso lleva
+     * el primer campus dado. Sin campus, no avisa. Da los usuarios avisados.
      *
      * @param  Collection<int, Campus>  $campuses
      * @param  list<Catalog>  $catalogs
@@ -52,31 +54,24 @@ final class NotifyPendingReviews
     public function notifyOpened(Term $term, Collection $campuses, array $catalogs): Collection
     {
         $notified = new Collection;
+        $campus = $campuses->first();
+
+        if ($campus === null) {
+            return $notified;
+        }
 
         foreach (Department::query()->where('is_active', true)->orderBy('code')->get() as $department) {
-            $reached = [];
+            $pending = array_values(array_filter(
+                $this->reviews->pendingFor($term, null, $department),
+                fn (Catalog $catalog): bool => in_array($catalog, $catalogs, true),
+            ));
 
-            foreach ($campuses as $campus) {
-                $pending = array_values(array_filter(
-                    $this->reviews->pendingFor($term, $campus, $department),
-                    fn (Catalog $catalog): bool => in_array($catalog, $catalogs, true),
-                ));
-
-                if ($pending === []) {
-                    continue;
-                }
-
-                $heads = array_values(array_filter(
-                    $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey())),
-                    fn (array $holder): bool => ! isset($reached[$holder['user']->getKey()]),
-                ));
-
-                foreach ($heads as $holder) {
-                    $reached[$holder['user']->getKey()] = true;
-                }
-
-                $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $campus, $department, $pending)));
+            if ($pending === []) {
+                continue;
             }
+
+            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()));
+            $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $campus, $department, $pending)));
         }
 
         return $notified;
@@ -102,13 +97,13 @@ final class NotifyPendingReviews
         $notified = new Collection;
 
         foreach ($departments as $department) {
-            $pending = $this->reviews->pendingFor($term, $campus, $department);
+            $pending = $this->reviews->pendingFor($term, null, $department);
 
             if ($pending === []) {
                 continue;
             }
 
-            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(campus: $campus->getKey(), unit: $department->getKey()));
+            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()));
 
             $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $campus, $department, $pending)));
         }

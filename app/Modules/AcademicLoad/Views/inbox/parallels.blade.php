@@ -1,6 +1,6 @@
 {{--
-    El drawer de paralelos de una materia (academic-load::pages.inbox): lo que piden las carreras contra lo que
-    bastan juntándolas, una minitabla carrera × (grupos completos, alumnos al mixto) y los grupos mixtos. Es solo la
+    El drawer de paralelos de una materia en un campus (academic-load::pages.inbox): lo que piden las carreras en ese
+    campus contra lo que bastan juntándolas (un grupo es de un campus, M8), una minitabla carrera × (grupos completos, alumnos al mixto) y los grupos mixtos. Es solo la
     sugerencia de ParallelGroups; lo mixto se arma en la fase 3. `close()` es del x-drawer.
 --}}
 @php($subject = $parallelsTarget['subject'])
@@ -8,7 +8,7 @@
 <div class="flex min-h-dvh flex-col" data-testid="parallels-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
         <div class="min-w-0 flex-1">
-            <p class="font-mono text-[15px] font-semibold">{{ $subject->code }}</p>
+            <p class="flex items-center gap-2 font-mono text-[15px] font-semibold">{{ $subject->code }}<x-academic-load::campus-tag :campus="$parallelsTarget['campus']" /></p>
             <h2 id="parallels-title" class="mt-0.5 text-xl font-bold leading-tight">{{ $subject->name }}</h2>
         </div>
         <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle max-md:h-11 max-md:w-11" @click="close()" aria-label="Cerrar el panel" />

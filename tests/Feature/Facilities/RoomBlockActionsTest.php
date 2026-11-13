@@ -1,6 +1,8 @@
 <?php
 
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Actions\AddRoomBlock;
@@ -16,9 +18,9 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| Bloqueos de un salón. El día y las horas deben caber en el perfil del campus (días y jornada); la
-| hora de fin es posterior a la de inicio; el periodo es opcional (sin él, todos); quitar es borrado
-| lógico.
+| Bloqueos de un salón. El día y las horas deben caber en la jornada de los salones (días y horario de las
+| modalidades activas con salones, MS34); la hora de fin es posterior a la de inicio; el periodo es opcional
+| (sin él, todos); quitar es borrado lógico.
 */
 
 beforeEach(function () {
@@ -54,17 +56,26 @@ it('acepta un periodo existente y rechaza uno inexistente', function () {
         ->toThrow(ValidationException::class, 'El periodo no existe');
 });
 
-it('rechaza un día que el campus no usa', function () {
+it('MS34: rechaza un día sin clases con salón en ninguna modalidad activa', function () {
     expect(fn () => app(AddRoomBlock::class)->handle($this->room, blockData(['day' => 6])))
-        ->toThrow(ValidationException::class, 'El campus no tiene clases ese día');
+        ->toThrow(ValidationException::class, 'No hay clases con salón ese día');
 });
 
-it('respeta los días del perfil del campus, no unos fijos', function () {
-    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [1, 6]]]);
+it('MS34: la jornada de los salones es la de las modalidades activas con salones, no una fija ni la de un campus', function () {
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [1, 6]]]);
 
     expect(app(AddRoomBlock::class)->handle($this->room->fresh(), blockData(['day' => 6]))->day)->toBe(6)
         ->and(fn () => app(AddRoomBlock::class)->handle($this->room->fresh(), blockData(['day' => 2])))
-        ->toThrow(ValidationException::class, 'El campus no tiene clases ese día');
+        ->toThrow(ValidationException::class, 'No hay clases con salón ese día');
+
+    modalityOf('EAD')->update(['is_active' => true]);
+
+    expect(app(AddRoomBlock::class)->handle($this->room->fresh(), blockData(['day' => 2]))->day)->toBe(2);
+
+    Modality::factory()->create(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false, 'days' => [3], 'day_start' => '06:00']]);
+
+    expect(fn () => app(AddRoomBlock::class)->handle($this->room->fresh(), blockData(['day' => 3, 'starts_at' => '06:00', 'ends_at' => '07:00'])))
+        ->toThrow(ValidationException::class, 'dentro de la jornada de los salones');
 });
 
 it('rechaza horas fuera de la jornada del campus, en el campo de la hora que se sale', function (string $starts, string $ends, string $field) {
@@ -73,7 +84,7 @@ it('rechaza horas fuera de la jornada del campus, en el campo de la hora que se 
         $this->fail('Debió rechazar las horas.');
     } catch (ValidationException $exception) {
         expect(array_keys($exception->errors()))->toBe([$field])
-            ->and($exception->errors()[$field][0])->toContain('dentro del horario del campus (7:00 a 21:00)');
+            ->and($exception->errors()[$field][0])->toContain('dentro de la jornada de los salones (7:00 a 21:00)');
     }
 })->with([['06:00', '08:00', 'starts_at'], ['20:00', '22:00', 'ends_at']]);
 
@@ -89,11 +100,11 @@ it('vuelve a leer el salón: uno borrado no se encuentra', function () {
     expect(fn () => app(AddRoomBlock::class)->handle($stale, blockData()))->toThrow(ModelNotFoundException::class);
 });
 
-it('usa el perfil vigente del salón en la base, no el de un modelo viejo', function () {
+it('usa la jornada vigente de las modalidades en la base, no la de un modelo viejo', function () {
     $stale = Room::query()->with('campus')->find($this->room->id);
-    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [6]]]);
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [6]]]);
 
-    expect(fn () => app(AddRoomBlock::class)->handle($stale, blockData(['day' => 2])))->toThrow(ValidationException::class, 'El campus no tiene clases ese día');
+    expect(fn () => app(AddRoomBlock::class)->handle($stale, blockData(['day' => 2])))->toThrow(ValidationException::class, 'No hay clases con salón ese día');
 });
 
 it('acepta de la hora de inicio a la de cierre de la jornada', function () {

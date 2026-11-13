@@ -33,13 +33,13 @@ beforeEach(function () {
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->proposal = CareerProposal::factory()->submitted()->create([
         'term_id' => $this->term->id,
-        'campus_id' => $this->campus->id,
+        'modality_id' => modalityOf('PRES')->id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
     $this->accepted = ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id]);
     $this->pending = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id]);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
 });
 
 function returnPart(string $comment = 'Pide un grupo menos de Cálculo.', ?ProposalReview $part = null): ProposalReview
@@ -87,7 +87,7 @@ it('deja bitácora de la parte con el comentario y el cambio de la propuesta', f
             'career_proposal_id' => $this->proposal->id,
             'proposal_status' => ['old' => 'submitted', 'attributes' => 'returned'],
         ])
-        ->and($activity->description)->toBe('Regresó la parte de CB en la propuesta de ISC en C2 para el periodo 20271');
+        ->and($activity->description)->toBe('Regresó la parte de CB en la propuesta de ISC en Presencial para el periodo 20271');
 });
 
 it('no toca las otras partes ni la carga del departamento', function () {

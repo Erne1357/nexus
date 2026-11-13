@@ -7,9 +7,9 @@ use App\Modules\Core\Actions\SaveStageWindows;
 use App\Modules\Core\Actions\UpdateTerm;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Livewire\Forms\TermForm;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\CampusQuery;
+use App\Modules\Core\Queries\ModalityQuery;
 use App\Modules\Core\Queries\TermCalendarQuery;
 use App\Modules\Core\Queries\TermQuery;
 use App\Modules\Core\Rules\TermRules;
@@ -25,14 +25,16 @@ use Mary\Traits\Toast;
 
 /**
  * Ficha del periodo (tarea 2.1, maqueta B «Línea de tiempo»): su encabezado con «Editar» y «Marcar como actual», el
- * resumen de campus en un renglón (dónde se abrió y «Abrir en…» para los campus que faltan) y el calendario de sus 8 etapas como una línea de tiempo (core::terms.timeline) con la barra general de cada etapa y una
- * barra delgada por cada campus con ventana propia. Tocar una etapa abre su panel lateral (x-drawer): las fechas
- * generales y, por cada campus activo, una ventana propia opcional que se agrega y se quita. La sección «Campus»
- * (tarea 2.2, maqueta B) lista los campus activos, y los que se abrieron y ya no están activos, solo lectura: abre el
- * periodo en un campus o completa una apertura con OpenTerm (`openIn`, `completeIn`) y dice en un toast lo que creó.
+ * resumen de modalidades en un renglón (dónde se abrió y «Abrir en…» para las modalidades que faltan; M4: el periodo
+ * se abre y se calendariza por modalidad; cada «Abrir en» abre el panel «Abrir el periodo» con lo que se crea) y el calendario de sus 8 etapas como una línea de tiempo
+ * (core::terms.timeline) con la barra general de cada etapa y una barra delgada por cada modalidad con ventana propia.
+ * Tocar una etapa abre su panel lateral (x-drawer): las fechas generales y, por cada modalidad activa, una ventana
+ * propia opcional que se agrega y se quita. La sección «Modalidades» lista las activas, y las que se abrieron y ya no
+ * están activas, solo lectura: el panel (`prepareOpen`) abre el periodo en una modalidad o completa una apertura con OpenTerm
+ * (`openIn`, `completeIn`) y se dice en un toast lo que creó.
  *
  * Lo ven y cambian el admin y la subdirección (TermPolicy). El componente lee con TermQuery, TermCalendarQuery y
- * CampusQuery, autoriza en mount() y en cada método público (una petición puede llegar con una página que abrió otra
+ * ModalityQuery, autoriza en mount() y en cada método público (una petición puede llegar con una página que abrió otra
  * sesión), valida la forma de los datos y llama a UpdateTerm, MakeTermCurrent, SaveStageWindows, que
  * hacen cumplir las reglas (TermRules). Las fechas de las etapas solo informan (D4).
  */
@@ -70,6 +72,21 @@ new #[Title('Ficha del periodo')] class extends Component
     #[Locked]
     public ?array $copyReplace = null;
 
+    /** El panel «Abrir el periodo»; `showOpen` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
+    public bool $showOpen = false;
+
+    /** La modalidad del panel «Abrir el periodo». El navegador no la puede cambiar; se vuelve a leer y autorizar al abrir. */
+    #[Locked]
+    public ?string $openingId = null;
+
+    /**
+     * Lo que se creará al abrir, calculado una vez al abrir el panel (TermQuery::openingPreview), no en cada render.
+     *
+     * @var array{items: list<array{count: int, text: string, chips: list<string>}>, campuses: list<string>, profile: ?string, ownWindows: int, completing: bool}|null
+     */
+    #[Locked]
+    public ?array $openPreview = null;
+
     /** `showDrawer` no puede ser #[Locked]: el x-drawer lo cierra desde el navegador. */
     public bool $showDrawer = false;
 
@@ -81,7 +98,7 @@ new #[Title('Ficha del periodo')] class extends Component
     public array $general = ['starts_on' => '', 'ends_on' => ''];
 
     /**
-     * Las ventanas propias de la etapa en edición, por id de campus activo; solo los campus que la tienen.
+     * Las ventanas propias de la etapa en edición, por id de modalidad activa; solo las modalidades que la tienen.
      *
      * @var array<string, array{starts_on: string, ends_on: string}>
      */
@@ -98,25 +115,28 @@ new #[Title('Ficha del periodo')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TermQuery $terms, TermCalendarQuery $calendar, CampusQuery $campuses): array
+    public function with(TermQuery $terms, TermCalendarQuery $calendar, ModalityQuery $modalities): array
     {
         $term = $terms->findOrFail($this->termId);
         $this->authorize('view', $term);
 
-        $active = $campuses->active();
+        $active = $modalities->active();
         $general = $calendar->for($term, null);
         $stage = $this->stage === null ? null : Stage::from($this->stage);
-        $campusRows = $terms->campusRows($term, $active);
+        $modalityRows = $terms->modalityRows($term, $active);
         $copySources = $calendar->copySources($term);
+        $opening = $this->showOpen && $this->openingId !== null && $this->openPreview !== null ? $modalities->findOrFail($this->openingId) : null;
 
         return [
             'term' => $term,
             'timeline' => StageTimeline::build($general, $calendar->ownWindows($term, $active), today()->toImmutable()),
-            'campuses' => $active,
-            'campusRows' => $campusRows,
-            'openedRows' => $campusRows->filter(fn (array $row): bool => $row['opening'] !== null)->values(),
-            'pendingRows' => $campusRows->filter(fn (array $row): bool => $row['opening'] === null && $row['actionable'])->values(),
+            'modalities' => $active,
+            'modalityRows' => $modalityRows,
+            'openedRows' => $modalityRows->filter(fn (array $row): bool => $row['opening'] !== null)->values(),
+            'pendingRows' => $modalityRows->filter(fn (array $row): bool => $row['opening'] === null && $row['actionable'])->values(),
             'canOpen' => Gate::allows('open', $term),
+            'openModality' => $opening,
+            'openPreview' => $opening === null ? null : $this->openPreview,
             'editing' => $stage === null ? null : [
                 'stage' => $stage,
                 'number' => array_search($stage, Stage::cases(), true) + 1,
@@ -136,7 +156,7 @@ new #[Title('Ficha del periodo')] class extends Component
     /**
      * Abre el modal para copiar el calendario de otro periodo.
      */
-    public function openCopy(TermQuery $terms, TermCalendarQuery $calendar, CampusQuery $campuses): void
+    public function openCopy(TermQuery $terms, TermCalendarQuery $calendar, ModalityQuery $modalities): void
     {
         $term = $terms->findOrFail($this->termId);
         $this->authorize('manageCalendar', $term);
@@ -144,7 +164,7 @@ new #[Title('Ficha del periodo')] class extends Component
         $this->resetValidation();
         $this->sourceId = '';
         $this->copyData = null;
-        $this->copyReplace = $this->replaceNotice($term, $calendar, $campuses);
+        $this->copyReplace = $this->replaceNotice($term, $calendar, $modalities);
         $this->showCopy = true;
     }
 
@@ -237,33 +257,50 @@ new #[Title('Ficha del periodo')] class extends Component
     }
 
     /**
-     * Abre el periodo en un campus (la primera vez) y dice en un toast lo que se creó.
+     * Abre el panel «Abrir el periodo» de una modalidad activa (U4 opción A): lo que se creará, sin escribir nada. En una
+     * modalidad ya abierta es «Completar apertura». Confirmar es `openIn` o `completeIn`.
      */
-    public function openIn(string $campusId, TermQuery $terms, CampusQuery $campuses, OpenTerm $openTerm): void
+    public function prepareOpen(string $modalityId, TermQuery $terms, ModalityQuery $modalities): void
     {
-        $this->openTerm($campusId, 'Periodo abierto en', $terms, $campuses, $openTerm);
+        $term = $terms->findOrFail($this->termId);
+        $this->authorize('open', $term);
+
+        $modality = $this->activeModality($modalities, $modalityId);
+        $this->authorize('open', [$term, $modality]);
+
+        $this->openingId = $modality->id;
+        $this->openPreview = $terms->openingPreview($term, $modality);
+        $this->showOpen = true;
     }
 
     /**
-     * Completa la apertura de un campus ya abierto: crea solo lo que falte.
+     * Abre el periodo en una modalidad (la primera vez) y dice en un toast lo que se creó.
      */
-    public function completeIn(string $campusId, TermQuery $terms, CampusQuery $campuses, OpenTerm $openTerm): void
+    public function openIn(string $modalityId, TermQuery $terms, ModalityQuery $modalities, OpenTerm $openTerm): void
     {
-        $this->openTerm($campusId, 'Apertura completada en', $terms, $campuses, $openTerm);
+        $this->openTerm($modalityId, 'Periodo abierto en', $terms, $modalities, $openTerm);
     }
 
     /**
-     * Abre el panel de una etapa con las ventanas que tiene guardadas: la general y las de los campus activos.
+     * Completa la apertura de una modalidad ya abierta: crea solo lo que falte.
      */
-    public function editStage(string $stage, TermQuery $terms, TermCalendarQuery $calendar, CampusQuery $campuses): void
+    public function completeIn(string $modalityId, TermQuery $terms, ModalityQuery $modalities, OpenTerm $openTerm): void
+    {
+        $this->openTerm($modalityId, 'Apertura completada en', $terms, $modalities, $openTerm);
+    }
+
+    /**
+     * Abre el panel de una etapa con las ventanas que tiene guardadas: la general y las de las modalidades activas.
+     */
+    public function editStage(string $stage, TermQuery $terms, TermCalendarQuery $calendar, ModalityQuery $modalities): void
     {
         $term = $terms->findOrFail($this->termId);
         $this->authorize('manageCalendar', $term);
 
         $stage = Stage::tryFrom($stage) ?? abort(404);
-        $active = $campuses->active()->pluck('id')->all();
+        $active = $modalities->active()->pluck('id')->all();
         $stored = $calendar->storedWindows($term, $stage);
-        $general = $stored->firstWhere('campus_id', null);
+        $general = $stored->firstWhere('modality_id', null);
 
         $this->resetValidation();
         $this->stage = $stage->value;
@@ -272,8 +309,8 @@ new #[Title('Ficha del periodo')] class extends Component
             'ends_on' => $general?->ends_on->toDateString() ?? '',
         ];
         $this->own = $stored
-            ->filter(fn ($window): bool => $window->campus_id !== null && in_array($window->campus_id, $active, true))
-            ->mapWithKeys(fn ($window): array => [$window->campus_id => [
+            ->filter(fn ($window): bool => $window->modality_id !== null && in_array($window->modality_id, $active, true))
+            ->mapWithKeys(fn ($window): array => [$window->modality_id => [
                 'starts_on' => $window->starts_on->toDateString(),
                 'ends_on' => $window->ends_on->toDateString(),
             ]])
@@ -293,45 +330,45 @@ new #[Title('Ficha del periodo')] class extends Component
     }
 
     /**
-     * Agrega al panel la ventana propia de un campus, que empieza con las fechas generales; se guarda al guardar.
+     * Agrega al panel la ventana propia de una modalidad, que empieza con las fechas generales; se guarda al guardar.
      */
-    public function addCampusWindow(string $campusId, TermQuery $terms, CampusQuery $campuses): void
+    public function addModalityWindow(string $modalityId, TermQuery $terms, ModalityQuery $modalities): void
     {
         $this->authorize('manageCalendar', $terms->findOrFail($this->termId));
 
-        $campus = $this->activeCampus($campuses, $campusId);
+        $modality = $this->activeModality($modalities, $modalityId);
 
-        $this->own[$campus->id] ??= [
+        $this->own[$modality->id] ??= [
             'starts_on' => $this->general['starts_on'],
             'ends_on' => $this->general['ends_on'],
         ];
     }
 
     /**
-     * Quita del panel la ventana propia de un campus; se borra al guardar.
+     * Quita del panel la ventana propia de una modalidad; se borra al guardar.
      */
-    public function removeCampusWindow(string $campusId, TermQuery $terms, CampusQuery $campuses): void
+    public function removeModalityWindow(string $modalityId, TermQuery $terms, ModalityQuery $modalities): void
     {
         $this->authorize('manageCalendar', $terms->findOrFail($this->termId));
 
-        $campus = $this->activeCampus($campuses, $campusId);
+        $modality = $this->activeModality($modalities, $modalityId);
 
         $this->resetValidation();
-        unset($this->own[$campus->id]);
+        unset($this->own[$modality->id]);
     }
 
     /**
      * Guarda las ventanas de la etapa con SaveStageWindows, todas o ninguna. Aquí solo se valida la forma de lo que
      * manda el navegador (puede venir manipulado) y se arman los datos: la general en blanco se quita, y se quitan
-     * las ventanas propias de los campus activos que el panel ya no trae. Las fechas las revisa la Action.
+     * las ventanas propias de las modalidades activas que el panel ya no trae. Las fechas las revisa la Action.
      */
-    public function saveStage(TermQuery $terms, TermCalendarQuery $calendar, CampusQuery $campuses, SaveStageWindows $saveStageWindows): void
+    public function saveStage(TermQuery $terms, TermCalendarQuery $calendar, ModalityQuery $modalities, SaveStageWindows $saveStageWindows): void
     {
         $term = $terms->findOrFail($this->termId);
         $this->authorize('manageCalendar', $term);
 
         $stage = Stage::tryFrom((string) $this->stage) ?? abort(404);
-        $active = $campuses->active()->pluck('id')->all();
+        $active = $modalities->active()->pluck('id')->all();
         $this->own = array_intersect_key($this->own, array_flip($active));
 
         $date = ['nullable', 'string', 'date_format:Y-m-d'];
@@ -349,8 +386,8 @@ new #[Title('Ficha del periodo')] class extends Component
         $own = array_map($this->normalized(...), $this->own);
 
         foreach ($calendar->storedWindows($term, $stage) as $window) {
-            if ($window->campus_id !== null && in_array($window->campus_id, $active, true) && ! array_key_exists($window->campus_id, $own)) {
-                $own[$window->campus_id] = null;
+            if ($window->modality_id !== null && in_array($window->modality_id, $active, true) && ! array_key_exists($window->modality_id, $own)) {
+                $own[$window->modality_id] = null;
             }
         }
 
@@ -393,18 +430,18 @@ new #[Title('Ficha del periodo')] class extends Component
             'general.ends_on.date_format' => 'El campo :attribute debe ser una fecha válida.',
             'own.*.starts_on.date_format' => 'El campo :attribute debe ser una fecha válida.',
             'own.*.ends_on.date_format' => 'El campo :attribute debe ser una fecha válida.',
-            'own.*.array' => 'Las fechas del campus no son válidas.',
-            'own.array' => 'Las fechas de los campus no son válidas.',
+            'own.*.array' => 'Las fechas de la modalidad no son válidas.',
+            'own.array' => 'Las fechas de las modalidades no son válidas.',
         ];
     }
 
     /**
-     * El aviso de lo que copiar reemplazaría: cuántas ventanas tiene el periodo y cuántas son de campus inactivos
+     * El aviso de lo que copiar reemplazaría: cuántas ventanas tiene el periodo y cuántas son de modalidades inactivas
      * (que no se ven en la línea de tiempo pero la copia también quita). Null si no tiene ninguna.
      *
      * @return array{text: string}|null
      */
-    private function replaceNotice(Term $term, TermCalendarQuery $calendar, CampusQuery $campuses): ?array
+    private function replaceNotice(Term $term, TermCalendarQuery $calendar, ModalityQuery $modalities): ?array
     {
         $count = $calendar->windowCount($term);
 
@@ -412,18 +449,18 @@ new #[Title('Ficha del periodo')] class extends Component
             return null;
         }
 
-        $active = $campuses->active()->pluck('id')->all();
+        $active = $modalities->active()->pluck('id')->all();
         $inactive = collect(Stage::cases())
             ->flatMap(fn (Stage $stage) => $calendar->storedWindows($term, $stage))
-            ->filter(fn ($window): bool => $window->campus_id !== null && ! in_array($window->campus_id, $active, true))
+            ->filter(fn ($window): bool => $window->modality_id !== null && ! in_array($window->modality_id, $active, true))
             ->count();
 
         $text = ($count === 1 ? 'Se reemplazará la ventana actual del periodo' : "Se reemplazarán las {$count} ventanas actuales del periodo")
             .match (true) {
                 $inactive === 0 => '.',
-                $inactive === 1 && $count === 1 => ', que es de un campus inactivo.',
-                $inactive === 1 => ', 1 de ellas de un campus inactivo.',
-                default => ", {$inactive} de ellas de campus inactivos.",
+                $inactive === 1 && $count === 1 => ', que es de una modalidad inactiva.',
+                $inactive === 1 => ', 1 de ellas de una modalidad inactiva.',
+                default => ", {$inactive} de ellas de modalidades inactivas.",
             };
 
         return ['text' => $text];
@@ -433,7 +470,7 @@ new #[Title('Ficha del periodo')] class extends Component
      * La vista previa de la copia para el modal: las ventanas agrupadas por etapa con sus fechas, el corrimiento en
      * semanas y lo que no se copia.
      *
-     * @param  array{shiftDays: int, windows: list<array{stage: Stage, campus: ?Campus, starts_on: CarbonImmutable, ends_on: CarbonImmutable}>, skipped: list<array{stage: Stage, campus: Campus}>}  $preview
+     * @param  array{shiftDays: int, windows: list<array{stage: Stage, modality: ?Modality, starts_on: CarbonImmutable, ends_on: CarbonImmutable}>, skipped: list<array{stage: Stage, modality: Modality}>}  $preview
      * @return array{weeks: int, direction: string, groups: list<array{stage: string, rows: list<array{who: string, general: bool, dates: string}>}>, skipped: list<string>}
      */
     private function copyView(array $preview): array
@@ -443,8 +480,8 @@ new #[Title('Ficha del periodo')] class extends Component
         foreach ($preview['windows'] as $window) {
             $groups[$window['stage']->value] ??= ['stage' => $window['stage']->label(), 'rows' => []];
             $groups[$window['stage']->value]['rows'][] = [
-                'who' => $window['campus']?->code ?? 'General',
-                'general' => $window['campus'] === null,
+                'who' => $window['modality']?->code ?? 'General',
+                'general' => $window['modality'] === null,
                 'dates' => StageTimeline::rangeBetween($window['starts_on'], $window['ends_on']),
             ];
         }
@@ -453,12 +490,12 @@ new #[Title('Ficha del periodo')] class extends Component
             'weeks' => intdiv(abs($preview['shiftDays']), 7),
             'direction' => $preview['shiftDays'] < 0 ? 'atrás' : 'adelante',
             'groups' => array_values($groups),
-            'skipped' => array_map(fn (array $row): string => "{$row['campus']->code} · {$row['stage']->label()} (campus ".($row['campus']->trashed() ? 'borrado' : 'inactivo').')', $preview['skipped']),
+            'skipped' => array_map(fn (array $row): string => "{$row['modality']->code} · {$row['stage']->label()} (modalidad ".($row['modality']->trashed() ? 'borrada' : 'inactiva').')', $preview['skipped']),
         ];
     }
 
     /**
-     * Las fechas generales que se están editando en el panel como «10–19 nov», para los campus que usan la general;
+     * Las fechas generales que se están editando en el panel como «10–19 nov», para las modalidades que usan la general;
      * null si están vacías o no forman una ventana válida todavía.
      */
     private function generalPreview(): ?string
@@ -486,30 +523,31 @@ new #[Title('Ficha del periodo')] class extends Component
         ];
     }
 
-    private function openTerm(string $campusId, string $title, TermQuery $terms, CampusQuery $campuses, OpenTerm $openTerm): void
+    private function openTerm(string $modalityId, string $title, TermQuery $terms, ModalityQuery $modalities, OpenTerm $openTerm): void
     {
         $term = $terms->findOrFail($this->termId);
         $this->authorize('open', $term);
 
-        $campus = $campuses->findOrFail($campusId);
-        $this->authorize('open', [$term, $campus]);
+        $modality = $modalities->findOrFail($modalityId);
+        $this->authorize('open', [$term, $modality]);
 
         try {
-            $lines = $openTerm->handle($term, $campus);
+            $lines = $openTerm->handle($term, $modality);
         } catch (ValidationException $e) {
             $this->error('No se abrió el periodo', e(collect($e->errors())->flatten()->implode(' ')));
 
             return;
         }
 
-        $this->success("{$title} {$campus->code}", e($lines === [] ? 'No faltaba nada.' : implode(', ', $lines)));
+        $this->showOpen = false;
+        $this->success(e("{$title} {$modality->name}"), e($lines === [] ? 'No faltaba nada.' : implode(', ', $lines)));
     }
 
-    private function activeCampus(CampusQuery $campuses, string $id): Campus
+    private function activeModality(ModalityQuery $modalities, string $id): Modality
     {
-        $campus = $campuses->findOrFail($id);
+        $modality = $modalities->findOrFail($id);
 
-        return $campus->is_active ? $campus : abort(404);
+        return $modality->is_active ? $modality : abort(404);
     }
 
     /**

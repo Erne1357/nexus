@@ -72,7 +72,7 @@ it('el admin da de alta un periodo, lo edita y lo marca como actual desde la UI'
     expect(Term::where('code', '20271')->sole()->is_current)->toBeTrue();
 });
 
-it('el admin abre la ficha de un periodo, fija las fechas de una etapa y la ventana propia de Campus II y ve las barras', function () {
+it('M4: el admin abre la ficha de un periodo, fija las fechas de una etapa y la ventana propia de Presencial y ve las barras', function () {
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
 
     signInToTerms('admin')
@@ -83,10 +83,10 @@ it('el admin abre la ficha de un periodo, fija las fechas de una etapa y la vent
         ->waitForText('Etapa 3 de 8')
         ->fill('@general-starts', '2027-01-04')
         ->fill('@general-ends', '2027-01-22')
-        ->click('@add-C2')
+        ->click('@add-PRES')
         ->wait(1)
-        ->fill('@own-C2-starts', '2027-01-11')
-        ->fill('@own-C2-ends', '2027-01-29')
+        ->fill('@own-PRES-starts', '2027-01-11')
+        ->fill('@own-PRES-ends', '2027-01-29')
         ->click('@save-stage')
         ->waitForText('Etapa actualizada')
         ->assertSee('4–22 ene')
@@ -105,16 +105,18 @@ it('un coordinador no ve la opción Periodos en el menú', function () {
         ->assertNoJavaScriptErrors();
 });
 
-it('el admin abre el periodo en Campus II desde la ficha y ve quién y cuándo', function () {
+it('M4: el admin abre el periodo en Presencial desde la ficha, revisa lo que se crea y ve quién y cuándo', function () {
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
 
     $page = signInToTerms('admin')
         ->navigate('/terms/'.$term->id)
         ->assertSee('No abierto en este periodo');
 
-    $page->click('@open-C2')
-        ->click('@confirm-accept')
-        ->waitForText('Periodo abierto en C2')
+    $page->click('@open-PRES')
+        ->waitForText('Revisa lo que se crea antes de abrir.')
+        ->assertSee('Salones · bloques de 60 min')
+        ->click('@confirm-open')
+        ->waitForText('Periodo abierto en Presencial')
         ->waitForText('Abierto el')
         ->assertSee('por Ana Admin')
         ->assertNoJavaScriptErrors();

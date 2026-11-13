@@ -3,7 +3,7 @@
 namespace App\Modules\Staffing\Actions;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
@@ -23,8 +23,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Recalcula el ranking docente de los grupos de un departamento en un periodo y campus (reglas-de-negocio.md,
- * «Ranking docente (desempate)»; tarea 3.8) y devuelve cuántos grupos rankeó (los no cancelados).
+ * Recalcula el ranking docente de los grupos de un departamento en un periodo y modalidad, de todos sus campus (M1;
+ * reglas-de-negocio.md, «Ranking docente (desempate)»; tarea 3.8) y devuelve cuántos grupos rankeó (los no cancelados).
  *
  * Los insumos de Faculty salen de RankingInputsQuery en lotes. Las marcas las da el validador de Scheduling (scoped;
  * se olvida su foto al empezar para leer la de ahora), con checkTeachers() una vez por grupo y las marcas de
@@ -34,9 +34,10 @@ use Illuminate\Support\Facades\DB;
  * RankingScorer y los pesos de `staffing.weights`.
  *
  * En una sola transacción borra las filas de `staffing_rankings` de todos los grupos del departamento en ese periodo
- * y campus (también las de los cancelados, que se quedan sin ranking) y escribe las nuevas, así que quien lee ve el
- * ranking anterior completo o el nuevo. Es una tabla derivada (decisión de modelado 5): no deja bitácora. Después del
- * commit avisa con RankingsComputed. La corre el job ComputeRankings y el comando `staffing:rank`.
+ * y modalidad (también las de los cancelados, que se quedan sin ranking), por sus ids y no por las copias de la fila,
+ * y escribe las nuevas, así que quien lee ve el ranking anterior completo o el nuevo. La fila copia el periodo y la
+ * modalidad del grupo, no su campus (M8: se lee del grupo). Es una tabla derivada (decisión de modelado 5): no deja
+ * bitácora. Después del commit avisa con RankingsComputed. La corre el job ComputeRankings y el comando `staffing:rank`.
  */
 final class RankGroups
 {
@@ -47,24 +48,22 @@ final class RankGroups
         private readonly Container $container,
     ) {}
 
-    public function handle(Term $term, Campus $campus, Department $department): int
+    public function handle(Term $term, Modality $modality, Department $department): int
     {
         $groups = Group::query()->active()
             ->where('term_id', $term->id)
-            ->where('campus_id', $campus->id)
+            ->where('modality_id', $modality->id)
             ->where('department_id', $department->id)
             ->orderBy('id')
             ->get();
 
         $rows = $groups->isEmpty() ? [] : $this->rows($term, $groups);
 
-        DB::transaction(function () use ($term, $campus, $department, $rows): void {
+        DB::transaction(function () use ($term, $modality, $department, $rows): void {
             StaffingRanking::query()
-                ->where('term_id', $term->id)
-                ->where('campus_id', $campus->id)
                 ->whereIn('group_id', Group::query()
                     ->where('term_id', $term->id)
-                    ->where('campus_id', $campus->id)
+                    ->where('modality_id', $modality->id)
                     ->where('department_id', $department->id)
                     ->select('id'))
                 ->delete();
@@ -74,7 +73,7 @@ final class RankGroups
             }
         });
 
-        RankingsComputed::dispatch($term->id, $campus->id, $department->id);
+        RankingsComputed::dispatch($term->id, $modality->id, $department->id);
 
         return $groups->count();
     }
@@ -159,7 +158,7 @@ final class RankGroups
     {
         return [
             'term_id' => $group->term_id,
-            'campus_id' => $group->campus_id,
+            'modality_id' => $group->modality_id,
             'group_id' => $group->id,
             'teacher_id' => $ranked->candidate->teacherId,
             'rank' => $ranked->rank,

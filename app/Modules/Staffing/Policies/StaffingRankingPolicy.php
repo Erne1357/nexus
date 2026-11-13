@@ -18,7 +18,7 @@ final class StaffingRankingPolicy
     public function viewAny(User $user, Group $group): bool
     {
         return $this->actor($user)->allows(StaffingPermission::RankingView, Target::of(
-            campus: $group->campus_id,
+            modality: $group->modality_id,
             unit: $group->department_id,
         ));
     }

@@ -1,7 +1,7 @@
 {{--
     La línea de tiempo del calendario del periodo (DESIGN.md, "Línea de tiempo de etapas"), la maqueta B de la ficha de
     core::pages.term: el encabezado de meses y semanas y un renglón por etapa, con su número, su nombre, su estado, su
-    barra general y una barra delgada por cada campus con ventana propia; la línea «Hoy» cruza todo y su marca va en
+    barra general y una barra delgada por cada modalidad con ventana propia; la línea «Hoy» cruza todo y su marca va en
     un carril propio del encabezado. Cada renglón es un botón que abre el panel de la etapa (`editStage`) y se llama
     por su contenido (nombre, estado, fechas, días que faltan), sin `aria-label`. Un periodo sin ninguna fecha no
     pinta las 8 etapas vacías: dice que no tiene calendario y lista las etapas con «Poner fechas». Se acomoda por el ancho de su caja (container queries):
@@ -76,7 +76,7 @@
                         @endif
                     @endif
 
-                    @foreach ($row['campuses'] as $bar)
+                    @foreach ($row['modalities'] as $bar)
                         <span class="inline-flex basis-full items-center gap-1.5 text-sm text-neutral @2xl:hidden">
                             <i class="inline-block h-1.5 w-3 rounded-[3px] bg-primary"></i>
                             <span><b class="font-mono font-semibold text-base-content">{{ $bar['code'] }}</b> · {{ \App\Modules\Core\Support\StageTimeline::rangeLabel($bar['window']) }}</span>
@@ -110,7 +110,7 @@
                     </span>
                 @endif
 
-                @foreach ($row['campuses'] as $bar)
+                @foreach ($row['modalities'] as $bar)
                     @php($barEnd = $bar['left'] + $bar['width'])
                     <span class="relative block h-2">
                         <i class="absolute inset-y-0 block min-w-1.5 rounded-[3px] bg-primary" style="left: {{ $bar['left'] }}%; width: {{ $bar['width'] }}%"></i>
@@ -143,8 +143,8 @@
                 <span class="inline-flex items-center gap-2"><i class="inline-block h-3 w-5.5 rounded-[3px] {{ $status->barClasses() }}"></i>{{ $status->label() }}</span>
             @endif
         @endforeach
-        @if (collect($timeline->rows)->contains(fn (array $row): bool => $row['campuses'] !== []))
-            <span class="inline-flex items-center gap-2"><i class="inline-block h-1.5 w-5.5 rounded-[3px] bg-primary"></i>Ventana propia de un campus</span>
+        @if (collect($timeline->rows)->contains(fn (array $row): bool => $row['modalities'] !== []))
+            <span class="inline-flex items-center gap-2"><i class="inline-block h-1.5 w-5.5 rounded-[3px] bg-primary"></i>Ventana propia de una modalidad</span>
         @endif
         @if ($timeline->today !== null)
             <span class="inline-flex items-center gap-2"><i class="inline-block h-3.5 w-0.5 bg-base-content"></i>Hoy, {{ \App\Modules\Core\Support\StageTimeline::dateLabel(today()->toImmutable()) }}</span>

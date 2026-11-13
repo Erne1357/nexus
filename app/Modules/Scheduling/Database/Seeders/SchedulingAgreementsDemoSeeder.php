@@ -12,9 +12,11 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
@@ -44,6 +46,8 @@ use App\Modules\Scheduling\Validation\State\StateGroup;
 use App\Modules\Scheduling\Validation\State\StateRoom;
 use App\Modules\Scheduling\Validation\State\StateSession;
 use Closure;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
@@ -63,7 +67,7 @@ use RuntimeException;
  * AcceptSharedGroup, RejectSharedGroup, WithdrawGroupQuotaProposal) y por el jefe que corresponde en cada paso (quien
  * pide, quien decide), para que la bitácora y los avisos digan quién fue; sin jefe en el departamento, la pide `admin`.
  * La cola va en `sync` mientras siembra (los avisos salen en el momento) y los eventos GroupScheduleChanged y
- * GroupQuotasChanged se descartan; al final corre SyncScheduleConflicts una vez por campus.
+ * GroupQuotasChanged se descartan; al final corre SyncScheduleConflicts una vez por modalidad (M1).
  *
  * Por campus, solo en grupos editables (no cancelados, con la carga del departamento en proposed, staffing o
  * adjusting) y sin tocar los departamentos limpios de SchedulingDemoSeeder (sin salones ajenos ni choques; sus cupos
@@ -158,6 +162,12 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     /** @var array<string, int> intentos que una Action rechazó por sus reglas, por fase, en el campus en curso */
     private array $rejections = [];
 
+    /** La clave de la modalidad de la carga de la demo (Presencial): el campus es solo el lugar (MS3) y no la dice. */
+    private string $modalityCode = 'PRES';
+
+    /** Su id, leído una vez (modalityId()). */
+    private ?string $modalityId = null;
+
     /**
      * @param  list<string>  $campuses  claves de campus
      * @param  array<string, float|int>  $ratios  sobrescribe `loans`, `shared`, `direct_quota_groups` y `suggested_rooms`
@@ -168,9 +178,11 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      * @throws RuntimeException en producción, si el periodo no existe o, con `quotas` o `rooms`, si algo no se puede completar
      * @throws InvalidArgumentException con un modo desconocido
      */
-    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $ratios = [], ?array $cleanDepartments = null, string $mode = 'mixed'): void
+    public function run(string $profile = 'demo', array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $ratios = [], ?array $cleanDepartments = null, string $mode = 'mixed', string $modality = 'PRES'): void
     {
         $this->refuseProduction();
+        $this->modalityCode = $modality;
+        $this->modalityId = null;
 
         if (! in_array($mode, self::MODES, true)) {
             throw new InvalidArgumentException("Modo desconocido «{$mode}»: usa ".implode(', ', self::MODES).'.');
@@ -210,14 +222,18 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
             config(['queue.default' => $previousQueue]);
         }
 
-        foreach ($found as $campus) {
-            app(SyncScheduleConflicts::class)->handle($termModel, $campus);
+        $modalities = Modality::query()->withTrashed()
+            ->whereIn('id', Group::query()->where('term_id', $termModel->id)->whereIn('campus_id', $found->modelKeys())->select('modality_id'))
+            ->orderBy('code')->get();
+
+        foreach ($modalities as $modality) {
+            app(SyncScheduleConflicts::class)->handle($termModel, $modality);
         }
     }
 
     private function seedCampus(Term $term, Campus $campus, string $profile, ?array $cleanCodes): void
     {
-        $already = InterdepartmentalAgreement::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->exists();
+        $already = $this->agreementsIn($term, $campus)->exists();
         $groups = Group::query()->with('subject')
             ->where('term_id', $term->id)->where('campus_id', $campus->id)
             ->get()->sortBy(fn (Group $group): string => self::groupKey($group))->values();
@@ -238,8 +254,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         $this->seedSharedGroups($term, $campus, $usable);
         $suggested = $this->seedSuggestedRooms($campus, $open, $loanGroups);
 
-        $byStatus = fn (AgreementKind $kind): string => InterdepartmentalAgreement::query()
-            ->where('term_id', $term->id)->where('campus_id', $campus->id)->where('kind', $kind->value)
+        $byStatus = fn (AgreementKind $kind): string => $this->agreementsIn($term, $campus)->where('kind', $kind->value)
             ->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status')
             ->map(fn (int $total, string $status): string => "{$total} ".AgreementStatus::from($status)->value)->implode(', ');
 
@@ -251,6 +266,18 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     }
 
     /**
+     * Los acuerdos del periodo de los grupos del campus: el grupo compartido no guarda campus (su lugar es el del grupo) y
+     * el préstamo lleva el del salón, que es el de su grupo.
+     *
+     * @return Builder<InterdepartmentalAgreement>
+     */
+    private function agreementsIn(Term $term, Campus $campus): Builder
+    {
+        return InterdepartmentalAgreement::query()->where('term_id', $term->id)
+            ->whereIn('group_id', Group::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->select('id'));
+    }
+
+    /**
      * Los cupos completos del punto 5: grupos compartidos, todos aceptados, y cupos directos en todos los departamentos
      * editables.
      *
@@ -258,8 +285,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      */
     private function seedCampusQuotas(Term $term, Campus $campus): void
     {
-        $already = InterdepartmentalAgreement::query()->where('term_id', $term->id)->where('campus_id', $campus->id)
-            ->where('kind', AgreementKind::SharedGroup->value)->exists();
+        $already = $this->agreementsIn($term, $campus)->where('kind', AgreementKind::SharedGroup->value)->exists();
 
         if ($already) {
             $this->command?->info("Cupos en {$campus->code}: ya hay grupos compartidos, no se hace nada.");
@@ -289,13 +315,42 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      */
     private function seedCampusRooms(Term $term, Campus $campus): void
     {
-        if (! $campus->profile->usesRooms) {
-            $this->command?->info("Salones en {$campus->code}: el campus no usa salones, no se hace nada.");
+        $modalities = $this->roomModalities($term, $campus);
+
+        if ($modalities->isEmpty()) {
+            $this->command?->info("Salones en {$campus->code}: ninguna modalidad con grupos aquí usa salones, no se hace nada.");
 
             return;
         }
 
-        ['plan' => $plan, 'missing' => $missing] = $this->roomPlan($term, $campus);
+        foreach ($modalities as $modality) {
+            $this->seedModalityRooms($term, $campus, $modality);
+        }
+    }
+
+    /**
+     * Las modalidades con grupos en el campus que usan salones (su perfil), por clave.
+     *
+     * @return EloquentCollection<int, Modality>
+     */
+    private function roomModalities(Term $term, Campus $campus): EloquentCollection
+    {
+        return Modality::query()->withTrashed()
+            ->whereIn('id', Group::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->select('modality_id'))
+            ->orderBy('code')->get()
+            ->filter(fn (Modality $modality): bool => $modality->profile->usesRooms)
+            ->values();
+    }
+
+    /**
+     * El paso de salones de una modalidad en el campus. Las modalidades van una tras otra: la foto de la siguiente ya
+     * trae los salones que esta asignó (ScheduleStateQuery carga los grupos con sesión en salón de toda modalidad).
+     *
+     * @throws RuntimeException si alguna sesión no tiene salón posible o una Action rechaza un paso
+     */
+    private function seedModalityRooms(Term $term, Campus $campus, Modality $modality): void
+    {
+        ['plan' => $plan, 'missing' => $missing] = $this->roomPlan($term, $campus, $modality);
 
         if ($missing !== []) {
             throw new RuntimeException(count($missing)." sesiones de {$campus->code} no tienen un salón libre que les sirva sin choque (HC-02, HC-05, HC-06, HC-11); por ejemplo: ".implode('; ', array_slice($missing, 0, 5)).'.');
@@ -369,16 +424,16 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
      *
      * @return array{plan: list<array{session: StateSession, group: StateGroup, room: StateRoom, label: string}>, missing: list<string>}
      */
-    private function roomPlan(Term $term, Campus $campus): array
+    private function roomPlan(Term $term, Campus $campus, Modality $modality): array
     {
         $editable = $this->editableDepartments($term, $campus);
-        $state = app(ScheduleStateQuery::class)->forCampus($term, $campus);
+        $state = app(ScheduleStateQuery::class)->forModality($term, $modality->id);
         $defaults = SubjectRoomDefault::query()->where('campus_id', $campus->id)->orderBy('priority')->orderBy('room_id')->get(['subject_id', 'room_id'])
             ->groupBy('subject_id')->map(fn (Collection $rows): array => $rows->pluck('room_id')->all())->all();
         $pending = [];
 
         foreach ($state->groups() as $group) {
-            if (! $group->isActive || $group->campusId !== $campus->id || ! isset($editable[$group->departmentId])) {
+            if (! $group->isActive || $group->campusId !== $campus->id || $group->modalityId !== $modality->id || ! isset($editable[$group->departmentId])) {
                 continue;
             }
 
@@ -420,13 +475,15 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     /**
      * Las sesiones presenciales sin salón del campus a las que el paso de salones (modo `rooms`) no podría darles uno
      * sin choque, descritas («Cálculo Integral, grupo A3 el lunes de 7:00 a 9:00»). La usa la revisión del punto 5 de
-     * la demo, «la oferta de salones alcanza para el horario». No escribe nada.
+     * la demo, «la oferta de salones alcanza para el horario»; solo de las modalidades que usan salones. No escribe nada.
      *
      * @return list<string>
      */
     public function missingRooms(Term $term, Campus $campus): array
     {
-        return $this->roomPlan($term, $campus)['missing'];
+        return $this->roomModalities($term, $campus)
+            ->flatMap(fn (Modality $modality): array => $this->roomPlan($term, $campus, $modality)['missing'])
+            ->all();
     }
 
     /**
@@ -498,7 +555,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     {
         $open = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
 
-        return AcademicLoad::query()->where('term_id', $term->id)->where('campus_id', $campus->id)->get(['department_id', 'status'])
+        return AcademicLoad::query()->where('term_id', $term->id)->where('modality_id', $this->modalityId())->get(['department_id', 'status'])
             ->filter(fn (AcademicLoad $load): bool => in_array($load->status, $open, true))
             ->mapWithKeys(fn (AcademicLoad $load): array => [$load->department_id => true])->all();
     }
@@ -510,7 +567,7 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
     {
         $key = "{$permission->value}|{$campus->id}|{$departmentId}";
 
-        return $this->heads[$key] ??= app(RecipientsQuery::class)->holders($permission, Target::of(campus: $campus->id, unit: $departmentId))[0]['user'] ?? $this->admin;
+        return $this->heads[$key] ??= app(RecipientsQuery::class)->holders($permission, Target::of(modality: $this->modalityId(), campus: in_array(Dimension::Campus, $permission->dimensions(), true) ? $campus->id : null, unit: $departmentId))[0]['user'] ?? $this->admin;
     }
 
     // ---------------------------------------------------------------- préstamos
@@ -891,5 +948,13 @@ final class SchedulingAgreementsDemoSeeder extends Seeder
         }
 
         return $done;
+    }
+
+    /**
+     * El id de la modalidad de la carga de la demo (`$modality` de run(); Presencial si se llama sin run()).
+     */
+    private function modalityId(): string
+    {
+        return $this->modalityId ??= Modality::query()->where('code', $this->modalityCode)->firstOrFail()->id;
     }
 }

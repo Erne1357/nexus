@@ -65,10 +65,11 @@ it('recuerda solo a un departamento y a nadie si no le falta nada', function () 
     expect(app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2]), $this->subdireccion, [$this->sis->id]))->toBe(1);
 });
 
-it('avisa en cada campus que se le pasa y cuenta una vez al jefe', function () {
+it('con el tablero en «Todos» (varios campus) avisa una sola vez a cada jefe y la bitácora guarda los campus del tablero', function () {
     Notification::fake();
 
     expect(app(RemindPendingReviews::class)->handle($this->term, collect([$this->c2, $this->c1]), $this->subdireccion))->toBe(1);
+    Notification::assertSentToTimes($this->jefeSis, CatalogReviewsPending::class, 1);
     expect(Activity::query()->where('event', 'reminded')->sole()->properties['campuses'])->toBe(['C2', 'C1']);
 });
 

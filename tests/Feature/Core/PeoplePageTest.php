@@ -43,7 +43,7 @@ it('el admin ve la lista con chips y estados, busca y filtra', function () {
         ->assertOk()
         ->assertSee('<title>Personas y puestos · Nexus</title>', false)
         ->assertSeeInOrder(['Usuario', 'Persona', 'Puestos vigentes', 'Estado'])
-        ->assertSee('Coordinador de carrera · ISC · C2')
+        ->assertSee('Coordinador de carrera · ISC · Presencial · Campus II')
         ->assertSee('Con puesto')
         ->assertSee('Sin puesto vigente')
         ->assertSee('Usuario inactivo')

@@ -84,7 +84,7 @@
 
                     <div class="text-neutral">{{ $term->starts_on->format('d/m/Y') }} al {{ $term->ends_on->format('d/m/Y') }}</div>
 
-                    @if ($term->opened_campus_codes !== [])
+                    @if ($term->opened_modality_codes !== [])
                         <div class="flex items-center gap-1.5 text-neutral">Abierto en @include('core::terms.opened-in', ['term' => $term])</div>
                     @endif
 

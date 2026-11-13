@@ -1,9 +1,6 @@
 <?php
 
-use App\Modules\Core\Enums\Modality;
-use App\Modules\Core\Enums\StaffingMode;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use Illuminate\Database\UniqueConstraintViolationException;
 
 it('no permite dos campus con el mismo código', function () {
@@ -29,31 +26,9 @@ it('borra un campus con soft delete y conserva el registro', function () {
         ->and(Campus::withTrashed()->find($campus->id)->trashed())->toBeTrue();
 });
 
-it('guarda la modalidad y expone el perfil de flujo de settings', function () {
-    $campus = Campus::factory()->create([
-        'modality' => Modality::Mixta,
-        'settings' => ['days' => [1, 2, 3, 4, 5, 6], 'staffing_mode' => 'central'],
-    ])->fresh();
+it('MS3: el campus es solo el lugar: código, nombre y estado, sin modalidad ni perfil de flujo', function () {
+    $campus = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus Nueve'])->fresh();
 
-    expect($campus->modality)->toBe(Modality::Mixta)
-        ->and($campus->profile)->toBeInstanceOf(CampusProfile::class)
-        ->and($campus->profile->days)->toBe([1, 2, 3, 4, 5, 6])
-        ->and($campus->profile->staffingMode)->toBe(StaffingMode::Central)
-        ->and($campus->profile->usesRooms)->toBeTrue();
-});
-
-it('usa el perfil por omisión cuando el campus se crea sin settings', function () {
-    $campus = Campus::create(['code' => 'ENL', 'name' => 'EnLínea', 'modality' => Modality::EnLinea])->fresh();
-
-    expect($campus->settings)->toBe([])
-        ->and($campus->profile->toArray())->toBe(CampusProfile::DEFAULTS);
-});
-
-it('lee el perfil nuevo en la misma instancia después de cambiar settings', function () {
-    $campus = Campus::factory()->create();
-    expect($campus->profile->usesRooms)->toBeTrue();
-
-    $campus->settings = [...$campus->settings, 'uses_rooms' => false];
-
-    expect($campus->profile->usesRooms)->toBeFalse();
+    expect(array_keys($campus->getAttributes()))->not->toContain('modality', 'settings', 'modality_id')
+        ->and($campus->getFillable())->toBe(['code', 'name', 'is_active']);
 });

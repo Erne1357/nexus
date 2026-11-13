@@ -2,7 +2,7 @@
 
 namespace App\Modules\Staffing\Models;
 
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -21,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Una asignación de docente a grupo en el historial (HC-16). Es de solo agregar: la base solo deja fijar
  * `replaced_at` y `replaced_by` una vez, cuando otra asignación la reemplaza.
  */
-#[Fillable(['term_id', 'campus_id', 'group_id', 'teacher_id', 'assigned_by', 'assigned_at', 'ranking_position_at_assignment', 'ranking_size_at_assignment', 'reason', 'replaced_at', 'replaced_by'])]
+#[Fillable(['term_id', 'modality_id', 'group_id', 'teacher_id', 'assigned_by', 'assigned_at', 'ranking_position_at_assignment', 'ranking_size_at_assignment', 'reason', 'replaced_at', 'replaced_by'])]
 #[UseFactory(GroupTeacherAssignmentFactory::class)]
 class GroupTeacherAssignment extends Model
 {
@@ -95,10 +95,12 @@ class GroupTeacherAssignment extends Model
     }
 
     /**
-     * @return BelongsTo<Campus, $this>
+     * Su modalidad del catálogo (ADR-0025), copia de la de su grupo. El campus no se copia: se lee del grupo (M8).
+     *
+     * @return BelongsTo<Modality, $this>
      */
-    public function campus(): BelongsTo
+    public function modality(): BelongsTo
     {
-        return $this->belongsTo(Campus::class);
+        return $this->belongsTo(Modality::class);
     }
 }

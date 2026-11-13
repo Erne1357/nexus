@@ -7,13 +7,14 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
- * Una versión publicada con un payload v1 válido y realista, para probar lo que lee el snapshot (consulta publicada,
+ * Una versión publicada con un payload v2 válido y realista (la forma actual de SnapshotPayload), para probar lo que lee el snapshot (consulta publicada,
  * exportes) sin armar grupos en Scheduling: tres grupos con un compartido entre dos carreras (una con dos retículas
  * y otra sin la materia en su retícula), un salón prestado por otro departamento, una sesión virtual y un grupo sin
  * docente con su justificación. El encabezado sale de la carga y de quien publica, como en la publicación real.
@@ -97,12 +98,26 @@ class LoadSnapshotFactory extends Factory
     {
         return [
             ...SnapshotPayload::header($load, $version, $publisher, $publishedAt ?? CarbonImmutable::now()),
-            'groups' => $groups ?? self::sampleGroups($load->department_id),
+            'groups' => $groups ?? self::sampleGroups($load->department_id, self::campusOf($load)),
         ];
     }
 
     /**
-     * Un grupo con una sesión de teoría y su carrera dueña; `$overrides` reemplaza llaves de primer nivel.
+     * El campus de los grupos de ejemplo: el primero donde se dan los grupos de la modalidad de la carga (MS4,
+     * CampusQuery::of), o ninguno si no tiene.
+     *
+     * @return array{id: string, code: string, name: string}|null
+     */
+    private static function campusOf(AcademicLoad $load): ?array
+    {
+        $campus = app(CampusQuery::class)->of($load->modality)->first();
+
+        return $campus === null ? null : ['id' => $campus->id, 'code' => $campus->code, 'name' => $campus->name];
+    }
+
+    /**
+     * Un grupo con una sesión de teoría y su carrera dueña, en un campus inventado (C2); `$overrides` reemplaza llaves de
+     * primer nivel.
      *
      * @param  array<string, mixed>  $overrides
      * @return array<string, mixed>
@@ -115,6 +130,7 @@ class LoadSnapshotFactory extends Factory
             'status' => 'confirmed',
             'capacity' => 35,
             'justification' => null,
+            'campus' => ['id' => (string) Str::uuid7(), 'code' => 'C2', 'name' => 'Campus II'],
             'subject' => ['id' => (string) Str::uuid7(), 'code' => 'SCD-1027', 'name' => 'Tópicos Avanzados de Programación', 'credits' => 5, 'theory_hours' => 2, 'practice_hours' => 3, 'department_id' => (string) Str::uuid7()],
             'teacher' => ['id' => (string) Str::uuid7(), 'rfc' => 'OISM850312AB1', 'name' => 'María Fernanda Ortiz Saucedo'],
             'placements' => [self::placement()],
@@ -164,11 +180,13 @@ class LoadSnapshotFactory extends Factory
     }
 
     /**
-     * Los grupos de ejemplo de un departamento, con docentes, carreras, retículas y salones compartidos entre ellos.
+     * Los grupos de ejemplo de un departamento en un campus, con docentes, carreras, retículas y salones compartidos
+     * entre ellos.
      *
+     * @param  array{id: string, code: string, name: string}|null  $campus
      * @return list<array<string, mixed>>
      */
-    private static function sampleGroups(string $departmentId): array
+    private static function sampleGroups(string $departmentId, ?array $campus): array
     {
         $uuid = fn (): string => (string) Str::uuid7();
         $building = ['id' => $uuid(), 'code' => 'A', 'name' => 'Edificio A'];
@@ -193,6 +211,7 @@ class LoadSnapshotFactory extends Factory
         return [
             self::group([
                 'code' => 'A',
+                'campus' => $campus,
                 'subject' => $subject('SCD-1027', 'Tópicos Avanzados de Programación', 2, 3),
                 'teacher' => $ortiz,
                 'placements' => [self::placement(['career' => $isc, 'study_plan' => $iscPlan, 'semester' => 4, 'seats' => 35])],
@@ -203,6 +222,7 @@ class LoadSnapshotFactory extends Factory
             ]),
             self::group([
                 'code' => 'D',
+                'campus' => $campus,
                 'capacity' => 40,
                 'subject' => $subject('ACA-0909', 'Taller de Investigación I', 0, 4),
                 'teacher' => $delgado,
@@ -219,6 +239,7 @@ class LoadSnapshotFactory extends Factory
             ]),
             self::group([
                 'code' => 'M',
+                'campus' => $campus,
                 'status' => 'planned',
                 'capacity' => 30,
                 'justification' => 'Docente en contratación; se asigna antes del inicio de clases.',

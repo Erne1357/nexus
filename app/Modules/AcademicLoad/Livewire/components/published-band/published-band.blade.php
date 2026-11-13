@@ -1,16 +1,20 @@
 {{--
     La banda pública (DESIGN.md, «Consulta publicada»): la del shell sin buscador ni menú. La liebre en el cuadro rojo
-    es la marca y lleva a la consulta; luego «Nexus» y la ruta «Horarios». A la derecha, los selectores de Campus y
-    Periodo (cambiar uno recarga la consulta con ese contexto) y el acceso. Bajo 768 px mide 56 px: la liebre de 56,
-    sin la ruta, y los selectores compactos. Bajo 480 px «Nexus» queda solo para lectores de pantalla, para que los
-    selectores quepan completos, y bajo 380 px los selectores bajan a un segundo renglón de la banda, a lo ancho.
+    es la marca y lleva a la consulta; luego «Nexus» y la ruta «Horarios». A la derecha, los selectores de Campus,
+    Modalidad (solo con más de una publicada en el periodo, MS16) y Periodo (cambiar uno recarga la consulta con ese
+    contexto) y el acceso. Bajo 768 px mide 56 px: la liebre de 56, sin la ruta, y los selectores compactos. Bajo 480 px
+    «Nexus» queda solo para lectores de pantalla, para que los selectores quepan completos, y bajo 380 px (bajo 768 px si
+    hay selector de modalidad) los selectores bajan a un segundo renglón de la banda, a lo ancho.
     Debajo, la franja roja de 3 px.
 --}}
 @php
     $selectClasses = 'select h-10 w-auto min-w-0 max-w-full border-band-content/25 bg-band-content/8 text-band-content text-sm [&>option]:bg-base-100 [&>option]:text-base-content max-md:h-11 max-md:max-w-36 max-md:truncate max-md:ps-2 max-md:pe-8 max-md:text-[13px]';
 @endphp
 <div class="sticky top-0 z-30 text-sm/[1.45]">
-    <header class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-desktop:gap-3.5 max-md:h-auto max-md:min-h-14 max-md:gap-2 max-md:pe-2 max-[379px]:flex-wrap max-[379px]:pb-2">
+    <header @class([
+        'flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-desktop:gap-3.5 max-md:h-auto max-md:min-h-14 max-md:gap-2 max-md:pe-2 max-[379px]:flex-wrap max-[379px]:pb-2',
+        'max-md:flex-wrap max-md:pb-2' => count($modalities) > 1,
+    ])>
         <a
             href="{{ route('published.index') }}"
             wire:navigate
@@ -34,12 +38,23 @@
         <span class="flex-1"></span>
 
         @if ($terms !== [])
-            <div class="flex min-w-0 items-center gap-2 max-md:gap-1.5 max-[379px]:order-last max-[379px]:basis-full max-[379px]:ps-2 max-[379px]:[&>select]:max-w-none max-[379px]:[&>select]:flex-1">
+            @php($withModality = count($modalities) > 1)
+            <div @class([
+                'flex min-w-0 items-center gap-2 max-md:gap-1.5 max-[379px]:order-last max-[379px]:basis-full max-[379px]:ps-2 max-[379px]:[&>select]:max-w-none max-[379px]:[&>select]:flex-1',
+                'max-md:order-last max-md:basis-full max-md:ps-2 max-md:[&>select]:max-w-none max-md:[&>select]:flex-1' => $withModality,
+            ])>
                 <select wire:model.live="campus" aria-label="Campus" data-testid="published-campus" class="{{ $selectClasses }}">
                     @foreach ($campuses as $option)
                         <option value="{{ $option['id'] }}" @selected($option['id'] === $campus)>{{ $option['name'] }}</option>
                     @endforeach
                 </select>
+                @if ($withModality)
+                    <select wire:model.live="modalidad" aria-label="Modalidad" data-testid="published-modality" class="{{ $selectClasses }}">
+                        @foreach ($modalities as $option)
+                            <option value="{{ $option['id'] }}" @selected($option['id'] === $modalidad)>{{ $option['name'] }}</option>
+                        @endforeach
+                    </select>
+                @endif
                 <select wire:model.live="periodo" aria-label="Periodo" data-testid="published-term" class="{{ $selectClasses }}">
                     @foreach ($terms as $option)
                         <option value="{{ $option['id'] }}" @selected($option['id'] === $periodo)>{{ $option['name'] }}</option>

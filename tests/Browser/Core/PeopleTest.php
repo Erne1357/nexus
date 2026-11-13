@@ -50,12 +50,13 @@ it('el admin nombra coordinadora a una persona y luego termina el nombramiento',
         ->assertSee('Sin puesto vigente')
         ->click('@appoint')
         ->assertSee('Nombrar a Rosa Ruiz Almanza')
-        ->select('campus', $this->c2->id)
-        ->select('career', $this->isc->id)
+        ->click('input[name="campus"][value="'.$this->c2->id.'"]')
+        ->assertSee('Todas las de Presencial en Campus II')
+        ->click('@career-ISC')
         ->fill('from', today()->subDays(10)->toDateString())
         ->click('@appoint-submit')
         ->assertSee('Nombramiento creado')
-        ->assertSee('Coordinador de carrera · ISC · C2')
+        ->assertSee('Coordinador de carrera · ISC · Presencial · Campus II')
         ->assertSee('Con 1 puesto vigente')
         ->assertNoJavaScriptErrors();
 

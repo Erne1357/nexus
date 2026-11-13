@@ -73,7 +73,7 @@ function crGroupOptions(Testable $page): array
 function crWorldDepartmentGroup(object $world, LoadStatus $status): Group
 {
     $department = Department::factory()->create(['code' => 'IND', 'name' => 'Industrial']);
-    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'campus_id' => $world->campus->id, 'department_id' => $department->id, 'status' => $status]);
+    AcademicLoad::factory()->create(['term_id' => $world->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id, 'status' => $status]);
 
     return crGroup($world, '9Z', 'Materia en propuesta', $department, $world->isc, null);
 }
@@ -125,10 +125,11 @@ describe('lista', function () {
     });
 
     it('la consulta de la lista hace un número constante de consultas', function () {
-        $count = function (): int {
+        $presencial = modalityOf('PRES')->id;
+        $count = function () use ($presencial): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
-            app(ChangeRequestsQuery::class)->listFor(app(Actor::class), $this->w->term->id, $this->w->campus->id, $this->w->sc->id);
+            app(ChangeRequestsQuery::class)->listFor(app(Actor::class), $this->w->term->id, $presencial, null, $this->w->sc->id);
             DB::disableQueryLog();
 
             return count(DB::getQueryLog());
@@ -144,7 +145,8 @@ describe('lista', function () {
             crRequest($group, $n % 2 === 0 ? $this->w->otherTeacherUser : $this->w->coordIsc, ['pending', 'approved', 'rejected', 'applied'][$n % 4]);
         }
 
-        expect($count())->toBe($few)->toBeLessThanOrEqual(8);
+        // Con el campus de hoy del grupo de cada solicitud (M8), para su etiqueta y el editor.
+        expect($count())->toBe($few)->toBeLessThanOrEqual(9);
     });
 
     it('la página completa hace un número constante de consultas', function () {
@@ -214,7 +216,7 @@ describe('detalle', function () {
     it('muestra el estado de la carga del departamento en el aviso', function () {
         crPage($this->w->jefeSc)
             ->assertSeeHtml('data-testid="load-banner"')
-            ->assertSeeInOrder(['Sistemas y Computación', 'Campus II', 'Asignación']);
+            ->assertSeeInOrder(['Sistemas y Computación', 'Presencial', 'Asignación']);
 
         $this->w->scLoad->update(['status' => LoadStatus::Adjusting]);
         crRequest($this->g1, $this->w->teacherUser, 'approved');
@@ -371,7 +373,7 @@ describe('aplicar', function () {
 
         crPage($this->w->coordIsc, ['solicitud' => $request->id])
             ->assertSeeHtml('data-testid="open-editor"')
-            ->assertSeeHtml('href="'.e(route('scheduling.editor', ['campus' => $this->w->campus->code, 'grupo' => $this->g1->id])).'"');
+            ->assertSeeHtml('href="'.e(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => $this->w->campus->code, 'grupo' => $this->g1->id])).'"');
 
         crPage($this->w->jefeSc, ['solicitud' => $request->id])->assertDontSeeHtml('data-testid="open-editor"');
     });
@@ -543,12 +545,12 @@ describe('menú', function () {
 });
 
 describe('avisos', function () {
-    it('el aviso a los jefes dice el tipo de cambio y abre la pantalla con la solicitud', function () {
+    it('el aviso a los jefes dice el tipo de cambio y abre la pantalla con la solicitud en el campus del grupo (MS14)', function () {
         $request = crRequest($this->g1, $this->w->teacherUser, 'pending', ['kind' => 'room']);
         $message = (new ChangeRequested($request))->message($this->w->jefeSc);
 
         expect($message->title)->toBe('Solicitud de cambio de salón')
-            ->and(route($message->route, $message->parameters))->toBe(route('staffing.change-requests', ['solicitud' => $request->id]))
+            ->and(route($message->route, $message->parameters))->toBe(route('staffing.change-requests', ['solicitud' => $request->id, 'campus' => $this->g1->campus->code]))
             ->and(ChangeRequested::unavailableReason(app(Actor::class)->forUser($this->w->jefeSc), $message))->toBeNull();
     });
 });

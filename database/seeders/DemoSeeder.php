@@ -56,7 +56,7 @@ class DemoSeeder extends Seeder
         $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C2']]);
         $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 120]]);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 35]]);
-        $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['C2']]]);
+        $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
         // Aceptar una parte crea grupos (3.3) y GroupsCreated recalcularía los choques del campus en cada aceptación;
@@ -74,13 +74,14 @@ class DemoSeeder extends Seeder
     }
 
     /**
-     * CEA, la que deja cerrada el paso anterior, publicada en tres versiones (tarea 4.3). Solo con `demo:seed
-     * --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la demo no lo necesitan.
+     * La carga que deja cerrada el paso anterior (la escoge PublicationShowcaseDemoSeeder: CEA), publicada en tres
+     * versiones (tarea 4.3). Solo con `demo:seed --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la
+     * demo no lo necesitan.
      */
     public function showcase(): void
     {
         if (config('demo.showcase', false)) {
-            $this->callWith(PublicationShowcaseDemoSeeder::class, ['campus' => 'C2', 'department' => 'CEA', 'versions' => 3]);
+            $this->callWith(PublicationShowcaseDemoSeeder::class, ['versions' => 3]);
         }
     }
 }

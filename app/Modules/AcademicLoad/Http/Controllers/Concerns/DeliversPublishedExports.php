@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Exports\PublishedExports;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -25,13 +26,19 @@ trait DeliversPublishedExports
     public const int ENQUEUES_PER_MINUTE = 30;
 
     /**
-     * @return array{0: Term, 1: Campus}
+     * El periodo, la modalidad activa (por su clave, en cualquier capitalización; M1) y el campus del filtro (`?campus=`,
+     * activo) de la URL; 404 si alguno no existe.
+     *
+     * @return array{0: Term, 1: Modality, 2: ?Campus}
      */
-    private function context(string $termCode, string $campusCode): array
+    private function context(string $termCode, string $modalityCode, ?string $campusCode = null): array
     {
+        $campusCode = $campusCode === '' ? null : $campusCode;
+
         return [
             Term::query()->where('code', PublishedContextQuery::isCode($termCode) ? $termCode : '')->firstOrFail(),
-            Campus::query()->where('code', PublishedContextQuery::isCode($campusCode) ? $campusCode : '')->where('is_active', true)->firstOrFail(),
+            PublishedContextQuery::modality($modalityCode) ?? abort(404),
+            $campusCode === null ? null : Campus::query()->where('code', PublishedContextQuery::isCode($campusCode) ? $campusCode : '')->where('is_active', true)->firstOrFail(),
         ];
     }
 

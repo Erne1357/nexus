@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Models;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Database\Factories\ProposalItemFactory;
+use App\Modules\Core\Models\Campus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -15,11 +16,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Una materia de la propuesta de carrera: el plan y el semestre de la retícula de donde se tomó, los elegibles
- * al armarla y lo que corrige el coordinador (alumnos esperados, grupos solicitados y notas). Su departamento
- * es el de la materia.
+ * Una materia de la propuesta de carrera en un campus (M6): el plan y el semestre de la retícula de donde se tomó, los
+ * alumnos posibles de ese campus al armarla y lo que corrige el coordinador (alumnos esperados, grupos solicitados y
+ * notas). Su departamento es el de la materia. Los grupos que nacen de ella son de su campus (M8). `campus_id` es nulo
+ * solo en una modalidad sin salones, que lleva una sola columna (MS5).
  */
-#[Fillable(['career_proposal_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes'])]
+#[Fillable(['career_proposal_id', 'campus_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes'])]
 #[UseFactory(ProposalItemFactory::class)]
 class ProposalItem extends Model
 {
@@ -45,6 +47,16 @@ class ProposalItem extends Model
     public function proposal(): BelongsTo
     {
         return $this->belongsTo(CareerProposal::class, 'career_proposal_id');
+    }
+
+    /**
+     * El campus de la fila (su columna en la propuesta); null en una modalidad sin salones (MS5).
+     *
+     * @return BelongsTo<Campus, $this>
+     */
+    public function campus(): BelongsTo
+    {
+        return $this->belongsTo(Campus::class);
     }
 
     /**

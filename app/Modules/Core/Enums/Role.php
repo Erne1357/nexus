@@ -54,8 +54,8 @@ enum Role: string
             self::Admin => 'Tienes acceso a todo Nexus. Tus acciones quedan en la bitácora como las de cualquier usuario.',
             self::Subdireccion => 'Cuando se pide, das el visto bueno final antes de publicar la carga académica.',
             self::JefeDepartamento => 'Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.',
-            self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos según la prioridad de base.',
-            self::Coordinador => 'Analizas el avance de los alumnos de tu carrera, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre.',
+            self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos de tu modalidad según la prioridad de base; si tu nombramiento es de un campus, solo los de ese campus.',
+            self::Coordinador => 'Analizas el avance de los alumnos de tu carrera en tu modalidad, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre; si tu nombramiento es de un campus, ves toda la propuesta y cambias lo de tu campus.',
             self::Docente => 'Consultas tu propia carga: los grupos que impartes y sus horarios.',
             self::Alumno => 'Consultas tus datos escolares en «Mis datos», y ahí mismo puedes cambiar tu contraseña cuando quieras.',
         };
@@ -127,8 +127,8 @@ enum Role: string
             self::Admin => 'Este puesto no tiene alcance: vale en todo el sistema.',
             self::Subdireccion => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
             self::JefeDepartamento => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
-            self::JefeProyectoDocente => 'Este puesto pide campus y departamento académico.',
-            self::Coordinador => 'Este puesto pide campus y carrera.',
+            self::JefeProyectoDocente => 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.',
+            self::Coordinador => 'Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.',
             self::Docente, self::Alumno => null,
         };
     }
@@ -162,19 +162,35 @@ enum Role: string
      * (columna "Alcance" de PROJECT.md). Admin no necesita alcance y el docente es de todo el Tec. El alumno tampoco
      * lleva alcance: sus permisos son personales (AC-10). La Subdirección
      * va sobre su unidad (Subdirección Académica, AZ-S3) y el jefe de departamento sobre la de su departamento, los
-     * dos en todo el Tec: no piden campus, y sin campus valen en todos los activos. El jefe de proyecto docente y el
-     * coordinador sí piden campus. Un nombramiento con un campus que su puesto no pide sigue valiendo solo en ese
-     * campus.
+     * dos en todo el Tec y en todas las modalidades: no piden campus ni modalidad, y sin ellos valen en todos los
+     * activos. El jefe de proyecto docente va sobre su departamento y una modalidad, y el coordinador sobre su carrera
+     * y una modalidad (AZ-S17; M5 y M9): el campus es opcional para los dos (optionalScopeColumns()). Un nombramiento
+     * con un campus que su puesto no pide sigue valiendo solo en ese campus.
      *
-     * @return list<'campus_id'|'org_unit_id'|'career_id'>
+     * @return list<'org_unit_id'|'career_id'|'modality_id'>
      */
     public function scopeColumns(): array
     {
         return match ($this) {
             self::Admin, self::Docente, self::Alumno => [],
             self::Subdireccion, self::JefeDepartamento => ['org_unit_id'],
-            self::JefeProyectoDocente => ['campus_id', 'org_unit_id'],
-            self::Coordinador => ['campus_id', 'career_id'],
+            self::JefeProyectoDocente => ['modality_id', 'org_unit_id'],
+            self::Coordinador => ['modality_id', 'career_id'],
+        };
+    }
+
+    /**
+     * Columnas de `role_assignments` que el puesto admite sin pedirlas (AZ-S17): el campus del coordinador y del jefe de
+     * proyecto docente. Con campus, el nombramiento trabaja solo ese campus; sin él, todos los de su modalidad.
+     * AppointRole rechaza cualquier otra columna que el puesto no pida.
+     *
+     * @return list<'campus_id'>
+     */
+    public function optionalScopeColumns(): array
+    {
+        return match ($this) {
+            self::JefeProyectoDocente, self::Coordinador => ['campus_id'],
+            default => [],
         };
     }
 

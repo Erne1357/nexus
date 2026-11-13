@@ -20,12 +20,14 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupMovedToCampus;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\RankGroups;
 use App\Modules\Staffing\Jobs\ComputeRankings;
+use App\Modules\Staffing\Listeners\FollowGroupMovedToCampus;
 use App\Modules\Staffing\Listeners\RerankOnFacultyChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
@@ -36,7 +38,8 @@ use Illuminate\Support\Facades\Queue;
 
 /*
 | Cuándo se recalcula el ranking docente (tarea 3.8): Staffing escucha los eventos de Scheduling y de Faculty y
-| encola ComputeRankings por periodo, campus y departamento, con un retraso corto y uno solo por alcance en la cola.
+| encola ComputeRankings por periodo, modalidad y departamento (M1: con los grupos de todos sus campus), con un retraso
+| corto y uno solo por alcance en la cola.
 | Sin periodo en el evento, cuentan los periodos con alguna carga en `proposed`, `staffing` o `adjusting`.
 */
 
@@ -45,15 +48,16 @@ beforeEach(function () {
     $this->closedTerm = Term::factory()->create(['code' => '20263', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
     $this->campus = Campus::factory()->create();
     $this->otherCampus = Campus::factory()->create();
+    $this->modalityId = modalityOf('PRES')->id;
     $this->department = Department::factory()->create();
     $this->otherDepartment = Department::factory()->create();
     $this->subject = Subject::factory()->create(['department_id' => $this->department->id]);
     $this->otherSubject = Subject::factory()->create(['department_id' => $this->otherDepartment->id]);
     AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     AcademicLoad::factory()->inStatus(LoadStatus::Published)->create([
-        'term_id' => $this->closedTerm->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->closedTerm->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     $this->group = fn (Term $term, Campus $campus, Subject $subject, array $attributes = []): Group => Group::factory()->create($attributes + [
         'term_id' => $term->id, 'campus_id' => $campus->id, 'subject_id' => $subject->id,
@@ -68,8 +72,8 @@ beforeEach(function () {
     TeacherDepartment::factory()->create(['teacher_id' => $this->teacher->id, 'department_id' => $this->department->id]);
     TeacherSubjectQualification::factory()->for($this->teacher)->for($this->otherSubject)->preferente()->create();
     $this->teacherScopes = [
-        [$this->term->id, $this->campus->id, $this->department->id],
-        [$this->term->id, $this->otherCampus->id, $this->otherDepartment->id],
+        [$this->term->id, $this->modalityId, $this->department->id],
+        [$this->term->id, $this->modalityId, $this->otherDepartment->id],
     ];
 
     Queue::fake();
@@ -92,7 +96,7 @@ function sortedRankingScopes(array $scopes): array
 function queuedRankingScopes(): array
 {
     return sortedRankingScopes(Queue::pushed(ComputeRankings::class)
-        ->map(fn (ComputeRankings $job): array => [$job->termId, $job->campusId, $job->departmentId])
+        ->map(fn (ComputeRankings $job): array => [$job->termId, $job->modalityId, $job->departmentId])
         ->all());
 }
 
@@ -100,6 +104,7 @@ it('registra sus listeners en StaffingServiceProvider', function () {
     Event::fake();
 
     Event::assertListening(GroupsCreated::class, RerankOnGroupsCreated::class);
+    Event::assertListening(GroupMovedToCampus::class, FollowGroupMovedToCampus::class);
     Event::assertListening(GroupScheduleChanged::class, RerankOnGroupChange::class);
     Event::assertListening(GroupCancelled::class, RerankOnGroupChange::class);
     Event::assertListening(GroupTeacherChanged::class, RerankOnGroupChange::class);
@@ -110,15 +115,15 @@ it('registra sus listeners en StaffingServiceProvider', function () {
     }
 });
 
-it('Ranking docente: al nacer grupos encola uno por cada departamento de esos grupos', function () {
-    $sibling = ($this->group)($this->term, $this->campus, $this->subject);
+it('M1: al nacer grupos encola uno por cada departamento de esos grupos en su modalidad, aunque sean de varios campus', function () {
+    $sibling = ($this->group)($this->term, $this->otherCampus, $this->subject);
     $foreign = ($this->group)($this->term, $this->campus, $this->otherSubject);
 
-    GroupsCreated::dispatch($this->term->id, $this->campus->id, [$this->ownGroup->id, $sibling->id, $foreign->id]);
+    GroupsCreated::dispatch($this->term->id, $this->modalityId, [$this->ownGroup->id, $sibling->id, $foreign->id]);
 
     expect(queuedRankingScopes())->toBe(sortedRankingScopes([
-        [$this->term->id, $this->campus->id, $this->department->id],
-        [$this->term->id, $this->campus->id, $this->otherDepartment->id],
+        [$this->term->id, $this->modalityId, $this->department->id],
+        [$this->term->id, $this->modalityId, $this->otherDepartment->id],
     ]));
 });
 
@@ -135,7 +140,7 @@ it('Ranking docente: un grupo sin docente solo encola su propio alcance', functi
 
     GroupScheduleChanged::dispatch($foreign);
 
-    expect(queuedRankingScopes())->toBe([[$this->term->id, $this->campus->id, $this->otherDepartment->id]]);
+    expect(queuedRankingScopes())->toBe([[$this->term->id, $this->modalityId, $this->otherDepartment->id]]);
 });
 
 it('Ranking docente: un cambio de docente encola el alcance del grupo y los del docente anterior y el nuevo', function () {
@@ -147,10 +152,10 @@ it('Ranking docente: un cambio de docente encola el alcance del grupo y los del 
 
     GroupTeacherChanged::dispatch($foreign, $previous->id, $this->teacher->id);
 
+    // El alcance del grupo (el otro departamento en su modalidad) ya es uno de los del docente nuevo.
     expect(queuedRankingScopes())->toBe(sortedRankingScopes([
         ...$this->teacherScopes,
-        [$this->term->id, $this->campus->id, $this->otherDepartment->id],
-        [$this->term->id, $this->campus->id, $thirdDepartment->id],
+        [$this->term->id, $this->modalityId, $thirdDepartment->id],
     ]));
 });
 
@@ -170,7 +175,7 @@ it('Ranking docente: horas externas y disponibilidad encolan solo el periodo del
     ExternalLoadChanged::dispatch(TeacherExternalLoad::factory()->for($this->teacher)->create(['term_id' => $this->closedTerm->id]));
     AvailabilityChanged::dispatch($this->teacher, $this->closedTerm);
 
-    expect(queuedRankingScopes())->toBe([[$this->closedTerm->id, $this->campus->id, $this->department->id]]);
+    expect(queuedRankingScopes())->toBe([[$this->closedTerm->id, $this->modalityId, $this->department->id]]);
 });
 
 it('Ranking docente: quien perdió la adscripción se recalcula donde todavía tiene ranking', function () {
@@ -181,7 +186,7 @@ it('Ranking docente: quien perdió la adscripción se recalcula donde todavía t
 
     AdscriptionChanged::dispatch($adscription);
 
-    expect(queuedRankingScopes())->toBe([[$this->term->id, $this->campus->id, $this->department->id]]);
+    expect(queuedRankingScopes())->toBe([[$this->term->id, $this->modalityId, $this->department->id]]);
 });
 
 it('Ranking docente: sin carga abierta en ningún periodo, un cambio de Faculty no encola nada', function () {
@@ -193,12 +198,12 @@ it('Ranking docente: sin carga abierta en ningún periodo, un cambio de Faculty 
 });
 
 it('Ranking docente: espera uno solo por alcance en la cola, con 5 segundos de retraso', function () {
-    ComputeRankings::dispatch($this->term->id, $this->campus->id, $this->department->id);
+    ComputeRankings::dispatch($this->term->id, $this->modalityId, $this->department->id);
     GroupScheduleChanged::dispatch($this->ownGroup);
-    ComputeRankings::dispatch($this->term->id, $this->otherCampus->id, $this->department->id);
+    ComputeRankings::dispatch($this->term->id, modalityOf('EAD')->id, $this->department->id);
 
     Queue::assertPushed(ComputeRankings::class, 2);
-    Queue::assertPushed(ComputeRankings::class, fn (ComputeRankings $job): bool => $job->uniqueId() === "{$this->term->id}:{$this->campus->id}:{$this->department->id}");
+    Queue::assertPushed(ComputeRankings::class, fn (ComputeRankings $job): bool => $job->uniqueId() === "{$this->term->id}:{$this->modalityId}:{$this->department->id}");
 
     GroupScheduleChanged::dispatch(($this->group)($this->term, $this->campus, $this->otherSubject));
 
@@ -207,7 +212,7 @@ it('Ranking docente: espera uno solo por alcance en la cola, con 5 segundos de r
 
 it('el job corre RankGroups sin encimar dos corridas del mismo alcance', function () {
     TeacherDepartment::factory()->create(['department_id' => $this->department->id]);
-    $job = new ComputeRankings($this->term->id, $this->campus->id, $this->department->id);
+    $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);
     $middleware = $job->middleware();
 
     $job->handle(app(RankGroups::class));
@@ -221,8 +226,21 @@ it('el job corre RankGroups sin encimar dos corridas del mismo alcance', functio
         ->and($middleware[0]->key)->toBe($job->uniqueId());
 });
 
+it('el tiempo límite del job deja el doble del departamento más grande y vence antes de que Redis lo entregue otra vez', function () {
+    // El departamento × modalidad más grande del masivo (CEA presencial, 1 139 grupos de C1 y C2) tardó 403 s como un
+    // solo job, sin otros corriendo (12 de noviembre de 2026; docs/arquitectura/arquitectura.md, el tiempo de ComputeRankings).
+    $largestSeconds = 403;
+    $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);
+    $overlap = $job->middleware()[0];
+
+    expect($job->timeout)->toBeGreaterThanOrEqual(2 * $largestSeconds)
+        ->toBeLessThan((int) config('queue.connections.redis.retry_after'))
+        ->and($job->failOnTimeout)->toBeTrue()
+        ->and($overlap->expiresAfter)->toBe($job->timeout);
+});
+
 it('el job no hace nada si el departamento ya no existe', function () {
-    $job = new ComputeRankings($this->term->id, $this->campus->id, $this->department->id);
+    $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);
     $this->department->delete();
 
     $job->handle(app(RankGroups::class));

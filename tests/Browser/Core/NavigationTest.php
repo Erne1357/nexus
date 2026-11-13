@@ -24,7 +24,7 @@ beforeEach(function () {
     $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
     $this->previous = Term::factory()->create(['name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
     // Carga en curso (MN-04): el coordinador ve las pantallas de la carga y el admin, sin la insignia «Oculta».
-    AcademicLoad::factory()->for($term)->create(['campus_id' => $this->c2->id]);
+    AcademicLoad::factory()->for($term)->create();
 
     User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
     User::factory()

@@ -2,11 +2,14 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Queries\ChangeRequestsQuery;
 
 require_once __DIR__.'/ChangeRequestsTestSupport.php';
 
@@ -95,4 +98,57 @@ it('el admin lo puede todo', function () {
     $admin = User::factory()->withRole(Role::Admin)->create();
 
     expect(changeAbilities($admin, $s, requestFor($s['group'], 'approved')))->toBe([true, true, true, true]);
+});
+
+/*
+| AZ-S17 (MS6, supuesto por confirmar): las solicitudes se leen a nivel de modalidad y se aplican con campus. EAD se
+| activa en estas pruebas.
+*/
+
+it('AZ-S17: un jefe de proyecto docente de EAD no ve en la lista una solicitud de PRES', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $s = changeScenario();
+    $request = requestFor($s['group']);
+    $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('EAD')->id, 'department_id' => $s['group']->department_id])->create();
+
+    $listed = app(ChangeRequestsQuery::class)->listFor(app(Actor::class)->forUser($jpd), $s['load']->term_id, $s['group']->modality_id, $s['group']->campus_id, $s['group']->department_id);
+
+    expect($listed)->toHaveCount(0)
+        ->and($jpd->can('view', $request))->toBeFalse();
+});
+
+it('AZ-S17: un jefe de proyecto docente de PRES limitado a C2 ve la solicitud de un grupo de C1', function () {
+    $s = changeScenario();
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $request = requestFor($s['group']);
+    $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['modality_id' => modalityOf('PRES')->id, 'campus_id' => $c2->id, 'department_id' => $s['group']->department_id])->create();
+
+    $listed = app(ChangeRequestsQuery::class)->listFor(app(Actor::class)->forUser($jpd), $s['load']->term_id, $s['group']->modality_id, $s['group']->campus_id, $s['group']->department_id);
+
+    expect($listed->modelKeys())->toBe([$request->id])
+        ->and($jpd->can('view', $request))->toBeTrue();
+});
+
+it('AZ-S17: un coordinador de PRES limitado a C2 aplica el cambio de horario de un grupo de C2 y no el de C1', function () {
+    $c1 = changeScenario();
+    $c2Campus = Campus::factory()->create(['code' => 'C2']);
+    $c2Group = Group::factory()->create(['campus_id' => $c2Campus->id, 'owner_career_id' => $c1['group']->owner_career_id, 'term_id' => $c1['group']->term_id]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('PRES')->id, 'campus_id' => $c2Campus->id, 'career_id' => $c1['group']->owner_career_id])->create();
+
+    expect($coordinador->can('apply', requestFor($c2Group, 'approved', ['kind' => 'schedule'])))->toBeTrue()
+        ->and($coordinador->can('apply', requestFor($c1['group'], 'approved', ['kind' => 'schedule'])))->toBeFalse();
+});
+
+it('AZ-S17, MS6: en la lista, el coordinador de PRES limitado a C2 ve las solicitudes de horario de los grupos de C2, por el campus del grupo, y no las de C1 ni las de salón', function () {
+    $c1 = changeScenario();
+    $c2Campus = Campus::factory()->create(['code' => 'C2']);
+    $c2Group = Group::factory()->create(['campus_id' => $c2Campus->id, 'owner_career_id' => $c1['group']->owner_career_id, 'term_id' => $c1['group']->term_id, 'subject_id' => $c1['group']->subject_id]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('PRES')->id, 'campus_id' => $c2Campus->id, 'career_id' => $c1['group']->owner_career_id])->create();
+    $inC2 = requestFor($c2Group, 'approved', ['kind' => 'schedule']);
+    requestFor($c2Group, 'approved', ['kind' => 'room']);
+    requestFor($c1['group'], 'approved', ['kind' => 'schedule']);
+
+    $visible = app(ChangeRequestsQuery::class)->visible(app(Actor::class)->forUser($coordinador), ChangeRequest::query())->pluck('id')->all();
+
+    expect($visible)->toBe([$inC2->id]);
 });

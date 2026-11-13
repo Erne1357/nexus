@@ -15,7 +15,7 @@ use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
@@ -43,11 +43,10 @@ beforeEach(function () {
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica y Electrónica']);
 
-    foreach ([$this->c2, $this->c1] as $campus) {
-        TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $campus->id]);
-        app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
-        app(CreateTermLoads::class)->handle($this->term, $campus);
-    }
+    // El periodo abierto en Presencial: C1 y C2 (M4).
+    TermOpening::factory()->create(['term_id' => $this->term->id]);
+    app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
+    app(CreateTermLoads::class)->handle($this->term, modalityOf('PRES'));
 
     $this->jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Dra. Ana Soto']);
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
@@ -146,10 +145,12 @@ describe('accesibilidad y renglones', function () {
             ->and($cards[0])->toContain('hoy');
     });
 
-    it('«Carga:» sale con las cargas que se pintan, separadas por un punto medio', function () {
+    it('«Carga:» sale con la carga del departamento en la modalidad de los campus (M1), una aunque haya dos campus', function () {
         $html = progressPage()->html();
 
-        expect($html)->toContain('data-testid="loads-SIS"')->and(preg_match('/loads-SIS.*?C1.*?·.*?C2/s', $html))->toBe(1);
+        expect($html)->toContain('data-testid="loads-SIS"')->toContain('data-testid="load-SIS-PRES"')
+            ->and(preg_match('/data-testid="loads-SIS".*?<\/p>/s', $html, $line))->toBe(1)
+            ->and($line[0])->not->toContain('·');
     });
 
     it('con una sola carga no hay separador, y sin ninguna no hay «Carga:»', function () {
@@ -234,8 +235,6 @@ describe('conteos', function () {
 
 describe('filtros', function () {
     it('el filtro de campus no cambia los catálogos: son los que el admin abrió en el periodo (CV9)', function () {
-        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-
         progressPage()->set('campus', $this->c1->id)->assertSee('0 de 10');
     });
 
@@ -424,16 +423,15 @@ describe('abrir la validación (CV9)', function () {
         expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(2);
     });
 
-    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin campus que los use', function () {
+    it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin modalidad abierta que los use', function () {
         $page = progressPage($this->admin)->set('toOpen', [Catalog::Teachers->value])->call('openValidation');
         expect(lastToastOf($page)['description'])->toBe('Esos catálogos ya estaban abiertos.');
 
         CatalogReview::query()->where('catalog', Catalog::Rooms->value)->delete();
-        $this->c1->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
-        $this->c2->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
 
         $page = progressPage($this->admin)->set('toOpen', [Catalog::Rooms->value])->call('openValidation');
-        expect(lastToastOf($page)['description'])->toBe('Ningún campus abierto en este periodo usa salones.');
+        expect(lastToastOf($page)['description'])->toBe('Ninguna modalidad abierta en este periodo usa salones.');
     });
 
     it('sin marcar ningún catálogo no abre nada y lo dice', function () {

@@ -40,7 +40,7 @@ final class ReturnProposalReview
 
         return DB::transaction(function () use ($review, $comment, $actor): ProposalReview {
             $proposal = CareerProposal::query()
-                ->with(['term', 'campus' => fn ($query) => $query->withTrashed(), 'career' => fn ($query) => $query->withTrashed()])
+                ->with(['term', 'modality' => fn ($query) => $query->withTrashed(), 'career' => fn ($query) => $query->withTrashed()])
                 ->lockForUpdate()
                 ->findOrFail($review->career_proposal_id);
 
@@ -67,7 +67,7 @@ final class ReturnProposalReview
                     'career_proposal_id' => $proposal->getKey(),
                     'proposal_status' => ['old' => $from->value, 'attributes' => $proposal->status->value],
                 ])
-                ->log("Regresó la parte de {$department->code} en la propuesta de {$proposal->career->code} en {$proposal->campus->code} para el periodo {$proposal->term->code}");
+                ->log("Regresó la parte de {$department->code} en la propuesta de {$proposal->career->code} en {$proposal->modality->name} para el periodo {$proposal->term->code}");
 
             CareerProposalReturned::dispatch($proposal, $department, $comment);
 

@@ -21,7 +21,7 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Oferta del departamento para un docente (HC-17, tarea 3.10): todos los grupos no cancelados de cada departamento
- * donde tiene una adscripción vigente, en todos los campus, desde que la carga del departamento (periodo, campus y
+ * donde tiene una adscripción vigente, en todos los campus, desde que la carga del departamento (periodo, modalidad y
  * departamento) entra a `staffing` y en cualquier estado posterior. No se esconde ningún grupo. De cada uno trae su
  * lugar y su desglose, nunca el de los demás: el ranking se lee solo con el id de ese docente, y de los demás solo se
  * cuenta cuántos hay. Un número constante de consultas, sin importar los grupos.
@@ -61,7 +61,7 @@ final class TeacherOfferQuery
             ->whereIn('groups.department_id', $departmentIds)
             ->whereExists(fn (QueryBuilder $load) => $load->select(DB::raw(1))->from('academic_loads')
                 ->whereColumn('academic_loads.term_id', 'groups.term_id')
-                ->whereColumn('academic_loads.campus_id', 'groups.campus_id')
+                ->whereColumn('academic_loads.modality_id', 'groups.modality_id')
                 ->whereColumn('academic_loads.department_id', 'groups.department_id')
                 ->whereIn('academic_loads.status', self::visibleStatuses())
                 ->whereNotIn('academic_loads.id', $published->loadIds()))
@@ -175,7 +175,7 @@ final class TeacherOfferQuery
      *
      * @return array<string, mixed>
      */
-    private static function fromPublished(PublishedGroup $group, Campus $campus, Teacher $teacher): array
+    private static function fromPublished(PublishedGroup $group, ?Campus $campus, Teacher $teacher): array
     {
         $owner = $group->placements[0];
 
@@ -187,8 +187,8 @@ final class TeacherOfferQuery
             'subject_code' => $group->subject['code'],
             'subject_name' => $group->subject['name'],
             'career' => $owner['career']['code'],
-            'campus_code' => $campus->code,
-            'campus_name' => $campus->name,
+            'campus_code' => $campus?->code ?? ($group->campus['code'] ?? ''),
+            'campus_name' => $campus?->name ?? ($group->campus['name'] ?? ''),
             'schedule' => SessionLabels::published($group->sessions),
             'rooms' => array_values(array_unique(array_filter(array_map(fn (PublishedSession $session): ?string => $session->room['code'] ?? null, $group->sessions)))),
             'teacher_name' => $group->teacher['name'] ?? null,

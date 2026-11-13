@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -37,7 +38,7 @@ function closingTeacher(bool $active = true): Teacher
 
 function closingRoom(int $capacity = 40): Room
 {
-    return Room::factory()->capacity($capacity)->create(['building_id' => Building::factory()->create(['campus_id' => test()->load->campus_id])->id]);
+    return Room::factory()->capacity($capacity)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id]);
 }
 
 /**
@@ -53,7 +54,7 @@ function closingGroup(array $attributes = [], bool $scheduled = true, ?Room $roo
     };
     $group = Group::factory()->create([
         'term_id' => test()->load->term_id,
-        'campus_id' => test()->load->campus_id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => test()->subject->id,
         'capacity' => 30,
         'teacher_id' => $teacherId,
@@ -128,16 +129,22 @@ it('HC-15: veta cerrar con un docente dado de baja, aunque el grupo tenga justif
     expect(closingVeto()->reasons())->toBe(['HC-15: 2 grupos tienen un docente dado de baja: asígnales otro.']);
 });
 
+it('M1: cuenta los grupos de la carga en cualquier campus de su modalidad', function () {
+    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => Campus::factory()->create(['code' => 'C9'])->id, 'subject_id' => $this->subject->id]);
+
+    expect(closingVeto()->blocked())->toBeTrue();
+});
+
 it('publicar vuelve a revisar HC-15 desde cerrada y desde aprobada', function (LoadStatus $from) {
     closingGroup(teacher: null);
 
     expect(closingVeto($from, LoadStatus::Published)->reasons())->toBe(['HC-15: 1 grupo no tiene docente ni justificación.']);
 })->with([LoadStatus::Closed, LoadStatus::Approved]);
 
-it('no mira otras transiciones, grupos cancelados ni grupos de otro departamento o campus', function () {
+it('no mira otras transiciones, grupos cancelados ni grupos de otro departamento o modalidad', function () {
     closingGroup(teacher: null, attributes: ['status' => 'cancelled']);
     closingGroup(teacher: null, attributes: ['subject_id' => Subject::factory()->create(['department_id' => departmentKey(11)])->id]);
-    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => Campus::factory()->create()->id, 'subject_id' => $this->subject->id]);
+    Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => modalityOf('EAD')->id, 'subject_id' => $this->subject->id]);
 
     expect(closingVeto()->blocked())->toBeFalse();
 
@@ -148,8 +155,8 @@ it('no mira otras transiciones, grupos cancelados ni grupos de otro departamento
         ->and(closingVeto(LoadStatus::Proposed, LoadStatus::Staffing)->blocked())->toBeFalse();
 });
 
-it('sigue el perfil del campus: sin salones no pide salón y sin bloques de tiempo no pide horario', function () {
-    $this->load->campus->update(['settings' => ['uses_rooms' => false, 'uses_time_blocks' => false]]);
+it('sigue el perfil de la modalidad de la carga: sin salones no pide salón y sin bloques de tiempo no pide horario', function () {
+    $this->load->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false, 'uses_time_blocks' => false]]);
     closingGroup(withRoom: false);
     closingGroup(scheduled: false);
 

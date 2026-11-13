@@ -46,14 +46,15 @@ final readonly class ValidationScope
     }
 
     /**
-     * Toda la carga de un campus, o la de un departamento en él: sus grupos activos.
+     * Toda la carga de una modalidad, con los grupos de todos sus campus (M1), o la de un departamento en ella: sus
+     * grupos activos.
      */
-    public static function load(ScheduleState $state, string $campusId, ?string $departmentId = null): self
+    public static function load(ScheduleState $state, string $modalityId, ?string $departmentId = null): self
     {
         $ids = [];
 
         foreach ($state->groups() as $group) {
-            if ($group->isActive && $group->campusId === $campusId && ($departmentId === null || $group->departmentId === $departmentId)) {
+            if ($group->isActive && $group->modalityId === $modalityId && ($departmentId === null || $group->departmentId === $departmentId)) {
                 $ids[] = $group->id;
             }
         }

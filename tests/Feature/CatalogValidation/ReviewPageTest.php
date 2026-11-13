@@ -15,7 +15,7 @@ use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -43,7 +43,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $this->ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica-Electrónica']);
-    TermOpening::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    TermOpening::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
     app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
@@ -145,8 +145,8 @@ describe('estados vacíos', function () {
 });
 
 describe('tablero', function () {
-    it('cuenta los validados y el total baja a 4 si ningún campus abierto usa salones', function () {
-        $this->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    it('cuenta los validados y el total baja a 4 si ninguna modalidad abierta usa salones', function () {
+        modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false]]);
         CatalogReview::query()->where('catalog', Catalog::Rooms)->delete();
         reviewOf(Catalog::Careers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
@@ -273,13 +273,13 @@ describe('tablero', function () {
 
     it('CV5: con la carga fuera de borrador, Reabrir queda deshabilitado con su motivo y no reabre', function () {
         reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
-        AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sis->id, 'status' => LoadStatus::Proposed]);
+        AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sis->id, 'status' => LoadStatus::Proposed]);
 
         reviewPage()
-            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->assertSee('La carga académica de SIS ya salió de borrador en Presencial.')
             ->call('confirm', 'reopen', 'subjects')
             ->assertHasErrors('status')
-            ->assertSee('La carga académica de SIS ya salió de borrador en C2.')
+            ->assertSee('La carga académica de SIS ya salió de borrador en Presencial.')
             ->assertSet('showConfirm', false);
 
         expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Validated);

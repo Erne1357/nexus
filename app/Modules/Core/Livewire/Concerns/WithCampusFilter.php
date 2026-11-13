@@ -117,9 +117,12 @@ trait WithCampusFilter
 
     /**
      * Cambiar de campus en una pantalla que lo resolvió al abrirse (periodo, grupos, filtros del campus anterior): la
-     * abre de nuevo en `$route` con el campus elegido, sin los demás filtros.
+     * abre de nuevo en `$route` con el campus elegido, sin los demás filtros salvo `$parameters` (la modalidad de una
+     * pantalla de la carga, que no cambia con el campus).
+     *
+     * @param  array<string, string>  $parameters
      */
-    protected function reopenOnCampus(string $route): void
+    protected function reopenOnCampus(string $route, array $parameters = []): void
     {
         $chosen = $this->campusFilter();
 
@@ -128,6 +131,6 @@ trait WithCampusFilter
         }
 
         $this->rememberCampus($chosen);
-        $this->redirectRoute($route, ['campus' => $chosen->code], navigate: true);
+        $this->redirectRoute($route, [...$parameters, 'campus' => $chosen->code], navigate: true);
     }
 }

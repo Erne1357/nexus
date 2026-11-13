@@ -1,6 +1,6 @@
 # Proceso propuesto en Nexus
 
-Flujo de carga académica e inscripción para modalidad presencial, tal como lo implementa Nexus. Cada etapa indica quién la ejecuta, qué entra, qué sale y en qué entrega (R1, R2, R3) queda disponible. Las reglas exactas están en `docs/dominio/reglas-de-negocio.md`.
+Flujo de carga académica e inscripción para modalidad presencial, tal como lo implementa Nexus. La carga, sus coordinadores y la apertura del periodo son de una **modalidad** (departamento × modalidad la carga; carrera × modalidad la propuesta); el campus es solo el lugar donde se dan los grupos, así que Presencial es una sola carga con los grupos de Campus I y Campus II (ADR-0025). Cada etapa indica quién la ejecuta, qué entra, qué sale y en qué entrega (R1, R2, R3) queda disponible. Las reglas exactas están en `docs/dominio/reglas-de-negocio.md`.
 
 ## Vista general
 
@@ -31,9 +31,9 @@ flowchart LR
 
 ### 0. Preparar periodo (admin, Subdirección)
 
-- Entrada: fechas del semestre y de cada etapa por campus.
-- Acción: crear el periodo (`20271`), su calendario de etapas y revisar el perfil de flujo de cada campus (bloques, horario, si requiere visto bueno de Subdirección).
-- Salida: periodo abierto; cada departamento recibe su `academic_load` en estado `draft` y sus `catalog_reviews` en `pending`.
+- Entrada: fechas del semestre y de cada etapa por modalidad (Presencial, una sola para C1 y C2).
+- Acción: crear el periodo (`20271`), su calendario de etapas y abrirlo en cada modalidad que va a capturar y revisar el perfil de flujo de cada modalidad (bloques, horario, si requiere visto bueno de Subdirección).
+- Salida: periodo abierto en la modalidad; cada departamento recibe su `academic_load` en estado `draft` y sus `catalog_reviews` en `pending`.
 
 ### 1. Importar catálogos (admin)
 
@@ -42,7 +42,7 @@ flowchart LR
 - Salida: catálogos cargados; `student_progress` recalculado; errores por fila disponibles para corregir en el SII o en el archivo.
 - Repetible: cualquier catálogo se puede re-importar en cualquier momento (la etapa 9 depende de ello).
 
-### 2. Validar catálogos (jefe de departamento, por campus)
+### 2. Validar catálogos (jefe de departamento, una vez para todo el Tec)
 
 - Entrada: catálogos importados.
 - Acción: el jefe revisa listas de docentes, salones, materias y planes de su departamento con contadores y diferencias respecto al periodo anterior; corrige (desactivar docente, cambiar capacidad, marcar plan inactivo) o deja observaciones; marca cada catálogo como validado.
@@ -51,7 +51,7 @@ flowchart LR
 
 ### 3. Propuesta por carrera (coordinador)
 
-- Entrada: avance reticular de los alumnos de la carrera en el campus.
+- Entrada: avance reticular de los alumnos de la carrera en la modalidad, por campus (las filas de la propuesta son por campus).
 - Acción R1: Nexus muestra, por materia de la retícula, cuántos alumnos son **elegibles** (aprobaron la seriación y no han aprobado la materia). El coordinador ajusta el estimado, define cuántos grupos pide y lo envía.
 - Acción R2: `Demand` precarga el estimado con tasas históricas de reprobación y grupos sugeridos; el coordinador solo corrige.
 - Salida: `career_proposal` en `submitted`; cada departamento ve las materias que le piden las carreras.
@@ -80,9 +80,9 @@ flowchart LR
 ### 7. Cierre y aprobación (jefe de departamento, Subdirección opcional)
 
 - Condiciones para cerrar: cero choques duros, todos los grupos con docente activo y salón (o justificados), sin solicitudes de cambio pendientes ni acuerdos sin respuesta (HC-15; reglas-de-negocio.md, "Cierre y reapertura de la carga").
-- Acción: el jefe cierra su carga (`closed`) y sus grupos activos quedan confirmados. Si el campus tiene `requires_subdireccion_approval`, Subdirección revisa el tablero del campus y aprueba (`approved`) o regresa con comentarios (`adjusting`).
+- Acción: el jefe cierra su carga (`closed`) y sus grupos activos quedan confirmados. Si el perfil de la modalidad tiene `requires_subdireccion_approval`, Subdirección revisa el tablero y aprueba (`approved`) o regresa con comentarios (`adjusting`).
 - Subdirección o el admin reabren, con motivo, una carga cerrada, aprobada o publicada: vuelve a ajustes, el jefe la corrige, la regresa a asignación y la cierra otra vez.
-- Salida: carga aprobada por departamento y campus.
+- Salida: carga aprobada por departamento y modalidad.
 
 ### 8. Publicación (Subdirección o jefe según perfil)
 
@@ -109,8 +109,8 @@ stateDiagram-v2
     staffing --> adjusting : solicitud de cambio aprobada
     adjusting --> staffing : cambios aplicados y validados
     staffing --> closed : todos los grupos con docente y salón (HC-15)
-    closed --> approved : visto bueno de Subdirección (si el campus lo exige)
-    closed --> published : publicar (si el campus no exige visto bueno)
+    closed --> approved : visto bueno de Subdirección (si la modalidad lo exige)
+    closed --> published : publicar (si la modalidad no exige visto bueno)
     closed --> adjusting : regresada o reabierta, con motivo
     approved --> published : publicar
     approved --> adjusting : reabierta, con motivo
@@ -164,5 +164,5 @@ sequenceDiagram
 | Jefe de departamento | Excel, correo, criterios informales; mes y medio | Ranking visible, tablero de pendientes, salones sugeridos, acuerdos registrados; obligación de validar catálogos |
 | Jefe de proyecto docente | Mismo Excel | Mismas pantallas que el jefe, con su alcance |
 | Docente | Se entera por correo, pide cambios en persona | Ve toda la oferta de su departamento y su carga; solicita cambios con seguimiento |
-| Subdirección | Sin visibilidad hasta el final | Tablero de avance por campus y departamento; visto bueno opcional |
+| Subdirección | Sin visibilidad hasta el final | Tablero de avance por modalidad y departamento (con el campus como filtro); visto bueno opcional |
 | Alumno | Horario publicado en el SII | R1: consulta publicada en Nexus; R3: inscripción en Nexus con cupos reales |

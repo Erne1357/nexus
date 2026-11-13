@@ -22,18 +22,20 @@ use App\Modules\Core\Models\User;
 beforeEach(function () {
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['code' => '20271']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas Computacionales']);
     CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $campus->id]);
     $department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
-    $proposal = CareerProposal::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'career_id' => $career->id]);
+    $proposal = CareerProposal::factory()->create(['term_id' => $term->id, 'career_id' => $career->id]);
     ProposalItem::factory()->create([
         'career_proposal_id' => $proposal->id,
+        'campus_id' => $campus->id,
         'subject_id' => Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Cálculo Diferencial', 'department_id' => $department->id])->id,
         'requested_groups' => 2,
     ]);
     $this->proposal = $proposal;
     $this->department = $department;
+    $this->campus = $campus;
 
     User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => $career->id])->create(['username' => '19110003']);
 });
@@ -65,6 +67,7 @@ it('el coordinador cambia los grupos de una materia en la tabla y envía la prop
 it('el coordinador marca en la retícula las materias sin grupos y quita el resaltado', function () {
     ProposalItem::factory()->create([
         'career_proposal_id' => $this->proposal->id,
+        'campus_id' => $this->campus->id,
         'subject_id' => Subject::factory()->create(['code' => 'ACF-0902', 'name' => 'Cálculo Integral', 'department_id' => $this->department->id])->id,
         'semester' => 2,
         'requested_groups' => 0,

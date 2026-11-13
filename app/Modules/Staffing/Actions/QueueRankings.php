@@ -13,11 +13,12 @@ use App\Modules\Staffing\Models\StaffingRanking;
 use Illuminate\Database\Query\Builder;
 
 /**
- * Encola ComputeRankings para los alcances (periodo, campus y departamento) cuyo ranking docente cambió, cada uno una
- * sola vez y con 5 segundos de retraso para que una ráfaga de cambios espere un solo recálculo. No escribe nada.
+ * Encola ComputeRankings para los alcances (periodo, modalidad y departamento; M1: con los grupos de todos sus campus)
+ * cuyo ranking docente cambió, cada uno una sola vez y con 5 segundos de retraso para que una ráfaga de cambios espere
+ * un solo recálculo. No escribe nada.
  *
  * Los alcances de un docente son los departamentos donde es candidato (adscripciones vigentes y departamentos de las
- * materias donde es `preferente`) en cada campus con grupos no cancelados de ellos en el periodo, más los alcances
+ * materias donde es `preferente`) en cada modalidad con grupos no cancelados de ellos en el periodo, más los alcances
  * donde todavía aparece en el ranking: así se recalcula también donde dejó de ser candidato (perdió la adscripción
  * o el perfil). Sin periodo, cuentan los periodos con alguna carga en `proposed`, `staffing` o `adjusting`.
  */
@@ -32,9 +33,9 @@ final class QueueRankings
      */
     public const array OPEN_STATUSES = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
 
-    public function forScope(string $termId, string $campusId, string $departmentId): void
+    public function forScope(string $termId, string $modalityId, string $departmentId): void
     {
-        $this->dispatch([[$termId, $campusId, $departmentId]]);
+        $this->dispatch([[$termId, $modalityId, $departmentId]]);
     }
 
     /**
@@ -45,7 +46,7 @@ final class QueueRankings
     public function forGroup(Group $group, array $teacherIds = []): void
     {
         $this->dispatch([
-            [$group->term_id, $group->campus_id, $group->department_id],
+            [$group->term_id, $group->modality_id, $group->department_id],
             ...$this->teacherScopes(array_values(array_filter($teacherIds)), $group->term_id),
         ]);
     }
@@ -83,16 +84,16 @@ final class QueueRankings
                     ->where('teacher_subject_qualifications.level', QualificationLevel::Preferente)
                     ->select('subjects.department_id')))
             ->tap(fn (Builder $query) => $terms($query, 'groups.term_id'))
-            ->select(['groups.term_id', 'groups.campus_id', 'groups.department_id']);
+            ->select(['groups.term_id', 'groups.modality_id', 'groups.department_id']);
 
         $ranked = StaffingRanking::query()->toBase()
             ->join('groups', 'groups.id', '=', 'staffing_rankings.group_id')
             ->whereIn('staffing_rankings.teacher_id', $teacherIds)
             ->tap(fn (Builder $query) => $terms($query, 'staffing_rankings.term_id'))
-            ->select(['groups.term_id', 'groups.campus_id', 'groups.department_id']);
+            ->select(['groups.term_id', 'groups.modality_id', 'groups.department_id']);
 
         return $candidate->union($ranked)->get()
-            ->map(fn (object $row): array => [$row->term_id, $row->campus_id, $row->department_id])
+            ->map(fn (object $row): array => [$row->term_id, $row->modality_id, $row->department_id])
             ->all();
     }
 
@@ -103,13 +104,13 @@ final class QueueRankings
     {
         $queued = [];
 
-        foreach ($scopes as [$termId, $campusId, $departmentId]) {
-            if (isset($queued[$key = "{$termId}:{$campusId}:{$departmentId}"])) {
+        foreach ($scopes as [$termId, $modalityId, $departmentId]) {
+            if (isset($queued[$key = "{$termId}:{$modalityId}:{$departmentId}"])) {
                 continue;
             }
 
             $queued[$key] = true;
-            ComputeRankings::dispatch($termId, $campusId, $departmentId)->delay(self::DELAY_SECONDS);
+            ComputeRankings::dispatch($termId, $modalityId, $departmentId)->delay(self::DELAY_SECONDS);
         }
     }
 }

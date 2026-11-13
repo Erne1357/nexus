@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Actions\Transitions\CloseLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadClosing;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
@@ -25,7 +26,7 @@ function confirmingGroup(array $attributes = []): Group
 {
     return Group::factory()->create([
         'term_id' => test()->load->term_id,
-        'campus_id' => test()->load->campus_id,
+        'campus_id' => loadCampus()->id,
         'subject_id' => test()->subject->id,
         ...$attributes,
     ]);
@@ -34,7 +35,7 @@ function confirmingGroup(array $attributes = []): Group
 it('confirma los grupos planeados del departamento y deja bitácora en la carga', function () {
     $planned = [confirmingGroup(), confirmingGroup()];
     $cancelled = confirmingGroup(['status' => GroupStatus::Cancelled]);
-    $other = Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => $this->load->campus_id]);
+    $other = Group::factory()->create(['term_id' => $this->load->term_id, 'campus_id' => loadCampus()->id]);
 
     $actor = User::factory()->admin()->create();
     LoadClosing::dispatch($this->load, $actor);
@@ -51,7 +52,7 @@ it('confirma los grupos planeados del departamento y deja bitácora en la carga'
 
 it('cerrar la carga confirma sus grupos', function () {
     $this->load->update(['status' => LoadStatus::Staffing]);
-    $this->load->campus->update(['settings' => ['uses_time_blocks' => false, 'uses_rooms' => false]]);
+    $this->load->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_time_blocks' => false, 'uses_rooms' => false]]);
     $group = confirmingGroup(['teacher_id' => null, 'close_justification' => 'Contratación en trámite']);
     CareerCampus::factory()->create(['career_id' => $group->owner_career_id, 'campus_id' => $group->campus_id]);
 

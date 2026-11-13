@@ -7,9 +7,10 @@ use App\Modules\Core\Policies\CampusPolicy;
 
 /*
 | CampusPolicy. Según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Abrir periodo,
-| calendario, perfil de campus": `admin`, `subdireccion`):
-| - el admin da de alta campus y edita sus datos, su estado y su perfil de flujo, en cualquier campus;
-| - la subdirección ve los campus de su alcance y edita solo su perfil de flujo (`settings`);
+| calendario, perfil de modalidad": `admin`, `subdireccion`):
+| - el admin da de alta campus y edita sus datos y su estado, en cualquier campus;
+| - la subdirección solo ve los campus de su alcance (MS23): el campus es solo el lugar (MS3) y el perfil de flujo es
+|   de la modalidad;
 | - nadie más administra campus, y nadie los borra (catálogo: se desactivan).
 */
 
@@ -18,7 +19,7 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
 });
 
-it('al admin le permite ver, dar de alta y editar datos, estado y perfil de cualquier campus, también inactivo', function () {
+it('al admin le permite ver, dar de alta y editar datos y estado de cualquier campus, también inactivo', function () {
     $admin = User::factory()->admin()->create();
     $inactive = Campus::factory()->inactive()->create();
 
@@ -27,17 +28,16 @@ it('al admin le permite ver, dar de alta y editar datos, estado y perfil de cual
 
     foreach ([$this->c1, $this->c2, $inactive] as $campus) {
         expect($admin->can('view', $campus))->toBeTrue()
-            ->and($admin->can('update', $campus))->toBeTrue()
-            ->and($admin->can('updateProfile', $campus))->toBeTrue();
+            ->and($admin->can('update', $campus))->toBeTrue();
     }
 });
 
-it('a la subdirección le permite ver y editar el perfil de flujo de los campus de su alcance (reglas-de-negocio.md, "perfil de campus")', function () {
+it('MS23: a la subdirección le permite ver los campus de su alcance; el perfil de flujo ya no es del campus (MS3)', function () {
     $subdireccion = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
 
     expect($subdireccion->can('viewAny', Campus::class))->toBeTrue()
         ->and($subdireccion->can('view', $this->c1))->toBeTrue()
-        ->and($subdireccion->can('updateProfile', $this->c1))->toBeTrue();
+        ->and(method_exists(CampusPolicy::class, 'updateProfile'))->toBeFalse();
 });
 
 it('a la subdirección no le permite dar de alta campus ni cambiar datos o estado, ni del suyo', function () {
@@ -51,7 +51,6 @@ it('a la subdirección de C1 no le permite ver ni editar C2', function () {
     $subdireccion = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id])->create();
 
     expect($subdireccion->can('view', $this->c2))->toBeFalse()
-        ->and($subdireccion->can('updateProfile', $this->c2))->toBeFalse()
         ->and($subdireccion->can('update', $this->c2))->toBeFalse();
 });
 
@@ -61,8 +60,7 @@ it('niega todo a los demás roles de R1, aun en su propio campus', function (Rol
     expect($user->can('viewAny', Campus::class))->toBeFalse()
         ->and($user->can('create', Campus::class))->toBeFalse()
         ->and($user->can('view', $this->c1))->toBeFalse()
-        ->and($user->can('update', $this->c1))->toBeFalse()
-        ->and($user->can('updateProfile', $this->c1))->toBeFalse();
+        ->and($user->can('update', $this->c1))->toBeFalse();
 })->with([
     'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
     'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
@@ -90,11 +88,9 @@ it('la misma persona con otro perfil activo es rechazada', function () {
         ->withRole(Role::Docente)->create();
 
     actingAsRole($user, Role::Subdireccion);
-    expect($user->can('view', $this->c1))->toBeTrue()
-        ->and($user->can('updateProfile', $this->c1))->toBeTrue();
+    expect($user->can('view', $this->c1))->toBeTrue();
 
     actingAsRole($user, Role::Docente);
     expect($user->can('viewAny', Campus::class))->toBeFalse()
-        ->and($user->can('view', $this->c1))->toBeFalse()
-        ->and($user->can('updateProfile', $this->c1))->toBeFalse();
+        ->and($user->can('view', $this->c1))->toBeFalse();
 });

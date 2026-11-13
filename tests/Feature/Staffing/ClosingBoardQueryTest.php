@@ -24,6 +24,8 @@ use Tests\Support\Staffing\ClosingWorld;
 
 beforeEach(function () {
     $this->world = ClosingWorld::create();
+    // Una carga de otra modalidad (EAD) con sus grupos en Campus I, para tener dos cargas del mismo departamento (M1).
+    modalityOf('EAD')->update(['is_active' => true]);
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
 });
 
@@ -43,12 +45,12 @@ function closingBoardLoads(array $board, string $code): array
 {
     $row = collect($board['rows'])->first(fn (array $row): bool => $row['department']->code === $code);
 
-    return collect($row['loads'])->mapWithKeys(fn (LoadProgress $load): array => [$load->load->campus->code => $load])->all();
+    return collect($row['loads'])->mapWithKeys(fn (LoadProgress $load): array => [$load->load->modality->code => $load])->all();
 }
 
-it('un renglón por departamento con una entrada por campus con grupos y lo que le falta a cada carga', function () {
+it('un renglón por departamento con una entrada por modalidad con grupos y lo que le falta a cada carga', function () {
     $jefe = $this->world->head();
-    $c1Load = $this->world->loadIn($this->c1, LoadStatus::Published);
+    $c1Load = $this->world->loadIn($this->c1, LoadStatus::Published, modality: modalityOf('EAD'));
     $c1Load->update(['current_version' => 2]);
     $this->world->group(load: $c1Load);
     $this->world->group();
@@ -66,9 +68,9 @@ it('un renglón por departamento con una entrada por campus con grupos y lo que 
 
     $loads = closingBoardLoads(closingBoardOf(), 'SC');
 
-    expect(array_keys($loads))->toBe(['C1', 'C2'])
-        ->and($loads['C1']->bucket())->toBe('published')
-        ->and($loads['C2'])->toMatchObject([
+    expect(array_keys($loads))->toBe(['EAD', 'PRES'])
+        ->and($loads['EAD']->bucket())->toBe('published')
+        ->and($loads['PRES'])->toMatchObject([
             'groups' => 9,
             'hard' => 1,
             'unscheduled' => 1,
@@ -78,11 +80,11 @@ it('un renglón por departamento con una entrada por campus con grupos y lo que 
             'requests' => 1,
             'justified' => 1,
         ])
-        ->and($loads['C2']->others())->toBe(2)
-        ->and($loads['C2']->blockingGroups)->toBe(5)
-        ->and($loads['C2']->procedures())->toBe(1)
-        ->and($loads['C2']->missing())->toBe(6)
-        ->and($loads['C2']->bucket())->toBe('missing');
+        ->and($loads['PRES']->others())->toBe(2)
+        ->and($loads['PRES']->blockingGroups)->toBe(5)
+        ->and($loads['PRES']->procedures())->toBe(1)
+        ->and($loads['PRES']->missing())->toBe(6)
+        ->and($loads['PRES']->bucket())->toBe('missing');
 });
 
 it('HC-15: cuenta por grupo lo mismo que el veto (ClosingBlockersQuery), con la misma regla', function () {
@@ -95,7 +97,7 @@ it('HC-15: cuenta por grupo lo mismo que el veto (ClosingBlockersQuery), con la 
     $this->world->group(teacher: $this->world->teacher(active: false));
 
     $veto = app(ClosingBlockersQuery::class)->of($this->world->load->fresh());
-    $board = closingBoardLoads(closingBoardOf(), 'SC')['C2'];
+    $board = closingBoardLoads(closingBoardOf(), 'SC')['PRES'];
 
     expect([$board->hard, $board->unscheduled, $board->withoutTeacher, $board->withoutRoom, $board->inactiveTeacher, $board->justified, $board->blockingGroups])
         ->toBe([$veto->conflicted, $veto->unscheduled, $veto->withoutTeacher, $veto->withoutRoom, $veto->inactiveTeacher, $veto->justified, $veto->groups])
@@ -107,7 +109,7 @@ it('«C2 · N» cuenta grupos distintos: un grupo sin docente ni salón cuenta u
     $this->world->group(teacher: false);
     $this->world->group();
 
-    $load = closingBoardLoads(closingBoardOf(), 'SC')['C2'];
+    $load = closingBoardLoads(closingBoardOf(), 'SC')['PRES'];
 
     expect($load->withoutTeacher)->toBe(2)
         ->and($load->withoutRoom)->toBe(1)
@@ -119,11 +121,11 @@ it('cuenta los acuerdos que detienen el cierre con la regla de AgreementsAnswere
     $other = Department::factory()->create();
     $this->world->group();
     $base = ['term_id' => $this->world->term->id, 'campus_id' => $this->world->campus->id];
-    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
+    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'campus_id' => null, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
     InterdepartmentalAgreement::factory()->create([...$base, 'from_department_id' => $other->id, 'to_department_id' => $this->world->department->id]);
     InterdepartmentalAgreement::factory()->create([...$base, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
 
-    $load = closingBoardLoads(closingBoardOf(), 'SC')['C2'];
+    $load = closingBoardLoads(closingBoardOf(), 'SC')['PRES'];
 
     expect($load->shared)->toBe(1)
         ->and($load->awaiting)->toBe(1);
@@ -133,23 +135,23 @@ it('cuenta las cubetas de todo el Tec: con faltantes, listas, cerradas y publica
     $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $ee = Department::factory()->create(['code' => 'EE', 'name' => 'Eléctrica y Electrónica']);
     $this->world->group(teacher: false);
-    $this->world->group(load: $this->world->loadIn($this->c1));
+    $this->world->group(load: $this->world->loadIn($this->c1, modality: modalityOf('EAD')));
     $this->world->group(load: $this->world->loadIn($this->world->campus, LoadStatus::Closed, $cb));
-    $this->world->group(load: $this->world->loadIn($this->c1, LoadStatus::Published, $cb));
+    $this->world->group(load: $this->world->loadIn($this->c1, LoadStatus::Published, $cb, modality: modalityOf('EAD')));
     $this->world->group(load: $this->world->loadIn($this->world->campus, LoadStatus::Adjusting, $ee));
 
     $board = closingBoardOf();
 
     expect($board['kpis'])->toBe(['missing' => 2, 'ready' => 1, 'closed' => 1, 'published' => 1, 'total' => 5])
-        ->and(closingBoardLoads($board, 'EE')['C2']->bucket())->toBe('missing');
+        ->and(closingBoardLoads($board, 'EE')['PRES']->bucket())->toBe('missing');
 });
 
 it('a una carga publicada no le cuenta faltantes: ya pasó el cierre', function () {
-    $published = $this->world->loadIn($this->c1, LoadStatus::Published);
+    $published = $this->world->loadIn($this->c1, LoadStatus::Published, modality: modalityOf('EAD'));
     $this->world->group(teacher: false, load: $published);
     $this->world->group(load: $published);
 
-    $load = closingBoardLoads(closingBoardOf(), 'SC')['C1'];
+    $load = closingBoardLoads(closingBoardOf(), 'SC')['EAD'];
 
     expect($load->groups)->toBe(2)
         ->and($load->missing())->toBe(0)
@@ -179,15 +181,17 @@ it('filtra por clave o nombre sin importar acentos y por la cubeta de alguna car
         ->and(closingBoardOf('electrica')['kpis']['total'])->toBe(2);
 });
 
-it('dice cuándo se recalcularon los choques: el más viejo de los campus, y cuáles no se han recalculado', function () {
+it('dice cuándo se recalcularon los choques: el más viejo de las modalidades con cargas, y cuáles no se han recalculado', function () {
+    $ead = modalityOf('EAD');
     $this->world->group();
-    $this->world->group(load: $this->world->loadIn($this->c1));
-    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->world->campus->id), now()->setTime(9, 15)->toIso8601String());
+    $this->world->group(load: $this->world->loadIn($this->c1, modality: modalityOf('EAD')));
+    $this->world->group(load: $this->world->loadIn(Campus::factory()->create(), modality: $ead));
+    Cache::forever(SyncScheduleConflicts::stampKey($this->world->term->id, $this->world->load->modality_id), now()->setTime(9, 15)->toIso8601String());
 
     $board = closingBoardOf();
 
     expect($board['syncedAt']->format('H:i'))->toBe('09:15')
-        ->and($board['unsynced'])->toBe(['C1']);
+        ->and($board['unsynced'])->toBe([$ead->name]);
 });
 
 it('da el jefe de cada departamento: quien tiene vigente pasar la carga a asignación, no Subdirección', function () {
@@ -227,7 +231,7 @@ it('lee todo el Tec en pocas consultas, sin importar cuántas cargas haya', func
     foreach (range(1, 6) as $index) {
         $department = Department::factory()->create();
         $this->world->group(load: $this->world->loadIn($this->world->campus, department: $department));
-        $this->world->group(load: $this->world->loadIn($this->c1, department: $department));
+        $this->world->group(load: $this->world->loadIn($this->c1, department: $department, modality: modalityOf('EAD')));
     }
 
     DB::enableQueryLog();

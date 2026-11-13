@@ -37,7 +37,7 @@ beforeEach(function () {
 function publishLoad(?array $groups, array $load = [], array $snapshot = []): LoadSnapshot
 {
     $loadModel = AcademicLoad::factory()->inStatus(LoadStatus::Published)->create([
-        'term_id' => test()->term->id, 'campus_id' => test()->campus->id, ...$load,
+        'term_id' => test()->term->id, 'modality_id' => modalityOf('PRES')->id, ...$load,
     ]);
     $factory = LoadSnapshot::factory()->state(['academic_load_id' => $loadModel->id, ...$snapshot]);
 
@@ -64,11 +64,11 @@ function lines(string $content): array
 
 function exportFiles(): array
 {
-    return app(SiiLoadExport::class)->files(test()->term, test()->campus);
+    return app(SiiLoadExport::class)->files(test()->term, modalityOf('PRES'));
 }
 
 it('sin cargas publicadas devuelve los dos archivos solo con el encabezado', function () {
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id]);
 
     $files = exportFiles();
 
@@ -179,12 +179,12 @@ it('solo usa la última versión de cada carga', function () {
     expect($grupos)->toHaveCount(2)->and($grupos[1])->toContain("'B  '");
 });
 
-it('exporta la última versión publicada aunque la carga se haya reabierto, e ignora otro campus u otro periodo', function () {
+it('exporta la última versión publicada aunque la carga se haya reabierto, e ignora otra modalidad u otro periodo', function () {
     publishLoad([Snap::group(['code' => 'A'])]);
     $reopened = publishLoad([Snap::group(['code' => 'R'])]);
     $reopened->academicLoad->update(['status' => LoadStatus::Adjusting]);
-    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $reopened->academicLoad->term_id, 'campus_id' => $reopened->academicLoad->campus_id]);
-    publishLoad([Snap::group(['code' => 'K'])], ['campus_id' => Campus::factory()->create()->id]);
+    AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $reopened->academicLoad->term_id, 'modality_id' => $reopened->academicLoad->modality_id]);
+    publishLoad([Snap::group(['code' => 'K'])], ['modality_id' => modalityOf('EAD')->id]);
     publishLoad([Snap::group(['code' => 'T'])], ['term_id' => Term::factory()->create(['code' => '20272'])->id]);
 
     $codes = array_map(fn (string $l): string => explode(',', $l)[2], array_slice(lines(exportFiles()['grupos.csv']), 1));

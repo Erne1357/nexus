@@ -13,14 +13,14 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  * permisos":
  *
  * - Ven la carga la subdirección, el jefe de departamento y el jefe de proyecto docente, dentro de su
- *   campus y su departamento.
- * - Propone (sale de borrador) y pasa a asignación el jefe de departamento de ese campus y departamento (supuesto por
+ *   modalidad y su departamento; con campus en el nombramiento ven igual toda la modalidad (AZ-S17, MS6).
+ * - Propone (sale de borrador) y pasa a asignación el jefe de departamento de esa modalidad y departamento (supuesto por
  *   confirmar).
  * - Cierra el jefe de departamento; Subdirección también, cualquier carga, sin ser paso obligatorio (confirmado el 10
  *   de noviembre de 2026).
  * - Reabre y da el visto bueno la Subdirección (tareas 4.1 y 4.2).
  *
- * - Publica la Subdirección, o el jefe de departamento si el campus no exige visto bueno (tarea 4.3).
+ * - Publica la Subdirección, o el jefe de departamento si la modalidad de la carga no exige visto bueno (tarea 4.3, M1).
  *
  * El admin pasa por la concesión implícita del registro.
  */
@@ -59,18 +59,18 @@ final class AcademicLoadPolicy
     }
 
     /**
-     * Publicar: Subdirección, o el jefe del departamento si el campus no exige visto bueno (reglas-de-negocio.md,
+     * Publicar: Subdirección, o el jefe del departamento si la modalidad no exige visto bueno (reglas-de-negocio.md,
      * tabla de permisos). Con visto bueno, la carga aprobada solo la publica quien tiene `LoadPublishApproved`.
      */
     public function publish(User $user, AcademicLoad $load): bool
     {
-        return $this->can($user, $load->campus->profile->requiresSubdireccionApproval
+        return $this->can($user, $load->modality->profile->requiresSubdireccionApproval
             ? AcademicLoadPermission::LoadPublishApproved
             : AcademicLoadPermission::LoadPublish, $load);
     }
 
     private function can(User $user, AcademicLoadPermission $permission, AcademicLoad $load): bool
     {
-        return $this->actor($user)->allows($permission, Target::of(campus: $load->campus_id, unit: $load->department_id));
+        return $this->actor($user)->allows($permission, Target::of(modality: $load->modality_id, unit: $load->department_id));
     }
 }

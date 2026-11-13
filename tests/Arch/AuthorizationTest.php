@@ -50,6 +50,7 @@ it('RecipientsQuery no conserva for()', function () {
 const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Academic/Database/Seeders/DemoStaffSeeder.php',
     'app/Modules/CatalogValidation/Database/Seeders/CatalogValidationDemoSeeder.php',
+    'app/Modules/Core/Actions/AppointCareerCoordinator.php',
     'app/Modules/Core/Actions/EndRoleAssignment.php',
     'app/Modules/Core/Database/Factories/RoleAssignmentFactory.php',
     'app/Modules/Core/Database/Factories/UserFactory.php',
@@ -60,6 +61,7 @@ const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Core/Livewire/pages/people/people.php',
     'app/Modules/Core/Livewire/pages/person/person.php',
     'app/Modules/Core/Notifications/NotificationMessage.php',
+    'app/Modules/Core/Queries/AppointmentsQuery.php',
     'app/Modules/Core/Queries/OrgChartQuery.php',
     'app/Modules/Core/Queries/PeopleQuery.php',
     'app/Modules/Core/Rules/RoleAssignmentRules.php',

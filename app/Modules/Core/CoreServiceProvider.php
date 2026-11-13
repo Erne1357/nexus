@@ -33,6 +33,7 @@ use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Livewire\BlockViewDataCalls;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
@@ -65,7 +66,6 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->make(AuthorizationSnapshots::class),
             $app->make(PermissionRegistry::class),
             $app['session.store'],
-            fn (): mixed => $app['request'],
         ));
 
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
@@ -122,6 +122,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
         return [
             new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [Campus::class]),
+            new NavigationItem('Modalidades', 'core.modalities', 'o-squares-2x2', NavigationArea::Administracion, group: NavigationGroup::Institucion,
+                ability: 'viewAny', arguments: [Modality::class]),
             new NavigationItem('Periodos', 'core.terms', 'o-calendar-days', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [Term::class], childRoutes: ['core.terms.show']),
             new NavigationItem('Organigrama', 'core.org-chart', 'o-rectangle-group', NavigationArea::Administracion, group: NavigationGroup::Institucion,
@@ -141,7 +143,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
         return [
             Role::Subdireccion->value => [
                 CorePermission::CampusView,
-                CorePermission::CampusUpdateProfile,
+                CorePermission::ModalityView,
+                CorePermission::ModalityUpdateProfile,
                 CorePermission::TermView,
                 CorePermission::TermCreate,
                 CorePermission::TermUpdate,
@@ -154,11 +157,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
     /**
      * Demo por puntos: lo base, el admin con la contraseña demo y los periodos 20261, 20263 y 20271 llevan a
-     * «catálogos»; abrir 20271 en los campus del volumen (en el masivo también 20263, la foto anterior de la
-     * validación) lleva a «validación». En el masivo, el historial de periodos desde 2014 va justo antes de abrir,
+     * «catálogos»; abrir 20271 en las modalidades del volumen (M4; DemoVolume::modalities(): Presencial; en el masivo
+     * también 20263, la foto anterior de la validación) lleva a «validación». En el masivo, el historial de periodos desde
+     * 2014 va justo antes de abrir,
      * después de los alumnos, como en MassiveSeeder (StudentsDemoSeeder liga el periodo de ingreso solo a los que ya
      * existen). Sin TermCalendarDemoSeeder: el calendario de 20271 lo escribe DemoRunner, sin ventanas propias de
-     * Campus I, y 20263 queda sin calendario.
+     * Presencial, y 20263 queda sin calendario.
      */
     public function demoSteps(): array
     {
@@ -173,10 +177,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
                     $demo->runSeeder(TermHistorySeeder::class);
                 }
 
+                $modalities = $this->demoModalityCodes($demo);
+
                 $demo->runSeeder(TermOpeningDemoSeeder::class, [
                     'openings' => $demo->volume === DemoVolume::Massive
-                        ? [$demo->termCode => $demo->campuses, '20263' => $demo->campuses]
-                        : [$demo->termCode => $demo->campuses],
+                        ? [$demo->termCode => $modalities, '20263' => $modalities]
+                        : [$demo->termCode => $modalities],
                 ]);
             }),
         ];
@@ -186,16 +192,16 @@ final class CoreServiceProvider extends ModuleServiceProvider
     {
         $openedIn = fn (DemoContext $demo): int => TermOpening::query()
             ->where('term_id', $demo->term()->getKey())
-            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $this->demoModalityCodes($demo))->select('id'))
             ->count();
 
         return [
             new DemoCheck([DemoCheckpoint::Catalogs], 'Ene-Jun 2027 todavía sin abrir', fn (DemoContext $demo): true|string => ($opened = $openedIn($demo)) === 0
                 ? true
-                : "Ya está abierto en {$opened} campus."),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::CatalogValidation), 'Ene-Jun 2027 abierto en los campus del volumen', fn (DemoContext $demo): true|string => ($opened = $openedIn($demo)) === count($demo->campuses)
+                : "Ya está abierto en {$opened} modalidades."),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::CatalogValidation), 'Ene-Jun 2027 abierto en las modalidades del volumen', fn (DemoContext $demo): true|string => ($opened = $openedIn($demo)) === count($this->demoModalityCodes($demo))
                 ? true
-                : sprintf('Abierto en %d de %d campus.', $opened, count($demo->campuses))),
+                : sprintf('Abierto en %d de %d modalidades.', $opened, count($this->demoModalityCodes($demo)))),
             new DemoCheck(DemoCheckpoint::staged(), 'El admin entra con la contraseña demo', function (DemoContext $demo): true|string {
                 $admin = $demo->admin();
 
@@ -204,5 +210,15 @@ final class CoreServiceProvider extends ModuleServiceProvider
                     : 'El admin no tiene la contraseña demo o debe cambiarla.';
             }),
         ];
+    }
+
+    /**
+     * Las claves de las modalidades del volumen que existen (M4; DemoVolume::modalities()): Presencial.
+     *
+     * @return list<string>
+     */
+    private function demoModalityCodes(DemoContext $demo): array
+    {
+        return Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->pluck('code')->all();
     }
 }

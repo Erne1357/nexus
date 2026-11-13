@@ -4,6 +4,7 @@ use App\Modules\Core\Actions\SetTermStage;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -95,8 +96,8 @@ it('un invitado va al login', function () {
 
 /*
 | Bloque «Calendario» de Inicio (tarea 2.1, maqueta B): las etapas en curso, con los días que quedan, y las dos que
-| siguen, del periodo activo; con un solo campus, su ventana propia gana a la general, y con varios se ve la general. El
-| pie dice solo el periodo: la credencial ya no elige campus (#415). Solo lectura; se oculta sin periodo activo o sin
+| siguen, del periodo activo; con una sola modalidad, su ventana propia gana a la general, y con varias se ve la
+| general (M4). El pie dice solo el periodo: la credencial ya no elige campus (#415). Solo lectura; se oculta sin periodo activo o sin
 | etapas con fecha.
 */
 
@@ -105,9 +106,9 @@ function homeCalendarUser(Campus $campus): User
     return User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])->create();
 }
 
-function homeCalendarStage(Term $term, Stage $stage, ?Campus $campus, string $from, string $to): void
+function homeCalendarStage(Term $term, Stage $stage, ?Modality $modality, string $from, string $to): void
 {
-    app(SetTermStage::class)->handle($term, $stage, $campus, $from, $to);
+    app(SetTermStage::class)->handle($term, $stage, $modality, $from, $to);
 }
 
 describe('calendario en Inicio', function () {
@@ -132,9 +133,9 @@ describe('calendario en Inicio', function () {
             ->assertDontSee('Salones y acuerdos');
     });
 
-    it('con un solo campus, su ventana propia gana a la general', function () {
+    it('M4: con una sola modalidad, su ventana propia gana a la general', function () {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
-        homeCalendarStage($this->term, Stage::Proposal, $this->campus, '2026-11-11', '2026-11-30');
+        homeCalendarStage($this->term, Stage::Proposal, modalityOf('PRES'), '2026-11-11', '2026-11-30');
 
         $this->actingAs(homeCalendarUser($this->campus));
 
@@ -216,10 +217,10 @@ describe('calendario en Inicio', function () {
         Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
     });
 
-    it('con varios campus usa el calendario general, sin nombrar campus', function () {
-        $other = Campus::factory()->create(['code' => 'C1']);
+    it('M4: con varias modalidades usa el calendario general, sin nombrar modalidad', function () {
+        modalityOf('EAD')->update(['is_active' => true]);
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
-        homeCalendarStage($this->term, Stage::Proposal, $this->campus, '2026-11-11', '2026-11-30');
+        homeCalendarStage($this->term, Stage::Proposal, modalityOf('PRES'), '2026-11-11', '2026-11-30');
 
         $this->actingAs(User::factory()->admin()->create());
 

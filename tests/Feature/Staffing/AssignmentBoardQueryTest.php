@@ -16,9 +16,9 @@ use Illuminate\Support\Facades\DB;
 use Tests\Support\Staffing\AssignmentWorld;
 
 /*
-| Lecturas de la pantalla «Asignación docente» (tarea 3.9): los grupos del departamento en el periodo y campus con su
-| horario, su docente vigente, los tres primeros lugares de su ranking y su estado; el ranking completo y el historial
-| de un grupo.
+| Lecturas de la pantalla «Asignación docente» (tarea 3.9): los grupos del departamento en el periodo y la modalidad
+| (M1: de todos sus campus, cada uno con el suyo; el campus es un filtro) con su horario, su docente vigente, los tres
+| primeros lugares de su ranking y su estado; el ranking completo y el historial de un grupo.
 */
 
 beforeEach(function () {
@@ -29,19 +29,19 @@ beforeEach(function () {
     $this->redes = $this->world->subject('SCD-1021', 'Redes de Computadoras');
 });
 
-function boardOf(AssignmentWorld $world): AssignmentBoard
+function boardOf(AssignmentWorld $world, ?Campus $campus = null): AssignmentBoard
 {
-    return app(AssignmentBoardQuery::class)->board($world->term->id, $world->campus->id, $world->department->id);
+    return app(AssignmentBoardQuery::class)->board($world->term->id, $world->load->modality_id, $world->department->id, $campus?->id);
 }
 
-it('lista los grupos del departamento en el periodo y campus, por semestre, materia, carrera y clave', function () {
+it('lista los grupos del departamento en el periodo y la modalidad, por semestre, materia, carrera y clave', function () {
     $this->world->group($this->redes, $this->isc, 'H', 5);
     $this->world->group($this->poo, $this->iinf, 'D', 2);
     $this->world->group($this->poo, $this->isc, 'G', 2);
     $this->world->group($this->poo, $this->isc, 'C', 2);
     $this->world->group($this->poo, $this->isc, 'X', 2, attributes: ['status' => GroupStatus::Cancelled]);
     $this->world->group($this->world->subject('ACF-0901', 'Cálculo', Department::factory()->create()), $this->isc, 'A');
-    $this->world->group($this->poo, $this->isc, 'B', attributes: ['campus_id' => Campus::factory()->create()->id]);
+    $this->world->group($this->poo, $this->isc, 'B', attributes: ['modality_id' => modalityOf('EAD')->id]);
     $this->world->group($this->poo, $this->isc, 'E', attributes: ['term_id' => Term::factory()->create()->id]);
 
     $board = boardOf($this->world);
@@ -49,6 +49,31 @@ it('lista los grupos del departamento en el periodo y campus, por semestre, mate
     expect(array_map(fn ($row) => $row->group->ownerCareer->code.' '.$row->group->code, $board->groups))->toBe(['IINF D', 'ISC C', 'ISC G', 'ISC H'])
         ->and($board->groups[0]->group->subject->code)->toBe('SCC-1013')
         ->and($board->total())->toBe(4)
+        ->and($board->load->is($this->world->load))->toBeTrue();
+});
+
+it('M1: sin filtro muestra los grupos de C1 y C2 del departamento en su modalidad, cada uno con su campus', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group($this->poo, $this->isc, 'D', 2);
+    $this->world->group($this->poo, $this->isc, 'E', 2, attributes: ['campus_id' => $c1->id]);
+
+    $board = boardOf($this->world);
+
+    expect(array_map(fn ($row): string => $row->group->code.' '.$row->group->campus->code, $board->groups))->toBe(['D C2', 'E C1'])
+        ->and($board->modality->code)->toBe('PRES')
+        ->and($board->campus)->toBeNull()
+        ->and($board->load->is($this->world->load))->toBeTrue();
+});
+
+it('M1: con el filtro de campus muestra solo los grupos de ese campus, con la misma carga', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $this->world->group($this->poo, $this->isc, 'D', 2);
+    $this->world->group($this->poo, $this->isc, 'E', 2, attributes: ['campus_id' => $c1->id]);
+
+    $board = boardOf($this->world, $c1);
+
+    expect(array_map(fn ($row): string => $row->group->code, $board->groups))->toBe(['E'])
+        ->and($board->campus->is($c1))->toBeTrue()
         ->and($board->load->is($this->world->load))->toBeTrue();
 });
 

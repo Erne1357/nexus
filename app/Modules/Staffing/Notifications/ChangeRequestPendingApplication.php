@@ -41,6 +41,6 @@ final class ChangeRequestPendingApplication extends ChangeRequestNotification
             return $message;
         }
 
-        return new NotificationMessage($message->title, $message->body, $message->icon, $message->route, ['grupo' => (string) $this->request->group_id], $message->termId, $message->campusId, $message->tone);
+        return new NotificationMessage($message->title, $message->body, $message->icon, $message->route, ['grupo' => (string) $this->request->group_id], $message->termId, $message->campusId, $message->tone, $message->role, $message->modalityId);
     }
 }

@@ -5,7 +5,9 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
@@ -18,7 +20,8 @@ use Livewire\Livewire;
 /*
 | Tarea 3.4: el tablero de choques y avance (`/scheduling/conflicts`, scheduling::pages.conflicts). Vista principal
 | por carrera, retícula y semestre; vista por departamento con drawer (decidido por el usuario el 7 de noviembre de
-| 2026). Lo ven quienes ven la carga y el coordinador de su carrera en su campus; nadie más.
+| 2026). Lo ven quienes ven la carga y el coordinador de su carrera; nadie más. Es de la carga de una modalidad (M1,
+| `?modalidad=`) con el campus como filtro opcional (`?campus=`).
 */
 
 beforeEach(function () {
@@ -93,7 +96,7 @@ describe('vista por carrera y semestre', function () {
         $other = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => Career::factory()->create()->id])->create();
 
         conflictsPage($other)
-            ->assertSee('Todavía no hay grupos que puedas ver en Campus II.')
+            ->assertSee('Todavía no hay grupos que puedas ver en Presencial.')
             ->assertDontSee('Ana Pérez');
     });
 });
@@ -127,43 +130,90 @@ it('cerrar el drawer con Esc o el velo olvida el departamento', function () {
         ->assertSet('departmentId', null);
 });
 
-it('sin ningún campus activo donde trabaje, responde 403', function () {
-    Campus::query()->update(['is_active' => false]);
+it('sin ninguna modalidad activa donde trabaje, responde 403', function () {
+    Modality::query()->update(['is_active' => false]);
 
     Livewire::actingAs($this->admin)->test('scheduling::pages.conflicts')->assertForbidden();
 });
 
-it('AZ-02: el campus de la página es el de ?campus=, con selector si trabaja en varios, y Recalcular encola ese', function () {
-    $other = Campus::factory()->create(['code' => 'ZZ', 'name' => 'Campus Z']);
-    Queue::fake([RecomputeScheduleConflicts::class]);
+it('M1: sin campus cuenta la carga de la modalidad en todos sus campus; ?campus= la filtra, y otra modalidad no cuenta', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    $there = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'subject_id' => $this->subject->id,
+        'owner_career_id' => $this->career->id, 'study_plan_id' => $this->plan->id, 'semester' => 5]);
+    Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => modalityOf('EAD')->id,
+        'subject_id' => $this->subject->id, 'owner_career_id' => $this->career->id, 'study_plan_id' => $this->plan->id, 'semester' => 5]);
+    onCampusPage(null);
 
-    $page = Livewire::withQueryParams(['campus' => 'ZZ'])->actingAs($this->admin)->test('scheduling::pages.conflicts')
-        ->assertSee('Campus Z')
-        ->assertSeeHtml('data-testid="campus-filter-ZZ"')
-        ->call('recompute');
+    $all = Livewire::actingAs($this->admin)->test('scheduling::pages.conflicts')
+        ->assertSee('Lo que le falta a la carga de Presencial para cerrar')
+        ->assertSeeHtml('data-testid="campus-filter-todos"');
+    $c1Only = Livewire::withQueryParams(['campus' => 'C1'])->actingAs($this->admin)->test('scheduling::pages.conflicts')
+        ->assertSee('Lo que le falta a la carga de Presencial en Campus I para cerrar');
 
-    Queue::assertPushed(RecomputeScheduleConflicts::class, fn ($job): bool => $job->campusId === $other->id);
-    expect(session('core.last_campus'))->toBe('ZZ');
+    expect(textOf(domOf($all)->querySelector('[data-testid="career-tab-ISC"]')))->toContain('2')
+        ->and(textOf(domOf($c1Only)->querySelector('[data-testid="career-tab-ISC"]')))->toContain('1')
+        ->and($there->campus_id)->toBe($c1->id);
 });
 
-it('AZ-02: quien no trabaja en el campus pedido no lo ve: se abre en el suyo', function () {
-    $other = Campus::factory()->create(['code' => 'ZZ']);
+it('MS6: el coordinador limitado a C2 filtra cualquier campus de su modalidad (la lee toda); uno inactivo o que no existe se ignora', function () {
+    $other = Campus::factory()->create(['code' => 'ZZ', 'name' => 'Campus Z']);
+    Campus::factory()->inactive()->create(['code' => 'YY', 'name' => 'Campus Y']);
     $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
 
     Livewire::withQueryParams(['campus' => $other->code])->actingAs($coordinator)->test('scheduling::pages.conflicts')
-        ->assertSee($this->campus->name)->assertDontSee($other->name);
+        ->assertSee('Lo que le falta a la carga de Presencial en Campus Z para cerrar');
+
+    foreach (['YY', 'XX'] as $ignored) {
+        Livewire::withQueryParams(['campus' => $ignored])->actingAs($coordinator)->test('scheduling::pages.conflicts')
+            ->assertSee('Lo que le falta a la carga de Presencial para cerrar')->assertDontSee('Campus Y');
+    }
 });
 
-it('Recalcular encola el recálculo de la carga del campus', function () {
+it('U2: el filtro de campus lleva los grupos que el usuario ve en cada campus, y cada grupo pendiente su etiqueta y el editor en su modalidad', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
+    Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $c1->id, 'subject_id' => $this->subject->id,
+        'owner_career_id' => $this->career->id, 'study_plan_id' => $this->plan->id, 'semester' => 5]);
+    onCampusPage(null);
+
+    $page = Livewire::actingAs($this->admin)->test('scheduling::pages.conflicts')->call('selectCell', $this->plan->id, 5);
+    $dom = domOf($page);
+
+    expect(textOf($dom->querySelector('[data-testid="campus-count-todos"]')))->toBe('2')
+        ->and(textOf($dom->querySelector('[data-testid="campus-count-C1"]')))->toBe('1')
+        ->and(textOf($dom->querySelector('[data-testid="campus-count-C2"]')))->toBe('1')
+        ->and($dom->querySelector('[data-testid="conflict-group-'.$this->clash->id.'"] [title="Campus II"]'))->not->toBeNull()
+        ->and($page->html())->toContain(e(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => 'C2', 'grupo' => $this->clash->id])));
+});
+
+it('otra modalidad: el coordinador de la carrera en EAD no ve la carga presencial aunque pida ?modalidad=PRES', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $ead = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->career->id])->create();
+
+    conflictsPage($ead, ['modalidad' => 'PRES'])
+        ->assertSee('Lo que le falta a la carga de EAD')
+        ->assertSeeHtml('data-testid="conflicts-empty"')
+        ->assertDontSee('SCD-1015');
+});
+
+it('Recalcular encola el recálculo de la carga de la modalidad, aunque haya un campus en el filtro', function () {
     Queue::fake([RecomputeScheduleConflicts::class]);
 
-    $component = conflictsPage($this->admin)->call('recompute');
+    $component = conflictsPage($this->admin, ['campus' => 'C2'])->call('recompute');
 
-    Queue::assertPushed(RecomputeScheduleConflicts::class, fn (RecomputeScheduleConflicts $job): bool => $job->termId === $this->term->id && $job->campusId === $this->campus->id);
+    Queue::assertPushed(RecomputeScheduleConflicts::class, fn (RecomputeScheduleConflicts $job): bool => $job->termId === $this->term->id && $job->modalityId === modalityOf('PRES')->id);
     expect(lastToastOf($component)['title'])->toBe('Recalculando los choques')
         ->and($component->get('pollUntil'))->toBeGreaterThan(now()->getTimestamp());
     $component->assertSeeHtml('wire:poll.3s="refreshBoard"');
 
     $this->travel(31)->seconds();
     $component->call('refreshBoard')->assertSet('pollUntil', 0)->assertDontSeeHtml('wire:poll.3s="refreshBoard"');
+});
+
+it('fija la modalidad que resolvió: si después se abre otra antes por clave, el tablero no cambia de modalidad', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $page = conflictsPage($this->admin)->assertSet('modalidad', 'EAD');
+
+    TermOpening::query()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'opened_by' => $this->admin->id, 'opened_at' => now()]);
+
+    $page->call('refreshBoard')->assertSet('modalidad', 'EAD')->assertSee('Lo que le falta a la carga de EAD');
 });

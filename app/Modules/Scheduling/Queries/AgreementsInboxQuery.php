@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
@@ -27,8 +28,10 @@ use Spatie\Activitylog\Models\Activity;
 
 /**
  * Lo que muestra la pantalla Acuerdos (tareas 3.6 y 3.7, reglas-de-negocio.md, "Acuerdos entre departamentos"): los
- * préstamos de salón y los grupos compartidos del periodo y campus activos que el actor ve (`academic_load.agreement.view`
- * sobre el departamento que lo pide o el que lo decide, con `constrain()`), en tres grupos: «Por decidir» (propuestos
+ * préstamos de salón y los grupos compartidos del periodo y la modalidad de la página (M1: la carga de cada departamento
+ * en ella) que el actor ve (`academic_load.agreement.view` sobre la modalidad y el departamento que lo pide o el que lo
+ * decide, con `constrain()`, sin el campus: MS6), y con un campus, solo los de ese campus (el filtro de la página,
+ * maqueta U2), en tres grupos: «Por decidir» (propuestos
  * dirigidos a un departamento que el actor decide), «Enviados» (los demás propuestos: los que pidió un departamento
  * suyo y, para quien solo ve, los que esperan respuesta; supuesto por confirmar) y «Decididos» (aceptados, rechazados y
  * cancelados de cualquiera de los dos lados). Quién puede actuar lo decide InterdepartmentalAgreementPolicy en la página.
@@ -47,6 +50,7 @@ final class AgreementsInboxQuery
     public function __construct(
         private readonly RoomScheduleQuery $rooms,
         private readonly RoomLoanFree $free,
+        private readonly AgreementPlaceQuery $place,
     ) {}
 
     /**
@@ -56,11 +60,11 @@ final class AgreementsInboxQuery
      *
      * @return array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}
      */
-    public function inbox(Actor $actor, Term $term, Campus $campus, ?AgreementKind $kind = null, string $search = ''): array
+    public function inbox(Actor $actor, Term $term, Modality $modality, ?Campus $campus = null, ?AgreementKind $kind = null, string $search = ''): array
     {
-        $agreements = $this->visible($actor, $term, $campus)
+        $agreements = $this->visible($actor, $term, $modality, $campus)
             ->when($kind !== null, fn (Builder $query) => $query->where('kind', $kind->value))
-            ->when(trim($search) !== '', fn (Builder $query) => $this->search($query, trim($search), $term, $campus))
+            ->when(trim($search) !== '', fn (Builder $query) => $this->search($query, trim($search), $term, $modality))
             ->get();
 
         $rows = $this->rows($agreements);
@@ -69,9 +73,12 @@ final class AgreementsInboxQuery
         $grouped = [self::DECIDE => [], self::SENT => [], self::DONE => []];
 
         foreach ($rows as $row) {
-            $deciders[$row['to']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementDecide, Target::of(campus: $campus->getKey(), unit: $row['to']['id']));
-            $requesters[$row['from']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementRequest, Target::of(campus: $campus->getKey(), unit: $row['from']['id']));
-            $row['side'] = $deciders[$row['to']['id']] ? 'to' : ($requesters[$row['from']['id']] ? 'from' : null);
+            $deciders[$row['to']['id']] ??= $actor->allows(AcademicLoadPermission::AgreementDecide, Target::of(modality: $modality->getKey(), unit: $row['to']['id']));
+            // Pide con el campus del lugar: el del salón en un préstamo y el del grupo en un grupo compartido (como
+            // InterdepartmentalAgreementPolicy::cancel con el campus del grupo).
+            $requested = $row['campus']['id'] ?? null;
+            $requesters[$row['from']['id'].'|'.$requested] ??= $actor->allows(AcademicLoadPermission::AgreementRequest, Target::of(modality: $modality->getKey(), campus: $requested, unit: $row['from']['id']));
+            $row['side'] = $deciders[$row['to']['id']] ? 'to' : ($requesters[$row['from']['id'].'|'.$requested] ? 'from' : null);
 
             if ($row['status'] !== AgreementStatus::Proposed) {
                 $grouped[self::DONE][] = $row;
@@ -124,13 +131,32 @@ final class AgreementsInboxQuery
     }
 
     /**
-     * Un acuerdo visible para el actor en el periodo y campus por un id que llega del cliente; uno que no ve no existe.
+     * Un acuerdo visible para el actor en el periodo y la modalidad (y el campus del filtro, si hay) por un id que llega
+     * del cliente; uno que no ve no existe.
      *
      * @throws ModelNotFoundException<InterdepartmentalAgreement>
      */
-    public function findOrFail(Actor $actor, Term $term, Campus $campus, string $id): InterdepartmentalAgreement
+    public function findOrFail(Actor $actor, Term $term, Modality $modality, ?Campus $campus, string $id): InterdepartmentalAgreement
     {
-        return KeyLookup::findOrFail($this->visible($actor, $term, $campus), $id);
+        return KeyLookup::findOrFail($this->visible($actor, $term, $modality, $campus), $id);
+    }
+
+    /**
+     * Cuántos acuerdos del periodo y la modalidad ve el actor en cada campus, por clave: la cifra de cada botón del filtro
+     * de campus (maqueta U2, opción A).
+     *
+     * @return array<string, int>
+     */
+    public function campusCounts(Actor $actor, Term $term, Modality $modality): array
+    {
+        return $this->visible($actor, $term, $modality, null)
+            ->join('campuses', 'campuses.id', '=', $this->place->campusIdColumn())
+            ->groupBy('campuses.code')
+            ->selectRaw('campuses.code, count(*) as total')
+            ->toBase()
+            ->pluck('total', 'code')
+            ->map(fn (mixed $total): int => (int) $total)
+            ->all();
     }
 
     /**
@@ -165,16 +191,22 @@ final class AgreementsInboxQuery
     }
 
     /**
+     * Los acuerdos del periodo y la modalidad (y del campus del filtro, si hay: el lugar de AgreementPlaceQuery, el del
+     * salón en un préstamo y el del grupo en un grupo compartido) que el actor ve: `agreement.view` sobre la modalidad y
+     * el departamento que lo pide o el que lo decide, sin el campus. El jefe ve y decide los de toda la modalidad de su
+     * departamento, de cualquier campus: ningún jefe de departamento está limitado a un campus (M12).
+     *
      * @return Builder<InterdepartmentalAgreement>
      */
-    private function visible(Actor $actor, Term $term, Campus $campus): Builder
+    private function visible(Actor $actor, Term $term, Modality $modality, ?Campus $campus): Builder
     {
         $query = InterdepartmentalAgreement::query()
-            ->where('term_id', $term->getKey())
-            ->where('campus_id', $campus->getKey());
+            ->where('interdepartmental_agreements.term_id', $term->getKey())
+            ->where('interdepartmental_agreements.modality_id', $modality->getKey())
+            ->when($campus !== null, fn (Builder $inCampus) => $this->place->in($inCampus, $campus));
 
         return $actor->constrain($query, AcademicLoadPermission::AgreementView, [
-            'campus' => 'campus_id',
+            'modality' => 'interdepartmental_agreements.modality_id',
             'unit' => fn (Builder $scoped, array $ids) => $scoped->where(fn (Builder $either) => $either
                 ->whereIn('from_department_id', $ids)
                 ->orWhereIn('to_department_id', $ids)),
@@ -185,7 +217,7 @@ final class AgreementsInboxQuery
      * @param  Builder<InterdepartmentalAgreement>  $query
      * @return Builder<InterdepartmentalAgreement>
      */
-    private function search(Builder $query, string $term, Term $period, Campus $campus): Builder
+    private function search(Builder $query, string $term, Term $period, Modality $modality): Builder
     {
         return $query->where(fn (Builder $any) => $any
             ->orWhereHas('room', fn ($room) => TextSearch::apply($room->withTrashed(), ['code'], $term))
@@ -194,7 +226,7 @@ final class AgreementsInboxQuery
             ->orWhereHas('career', fn ($career) => TextSearch::apply($career->withTrashed(), ['code', 'name'], $term))
             ->orWhereIn('group_id', Group::query()->select('groups.id')
                 ->where('groups.term_id', $period->getKey())
-                ->where('groups.campus_id', $campus->getKey())
+                ->where('groups.modality_id', $modality->getKey())
                 ->where(fn (Builder $group) => $group
                     ->orWhere(fn (Builder $code) => TextSearch::apply($code, ['groups.code'], $term))
                     ->orWhereHas('subject', fn ($subject) => TextSearch::apply($subject->withTrashed(), ['code', 'name'], $term)))));
@@ -212,11 +244,11 @@ final class AgreementsInboxQuery
         $trashed = fn (Relation $relation) => $relation->withTrashed();
         $agreements->load([
             'room' => $trashed, 'career' => $trashed, 'fromDepartment' => $trashed, 'toDepartment' => $trashed,
-            'requester', 'decider', 'canceller',
+            'campus' => $trashed, 'requester', 'decider', 'canceller',
         ]);
         $groups = Group::query()
             ->whereIn('id', $agreements->pluck('group_id')->filter()->all())
-            ->with(['subject' => $trashed])
+            ->with(['subject' => $trashed, 'campus' => $trashed])
             ->get()
             ->keyBy('id');
 
@@ -241,6 +273,7 @@ final class AgreementsInboxQuery
                 'room' => $agreement->room?->code,
                 'room_id' => $agreement->room_id,
                 'term_id' => $agreement->term_id,
+                'campus' => ($place = $this->place->campusOf($agreement, $group)) === null ? null : ['id' => $place->getKey(), 'code' => $place->code, 'name' => $place->name],
                 'day' => $agreement->day,
                 'starts_at' => $agreement->starts_at === null ? null : substr($agreement->starts_at, 0, 5),
                 'ends_at' => $agreement->ends_at === null ? null : substr($agreement->ends_at, 0, 5),
@@ -287,7 +320,6 @@ final class AgreementsInboxQuery
     {
         $room = $agreement->room()->withTrashed()->firstOrFail();
         $term = KeyLookup::findOrFail(Term::query(), $agreement->term_id);
-        $campus = KeyLookup::findOrFail(Campus::query(), $agreement->campus_id);
         $schedule = $this->rooms->for($room, $term);
 
         $busy = [];
@@ -309,7 +341,7 @@ final class AgreementsInboxQuery
         $clash = $slot === null ? null : ['day' => $slot['day'], 'starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at'], 'label' => $slot['label'], 'rule' => $slot['rule']];
         $busy = array_map(fn (array $slot): array => ['day' => $slot['day'], 'starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at'], 'label' => $slot['label'], 'rule' => $slot['rule']], $busy);
 
-        return [...$this->frame($campus, [$requested, ...$busy]), 'busy' => $busy, 'requested' => $requested, 'clash' => $clash];
+        return [...$this->frame($this->modalityOf($agreement), [$requested, ...$busy]), 'busy' => $busy, 'requested' => $requested, 'clash' => $clash];
     }
 
     /**
@@ -335,7 +367,7 @@ final class AgreementsInboxQuery
             ])
             ->all();
 
-        return [...$this->frame(KeyLookup::findOrFail(Campus::query(), $agreement->campus_id), $sessions), 'sessions' => $sessions];
+        return [...$this->frame($this->modalityOf($agreement), $sessions), 'sessions' => $sessions];
     }
 
     /**
@@ -362,15 +394,21 @@ final class AgreementsInboxQuery
         return ['semester' => (int) $group->semester, 'plan' => (string) $group->studyPlan?->code, 'owner' => (string) $group->ownerCareer?->code, 'career' => $career];
     }
 
+    private function modalityOf(InterdepartmentalAgreement $agreement): Modality
+    {
+        return KeyLookup::findOrFail(Modality::query()->withTrashed(), $agreement->modality_id);
+    }
+
     /**
-     * Las horas y los días de una mini semana: los del perfil del campus, extendidos a lo que se pinta fuera de ellos.
+     * Las horas y los días de una mini semana: los del perfil de la modalidad del acuerdo, extendidos a lo que se pinta
+     * fuera de ellos.
      *
      * @param  list<array{day: int, starts_at: string, ends_at: string}>  $slots
      * @return array{hours: list<int>, days: list<int>, day_labels: array<int, string>}
      */
-    private function frame(Campus $campus, array $slots): array
+    private function frame(Modality $modality, array $slots): array
     {
-        $profile = $campus->profile;
+        $profile = $modality->profile;
         $starts = [Minutes::of($profile->dayStart), ...array_map(fn (array $slot): int => Minutes::of($slot['starts_at']), $slots)];
         $ends = [Minutes::of($profile->dayEnd), ...array_map(fn (array $slot): int => Minutes::of($slot['ends_at']), $slots)];
         $first = intdiv(min($starts), 60);

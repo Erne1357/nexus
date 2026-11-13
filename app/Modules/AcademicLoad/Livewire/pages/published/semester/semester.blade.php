@@ -79,13 +79,18 @@
                         @foreach ($entry['groups'] as $group)
                             <article class="{{ $tint }} grid min-w-0 gap-2.5 rounded-box border border-base-300 py-3 ps-[18px] pe-3.5 pb-3.5" data-group="{{ $group->label() }}" wire:key="group-{{ $group->id }}">
                                 <div class="grid gap-0.5">
-                                    <div class="font-mono text-[17px] font-semibold">{{ $subject['code'] }} <span class="font-normal text-neutral">·</span> {{ $group->code }}</div>
+                                    <div class="flex flex-wrap items-baseline gap-x-2">
+                                        <span class="font-mono text-[17px] font-semibold">{{ $subject['code'] }} <span class="font-normal text-neutral">·</span> {{ $group->code }}</span>
+                                        @if ($group->campus !== null)
+                                            <span class="text-sm text-neutral" data-testid="published-group-campus">{{ $group->campus['name'] }}</span>
+                                        @endif
+                                    </div>
                                     <div @class(['flex min-w-0 items-center gap-1.5', 'text-neutral' => $group->teacher === null])>
                                         <x-icon name="o-user" class="h-4 w-4 shrink-0 text-neutral" aria-hidden="true" />
                                         @if ($group->teacher === null)
                                             <span>Por asignar</span>
                                         @else
-                                            <a href="{{ route('published.teacher', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'docente' => $group->teacher['id']]) }}" wire:navigate class="truncate hover:underline focus-visible:outline-2 focus-visible:outline-primary">{{ $group->teacher['name'] }}</a>
+                                            <a href="{{ route('published.teacher', [...$context->routeParameters(), 'docente' => $group->teacher['id']]) }}" wire:navigate class="truncate hover:underline focus-visible:outline-2 focus-visible:outline-primary">{{ $group->teacher['name'] }}</a>
                                         @endif
                                     </div>
                                 </div>
@@ -115,7 +120,7 @@
                                                                 <span class="flex items-center justify-between gap-0.5">{{ WeekGrid::clock($session->startsAt) }}@if ($session->kind !== 'teoria')<x-academic-load::published.kind-icon :kind="$session->kind" :label="$session->kindLabel" />@endif</span>
                                                                 <span>{{ WeekGrid::clock($session->endsAt) }}</span>
                                                                 @if ($session->room !== null)
-                                                                    <a href="{{ route('published.room', ['periodo' => $context->term->code, 'campus' => $context->campus->code, 'salon' => $session->room['id']]) }}" wire:navigate class="mt-0.5 font-semibold break-words hover:underline focus-visible:outline-2 focus-visible:outline-primary">{{ $session->room['code'] }}</a>
+                                                                    <a href="{{ route('published.room', [...$context->routeParameters(), 'salon' => $session->room['id']]) }}" wire:navigate class="mt-0.5 font-semibold break-words hover:underline focus-visible:outline-2 focus-visible:outline-primary">{{ $session->room['code'] }}</a>
                                                                 @elseif ($session->kind === 'virtual')
                                                                     <b class="mt-0.5 font-semibold">Virtual</b>
                                                                 @elseif ($profile->usesRooms)

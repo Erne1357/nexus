@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -39,11 +40,21 @@ it('el docente del grupo lo pide: queda pendiente con su docente y la foto de la
         ->and($request->teacher_id)->toBe($s['teacher']->id)
         ->and($request->requested_by)->toBe($s['teacherUser']->id)
         ->and($request->department_id)->toBe($s['group']->department_id)
-        ->and($request->campus_id)->toBe($s['group']->campus_id)
+        ->and($request->modality_id)->toBe($s['group']->modality_id)
         ->and($request->reason)->toBe('Doy clase en otro campus')
         ->and($request->proposed['description'])->toBe('Los martes de 7 a 9')
         ->and($request->current)->toHaveCount(1)
         ->and($request->current[0])->toMatchArray(['day' => 2, 'room' => 'A-101']);
+});
+
+it('la solicitud copia la modalidad de su grupo (ampliación de la ronda 2)', function () {
+    $s = changeScenario();
+    $ead = Modality::query()->where('code', 'EAD')->sole();
+    $ead->update(['is_active' => true]);
+    $s['group']->update(['modality_id' => $ead->id]);
+    $s['load']->update(['modality_id' => $ead->id]);
+
+    expect(askChange($s)->fresh()->modality->code)->toBe('EAD');
 });
 
 it('el coordinador lo pide sin docente y sin el límite de una abierta', function () {
@@ -72,7 +83,7 @@ it('avisa a los jefes del departamento del grupo y a nadie más', function () {
 
     $request = askChange($s);
 
-    Notification::assertSentTo($s['jefe'], ChangeRequested::class, fn ($n) => $n->message($s['jefe'])->parameters === ['solicitud' => $request->id]);
+    Notification::assertSentTo($s['jefe'], ChangeRequested::class, fn ($n) => $n->message($s['jefe'])->parameters === ['solicitud' => $request->id, 'campus' => $s['group']->campus->code]);
     Notification::assertNotSentTo($otro['jefe'], ChangeRequested::class);
     Notification::assertNotSentTo($s['coordinador'], ChangeRequested::class);
 });

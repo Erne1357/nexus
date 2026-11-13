@@ -9,7 +9,7 @@ use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewValidated;
 use App\Modules\CatalogValidation\Listeners\CreateReviewsForDepartment;
-use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnCampusUpdated;
+use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnModalityUpdated;
 use App\Modules\CatalogValidation\Listeners\InviteTeacherAfterValidation;
 use App\Modules\CatalogValidation\Listeners\InviteTeachersOnReviewValidated;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
@@ -24,7 +24,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Events\CampusUpdated;
+use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Faculty\Events\AdscriptionChanged;
@@ -52,7 +52,7 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     {
         parent::boot();
 
-        Event::listen(CampusUpdated::class, CreateRoomsReviewsOnCampusUpdated::class);
+        Event::listen(ModalityUpdated::class, CreateRoomsReviewsOnModalityUpdated::class);
         Event::listen([DepartmentCreated::class, DepartmentUpdated::class], CreateReviewsForDepartment::class);
 
         Event::listen(CatalogReviewValidated::class, InviteTeachersOnReviewValidated::class);

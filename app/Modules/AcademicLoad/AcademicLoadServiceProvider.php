@@ -21,7 +21,9 @@ use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
 use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
+use App\Modules\AcademicLoad\Listeners\PreviewLoadsOnTermOpening;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
+use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
@@ -40,8 +42,11 @@ use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\ModalityDeactivating;
 use App\Modules\Core\Events\TermOpened;
+use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Faculty\Enums\HistorySource;
@@ -54,12 +59,12 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 
 /**
- * Módulo AcademicLoad, el orquestador: la carga académica de cada departamento en un campus y un periodo
+ * Módulo AcademicLoad, el orquestador: la carga académica de cada departamento en una modalidad y un periodo (M1)
  * (docs/dominio/modelo-de-datos.md, "AcademicLoad"). Depende de Academic, CatalogValidation y Demand, y de lo
  * que está a su izquierda.
  *
- * Escucha a Core, a Academic y a CatalogValidation, que no dependen de AcademicLoad: al abrir un periodo en un
- * campus crea las cargas que falten, veta borrar un departamento que tiene cargas y veta reabrir una revisión
+ * Escucha a Core, a Academic y a CatalogValidation, que no dependen de AcademicLoad: al abrir un periodo en una
+ * modalidad crea las cargas que falten, veta borrar un departamento que tiene cargas y veta reabrir una revisión
  * de catálogo si una carga del departamento ya salió de borrador, y le dice al tablero de avance de validación
  * el estado de cada carga (LoadStatusesRequested).
  */
@@ -73,6 +78,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Event::listen(TermOpened::class, CreateLoadsOnTermOpened::class);
+        Event::listen(ModalityDeactivating::class, ReportUnpublishedLoadsOnModalityDeactivating::class);
+        Event::listen(TermOpeningPreviewing::class, PreviewLoadsOnTermOpening::class);
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithLoads::class);
         Event::listen(CatalogReviewReopening::class, BlockReviewReopeningAfterDraft::class);
         Event::listen(LoadStatusesRequested::class, ReportLoadStatuses::class);
@@ -114,7 +121,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta, y
      * cierra, reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3: cierra cualquiera sin ser paso
      * obligatorio, confirmado el 10 de noviembre de 2026); el jefe de departamento, además, propone la carga, la pasa a
-     * asignación docente, la cierra, la publica si el campus no exige visto bueno, decide la parte de su departamento y
+     * asignación docente, la cierra, la publica si la modalidad no exige visto bueno, decide la parte de su departamento y
      * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
      * coordinador arma, corrige, envía y ve la propuesta de su carrera.
      */
@@ -171,15 +178,14 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
-            new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeeder(AcademicLoadDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
                 'seed' => $demo->seed,
                 'complete' => true,
             ])),
             // La publicación termina la etapa 8: cada carga cerrada sale con su versión 1 (tarea 4.3).
-            new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeeder(PublicationDemoSeeder::class, [
-                'campuses' => $demo->campuses,
+            new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeederPerModality(PublicationDemoSeeder::class, [
                 'term' => $demo->termCode,
             ])),
         ];
@@ -188,11 +194,15 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoChecks(): array
     {
         $campusIds = fn (DemoContext $demo): array => Campus::query()->whereIn('code', $demo->campuses)->pluck('id')->all();
-        $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo));
+        $modalityIds = fn (DemoContext $demo): array => Modality::query()->whereIn('code', $demo->volume->modalities())->pluck('id')->all();
+        // Las carreras ofrecidas en los campus de la demo, cada una una vez: su propuesta es una por modalidad (M6).
+        $offeredCareerIds = fn (DemoContext $demo): array => CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->distinct()->pluck('career_id')->all();
+        $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())
+            ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
         return [
-            new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($campusIds): true|string {
-                $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))
+            new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
+                $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Draft)
                     ->where(fn (Builder $load) => $load->where('status', '!=', LoadStatus::Published)->orWhere('current_version', '!=', 1)
                         ->orWhereDoesntHave('snapshots', fn (Builder $snapshot) => $snapshot->where('version', 1)))
@@ -200,23 +210,26 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
                 return $behind === 0 ? true : "{$behind} cargas con grupos no están publicadas en su versión 1.";
             }),
-            new DemoCheck([DemoCheckpoint::Reanalysis], 'Cada foto cumple la forma del snapshot y el historial docente la sigue', function (DemoContext $demo) use ($campusIds): true|string {
+            new DemoCheck([DemoCheckpoint::Reanalysis], 'Cada foto cumple la forma del snapshot y el historial docente la sigue', function (DemoContext $demo) use ($campusIds, $modalityIds): true|string {
                 $snapshots = LoadSnapshot::query()->latestVersion()
-                    ->whereIn('academic_load_id', AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))->select('id'))
+                    ->whereIn('academic_load_id', AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))->select('id'))
                     ->get();
-                $invalid = $snapshots->filter(fn (LoadSnapshot $snapshot): bool => SnapshotPayload::errors($snapshot->payload) !== [])->count();
-                $taught = $snapshots->sum(fn (LoadSnapshot $snapshot): int => count(array_filter($snapshot->payload['groups'], fn (array $group): bool => $group['teacher'] !== null)));
+                $invalid = $snapshots->filter(fn (LoadSnapshot $snapshot): bool => SnapshotPayload::errors(SnapshotPayload::normalize($snapshot->payload)) !== [])->count();
+                $taught = $snapshots->sum(fn (LoadSnapshot $snapshot): int => count(array_filter(
+                    SnapshotPayload::normalize($snapshot->payload)['groups'],
+                    fn (array $group): bool => $group['teacher'] !== null && in_array($group['campus']['code'] ?? null, $demo->campuses, true),
+                )));
                 $history = TeacherSubjectHistory::query()->where('term_code', $demo->termCode)->whereIn('campus_id', $campusIds($demo))->where('source', HistorySource::Nexus)->count();
 
                 return match (true) {
                     $snapshots->isEmpty() => 'No hay fotos publicadas.',
-                    $invalid > 0 => "{$invalid} fotos no cumplen la forma v1.",
+                    $invalid > 0 => "{$invalid} fotos no cumplen la forma del snapshot.",
                     $history !== $taught => "El historial docente tiene {$history} filas de Nexus y las fotos dicen {$taught} grupos con docente.",
                     default => true,
                 };
             }),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($campusIds, $proposals): true|string {
-                $offered = CareerCampus::query()->whereIn('campus_id', $campusIds($demo))->where('is_active', true)->count();
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds, $proposals): true|string {
+                $offered = count($offeredCareerIds($demo)) * count($modalityIds($demo));
                 $accepted = $proposals($demo)->where('status', ProposalStatus::Accepted)->count();
 
                 return $accepted === $offered ? true : "{$accepted} de {$offered} carreras ofrecidas tienen su propuesta aceptada.";
@@ -226,15 +239,16 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
                 return $open === 0 ? true : "{$open} partes siguen sin aceptar.";
             }),
-            // Una carga se compara con las partes de su mismo campus: un departamento que imparte en Campus I y no en
-            // Campus II deja su carga de Campus II en borrador.
-            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($campusIds): true|string {
-                $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('campus_id', $campusIds($demo))
+            // Una carga se compara con las partes de su misma modalidad (M1, M6), de las carreras de los campus de la demo: un
+            // departamento sin partes aceptadas deja su carga en borrador.
+            new DemoCheck([DemoCheckpoint::Scheduling], 'Las cargas con partes aceptadas están en propuesta', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds): true|string {
+                $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Proposed)
                     ->whereExists(fn (QueryBuilder $parts) => $parts->selectRaw('1')->from('proposal_reviews')
                         ->join('career_proposals', 'career_proposals.id', '=', 'proposal_reviews.career_proposal_id')
                         ->whereColumn('proposal_reviews.department_id', 'academic_loads.department_id')
-                        ->whereColumn('career_proposals.campus_id', 'academic_loads.campus_id')
+                        ->whereColumn('career_proposals.modality_id', 'academic_loads.modality_id')
+                        ->whereIn('career_proposals.career_id', $offeredCareerIds($demo))
                         ->whereColumn('career_proposals.term_id', 'academic_loads.term_id'))
                     ->count();
 

@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Scheduling\Queries\ClosingBlockers;
 use App\Modules\Staffing\Queries\LoadClosing;
 use App\Modules\Staffing\Queries\LoadClosingQuery;
@@ -21,7 +22,7 @@ use Livewire\Attributes\Locked;
 /**
  * Las acciones de una carga en «Cierre de la carga» y en el detalle de «Avance del cierre» (tareas 4.1 y 4.2): cerrar
  * con confirmación y comentario opcional (CloseLoad), reabrir con motivo (ReopenLoad), volver a asignación
- * (ReturnToStaffing) y, solo si el perfil del campus exige el visto bueno, aprobar (ApproveLoad) o regresar con
+ * (ReturnToStaffing) y, solo si el perfil de la modalidad exige el visto bueno, aprobar (ApproveLoad) o regresar con
  * comentarios (que es reabrir). Publicar es aparte: la pantalla monta academic-load::components.publish-load. Cada
  * método vuelve a autorizar con su ability (close, reopen, startStaffing, approve): la petición puede llegar de una
  * pantalla que abrió otra sesión. Lo que vetan las guardas se ve en la pantalla, sin ids de regla, y en un toast.
@@ -101,7 +102,7 @@ trait ClosesLoads
             return;
         }
 
-        $this->success('Carga cerrada', e("{$load->department->code} en {$load->campus->name} · {$groups} ".($groups === 1 ? 'grupo confirmado.' : 'grupos confirmados.')));
+        $this->success('Carga cerrada', e("{$load->department->code} en {$load->modality->name} · {$groups} ".($groups === 1 ? 'grupo confirmado.' : 'grupos confirmados.')));
     }
 
     public function askReopen(LoadClosingQuery $query): void
@@ -130,7 +131,7 @@ trait ClosesLoads
             return;
         }
 
-        $this->warning('Carga reabierta', e("{$load->department->code} en {$load->campus->name} regresó a Ajustes."));
+        $this->warning('Carga reabierta', e("{$load->department->code} en {$load->modality->name} regresó a Ajustes."));
     }
 
     public function returnToStaffing(LoadClosingQuery $query, ReturnToStaffing $action): void
@@ -142,7 +143,7 @@ trait ClosesLoads
             return;
         }
 
-        $this->success('La carga volvió a Asignación', e("{$load->department->code} en {$load->campus->name}: ya se puede cerrar otra vez."));
+        $this->success('La carga volvió a Asignación', e("{$load->department->code} en {$load->modality->name}: ya se puede cerrar otra vez."));
     }
 
     public function askApprove(LoadClosingQuery $query): void
@@ -167,7 +168,7 @@ trait ClosesLoads
             return;
         }
 
-        $this->success('Visto bueno', e("{$load->department->code} en {$load->campus->name} queda lista para publicar."));
+        $this->success('Visto bueno', e("{$load->department->code} en {$load->modality->name} queda lista para publicar."));
     }
 
     /**
@@ -190,25 +191,30 @@ trait ClosesLoads
     }
 
     /**
-     * Lleva a la pantalla donde se arregla un faltante, con la credencial en el periodo de la carga y la pantalla en su
-     * campus (`?campus=`, #415: la credencial ya no elige campus), para que muestre esta carga. `$screen`: conflicts,
-     * editor, assign, change-requests o agreements.
+     * Lleva a la pantalla donde se arregla un faltante, con la credencial en el periodo de la carga y, si esta pantalla
+     * filtra un campus donde se dan los grupos de la modalidad de la carga (`?campus=`; CampusQuery::of, MS4, MS6), la otra
+     * en ese campus; si no, la otra elige el suyo. Todas son por modalidad (M1, maqueta U2): van en la de la carga
+     * (`?modalidad=`). `$screen`: conflicts, editor, assign,
+     * change-requests o agreements.
      */
     public function goTo(string $screen, LoadClosingQuery $query, SetActiveContext $context): void
     {
         $load = $this->closingLoad($query);
         $route = match ($screen) {
-            'conflicts' => ['scheduling.conflicts', ['vista' => 'departamentos']],
-            'editor' => ['scheduling.editor', []],
-            'assign' => ['staffing.assign', ['depto' => $load->department->code]],
-            'change-requests' => ['staffing.change-requests', ['depto' => $load->department->code]],
-            'agreements' => ['scheduling.agreements', []],
+            'conflicts' => ['scheduling.conflicts', ['vista' => 'departamentos', 'modalidad' => $load->modality->code]],
+            'editor' => ['scheduling.editor', ['modalidad' => $load->modality->code]],
+            'assign' => ['staffing.assign', ['depto' => $load->department->code, 'modalidad' => $load->modality->code]],
+            'change-requests' => ['staffing.change-requests', ['depto' => $load->department->code, 'modalidad' => $load->modality->code]],
+            'agreements' => ['scheduling.agreements', ['modalidad' => $load->modality->code]],
             default => abort(404),
         };
 
-        if (app(Actor::class)->campuses()->contains('id', $load->campus_id)) {
-            $context->handle($load->term);
-            $route[1]['campus'] = $load->campus->code;
+        $context->handle($load->term);
+        $campus = property_exists($this, 'campus') ? (string) ($this->campus ?? '') : '';
+        $readable = app(CampusQuery::class)->of($load->modality);
+
+        if ($campus !== '' && $readable->contains('code', $campus)) {
+            $route[1]['campus'] = $campus;
         }
 
         $this->redirectRoute($route[0], $route[1], navigate: true);
@@ -226,7 +232,7 @@ trait ClosesLoads
     {
         $load = $closing->load;
         $status = $load->status;
-        $approval = $load->campus->profile->requiresSubdireccionApproval;
+        $approval = $load->modality->profile->requiresSubdireccionApproval;
         $actions = [];
 
         if (in_array($status, [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published], true)) {

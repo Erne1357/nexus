@@ -14,14 +14,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Nombramiento (ADR-0018): `user` ocupa el puesto `role` sobre un campus, una unidad del organigrama o una carrera
- * (nulo = sin límite en esa dimensión), del día `valid_from` al `valid_to` (nulo, sin fin). Es la única fuente de
+ * Nombramiento (ADR-0018): `user` ocupa el puesto `role` sobre un campus, una unidad del organigrama, una carrera o
+ * una modalidad (nulo = sin límite en esa dimensión), del día `valid_from` al `valid_to` (nulo, sin fin). El
+ * coordinador y el jefe de proyecto docente llevan modalidad y, opcionalmente, campus (AZ-S17). Es la única fuente de
  * quién tiene qué puesto. Un departamento académico es una unidad con su mismo id, así que `org_unit_id` de un jefe
  * es el id de su departamento. `career_id` tiene FK a `careers` (la agrega Academic), pero sin relación aquí porque
  * Core no depende de Academic. La base garantiza un solo jefe y una sola Subdirección por unidad en cada fecha, y
- * sube `users.authz_version` en cada cambio. Quién cubre qué lo decide Actor, no este modelo.
+ * sube `users.authz_version` en cada cambio. Quién cubre qué lo decide Actor, no este modelo: él descarta los de un
+ * campus o una modalidad desactivados o borrados en cada petición (MS8), porque el snapshot cacheado no se invalida
+ * al desactivarlos.
  */
-#[Fillable(['user_id', 'role', 'campus_id', 'org_unit_id', 'career_id', 'valid_from', 'valid_to'])]
+#[Fillable(['user_id', 'role', 'campus_id', 'org_unit_id', 'career_id', 'modality_id', 'valid_from', 'valid_to'])]
 #[UseFactory(RoleAssignmentFactory::class)]
 class RoleAssignment extends Model
 {
@@ -54,6 +57,14 @@ class RoleAssignment extends Model
     public function campus(): BelongsTo
     {
         return $this->belongsTo(Campus::class);
+    }
+
+    /**
+     * @return BelongsTo<Modality, $this>
+     */
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(Modality::class);
     }
 
     /**

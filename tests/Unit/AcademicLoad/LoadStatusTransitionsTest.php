@@ -1,7 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 
 /*
 | El diagrama de "Máquina de estados de la carga académica" (docs/proceso/proceso-propuesto.md) como datos:
@@ -25,9 +25,9 @@ function allowedLoadTransitions(bool $requiresApproval): array
     return [...COMMON_LOAD_TRANSITIONS, 'closed' => [$requiresApproval ? 'approved' : 'published', 'adjusting']];
 }
 
-function loadProfile(bool $requiresApproval): CampusProfile
+function loadProfile(bool $requiresApproval): ModalityProfile
 {
-    return CampusProfile::fromArray([...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]);
+    return ModalityProfile::fromArray([...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => $requiresApproval]);
 }
 
 dataset('load transitions matrix', function () {

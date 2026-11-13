@@ -9,7 +9,8 @@
 @php
     $person = $record->person;
     $whoUnitLabel = $whoRoleCase?->unitLabel() ?? 'Departamento académico';
-    $whoColumns = $whoRoleCase?->scopeColumns() ?? [];
+    $whoOptionalColumns = $whoRoleCase?->optionalScopeColumns() ?? [];
+    $whoColumns = [...($whoRoleCase?->scopeColumns() ?? []), ...$whoOptionalColumns];
 @endphp
 
 <div class="space-y-5">
@@ -147,8 +148,12 @@
 
                     @if ($whoColumns !== [])
                         <div class="grid gap-3 sm:grid-cols-2 min-[1200px]:grid-cols-1 min-[1400px]:grid-cols-2">
+                            @if (in_array('modality_id', $whoColumns, true))
+                                <x-select label="Modalidad" wire:model.live="whoModality" :options="$whoOptions['modalities']" placeholder="Elige" />
+                            @endif
+
                             @if (in_array('campus_id', $whoColumns, true))
-                                <x-select label="Campus" wire:model.live="whoCampus" :options="$whoOptions['campuses']" placeholder="Elige" />
+                                <x-select label="Campus" wire:model.live="whoCampus" :options="$whoOptions['campuses']" :placeholder="in_array('campus_id', $whoOptionalColumns, true) ? 'Todos los campus' : 'Elige'" />
                             @endif
 
                             @if (in_array('career_id', $whoColumns, true))
@@ -205,14 +210,7 @@
         </div>
     </div>
 
-    <x-modal wire:model="showModal" :title="'Nombrar a '.$person->name" subtitle="El formulario pide solo el alcance que el puesto necesita." box-class="max-w-xl" separator>
-        <x-form wire:submit="appoint" no-separator>
-            @include('core::people.appoint-fields', ['roleNote' => 'El puesto de docente se maneja en la ficha del docente.', 'lockedUnit' => null])
-
-            <x-slot:actions>
-                <x-button label="Cancelar" @click="$wire.showModal = false" />
-                <x-button label="Nombrar" type="submit" icon="o-plus" class="btn-primary" spinner="appoint" data-testid="appoint-submit" />
-            </x-slot:actions>
-        </x-form>
-    </x-modal>
+    <x-drawer wire:model.live="showModal" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="appoint-title" data-testid="appoint-drawer">
+        @include('core::people.appoint-drawer', ['person' => $person, 'isCoordinator' => $isCoordinator])
+    </x-drawer>
 </div>

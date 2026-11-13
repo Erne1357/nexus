@@ -4,7 +4,7 @@ namespace App\Modules\Facilities\Rules;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\WeekTime;
@@ -23,8 +23,8 @@ use Illuminate\Validation\ValidationException;
  * - `capacity` mayor que cero; `type` de RoomType; `building_id` de un edificio sin borrar del mismo
  *   campus; `department_id` (dueño), si viene, de un departamento sin borrar y activo (departamentos son globales).
  * - `features`: lista de textos recortados, sin vacíos ni repetidos (sin distinguir mayúsculas).
- * - Bloqueo: el día es uno de los del perfil del campus, las horas caen en su jornada (`day_start` a
- *   `day_end`), la de fin es posterior a la de inicio, el motivo no está vacío y el periodo, si viene, existe.
+ * - Bloqueo: el día y las horas caen en la jornada de los salones (la de las modalidades activas con salones,
+ *   ModalityQuery::roomsWindow; MS34), la de fin es posterior a la de inicio, el motivo no está vacío y el periodo, si viene, existe.
  */
 final class RoomRules
 {
@@ -120,7 +120,8 @@ final class RoomRules
     }
 
     /**
-     * Un edificio sin borrar, de cualquier campus activo y sin borrar cuyo perfil usa salones; el id llega del navegador.
+     * Un edificio sin borrar, de cualquier campus activo y sin borrar (todo campus es un lugar con salones, MS34); el id
+     * llega del navegador.
      * Al editar un salón, el de otro campus lo mueve a ese campus (UpdateRoom, CV-S10).
      *
      * @throws ValidationException
@@ -130,8 +131,8 @@ final class RoomRules
         $building = KeyLookup::find(Building::query()->with('campus'), $buildingId)
             ?? throw ValidationException::withMessages(['building_id' => 'El edificio no existe.']);
 
-        if ($building->campus === null || ! $building->campus->is_active || ! $building->campus->profile->usesRooms) {
-            throw ValidationException::withMessages(['building_id' => 'El edificio es de un campus inactivo o que no usa salones.']);
+        if ($building->campus === null || ! $building->campus->is_active) {
+            throw ValidationException::withMessages(['building_id' => 'El edificio es de un campus inactivo.']);
         }
 
         return $building;
@@ -249,21 +250,22 @@ final class RoomRules
     }
 
     /**
-     * Día y horas del bloqueo dentro del perfil del campus; las horas ya normalizadas (HH:MM).
+     * Día y horas del bloqueo dentro de la jornada de los salones (ModalityQuery::roomsWindow, MS34); las horas ya
+     * normalizadas (HH:MM).
      *
      * @throws ValidationException
      */
-    public function ensureBlockFitsCampus(CampusProfile $profile, int $day, string $startsAt, string $endsAt): void
+    public function ensureBlockFitsWindow(ModalityProfile $profile, int $day, string $startsAt, string $endsAt): void
     {
         if (! in_array($day, $profile->days, true)) {
-            throw ValidationException::withMessages(['day' => 'El campus no tiene clases ese día.']);
+            throw ValidationException::withMessages(['day' => 'No hay clases con salón ese día.']);
         }
 
         if ($endsAt <= $startsAt) {
             throw ValidationException::withMessages(['ends_at' => 'La hora de fin debe ser posterior a la de inicio.']);
         }
 
-        $window = 'El bloqueo debe quedar dentro del horario del campus ('.WeekTime::clock($profile->dayStart).' a '.WeekTime::clock($profile->dayEnd).').';
+        $window = 'El bloqueo debe quedar dentro de la jornada de los salones ('.WeekTime::clock($profile->dayStart).' a '.WeekTime::clock($profile->dayEnd).').';
 
         if ($startsAt < $profile->dayStart) {
             throw ValidationException::withMessages(['starts_at' => $window]);

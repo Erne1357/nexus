@@ -9,7 +9,7 @@ use App\Modules\Staffing\Models\ChangeRequest;
 
 /**
  * Guarda de Staffing para cerrar la carga (HC-15, tarea 4.1, P5 confirmado el 10 de noviembre de 2026): no queda
- * ninguna solicitud de cambio del departamento (mismo periodo y campus) pendiente de decidir; las aprobadas que
+ * ninguna solicitud de cambio del departamento (mismo periodo y modalidad) pendiente de decidir; las aprobadas que
  * siguen sin aplicar también la detienen (supuesto por confirmar). Veta con un motivo por tipo (evento con veto,
  * LoadTransitioning).
  */
@@ -23,7 +23,7 @@ final class BlockClosingWithPendingChangeRequests
 
         $load = $event->load;
         $counts = ChangeRequest::query()
-            ->where('term_id', $load->term_id)->where('campus_id', $load->campus_id)->where('department_id', $load->department_id)
+            ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
             ->whereIn('status', [ChangeRequestStatus::Pending, ChangeRequestStatus::Approved])
             ->selectRaw('status, count(*) as total')->groupBy('status')
             ->pluck('total', 'status');

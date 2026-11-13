@@ -41,7 +41,7 @@ function requestLoan(array $overrides = []): InterdepartmentalAgreement
 {
     $t = test();
     $args = [
-        'term' => $t->term, 'campus' => $t->campus, 'from' => $t->from, 'groupId' => $t->groupId, 'room' => $t->room,
+        'term' => $t->term, 'modality' => modalityOf('PRES'), 'campus' => $t->campus, 'from' => $t->from, 'groupId' => $t->groupId, 'room' => $t->room,
         'day' => 1, 'startsAt' => '09:00', 'endsAt' => '11:00', 'actor' => $t->actor,
         ...$overrides,
     ];
@@ -79,6 +79,13 @@ it('crea un préstamo propuesto dirigido al dueño del salón', function () {
         ->and($loan->ends_at)->toBe('11:00:00')
         ->and($loan->requested_by)->toBe($this->actor->id)
         ->and($loan->decided_at)->toBeNull();
+});
+
+it('el préstamo nace con la modalidad de su grupo, que da quien lo pide; el campus es el del salón (MS3)', function () {
+    $loan = requestLoan(['modality' => modalityOf('EAD')])->fresh();
+
+    expect($loan->modality->code)->toBe('EAD')
+        ->and($loan->campus_id)->toBe($this->campus->id);
 });
 
 it('deja bitácora con quién lo pidió y qué pidió', function () {

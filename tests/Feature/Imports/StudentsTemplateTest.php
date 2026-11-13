@@ -7,7 +7,6 @@ use App\Modules\Core\Models\User;
 use App\Modules\Imports\Templates\ImportContext;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
-use App\Modules\Students\Enums\StudentModality;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Jobs\RecomputeStudentProgress;
 use App\Modules\Students\Models\Student;
@@ -129,20 +128,49 @@ it('al terminar el lote despacha el recálculo del progreso', function () {
 });
 
 it('guarda la modalidad y el motivo del SII, y un cambio no los pisa con vacío', function () {
-    $row = studentRow(['modality' => 'Distancia', 'status_reason' => 'bt1']);
+    $row = studentRow(['modality' => 'A distancia', 'status_reason' => 'bt1']);
 
     expect($this->template->validate($row, $this->context)->errors)->toBe([]);
     $this->template->apply($row, $this->context);
     $this->template->apply(studentRow(), $this->context);
 
     expect(Student::query()->where('control_number', '19111234')->firstOrFail())
-        ->modality->toBe(StudentModality::Distancia)
+        ->modality->code->toBe('EAD')
         ->status_reason->toBe('BT1');
+});
+
+it('MS7: Presencial, A distancia, EAD y Mixta se importan como PRES, EAD, EAD y EAD, y el vacío como PRES', function () {
+    $codes = collect(['Presencial', 'A distancia', 'EAD', 'Mixta', null])->map(function (?string $text, int $i): string {
+        $row = studentRow(['control_number' => (string) (100 + $i), 'modality' => $text]);
+
+        expect($this->template->validate($row, $this->context)->errors)->toBe([]);
+
+        return $this->template->apply($row, $this->context)->modality->code;
+    })->all();
+
+    expect($codes)->toBe(['PRES', 'EAD', 'EAD', 'EAD', 'PRES']);
 });
 
 it('una modalidad que Nexus no conoce o un motivo demasiado largo son error', function () {
     expect($this->template->validate(studentRow(['modality' => 'Híbrida']), $this->context)->errors)->toHaveKey('modality')
         ->and($this->template->validate(studentRow(['status_reason' => 'ABCDEFGHIJK']), $this->context)->errors)->toHaveKey('status_reason');
+});
+
+it('MS7: una modalidad que Nexus no conoce es error de la fila y dice el texto del archivo', function () {
+    expect($this->template->validate(studentRow(['modality' => 'Híbrida']), $this->context)->errors['modality'] ?? [])
+        ->toBe(['La modalidad «Híbrida» no está en Nexus: usa presencial, a distancia, EAD o mixta.']);
+});
+
+it('MS7: una modalidad borrada del catálogo es error de la fila, también la Presencial que toma un alta sin modalidad', function () {
+    modalityOf('EAD')->delete();
+
+    expect($this->template->validate(studentRow(['modality' => 'Mixta']), $this->context)->errors['modality'] ?? [])
+        ->toBe(['La modalidad EAD está borrada en Nexus.']);
+
+    modalityOf('PRES')->delete();
+
+    expect($this->template->validate(studentRow(), $this->context)->errors['modality'] ?? [])
+        ->toBe(['La modalidad PRES está borrada en Nexus.']);
 });
 
 it('el alumno que el archivo marca inactivo nace inactivo y el vacío lo deja activo', function () {

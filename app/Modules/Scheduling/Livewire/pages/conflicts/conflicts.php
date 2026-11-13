@@ -1,7 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Jobs\RecomputeScheduleConflicts;
 use App\Modules\Scheduling\Queries\BoardCount;
@@ -16,10 +16,13 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 
 /**
- * Tablero de choques y avance (tarea 3.4): qué le falta a la carga del campus activo en el periodo activo para cerrar
- * (HC-15). La vista principal es por carrera, retícula y semestre, y la otra, la matriz por departamento con su
+ * Tablero de choques y avance (tarea 3.4): qué le falta a la carga de la modalidad de la página (`?modalidad=`,
+ * WithModalityCampusFilter; M1: con los grupos de todos sus campus) en el periodo activo para cerrar (HC-15), con el campus
+ * como filtro opcional (`?campus=`, «Todos» sin él): los campus de la modalidad, cada uno con los grupos que el usuario ve
+ * ahí (maqueta U2, opción A). La modalidad que resuelve al abrir queda fija en la URL, para que no cambie si se abre otra
+ * a media sesión (MS30). La vista principal es por carrera, retícula y semestre, y la otra, la matriz por departamento con su
  * drawer (decidido por el usuario el 7 de noviembre de 2026). Lo ven quienes ven la carga y el coordinador de su
- * carrera en su campus (`scheduling.schedule.view`); ConflictBoardQuery filtra por ese alcance. Cada método público
+ * carrera, de toda la modalidad aunque el puesto tenga un campus (MS6; `scheduling.schedule.view`); ConflictBoardQuery filtra por ese alcance. Cada método público
  * vuelve a autorizar, porque la petición puede llegar con una pantalla que abrió otra sesión.
  *
  * Cada pendiente enlaza a la pantalla que lo corrige: el editor de horarios (`scheduling.editor`, tarea 3.5) y la
@@ -29,7 +32,7 @@ use Mary\Traits\Toast;
 new #[Title('Choques y avance')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityCampusFilter;
 
     /** 'reticula' (carrera, retícula y semestre) o 'departamentos' (matriz). */
     #[Url(as: 'vista', except: 'reticula')]
@@ -56,6 +59,7 @@ new #[Title('Choques y avance')] class extends Component
     {
         $this->authorizeView($context);
         $this->view = $this->normalizedView();
+        $this->modalidad = $this->requiredModality()->code;
     }
 
     /**
@@ -66,14 +70,18 @@ new #[Title('Choques y avance')] class extends Component
         $this->authorizeView($context);
 
         $term = $context->activeTerm();
-        $campus = $this->requiredCampus();
+        $modality = $this->requiredModality();
+        $campus = $this->campusFilter();
         $links = ['editor' => Route::has('scheduling.editor'), 'assign' => Route::has('staffing.assign')];
+        $scope = [...$this->scopeViewData(), 'campusCounts' => null];
 
         if ($term === null) {
-            return ['term' => $term, 'shownCampus' => $campus, 'summary' => null, 'links' => $links, ...$this->campusViewData()];
+            return ['term' => $term, 'summary' => null, 'links' => $links, ...$scope];
         }
 
-        $statuses = $board->statuses($context, $term, $campus);
+        $scope['campusCounts'] = $scope['campusOptions']->count() > 1 ? $board->campusCounts($context, $term, $modality) : null;
+
+        $statuses = $board->statuses($context, $term, $modality, $campus);
         $careers = $board->byCareer($statuses);
         $careerId = $this->careerIn($careers);
         $grid = $careerId === null ? null : $board->grid($statuses, $careerId);
@@ -81,10 +89,9 @@ new #[Title('Choques y avance')] class extends Component
 
         return [
             'term' => $term,
-            'shownCampus' => $campus,
-            ...$this->campusViewData(),
+            ...$scope,
             'links' => $links,
-            'syncedAt' => $board->lastSyncedAt($term, $campus),
+            'syncedAt' => $board->lastSyncedAt($term, $modality),
             'summary' => $board->summary($statuses),
             'careers' => $careers,
             'careerId' => $careerId,
@@ -99,9 +106,20 @@ new #[Title('Choques y avance')] class extends Component
         ];
     }
 
+    /**
+     * El campus es un filtro: cambiarlo vuelve a contar sin la celda ni el drawer del campus anterior.
+     */
     public function updatedCampus(): void
     {
-        $this->reopenOnCampus('scheduling.conflicts');
+        $this->cell = '';
+        $this->closeDrawer();
+    }
+
+    public function updatedModalidad(): void
+    {
+        $this->career = '';
+        $this->cell = '';
+        $this->closeDrawer();
     }
 
     public function updatedView(): void
@@ -147,9 +165,8 @@ new #[Title('Choques y avance')] class extends Component
         $this->authorizeView($context);
 
         $term = $context->activeTerm() ?? abort(404);
-        $campus = $this->requiredCampus();
 
-        abort_unless($board->hasDepartment($context, $term, $campus, $id), 404);
+        abort_unless($board->hasDepartment($context, $term, $this->requiredModality(), $this->campusFilter(), $id), 404);
 
         $this->departmentId = $id;
         $this->showDrawer = true;
@@ -166,9 +183,8 @@ new #[Title('Choques y avance')] class extends Component
         $this->authorizeView($context);
 
         $term = $context->activeTerm() ?? abort(404);
-        $campus = $this->requiredCampus();
 
-        RecomputeScheduleConflicts::dispatch($term->id, $campus->id);
+        RecomputeScheduleConflicts::dispatch($term->id, $this->requiredModality()->id);
         $this->pollUntil = now()->addSeconds(30)->getTimestamp();
 
         $this->success('Recalculando los choques', 'Los conteos se actualizan en unos segundos.');

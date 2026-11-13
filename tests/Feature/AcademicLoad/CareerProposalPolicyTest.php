@@ -2,21 +2,25 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 
 /*
-| CareerProposalPolicy. Según reglas-de-negocio.md, "Aprobaciones y permisos": arma, corrige y envía la
-| propuesta el coordinador de la carrera y campus; la ve también la subdirección, solo lectura (supuesto por
-| confirmar). El admin, siempre. Los jefes deciden su parte desde la bandeja del departamento (tarea 2.8).
+| CareerProposalPolicy. Según reglas-de-negocio.md, "Aprobaciones y permisos": arma y envía la propuesta cualquier
+| coordinador de la carrera en la modalidad (M6) y corrige la fila de su campus (M7); la ve también la subdirección,
+| solo lectura (supuesto por confirmar). El admin, siempre. Los jefes deciden su parte desde la bandeja del
+| departamento (tarea 2.8).
 */
 
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->career = Career::query()->findOrFail(careerKey(20));
-    $this->proposal = CareerProposal::factory()->create(['campus_id' => $this->c1->id, 'career_id' => $this->career->id]);
+    $this->proposal = CareerProposal::factory()->create(['career_id' => $this->career->id]);
+    $this->item = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $this->c1->id]);
 });
 
 /**
@@ -27,9 +31,9 @@ beforeEach(function () {
 function proposalAbilitiesOf(User $user): array
 {
     return [
-        $user->can('create', [CareerProposal::class, test()->c1, test()->career]),
+        $user->can('create', [CareerProposal::class, modalityOf('PRES'), test()->career]),
         $user->can('view', test()->proposal),
-        $user->can('update', test()->proposal),
+        $user->can('update', [test()->proposal, test()->item]),
         $user->can('submit', test()->proposal),
     ];
 }
@@ -64,11 +68,34 @@ it('niega todo al coordinador de otra carrera en el mismo campus', function () {
     expect(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false]);
 });
 
-it('niega todo al coordinador de la misma carrera en otro campus', function () {
+it('AZ-S17: el coordinador de la misma carrera con otro campus ve y envía en la modalidad, pero solo corrige en su campus', function () {
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 
-    expect(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false])
-        ->and($coordinador->can('create', [CareerProposal::class, $this->c2, $this->career]))->toBeTrue();
+    expect(proposalAbilitiesOf($coordinador))->toBe([true, true, false, true])
+        ->and($coordinador->can('update', [$this->proposal, ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $this->c2->id])]))->toBeTrue();
+});
+
+it('M7: corregir es solo sobre una fila de la misma propuesta', function () {
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
+    $otherProposal = CareerProposal::factory()->create(['career_id' => $this->career->id, 'term_id' => Term::factory()->create()->id]);
+
+    expect($coordinador->can('update', [$otherProposal, $this->item]))->toBeFalse();
+});
+
+it('MS5: la fila sin campus de una modalidad sin salones solo la corrige un coordinador sin campus', function () {
+    $withoutCampus = ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => null]);
+    $ofC1 = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(20)])->create();
+    $ofAll = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
+
+    expect($ofC1->can('update', [$this->proposal, $withoutCampus]))->toBeFalse()
+        ->and($ofAll->can('update', [$this->proposal, $withoutCampus]))->toBeTrue();
+});
+
+it('AZ-S17: el coordinador de la misma carrera en otra modalidad no ve ni corrige', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => careerKey(20)])->create();
+
+    expect(proposalAbilitiesOf($coordinador))->toBe([false, false, false, false]);
 });
 
 it('al admin le permite todo', function () {

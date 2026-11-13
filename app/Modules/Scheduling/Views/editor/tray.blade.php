@@ -55,7 +55,12 @@
                                     'hover:border-primary aria-pressed:border-primary aria-pressed:ring-3 aria-pressed:ring-primary/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
                                 ])>
                                 <span class="flex min-w-0 items-center justify-between gap-2">
-                                    <b class="truncate font-mono text-[13px] font-semibold">{{ $group['subject']['code'] }} · {{ $group['code'] }}</b>
+                                    <span class="flex min-w-0 items-center gap-1.5">
+                                        <b class="truncate font-mono text-[13px] font-semibold">{{ $group['subject']['code'] }} · {{ $group['code'] }}</b>
+                                        @if ($campusOptions->count() > 1 && $group['campus'] !== null)
+                                            <x-core::campus-tag :campus="(object) $group['campus']" data-testid="tray-campus" />
+                                        @endif
+                                    </span>
                                     <span @class(['inline-flex items-center gap-1 text-xs whitespace-nowrap', 'text-success' => $done, 'text-warning' => ! $done])>
                                         <x-icon :name="$done ? 'o-check-circle' : 'o-exclamation-triangle'" class="h-3.5 w-3.5" aria-hidden="true" /><span><span class="font-mono">{{ $group['placed_hours'] }}</span> de <span class="font-mono">{{ $group['required_hours'] }}</span> h</span>
                                     </span>

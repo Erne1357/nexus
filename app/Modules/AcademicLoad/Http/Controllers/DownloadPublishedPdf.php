@@ -13,8 +13,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Las descargas públicas de los PDF de lo publicado (tarea 4.5): por carrera, retícula y semestre, por docente y por
- * salón, sin sesión (decisión del usuario del 10 de noviembre de 2026). Primero busca el periodo y el campus activo por
- * su clave y el sujeto en lo publicado: lo que no está publicado es 404 y no encola nada. Autoriza antes de encolar
+ * salón, sin sesión (decisión del usuario del 10 de noviembre de 2026). Primero busca el periodo, la modalidad activa
+ * (M1) y, si la URL lo trae, el campus del filtro (`?campus=`) por su clave, y el sujeto en lo publicado: lo que no está publicado es 404 y no encola nada. Autoriza antes de encolar
  * (PublishedExportPolicy). Si el PDF está listo lo entrega; si no, lo pide a la cola y responde una página que se
  * recarga sola hasta que esté, o que dice que falló.
  *
@@ -30,26 +30,36 @@ final class DownloadPublishedPdf
         private readonly PublishedScheduleQuery $published,
     ) {}
 
-    public function semester(Request $request, string $periodo, string $campus, string $carrera): Response|StreamedResponse
+    public function semester(Request $request, string $periodo, string $modalidad, string $carrera): Response|StreamedResponse
     {
-        [$term, $campusModel] = $this->context($periodo, $campus);
+        [$term, $modality, $campus] = $this->context($periodo, $modalidad, $this->campusOf($request));
         $plan = $request->query('reticula');
         $semester = filter_var($request->query('semestre'), FILTER_VALIDATE_INT);
 
-        return $this->deliver($request, is_string($plan) && $semester !== false ? SemesterPdf::find($this->published, $term, $campusModel, $carrera, $plan, $semester) : null);
+        return $this->deliver($request, is_string($plan) && $semester !== false ? SemesterPdf::find($this->published, $term, $modality, $campus, $carrera, $plan, $semester) : null);
     }
 
-    public function teacher(Request $request, string $periodo, string $campus, string $docente): Response|StreamedResponse
+    public function teacher(Request $request, string $periodo, string $modalidad, string $docente): Response|StreamedResponse
     {
-        [$term, $campusModel] = $this->context($periodo, $campus);
+        [$term, $modality, $campus] = $this->context($periodo, $modalidad, $this->campusOf($request));
 
-        return $this->deliver($request, TeacherPdf::find($this->published, $term, $campusModel, $docente));
+        return $this->deliver($request, TeacherPdf::find($this->published, $term, $modality, $campus, $docente));
     }
 
-    public function room(Request $request, string $periodo, string $campus, string $salon): Response|StreamedResponse
+    public function room(Request $request, string $periodo, string $modalidad, string $salon): Response|StreamedResponse
     {
-        [$term, $campusModel] = $this->context($periodo, $campus);
+        [$term, $modality, $campus] = $this->context($periodo, $modalidad, $this->campusOf($request));
 
-        return $this->deliver($request, RoomPdf::find($this->published, $term, $campusModel, $salon));
+        return $this->deliver($request, RoomPdf::find($this->published, $term, $modality, $campus, $salon));
+    }
+
+    /**
+     * La clave del campus del filtro de la URL (`?campus=`), o null; un valor que no es texto se trata como ninguno.
+     */
+    private function campusOf(Request $request): ?string
+    {
+        $campus = $request->query('campus');
+
+        return is_string($campus) ? $campus : null;
     }
 }

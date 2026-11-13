@@ -61,4 +61,19 @@ final readonly class DemoContext
 
         $seeder->__invoke($parameters);
     }
+
+    /**
+     * Corre un seeder de la carga una vez por cada modalidad del volumen (DemoVolume::modalities()), con su clave en
+     * `modality`: la carga es por departamento y modalidad (M1), y los pasos y las revisiones leen las modalidades del
+     * mismo lugar en vez de fiarse de la que cada seeder trae por omisión.
+     *
+     * @param  class-string<Seeder>  $seederClass
+     * @param  array<string, mixed>  $parameters
+     */
+    public function runSeederPerModality(string $seederClass, array $parameters = []): void
+    {
+        foreach ($this->volume->modalities() as $modality) {
+            $this->runSeeder($seederClass, [...$parameters, 'modality' => $modality]);
+        }
+    }
 }

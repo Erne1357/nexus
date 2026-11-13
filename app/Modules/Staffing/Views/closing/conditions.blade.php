@@ -1,14 +1,16 @@
 {{--
-    «Para cerrar» en cifras (maqueta B2): una celda por cosa que falta (LoadClosing::conditions), con su cifra en Mono,
-    su icono y su tono, el detalle («14 justificados», el nombre del docente dado de baja) y «Ir a …», que lleva a la
-    pantalla donde se arregla con `?campus=` del campus de la carga. Lo que ya no falta queda atenuado con
-    `o-check-circle`. La caja es un contenedor: cuatro columnas desde 44rem, dos desde 26rem y, más angosta, un renglón
-    por cifra. `$closing`.
+    «Para cerrar» en cifras (maqueta B2; el reparto por campus, maqueta U2, opción A): una celda por cosa que falta
+    (LoadClosing::conditionsIn, con el filtro de campus de la pantalla), con su cifra en Mono, su icono y su tono; sin
+    filtro, debajo del nombre, el reparto de los grupos por campus («[C1] 4 [C2] 2», `by`); el detalle («14
+    justificados», el nombre del docente dado de baja) y «Ir a …», que lleva a la pantalla donde se arregla con el
+    `?campus=` del filtro, si hay. Lo que ya no falta queda atenuado con `o-check-circle`. La caja es un contenedor: cuatro
+    columnas desde 44rem, dos desde 26rem y, más angosta, un renglón por cifra. `$conditions`, `$campusOptions`.
 --}}
 @php($screens = ['conflicts' => 'Choques y avance', 'editor' => 'Horarios', 'assign' => 'Asignación docente', 'change-requests' => 'Solicitudes de cambio', 'agreements' => 'Acuerdos'])
 <div class="@container overflow-hidden rounded-b-box">
     <div class="-ms-px -mt-px grid grid-cols-1 @min-[26rem]:grid-cols-2 @min-[44rem]:grid-cols-4">
-        @foreach ($closing->conditions() as $row)
+        @php($campusByCode = collect($campusOptions)->keyBy('code'))
+        @foreach ($conditions as $row)
             @php($pending = $row['count'] > 0)
             <div class="grid grid-cols-[5.25rem_minmax(0,1fr)] content-start gap-x-3 gap-y-0.5 border-s border-t border-base-300 px-4 py-3 @min-[26rem]:flex @min-[26rem]:flex-col @min-[26rem]:pt-3.5 @min-[26rem]:pb-4" data-testid="condition-{{ $row['key'] }}">
                 <span @class([
@@ -24,6 +26,13 @@
                     @endif
                 </span>
                 <span @class(['text-sm text-balance', 'font-semibold' => $pending, 'font-medium text-neutral' => ! $pending])>{{ $row['label'] }}</span>
+                @if ($pending && $row['by'] !== null)
+                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1 pt-0.5 text-[12.5px]" data-testid="condition-{{ $row['key'] }}-by-campus">
+                        @foreach ($row['by'] as $code => $count)
+                            <span class="inline-flex items-center gap-1.5"><x-core::campus-tag :campus="$campusByCode[$code] ?? null" /><span @class(['font-mono font-semibold tabular-nums', 'text-neutral' => $count === 0])>{{ $count }}</span></span>
+                        @endforeach
+                    </span>
+                @endif
                 @if ($row['detail'])
                     <span class="text-[12.5px] text-neutral">{{ $row['detail'] }}</span>
                 @endif

@@ -182,14 +182,14 @@ describe('disparadores', function () {
         Queue::fake();
         $this->teacher = loadTeacher($this->department);
         $this->group = teach($this->teacher, $this->term, $this->c2, 5);
-        $this->proposed = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id, 'department_id' => $this->department->id]);
+        $this->proposed = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id]);
     });
 
     it('al cambiar el docente de un grupo, al cancelarlo o al crear grupos con docente encola el periodo', function () {
         foreach ([
             fn () => GroupTeacherChanged::dispatch($this->group, null, $this->teacher->id),
             fn () => GroupCancelled::dispatch($this->group),
-            fn () => GroupsCreated::dispatch($this->term->id, $this->c2->id, [$this->group->id]),
+            fn () => GroupsCreated::dispatch($this->term->id, $this->group->modality_id, [$this->group->id]),
         ] as $dispatch) {
             Queue::fake();
             $dispatch();
@@ -201,7 +201,7 @@ describe('disparadores', function () {
     it('no encola al crear grupos sin docente ni al cancelar uno sin docente', function () {
         $free = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->c2->id]);
 
-        GroupsCreated::dispatch($this->term->id, $this->c2->id, [$free->id]);
+        GroupsCreated::dispatch($this->term->id, $free->modality_id, [$free->id]);
         GroupCancelled::dispatch($free);
 
         Queue::assertNotPushed(RefreshTeacherLoads::class);

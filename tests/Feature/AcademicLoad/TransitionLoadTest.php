@@ -48,7 +48,7 @@ it('cambia el estado, guarda la transición con quién y el comentario, y deja b
         ->and($activity->attribute_changes['old'])->toBe(['status' => 'draft'])
         ->and($activity->attribute_changes['attributes'])->toBe(['status' => 'proposed'])
         ->and($activity->properties['comment'])->toBe('Lista para asignar')
-        ->and($activity->description)->toBe("Pasó la carga de {$load->department->code} en {$load->campus->code} de Borrador a Propuesta");
+        ->and($activity->description)->toBe("Pasó la carga de {$load->department->code} en {$load->modality->name} de Borrador a Propuesta");
 });
 
 it('guarda un comentario vacío como nulo', function () {

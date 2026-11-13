@@ -2,10 +2,9 @@
 
 namespace App\Modules\Faculty\Queries;
 
-use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
-use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
@@ -16,8 +15,8 @@ use App\Modules\Faculty\Rules\AvailabilityRanges;
  * La cuadrícula día × hora de la disponibilidad de un docente en un periodo, para el editor y la pestaña de la ficha
  * (S12, supuesto por confirmar). Quién la ve lo decide TeacherPolicy antes de llamarla.
  *
- * La disponibilidad es del docente en el periodo, no del campus: los días, el horario y el bloque de la cuadrícula
- * salen del perfil del campus activo o, sin él, del perfil presencial por omisión (profile()). Un bloque toma el tipo
+ * La disponibilidad es del docente en el periodo, no del campus ni de una modalidad: los días, el horario y el bloque de la cuadrícula
+ * salen de la ventana que cubre a las modalidades activas (profile(); MS11). Un bloque toma el tipo
  * de un rango guardado que lo toque aunque sea en parte, y el no disponible gana al preferido; lo guardado fuera de la
  * cuadrícula (otros días u horas) no se ve ni se cuenta. Las horas del resumen cuentan los bloques de la cuadrícula:
  * disponibles son todas menos las no disponibles (las preferidas también están disponibles).
@@ -29,21 +28,19 @@ final class AvailabilityGridQuery
     public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
-     * El perfil de la cuadrícula: el del campus activo o, sin él, el presencial por omisión (lunes a viernes, de 7:00
-     * a 21:00, bloques de 60 minutos). El docente ya no tiene campus por su adscripción (S12, supuesto por confirmar).
+     * El perfil de la cuadrícula: la ventana que cubre a las modalidades activas, sin borrar y con bloques de tiempo
+     * (MS11 y MS20, supuestos por confirmar; ModalityProfile::covering). Una modalidad sin bloques de tiempo no ensancha
+     * la cuadrícula, como en SessionRules, GroupFitQuery y ModalityWindow; una con perfil guardado inválido tampoco
+     * (Modality::valid_profile). Con solo Presencial activa es lunes a viernes, de 7:00 a 21:00, bloques de 60 minutos;
+     * sin ninguna que cuente, el presencial por omisión.
      */
-    public function profile(?Campus $campus): CampusProfile
+    public function profile(): ModalityProfile
     {
-        return $campus?->profile ?? CampusProfile::fromArray([]);
-    }
-
-    /**
-     * El campus de la cuadrícula que eligió el editor al abrirse (el activo entonces), aunque después se desactive;
-     * null si no había o ya se borró.
-     */
-    public function campus(?string $id): ?Campus
-    {
-        return $id === null ? null : KeyLookup::find(Campus::query(), $id);
+        return ModalityProfile::covering(
+            Modality::query()->where('is_active', true)->get()
+                ->map(fn (Modality $modality): ?ModalityProfile => $modality->valid_profile)
+                ->filter(fn (?ModalityProfile $profile): bool => $profile?->usesTimeBlocks === true),
+        );
     }
 
     /**
@@ -63,7 +60,7 @@ final class AvailabilityGridQuery
      *     summary: array{available: int|float, preferred: int|float, unavailable: int|float, total: int|float, baseHours: int, positions: int},
      * }
      */
-    public function for(Teacher $teacher, Term $term, CampusProfile $profile): array
+    public function for(Teacher $teacher, Term $term, ModalityProfile $profile): array
     {
         $rows = TeacherAvailability::query()
             ->where('teacher_id', $teacher->getKey())
@@ -137,7 +134,7 @@ final class AvailabilityGridQuery
      * Si el docente tiene disponibilidad capturada (sin borrar) en el periodo que se vea en la cuadrícula del perfil: en
      * uno de sus días y que toque su horario. Lo de otros días u horas no cuenta, porque copiarlo no traería nada.
      */
-    public function hasAvailability(Teacher $teacher, Term $term, CampusProfile $profile): bool
+    public function hasAvailability(Teacher $teacher, Term $term, ModalityProfile $profile): bool
     {
         return TeacherAvailability::query()
             ->where('teacher_id', $teacher->getKey())
@@ -167,7 +164,7 @@ final class AvailabilityGridQuery
     /**
      * @return list<array{starts_at: string, ends_at: string, label: string, end_label: string}>
      */
-    private function blocks(CampusProfile $profile): array
+    private function blocks(ModalityProfile $profile): array
     {
         return array_map(
             fn (array $block): array => [...$block, 'label' => self::label($block['starts_at']), 'end_label' => self::label($block['ends_at'])],

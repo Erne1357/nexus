@@ -5,13 +5,15 @@ namespace App\Modules\Core\Queries;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 
 /**
  * Nombra el alcance de los nombramientos para las pantallas, los avisos y los errores: una consulta por dimensión
- * (unidades, campus y, por ScopeLabels, carreras), con borrados, porque un nombramiento viejo sigue nombrando lo que se
- * dio de baja.
+ * (unidades, campus, modalidades y, por ScopeLabels, carreras), con borrados, porque un nombramiento viejo sigue
+ * nombrando lo que se dio de baja. El alcance va de lo académico a lo físico: unidad o carrera, modalidad y campus
+ * (AZ-S17). Un puesto con el campus opcional y sin él dice «Todos los campus».
  */
 final class AssignmentLabels
 {
@@ -19,9 +21,10 @@ final class AssignmentLabels
 
     /**
      * @param  iterable<RoleAssignment>  $assignments
+     * @param  bool  $withCareerNames  también el nombre de cada carrera (una consulta más), para las tablas
      * @return array<string, AssignmentLabel> por id del nombramiento
      */
-    public function describe(iterable $assignments): array
+    public function describe(iterable $assignments, bool $withCareerNames = false): array
     {
         $list = [];
 
@@ -30,13 +33,15 @@ final class AssignmentLabels
         }
 
         $units = $this->unitsOf($list);
-        $campuses = $this->idsOf($list, 'campus_id') === [] ? [] : Campus::withTrashed()->whereKey($this->idsOf($list, 'campus_id'))->pluck('code', 'id')->all();
+        $campuses = $this->idsOf($list, 'campus_id') === [] ? [] : Campus::withTrashed()->whereKey($this->idsOf($list, 'campus_id'))->pluck('name', 'id')->all();
+        $modalities = $this->idsOf($list, 'modality_id') === [] ? [] : Modality::withTrashed()->whereKey($this->idsOf($list, 'modality_id'))->pluck('name', 'id')->all();
         $careers = $this->labels->careers($this->idsOf($list, 'career_id'));
+        $careerNames = $withCareerNames ? $this->labels->careerNames($this->idsOf($list, 'career_id')) : [];
 
         $described = [];
 
         foreach ($list as $assignment) {
-            $described[$assignment->getKey()] = $this->label($assignment, $units, $campuses, $careers);
+            $described[$assignment->getKey()] = $this->label($assignment, $units, $campuses, $modalities, $careers, $careerNames);
         }
 
         return $described;
@@ -84,9 +89,11 @@ final class AssignmentLabels
      *
      * @param  array<string, array{name: string, kind: OrgUnitKind, code: string}>  $units
      * @param  array<string, string>  $campuses
+     * @param  array<string, string>  $modalities
      * @param  array<string, string>  $careers
+     * @param  array<string, string>  $careerNames
      */
-    private function label(RoleAssignment $assignment, array $units, array $campuses, array $careers): AssignmentLabel
+    private function label(RoleAssignment $assignment, array $units, array $campuses, array $modalities, array $careers, array $careerNames = []): AssignmentLabel
     {
         $unit = $assignment->org_unit_id === null ? null : ($units[$assignment->org_unit_id] ?? null);
         $title = $assignment->role->titleOn($unit === null ? [] : [$unit]);
@@ -103,12 +110,29 @@ final class AssignmentLabels
             $chips[] = ['label' => 'Carrera', 'value' => $careers[$assignment->career_id]];
         }
 
+        if ($assignment->modality_id !== null && isset($modalities[$assignment->modality_id])) {
+            $chips[] = ['label' => 'Modalidad', 'value' => $modalities[$assignment->modality_id]];
+        }
+
         if ($assignment->campus_id !== null && isset($campuses[$assignment->campus_id])) {
             $chips[] = ['label' => 'Campus', 'value' => $campuses[$assignment->campus_id]];
+        } elseif ($assignment->campus_id === null && in_array('campus_id', $assignment->role->optionalScopeColumns(), true)) {
+            $chips[] = ['label' => 'Campus', 'value' => 'Todos los campus'];
         }
 
         $values = array_values(array_filter(array_column($chips, 'value'), fn (string $value): bool => $value !== $title && ($unit === null || $value !== $unit['name'] || ! str_contains($title, $value))));
 
-        return new AssignmentLabel($title, $chips, implode(' · ', [$title, ...$values]));
+        $chipValue = fn (string $label): ?string => collect($chips)->firstWhere('label', $label)['value'] ?? null;
+
+        return new AssignmentLabel(
+            $title,
+            $chips,
+            implode(' · ', [$title, ...$values]),
+            careerCode: $chipValue('Carrera'),
+            careerName: $assignment->career_id === null ? null : ($careerNames[$assignment->career_id] ?? null),
+            unitName: $unit['name'] ?? null,
+            modalityName: $chipValue('Modalidad'),
+            campusName: $chipValue('Campus'),
+        );
     }
 }

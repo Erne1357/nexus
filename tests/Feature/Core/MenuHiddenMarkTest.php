@@ -221,7 +221,7 @@ describe('MN-02: el motivo de una entrada para quien la ve marcada', function ()
 
 it('MN-02: el icono de un área no lleva a una página que el menú ya le esconde: la del coordinador, sin carga en curso, va a la principal', function () {
     $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
-    $load = AcademicLoad::factory()->for($term)->create(['campus_id' => $this->campus->id]);
+    $load = AcademicLoad::factory()->for($term)->create();
     $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
     app(RecentPages::class)->remember('academic-load.proposal', '/propuesta?carrera=x');
 

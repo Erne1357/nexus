@@ -24,11 +24,11 @@ use App\Modules\Scheduling\Models\GroupSession;
 beforeEach(function () {
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
-    TermOpening::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id]);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     $sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     // Carga en curso (MN-04): sin ella, el jefe no ve Acuerdos en el menú.
-    AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $sc->id]);
+    AcademicLoad::factory()->create(['term_id' => $term->id, 'department_id' => $sc->id]);
     $group = Group::factory()->create([
         'term_id' => $term->id, 'campus_id' => $campus->id, 'code' => '3A',
         'subject_id' => Subject::factory()->create(['code' => 'SCC-1013', 'name' => 'Redes', 'department_id' => $ii->id])->id,
@@ -73,7 +73,7 @@ it('el jefe dueño abre un préstamo pendiente desde el menú y lo rechaza con e
 });
 
 it('elegir varios cambia la cuenta y la barra en el navegador, sin ir al servidor', function () {
-    $share = InterdepartmentalAgreement::factory()->sharedGroup(3)->create($this->ids);
+    $share = InterdepartmentalAgreement::factory()->sharedGroup(3)->create([...$this->ids, 'campus_id' => null]);
 
     $page = visit('/login')
         ->fill('username', '19110005')

@@ -34,7 +34,7 @@ it('genera la llave UUIDv7 en la base cuando un insert no la trae', function () 
         ->filter(fn (object $column): bool => $column->column_name === 'id' && $column->data_type === 'uuid' && $column->column_default !== 'uuidv7()')
         ->pluck('table_name');
 
-    DB::table('campuses')->insert(['code' => 'C9', 'name' => 'Campus de prueba', 'modality' => 'presencial']);
+    DB::table('campuses')->insert(['code' => 'C9', 'name' => 'Campus de prueba']);
 
     expect($withoutDefault->all())->toBeEmpty()
         ->and(Str::isUuid(DB::table('campuses')->where('code', 'C9')->value('id'), 7))->toBeTrue();

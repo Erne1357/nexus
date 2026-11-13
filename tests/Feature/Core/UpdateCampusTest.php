@@ -1,10 +1,8 @@
 <?php
 
 use App\Modules\Core\Actions\UpdateCampus;
-use App\Modules\Core\Enums\Modality;
 use App\Modules\Core\Events\CampusUpdated;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -12,8 +10,8 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| UpdateCampus cambia solo lo que recibe (datos, estado o perfil de flujo) con las mismas reglas que
-| CreateCampus (CampusRules). Dentro de la transacción lee el campus con bloqueo, deja en la
+| UpdateCampus cambia solo lo que recibe (código, nombre o estado; el campus es solo el lugar, MS3) con las mismas
+| reglas que CreateCampus (CampusRules). Dentro de la transacción lee el campus con bloqueo, deja en la
 | bitácora el valor anterior confirmado y el nuevo de lo que cambió y, después del commit, avisa con
 | CampusUpdated. Si nada cambió, no escribe, no registra ni avisa.
 */
@@ -22,7 +20,6 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create([
         'code' => 'C2',
         'name' => 'Campus II',
-        'modality' => Modality::Presencial,
     ])->fresh();
 });
 
@@ -37,7 +34,6 @@ it('cambia solo los campos que recibe', function () {
     expect($this->campus->fresh())
         ->name->toBe('Campus Dos')
         ->code->toBe('C2')
-        ->modality->toBe(Modality::Presencial)
         ->is_active->toBeTrue();
 });
 
@@ -66,18 +62,6 @@ it('rechaza el código de otro campus, también si está borrado', function (boo
     expect($this->campus->fresh()->code)->toBe('C2');
 })->with(['activo' => false, 'borrado' => true]);
 
-it('rechaza un perfil de flujo que CampusProfile no acepta y deja el campus como estaba', function () {
-    expect(fn () => updateCampus($this->campus, [
-        'name' => 'Campus Dos',
-        'settings' => [...CampusProfile::DEFAULTS, 'day_start' => '21:00', 'day_end' => '07:00'],
-    ]))->toThrow(ValidationException::class, 'day_end debe ser posterior a day_start');
-
-    expect($this->campus->fresh())
-        ->name->toBe('Campus II')
-        ->settings->toEqual(CampusProfile::DEFAULTS)
-        ->and(Activity::count())->toBe(0);
-});
-
 it('desactiva y reactiva el campus', function () {
     updateCampus($this->campus, ['is_active' => false]);
     expect($this->campus->fresh()->is_active)->toBeFalse();
@@ -89,9 +73,8 @@ it('desactiva y reactiva el campus', function () {
 it('registra en la bitácora quién cambió el campus, con el valor anterior y el nuevo de lo que cambió', function () {
     $admin = User::factory()->admin()->create();
     $this->actingAs($admin);
-    $settings = [...CampusProfile::DEFAULTS, 'uses_rooms' => false];
 
-    updateCampus($this->campus, ['code' => 'C2', 'name' => 'Campus Dos', 'settings' => $settings]);
+    updateCampus($this->campus, ['code' => 'C2', 'name' => 'Campus Dos', 'is_active' => false]);
 
     $entry = Activity::sole();
 
@@ -101,17 +84,17 @@ it('registra en la bitácora quién cambió el campus, con el valor anterior y e
         ->and($entry->subject->is($this->campus))->toBeTrue()
         ->and($entry->causer->is($admin))->toBeTrue()
         ->and($entry->attribute_changes->toArray())->toBe([
-            'attributes' => ['name' => 'Campus Dos', 'settings' => $settings],
-            'old' => ['name' => 'Campus II', 'settings' => CampusProfile::DEFAULTS],
+            'attributes' => ['name' => 'Campus Dos', 'is_active' => false],
+            'old' => ['name' => 'Campus II', 'is_active' => true],
         ]);
 });
 
-it('sin cambios no escribe, no registra ni avisa, aunque PostgreSQL haya reordenado el jsonb del perfil', function () {
+it('sin cambios no escribe, no registra ni avisa', function () {
     Event::fake([CampusUpdated::class]);
     $updatedAt = $this->campus->updated_at;
     $this->travel(1)->minute();
 
-    updateCampus($this->campus, ['code' => 'c2', 'name' => 'Campus II', 'settings' => CampusProfile::DEFAULTS, 'is_active' => true]);
+    updateCampus($this->campus, ['code' => 'c2', 'name' => 'Campus II', 'is_active' => true]);
 
     expect($this->campus->fresh()->updated_at->equalTo($updatedAt))->toBeTrue()
         ->and(Activity::count())->toBe(0);
@@ -121,10 +104,10 @@ it('sin cambios no escribe, no registra ni avisa, aunque PostgreSQL haya reorden
 it('avisa con CampusUpdated qué campos cambiaron', function () {
     Event::fake([CampusUpdated::class]);
 
-    updateCampus($this->campus, ['name' => 'Campus Dos', 'settings' => [...CampusProfile::DEFAULTS, 'days' => [1, 2, 3, 4, 5, 6]]]);
+    updateCampus($this->campus, ['name' => 'Campus Dos', 'is_active' => false]);
 
     Event::assertDispatched(CampusUpdated::class, fn (CampusUpdated $event): bool => $event->campus->is($this->campus)
-        && $event->changed === ['name', 'settings']);
+        && $event->changed === ['name', 'is_active']);
 });
 
 it('avisa solo después del commit: si la transacción se revierte, nadie se entera', function () {
@@ -151,34 +134,8 @@ it('avisa solo después del commit: si la transacción se revierte, nadie se ent
     expect($heard)->toHaveCount(1);
 });
 
-describe('con el perfil guardado inválido', function () {
-    beforeEach(function () {
-        $this->broken = ['block_minutes' => 45];
-        DB::table('campuses')->where('id', $this->campus->id)->update(['settings' => json_encode($this->broken)]);
-        $this->campus = $this->campus->fresh();
-    });
-
-    it('activa, desactiva y cambia nombre o código sin error', function () {
-        updateCampus($this->campus, ['is_active' => false]);
-        updateCampus($this->campus, ['is_active' => true, 'name' => 'Campus Dos', 'code' => 'C22']);
-
-        expect($this->campus->fresh())
-            ->is_active->toBeTrue()
-            ->name->toBe('Campus Dos')
-            ->code->toBe('C22')
-            ->settings->toBe($this->broken);
-    });
-
-    it('se repara guardando un perfil válido, y la bitácora conserva el perfil roto como valor anterior', function () {
-        updateCampus($this->campus, ['settings' => CampusProfile::DEFAULTS]);
-
-        expect($this->campus->fresh()->profile->toArray())->toBe(CampusProfile::DEFAULTS)
-            ->and(Activity::sole()->attribute_changes['old'])->toBe(['settings' => $this->broken]);
-    });
-});
-
 it('si otro guarda el mismo código entre la validación y la escritura, responde con el error de código', function () {
-    Campus::updating(fn () => DB::table('campuses')->insert(['code' => 'C1', 'name' => 'Otra sesión', 'modality' => 'presencial']));
+    Campus::updating(fn () => DB::table('campuses')->insert(['code' => 'C1', 'name' => 'Otra sesión']));
 
     expect(fn () => updateCampus($this->campus, ['code' => 'C1']))
         ->toThrow(ValidationException::class, 'Ya existe un campus con el código C1');
@@ -201,5 +158,15 @@ it('registra como valor anterior el confirmado en la base, leído con bloqueo de
         ->and(Activity::sole()->attribute_changes->toArray())->toBe([
             'attributes' => ['name' => 'Campus Dos'],
             'old' => ['name' => 'Campus 2'],
+        ]);
+});
+
+it('MS3: ignora la modalidad y el perfil de flujo: el campus es solo el lugar', function () {
+    updateCampus($this->campus, ['modality' => 'en_linea', 'settings' => ['uses_rooms' => false], 'name' => 'Campus Dos']);
+
+    expect($this->campus->fresh())->name->toBe('Campus Dos')
+        ->and(Activity::sole()->attribute_changes->toArray())->toBe([
+            'attributes' => ['name' => 'Campus Dos'],
+            'old' => ['name' => 'Campus II'],
         ]);
 });

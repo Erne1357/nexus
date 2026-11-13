@@ -8,21 +8,26 @@ use Illuminate\Support\Arr;
 use InvalidArgumentException;
 
 /**
- * Perfil de flujo de un campus (ADR-0009), de solo lectura, construido desde `campuses.settings`.
- * Pantallas, validadores y transiciones consultan este perfil, nunca el código del campus.
+ * Perfil de flujo de una modalidad (ADR-0025; MS1, supuesto por confirmar), de solo lectura, construido desde
+ * `modalities.settings`. Pantallas, validadores y transiciones consultan este perfil, nunca la clave de la modalidad.
+ * Es el perfil que antes llevaba cada campus en `campuses.settings` (el campus ya es solo el lugar, MS3) sin
+ * `heads_edit_rooms`, que es de la validación de salones y no de la modalidad: si llega en `settings`, se ignora como
+ * cualquier clave desconocida.
  *
- * - Una clave que falta toma su valor de DEFAULTS, así una clave nueva no obliga a migrar cada campus.
+ * - Una clave que falta toma su valor de DEFAULTS, así una clave nueva no obliga a migrar cada modalidad.
  * - Un valor presente pero inválido lanza InvalidArgumentException: una configuración rota falla
  *   en voz alta en lugar de reemplazarse en silencio.
  * - Las claves que el perfil no conoce se ignoran.
+ * - `weekly_hours_tolerance` (minutos, entero de 0 en adelante) es opcional y no está en DEFAULTS: es la tolerancia de
+ *   HC-12 de la modalidad (MS17, supuesto por confirmar); sin ella, el validador usa la configuración global
+ *   `scheduling.weekly_hours_tolerance`. toArray() solo la incluye si la modalidad la tiene.
  */
-final readonly class CampusProfile
+final readonly class ModalityProfile
 {
     /**
      * Bloques, horario y días: supuesto 4 de PROJECT.md (bloque de 1 h, 7:00 a 21:00, lunes a viernes).
      * Sin visto bueno obligatorio de Subdirección: ADR-0008 (se activa por configuración). Sin
-     * docentes externos: los de presencial son del ITCJ. Ya no lleva `heads_edit_rooms`: el jefe corrige los salones
-     * de su departamento en cualquier campus (decisión 5, confirmada el 12 de noviembre de 2026).
+     * docentes externos: los de presencial son del ITCJ.
      *
      * @var array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}
      */
@@ -56,6 +61,7 @@ final readonly class CampusProfile
         public array $days,
         public bool $allowExternalTeachers,
         public bool $requiresSubdireccionApproval,
+        public ?int $weeklyHoursTolerance,
     ) {}
 
     /**
@@ -90,13 +96,61 @@ final readonly class CampusProfile
             days: self::days($settings['days']),
             allowExternalTeachers: self::bool($settings, 'allow_external_teachers'),
             requiresSubdireccionApproval: self::bool($settings, 'requires_subdireccion_approval'),
+            weeklyHoursTolerance: self::tolerance($settings['weekly_hours_tolerance'] ?? null),
         );
     }
 
     /**
-     * El arreglo que se guarda en `campuses.settings`.
+     * La ventana que cubre a varios perfiles, para lo que es del docente y no de una modalidad: su disponibilidad
+     * (MS11, supuesto por confirmar). Los días son la unión ordenada; el inicio, el más temprano; el fin, el más tarde;
+     * y el bloque, el más corto de los perfiles si divide exacto la ventana. Si no la divide, el máximo común divisor
+     * de todos los bloques y la ventana (supuesto por confirmar), que siempre divide la ventana. Lo demás (salones, bloques fijos, asignación, docentes externos y visto bueno)
+     * no importa a la disponibilidad y sale de DEFAULTS. Sin perfiles es el presencial por omisión.
      *
-     * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool}
+     * @param  iterable<ModalityProfile>  $profiles
+     */
+    public static function covering(iterable $profiles): self
+    {
+        $days = [];
+        $blocks = [];
+        $start = null;
+        $end = null;
+
+        foreach ($profiles as $profile) {
+            $days = [...$days, ...$profile->days];
+            $blocks[] = $profile->blockMinutes;
+            $start = $start === null || self::minutesOf($profile->dayStart) < self::minutesOf($start) ? $profile->dayStart : $start;
+            $end = $end === null || self::minutesOf($profile->dayEnd) > self::minutesOf($end) ? $profile->dayEnd : $end;
+        }
+
+        if ($blocks === []) {
+            return self::fromArray([]);
+        }
+
+        $window = self::minutesOf($end) - self::minutesOf($start);
+        $block = min($blocks);
+
+        if ($window % $block !== 0) {
+            $block = array_reduce($blocks, fn (int $carry, int $minutes): int => self::gcd($carry, $minutes), $window);
+        }
+
+        return self::fromArray([
+            'days' => $days,
+            'day_start' => $start,
+            'day_end' => $end,
+            'block_minutes' => $block,
+        ]);
+    }
+
+    private static function gcd(int $a, int $b): int
+    {
+        return $b === 0 ? $a : self::gcd($b, $a % $b);
+    }
+
+    /**
+     * El arreglo que se guarda en `modalities.settings`, con `weekly_hours_tolerance` solo si la modalidad la tiene.
+     *
+     * @return array{uses_rooms: bool, uses_time_blocks: bool, staffing_mode: string, block_minutes: int, day_start: string, day_end: string, days: list<int>, allow_external_teachers: bool, requires_subdireccion_approval: bool, weekly_hours_tolerance?: int}
      */
     public function toArray(): array
     {
@@ -110,12 +164,13 @@ final readonly class CampusProfile
             'days' => $this->days,
             'allow_external_teachers' => $this->allowExternalTeachers,
             'requires_subdireccion_approval' => $this->requiresSubdireccionApproval,
+            ...($this->weeklyHoursTolerance === null ? [] : ['weekly_hours_tolerance' => $this->weeklyHoursTolerance]),
         ];
     }
 
     /**
-     * El perfil en una línea para la tabla de campus: salones, bloques, días y jornada, y lo que se
-     * aparta del flujo presencial (asignación central, docentes externos y visto bueno de Subdirección).
+     * El perfil en una línea: salones, bloques, días y jornada, y lo que se aparta del flujo presencial
+     * (asignación central, docentes externos y visto bueno de Subdirección).
      */
     public function summary(): string
     {
@@ -185,6 +240,15 @@ final readonly class CampusProfile
             ?? throw self::invalid('staffing_mode', 'debe ser '.implode(' o ', array_column(StaffingMode::cases(), 'value')));
     }
 
+    private static function tolerance(mixed $value): ?int
+    {
+        if ($value !== null && (! is_int($value) || $value < 0)) {
+            throw self::invalid('weekly_hours_tolerance', 'debe ser un entero de 0 en adelante');
+        }
+
+        return $value;
+    }
+
     private static function blockMinutes(mixed $value): int
     {
         if (! is_int($value) || $value <= 0) {
@@ -236,6 +300,6 @@ final readonly class CampusProfile
 
     private static function invalid(string $key, string $reason): InvalidArgumentException
     {
-        return new InvalidArgumentException("Perfil de campus inválido: {$key} {$reason}.");
+        return new InvalidArgumentException("Perfil de modalidad inválido: {$key} {$reason}.");
     }
 }

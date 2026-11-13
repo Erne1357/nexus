@@ -1,11 +1,14 @@
 {{--
     Los campos del formulario «Nombrar» (DESIGN.md, «Personas y puestos», modal «Nombrar»), en el modal de la ficha y en
-    el panel del Organigrama: aviso de `user`, «Puesto» con su nota y su pista, campus, carrera y unidad según el puesto
-    (la unidad, deshabilitada si viene fija) y las fechas. Espera $offered, $roleCase, $options, $roleNote y $lockedUnit.
+    el panel del Organigrama: aviso de `user`, «Puesto» con su nota y su pista, modalidad, campus, carrera y unidad según
+    el puesto (la unidad, deshabilitada si viene fija) y las fechas. El campus del coordinador y del jefe de proyecto
+    docente es opcional (AZ-S17): vacío es «Todos los campus». Lo usa el panel del Organigrama; la ficha usa `appoint-drawer`. Espera $offered,
+    $roleCase, $options, $roleNote y $lockedUnit.
 --}}
 @php
     $unitLabel = $roleCase?->unitLabel() ?? 'Departamento académico';
-    $columns = $roleCase?->scopeColumns() ?? [];
+    $optionalColumns = $roleCase?->optionalScopeColumns() ?? [];
+    $columns = [...($roleCase?->scopeColumns() ?? []), ...$optionalColumns];
 @endphp
 
 @error('user')
@@ -23,15 +26,25 @@
 
 @if ($columns !== [])
     <div class="grid gap-4 sm:grid-cols-2">
-        @if (in_array('campus_id', $columns, true))
+        @if (in_array('modality_id', $columns, true))
+            <div data-testid="field-modality">
+                <x-select label="Modalidad" name="modality" wire:model.live="modality" :options="$options['modalities']" placeholder="Elige la modalidad" />
+            </div>
+        @endif
+
+        @if (in_array('campus_id', $columns, true) && $options['campuses'] !== [])
             <div data-testid="field-campus">
-                <x-select label="Campus" name="campus" wire:model.live="campus" :options="$options['campuses']" placeholder="Elige el campus" />
+                @if (in_array('campus_id', $optionalColumns, true))
+                    <x-select label="Campus (opcional)" name="campus" wire:model.live="campus" :options="$options['campuses']" placeholder="Todos los campus" />
+                @else
+                    <x-select label="Campus" name="campus" wire:model.live="campus" :options="$options['campuses']" placeholder="Elige el campus" />
+                @endif
             </div>
         @endif
 
         @if (in_array('career_id', $columns, true))
             <div data-testid="field-career">
-                <x-select label="Carrera" name="career" wire:model="career" :options="$options['careers']" :placeholder="$campus === '' ? 'Elige primero el campus' : 'Elige la carrera'" />
+                <x-select label="Carrera" name="career" wire:model="career" :options="$options['careers']" :placeholder="$campus === '' && ! in_array('campus_id', $optionalColumns, true) ? 'Elige primero el campus' : 'Elige la carrera'" />
             </div>
         @endif
 

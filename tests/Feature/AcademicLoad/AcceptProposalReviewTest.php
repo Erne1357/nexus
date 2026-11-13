@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Proposals\AcceptProposalReview;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
@@ -11,11 +12,12 @@ use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -36,17 +38,17 @@ use Spatie\Activitylog\Models\Activity;
 beforeEach(function () {
     $this->actor = User::factory()->create();
     $this->term = Term::factory()->create(['code' => '20271']);
-    $this->campus = Campus::factory()->create(['code' => 'C2', 'settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false]]);
+    $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->cb = Department::factory()->create(['code' => 'CB']);
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->proposal = CareerProposal::factory()->submitted()->create([
         'term_id' => $this->term->id,
-        'campus_id' => $this->campus->id,
+        'modality_id' => modalityOf('PRES')->id,
         'career_id' => Career::factory()->create(['code' => 'ISC'])->id,
     ]);
     $this->part = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->cb->id]);
     $this->otherPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id]);
-    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->cb->id]);
+    $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
     validateAcceptCatalogs($this->cb);
 });
 
@@ -100,7 +102,7 @@ it('acepta la parte con los catálogos validados: queda aceptada, con quién y c
             'career_proposal_id' => $this->proposal->id,
             'proposal_status' => ['old' => 'submitted', 'attributes' => 'submitted'],
         ])
-        ->and($activity->description)->toBe('Aceptó la parte de CB en la propuesta de ISC en C2 para el periodo 20271');
+        ->and($activity->description)->toBe('Aceptó la parte de CB en la propuesta de ISC en Presencial para el periodo 20271');
 });
 
 it('AZ-01: quien envió la propuesta acepta su parte y la bitácora lo marca', function () {
@@ -114,7 +116,7 @@ it('AZ-01: quien envió la propuesta acepta su parte y la bitácora lo marca', f
 });
 
 it('con la primera parte aceptada la carga del departamento pasa de borrador a propuesta, con su historial', function () {
-    $scLoad = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->sc->id]);
+    $scLoad = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->sc->id]);
 
     acceptPart();
 
@@ -147,8 +149,8 @@ it('HC-14: también bloquea con la carga ya en propuesta', function () {
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
 });
 
-it('HC-14: en un campus que usa salones exige también los salones del departamento', function () {
-    $this->campus->update(['settings' => CampusProfile::DEFAULTS]);
+it('HC-14: en una modalidad que usa salones exige también los salones del departamento', function () {
+    modalityOf('PRES')->update(['settings' => ModalityProfile::DEFAULTS]);
     CatalogReview::factory()->rooms()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
 
     expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Salones.']]);
@@ -156,6 +158,23 @@ it('HC-14: en un campus que usa salones exige también los salones del departame
     CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Rooms)->update(['status' => 'validated']);
 
     expect(acceptPart()->status)->toBe(ProposalReviewStatus::Accepted);
+});
+
+it('HC-13 por columna: no acepta la parte si pide grupos en un campus que ya está inactivo, y lo nombra', function () {
+    $c1 = Campus::factory()->create(['code' => 'C1']);
+    $subject = Subject::factory()->create(['department_id' => $this->cb->id]);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'subject_id' => $subject->id, 'campus_id' => $this->campus->id, 'requested_groups' => 2]);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'subject_id' => $subject->id, 'campus_id' => $c1->id, 'requested_groups' => 1]);
+    ProposalItem::factory()->create(['career_proposal_id' => $this->proposal->id, 'subject_id' => Subject::factory()->create(['department_id' => $this->sc->id])->id, 'campus_id' => $this->campus->id, 'requested_groups' => 1]);
+    $this->campus->update(['is_active' => false]);
+
+    expect(acceptErrors())->toBe(['campus' => ['C2 está inactivo y la parte pide grupos ahí: regrésala para que el coordinador deje en cero sus grupos de C2 (HC-13).']])
+        ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending)
+        ->and($this->load->fresh()->status)->toBe(LoadStatus::Draft);
+
+    ProposalItem::query()->where('campus_id', $this->campus->id)->whereIn('subject_id', [$subject->id])->update(['requested_groups' => 0]);
+
+    expect(acceptPart()->fresh()->status)->toBe(ProposalReviewStatus::Accepted);
 });
 
 it('con la carga ya fuera de borrador solo acepta: no hay otra transición', function (LoadStatus $status) {
@@ -171,7 +190,7 @@ it('con la carga ya fuera de borrador solo acepta: no hay otra transición', fun
 it('la segunda parte que acepta el departamento, de otra carrera, no vuelve a transitar la carga', function () {
     acceptPart();
     $another = ProposalReview::factory()->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id])->id,
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id])->id,
         'department_id' => $this->cb->id,
     ]);
 
@@ -263,10 +282,10 @@ it('usa el estado de la base y no el de los modelos que llegaron', function () {
     expect(acceptErrors($stale))->toBe(['status' => ['La propuesta todavía no se envía.']]);
 });
 
-it('sin la carga del departamento en el campus no acepta y lo dice', function () {
+it('M4: sin la carga del departamento en el campus no acepta y dice que se complete la apertura en su modalidad', function () {
     $this->load->delete();
 
-    expect(acceptErrors())->toBe(['load' => ['CB no tiene carga en C2 para el periodo 20271: vuelve a abrir el periodo en el campus para crearla.']])
+    expect(acceptErrors())->toBe(['load' => ['CB no tiene carga en Presencial para el periodo 20271: completa la apertura del periodo en Presencial para crearla.']])
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
 });
 

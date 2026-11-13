@@ -25,7 +25,7 @@ class GroupTeacherAssignmentFactory extends Factory
         return [
             'group_id' => Group::factory(),
             'term_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->term_id,
-            'campus_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->campus_id,
+            'modality_id' => fn (array $attributes): string => Group::query()->findOrFail($attributes['group_id'])->modality_id,
             'teacher_id' => Teacher::factory(),
             'assigned_by' => User::factory(),
             'assigned_at' => now(),

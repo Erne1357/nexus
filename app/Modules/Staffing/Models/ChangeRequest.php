@@ -3,7 +3,7 @@
 namespace App\Modules\Staffing\Models;
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
@@ -24,7 +24,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Una solicitud de cambio de horario o de salón de un grupo (tarea 3.11). No es catálogo: no se desactiva ni se
  * borra. `current` es la foto de las sesiones al pedirla; `proposed` trae la `description` libre de lo que se pide.
  */
-#[Fillable(['term_id', 'campus_id', 'department_id', 'group_id', 'requested_by', 'teacher_id', 'kind', 'current', 'proposed', 'reason', 'status', 'decided_by', 'decided_at', 'decision_comment', 'applied_by', 'applied_at', 'impact'])]
+#[Fillable(['term_id', 'modality_id', 'department_id', 'group_id', 'requested_by', 'teacher_id', 'kind', 'current', 'proposed', 'reason', 'status', 'decided_by', 'decided_at', 'decision_comment', 'applied_by', 'applied_at', 'impact'])]
 #[UseFactory(ChangeRequestFactory::class)]
 class ChangeRequest extends Model
 {
@@ -77,11 +77,13 @@ class ChangeRequest extends Model
     }
 
     /**
-     * @return BelongsTo<Campus, $this>
+     * Su modalidad del catálogo (ADR-0025), copia de la de su grupo. El campus no se copia: se lee del grupo (M8).
+     *
+     * @return BelongsTo<Modality, $this>
      */
-    public function campus(): BelongsTo
+    public function modality(): BelongsTo
     {
-        return $this->belongsTo(Campus::class);
+        return $this->belongsTo(Modality::class);
     }
 
     /**

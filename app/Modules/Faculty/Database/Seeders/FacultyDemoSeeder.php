@@ -9,6 +9,7 @@ use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
@@ -284,9 +285,9 @@ class FacultyDemoSeeder extends Seeder
     }
 
     /**
-     * Nombra jefe de proyecto docente a los docentes elegidos de cada departamento, salvo que ya tengan cualquier
-     * nombramiento de ese puesto en ese departamento y campus, aunque ya haya terminado: volver a sembrar no repone una
-     * jefatura que un admin terminó.
+     * Nombra jefe de proyecto docente a los docentes elegidos de cada departamento, en Presencial y en su campus
+     * (AZ-S17), salvo que ya tengan cualquier nombramiento de ese puesto en ese departamento y campus, aunque ya haya
+     * terminado: volver a sembrar no repone una jefatura que un admin terminó.
      *
      * @param  array<string, array<string, list<string>>>  $heads  por campus y departamento, números de empleado
      * @param  array<string, string>  $campuses
@@ -294,6 +295,7 @@ class FacultyDemoSeeder extends Seeder
     private function appointHeads(array $heads, array $campuses): int
     {
         $appointed = 0;
+        $presencial = Modality::query()->where('code', 'PRES')->firstOrFail();
 
         foreach ($heads as $code => $byDepartment) {
             $campus = Campus::query()->findOrFail($campuses[$code]);
@@ -307,7 +309,7 @@ class FacultyDemoSeeder extends Seeder
                         ->exists();
 
                     if (! $already) {
-                        app(AppointRole::class)->handle($user, Role::JefeProyectoDocente, $campus, $department, null, today()->toImmutable());
+                        app(AppointRole::class)->handle($user, Role::JefeProyectoDocente, $campus, $department, null, today()->toImmutable(), modality: $presencial);
                         $appointed++;
                     }
                 }

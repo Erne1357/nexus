@@ -189,7 +189,6 @@ describe('vigencia y coherencia del alcance', function () {
             ->and($context->heldRoles())->toBe([])
             ->and($context->allows(FakePermission::ViewCampus, Target::of(campus: $this->c2->id)))->toBeFalse()
             ->and($context->campuses())->toBeEmpty()
-            ->and($context->activeCampus())->toBeNull()
             ->and($context->activeTerm())->toBeNull();
     });
 });
@@ -201,8 +200,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
         expect($context->heldRoles())->toBe([Role::Subdireccion])
             ->and($context->allows(FakePermission::ViewCampus, Target::of(campus: $this->c1->id)))->toBeTrue()
             ->and($context->allows(FakePermission::ViewCampusUnit, Target::of(campus: $this->c2->id, unit: departmentKey(10))))->toBeTrue()
-            ->and($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
-            ->and($context->activeCampus())->toBeNull();
+            ->and($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2']);
     });
 
     it('un alcance sin campus no cubre un campus desactivado o borrado: eso queda para el admin', function (string $retired) {
@@ -259,13 +257,11 @@ describe('alcance de todo el Tec (sin campus)', function () {
         actingAsRole($user, Role::Coordinador);
         $context = app(Actor::class);
 
-        expect($context->campuses()->pluck('code')->all())->toBe(['C2'])
-            ->and($context->activeCampus()?->is($this->c2))->toBeTrue();
+        expect($context->campuses()->pluck('code')->all())->toBe(['C2']);
 
         actingAsRole($user, Role::Docente);
 
-        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
-            ->and($context->activeCampus())->toBeNull();
+        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2']);
     });
 
     it('un coordinador de un campus desactivado o borrado que también es docente de todo el Tec solo actúa como docente: la credencial ofrece los campus activos', function (string $retired) {
@@ -279,7 +275,6 @@ describe('alcance de todo el Tec (sin campus)', function () {
 
         expect($context->activeRole())->toBe(Role::Docente)
             ->and($context->campuses()->pluck('code')->all())->toBe(['C1'])
-            ->and($context->activeCampus()?->is($this->c1))->toBeTrue()
             ->and($context->heldRoles())->toBe([Role::Docente]);
     })->with(['desactivado', 'borrado']);
 
@@ -301,8 +296,7 @@ describe('alcance de todo el Tec (sin campus)', function () {
             ->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])
             ->create());
 
-        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
-            ->and($context->activeCampus())->toBeNull();
+        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2']);
     });
 
     it('un alcance sin campus de un usuario inactivo no cuenta', function () {
@@ -418,13 +412,7 @@ describe('campus y periodo activos por omisión', function () {
         expect($context->activeTerm()?->is($current))->toBeTrue();
     });
 
-    it('el campus activo por omisión es el único del alcance', function () {
-        $context = actorOf(User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create());
-
-        expect($context->activeCampus()?->is($this->c2))->toBeTrue();
-    });
-
-    it('no elige campus activo por omisión si el alcance tiene varios', function () {
+    it('con varios campus en el alcance, la credencial los ofrece todos', function () {
         $user = User::factory()
             ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
             ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
@@ -432,66 +420,7 @@ describe('campus y periodo activos por omisión', function () {
 
         $context = actorOf($user);
 
-        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2'])
-            ->and($context->activeCampus())->toBeNull();
-    });
-});
-
-/*
-| Puente de activeCampus() (#415, A1): la credencial ya no elige campus; mientras las pantallas de los demás módulos no
-| pasen a WithCampusFilter, el campus es el de `?campus=` de la petición (en una petición de Livewire, el de la página,
-| que viene en Referer), si es de los que ofrece campuses(); si no, el único de campuses(), o ninguno.
-*/
-
-describe('puente del campus de la pantalla', function () {
-    beforeEach(function () {
-        Route::middleware('web')->match(['GET', 'POST'], '/_test/active-campus', fn (Actor $context): array => ['active' => $context->activeCampus()?->code]);
-        $this->both = User::factory()
-            ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c1->id, 'department_id' => departmentKey(10)])
-            ->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])
-            ->create();
-    });
-
-    it('toma el campus de ?campus= si es de los que ofrece', function () {
-        $this->actingAs($this->both)->get('/_test/active-campus?campus=C2')->assertExactJson(['active' => 'C2']);
-    });
-
-    it('ignora un campus que no ofrece y cae en el único o en ninguno', function () {
-        Campus::factory()->create(['code' => 'EAD', 'is_active' => false]);
-        $onlyC2 = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
-
-        $this->actingAs($this->both)->get('/_test/active-campus?campus=EAD')->assertExactJson(['active' => null]);
-        $this->actingAs($onlyC2)->get('/_test/active-campus?campus=C1')->assertExactJson(['active' => 'C2']);
-        $this->actingAs($onlyC2)->get('/_test/active-campus')->assertExactJson(['active' => 'C2']);
-    });
-
-    it('en una petición de Livewire toma el campus de la página, que viene en Referer', function () {
-        $this->actingAs($this->both)
-            ->withHeaders(['X-Livewire' => 'true', 'Referer' => url('/scheduling/editor?carrera=ISC&campus=C1')])
-            ->post('/_test/active-campus')
-            ->assertExactJson(['active' => 'C1']);
-    });
-
-    it('en una petición de Livewire ignora un campus de Referer que no ofrece', function () {
-        Campus::factory()->create(['code' => 'C9']);
-
-        $this->actingAs($this->both)
-            ->withHeaders(['X-Livewire' => 'true', 'Referer' => url('/scheduling/editor?campus=C9')])
-            ->post('/_test/active-campus')
-            ->assertExactJson(['active' => null]);
-    });
-
-    it('fuera de Livewire no lee Referer', function () {
-        $this->actingAs($this->both)
-            ->withHeaders(['Referer' => url('/scheduling/editor?campus=C1')])
-            ->get('/_test/active-campus')
-            ->assertExactJson(['active' => null]);
-    });
-
-    it('el contexto de otro usuario (forUser) no lee el campus de la petición', function () {
-        Route::middleware('web')->get('/_test/other-campus', fn (Actor $context): array => ['other' => $context->forUser($this->both)->activeCampus()?->code]);
-
-        $this->actingAs(User::factory()->admin()->create())->get('/_test/other-campus?campus=C1')->assertExactJson(['other' => null]);
+        expect($context->campuses()->pluck('code')->all())->toBe(['C1', 'C2']);
     });
 });
 
@@ -506,10 +435,9 @@ describe('ciclo de vida en el contenedor (Octane)', function () {
         expect(app(Actor::class))->not->toBe($first);
     });
 
-    it('no filtra el alcance ni el campus activo entre dos usuarios seguidos en la misma app', function () {
+    it('no filtra el alcance entre dos usuarios seguidos en la misma app', function () {
         Route::middleware('web')->get('/_test/scoped-context', fn (Actor $context): array => [
             'campuses' => $context->campuses()->pluck('code')->all(),
-            'active' => $context->activeCampus()?->code,
         ]);
         // Dos campus con un puesto que no es exclusivo: la Subdirección es una sola por unidad (AZ-S7).
         $both = User::factory()
@@ -518,9 +446,9 @@ describe('ciclo de vida en el contenedor (Octane)', function () {
             ->create();
         $onlyC2 = User::factory()->withRole(Role::Docente, ['campus_id' => $this->c2->id])->create();
 
-        $this->actingAs($both)->get('/_test/scoped-context?campus=C1')->assertExactJson(['campuses' => ['C1', 'C2'], 'active' => 'C1']);
+        $this->actingAs($both)->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C1', 'C2']]);
 
-        $this->actingAs($onlyC2)->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C2'], 'active' => 'C2']);
+        $this->actingAs($onlyC2)->get('/_test/scoped-context')->assertExactJson(['campuses' => ['C2']]);
     });
 });
 

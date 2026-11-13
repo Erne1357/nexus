@@ -42,7 +42,7 @@ beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
     $this->campus = Campus::factory()->create(['code' => 'C2']);
     $this->department = Department::factory()->create(['code' => 'II']);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id]);
     $subject = $this->subject = Subject::factory()->create(['department_id' => $this->department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
     $career = $this->career = Career::factory()->create(['department_id' => $this->department->id]);
     $plan = $this->plan = StudyPlan::factory()->create(['career_id' => $career->id]);
@@ -168,11 +168,11 @@ it('da de alta docentes de asignatura donde la capacidad no llega a 1.35 veces l
         ->and($hired->sole()->positions->sole()->valid_from->lte($this->term->starts_on))->toBeTrue();
 });
 
-it('la revisión del punto 5 compara cada carga con los grupos de su mismo campus: una carga sin grupos ahí puede quedarse en borrador', function () {
+it('la revisión del punto 5 compara cada carga con sus grupos en los campus de la demo: una carga sin grupos puede quedarse en borrador', function () {
     ($this->group)('A1', 1, '07:00', '09:00', 1);
     ($this->teacher)('Ana', 4);
-    $other = Campus::factory()->create(['code' => 'C1']);
-    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'campus_id' => $other->id, 'department_id' => $this->department->id]);
+    Campus::factory()->create(['code' => 'C1']);
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => Department::factory()->create()->id]);
     ($this->seedMode)('start');
     $check = collect(app(StaffingServiceProvider::class, ['app' => app()])->demoChecks())->firstWhere('label', 'Toda carga con grupos está en asignación');
 
@@ -181,4 +181,16 @@ it('la revisión del punto 5 compara cada carga con los grupos de su mismo campu
     AcademicLoad::query()->whereKey($this->load->id)->update(['status' => LoadStatus::Proposed->value]);
 
     expect(($check->passes)(new DemoContext(DemoVolume::Massive, ['C1', 'C2'])))->toBe('1 cargas con grupos no están en asignación.');
+});
+
+it('en modo mixed no se salta la modalidad pedida porque otra modalidad ya tenga asignaciones en el campus', function () {
+    ($this->group)('A1', 1, '07:00', '09:00', 1);
+    ($this->teacher)('Ana', 4);
+    $distance = Group::factory()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => modalityOf('EAD')->id]);
+    GroupTeacherAssignment::factory()->create(['group_id' => $distance->id]);
+
+    (new DatabaseSeeder)->setContainer(app())
+        ->callWith(StaffingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'mode' => 'mixed', 'modality' => 'PRES']);
+
+    expect($this->load->refresh()->status)->not->toBe(LoadStatus::Proposed);
 });

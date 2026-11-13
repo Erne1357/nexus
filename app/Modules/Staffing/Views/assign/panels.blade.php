@@ -27,7 +27,12 @@
                 <li wire:key="item-{{ $group->id }}">
                     <button type="button" wire:click="pick('{{ $group->id }}')" aria-current="{{ $isSelected ? 'true' : 'false' }}" data-group-item="{{ $group->id }}"
                         class="group grid min-h-15 w-full cursor-pointer grid-cols-[2.75rem_minmax(0,1fr)] items-start gap-x-2.5 px-3.5 py-2.5 text-left hover:bg-base-200 lg:aria-[current=true]:bg-secondary lg:aria-[current=true]:text-secondary-content">
-                        <span class="font-mono text-[15px] font-semibold leading-tight">{{ $group->code }}</span>
+                        <span class="grid justify-items-start gap-1">
+                            <span class="font-mono text-[15px] font-semibold leading-tight">{{ $group->code }}</span>
+                            @if ($multiCampus && $group->campus !== null)
+                                <x-core::campus-tag :campus="$group->campus" />
+                            @endif
+                        </span>
                         <span class="grid min-w-0 gap-1">
                             <span class="line-clamp-2 font-semibold leading-tight">{{ $group->subject?->name }}</span>
                             <span class="truncate text-[12.5px] text-neutral lg:group-aria-[current=true]:text-secondary-muted">{{ $group->ownerCareer?->code }} · Sem. {{ $group->semester }} · <span class="font-mono">{{ $row->schedule }}</span></span>
@@ -47,7 +52,7 @@
                 </li>
             @empty
                 <li class="px-4 py-6 text-center text-sm text-neutral">
-                    {{ $board->total() === 0 ? 'El departamento no tiene grupos en este periodo y campus.' : 'Ningún grupo cumple los filtros.' }}
+                    {{ $board->total() === 0 ? ($board->campus === null ? 'El departamento no tiene grupos en esta modalidad y periodo.' : "El departamento no tiene grupos en {$board->campus->code}.") : 'Ningún grupo cumple los filtros.' }}
                 </li>
             @endforelse
         </ul>

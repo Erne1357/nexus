@@ -5,8 +5,7 @@ use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Rules\AgreementRules;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Actions\Agreements\AcceptRoomLoan;
@@ -31,7 +30,9 @@ use Mary\Traits\Toast;
 /**
  * Acuerdos entre departamentos (tareas 3.6 y 3.7, reglas-de-negocio.md, "Acuerdos entre departamentos"; maqueta B
  * «Bandeja de dos paneles», decidida por el usuario el 7 de noviembre de 2026): los préstamos de salón y los grupos
- * compartidos del periodo y campus activos de la credencial. A la izquierda la lista agrupada («Por decidir»,
+ * compartidos del periodo activo en la modalidad de la página (`?modalidad=`, M1; select «Modalidad» con más de una,
+ * MS16), con el campus como filtro (`?campus=`, «Todos» sin él; los campus de la modalidad con sus acuerdos, maqueta U2,
+ * opción A; quien tiene un nombramiento con campus lee los de toda su modalidad, MS6). A la izquierda la lista agrupada («Por decidir»,
  * «Enviados», «Decididos») con búsqueda y filtro de tipo; a la derecha el detalle, con la semana del salón en un
  * préstamo, y las acciones al pie.
  *
@@ -50,7 +51,7 @@ use Mary\Traits\Toast;
 new #[Title('Acuerdos')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityCampusFilter;
 
     /** Cuántos acuerdos se aceptan juntos a lo más (confirmado el 8 de noviembre de 2026). */
     private const int MAX_BULK = 50;
@@ -66,12 +67,9 @@ new #[Title('Acuerdos')] class extends Component
     #[Url(as: 'buscar')]
     public string $search = '';
 
-    /** El periodo y el campus con los que entró. El navegador no los puede cambiar. */
+    /** El periodo con el que entró. El navegador no lo puede cambiar. */
     #[Locked]
     public ?string $termId = null;
-
-    #[Locked]
-    public ?string $campusId = null;
 
     #[Locked]
     public ?string $message = null;
@@ -92,10 +90,8 @@ new #[Title('Acuerdos')] class extends Component
     #[Locked]
     public ?array $bulkResult = null;
 
-    /** Lo resuelto en esta petición (periodo, campus y acuerdos por id); se suelta al escribir. */
+    /** Lo resuelto en esta petición (periodo y acuerdos por id); se suelta al escribir. */
     protected ?Term $loadedTerm = null;
-
-    protected ?Campus $loadedCampus = null;
 
     /** @var array<string, InterdepartmentalAgreement|null> */
     protected array $found = [];
@@ -103,9 +99,20 @@ new #[Title('Acuerdos')] class extends Component
     /** @var array{decide: list<array<string, mixed>>, sent: list<array<string, mixed>>, done: list<array<string, mixed>>}|null La bandeja de esta petición. */
     protected ?array $inbox = null;
 
+    /**
+     * Otro campus en el filtro: la lista vuelve a leerse y abre el primero, sin la selección del filtro anterior.
+     */
     public function updatedCampus(): void
     {
-        $this->reopenOnCampus('scheduling.agreements');
+        $this->changedScope();
+    }
+
+    /**
+     * Otra modalidad: sus acuerdos, sin la selección de la anterior.
+     */
+    public function updatedModalidad(): void
+    {
+        $this->changedScope();
     }
 
     public function mount(Actor $context, AgreementsInboxQuery $query): void
@@ -232,15 +239,14 @@ new #[Title('Acuerdos')] class extends Component
     {
         $this->authorizeView();
         $agreement = $this->find($id, $context, $query);
-        $this->authorize('cancel', $agreement);
+        $row = $query->row($agreement);
+        $this->authorize('cancel', [$agreement, $row['campus']['id'] ?? null]);
 
         if ($agreement->status !== AgreementStatus::Proposed) {
             $this->error('No se canceló', 'Este acuerdo ya se decidió.');
 
             return;
         }
-
-        $row = $query->row($agreement);
 
         try {
             $cleared = $agreement->kind === AgreementKind::RoomLoan
@@ -353,7 +359,7 @@ new #[Title('Acuerdos')] class extends Component
     public function with(Actor $context, AgreementsInboxQuery $query): array
     {
         if ($this->termId === null) {
-            return ['groups' => null, ...$this->campusViewData()];
+            return ['groups' => null, 'campusCounts' => null, ...$this->scopeViewData()];
         }
 
         $groups = $this->inbox($context, $query);
@@ -362,16 +368,18 @@ new #[Title('Acuerdos')] class extends Component
         $agreement = $selected === null ? null : $this->findOrNull($selected['id'], $context, $query);
         $detail = $agreement === null ? null : $query->detail($agreement);
 
+        $scope = $this->scopeViewData();
+
         return [
             'groups' => $groups,
             'term' => $this->term(),
-            'shownCampus' => $this->campus(),
-            ...$this->campusViewData(),
+            ...$scope,
+            'campusCounts' => $scope['campusOptions']->count() > 1 ? $query->campusCounts($context, $this->term(), $scope['shownModality']) : null,
             'labels' => ['decide' => 'Por decidir', 'sent' => 'Enviados', 'done' => 'Decididos'],
             'selectedId' => $detail['id'] ?? null,
             'detail' => $detail,
             'canDecide' => $agreement !== null && Gate::allows('decide', $agreement),
-            'canCancel' => $agreement !== null && Gate::allows('cancel', $agreement),
+            'canCancel' => $agreement !== null && Gate::allows('cancel', [$agreement, $detail['campus']['id'] ?? null]),
             'acceptBlock' => $detail === null ? null : $this->acceptBlock($detail),
             'maxComment' => AgreementRules::MAX_COMMENT_LENGTH,
             'filtered' => $this->kind !== '' || trim($this->search) !== '',
@@ -435,7 +443,7 @@ new #[Title('Acuerdos')] class extends Component
      */
     private function inbox(Actor $context, AgreementsInboxQuery $query): array
     {
-        return $this->inbox ??= $query->inbox($context, $this->term(), $this->campus(), AgreementKind::tryFrom($this->kind), $this->search);
+        return $this->inbox ??= $query->inbox($context, $this->term(), $this->requiredModality(), $this->campusFilter(), AgreementKind::tryFrom($this->kind), $this->search);
     }
 
     /**
@@ -519,7 +527,7 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         try {
-            return $this->found[$id] = $query->findOrFail($context, $this->term(), $this->campus(), $id);
+            return $this->found[$id] = $query->findOrFail($context, $this->term(), $this->requiredModality(), $this->campusFilter(), $id);
         } catch (ModelNotFoundException) {
             return $this->found[$id] = null;
         }
@@ -530,17 +538,29 @@ new #[Title('Acuerdos')] class extends Component
         return $this->loadedTerm ??= KeyLookup::findOrFail(Term::query(), $this->termId);
     }
 
-    private function campus(): Campus
+    /**
+     * Cambió el alcance (la modalidad o el campus del filtro): la bandeja se vuelve a leer y abre el primero.
+     */
+    private function changedScope(): void
     {
-        return $this->loadedCampus ??= KeyLookup::findOrFail(Campus::query(), $this->campusId);
+        $this->agreementId = '';
+        $this->mobileDetail = false;
+        $this->rejecting = false;
+        $this->comment = '';
+        $this->selected = [];
+        $this->bulkResult = null;
+        $this->inbox = null;
+        $this->found = [];
+        $this->resetErrorBag();
     }
 
     /**
-     * Resuelve con la credencial el periodo y el campus, o deja por qué no hay pantalla que mostrar.
+     * Resuelve con la credencial el periodo y fija la modalidad de la página (403 sin ninguna; fija, para que no cambie si
+     * se abre otra a media sesión, MS30), o deja por qué no hay pantalla que mostrar.
      */
     private function resolve(Actor $context): void
     {
-        $campus = $this->requiredCampus();
+        $this->modalidad = $this->requiredModality()->code;
 
         $term = $context->activeTerm();
 
@@ -551,7 +571,6 @@ new #[Title('Acuerdos')] class extends Component
         }
 
         $this->termId = $term->getKey();
-        $this->campusId = $campus->getKey();
         $this->message = null;
     }
 

@@ -34,7 +34,7 @@ beforeEach(function () {
     $this->subject = Subject::factory()->create(['code' => 'AED-1026', 'department_id' => $this->imparte->id, 'needs_lab' => true]);
     $this->group = Group::factory()->create(['subject_id' => $this->subject->id, 'owner_career_id' => $this->career->id, 'code' => '3B', 'capacity' => 30]);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id,
+        'term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id,
     ]);
     $this->session = GroupSession::factory()->for($this->group)->practica()->on(2, '15:00', '17:00')->create();
     $this->building = Building::factory()->create(['campus_id' => $this->group->campus_id]);
@@ -220,8 +220,9 @@ it('un jefe que pierde el permiso después de montar recibe 403 al asignar o qui
     expect($this->session->fresh()->room_id)->toBeNull();
 });
 
-it('el coordinador de la carrera en otro campus no ve la sesión', function () {
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => $this->career->id])->create();
+it('AZ-S17: el coordinador de la carrera en otra modalidad no ve la sesión', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->career->id])->create();
 
     sessionRoomAs($coordinador)->assertForbidden();
 });

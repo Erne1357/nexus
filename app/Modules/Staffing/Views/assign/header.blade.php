@@ -1,22 +1,31 @@
 {{--
-    Encabezado de la asignación docente: título, departamento · campus · periodo y, debajo, el selector de departamento
-    (a quien ve varios: Subdirección, admin); a la derecha, la tarjeta «Carga del departamento» con su estado y cuántos
-    grupos tienen docente.
+    Encabezado de la asignación docente: título, departamento · modalidad (como dato con una sola, MS16) · periodo y,
+    debajo, en un renglón, el selector de departamento (a quien ve varios: Subdirección, admin) y el select «Modalidad»
+    (con más de una; maqueta U2, opción A); a la derecha, la tarjeta «Carga del departamento» con su estado y cuántos
+    grupos tienen docente. Debajo de todo, el filtro de campus con los grupos de la carga en cada uno y lo que filtra
+    (DESIGN.md, «Alcance de la carga»).
 --}}
 @php($total = $board->total())
 @php($assigned = $board->assignedCount())
+@php($singleModality = $modalityOptions->count() <= 1)
 <div class="flex flex-wrap items-end justify-between gap-x-7 gap-y-4">
     <div class="min-w-0 max-md:w-full">
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Asignación docente</h1>
         <p class="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-neutral" data-testid="assign-meta">
             <span class="font-medium text-base-content">{{ $board->department->name }}</span>
-            <span>{{ $board->campus->name }}</span>
+            @if ($singleModality)
+                <span data-testid="assign-modality">{{ $board->modality->name }}</span>
+            @endif
             <span>{{ $board->term->name }}</span>
         </p>
-        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-3" />
-        @if (count($departments) > 1)
-            <div class="mt-3 w-full md:w-80">
-                <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm max-md:h-11" data-testid="assign-department" />
+        @if (count($departments) > 1 || ! $singleModality)
+            <div class="mt-3 flex flex-wrap items-end gap-3">
+                @if (count($departments) > 1)
+                    <div class="w-full md:w-80">
+                        <x-select label="Departamento" wire:model.live="department" :options="$departments" option-value="code" option-label="name" class="select-sm max-md:h-11" data-testid="assign-department" />
+                    </div>
+                @endif
+                <x-core::modality-scope :options="$modalityOptions" :selected="$board->modality->code" class="w-full md:w-56" />
             </div>
         @endif
     </div>
@@ -38,3 +47,11 @@
         </div>
     </div>
 </div>
+
+@if ($campusOptions->count() > 1)
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="assign-campus">
+        <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral" aria-hidden="true">Campus</span>
+        <x-core::campus-filter :options="$campusOptions" :selected="$shownCampus?->code" :counts="$campusCounts" all />
+        <span class="text-sm text-neutral">Filtra los grupos y su avance; la carga es de toda la modalidad.</span>
+    </div>
+@endif

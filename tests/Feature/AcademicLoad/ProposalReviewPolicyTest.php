@@ -18,20 +18,20 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->department = Department::query()->findOrFail(departmentKey(10));
     $this->review = ProposalReview::factory()->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['campus_id' => $this->c1->id])->id,
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create()->id,
         'department_id' => $this->department->id,
     ]);
 });
 
 /**
- * Lo que `$user` puede hacer en la bandeja del departamento de la prueba en C1: [ver la bandeja, decidir la parte].
+ * Lo que `$user` puede hacer en la bandeja del departamento de la prueba en Presencial: [ver la bandeja, decidir la parte].
  *
  * @return list<bool>
  */
 function inboxAbilitiesOf(User $user): array
 {
     return [
-        $user->can('viewAny', [ProposalReview::class, test()->c1, test()->department]),
+        $user->can('viewAny', [ProposalReview::class, modalityOf('PRES'), test()->department]),
         $user->can('decide', ProposalReview::query()->findOrFail(test()->review->id)),
     ];
 }
@@ -54,22 +54,23 @@ it('niega todo al jefe de otro departamento', function () {
     expect(inboxAbilitiesOf($jefe))->toBe([false, false]);
 });
 
-it('niega todo a un alcance del departamento en otro campus', function (Role $role) {
-    $user = User::factory()->withRole($role, ['campus_id' => $this->c2->id, 'department_id' => departmentKey(10)])->create();
+it('AZ-S17: niega todo a un alcance del departamento en otra modalidad', function (Role $role) {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $user = User::factory()->withRole($role, ['modality_id' => modalityOf('EAD')->id, 'department_id' => departmentKey(10)])->create();
 
     expect(inboxAbilitiesOf($user))->toBe([false, false])
-        ->and($user->can('viewAny', [ProposalReview::class, $this->c2, $this->department]))->toBeTrue();
+        ->and($user->can('viewAny', [ProposalReview::class, modalityOf('EAD'), $this->department]))->toBeTrue();
 })->with([Role::JefeDepartamento, Role::JefeProyectoDocente]);
 
-it('el jefe de departamento de todo el Tec decide la parte de su departamento en cualquier campus', function () {
+it('el jefe de departamento de todo el Tec decide la parte de su departamento en otra carrera de la modalidad', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create();
-    $inC2 = ProposalReview::factory()->create([
-        'career_proposal_id' => CareerProposal::factory()->submitted()->create(['campus_id' => $this->c2->id])->id,
+    $other = ProposalReview::factory()->create([
+        'career_proposal_id' => CareerProposal::factory()->submitted()->create()->id,
         'department_id' => $this->department->id,
     ]);
 
-    expect($jefe->can('decide', $inC2))->toBeTrue()
-        ->and($jefe->can('viewAny', [ProposalReview::class, $this->c2, $this->department]))->toBeTrue();
+    expect($jefe->can('decide', $other))->toBeTrue()
+        ->and($jefe->can('viewAny', [ProposalReview::class, modalityOf('PRES'), $this->department]))->toBeTrue();
 });
 
 it('al admin le permite todo', function () {

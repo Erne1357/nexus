@@ -13,6 +13,7 @@ use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Models\Group;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -36,7 +37,7 @@ function closeLoadAgreement(AcademicLoad $load, array $attributes = [], Agreemen
 {
     return InterdepartmentalAgreement::factory()->inStatus($status)->create([
         'term_id' => $load->term_id,
-        'campus_id' => $load->campus_id,
+        'campus_id' => loadCampus()->id,
         ...$attributes,
     ]);
 }
@@ -45,7 +46,7 @@ function closeLoadSharedGroup(AcademicLoad $load, array $attributes = [], Agreem
 {
     return InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
         'term_id' => $load->term_id,
-        'campus_id' => $load->campus_id,
+        'modality_id' => $load->modality_id,
         ...$attributes,
     ]);
 }
@@ -138,12 +139,18 @@ it('bloquea con acuerdos que esperan la respuesta del departamento', function ()
     );
 });
 
-it('no bloquea con acuerdos decididos, cancelados, de otro campus o periodo, ni con préstamos que pidió', function () {
+it('M1: bloquea con un grupo compartido sin respuesta de la modalidad de la carga, sea del campus que sea (el acuerdo no guarda campus)', function () {
+    closeLoadSharedGroup($this->load, ['from_department_id' => $this->load->department_id, 'group_id' => Group::factory()->create(['campus_id' => Campus::factory()->create(['code' => 'C9'])->id])->id]);
+
+    expect(fn () => app(CloseLoad::class)->handle($this->load, $this->user))->toThrow(ValidationException::class);
+});
+
+it('no bloquea con acuerdos decididos, cancelados, de otra modalidad o periodo, ni con préstamos que pidió', function () {
     foreach ([AgreementStatus::Accepted, AgreementStatus::Rejected, AgreementStatus::Cancelled] as $status) {
         closeLoadSharedGroup($this->load, ['from_department_id' => $this->load->department_id], $status);
         closeLoadAgreement($this->load, ['to_department_id' => $this->load->department_id], $status);
     }
-    closeLoadSharedGroup($this->load, ['from_department_id' => $this->load->department_id, 'campus_id' => Campus::factory()->create()->id]);
+    closeLoadSharedGroup($this->load, ['from_department_id' => $this->load->department_id, 'modality_id' => modalityOf('EAD')->id]);
     closeLoadAgreement($this->load, ['to_department_id' => $this->load->department_id, 'term_id' => AcademicLoad::factory()->create()->term_id]);
     closeLoadAgreement($this->load, ['from_department_id' => $this->load->department_id]);
     closeLoadSharedGroup($this->load, ['from_department_id' => Department::factory()->create()->id]);
@@ -155,11 +162,11 @@ it('no bloquea con acuerdos decididos, cancelados, de otro campus o periodo, ni 
 
 it('la policy deja cerrar al admin, al jefe del departamento y a Subdirección, y niega a los demás', function (?Role $role, bool $sameDepartment, bool $expected) {
     $campus = Campus::factory()->create();
-    $load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['campus_id' => $campus->id, 'department_id' => departmentKey(10)]);
+    $load = AcademicLoad::factory()->inStatus(LoadStatus::Staffing)->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10)]);
     $user = $role === null
         ? User::factory()->admin()->create()
         : User::factory()->withRole($role, [
-            'campus_id' => $campus->id,
+            'modality_id' => modalityOf('PRES')->id,
             ...($role === Role::Coordinador ? ['career_id' => careerKey(20)] : ($role === Role::Subdireccion ? [] : ['department_id' => departmentKey($sameDepartment ? 10 : 11)])),
         ])->create();
 

@@ -10,13 +10,16 @@ use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\Violation;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Lo que hoy impediría pasar la carga de un departamento a asignación docente, para que la asignación deshabilite
  * «Pasar a asignación docente» con su motivo en lugar de dejar que el jefe choque con el veto (tarea 3.9). Hace la
  * misma cuenta que el veto de Scheduling (BlockStaffingWithHardConflicts, docs/proceso/proceso-propuesto.md): los grupos
- * del departamento con choques duros, con el validador sobre la foto de ahora (olvida la que tuviera, es scoped), y,
- * en un campus con bloques de tiempo, los grupos no cancelados sin sesiones. El veto sigue siendo quien decide al
+ * del departamento con choques duros, con el validador sobre la foto de ahora de la modalidad de la carga (una sola
+ * validación con los grupos de todos sus campus; olvida la que tuviera, es scoped), y,
+ * en una modalidad con bloques de tiempo, los grupos no cancelados sin sesiones (de todos los campus de la carga, M1). El
+ * veto sigue siendo quien decide al
  * pasarla.
  */
 final class StaffingBlockersQuery
@@ -33,22 +36,35 @@ final class StaffingBlockersQuery
 
         $this->validator->forget();
         $hard = array_filter(
-            $this->validator->validateLoad($load->term, $load->campus, $department)->violations(),
+            $this->validator->validateLoad($load->term, $load->modality, $department)->violations(),
             fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
         );
 
         return [
-            'conflicted' => count(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard)))),
-            'unscheduled' => $load->campus->profile->usesTimeBlocks ? $this->unscheduled($load) : 0,
+            'conflicted' => count(array_intersect(
+                array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))),
+                $this->groups($load)->pluck('id')->all(),
+            )),
+            'unscheduled' => $load->modality->profile->usesTimeBlocks ? $this->unscheduled($load) : 0,
         ];
+    }
+
+    /**
+     * Los grupos de la carga: los del departamento en su modalidad y periodo, de todos los campus (M1).
+     *
+     * @return Builder<Group>
+     */
+    private function groups(AcademicLoad $load): Builder
+    {
+        return Group::query()
+            ->where('term_id', $load->term_id)
+            ->where('modality_id', $load->modality_id)
+            ->where('department_id', $load->department_id);
     }
 
     private function unscheduled(AcademicLoad $load): int
     {
-        return Group::query()
-            ->where('term_id', $load->term_id)
-            ->where('campus_id', $load->campus_id)
-            ->where('department_id', $load->department_id)
+        return $this->groups($load)
             ->where('status', '<>', GroupStatus::Cancelled->value)
             ->whereDoesntHave('sessions')
             ->count();

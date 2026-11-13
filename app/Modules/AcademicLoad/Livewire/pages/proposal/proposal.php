@@ -14,12 +14,17 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
+use App\Modules\AcademicLoad\Queries\ProposalHeader;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
+use App\Modules\AcademicLoad\Queries\ProposalSubject;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityScope;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Support\SemesterGrid;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -29,30 +34,38 @@ use Livewire\Component;
 use Mary\Traits\Toast;
 
 /**
- * Propuesta de carrera (tarea 2.7, reglas-de-negocio.md, "Propuesta de carrera"): lo que una carrera pide a
- * los departamentos en el periodo y el campus activos de la credencial, en dos vistas que el usuario alterna
- * (`?vista=reticula|tabla`): la retícula por semestre con un panel lateral para corregir una materia, y la
- * tabla por semestre con captura en línea. En las dos, el resumen de cada departamento elige sus materias
- * (`?depto=<código>`) y el filtro de grupos, las que piden o no piden grupos (`?grupos=con|sin`). En la retícula
- * las elegidas se marcan como una cadena de seriación resaltada, con la barra de selección (maqueta C, DESIGN.md,
- * "Retícula de la propuesta de carrera"); en la tabla el filtro oculta las demás filas y el departamento las
- * atenúa, o las oculta con `?filtrar=1`. Una cadena de la leyenda manda sobre esa marca mientras está resaltada.
+ * Propuesta de carrera (tarea 2.7, reglas-de-negocio.md, "Propuesta de carrera"): lo que una carrera pide a los
+ * departamentos en el periodo activo de la credencial y la modalidad de la pantalla (`?modalidad=`, WithModalityScope).
+ * Es una por carrera y modalidad, con una columna por campus donde se ofrece la carrera (M6, MS5; maqueta U1, opción A
+ * «Columnas por campus», DESIGN.md, "Propuesta de carrera por modalidad"), en dos vistas que el usuario alterna
+ * (`?vista=reticula|tabla`): la retícula por semestre con un panel lateral para corregir una materia en sus campus, y
+ * la tabla con las columnas de cada campus lado a lado y captura en línea. En las dos, el resumen de cada departamento
+ * elige sus materias (`?depto=<código>`) y el filtro de grupos, las que piden o no piden grupos en algún campus
+ * (`?grupos=con|sin`). En la retícula las elegidas se marcan como una cadena de seriación resaltada, con la barra de
+ * selección; en la tabla el filtro oculta las demás filas y el departamento las atenúa, o las oculta con `?filtrar=1`.
  *
- * La carrera es la del coordinador en ese campus; con varias, o para subdirección y admin, `?carrera=<id>`
- * elige entre las ofrecidas en el campus. Lo ven el coordinador, subdirección y el admin; el rol sin alcance
- * recibe 403 y un coordinador no puede pedir por la URL una carrera que no cubre. Si la propuesta no existe y
- * el usuario puede armarla (CareerProposalPolicy::create), la arma al entrar (StartCareerProposal). Todo lo que
- * muestra sale de CareerProposalQuery::overview; las escrituras pasan por UpdateProposalItem y
- * SubmitCareerProposal, con la policy de la propuesta antes de cada una.
+ * La carrera es la del coordinador; con varias, o para subdirección y admin, `?carrera=<id>` elige entre las ofrecidas.
+ * Lo ven el coordinador de la carrera en la modalidad (con o sin campus: ve toda la propuesta, M7), subdirección y el
+ * admin; el rol sin alcance recibe 403 y un coordinador no puede pedir por la URL una carrera que no cubre. Si la
+ * propuesta no existe y el usuario puede armarla (CareerProposalPolicy::create), la arma al entrar
+ * (StartCareerProposal). Corregir es por fila (CareerProposalPolicy::update sobre la fila, M7): un coordinador con
+ * campus solo cambia su columna, y la de otro campus se ve de solo lectura con quién la captura; uno sin campus cambia
+ * todas. En la columna de un campus inactivo, quien envía la propuesta solo deja en cero los grupos de cada fila
+ * («Dejar en 0», `zeroRow`; CareerProposalPolicy::zeroInactiveCampus, M14). Enviar es de cualquier coordinador de la
+ * carrera (M6). Todo lo que muestra sale de
+ * CareerProposalQuery::overview; las escrituras pasan por UpdateProposalItem y SubmitCareerProposal, con la policy de
+ * la propuesta o de la fila antes de cada una.
  */
 new #[Title('Propuesta de carrera')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityScope;
 
     private const array VIEWS = ['reticula', 'tabla'];
 
     private const array GROUP_FILTERS = ['', 'con', 'sin'];
+
+    private const array CELL_FIELDS = ['expected_students', 'requested_groups'];
 
     /** 'reticula' o 'tabla'; otro valor muestra la retícula. */
     #[Url(as: 'vista')]
@@ -78,9 +91,9 @@ new #[Title('Propuesta de carrera')] class extends Component
     public ?int $chain = null;
 
     /**
-     * Las filas guardadas desde el último cambio del filtro de grupos, de la vista o del departamento: la tabla las
-     * deja a la vista aunque ya no cumplan el filtro, para que no desaparezcan mientras se capturan (y el foco y el
-     * aviso «Guardado» tengan dónde quedarse).
+     * Las materias (por id) guardadas desde el último cambio del filtro de grupos, de la vista o del departamento: la
+     * tabla las deja a la vista aunque ya no cumplan el filtro, para que no desaparezcan mientras se capturan (y el
+     * foco y el aviso «Guardado» tengan dónde quedarse).
      *
      * @var list<string>
      */
@@ -96,7 +109,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     public ?string $proposalId = null;
 
     /**
-     * Las carreras que el usuario puede ver en el campus, para el selector, y por qué no hay propuesta que
+     * Las carreras que el usuario puede ver en la modalidad, para el selector, y por qué no hay propuesta que
      * mostrar. Se resuelven al entrar y al cambiar de carrera, no en cada pintado.
      *
      * @var list<array{id: string, name: string}>
@@ -122,9 +135,17 @@ new #[Title('Propuesta de carrera')] class extends Component
     #[Locked]
     public array $cellErrors = [];
 
-    /** La fila abierta en el panel. */
+    /** La materia abierta en el panel (su id). */
     #[Locked]
-    public ?string $itemId = null;
+    public ?string $subjectId = null;
+
+    /**
+     * Lo que se captura en el panel, por id de fila: solo las filas que el usuario puede corregir (su campus y su
+     * estado). save() vuelve a autorizar cada una, porque el navegador puede mandar otras.
+     *
+     * @var array<string, array{expected_students: int|string|null, requested_groups: int|string|null, notes: ?string}>
+     */
+    public array $form = [];
 
     /** El resumen que armó la acción de esta petición, para no armarlo otra vez al pintar. */
     private ?ProposalOverview $fresh = null;
@@ -132,12 +153,6 @@ new #[Title('Propuesta de carrera')] class extends Component
     public bool $showDrawer = false;
 
     public bool $showSubmit = false;
-
-    public ?int $expected_students = null;
-
-    public ?int $requested_groups = null;
-
-    public string $notes = '';
 
     /** Sube con cada rechazo: la tabla repinta sus campos con lo guardado, no con lo que se tecleó. */
     public int $rejections = 0;
@@ -151,9 +166,12 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->resolve($context, $proposals);
     }
 
-    public function updatedCampus(): void
+    /**
+     * Otra modalidad: la página se abre de nuevo en ella.
+     */
+    public function updatedModalidad(): void
     {
-        $this->reopenOnCampus('academic-load.proposal');
+        $this->redirectRoute('academic-load.proposal', ['modalidad' => $this->requiredModality()->code], navigate: true);
     }
 
     /**
@@ -161,7 +179,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'itemId', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
+        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
         $this->resolve($context, $proposals);
     }
 
@@ -199,7 +217,7 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * «Todas», «Con grupos» o «Sin grupos»: marca en la retícula, o deja en la tabla, las materias que piden o no
-     * piden grupos. Suelta la cadena resaltada.
+     * piden grupos en algún campus. Suelta la cadena resaltada.
      */
     public function filterGroups(string $filter): void
     {
@@ -240,7 +258,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function showDepartment(string $code, CareerProposalQuery $proposals): void
     {
-        $this->fresh = $proposals->overview($this->authorizedProposal('view', $proposals));
+        $this->fresh = $proposals->overview($this->authorizedProposal('view', $proposals), withPendingCatalogs: false);
         $ids = $this->walk($this->fresh)['ids'][$code] ?? null;
 
         if ($ids === null) {
@@ -264,64 +282,121 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Abre una materia en el panel lateral.
+     * Abre una materia en el panel lateral con sus filas de cada campus. Lo que se captura (`form`) son solo las filas
+     * que el usuario puede corregir: las de su campus (M7) que su estado deja cambiar.
      */
     public function edit(string $id, CareerProposalQuery $proposals): void
     {
         $proposal = $this->authorizedProposal('view', $proposals);
-        $item = $proposals->itemOrFail($proposal, $id);
+        $items = $proposals->subjectItemsOrFail($proposal, $id);
+        $this->fresh = $proposals->overview($proposal, withPendingCatalogs: false);
 
-        $this->itemId = $item->id;
-        $this->expected_students = $item->expected_students;
-        $this->requested_groups = $item->requested_groups;
-        $this->notes = (string) $item->notes;
+        $this->subjectId = $items->first()->subject_id;
+        $this->form = $items
+            ->filter(fn (ProposalItem $item): bool => $this->fresh->isEditable($item) && Gate::allows('update', [$proposal, $item]))
+            ->mapWithKeys(fn (ProposalItem $item): array => [$item->id => [
+                'expected_students' => $item->expected_students,
+                'requested_groups' => $item->requested_groups,
+                'notes' => (string) $item->notes,
+            ]])
+            ->all();
         $this->resetErrorBag();
         $this->showDrawer = true;
     }
 
     /**
-     * «Usar sugerido»: los grupos que da la regla de la propuesta para los esperados escritos.
+     * «Usar sugerido» de una fila del panel: los grupos que da la regla de la propuesta para los esperados escritos en
+     * esa fila. Solo en una fila que el usuario puede corregir (M7).
      */
-    public function useSuggested(CareerProposalQuery $proposals): void
+    public function useSuggested(string $id, CareerProposalQuery $proposals): void
     {
-        $proposal = $this->authorizedProposal('update', $proposals);
-        $item = $proposals->itemOrFail($proposal, (string) $this->itemId)->load(['subject' => fn ($query) => $query->withTrashed()]);
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id)->load(['subject' => fn ($query) => $query->withTrashed()]);
+        $this->authorize('update', [$proposal, $item]);
 
-        $this->requested_groups = SuggestedGroups::fromSettings()->for(max(0, (int) $this->expected_students), (bool) $item->subject->needs_lab);
+        $expected = max(0, (int) ($this->form[$item->id]['expected_students'] ?? $item->expected_students));
+        $this->form[$item->id] = [
+            'expected_students' => $this->form[$item->id]['expected_students'] ?? $item->expected_students,
+            'requested_groups' => SuggestedGroups::fromSettings()->for($expected, (bool) $item->subject->needs_lab),
+            'notes' => (string) ($this->form[$item->id]['notes'] ?? $item->notes),
+        ];
     }
 
     /**
-     * Guarda lo que se capturó en el panel.
+     * Guarda lo que se capturó en el panel, fila por fila. Antes de escribir nada autoriza cada fila (una de otro campus
+     * es 403, M7) y revisa que cada número esté escrito y en su rango; si una fila no se guarda, el panel se queda
+     * abierto con su error.
      */
-    public function save(CareerProposalQuery $proposals, UpdateProposalItem $update): void
+    public function save(CareerProposalQuery $proposals, UpdateProposalItem $update, ProposalItemRules $rules): void
     {
-        $proposal = $this->authorizedProposal('update', $proposals);
-        $item = $proposals->itemOrFail($proposal, (string) $this->itemId);
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $items = [];
+
+        foreach (array_keys($this->form) as $id) {
+            $item = $proposals->itemOrFail($proposal, (string) $id);
+            $this->authorize('update', [$proposal, $item]);
+            $items[$item->id] = $item;
+        }
 
         $this->resetErrorBag();
+        $values = [];
 
-        if ($this->expected_students === null || $this->requested_groups === null) {
-            $this->addError($this->expected_students === null ? 'expected_students' : 'requested_groups', 'Escribe un número.');
+        foreach ($items as $id => $item) {
+            $row = is_array($this->form[$id]) ? $this->form[$id] : [];
 
+            foreach (self::CELL_FIELDS as $field) {
+                if (! is_numeric($row[$field] ?? null) || (int) $row[$field] != $row[$field]) {
+                    $this->addError("form.{$id}.{$field}", 'Escribe un número.');
+                }
+            }
+
+            if (isset($row['notes']) && ! is_string($row['notes'])) {
+                $this->addError("form.{$id}.notes", 'La nota debe ser texto.');
+            }
+
+            if ($this->getErrorBag()->isNotEmpty()) {
+                continue;
+            }
+
+            try {
+                $values[$id] = $rules->normalize((int) $row['expected_students'], (int) $row['requested_groups'], $row['notes'] ?? null);
+            } catch (ValidationException $e) {
+                foreach ($e->errors() as $field => $messages) {
+                    $this->addError("form.{$id}.{$field}", $messages[0]);
+                }
+            }
+        }
+
+        if ($this->getErrorBag()->isNotEmpty()) {
             return;
         }
 
-        if ($this->applyChange($update, $item, $this->expected_students, $this->requested_groups, $this->notes)) {
-            $this->keepRow($item);
-            $this->showDrawer = false;
-            $this->success('Materia guardada', e($item->load(['subject' => fn ($query) => $query->withTrashed()])->subject->code));
+        foreach ($items as $id => $item) {
+            if (! $this->applyChange($update, $item, $values[$id]['expected_students'], $values[$id]['requested_groups'], $values[$id]['notes'])) {
+                return;
+            }
         }
+
+        if ($items !== []) {
+            $this->keepRow((string) $this->subjectId);
+            $first = reset($items);
+            $this->success('Materia guardada', e($first->load(['subject' => fn ($query) => $query->withTrashed()])->subject->code));
+        }
+
+        $this->showDrawer = false;
     }
 
     /**
-     * Guarda una celda de la tabla al salir del campo: los esperados o los grupos, sin tocar lo demás.
+     * Guarda una celda de la tabla al salir del campo: los esperados o los grupos de una fila, sin tocar lo demás. La
+     * fila de otro campus es 403 (M7).
      */
     public function saveCell(string $id, string $field, string $value, CareerProposalQuery $proposals, UpdateProposalItem $update): void
     {
-        $proposal = $this->authorizedProposal('update', $proposals);
+        $proposal = $this->authorizedProposal('view', $proposals);
         $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
 
-        if (! in_array($field, ['expected_students', 'requested_groups'], true)) {
+        if (! in_array($field, self::CELL_FIELDS, true)) {
             return;
         }
 
@@ -345,14 +420,39 @@ new #[Title('Propuesta de carrera')] class extends Component
         );
 
         if ($saved) {
-            $this->keepRow($item);
+            $this->keepRow($item->subject_id);
             unset($this->cellErrors["{$item->id}.expected_students"], $this->cellErrors["{$item->id}.requested_groups"]);
             $this->dispatch('cell-saved', id: $item->id, field: $field);
         }
     }
 
     /**
-     * Abre la confirmación de envío con los totales y el aviso de catálogos pendientes.
+     * «Dejar en 0» en una fila de un campus inactivo (M14): solo los grupos pedidos, sin tocar lo demás, con
+     * CareerProposalPolicy::zeroInactiveCampus. Cualquier otro cambio de esa fila sigue negado por saveCell().
+     */
+    public function zeroRow(string $id, CareerProposalQuery $proposals, UpdateProposalItem $update): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('zeroInactiveCampus', [$proposal, $item]);
+        $cell = "{$item->id}.requested_groups";
+        unset($this->cellErrors[$cell]);
+
+        try {
+            $update->zeroRequestedGroups($item, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e, $item->id, $cell);
+
+            return;
+        }
+
+        $this->keepRow($item->subject_id);
+        $this->dispatch('cell-saved', id: $item->id, field: 'requested_groups');
+        $this->success('Grupos en 0', e("{$item->subject->code} en {$item->campus->code}: ya no se piden grupos ahí."));
+    }
+
+    /**
+     * Abre la confirmación de envío con los totales por campus, a quién se avisa y el aviso de catálogos pendientes.
      */
     public function confirmSubmit(CareerProposalQuery $proposals): void
     {
@@ -383,7 +483,7 @@ new #[Title('Propuesta de carrera')] class extends Component
     public function with(CareerProposalQuery $proposals): array
     {
         if ($this->proposalId === null) {
-            return ['proposal' => null, 'overview' => null, ...$this->campusViewData()];
+            return ['proposal' => null, 'overview' => null, ...$this->modalityViewData()];
         }
 
         $proposal = $this->authorizedProposal('view', $proposals);
@@ -392,8 +492,11 @@ new #[Title('Propuesta de carrera')] class extends Component
         $walk = $this->walk($overview);
         $departments = $overview->departments();
         $gridSemesters = $overview->gridSemesters();
-        $selected = $this->itemId === null ? null : $this->findItem($overview, $this->itemId);
+        $selected = $this->subjectId === null ? null : $overview->subject($this->subjectId);
         $rule = SuggestedGroups::fromSettings();
+        $header = $overview->header((string) config('app.timezone'));
+        $viewerId = auth()->id() === null ? null : (string) auth()->id();
+        $columns = $this->columns($overview, $header);
 
         $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
 
@@ -420,9 +523,14 @@ new #[Title('Propuesta de carrera')] class extends Component
         $highlight = $this->highlight($gridSemesters, $chains, $departments);
 
         return [
-            ...$this->campusViewData(),
+            ...$this->modalityViewData(),
             'proposal' => $proposal,
             'overview' => $overview,
+            'columns' => $columns,
+            'coordinators' => $header->coordinatorLine($viewerId),
+            'offer' => $header->offer(),
+            'scopeNote' => $header->scopeNote(array_keys(array_filter($columns, fn (array $column): bool => $column['editable']))),
+            'sent' => $header->sentLine(),
             'departments' => $departments,
             'department' => $this->department,
             'onlyDepartment' => $this->onlyDepartment,
@@ -432,17 +540,17 @@ new #[Title('Propuesta de carrera')] class extends Component
             'parts' => $this->parts($overview),
             'majority' => $walk['majority'],
             'submitReason' => $this->submitReason($overview),
-            'suggested' => $this->suggested($selected, $rule),
             'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
-            'canEdit' => Gate::allows('update', $proposal),
+            'suggested' => $this->suggested($selected, $rule),
             'canSubmit' => Gate::allows('submit', $proposal),
+            'submitNotice' => $this->showSubmit ? $header->submitNotice($viewerId) : null,
             'gridSemesters' => $gridSemesters,
             'chains' => $chains,
             'highlight' => $highlight,
             'figures' => $this->figures($gridSemesters, $highlight['marked']),
             'tileStates' => ProposalTileState::cases(),
             'layout' => SemesterGrid::place(
-                array_map(fn (array $items): array => collect($items)->mapWithKeys(fn (ProposalItem $item): array => [$item->subject->code => $overview->specialtyFor($item)])->all(), $gridSemesters),
+                array_map(fn (array $subjects): array => collect($subjects)->mapWithKeys(fn (ProposalSubject $subject): array => [$subject->subject->code => $overview->specialtyFor($subject)])->all(), $gridSemesters),
                 array_column($overview->specialties, 'id'),
             ),
             'specialtyNames' => array_column($overview->specialties, 'name', 'id'),
@@ -454,18 +562,27 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Resuelve con la credencial el periodo, el campus y la carrera, y deja en propiedades bloqueadas la
-     * propuesta que se muestra (`proposalId`), las carreras del selector y, si no hay propuesta, por qué. Si falta
-     * y quien entra puede armarla, la arma (StartCareerProposal). Una carrera pedida por la URL que el usuario
-     * no cubre es 403. Después, la página pinta y escribe siempre en esa propuesta.
+     * Las modalidades del selector y la que muestra la página, para `<x-core::modality-scope>`.
+     *
+     * @return array{modalityOptions: Collection<int, Modality>, modalityCode: string}
+     */
+    private function modalityViewData(): array
+    {
+        return ['modalityOptions' => $this->modalityOptions(), 'modalityCode' => $this->requiredModality()->code];
+    }
+
+    /**
+     * Resuelve con la credencial el periodo, con la página la modalidad y la carrera, y deja en propiedades bloqueadas
+     * la propuesta que se muestra (`proposalId`), las carreras del selector y, si no hay propuesta, por qué. Si falta
+     * y quien entra puede armarla, la arma (StartCareerProposal). Una carrera pedida por la URL que el usuario no
+     * cubre es 403. Después, la página pinta y escribe siempre en esa propuesta.
      */
     private function resolve(Actor $context, CareerProposalQuery $proposals): void
     {
         $this->proposalId = null;
         $this->careers = [];
 
-        $campus = $this->requiredCampus();
-
+        $modality = $this->requiredModality();
         $term = $context->activeTerm();
 
         if ($term === null) {
@@ -474,13 +591,13 @@ new #[Title('Propuesta de carrera')] class extends Component
             return;
         }
 
-        if (! $proposals->termIsOpen($term, $campus)) {
-            $this->message = "El periodo {$term->code} no está abierto en este campus.";
+        if (! $proposals->termIsOpen($term, $modality)) {
+            $this->message = "El periodo {$term->code} no está abierto en {$modality->name}.";
 
             return;
         }
 
-        $careers = $proposals->careersFor($context, $campus);
+        $careers = $proposals->careersFor($context, $modality);
         $career = $this->careerId === '' ? $careers->first() : $careers->first(fn (Career $career): bool => $career->id === $this->careerId);
 
         abort_if($this->careerId !== '' && $career === null, 403);
@@ -488,16 +605,16 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->careers = $careers->map(fn (Career $career): array => ['id' => $career->id, 'name' => "{$career->code} · {$career->name}"])->all();
 
         if ($career === null) {
-            $this->message = 'Este campus no ofrece carreras cuya propuesta puedas ver.';
+            $this->message = "No hay carreras de {$modality->name} cuya propuesta puedas ver.";
 
             return;
         }
 
-        $proposal = $proposals->findFor($term, $campus, $career);
+        $proposal = $proposals->findFor($term, $modality, $career);
 
-        if ($proposal === null && Gate::allows('create', [CareerProposal::class, $campus, $career])) {
+        if ($proposal === null && Gate::allows('create', [CareerProposal::class, $modality, $career])) {
             try {
-                $proposal = app(StartCareerProposal::class)->handle($term, $campus, $career, auth()->user());
+                $proposal = app(StartCareerProposal::class)->handle($term, $modality, $career, auth()->user());
             } catch (ValidationException $e) {
                 $this->report($e);
             }
@@ -509,7 +626,7 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * La propuesta que se muestra, con la ability ya autorizada: una petición puede llegar de una página que
-     * abrió otro usuario.
+     * abrió otro usuario. Corregir no se autoriza aquí sino en cada fila (CareerProposalPolicy::update, M7).
      */
     private function authorizedProposal(string $ability, CareerProposalQuery $proposals): CareerProposal
     {
@@ -522,12 +639,12 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Deja a la vista de la tabla la fila guardada aunque ya no cumpla el filtro (`editedRows`).
+     * Deja a la vista de la tabla la materia guardada aunque ya no cumpla el filtro (`editedRows`).
      */
-    private function keepRow(ProposalItem $item): void
+    private function keepRow(string $subjectId): void
     {
-        if (! in_array($item->id, $this->editedRows, true)) {
-            $this->editedRows[] = $item->id;
+        if (! in_array($subjectId, $this->editedRows, true)) {
+            $this->editedRows[] = $subjectId;
         }
     }
 
@@ -545,20 +662,20 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Los errores de una Action: en su campo, en la celda de la tabla que se editó (`$cell`, o la del campo que
-     * nombra el error en la fila `$itemId`) y, juntos, en un toast.
+     * Los errores de una Action: en el panel, en el campo de su fila (`form.<fila>.<campo>`) o en el suyo; en la celda
+     * de la tabla que se editó (`$cell`, o la del campo que nombra el error en la fila `$itemId`) y, juntos, en un toast.
      */
     private function report(ValidationException $e, ?string $itemId = null, ?string $cell = null): void
     {
         $this->rejections++;
 
         foreach ($e->errors() as $field => $messages) {
-            $this->addError($field, $messages[0]);
+            $this->addError($itemId !== null && $cell === null && in_array($field, [...self::CELL_FIELDS, 'notes'], true) ? "form.{$itemId}.{$field}" : $field, $messages[0]);
         }
 
         if ($cell !== null) {
             $field = array_key_first($e->errors());
-            $own = in_array($field, ['expected_students', 'requested_groups'], true) ? "{$itemId}.{$field}" : $cell;
+            $own = in_array($field, self::CELL_FIELDS, true) ? "{$itemId}.{$field}" : $cell;
             $this->cellErrors[$own] = (string) collect($e->errors())->flatten()->first();
         }
 
@@ -566,8 +683,53 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * El tipo de bloqueo de cada fila que no se edita, por id; las editables no aparecen. La vista arma el texto
-     * (ProposalLock::message).
+     * Cada columna de la propuesta, por su llave (ProposalOverview::columnKey), con su campus, si el usuario la puede
+     * corregir y, si no, quién la captura (ProposalHeader::capturedBy). Se decide con la policy de la fila
+     * (CareerProposalPolicy::update) sobre una fila de esa columna: un coordinador con campus solo corrige la suya (M7).
+     * La de un campus inactivo no la corrige nadie, pero quien envía la propuesta deja en cero sus grupos (`zeroable`,
+     * M14), y eso dice en lugar de quién la captura. `zeroAlert`: el aviso de la columna, solo mientras la propuesta se
+     * edita y alguna fila de ella todavía pide grupos.
+     *
+     * @return array<string, array{campus: ?Campus, editable: bool, zeroable: bool, zeroAlert: bool, readonly: ?string}>
+     */
+    private function columns(ProposalOverview $overview, ProposalHeader $header): array
+    {
+        $samples = [];
+        $subjects = $overview->subjects();
+
+        foreach ($subjects as $subject) {
+            $samples += $subject->cells;
+        }
+
+        $requested = $overview->groupsByColumn($subjects);
+        $open = $overview->proposal->status->isEditable();
+
+        $columns = [];
+
+        foreach ($overview->columns as $campus) {
+            $key = ProposalOverview::columnKey($campus);
+            $editable = isset($samples[$key]) && Gate::allows('update', [$overview->proposal, $samples[$key]]);
+            $zeroable = ! $editable && isset($samples[$key]) && Gate::allows('zeroInactiveCampus', [$overview->proposal, $samples[$key]]);
+
+            $columns[$key] = [
+                'campus' => $campus,
+                'editable' => $editable,
+                'zeroable' => $zeroable,
+                'zeroAlert' => $zeroable && $open && ($requested[$key] ?? 0) > 0,
+                'readonly' => match (true) {
+                    $editable => null,
+                    $zeroable => "{$campus->code} está inactivo: solo se pueden dejar sus grupos en 0.",
+                    default => $header->capturedBy($key),
+                },
+            ];
+        }
+
+        return $columns;
+    }
+
+    /**
+     * El tipo de bloqueo de cada fila que no se edita por su estado, por id; las editables no aparecen. La vista arma
+     * el texto (ProposalLock::message). La columna de otro campus no es un bloqueo de la fila: la dice `columns`.
      *
      * @return array<string, ProposalLock>
      */
@@ -576,8 +738,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         $locks = [];
         $general = $this->generalLock($overview);
 
-        foreach ($overview->semesters as $items) {
-            foreach ($items as $item) {
+        foreach ($overview->subjects() as $subject) {
+            foreach ($subject->items() as $item) {
                 if (! $overview->isEditable($item)) {
                     $locks[$item->id] = $general ?? ProposalLock::Department;
                 }
@@ -602,7 +764,7 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * Las partes que un departamento regresó, por departamento, con cuántas materias con grupos se le piden y las
-     * filas que «Ver» recorre: lo que dicen las alertas de arriba.
+     * materias que «Ver» recorre: lo que dicen las alertas de arriba.
      *
      * @param  list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>  $departments
      * @param  array<string, array{all: list<string>, requested: list<string>}>  $ids
@@ -622,9 +784,9 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Una sola pasada por las filas, en el orden de la vista: por código de departamento, los ids de todas sus
-     * filas y de las que piden grupos (lo que «Ver» recorre), y el departamento con más materias, cuyo código no
-     * se repite en cada mosaico.
+     * Una sola pasada por las materias, en el orden de la vista: por código de departamento, los ids de todas sus
+     * materias y de las que piden grupos en algún campus (lo que «Ver» recorre), y el departamento con más materias,
+     * cuyo código no se repite en cada mosaico.
      *
      * @return array{ids: array<string, array{all: list<string>, requested: list<string>}>, majority: ?string}
      */
@@ -633,15 +795,15 @@ new #[Title('Propuesta de carrera')] class extends Component
         $ids = [];
         $counts = [];
 
-        foreach ($this->view === 'tabla' ? $overview->semesters : $overview->gridSemesters() as $items) {
-            foreach ($items as $item) {
-                $code = $item->subject->department->code;
+        foreach ($this->view === 'tabla' ? $overview->semesters : $overview->gridSemesters() as $subjects) {
+            foreach ($subjects as $subject) {
+                $code = $subject->subject->department->code;
                 $ids[$code] ??= ['all' => [], 'requested' => []];
-                $ids[$code]['all'][] = $item->id;
+                $ids[$code]['all'][] = $subject->id();
                 $counts[$code] = ($counts[$code] ?? 0) + 1;
 
-                if ($item->requested_groups > 0) {
-                    $ids[$code]['requested'][] = $item->id;
+                if ($subject->groups() > 0) {
+                    $ids[$code]['requested'][] = $subject->id();
                 }
             }
         }
@@ -661,14 +823,12 @@ new #[Title('Propuesta de carrera')] class extends Component
     {
         $parts = [];
 
-        foreach ($overview->semesters as $items) {
-            foreach ($items as $item) {
-                $parts[$item->subject->department_id] ??= match ($overview->reviewFor($item->subject->department_id)?->status) {
-                    ProposalReviewStatus::Returned => 'returned',
-                    ProposalReviewStatus::Accepted => 'accepted',
-                    default => 'pending',
-                };
-            }
+        foreach ($overview->subjects() as $subject) {
+            $parts[$subject->subject->department_id] ??= match ($overview->reviewFor($subject->subject->department_id)?->status) {
+                ProposalReviewStatus::Returned => 'returned',
+                ProposalReviewStatus::Accepted => 'accepted',
+                default => 'pending',
+            };
         }
 
         return $parts;
@@ -687,19 +847,29 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * Los grupos que sugiere la regla para los esperados del panel, al abrirlo y al guardar: el número de
-     * «Usar sugerido: N». Mientras se teclea lo recalcula el navegador con `$size`, el tamaño objetivo de la materia.
+     * Los grupos que sugiere la regla para los esperados de cada fila del panel que se captura, por id de fila, al
+     * abrirlo y al guardar: el número de «Usar sugerido: N». Mientras se teclea lo recalcula el navegador con
+     * `$suggestedSize`, el tamaño objetivo de la materia.
+     *
+     * @return array<string, int>
      */
-    private function suggested(?ProposalItem $selected, SuggestedGroups $rule): ?int
+    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule): array
     {
-        return $selected === null ? null : $rule->for(max(0, (int) $this->expected_students), (bool) $selected->subject->needs_lab);
+        if ($selected === null) {
+            return [];
+        }
+
+        return array_map(
+            fn (array $row): int => $rule->for(max(0, (int) ($row['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab),
+            $this->form,
+        );
     }
 
     /**
-     * Las filas de la tabla por semestre: las del filtro de grupos y, con «Mostrar solo», del departamento elegido,
+     * Las materias de la tabla por semestre: las del filtro de grupos y, con «Mostrar solo», del departamento elegido,
      * más las que se guardaron desde el último cambio de filtro (`editedRows`).
      *
-     * @return array<int, list<ProposalItem>>
+     * @return array<int, list<ProposalSubject>>
      */
     private function tableSemesters(ProposalOverview $overview): array
     {
@@ -712,20 +882,21 @@ new #[Title('Propuesta de carrera')] class extends Component
         $edited = array_flip($this->editedRows);
 
         return array_filter(array_map(
-            fn (array $items): array => array_values(array_filter($items, fn (ProposalItem $item): bool => isset($edited[$item->id]) || $this->matches($item, $department))),
+            fn (array $subjects): array => array_values(array_filter($subjects, fn (ProposalSubject $subject): bool => isset($edited[$subject->id()]) || $this->matches($subject, $department))),
             $overview->semesters,
         ));
     }
 
     /**
-     * Si la fila es del departamento (`$department`, '' cualquiera) y cumple el filtro de grupos.
+     * Si la materia es del departamento (`$department`, '' cualquiera) y cumple el filtro de grupos, con los grupos de
+     * todos sus campus.
      */
-    private function matches(ProposalItem $item, string $department): bool
+    private function matches(ProposalSubject $subject, string $department): bool
     {
-        return ($department === '' || $item->subject->department->code === $department)
+        return ($department === '' || $subject->subject->department->code === $department)
             && match ($this->groupsFilter) {
-                'con' => $item->requested_groups > 0,
-                'sin' => $item->requested_groups === 0,
+                'con' => $subject->groups() > 0,
+                'sin' => $subject->groups() === 0,
                 default => true,
             };
     }
@@ -733,9 +904,9 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * Lo que se marca en la retícula y lo que dice la barra de selección: la cadena resaltada, si hay; si no, las
      * materias del departamento elegido y del filtro de grupos, lo que cumpla los dos si están los dos. `marked`
-     * es null sin nada marcado (la barra no se ve).
+     * es null sin nada marcado (la barra no se ve); va por id de materia.
      *
-     * @param  array<int, list<ProposalItem>>  $gridSemesters
+     * @param  array<int, list<ProposalSubject>>  $gridSemesters
      * @param  array{of: array<string, int>, chains: list<array{index: int, name: string, size: int}>}  $chains
      * @param  list<array{department: Department, subjects: int, groups: int, review: ?ProposalReview}>  $departments
      * @return array{marked: array<string, true>|null, info: string}
@@ -746,18 +917,18 @@ new #[Title('Propuesta de carrera')] class extends Component
             return ['marked' => null, 'info' => ''];
         }
 
-        $items = array_merge(...array_values($gridSemesters));
-        $count = fn (int $subjects): string => $subjects.' '.($subjects === 1 ? 'materia' : 'materias');
+        $subjects = array_merge([], ...array_values($gridSemesters));
+        $count = fn (int $total): string => $total.' '.($total === 1 ? 'materia' : 'materias');
 
         if ($this->chain !== null) {
             $chain = $chains['chains'][$this->chain];
-            $members = array_filter($items, fn (ProposalItem $item): bool => ($chains['of'][$item->subject_id] ?? null) === $this->chain);
+            $members = array_filter($subjects, fn (ProposalSubject $subject): bool => ($chains['of'][$subject->id()] ?? null) === $this->chain);
 
-            return ['marked' => array_fill_keys(array_map(fn (ProposalItem $item): string => $item->id, $members), true), 'info' => "Cadena de {$chain['name']}: {$count(count($members))}."];
+            return ['marked' => array_fill_keys(array_map(fn (ProposalSubject $subject): string => $subject->id(), $members), true), 'info' => "Cadena de {$chain['name']}: {$count(count($members))}."];
         }
 
-        $members = array_values(array_filter($items, fn (ProposalItem $item): bool => $this->matches($item, $this->department)));
-        $marked = array_fill_keys(array_map(fn (ProposalItem $item): string => $item->id, $members), true);
+        $members = array_values(array_filter($subjects, fn (ProposalSubject $subject): bool => $this->matches($subject, $this->department)));
+        $marked = array_fill_keys(array_map(fn (ProposalSubject $subject): string => $subject->id(), $members), true);
         $filter = match ($this->groupsFilter) {
             'con' => 'con grupos',
             'sin' => 'sin grupos',
@@ -769,7 +940,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         $name = collect($departments)->first(fn (array $row): bool => $row['department']->code === $this->department)['department']->name;
-        $groups = array_sum(array_map(fn (ProposalItem $item): int => $item->requested_groups, $members));
+        $groups = array_sum(array_map(fn (ProposalSubject $subject): int => $subject->groups(), $members));
 
         return ['marked' => $marked, 'info' => $filter === null
             ? "{$name} ({$this->department}): {$count(count($members))} · {$groups} ".($groups === 1 ? 'grupo' : 'grupos').'.'
@@ -778,10 +949,10 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * Lo que dice el encabezado de cada semestre de la retícula, a la vista y para lectores de pantalla: sus
-     * grupos; con el filtro de grupos, cuántas de sus materias lo cumplen («2 sin grupos»); con solo un
-     * departamento, los grupos de ese departamento («18 de SC»). Con una cadena resaltada, sus grupos.
+     * grupos en todos los campus; con el filtro de grupos, cuántas de sus materias lo cumplen («2 sin grupos»); con
+     * solo un departamento, los grupos de ese departamento («18 de SC»). Con una cadena resaltada, sus grupos.
      *
-     * @param  array<int, list<ProposalItem>>  $gridSemesters
+     * @param  array<int, list<ProposalSubject>>  $gridSemesters
      * @param  array<string, true>|null  $marked
      * @return array<int, array{text: string, note: ?string}>
      */
@@ -794,31 +965,18 @@ new #[Title('Propuesta de carrera')] class extends Component
         };
         $department = $this->chain !== null || $marked === null ? '' : $this->department;
 
-        return array_map(function (array $items) use ($filter, $department, $marked): array {
+        return array_map(function (array $subjects) use ($filter, $department, $marked): array {
             if ($filter !== null) {
-                $subjects = count(array_filter($items, fn (ProposalItem $item): bool => isset($marked[$item->id])));
+                $total = count(array_filter($subjects, fn (ProposalSubject $subject): bool => isset($marked[$subject->id()])));
 
-                return ['text' => "{$subjects} {$filter}", 'note' => 'materias'.($department === '' ? '' : " de {$department}")." {$filter}"];
+                return ['text' => "{$total} {$filter}", 'note' => 'materias'.($department === '' ? '' : " de {$department}")." {$filter}"];
             }
 
-            $groups = array_sum(array_map(fn (ProposalItem $item): int => $department === '' || $item->subject->department->code === $department ? $item->requested_groups : 0, $items));
+            $groups = array_sum(array_map(fn (ProposalSubject $subject): int => $department === '' || $subject->subject->department->code === $department ? $subject->groups() : 0, $subjects));
 
             return $department === ''
                 ? ['text' => $groups.' '.($groups === 1 ? 'grupo' : 'grupos'), 'note' => null]
                 : ['text' => "{$groups} de {$department}", 'note' => "grupos de {$department}"];
         }, $gridSemesters);
-    }
-
-    private function findItem(ProposalOverview $overview, string $id): ?ProposalItem
-    {
-        foreach ($overview->semesters as $items) {
-            foreach ($items as $item) {
-                if ($item->id === $id) {
-                    return $item;
-                }
-            }
-        }
-
-        return null;
     }
 };

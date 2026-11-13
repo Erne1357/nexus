@@ -39,7 +39,7 @@ beforeEach(function () {
         CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $this->group->campus_id]);
     }
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->imparte->id])->create();
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 function quotasAs(User $user, Group $group): Testable
@@ -100,7 +100,7 @@ it('proponer a otra carrera de otro departamento crea el acuerdo y la muestra «
 function proposedForeign(object $test, int $seats = 5): InterdepartmentalAgreement
 {
     return InterdepartmentalAgreement::factory()->sharedGroup($seats)->create([
-        'term_id' => $test->group->term_id, 'campus_id' => $test->group->campus_id, 'group_id' => $test->group->id,
+        'term_id' => $test->group->term_id, 'group_id' => $test->group->id,
         'from_department_id' => $test->imparte->id, 'to_department_id' => $test->otro->id, 'career_id' => $test->foreign->id,
     ]);
 }
@@ -267,8 +267,9 @@ it('un jefe que pierde el permiso después de montar recibe 403 al guardar o agr
     expect(GroupQuota::query()->count())->toBe(1);
 });
 
-it('un grupo de otro campus no lo ve el coordinador de su carrera en otro campus', function () {
-    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => $this->owner->id])->create();
+it('AZ-S17: un grupo de otra modalidad no lo ve el coordinador de su carrera', function () {
+    modalityOf('EAD')->update(['is_active' => true]);
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('EAD')->id, 'career_id' => $this->owner->id])->create();
 
     quotasAs($coordinador, $this->group)->assertForbidden();
 });

@@ -44,7 +44,7 @@ beforeEach(function () {
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $this->sameDept->id, 'campus_id' => $this->group->campus_id]);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 /**
@@ -119,7 +119,7 @@ it('una carrera de otro departamento sin cupo no se agrega aquí: hay que propon
 
 it('no toca las propuestas vivas de otras carreras', function () {
     InterdepartmentalAgreement::factory()->sharedGroup(8)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
     ]);
 
@@ -169,7 +169,7 @@ it('no edita cupos si el departamento no tiene carga en el campus y el periodo (
     $this->load->delete();
 
     expect(setQuotasErrors([$this->owner->id => 25])['quotas'][0])
-        ->toBe("{$this->imparte->name} no tiene carga en {$this->group->campus->name} en este periodo: no se editan cupos.")
+        ->toBe("{$this->imparte->name} no tiene carga en {$this->group->modality->name} en este periodo: no se editan cupos.")
         ->and(seatsOf($this->group))->toBe([$this->owner->id => 20]);
 });
 
@@ -184,7 +184,7 @@ it('edita cupos con la carga en proposed, staffing o adjusting', function (LoadS
 it('con cupo aceptado de otro departamento, cambiar lugares es directo y quitarlo lo borra y cancela su acuerdo', function () {
     GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $this->foreign->id, 'max_seats' => 10]);
     $agreement = InterdepartmentalAgreement::factory()->sharedGroup(10)->inStatus(AgreementStatus::Accepted)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
     ]);
 
@@ -247,7 +247,7 @@ it('HC-07: una propuesta aceptada deja de apartar y cuenta como su cupo, sin con
 
 it('HC-07: si datos de antes ya se pasan de la capacidad, deja guardar lo que no sube el total y rechaza lo que lo sube (supuesto por confirmar)', function () {
     InterdepartmentalAgreement::factory()->sharedGroup(25)->create([
-        'term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'group_id' => $this->group->id,
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
         'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
     ]);
 

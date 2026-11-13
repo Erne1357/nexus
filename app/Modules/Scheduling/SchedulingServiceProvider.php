@@ -16,6 +16,7 @@ use App\Modules\AcademicLoad\Events\ProposalReviewAccepted;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -25,7 +26,9 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Events\RoomBlockAdded;
@@ -74,7 +77,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 {
     /**
      * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
-     * Facilities, y disponibilidad, horas externas y plazas de Faculty.
+     * Facilities, disponibilidad, horas externas y plazas de Faculty, y el perfil de una modalidad de Core.
      */
     private const array RECOMPUTE_ON = [
         GroupsCreated::class,
@@ -87,6 +90,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         AvailabilityChanged::class,
         ExternalLoadChanged::class,
         PositionChanged::class,
+        ModalityUpdated::class,
     ];
 
     /**
@@ -157,8 +161,8 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Quienes ven la carga ven los horarios y el tablero, y el coordinador los de su carrera en su campus (confirmado
-     * el 7 de noviembre de 2026). Crear grupos y editar sesiones es del coordinador de la carrera dueña y del jefe del
+     * Quienes ven la carga ven los horarios y el tablero, y el coordinador los de su carrera, de toda la modalidad
+     * aunque el puesto tenga un campus (MS6; confirmado el 7 de noviembre de 2026). Crear grupos y editar sesiones es del coordinador de la carrera dueña y del jefe del
      * departamento; asignar salón y repartir cupos, del jefe del departamento que imparte.
      */
     public function grants(): array
@@ -186,9 +190,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Demo por puntos: aceptar cada parte crea grupos y GroupsCreated recalcularía los choques del campus en cada
+     * Demo por puntos: aceptar cada parte crea grupos y GroupsCreated recalcularía los choques de la modalidad en cada
      * aceptación (21.9 s contra 4.1 s con el volumen demo); se descarta mientras se siembra y los choques se
-     * recalculan una vez por campus al llegar a «horarios».
+     * recalculan una vez por modalidad al llegar a «horarios».
      *
      * @return list<class-string>
      */
@@ -200,13 +204,16 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
-            new DemoStep(DemoCheckpoint::Scheduling, 'Choques recalculados una vez por campus', function (DemoContext $demo): void {
-                foreach (Campus::query()->whereIn('code', $demo->campuses)->orderBy('code')->get() as $campus) {
-                    app(SyncScheduleConflicts::class)->handle($demo->term(), $campus);
+            new DemoStep(DemoCheckpoint::Scheduling, 'Choques recalculados una vez por modalidad', function (DemoContext $demo): void {
+                $modalities = Modality::query()->withTrashed()->whereIn('id', Group::query()->where('term_id', $demo->term()->getKey())
+                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))->select('modality_id'));
+
+                foreach ($modalities->orderBy('code')->get() as $modality) {
+                    app(SyncScheduleConflicts::class)->handle($demo->term(), $modality);
                 }
             }),
             // Los cupos terminan la etapa 4, como el horario limpio que sigue.
-            new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Staffing, 'Cupos: grupos compartidos aceptados y cupos directos', fn (DemoContext $demo) => $demo->runSeederPerModality(SchedulingAgreementsDemoSeeder::class, [
                 'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -217,7 +224,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
             ])),
-            new DemoStep(DemoCheckpoint::Closing, 'Salón para toda sesión presencial y préstamos aceptados', fn (DemoContext $demo) => $demo->runSeeder(SchedulingAgreementsDemoSeeder::class, [
+            new DemoStep(DemoCheckpoint::Closing, 'Salón para toda sesión presencial y préstamos aceptados', fn (DemoContext $demo) => $demo->runSeederPerModality(SchedulingAgreementsDemoSeeder::class, [
                 'profile' => $demo->volume === DemoVolume::Massive ? 'massive' : 'demo',
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -235,16 +242,18 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         return [
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Cada foto publicada tiene los grupos no cancelados de su carga', function (DemoContext $demo) use ($groups): true|string {
                 $live = $groups($demo)->where('status', '!=', GroupStatus::Cancelled->value)
-                    ->get(['id', 'campus_id', 'department_id'])
-                    ->groupBy(fn (Group $group): string => "{$group->campus_id}|{$group->department_id}")
+                    ->get(['id', 'modality_id', 'department_id'])
+                    ->groupBy(fn (Group $group): string => "{$group->modality_id}|{$group->department_id}")
                     ->map(fn ($rows) => $rows->pluck('id')->sort()->values()->all());
+                $inDemo = fn (LoadSnapshot $snapshot): array => collect(SnapshotPayload::normalize($snapshot->payload)['groups'])
+                    ->filter(fn (array $group): bool => in_array($group['campus']['code'] ?? null, $demo->campuses, true))->pluck('id')->sort()->values()->all();
                 $snapshots = LoadSnapshot::query()->latestVersion()->with('academicLoad')
                     ->whereHas('academicLoad', fn (Builder $load) => $load->where('term_id', $demo->term()->getKey()))
                     ->get()
-                    ->filter(fn (LoadSnapshot $snapshot): bool => in_array($snapshot->payload['campus']['code'], $demo->campuses, true));
-                $wrong = $snapshots->filter(fn (LoadSnapshot $snapshot): bool => collect($snapshot->payload['groups'])->pluck('id')->sort()->values()->all()
-                    !== ($live["{$snapshot->academicLoad->campus_id}|{$snapshot->academicLoad->department_id}"] ?? []))->count();
-                $missing = $live->keys()->diff($snapshots->map(fn (LoadSnapshot $snapshot): string => "{$snapshot->academicLoad->campus_id}|{$snapshot->academicLoad->department_id}"))->count();
+                    ->filter(fn (LoadSnapshot $snapshot): bool => $inDemo($snapshot) !== []);
+                $wrong = $snapshots->filter(fn (LoadSnapshot $snapshot): bool => $inDemo($snapshot)
+                    !== ($live["{$snapshot->academicLoad->modality_id}|{$snapshot->academicLoad->department_id}"] ?? []))->count();
+                $missing = $live->keys()->diff($snapshots->map(fn (LoadSnapshot $snapshot): string => "{$snapshot->academicLoad->modality_id}|{$snapshot->academicLoad->department_id}"))->count();
 
                 return $wrong === 0 && $missing === 0 ? true : "{$wrong} fotos no coinciden con sus grupos y {$missing} cargas con grupos no tienen foto.";
             }),
@@ -264,8 +273,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 };
             }),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Staffing), 'Cupos decididos: hay grupos compartidos aceptados y ningún acuerdo pendiente', function (DemoContext $demo): true|string {
+                // Los acuerdos de los grupos de los campus de la demo: el grupo compartido no guarda campus (es el del grupo).
                 $agreements = InterdepartmentalAgreement::query()->where('term_id', $demo->term()->getKey())
-                    ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+                    ->whereIn('group_id', Group::query()->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))->select('id'));
                 $pending = (clone $agreements)->where('status', AgreementStatus::Proposed->value)->count();
                 $shared = (clone $agreements)->where('kind', AgreementKind::SharedGroup->value)->where('status', AgreementStatus::Accepted->value)->count();
 
@@ -278,7 +288,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
             new DemoCheck([DemoCheckpoint::Staffing], 'La oferta de salones alcanza para el horario', function (DemoContext $demo): true|string {
                 $seeder = app(SchedulingAgreementsDemoSeeder::class);
                 $missing = Campus::query()->whereIn('code', $demo->campuses)->orderBy('code')->get()
-                    ->flatMap(fn (Campus $campus): array => $campus->profile->usesRooms ? $seeder->missingRooms($demo->term(), $campus) : [])->all();
+                    ->flatMap(fn (Campus $campus): array => $seeder->missingRooms($demo->term(), $campus))->all();
 
                 return $missing === [] ? true : count($missing).' sesiones no tendrían salón sin choque, por ejemplo: '.implode('; ', array_slice($missing, 0, 3)).'.';
             }),

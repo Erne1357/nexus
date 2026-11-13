@@ -6,7 +6,7 @@ use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Authorization\Target;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Support\WeekTime;
 use Illuminate\Http\Request;
@@ -16,49 +16,49 @@ use OpenSpout\Common\Entity\Style\Style;
 use OpenSpout\Writer\XLSX\Writer;
 
 /**
- * El Excel de todo lo publicado de un campus y periodo (tarea 4.5): un renglón por sesión de cada grupo (o uno solo
- * si el grupo no tiene horario), con su departamento, materia, grupo, capacidad, docente, carrera dueña, retícula,
+ * El Excel de todo lo publicado de una modalidad y periodo (tarea 4.5; M1): un renglón por sesión de cada grupo (o uno
+ * solo si el grupo no tiene horario), con su departamento, el campus del grupo, materia, grupo, capacidad, docente, carrera dueña, retícula,
  * semestre, día, horas, tipo, salón, edificio y si el salón es prestado. Solo para el personal con sesión
  * (`academic_load.load.export`; decisión del usuario del 10 de noviembre de 2026: el Excel completo, para cualquiera
  * del personal que cubre alguno de los departamentos que publicaron). Se arma con openspout, que ya usa Imports.
  */
 final class CampusWorkbook implements StaffExport
 {
-    public const array HEADER = ['Departamento', 'Clave', 'Materia', 'Grupo', 'Créditos', 'Capacidad', 'Docente', 'Carrera', 'Retícula', 'Semestre', 'Día', 'Inicio', 'Fin', 'Tipo', 'Salón', 'Edificio', 'Préstamo'];
+    public const array HEADER = ['Departamento', 'Campus', 'Clave', 'Materia', 'Grupo', 'Créditos', 'Capacidad', 'Docente', 'Carrera', 'Retícula', 'Semestre', 'Día', 'Inicio', 'Fin', 'Tipo', 'Salón', 'Edificio', 'Préstamo'];
 
     /**
      * @param  list<string>  $snapshotIds
      */
     public function __construct(
         public readonly string $termId,
-        public readonly string $campusId,
+        public readonly string $modalityId,
         public readonly string $termCode,
-        public readonly string $campusCode,
+        public readonly string $modalityCode,
         public readonly array $snapshotIds,
         /** @var list<string> los departamentos que publicaron, para el permiso */
         public readonly array $departmentIds,
     ) {}
 
-    public static function fromRequest(PublishedScheduleQuery $query, Term $term, Campus $campus, Request $request): ?static
+    public static function fromRequest(PublishedScheduleQuery $query, Term $term, Modality $modality, Request $request): ?static
     {
-        $ids = $query->snapshotIds($term, $campus);
+        $ids = $query->snapshotIds($term, $modality);
 
-        return $ids === [] ? null : new self($term->getKey(), $campus->getKey(), $term->code, $campus->code, $ids, array_keys($query->departmentsOf($ids)));
+        return $ids === [] ? null : new self($term->getKey(), $modality->getKey(), $term->code, $modality->code, $ids, array_keys($query->departmentsOf($ids)));
     }
 
     public static function label(): string
     {
-        return 'Excel del campus';
+        return 'Excel de la modalidad';
     }
 
     public function key(): string
     {
-        return 'excel-'.hash('xxh128', implode('|', [$this->termId, $this->campusId, ...$this->snapshotIds]));
+        return 'excel-'.hash('xxh128', implode('|', [$this->termId, $this->modalityId, ...$this->snapshotIds]));
     }
 
     public function filename(): string
     {
-        return "Carga publicada {$this->termCode} {$this->campusCode}.xlsx";
+        return "Carga publicada {$this->termCode} {$this->modalityCode}.xlsx";
     }
 
     public function mimeType(): string
@@ -78,20 +78,20 @@ final class CampusWorkbook implements StaffExport
 
     public function scope(): Target
     {
-        return Target::of(campus: $this->campusId, unit: StaffExports::units($this->departmentIds));
+        return Target::of(modality: $this->modalityId, unit: StaffExports::units($this->departmentIds));
     }
 
     public function build(): string
     {
         $term = Term::query()->findOrFail($this->termId);
-        $campus = Campus::query()->findOrFail($this->campusId);
-        $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $campus, $this->snapshotIds);
+        $modality = Modality::withTrashed()->findOrFail($this->modalityId);
+        $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $modality, $this->snapshotIds);
         $path = sys_get_temp_dir().'/nexus-'.Str::uuid7().'.xlsx';
 
         try {
             $writer = new Writer;
             $writer->openToFile($path);
-            $writer->getCurrentSheet()->setName("{$this->termCode} {$this->campusCode}");
+            $writer->getCurrentSheet()->setName("{$this->termCode} {$this->modalityCode}");
             $writer->addRow(Row::fromValuesWithStyle(self::HEADER, (new Style)->withFontBold(true)));
 
             $profile = $schedule->profile();
@@ -111,8 +111,8 @@ final class CampusWorkbook implements StaffExport
     }
 
     /**
-     * Los renglones de un grupo: uno por sesión, o uno sin horario (también en un campus sin bloques de tiempo). En un
-     * campus sin salones, las columnas de salón van vacías en lugar de decir «Por asignar».
+     * Los renglones de un grupo: uno por sesión, o uno sin horario (también en una modalidad sin bloques de tiempo). En
+     * una modalidad sin salones, las columnas de salón van vacías en lugar de decir «Por asignar».
      *
      * @return list<list<string|int|null>>
      */
@@ -121,6 +121,7 @@ final class CampusWorkbook implements StaffExport
         $owner = array_find($group->placements, fn (array $placement): bool => $placement['is_owner']) ?? ($group->placements[0] ?? null);
         $base = [
             $departmentCode,
+            $group->campus['code'] ?? null,
             $group->subject['code'],
             $group->subject['name'],
             $group->code,

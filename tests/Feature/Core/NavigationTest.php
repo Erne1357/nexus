@@ -375,7 +375,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
         'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Horarios publicados'],
     ])
         ->and(navigationGroupsFor($admin, NavigationArea::Administracion))->toBe([
-            'institucion' => ['Campus', 'Periodos', 'Organigrama', 'Personas y puestos'],
+            'institucion' => ['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos'],
             'catalogos' => ['Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones'],
             'datos' => ['Importaciones'],
         ])
@@ -473,7 +473,7 @@ describe('menú', function () {
         // no lleva la insignia «Oculta»; lo oculto para los demás lo prueba MenuHiddenMarkTest.
         $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
         CatalogReview::factory()->for($term)->create();
-        AcademicLoad::factory()->for($term)->create(['campus_id' => $this->campus->id]);
+        AcademicLoad::factory()->for($term)->create();
     });
 
     it('muestra al coordinador sus entradas con su enlace, y no las del admin', function () {
@@ -495,7 +495,7 @@ describe('menú', function () {
             ->{'Académico'}->toContain('Validar catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
-            ->{'Administración'}->toBe(['Campus', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']);
+            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']);
     });
 
     it('muestra al docente su «Mi espacio»', function () {

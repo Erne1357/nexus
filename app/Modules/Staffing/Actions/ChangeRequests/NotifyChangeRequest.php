@@ -23,7 +23,7 @@ final class NotifyChangeRequest
 
     public function requested(ChangeRequest $request): void
     {
-        $heads = $this->recipients->holders(StaffingPermission::ChangeRequestDecide, Target::of(campus: $request->campus_id, unit: $request->department_id));
+        $heads = $this->recipients->holders(StaffingPermission::ChangeRequestDecide, Target::of(modality: $request->modality_id, unit: $request->department_id));
 
         $this->notifyHolders->handle($heads, new ChangeRequested($request));
     }
@@ -45,8 +45,8 @@ final class NotifyChangeRequest
         $request->loadMissing('group');
 
         $holders = $request->kind === ChangeRequestKind::Schedule
-            ? $this->recipients->holders(StaffingPermission::ChangeRequestApplySchedule, Target::of(campus: $request->campus_id, career: $request->group->owner_career_id))
-            : $this->recipients->holders(StaffingPermission::ChangeRequestApplyRoom, Target::of(campus: $request->campus_id, unit: $request->department_id));
+            ? $this->recipients->holders(StaffingPermission::ChangeRequestApplySchedule, Target::of(modality: $request->modality_id, campus: $request->group->campus_id, career: $request->group->owner_career_id))
+            : $this->recipients->holders(StaffingPermission::ChangeRequestApplyRoom, Target::of(modality: $request->modality_id, campus: $request->group->campus_id, unit: $request->department_id));
 
         $this->notifyHolders->handle($holders, new ChangeRequestPendingApplication($request));
     }

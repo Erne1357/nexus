@@ -14,7 +14,7 @@ use App\Modules\Scheduling\Notifications\LoanCancelled;
 /**
  * Avisa que quien pidió un préstamo de salón lo canceló (reglas-de-negocio.md, "Acuerdos entre departamentos";
  * confirmado el 8 de noviembre de 2026): a los mismos que al pedirlo, los titulares de `academic_load.agreement.decide`
- * del departamento dueño del salón, en el campus (LoanCancelled). Solo se cancela un acuerdo vivo (CancelAgreement lo
+ * del departamento dueño del salón, en la modalidad del acuerdo, sin campus (M12; LoanCancelled). Solo se cancela un acuerdo vivo (CancelAgreement lo
  * exige), así que un rechazo no pasa por aquí: a quien pidió ya se le avisó. Un grupo compartido retirado no avisa (el
  * usuario solo lo decidió para préstamos). Da a cuántos usuarios avisó.
  */
@@ -28,7 +28,7 @@ final class NotifyLoanCancelled
             return 0;
         }
 
-        $owners = $this->recipients->holders(AcademicLoadPermission::AgreementDecide, Target::of(campus: $agreement->campus_id, unit: $agreement->to_department_id));
+        $owners = $this->recipients->holders(AcademicLoadPermission::AgreementDecide, Target::of(modality: $agreement->modality_id, unit: $agreement->to_department_id));
 
         return $this->notifyHolders->handle($owners, new LoanCancelled($agreement))->count();
     }

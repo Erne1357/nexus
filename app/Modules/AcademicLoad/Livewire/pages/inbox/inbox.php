@@ -14,8 +14,11 @@ use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
+use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Rules\SelfApproval;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
@@ -27,9 +30,12 @@ use Mary\Traits\Toast;
 
 /**
  * Bandeja del departamento (tarea 2.8, reglas-de-negocio.md, "Propuesta de carrera"): lo que piden las carreras
- * de un campus a un departamento en el periodo y el campus activos de la credencial. A la izquierda las carreras
- * con el estado de su parte; a la derecha lo que pide la elegida, materia por materia contra el total de la
- * materia, con la sugerencia de paralelos y los botones Aceptar y Regresar (maqueta C).
+ * a un departamento en el periodo activo de la credencial y la modalidad de la pantalla (`?modalidad=`,
+ * WithModalityCampusFilter; M1, M6): una propuesta por carrera, con las filas de cada campus. El campus es un filtro
+ * (`?campus=`, «Todos» sin él; maqueta U2, opción A): deja en la lista y el detalle las cifras y las filas de ese campus,
+ * pero la parte se acepta o se regresa una sola vez, con todos sus campus. A la izquierda las carreras
+ * con el estado de su parte; a la derecha lo que pide la elegida, materia por materia y campus contra el total de la
+ * materia en ese campus, con la sugerencia de paralelos y los botones Aceptar y Regresar (maqueta C).
  *
  * El departamento es el del jefe; con varios, o para subdirección y admin, `?depto=<código>` lo elige. `?carrera=<id>`
  * abre una carrera: son los parámetros con los que llega la notificación de una propuesta enviada. Ven la bandeja
@@ -40,7 +46,7 @@ use Mary\Traits\Toast;
 new #[Title('Bandeja del departamento')] class extends Component
 {
     use Toast;
-    use WithCampusFilter;
+    use WithModalityCampusFilter;
 
     private const array FILTERS = ['todas', 'pendientes'];
 
@@ -60,12 +66,12 @@ new #[Title('Bandeja del departamento')] class extends Component
     #[Url(as: 'anomalias')]
     public bool $onlyAnomalies = false;
 
-    /** El periodo, el campus y el departamento con los que entró. El navegador no los puede cambiar. */
+    /** El periodo, la modalidad y el departamento con los que entró. El navegador no los puede cambiar. */
     #[Locked]
     public ?string $termId = null;
 
     #[Locked]
-    public ?string $campusId = null;
+    public ?string $modalityId = null;
 
     #[Locked]
     public ?string $departmentId = null;
@@ -95,9 +101,12 @@ new #[Title('Bandeja del departamento')] class extends Component
 
     public string $comment = '';
 
-    /** La materia de la que se ven los paralelos. */
+    /** La materia de la que se ven los paralelos, y su campus. */
     #[Locked]
     public ?string $parallelsSubjectId = null;
+
+    #[Locked]
+    public ?string $parallelsCampusId = null;
 
     public bool $showParallels = false;
 
@@ -110,9 +119,22 @@ new #[Title('Bandeja del departamento')] class extends Component
         $this->resolve($context, $inbox, $proposals);
     }
 
+    /**
+     * Otra modalidad: la página se abre de nuevo en ella, en el mismo campus del filtro si la otra lo tiene.
+     */
+    public function updatedModalidad(): void
+    {
+        $this->redirectRoute('academic-load.inbox', array_filter(['modalidad' => $this->requiredModality()->code, 'campus' => $this->campusFilter()?->code]), navigate: true);
+    }
+
+    /**
+     * Otro campus en el filtro: solo cambian las cifras y las filas que se ven; la parte que estaba por decidir se suelta.
+     */
     public function updatedCampus(): void
     {
-        $this->reopenOnCampus('academic-load.inbox');
+        $this->showAccept = $this->showReturn = $this->showParallels = false;
+        $this->reviewId = null;
+        $this->onlyAnomalies = false;
     }
 
     /**
@@ -120,7 +142,7 @@ new #[Title('Bandeja del departamento')] class extends Component
      */
     public function updatedDepartment(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
-        $this->reset('careerId', 'reviewId', 'showAccept', 'showReturn', 'comment', 'mobileDetail', 'onlyAnomalies', 'showParallels', 'parallelsSubjectId');
+        $this->reset('careerId', 'reviewId', 'showAccept', 'showReturn', 'comment', 'mobileDetail', 'onlyAnomalies', 'showParallels', 'parallelsSubjectId', 'parallelsCampusId');
         $this->resolve($context, $inbox, $proposals);
     }
 
@@ -167,15 +189,17 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * Abre el detalle de los paralelos de una materia de la bandeja.
+     * Abre el detalle de los paralelos de una materia de la bandeja en un campus (sin campus, la columna única de una
+     * modalidad sin salones).
      */
-    public function openParallels(string $subjectId, DepartmentInboxQuery $query): void
+    public function openParallels(string $subjectId, DepartmentInboxQuery $query, string $campusId = ''): void
     {
-        $subject = collect($this->inbox($query)->subjects)->first(fn (array $row): bool => $row['subject']->getKey() === $subjectId);
+        $subject = collect($this->inbox($query)->subjects)->first(fn (array $row): bool => $row['subject']->getKey() === $subjectId && ($row['campus']?->getKey() ?? '') === $campusId);
 
         abort_if($subject === null, 404);
 
         $this->parallelsSubjectId = $subject['subject']->getKey();
+        $this->parallelsCampusId = $subject['campus']?->getKey();
         $this->showAccept = $this->showReturn = false;
         $this->showParallels = true;
     }
@@ -257,14 +281,18 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function with(DepartmentInboxQuery $query): array
     {
         if ($this->departmentId === null) {
-            return ['inbox' => null, ...$this->campusViewData()];
+            return ['inbox' => null, ...$this->modalityViewData()];
         }
 
         $inbox = $this->inbox($query);
         $rows = $inbox->careers;
         $selected = $this->selected($inbox);
         $canDecide = $selected !== null && $selected['decidable'] && Gate::allows('decide', $selected['review']);
-        $allItems = $selected === null ? [] : $inbox->rowsFor($selected['career']->getKey());
+        $campus = $this->campusFilter();
+        $allItems = $selected === null ? [] : array_values(array_filter(
+            $inbox->rowsFor($selected['career']->getKey()),
+            fn (array $entry): bool => $campus === null || $entry['item']->campus_id === $campus->getKey(),
+        ));
         $anomalous = $this->anomalousRows($allItems);
 
         if ($anomalous === []) {
@@ -276,8 +304,18 @@ new #[Title('Bandeja del departamento')] class extends Component
         $target = $this->reviewId === null ? null : $this->targetOf($rows, $this->reviewId);
         $catalogsUrl = Route::has('catalog-validation.review') ? route('catalog-validation.review', ['department' => $inbox->department->getKey()]) : null;
 
+        $careerCounts = $inbox->careerCounts();
+
         return [
-            ...$this->campusViewData(),
+            ...$this->modalityViewData(),
+            'campusOptions' => $this->campusOptions(),
+            'shownCampus' => $campus,
+            'campusCounts' => $careerCounts['byCampus'],
+            'campusTotal' => $careerCounts['total'],
+            'figures' => array_combine(
+                array_map(fn (array $row): string => $row['career']->getKey(), $rows),
+                array_map(fn (array $row): array => [...$inbox->figuresFor($row['career']->getKey(), $campus?->getKey()), 'byCampus' => $campus === null ? $inbox->groupsByCampus($row['career']->getKey()) : []], $rows),
+            ),
             'inbox' => $inbox,
             'rows' => $rows,
             'visible' => $this->filter === 'pendientes'
@@ -302,16 +340,27 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * Resuelve con la credencial el periodo, el campus y el departamento, y deja en propiedades bloqueadas con qué
-     * pinta y escribe la página (o por qué no hay bandeja). Un departamento pedido por la URL que el usuario no
-     * ve es 403.
+     * Las modalidades del selector y la que muestra la página, para `<x-core::modality-scope>`.
+     *
+     * @return array{modalityOptions: Collection<int, Modality>, modalityCode: string}
+     */
+    private function modalityViewData(): array
+    {
+        return ['modalityOptions' => $this->modalityOptions(), 'modalityCode' => $this->requiredModality()->code];
+    }
+
+    /**
+     * Resuelve con la credencial el periodo, con la página la modalidad y el departamento, y deja en propiedades
+     * bloqueadas con qué pinta y escribe la página (o por qué no hay bandeja). Un departamento pedido por la URL que el
+     * usuario no ve es 403.
      */
     private function resolve(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
-        $this->termId = $this->campusId = $this->departmentId = null;
+        $this->termId = $this->modalityId = $this->departmentId = null;
         $this->departments = [];
 
-        $campus = $this->requiredCampus();
+        $modality = $this->requiredModality();
+        $this->modalidad = $modality->code;
 
         $term = $context->activeTerm();
 
@@ -321,13 +370,13 @@ new #[Title('Bandeja del departamento')] class extends Component
             return;
         }
 
-        if (! $proposals->termIsOpen($term, $campus)) {
-            $this->message = "El periodo {$term->code} no está abierto en este campus.";
+        if (! $proposals->termIsOpen($term, $modality)) {
+            $this->message = "El periodo {$term->code} no está abierto en {$modality->name}.";
 
             return;
         }
 
-        $departments = $inbox->departmentsFor($context, $campus, $term);
+        $departments = $inbox->departmentsFor($context, $modality, $term);
         $department = $this->department === '' ? $departments->first() : $departments->first(fn (Department $department): bool => $department->code === $this->department);
 
         abort_if($this->department !== '' && $department === null, 403);
@@ -335,14 +384,14 @@ new #[Title('Bandeja del departamento')] class extends Component
         $this->departments = $departments->map(fn (Department $department): array => ['code' => $department->code, 'name' => "{$department->code} · {$department->name}"])->all();
 
         if ($department === null) {
-            $this->message = 'No tienes un departamento con bandeja en este campus.';
+            $this->message = "No tienes un departamento con bandeja en {$modality->name}.";
 
             return;
         }
 
         $this->department = $department->code;
         $this->termId = $term->getKey();
-        $this->campusId = $campus->getKey();
+        $this->modalityId = $modality->getKey();
         $this->departmentId = $department->getKey();
         $this->message = null;
     }
@@ -355,24 +404,24 @@ new #[Title('Bandeja del departamento')] class extends Component
     {
         abort_if($this->departmentId === null, 403);
 
-        $inbox = $query->inboxOf((string) $this->termId, (string) $this->campusId, $this->departmentId);
-        $this->authorize('viewAny', [ProposalReview::class, $inbox->campus, $inbox->department]);
+        $inbox = $query->inboxOf((string) $this->termId, (string) $this->modalityId, $this->departmentId);
+        $this->authorize('viewAny', [ProposalReview::class, $inbox->modality, $inbox->department]);
 
         return $inbox;
     }
 
     /**
-     * La parte del departamento de la página, en su periodo y campus, por un id del cliente, con las policies de
+     * La parte del departamento de la página, en su periodo y modalidad, por un id del cliente, con las policies de
      * ver la bandeja y de decidir la parte; sin armar la bandeja.
      */
     private function decidable(string $id, DepartmentInboxQuery $query): ProposalReview
     {
-        abort_if($this->departmentId === null || $this->campusId === null, 403);
+        abort_if($this->departmentId === null || $this->modalityId === null, 403);
 
-        [$campus, $department] = $query->scopeOf($this->campusId, $this->departmentId);
-        $this->authorize('viewAny', [ProposalReview::class, $campus, $department]);
+        [$modality, $department] = $query->scopeOf($this->modalityId, $this->departmentId);
+        $this->authorize('viewAny', [ProposalReview::class, $modality, $department]);
 
-        $review = $query->reviewOrFail($department, $id, $this->termId, $this->campusId);
+        $review = $query->reviewOrFail($department, $id, $this->termId, $this->modalityId);
         $review->setRelation('department', $department);
         $this->authorize('decide', $review);
 
@@ -428,12 +477,13 @@ new #[Title('Bandeja del departamento')] class extends Component
             return 'Valida los catálogos del departamento para poder aceptar.';
         }
 
-        return "{$inbox->department->code} no tiene carga en {$inbox->campus->code} para este periodo.";
+        return "{$inbox->department->code} no tiene carga en ".($inbox->modality?->name ?? 'esta modalidad').' para este periodo.';
     }
 
     /**
-     * El chip de paralelos de cada materia que piden varias carreras, por id de materia; solo la que ahorra grupos
-     * o arma un grupo mixto. `label` es su texto y `saved`, los grupos que ahorra (negativo si hacen falta).
+     * El chip de paralelos de cada materia que piden varias carreras en un campus, por «<id de materia>|<id de campus>»;
+     * solo la que ahorra grupos o arma un grupo mixto. `label` es su texto y `saved`, los grupos que ahorra (negativo si
+     * hacen falta).
      *
      * @return array<string, array{label: string, saved: int}>
      */
@@ -452,7 +502,7 @@ new #[Title('Bandeja del departamento')] class extends Component
             $groups = fn (int $n): string => $n === 1 ? '1 grupo' : "{$n} grupos";
             $rest = $parallels->isMixed() ? 'Con grupos mixtos' : '1 grupo más de '.array_key_first($parallels->mixedShares);
 
-            $chips[$row['subject']->getKey()] = [
+            $chips[$row['subject']->getKey().'|'.($row['campus']?->getKey() ?? '')] = [
                 'saved' => $saved,
                 'label' => match (true) {
                     $parallels->suggested === 0 => 'Sin alumnos esperados',
@@ -467,9 +517,9 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * La materia que se ve en el drawer de paralelos, con su sugerencia, su resumen y el reparto por carrera.
+     * La materia que se ve en el drawer de paralelos, con su campus, su sugerencia, su resumen y el reparto por carrera.
      *
-     * @return array{subject: Subject, parallels: ParallelGroups, summary: string, mixed: ?string}|null
+     * @return array{subject: Subject, campus: ?Campus, parallels: ParallelGroups, summary: string, mixed: ?string}|null
      */
     private function parallelsTarget(DepartmentInbox $inbox): ?array
     {
@@ -478,8 +528,8 @@ new #[Title('Bandeja del departamento')] class extends Component
         }
 
         foreach ($inbox->subjects as $row) {
-            if ($row['subject']->getKey() === $this->parallelsSubjectId) {
-                return ['subject' => $row['subject'], 'parallels' => $row['parallels'], 'summary' => $this->describe($row['parallels']), 'mixed' => $this->describeMixed($row['parallels'])];
+            if ($row['subject']->getKey() === $this->parallelsSubjectId && $row['campus']?->getKey() === $this->parallelsCampusId) {
+                return ['subject' => $row['subject'], 'campus' => $row['campus'], 'parallels' => $row['parallels'], 'summary' => $this->describe($row['parallels']), 'mixed' => $this->describeMixed($row['parallels'])];
             }
         }
 
@@ -504,7 +554,7 @@ new #[Title('Bandeja del departamento')] class extends Component
      */
     private function goToNext(DepartmentInboxQuery $query, ProposalReview $review): void
     {
-        $left = $query->decidableCareers((string) $this->termId, (string) $this->campusId, $review->department);
+        $left = $query->decidableCareers((string) $this->termId, (string) $this->modalityId, $review->department);
         $code = $review->proposal->career->code;
         $next = collect($left)->first(fn (string $other): bool => $other > $code) ?? collect($left)->first();
 

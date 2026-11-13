@@ -4,6 +4,7 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 
 /*
@@ -13,10 +14,10 @@ use App\Modules\Core\Models\User;
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);
-    $this->load = AcademicLoad::factory()->create(['campus_id' => $this->campus->id, 'department_id' => departmentKey(10), 'status' => LoadStatus::Closed]);
+    $this->load = AcademicLoad::factory()->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => departmentKey(10), 'status' => LoadStatus::Closed]);
 });
 
-it('en un campus sin visto bueno publican Subdirección y el jefe del departamento', function (Role $role, array $scope, bool $publish) {
+it('en una modalidad sin visto bueno publican Subdirección y el jefe del departamento', function (Role $role, array $scope, bool $publish) {
     $user = User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create();
 
     expect($user->can('publish', $this->load))->toBe($publish);
@@ -29,8 +30,8 @@ it('en un campus sin visto bueno publican Subdirección y el jefe del departamen
     'docente' => [Role::Docente, [], false],
 ]);
 
-it('en un campus con visto bueno solo publica Subdirección', function (Role $role, array $scope, bool $publish) {
-    $this->campus->update(['settings' => ['requires_subdireccion_approval' => true]]);
+it('en una modalidad con visto bueno solo publica Subdirección', function (Role $role, array $scope, bool $publish) {
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
     $user = User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create();
 
     expect($user->can('publish', $this->load->fresh()))->toBe($publish);

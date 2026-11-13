@@ -10,13 +10,15 @@ use App\Modules\Scheduling\Validation\Violation;
 use Illuminate\Support\Collection;
 
 /**
- * Lo que le falta a la carga de un departamento en un campus para cerrarse o publicarse (HC-15; confirmado el 10 de
- * noviembre de 2026). Es la cuenta del veto (BlockClosingWithPendingGroups) y de la pantalla de cierre, que deshabilita
+ * Lo que le falta a la carga de un departamento en una modalidad (M1) para cerrarse o publicarse (HC-15; confirmado el 10
+ * de noviembre de 2026). Es la cuenta del veto (BlockClosingWithPendingGroups) y de la pantalla de cierre, que deshabilita
  * el botón con estos mismos motivos; el veto sigue decidiendo.
  *
  * Cuenta las banderas de cada grupo activo (GroupClosingFlagsQuery) con la regla por grupo de GroupClosingFlags
- * (ClosingBlockers::tally), la misma del tablero. El choque duro lo calcula el validador en ese momento, con la foto de
- * todo el campus (HC-01 cruza departamentos y campus), no `schedule_conflicts`, que el job pudo no recalcular todavía.
+ * (ClosingBlockers::tally), la misma del tablero, con el perfil de la modalidad de la carga. El choque duro lo calcula el
+ * validador en ese momento, una vez con la foto de la modalidad de la carga en el periodo (con los grupos de todos sus
+ * campus; HC-01 cruza departamentos, campus y modalidades), no `schedule_conflicts`, que el job pudo no recalcular
+ * todavía; solo cuentan los grupos de la carga.
  * Olvida la foto antes, porque el validador es `scoped` y en el mismo request pudo haber leído una vieja (por ejemplo,
  * justo después de asignar el último salón).
  */
@@ -38,25 +40,26 @@ final class ClosingBlockersQuery
             return new ClosingBlockers;
         }
 
-        return ClosingBlockers::tally($flags, $load->campus->profile, $this->conflicted($load, $flags->keys()->all()));
+        return ClosingBlockers::tally($flags, $load->modality->profile, $this->conflicted($load, $flags));
     }
 
     /**
-     * Los ids de los grupos del departamento con al menos un choque duro.
+     * Los ids de los grupos de la carga con al menos un choque duro: el validador, una vez por periodo y modalidad, con
+     * el alcance del departamento, cruzado con los grupos de la carga.
      *
-     * @param  list<string>  $groupIds
+     * @param  Collection<string, GroupClosingFlags>  $flags
      * @return list<string>
      */
-    private function conflicted(AcademicLoad $load, array $groupIds): array
+    private function conflicted(AcademicLoad $load, Collection $flags): array
     {
         $department = Department::query()->withTrashed()->whereKey($load->department_id)->firstOrFail();
 
         $this->validator->forget();
         $hard = array_filter(
-            $this->validator->validateLoad($load->term, $load->campus, $department)->violations(),
+            $this->validator->validateLoad($load->term, $load->modality, $department)->violations(),
             fn (Violation $violation): bool => $violation->severity === ConflictSeverity::Hard,
         );
 
-        return array_values(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $groupIds));
+        return array_values(array_intersect(array_unique(array_filter(array_map(fn (Violation $violation): ?string => $violation->groupId, $hard))), $flags->keys()->all()));
     }
 }

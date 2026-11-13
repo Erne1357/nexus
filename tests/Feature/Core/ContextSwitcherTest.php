@@ -201,7 +201,7 @@ it('con las carreras nombradas por Academic muestra sus códigos', function () {
         ->create();
     actingAsRole($user, Role::Docente);
 
-    Livewire::test('core::components.context-switcher')->assertSee('Coordinador de carrera · IGE, ISC (C2)');
+    Livewire::test('core::components.context-switcher')->assertSee('Coordinador de carrera · IGE, ISC · Presencial (C2)');
 });
 
 it('con un solo puesto no muestra selector de perfil', function () {
@@ -268,7 +268,17 @@ it('arma los renglones de perfil una vez al montar, no en cada pintado', functio
             return [];
         }
 
-        public function careerOptions(string $campusId): array
+        public function careerOptions(?string $campusId): array
+        {
+            return [];
+        }
+
+        public function careerNames(array $careerIds): array
+        {
+            return [];
+        }
+
+        public function careerGroups(?string $campusId): array
         {
             return [];
         }
@@ -280,7 +290,7 @@ it('arma los renglones de perfil una vez al montar, no en cada pintado', functio
         ->assertSee('Actuando como')
         ->call('$refresh')
         ->assertSee('Actuando como')
-        ->assertSee('Coordinador de carrera · 1 carrera (C2)');
+        ->assertSee('Coordinador de carrera · 1 carrera · Presencial (C2)');
 
     expect($labels->calls)->toBe(1);
 });
@@ -294,5 +304,5 @@ it('sin quien nombre las carreras, el resumen cuenta cuántas son', function () 
         ->create();
     actingAsRole($user, Role::Docente);
 
-    Livewire::test('core::components.context-switcher')->assertSee('Coordinador de carrera · 2 carreras (C2)');
+    Livewire::test('core::components.context-switcher')->assertSee('Coordinador de carrera · 2 carreras · Presencial (C2)');
 });

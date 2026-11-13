@@ -16,11 +16,11 @@ use App\Modules\Core\Models\User;
 
 beforeEach(function () {
     Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
-    $c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
     // Carga en curso (MN-04): así las pantallas de la carga están disponibles y el menú no lleva la insignia
     // «Oculta»; lo oculto para los demás lo prueba MenuHiddenTest.
-    AcademicLoad::factory()->for($term)->create(['campus_id' => $c2->id]);
+    AcademicLoad::factory()->for($term)->create();
 
     User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
 });

@@ -4,6 +4,7 @@ namespace App\Modules\Core\Authorization;
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -12,7 +13,6 @@ use Closure;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use LogicException;
 
@@ -22,17 +22,18 @@ use LogicException;
  * clase. La credencial ya no elige campus (#415): lo elige cada pantalla en su URL (WithCampusFilter).
  *
  * Los nombramientos salen del snapshot cacheado (AuthorizationSnapshots): los vigentes hoy que llenan lo que su
- * puesto pide (Role::scopeColumns). Aquí se descartan los de un campus desactivado o borrado, para todo: no cuentan
- * ni en las dimensiones que un permiso no declara. Un usuario inactivo, o ninguno, no tiene ningún puesto. `admin`
- * (un nombramiento `admin` vigente) no es un alcance: no sale en heldScopes().
+ * puesto pide (Role::scopeColumns). Aquí se descartan los de un campus o una modalidad desactivados o borrados (MS8),
+ * para todo: no cuentan ni en las dimensiones que un permiso no declara. Se hace en cada petición, no en el snapshot,
+ * para que activar o desactivar uno cuente sin esperar a que venza la caché. Un usuario inactivo, o ninguno, no tiene
+ * ningún puesto. `admin` (un nombramiento `admin` vigente) no es un alcance: no sale en heldScopes().
  *
  * Perfil activo (spec 8.1, AZ-S4): en la sesión de quien entró solo cuenta un puesto, el que eligió, con sus
  * nombramientos. activeRole() es la elección de la sesión (ACTIVE_ROLE) si todavía tiene ese puesto; si no, el último
  * que usó (`users.last_role`) si lo conserva; si no, el primero de heldRoles() en el orden del enum, y ese de omisión
  * queda fijo en la sesión la primera vez que se pregunta. Sin puestos no hay perfil. Elegir otro es del cambio de
  * perfil (SwitchRole); asRole() responde como si ya hubiera cambiado, sin tocar la sesión. Sus puestos efectivos
- * (effectiveRoles()) son solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, y campuses()) responde
- * con ellos. El contexto de otro usuario (forUser()) y uno sin usuario autenticado no tienen perfil activo (el código
+ * (effectiveRoles()) son solo ese; todo lo demás (allows(), allowsAny() y constrain() de gestión, campuses() y
+ * modalities()) responde con ellos. El contexto de otro usuario (forUser()) y uno sin usuario autenticado no tienen perfil activo (el código
  * de consola que fija el usuario del guard sí recibe el predeterminado): sus puestos efectivos son todos los que tiene,
  * porque responden «quién podría», que es lo que preguntan los avisos y las policies sobre otra persona.
  *
@@ -47,17 +48,21 @@ use LogicException;
  * - allows(): un permiso personal lo da cualquier puesto que tenga y lo conceda, aunque no sea el activo, solo sobre
  *   lo suyo (el dueño del objetivo es el usuario). Uno de gestión, alguno de sus puestos efectivos que lo conceda: el
  *   admin, sobre todo; otro, si alguno de los nombramientos que lo aportan cubre el objetivo en cada dimensión que el
- *   permiso declara. Un nombramiento que no fija una dimensión la cubre (en campus, solo los activos; un objetivo sin
- *   campus también); uno que la fija cubre si algún valor del objetivo coincide (en unidad, la unidad o una
- *   descendiente, OrgTree) y no cubre un objetivo sin valor. Las dimensiones que el permiso no declara no se revisan.
+ *   permiso declara. Un nombramiento que no fija una dimensión la cubre (en campus y en modalidad, solo los activos, y en modalidad también los inactivos si el permiso es ReachesInactiveModalities, M10; un
+ *   objetivo sin campus o sin modalidad también); uno que la fija cubre si algún valor del objetivo coincide (en
+ *   unidad, la unidad o una descendiente, OrgTree) y no cubre un objetivo sin valor. Las dimensiones que el permiso no
+ *   declara no se revisan. Así se lee a nivel de modalidad y se escribe con campus (AZ-S17, MS6): un permiso de lectura
+ *   declara la modalidad sin el campus y uno que escribe algo con campus declara los dos, y un coordinador o jefe de
+ *   proyecto docente con campus pasa el primero en todos los campus de su modalidad y el segundo solo en el suyo.
  * - allowsAny(): si puede sobre algo: algún puesto efectivo (cualquiera que tenga, si es personal) lo concede.
  * - constrain(): la misma regla en SQL, para las listas, con una cláusula por nombramiento que lo aporta.
  * - rolesAllowing(): los puestos (todos los que tiene, sin el admin) con que allows() daría que sí sobre un objetivo; de ahí salen los
  *   destinatarios de un aviso (RecipientsQuery::holders()).
  *
  * El contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario
- * autenticado; forUser() da, y recuerda en esta instancia, la de otro usuario, que comparte con esta los campus
- * activos. Lo cargado se recuerda por petición: se vuelve a cargar si el usuario autenticado cambia o tras refresh().
+ * autenticado; forUser() da, y recuerda en esta instancia, la de otro usuario, que comparte con esta los campus y las
+ * modalidades activos. Lo cargado se recuerda por petición: se vuelve a cargar si el usuario autenticado cambia o tras
+ * refresh().
  * El árbol de unidades (OrgTree, también `scoped`) se lee una vez por petición: un movimiento de unidades cuenta
  * desde la siguiente.
  */
@@ -82,7 +87,7 @@ final class Actor
 
     private bool $admin = false;
 
-    /** @var list<AssignmentScope> nombramientos que cuentan: sin el de admin, sin campus o en un campus activo */
+    /** @var list<AssignmentScope> los que cuentan: sin el de admin, sin campus o en uno activo, sin modalidad o en una activa */
     private array $assignments = [];
 
     /** @var list<Role> puestos que tiene, el admin incluido, en el orden del enum */
@@ -94,11 +99,20 @@ final class Actor
     /** @var Collection<int, Campus>|null todos los campus activos, por código */
     private ?Collection $activeCampuses = null;
 
-    /** El contexto que creó este con forUser(): de él salen los campus activos. */
-    private ?self $campusSource = null;
+    /** @var Collection<int, Modality>|null todas las modalidades activas, por código */
+    private ?Collection $activeModalities = null;
+
+    /** @var Collection<int, Modality>|null todas las modalidades no borradas, activas o no (M10), por código */
+    private ?Collection $existingModalities = null;
+
+    /** El contexto que creó este con forUser() o asRole(): de él salen los campus y las modalidades activos. */
+    private ?self $catalogSource = null;
 
     /** @var array<string, Collection<int, Campus>> campuses() por perfil activo ('' sin perfil) */
     private array $campuses = [];
+
+    /** @var array<string, Collection<int, Modality>> modalities() por perfil activo ('' sin perfil) */
+    private array $modalities = [];
 
     /** @var array<string, Term|null> periodo activo por elección de sesión ('' sin elección) */
     private array $terms = [];
@@ -112,8 +126,6 @@ final class Actor
     /**
      * @param  Closure(): mixed  $resolveUser  usuario de esta petición; sin sesión, el contexto
      *                                         activo es siempre el de omisión
-     * @param  (Closure(): mixed)|null  $resolveRequest  la petición en curso, de donde el puente activeCampus() lee
-     *                                                   `?campus=`; sin ella, no lo lee
      */
     public function __construct(
         private readonly Closure $resolveUser,
@@ -121,12 +133,11 @@ final class Actor
         private readonly AuthorizationSnapshots $snapshots,
         private readonly PermissionRegistry $permissions,
         private readonly ?Session $session = null,
-        private readonly ?Closure $resolveRequest = null,
     ) {}
 
     /**
      * Este mismo contexto si `$user` es el autenticado; si no, uno nuevo de `$user`, sin el
-     * periodo ni el perfil que eligió en su sesión ni el campus de la petición: cuenta todos sus puestos.
+     * periodo ni el perfil que eligió en su sesión: cuenta todos sus puestos.
      */
     public function forUser(User $user): self
     {
@@ -136,7 +147,7 @@ final class Actor
 
         if (! isset($this->others[$user->getKey()])) {
             $other = new self(fn (): User => $user, $this->orgTree, $this->snapshots, $this->permissions);
-            $other->campusSource = $this;
+            $other->catalogSource = $this;
             $this->others[$user->getKey()] = $other;
         }
 
@@ -147,13 +158,14 @@ final class Actor
      * El contexto de esta misma persona actuando con `$role`, sin tocar la sesión: responde lo que respondería esta
      * sesión después de cambiar a ese perfil, para preguntar antes de cambiar (OpenNotification). Sus puestos
      * efectivos son solo `$role` si lo tiene, y ninguno si no; no tiene periodo ni perfil elegidos en sesión ni lee el
-     * campus de la petición, así que campuses() son los de ese perfil. Comparte con este los campus activos.
+     * campus de la petición, así que campuses() y modalities() son los de ese perfil. Comparte con este los campus y
+     * las modalidades activos.
      */
     public function asRole(Role $role): self
     {
         $user = $this->user();
         $context = new self(fn (): ?User => $user, $this->orgTree, $this->snapshots, $this->permissions);
-        $context->campusSource = $this;
+        $context->catalogSource = $this;
         $context->pinnedRole = $role;
 
         return $context;
@@ -266,6 +278,9 @@ final class Actor
      * dimensiones ampliaría el alcance.
      * - `campus` es siempre una columna: todo recurso de un campus tiene `campus_id`. Un nombramiento sin campus deja
      *   los campus activos y los registros sin campus (lo general), como allows().
+     * - `modality` es siempre una columna, igual que el campus (AZ-S17): un nombramiento sin modalidad deja las
+     *   modalidades activas y, solo si el permiso es ReachesInactiveModalities (M10: ver a los alumnos de una modalidad
+     *   inactiva), también las inactivas no borradas, y los registros sin modalidad; uno con modalidad, solo esa y solo si sigue activa (MS8).
      * - `unit` y `career` son una columna o una Closure(Builder, list<string>): void, para cuando la dimensión sale de
      *   una relación. Un nombramiento que no las fija no agrega nada (también quedan los registros sin valor); uno que
      *   las fija pide los valores que cubre (en unidad, la unidad y sus descendientes) con whereIn, o se los pasa a la
@@ -329,7 +344,7 @@ final class Actor
                     $clause->whereRaw('true');
 
                     foreach ($permission->dimensions() as $dimension) {
-                        $this->constrainDimension($clause, $scope, $dimension, $mappings[$dimension->value]);
+                        $this->constrainDimension($clause, $scope, $permission, $dimension, $mappings[$dimension->value]);
                     }
                 });
             }
@@ -387,8 +402,9 @@ final class Actor
 
     /**
      * Los nombramientos de todos sus puestos (o solo de `$role`), sin importar el perfil activo: lo que la credencial
-     * muestra por cada puesto. Son los vigentes, completos y sin campus o en un campus activo, como modelos sin guardar
-     * armados desde el snapshot (rol, campus, unidad y carrera); el admin no sale, porque no es un alcance.
+     * muestra por cada puesto. Son los vigentes, completos, sin campus o en uno activo y sin modalidad o en una activa,
+     * como modelos sin guardar armados desde el snapshot (rol, campus, unidad, carrera y modalidad); el admin no sale,
+     * porque no es un alcance.
      *
      * @return Collection<int, RoleAssignment>
      */
@@ -412,6 +428,7 @@ final class Actor
             'campus_id' => $scope->campusId,
             'org_unit_id' => $scope->unitId,
             'career_id' => $scope->careerId,
+            'modality_id' => $scope->modalityId,
         ]));
     }
 
@@ -449,42 +466,35 @@ final class Actor
     }
 
     /**
-     * Puente mientras las pantallas de los demás módulos pasan al campus de la pantalla (#415): el campus que nombra
-     * `?campus=<código>` de la petición, si está en campuses(); si no, el único de campuses(), o ninguno. En una
-     * petición de Livewire, que no trae la consulta de la página, lo lee de su Referer, como Livewire lee `#[Url]`. Los
-     * contextos de forUser() y asRole() no leen la petición. No es alcance: allows() y constrain() no lo usan.
+     * Modalidades activas donde trabaja con sus puestos efectivos, por código (AZ-S17): las de sus nombramientos
+     * efectivos; con uno sin modalidad (jefe de departamento, Subdirección, docente), todas las activas. El admin
+     * efectivo, todas las activas. Se recuerdan por perfil activo, como campuses().
      *
-     * @deprecated Usa el concern Core\Livewire\Concerns\WithCampusFilter (campusFilter() o requiredCampus()) en la
-     *             pantalla; este puente se borra cuando ninguna lo use.
+     * @return Collection<int, Modality>
      */
-    public function activeCampus(): ?Campus
+    public function modalities(): Collection
     {
-        $campuses = $this->campuses();
-        $code = $this->requestedCampusCode();
-
-        return ($code === null ? null : $campuses->firstWhere('code', $code))
-            ?? ($campuses->count() === 1 ? $campuses->first() : null);
-    }
-
-    /**
-     * El código de `?campus=` de la petición; en una de Livewire, el de la página que la manda (Referer).
-     */
-    private function requestedCampusCode(): ?string
-    {
-        $request = $this->resolveRequest === null ? null : ($this->resolveRequest)();
-
-        if (! $request instanceof Request) {
-            return null;
+        if ($this->user() === null) {
+            return new Collection;
         }
 
-        $code = $request->query('campus');
+        $key = $this->activeRole()?->value ?? '';
 
-        if ($code === null && $request->hasHeader('X-Livewire')) {
-            parse_str((string) parse_url((string) $request->headers->get('referer'), PHP_URL_QUERY), $query);
-            $code = $query['campus'] ?? null;
+        if (isset($this->modalities[$key])) {
+            return $this->modalities[$key];
         }
 
-        return is_string($code) && $code !== '' ? $code : null;
+        $scopes = $this->assignmentsOf($this->effectiveRoles());
+
+        if ($this->isAdmin() || array_any($scopes, fn (AssignmentScope $scope): bool => $scope->modalityId === null)) {
+            return $this->modalities[$key] = $this->activeModalities();
+        }
+
+        $modalityIds = array_map(fn (AssignmentScope $scope): ?string => $scope->modalityId, $scopes);
+
+        return $this->modalities[$key] = $this->activeModalities()
+            ->filter(fn (Modality $modality): bool => in_array($modality->getKey(), $modalityIds, true))
+            ->values();
     }
 
     /**
@@ -591,18 +601,26 @@ final class Actor
      */
     private function coversTarget(AssignmentScope $scope, Permission $permission, Target $target): bool
     {
-        return array_all($permission->dimensions(), fn (Dimension $dimension): bool => $this->coversValues($scope, $dimension, $target->values($dimension)));
+        return array_all($permission->dimensions(), fn (Dimension $dimension): bool => $this->coversValues($scope, $permission, $dimension, $target->values($dimension)));
     }
 
     /**
+     * Un nombramiento sin campus cubre los campus activos; uno sin modalidad cubre las modalidades activas y, solo si el
+     * permiso es ReachesInactiveModalities (M10, la lectura de alumnos), también las inactivas no borradas; uno que
+     * fija campus o modalidad solo cubre ese valor si sigue activo (MS8).
+     *
      * @param  list<string>|null  $values  los del objetivo en la dimensión; null si no tiene
      */
-    private function coversValues(AssignmentScope $scope, Dimension $dimension, ?array $values): bool
+    private function coversValues(AssignmentScope $scope, Permission $permission, Dimension $dimension, ?array $values): bool
     {
         $fixed = $scope->value($dimension);
 
         if ($fixed === null) {
-            return $dimension !== Dimension::Campus || $values === null || array_any($values, fn (string $campus): bool => $this->isActiveCampus($campus));
+            return match ($dimension) {
+                Dimension::Campus => $values === null || array_any($values, fn (string $campus): bool => $this->isActiveCampus($campus)),
+                Dimension::Modality => $values === null || array_any($values, fn (string $modality): bool => $this->modalitiesReachedBy($permission)->contains(fn (Modality $reached): bool => $reached->getKey() === $modality)),
+                default => true,
+            };
         }
 
         if ($values === null) {
@@ -611,13 +629,15 @@ final class Actor
 
         return match ($dimension) {
             Dimension::Campus => $this->isActiveCampus($fixed) && in_array($fixed, $values, true),
+            Dimension::Modality => $this->isActiveModality($fixed) && in_array($fixed, $values, true),
             Dimension::Unit => array_any($values, fn (string $unit): bool => $this->orgTree->covers($fixed, $unit)),
             Dimension::Career => in_array($fixed, $values, true),
         };
     }
 
     /**
-     * Dónde está cada dimensión que el permiso declara; falla si falta una o si el campus no es una columna.
+     * Dónde está cada dimensión que el permiso declara; falla si falta una o si el campus o la modalidad no son una
+     * columna.
      *
      * @param  array<string, string|Closure>  $columns
      * @return array<string, string|Closure>
@@ -634,6 +654,10 @@ final class Actor
                 throw new LogicException("En constrain() el campus es una columna, no una Closure (permiso «{$permission->value}»).");
             }
 
+            if ($dimension === Dimension::Modality && ! is_string($mapping)) {
+                throw new LogicException("En constrain() la modalidad es una columna, no una Closure (permiso «{$permission->value}»).");
+            }
+
             $mappings[$dimension->value] = $mapping;
         }
 
@@ -645,7 +669,7 @@ final class Actor
      *
      * @param  Builder<covariant Model>  $clause
      */
-    private function constrainDimension(Builder $clause, AssignmentScope $scope, Dimension $dimension, string|Closure $mapping): void
+    private function constrainDimension(Builder $clause, AssignmentScope $scope, Permission $permission, Dimension $dimension, string|Closure $mapping): void
     {
         $fixed = $scope->value($dimension);
 
@@ -654,6 +678,16 @@ final class Actor
                 $clause->where(fn (Builder $campus) => $campus->whereIn($mapping, $this->activeCampuses()->modelKeys())->orWhereNull($mapping));
             } else {
                 $this->whereValues($clause, $mapping, $this->isActiveCampus($fixed) ? [$fixed] : []);
+            }
+
+            return;
+        }
+
+        if ($dimension === Dimension::Modality && is_string($mapping)) {
+            if ($fixed === null) {
+                $clause->where(fn (Builder $modality) => $modality->whereIn($mapping, $this->modalitiesReachedBy($permission)->modelKeys())->orWhereNull($mapping));
+            } else {
+                $this->whereValues($clause, $mapping, $this->isActiveModality($fixed) ? [$fixed] : []);
             }
 
             return;
@@ -695,11 +729,58 @@ final class Actor
      */
     private function activeCampuses(): Collection
     {
-        if ($this->campusSource !== null) {
-            return $this->campusSource->activeCampuses();
+        if ($this->catalogSource !== null) {
+            return $this->catalogSource->activeCampuses();
         }
 
         return $this->activeCampuses ??= Campus::query()->where('is_active', true)->orderBy('code')->get();
+    }
+
+    private function isActiveModality(string $modalityId): bool
+    {
+        return $this->activeModalities()->contains(fn (Modality $modality): bool => $modality->getKey() === $modalityId);
+    }
+
+    /**
+     * Todas las modalidades activas y no borradas (MS8), por código; como activeCampuses().
+     *
+     * @return Collection<int, Modality>
+     */
+    private function activeModalities(): Collection
+    {
+        if ($this->catalogSource !== null) {
+            return $this->catalogSource->activeModalities();
+        }
+
+        return $this->activeModalities ??= Modality::query()->where('is_active', true)->orderBy('code')->get();
+    }
+
+    /**
+     * Las modalidades que cubre un nombramiento sin modalidad para `$permission`: las activas y, si el permiso alcanza
+     * a las inactivas (M10), todas las no borradas.
+     *
+     * @return Collection<int, Modality>
+     */
+    private function modalitiesReachedBy(Permission $permission): Collection
+    {
+        return $permission instanceof ReachesInactiveModalities && $permission->reachesInactiveModalities()
+            ? $this->existingModalities()
+            : $this->activeModalities();
+    }
+
+    /**
+     * Todas las modalidades no borradas, activas o no (M10). Como activeModalities(), la comparten los contextos
+     * derivados.
+     *
+     * @return Collection<int, Modality>
+     */
+    private function existingModalities(): Collection
+    {
+        if ($this->catalogSource !== null) {
+            return $this->catalogSource->existingModalities();
+        }
+
+        return $this->existingModalities ??= Modality::query()->orderBy('code')->get();
     }
 
     private function resolvedUser(): ?User
@@ -720,14 +801,18 @@ final class Actor
         $this->loaded = true;
         $this->loadedFor = $user?->getKey();
         $this->activeCampuses = null;
+        $this->activeModalities = null;
+        $this->existingModalities = null;
         $this->campuses = [];
+        $this->modalities = [];
         $this->scopeModels = null;
         $this->terms = [];
 
         $snapshot = $user === null ? new AuthorizationSnapshot : $this->snapshots->for($user);
-        $this->admin = array_any($snapshot->scopes(Role::Admin), fn (AssignmentScope $scope): bool => $scope->campusId === null && $scope->unitId === null && $scope->careerId === null);
+        $this->admin = array_any($snapshot->scopes(Role::Admin), fn (AssignmentScope $scope): bool => $scope->campusId === null && $scope->unitId === null && $scope->careerId === null && $scope->modalityId === null);
         $scoped = array_filter($snapshot->scopes(), fn (AssignmentScope $scope): bool => $scope->role !== Role::Admin);
-        $this->assignments = array_values(array_filter($scoped, fn (AssignmentScope $scope): bool => $scope->campusId === null || $this->isActiveCampus($scope->campusId)));
+        $this->assignments = array_values(array_filter($scoped, fn (AssignmentScope $scope): bool => ($scope->campusId === null || $this->isActiveCampus($scope->campusId))
+            && ($scope->modalityId === null || $this->isActiveModality($scope->modalityId))));
 
         $held = array_map(fn (AssignmentScope $scope): Role => $scope->role, $this->assignments);
         $this->heldRoles = array_values(array_filter(Role::cases(), fn (Role $role): bool => $role === Role::Admin ? $this->admin : in_array($role, $held, true)));

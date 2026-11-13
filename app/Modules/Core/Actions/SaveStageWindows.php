@@ -3,7 +3,7 @@
 namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Enums\Stage;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Rules\TermRules;
@@ -11,17 +11,17 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Guarda de una vez las ventanas de una etapa del periodo, las que edita su panel: la general y las de varios
- * campus. `$general` es `['starts_on' => ..., 'ends_on' => ...]`, o null para quitar la ventana general; `$own`
- * va de id de campus a su ventana, o a null para quitar la de ese campus. Los campus que no vienen en `$own` no se
- * tocan.
+ * Guarda de una vez las ventanas de una etapa del periodo, las que edita su panel: la general y las de varias
+ * modalidades (M4). `$general` es `['starts_on' => ..., 'ends_on' => ...]`, o null para quitar la ventana general;
+ * `$own` va de id de modalidad a su ventana, o a null para quitar la de esa modalidad. Las modalidades que no vienen en
+ * `$own` no se tocan.
  *
  * Primero revisa las fechas de todas las ventanas (TermRules) y junta los errores; luego escribe todo en UNA
  * transacción, con SetTermStage y RemoveTermStage dentro (sus transacciones son puntos de guardado y su aviso
  * TermCalendarChanged sale hasta el commit de esta). Si una falla, no queda guardado nada ni sale ningún aviso.
  *
- * Los errores llegan con el nombre del campo del panel: `general.starts_on`, `own.{campus}.ends_on`; el error del
- * campus cae en su fecha de inicio.
+ * Los errores llegan con el nombre del campo del panel: `general.starts_on`, `own.{modalidad}.ends_on`; el error de la
+ * modalidad cae en su fecha de inicio.
  */
 final class SaveStageWindows
 {
@@ -41,8 +41,8 @@ final class SaveStageWindows
     {
         $windows = ['general' => $general];
 
-        foreach ($own as $campusId => $window) {
-            $windows["own.{$campusId}"] = $window;
+        foreach ($own as $modalityId => $window) {
+            $windows["own.{$modalityId}"] = $window;
         }
 
         $dates = [];
@@ -68,8 +68,8 @@ final class SaveStageWindows
             $stored = TermStage::query()->where('term_id', $term->getKey())->where('stage', $stage->value)->get();
 
             foreach ($windows as $path => $window) {
-                $campusId = $path === 'general' ? null : substr($path, 4);
-                $existing = $stored->first(fn (TermStage $candidate): bool => $candidate->campus_id === $campusId);
+                $modalityId = $path === 'general' ? null : substr($path, 4);
+                $existing = $stored->first(fn (TermStage $candidate): bool => $candidate->modality_id === $modalityId);
 
                 if ($window === null) {
                     if ($existing !== null) {
@@ -79,14 +79,14 @@ final class SaveStageWindows
                     continue;
                 }
 
-                $campus = $campusId === null ? null : Campus::query()->find($campusId);
+                $modality = $modalityId === null ? null : Modality::query()->find($modalityId);
 
-                if ($campusId !== null && $campus === null) {
-                    throw ValidationException::withMessages(["{$path}.starts_on" => 'El campus debe estar activo.']);
+                if ($modalityId !== null && $modality === null) {
+                    throw ValidationException::withMessages(["{$path}.starts_on" => 'La modalidad debe estar activa.']);
                 }
 
                 try {
-                    $this->setStage->handle($term, $stage, $campus, ...$dates[$path]);
+                    $this->setStage->handle($term, $stage, $modality, ...$dates[$path]);
                 } catch (ValidationException $e) {
                     throw ValidationException::withMessages($this->under($path, $e));
                 }
@@ -102,7 +102,7 @@ final class SaveStageWindows
         $errors = [];
 
         foreach ($e->errors() as $field => $messages) {
-            $field = $field === 'campus_id' ? 'starts_on' : $field;
+            $field = $field === 'modality_id' ? 'starts_on' : $field;
             $errors["{$path}.{$field}"] = $messages;
         }
 

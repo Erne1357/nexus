@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 /**
  * Los grupos de la foto de una carga al publicarla (tarea 4.3), con la forma de `groups` en
  * `AcademicLoad\Rules\SnapshotPayload` (docs/dominio/modelo-de-datos.md, «Contenido del snapshot»): los grupos no
- * cancelados del departamento en el campus y el periodo, con su materia, su docente, dónde cuentan en cada carrera,
+ * cancelados del departamento en la modalidad y el periodo, de todos sus campus (M1), con su campus, su materia, su docente, dónde cuentan en cada carrera,
  * sus sesiones con salón y edificio y, si les falta docente o salón, la justificación con que se cerraron (HC-15). Congela lo que hoy se calcula y cambiaría después: la colocación de cada carrera
  * con cupo (desde la retícula del momento), la clave final y los nombres.
  *
@@ -32,10 +32,12 @@ final class LoadSnapshotQuery
 
         $groups = Group::query()
             ->where('term_id', $load->term_id)
-            ->where('campus_id', $load->campus_id)
+            ->where('modality_id', $load->modality_id)
             ->where('department_id', $load->department_id)
             ->where('status', '<>', GroupStatus::Cancelled->value)
             ->with([
+                'campus' => $trashed,
+                'modality' => $trashed,
                 'subject' => $trashed,
                 'teacher' => $trashed,
                 'ownerCareer' => $trashed,
@@ -56,7 +58,8 @@ final class LoadSnapshotQuery
                 'code' => $group->code,
                 'status' => $group->status->value,
                 'capacity' => $group->capacity,
-                'justification' => $this->lacksTeacherOrRoom($group, $load->campus->profile->usesRooms) ? $group->close_justification : null,
+                'justification' => $this->lacksTeacherOrRoom($group, $group->modality->profile->usesRooms) ? $group->close_justification : null,
+                'campus' => $group->campus === null ? null : ['id' => $group->campus->id, 'code' => $group->campus->code, 'name' => $group->campus->name],
                 'subject' => [
                     'id' => $group->subject->id,
                     'code' => $group->subject->code,

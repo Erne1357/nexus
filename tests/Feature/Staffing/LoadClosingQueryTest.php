@@ -8,7 +8,7 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -136,13 +136,14 @@ it('P10: un grupo con docente dado de baja cuenta aparte, con su nombre, y no se
         ->and($closing->items)->toBe([]);
 });
 
-it('cuenta las solicitudes de cambio pendientes y aprobadas sin aplicar del departamento en el campus', function () {
+it('cuenta las solicitudes de cambio pendientes y aprobadas sin aplicar del departamento en la modalidad', function () {
     $group = $this->world->group();
     ChangeRequest::factory()->forGroup($group)->pending()->count(2)->create();
     ChangeRequest::factory()->forGroup($group)->approved()->create();
     ChangeRequest::factory()->forGroup($group)->rejected()->create();
     ChangeRequest::factory()->forGroup($group)->applied()->create();
-    ChangeRequest::factory()->forGroup($this->world->group(load: $this->world->loadIn(Campus::factory()->create())))->pending()->create();
+    // M1: la de un grupo de otro campus de la misma modalidad es de la misma carga; la de otra modalidad, no.
+    ChangeRequest::factory()->forGroup($this->world->group(load: $this->world->loadIn(Campus::factory()->create(), modality: modalityOf('EAD'))))->pending()->create();
 
     $requests = collect(loadClosingOf()->conditions())->firstWhere('key', 'requests');
 
@@ -153,10 +154,10 @@ it('cuenta las solicitudes de cambio pendientes y aprobadas sin aplicar del depa
 it('cuenta los grupos compartidos que propuso sin respuesta y los acuerdos que esperan su respuesta', function () {
     $other = Department::factory()->create(['name' => 'Ciencias Económico-Administrativas']);
     $base = ['term_id' => $this->world->term->id, 'campus_id' => $this->world->campus->id];
-    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
+    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'campus_id' => null, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
     InterdepartmentalAgreement::factory()->create([...$base, 'from_department_id' => $other->id, 'to_department_id' => $this->world->department->id]);
-    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'from_department_id' => $other->id, 'to_department_id' => $this->world->department->id]);
-    InterdepartmentalAgreement::factory()->sharedGroup()->inStatus(AgreementStatus::Accepted)->create([...$base, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
+    InterdepartmentalAgreement::factory()->sharedGroup()->create([...$base, 'campus_id' => null, 'from_department_id' => $other->id, 'to_department_id' => $this->world->department->id]);
+    InterdepartmentalAgreement::factory()->sharedGroup()->inStatus(AgreementStatus::Accepted)->create([...$base, 'campus_id' => null, 'from_department_id' => $this->world->department->id, 'to_department_id' => $other->id]);
 
     $conditions = collect(loadClosingOf()->conditions())->keyBy('key');
 
@@ -165,7 +166,7 @@ it('cuenta los grupos compartidos que propuso sin respuesta y los acuerdos que e
 });
 
 it('sin bloques de tiempo ni salones, no pide horario ni salón', function () {
-    $this->world->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'uses_rooms' => false, 'uses_time_blocks' => false]]);
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'uses_rooms' => false, 'uses_time_blocks' => false]]);
     $this->world->group(scheduled: false);
 
     expect(array_column(loadClosingOf()->conditions(), 'key'))->not->toContain('unscheduled', 'room');
@@ -206,20 +207,21 @@ it('da el historial con nombres, del más reciente al más antiguo', function ()
     ])->and($history[0]['comment'])->toBe('Falta el grupo vespertino');
 });
 
-it('da las cargas del departamento con grupos, una por campus, y deja fuera la que no tiene grupos', function () {
+it('da las cargas del departamento con grupos, una por modalidad con los grupos de todos sus campus, y deja fuera la que no tiene grupos (M1)', function () {
     $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
-    $c3 = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
-    $published = $this->world->loadIn($c1, LoadStatus::Published);
-    $this->world->loadIn($c3, LoadStatus::Draft);
+    $ead = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+    $enl = Campus::factory()->create(['code' => 'C4', 'name' => 'Campus IV']);
+    $published = $this->world->loadIn($ead, LoadStatus::Published, modality: modalityOf('EAD'));
+    $this->world->loadIn($enl, LoadStatus::Draft, modality: modalityOf('ENL'));
     $this->world->group();
-    $this->world->group(load: $published);
+    $this->world->group(load: $this->world->loadIn($c1));
     $this->world->group(load: $published);
     $this->world->group(load: $this->world->loadIn($c1, department: Department::factory()->create()));
 
     $loads = $this->query->loadsOf($this->world->term->id, $this->world->department->id);
 
-    expect($loads->map(fn (AcademicLoad $load): string => "{$load->campus->code}:{$load->status->value}:{$load->active_groups}")->all())
-        ->toBe(['C1:published:2', 'C2:staffing:1']);
+    expect($loads->map(fn (AcademicLoad $load): string => "{$load->modality->code}:{$load->status->value}:{$load->active_groups}")->all())
+        ->toBe(['EAD:published:1', 'PRES:staffing:2']);
 });
 
 it('el jefe ve el cierre de su departamento; Subdirección y el admin, de todos, y se sabe cuáles tienen grupos', function () {
@@ -239,7 +241,7 @@ it('el jefe ve el cierre de su departamento; Subdirección y el admin, de todos,
 });
 
 it('la línea de estados marca un paso actual en cualquier estado, con o sin visto bueno de Subdirección', function (LoadStatus $status, bool $approval) {
-    $this->world->campus->update(['settings' => [...CampusProfile::DEFAULTS, 'requires_subdireccion_approval' => $approval]]);
+    modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => $approval]]);
     $this->world->load->update(['status' => $status]);
 
     $current = array_values(array_filter(loadClosingOf()->steps(), fn (array $step): bool => $step['state'] === 'current'));

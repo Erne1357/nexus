@@ -21,6 +21,7 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -36,8 +37,11 @@ use RuntimeException;
 
 /**
  * Propuestas de carrera y bandejas de prueba (tareas 2.7 a 2.9), armadas con las Actions reales para que dejen
- * bitácora, historial de la carga y avisos en la campana, como en el uso normal. En cada campus de `$campuses`
- * donde el periodo `$term` está abierto, por cada carrera que se ofrece ahí:
+ * bitácora, historial de la carga y avisos en la campana, como en el uso normal. La propuesta es una por carrera y
+ * modalidad, con una fila por materia y campus (M6): en cada modalidad de los campus de `$campuses` donde el periodo
+ * `$term` está abierto, por cada carrera que se ofrece en alguno de esos campus, una propuesta. Solo se piden grupos en
+ * los campus de `$campuses`: las filas de otro campus quedan en cero grupos (en el piloto de C2 la carga solo tiene
+ * los grupos de C2, M1). Por cada propuesta:
  *
  * - la primera queda en borrador, con algunas filas corregidas; las demás se corrigen y se envían;
  * - cada departamento decide su parte: regresa con un comentario una de cada `$returnEvery`, deja pendiente una de
@@ -81,10 +85,11 @@ final class AcademicLoadDemoSeeder extends Seeder
     /**
      * @param  list<string>  $campuses  claves de campus
      * @param  bool  $complete  todas las carreras envían y todas las partes se aceptan (punto 4 de la demo)
+     * @param  string  $modality  la clave de la modalidad de la carga (Presencial)
      *
      * @throws RuntimeException en producción, si el periodo no existe o, con `$complete`, si algo no se puede completar
      */
-    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3, bool $complete = false): void
+    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, int $returnEvery = 4, int $pendingEvery = 3, int $readOlderThan = 3, bool $complete = false, string $modality = 'PRES'): void
     {
         $this->refuseProduction();
         $this->random = new Randomizer(new Mt19937($seed));
@@ -94,22 +99,19 @@ final class AcademicLoadDemoSeeder extends Seeder
         config(['queue.default' => 'sync']);
 
         try {
-            foreach ($campuses as $code) {
-                $campus = Campus::query()->where('code', $code)->firstOrFail();
+            // La carga de la demo es de una modalidad (Presencial) con sus grupos en esos campus: el campus es solo el lugar (MS3).
+            $campusModels = Campus::query()->whereIn('code', $campuses)->orderBy('code')->get();
+            $modalityModel = Modality::query()->where('code', $modality)->firstOrFail();
+            $codes = $campusModels->pluck('code')->implode(', ');
 
-                if (! TermOpening::query()->where('term_id', $termModel->id)->where('campus_id', $campus->id)->exists()) {
-                    if ($complete) {
-                        throw new RuntimeException("El periodo {$term} no está abierto en {$code}: no se pueden enviar sus propuestas.");
-                    }
-
-                    $this->command?->warn("El periodo {$term} no está abierto en {$code}: no se arman propuestas ahí.");
-
-                    continue;
-                }
-
+            if (TermOpening::query()->where('term_id', $termModel->id)->where('modality_id', $modalityModel->id)->exists()) {
                 $complete
-                    ? $this->completeCampus($termModel, $campus)
-                    : $this->seedCampus($termModel, $campus, $returnEvery, $pendingEvery);
+                    ? $this->completeModality($termModel, $modalityModel, $campusModels)
+                    : $this->seedModality($termModel, $modalityModel, $campusModels, $returnEvery, $pendingEvery);
+            } elseif ($complete) {
+                throw new RuntimeException("El periodo {$term} no está abierto en {$modalityModel->name} ({$codes}): no se pueden enviar sus propuestas.");
+            } else {
+                $this->command?->warn("El periodo {$term} no está abierto en {$modalityModel->name} ({$codes}): no se arman propuestas ahí.");
             }
 
             $this->markOlderNoticesRead($readOlderThan);
@@ -118,25 +120,29 @@ final class AcademicLoadDemoSeeder extends Seeder
         }
     }
 
-    private function seedCampus(Term $term, Campus $campus, int $returnEvery, int $pendingEvery): void
+    /**
+     * @param  Collection<int, Campus>  $campuses  los campus de la demo en la modalidad
+     */
+    private function seedModality(Term $term, Modality $modality, Collection $campuses, int $returnEvery, int $pendingEvery): void
     {
-        $careers = $this->offeredCareers($campus);
+        $careers = $this->offeredCareers($campuses);
         $decision = 0;
 
         foreach ($careers->values() as $index => $career) {
-            $coordinator = $this->coordinatorOf($campus, $career);
+            $coordinator = $this->coordinatorOf($modality, $career, $campuses);
 
             if ($coordinator === null) {
                 continue;
             }
 
-            $proposal = app(StartCareerProposal::class)->handle($term, $campus, $career, $coordinator);
+            $proposal = app(StartCareerProposal::class)->handle($term, $modality, $career, $coordinator);
 
             if ($proposal->status !== ProposalStatus::Draft) {
                 continue;
             }
 
-            $this->adjustRows($proposal, $coordinator);
+            $this->outsideTheDemo($proposal, $campuses);
+            $this->adjustRows($proposal, $campuses);
 
             if ($index === 0) {
                 continue;
@@ -155,13 +161,13 @@ final class AcademicLoadDemoSeeder extends Seeder
                     continue;
                 }
 
-                $head = $this->headOf($campus, $part->department);
+                $head = $this->headOf($modality, $part->department);
 
                 if ($head === null) {
                     continue;
                 }
 
-                $validated = app(CatalogReviewQuery::class)->pendingFor($term, $campus, $part->department) === [];
+                $validated = app(CatalogReviewQuery::class)->pendingFor($term, $modality, $part->department) === [];
 
                 try {
                     if ($decision % $returnEvery === 0) {
@@ -177,7 +183,7 @@ final class AcademicLoadDemoSeeder extends Seeder
             $proposal->refresh();
 
             if ($proposal->status === ProposalStatus::Returned && $index % 2 === 0) {
-                $this->adjustRows($proposal, $coordinator);
+                $this->adjustRows($proposal, $campuses);
                 $this->submit($proposal, $coordinator);
             }
         }
@@ -187,23 +193,26 @@ final class AcademicLoadDemoSeeder extends Seeder
      * Cada carrera ofrecida corrige unas filas, envía, y cada departamento acepta su parte con su jefe; una propuesta
      * regresada antes se vuelve a enviar. Lo que no se pueda, se detiene con el motivo.
      *
+     * @param  Collection<int, Campus>  $campuses  los campus de la demo en la modalidad
+     *
      * @throws RuntimeException
      */
-    private function completeCampus(Term $term, Campus $campus): void
+    private function completeModality(Term $term, Modality $modality, Collection $campuses): void
     {
-        foreach ($this->offeredCareers($campus) as $career) {
-            $where = "{$career->code} en {$campus->code}";
-            $coordinator = $this->coordinatorOf($campus, $career) ?? throw new RuntimeException("{$where} no tiene coordinador: nadie puede enviar su propuesta.");
-            $proposal = app(StartCareerProposal::class)->handle($term, $campus, $career, $coordinator);
+        foreach ($this->offeredCareers($campuses) as $career) {
+            $where = "{$career->code} en {$modality->name}";
+            $coordinator = $this->coordinatorOf($modality, $career, $campuses) ?? throw new RuntimeException("{$where} no tiene coordinador: nadie puede enviar su propuesta.");
+            $proposal = app(StartCareerProposal::class)->handle($term, $modality, $career, $coordinator);
 
             if (in_array($proposal->status, [ProposalStatus::Draft, ProposalStatus::Returned], true)) {
-                $this->adjustRows($proposal, $coordinator);
+                $this->outsideTheDemo($proposal, $campuses, complete: true);
+                $this->adjustRows($proposal, $campuses);
                 $proposal = $this->orFail(fn (): CareerProposal => app(SubmitCareerProposal::class)->handle($proposal, $coordinator), "La propuesta de {$where} no se pudo enviar");
             }
 
             foreach ($this->pendingParts($proposal) as $part) {
                 $what = "La parte de {$part->department->code} en la propuesta de {$where}";
-                $head = $this->headOf($campus, $part->department) ?? throw new RuntimeException("{$what} no tiene jefe que la acepte.");
+                $head = $this->headOf($modality, $part->department) ?? throw new RuntimeException("{$what} no tiene jefe que la acepte.");
 
                 $this->orFail(fn () => app(AcceptProposalReview::class)->handle($part, $head), "{$what} no se pudo aceptar");
             }
@@ -230,23 +239,79 @@ final class AcademicLoadDemoSeeder extends Seeder
     }
 
     /**
+     * Las carreras ofrecidas en alguno de los campus de la demo, una vez cada una.
+     *
+     * @param  Collection<int, Campus>  $campuses
      * @return Collection<int, Career>
      */
-    private function offeredCareers(Campus $campus): Collection
+    private function offeredCareers(Collection $campuses): Collection
     {
         return Career::query()
-            ->whereIn('id', CareerCampus::query()->where('campus_id', $campus->id)->where('is_active', true)->select('career_id'))
+            ->whereIn('id', CareerCampus::query()->whereIn('campus_id', $campuses->modelKeys())->where('is_active', true)->select('career_id'))
             ->orderBy('code')
             ->get();
     }
 
     /**
-     * Corrige unas cuantas filas como lo haría el coordinador: más o menos esperados, un grupo de más o de menos y,
-     * a veces, una nota. Las filas bloqueadas (de un departamento que ya aceptó) se saltan.
+     * Las filas de los campus que no son de la demo no piden grupos: la demo de un campus solo abre grupos en él (M1). Cada
+     * fila la deja en cero un coordinador que corrige su campus (M7): uno de ese campus o uno sin campus. Si nadie la
+     * cubre, con `$complete` se detiene (los grupos nacerían fuera de la demo); si no, la deja como está y lo avisa.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     *
+     * @throws RuntimeException con `$complete`, si una fila con grupos fuera de la demo no tiene quien la corrija
      */
-    private function adjustRows(CareerProposal $proposal, User $coordinator): void
+    private function outsideTheDemo(CareerProposal $proposal, Collection $campuses, bool $complete = false): void
     {
-        $items = ProposalItem::query()->where('career_proposal_id', $proposal->id)->where('expected_students', '>', 0)->orderBy('id')->get();
+        $items = ProposalItem::query()
+            ->where('career_proposal_id', $proposal->id)
+            ->whereNotNull('campus_id')
+            ->whereNotIn('campus_id', $campuses->modelKeys())
+            ->where('requested_groups', '>', 0)
+            ->with(['campus', 'subject'])
+            ->orderBy('id')
+            ->get();
+
+        foreach ($items as $item) {
+            $holder = $this->rowHolder($proposal, $item);
+
+            if ($holder === false) {
+                $what = "La fila de {$item->subject->code} en {$item->campus->code} de la propuesta {$proposal->id} pide grupos fuera de la demo y nadie la puede corregir";
+
+                if ($complete) {
+                    throw new RuntimeException("{$what}.");
+                }
+
+                $this->command?->warn("{$what}: se deja como está.");
+
+                continue;
+            }
+
+            try {
+                app(UpdateProposalItem::class)->handle($item, $item->expected_students, 0, $item->notes, $holder);
+            } catch (ValidationException) {
+                // Fila bloqueada: se deja como está.
+            }
+        }
+    }
+
+    /**
+     * Corrige unas cuantas filas de los campus de la demo como lo haría el coordinador de cada campus: más o menos
+     * esperados, un grupo de más o de menos y, a veces, una nota. Cada fila la corrige un coordinador que cubre su campus
+     * (M7): el de ese campus o uno sin campus; si nadie la cubre, se deja como está. Las filas bloqueadas (de un
+     * departamento que ya aceptó) se saltan.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     */
+    private function adjustRows(CareerProposal $proposal, Collection $campuses): void
+    {
+        $items = ProposalItem::query()
+            ->where('career_proposal_id', $proposal->id)
+            ->where(fn ($query) => $query->whereNull('campus_id')->orWhereIn('campus_id', $campuses->modelKeys()))
+            ->where('expected_students', '>', 0)
+            ->orderBy('id')
+            ->get();
+        $holders = [];
 
         foreach ($items as $item) {
             if ($this->random->getInt(1, 100) > 30) {
@@ -256,13 +321,26 @@ final class AcademicLoadDemoSeeder extends Seeder
             $expected = min(ProposalItemRules::MAX_EXPECTED_STUDENTS, max(0, $item->expected_students + $this->random->getInt(-8, 12)));
             $groups = min(ProposalItemRules::MAX_REQUESTED_GROUPS, max(0, $item->requested_groups + $this->random->getInt(-1, 1)));
             $notes = $this->random->getInt(1, 100) <= 25 ? self::NOTES[$this->random->getInt(0, count(self::NOTES) - 1)] : $item->notes;
+            $holder = $holders[$item->campus_id ?? ''] ??= $this->rowHolder($proposal, $item);
+
+            if ($holder === false) {
+                continue;
+            }
 
             try {
-                app(UpdateProposalItem::class)->handle($item, $expected, $groups, $notes, $coordinator);
+                app(UpdateProposalItem::class)->handle($item, $expected, $groups, $notes, $holder);
             } catch (ValidationException) {
                 // Fila bloqueada o fuera de rango: el coordinador no la puede corregir; se deja como está.
             }
         }
+    }
+
+    /**
+     * El primer coordinador que corrige la fila (ProposalUpdate sobre su campus, M7), o false si nadie la cubre.
+     */
+    private function rowHolder(CareerProposal $proposal, ProposalItem $item): User|false
+    {
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $item->campus_id, career: $proposal->career_id))[0]['user'] ?? false;
     }
 
     private function submit(CareerProposal $proposal, User $coordinator): ?CareerProposal
@@ -289,14 +367,30 @@ final class AcademicLoadDemoSeeder extends Seeder
             ->get();
     }
 
-    private function coordinatorOf(Campus $campus, Career $career): ?User
+    /**
+     * Quien arma y envía la propuesta: el primer coordinador de la carrera en la modalidad que corrige las filas de un
+     * campus de la demo; si no hay, cualquiera de la carrera en la modalidad (M6).
+     *
+     * @param  Collection<int, Campus>  $campuses
+     */
+    private function coordinatorOf(Modality $modality, Career $career, Collection $campuses): ?User
     {
-        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(campus: $campus->getKey(), career: $career->getKey()))[0]['user'] ?? null;
+        $recipients = app(RecipientsQuery::class);
+
+        foreach ($campuses as $campus) {
+            $holder = $recipients->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $modality->getKey(), campus: $campus->getKey(), career: $career->getKey()))[0] ?? null;
+
+            if ($holder !== null) {
+                return $holder['user'];
+            }
+        }
+
+        return $recipients->holders(AcademicLoadPermission::ProposalSubmit, Target::of(modality: $modality->getKey(), career: $career->getKey()))[0]['user'] ?? null;
     }
 
-    private function headOf(Campus $campus, Department $department): ?User
+    private function headOf(Modality $modality, Department $department): ?User
     {
-        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(campus: $campus->getKey(), unit: $department->getKey()))[0]['user'] ?? null;
+        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(modality: $modality->getKey(), unit: $department->getKey()))[0]['user'] ?? null;
     }
 
     /**

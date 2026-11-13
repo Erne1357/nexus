@@ -6,12 +6,13 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\Core\Models\Campus;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Fila de primer semestre con 30 elegibles, 30 esperados y un grupo solicitado, con un plan de la carrera de la
- * propuesta (como las arma StartCareerProposal).
+ * Fila de primer semestre en un campus nuevo con 30 elegibles, 30 esperados y un grupo solicitado, con un plan de la
+ * carrera de la propuesta (como las arma StartCareerProposal). Las pruebas que miran el campus de la fila lo pasan.
  *
  * @extends Factory<ProposalItem>
  */
@@ -25,6 +26,7 @@ class ProposalItemFactory extends Factory
     {
         return [
             'career_proposal_id' => CareerProposal::factory(),
+            'campus_id' => Campus::factory(),
             'subject_id' => Subject::factory(),
             'study_plan_id' => fn (array $attributes): string => StudyPlan::factory()->create([
                 'career_id' => CareerProposal::query()->findOrFail($attributes['career_proposal_id'])->career_id,

@@ -4,9 +4,13 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Scheduling\Queries\CampusGroupCountsQuery;
 use App\Modules\Staffing\Livewire\Concerns\ClosesLoads;
 use App\Modules\Staffing\Queries\LoadClosingQuery;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -17,8 +21,10 @@ use Mary\Traits\Toast;
 
 /**
  * Cierre de la carga (tarea 4.1; reglas-de-negocio.md, "Cierre y reapertura de la carga"; maqueta B2, elegida por el
- * usuario el 10 de noviembre de 2026): la carga de un departamento en el periodo activo, con una pestaña por campus
- * donde tiene grupos (con una sola, sin pestañas). De la carga elegida: la línea de estados y, debajo, la publicación
+ * usuario el 10 de noviembre de 2026): la carga de un departamento en el periodo activo y en la modalidad de la pantalla
+ * (`?modalidad=`, WithModalityCampusFilter; M1: una carga con los grupos de todos sus campus), que se elige con el select
+ * «Modalidad» (maqueta U2, opción A; sin select con una sola, MS16). Sin elegir, abre en la primera modalidad donde el
+ * departamento tiene grupos (MS30). De la carga elegida: la línea de estados y, debajo, la publicación
  * con su línea de versiones (`academic-load::components.publish-load`, que avisa con `load-published`), lo que le falta
  * para cerrar en cifras con la pantalla donde se arregla, las justificaciones de los grupos sin docente o sin salón
  * (`staffing::components.closing-justifications`, con su drawer aparte, `closing-justify-drawer`: los dos avisan con
@@ -26,21 +32,19 @@ use Mary\Traits\Toast;
  *
  * Entra quien cierra la carga de algún departamento (`academic_load.load.close`: el jefe y Subdirección, y el admin);
  * el jefe va a su departamento y Subdirección y el admin eligen (`?departamento=<id>`, como llegan los avisos del
- * cierre). Un departamento que no puede cerrar es 403; uno que sí, pero sin carga en el periodo, lo dice. `?campus=`
- * elige la pestaña; sin él, la del último campus que eligió en la sesión (Campus::LAST_CHOSEN_KEY, AZ-02) si tiene grupos ahí,
- * o la primera (#415: la credencial ya no elige campus).
+ * cierre). Un departamento que no puede cerrar es 403; uno que sí, pero sin carga en el periodo, lo dice. `?campus=` es
+ * un filtro de «Para cerrar» (las cifras de los grupos de ese campus; los trámites son de toda la carga) y de las
+ * justificaciones (los grupos de ese campus); sin él, toda la carga, con el reparto por campus de cada cifra. Sus
+ * opciones son los campus de la modalidad, cada uno con los grupos de la carga que se dan ahí (MS6); el cierre es de toda
+ * la carga.
  */
 new #[Title('Cierre de la carga')] class extends Component
 {
-    use ClosesLoads, Toast;
+    use ClosesLoads, Toast, WithModalityCampusFilter;
 
     /** El id del departamento; '' es el primero que puede ver. */
     #[Url(as: 'departamento')]
     public string $department = '';
-
-    /** El código del campus de la pestaña; '' es el único donde trabaja o el primero. */
-    #[Url(as: 'campus')]
-    public string $campus = '';
 
     #[Locked]
     public ?string $termId = null;
@@ -74,17 +78,25 @@ new #[Title('Cierre de la carga')] class extends Component
     }
 
     /**
-     * Elige la pestaña de otro campus del mismo departamento.
+     * Otra modalidad en el select: la carga del mismo departamento en ella (el filtro de campus se conserva si la otra
+     * modalidad lo tiene).
      */
-    public function selectCampus(string $code, Actor $context, LoadClosingQuery $query): void
+    public function updatedModalidad(Actor $context, LoadClosingQuery $query): void
     {
-        $this->campus = $code;
-
-        if ($context->campuses()->contains('code', $code)) {
-            session()->put(Campus::LAST_CHOSEN_KEY, $code);
-        }
-
         $this->resolve($context, $query);
+    }
+
+    /**
+     * Otro campus en el filtro de las justificaciones: se recuerda para la siguiente pantalla (AZ-02, supuesto por
+     * confirmar).
+     */
+    public function updatedCampus(): void
+    {
+        $chosen = $this->campusFilter();
+
+        if ($chosen !== null) {
+            session()->put(Campus::LAST_CHOSEN_KEY, $chosen->code);
+        }
     }
 
     /**
@@ -126,21 +138,58 @@ new #[Title('Cierre de la carga')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(LoadClosingQuery $query): array
+    public function with(LoadClosingQuery $query, CampusGroupCountsQuery $counts): array
     {
+        $scope = [
+            'modalityOptions' => $this->modalityOptions(),
+            'campusOptions' => $this->termId === null ? collect() : $this->campusOptions(),
+            'campusFilter' => $this->termId === null ? null : $this->campusFilter(),
+        ];
+
         if ($this->loadId === null) {
-            return ['closing' => null, 'tabs' => collect(), 'actions' => [], 'canViewLoad' => false];
+            return ['closing' => null, 'actions' => [], 'canViewLoad' => false, 'campusCounts' => [], 'campusSplit' => null, 'conditions' => [], ...$scope];
         }
 
         $load = $this->closingLoad($query);
         $closing = $query->of($load, $this->cachedBlockers());
+        $byCampus = $counts->ofLoad($load);
+        $filter = $scope['campusFilter']?->getKey();
 
         return [
             'closing' => $closing,
-            'tabs' => $query->loadsOf($load->term_id, $load->department_id),
+            'conditions' => $closing->conditionsIn($filter, $scope['campusOptions']->pluck('code', 'id')->all()),
+            'missingHere' => $closing->missingIn($filter),
+            'missingHereLabel' => $closing->missingLabelIn($filter),
+            'hardHere' => $closing->hasHardConflictsIn($filter),
             'actions' => $this->loadActions($closing),
             'canViewLoad' => Gate::allows('view', $load),
+            'campusCounts' => $byCampus,
+            'campusSplit' => $this->campusSplit($byCampus),
+            ...$scope,
         ];
+    }
+
+    /**
+     * «Una sola carga: 2 grupos en C1 y 1 en C2. Se cierra y se publica una vez.» cuando la carga tiene grupos en más
+     * de un campus (M1); si no, null.
+     *
+     * @param  array<string, int>  $byCampus
+     */
+    private function campusSplit(array $byCampus): ?string
+    {
+        $parts = array_values(array_filter($byCampus, fn (int $total): bool => $total > 0));
+
+        if (count($parts) < 2) {
+            return null;
+        }
+
+        $codes = array_keys(array_filter($byCampus, fn (int $total): bool => $total > 0));
+        $phrases = array_map(fn (int $index): string => $index === 0
+            ? $parts[0].' '.($parts[0] === 1 ? 'grupo' : 'grupos')." en {$codes[0]}"
+            : "{$parts[$index]} en {$codes[$index]}", array_keys($parts));
+        $last = array_pop($phrases);
+
+        return 'Una sola carga: '.implode(', ', $phrases)." y {$last}. Se cierra y se publica una vez.";
     }
 
     protected function authorizeLoad(AcademicLoad $load): void
@@ -174,7 +223,7 @@ new #[Title('Cierre de la carga')] class extends Component
         if ($this->department !== '' && $department === null) {
             // Uno que puede cerrar pero sin carga en el periodo (el del jefe, sin filas en academic_loads) lo dice; uno
             // ajeno es 403.
-            $own = $query->closableDepartment($context, $this->department) ?? abort(403);
+            $own = $query->closableDepartment($context, $this->department, $this->requiredModality()->getKey()) ?? abort(403);
             $this->departments = $departments->filter(fn (Department $option): bool => $option->has_groups)
                 ->map(fn (Department $option): array => ['id' => $option->id, 'name' => "{$option->code} · {$option->name}"])->values()->all();
             $this->message = "{$own->name} no tiene carga en {$term->name}.";
@@ -195,19 +244,38 @@ new #[Title('Cierre de la carga')] class extends Component
         $this->departmentId = $department->getKey();
         $this->department = $department->getKey();
         $loads = $query->loadsOf($term->getKey(), $department->getKey());
-        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === $this->campus)
-            ?? $loads->first(fn (AcademicLoad $candidate): bool => $candidate->campus->code === session(Campus::LAST_CHOSEN_KEY))
-            ?? $loads->first();
+        $modality = $this->modalityOf($loads);
+        $load = $loads->first(fn (AcademicLoad $candidate): bool => $candidate->modality_id === $modality->getKey());
+        $this->modalidad = $modality->code;
 
         if ($load === null) {
-            $this->campus = '';
-            $this->message = "{$department->name} no tiene grupos en {$term->name}: su carga se queda en borrador.";
+            $this->message = "{$department->name} no tiene grupos en {$modality->name} en {$term->name}: su carga se queda en borrador.";
 
             return;
         }
 
-        $this->campus = $load->campus->code;
         $this->message = null;
         $this->showLoad($load, $query);
+    }
+
+    /**
+     * La modalidad de la pantalla: la elegida si está entre las opciones; sin elegir (o una que no se ofrece), la
+     * primera por clave donde el departamento tiene una carga con grupos, para no abrir en una modalidad vacía (MS30); si
+     * no tiene ninguna, la de omisión de WithModalityScope.
+     *
+     * @param  Collection<int, AcademicLoad>  $loads  las del departamento con grupos, por clave de la modalidad
+     */
+    private function modalityOf(Collection $loads): Modality
+    {
+        $options = $this->modalityOptions();
+        $chosen = blank($this->modalidad) ? null : $options->firstWhere('code', $this->modalidad);
+
+        if ($chosen !== null) {
+            return $chosen;
+        }
+
+        $withGroups = $loads->first(fn (AcademicLoad $load): bool => $options->contains(fn (Modality $option): bool => $option->getKey() === $load->modality_id));
+
+        return $withGroups === null ? $this->requiredModality() : $options->first(fn (Modality $option): bool => $option->getKey() === $withGroups->modality_id);
     }
 };

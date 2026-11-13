@@ -36,7 +36,7 @@ function proposeShared(array $overrides = []): InterdepartmentalAgreement
 {
     $t = test();
     $args = [
-        'term' => $t->term, 'campus' => $t->campus, 'from' => $t->from, 'groupId' => $t->groupId, 'career' => $t->career,
+        'term' => $t->term, 'modality' => modalityOf('PRES'), 'campus' => $t->campus, 'from' => $t->from, 'groupId' => $t->groupId, 'career' => $t->career,
         'seats' => 12, 'actor' => $t->actor, ...$overrides,
     ];
 
@@ -71,6 +71,13 @@ it('crea el acuerdo propuesto dirigido al departamento de la carrera', function 
         ->and($agreement->requested_by)->toBe($this->actor->id);
 });
 
+it('el acuerdo nace con la modalidad de su grupo, que da quien lo propone, y sin campus: su lugar es el del grupo', function () {
+    $agreement = proposeShared(['modality' => modalityOf('EAD')])->fresh();
+
+    expect($agreement->modality->code)->toBe('EAD')
+        ->and($agreement->campus_id)->toBeNull();
+});
+
 it('deja bitácora proposed con quién lo propuso', function () {
     $agreement = proposeShared();
 
@@ -84,7 +91,7 @@ it('deja bitácora proposed con quién lo propuso', function () {
 
 it('rechaza si la carrera ya tiene un acuerdo vivo en el grupo, sin abortar la transacción de quien llama', function (AgreementStatus $status) {
     InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->groupId,
+        'term_id' => $this->term->id, 'group_id' => $this->groupId,
         'from_department_id' => $this->from->id, 'to_department_id' => $this->to->id, 'career_id' => $this->career->id,
     ]);
 
@@ -97,7 +104,7 @@ it('rechaza si la carrera ya tiene un acuerdo vivo en el grupo, sin abortar la t
 
 it('un acuerdo rechazado o cancelado no estorba: propone uno nuevo', function (AgreementStatus $status) {
     InterdepartmentalAgreement::factory()->sharedGroup()->inStatus($status)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->groupId,
+        'term_id' => $this->term->id, 'group_id' => $this->groupId,
         'from_department_id' => $this->from->id, 'to_department_id' => $this->to->id, 'career_id' => $this->career->id,
     ]);
 
@@ -106,7 +113,7 @@ it('un acuerdo rechazado o cancelado no estorba: propone uno nuevo', function (A
 
 it('si el índice único gana la carrera, el mensaje es el mismo', function () {
     InterdepartmentalAgreement::factory()->sharedGroup()->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'group_id' => $this->groupId,
+        'term_id' => $this->term->id, 'group_id' => $this->groupId,
         'from_department_id' => $this->from->id, 'to_department_id' => $this->to->id, 'career_id' => $this->career->id,
     ]);
     // Simula la carrera: la lectura previa no ve el acuerdo vivo (otro proceso lo crea después).

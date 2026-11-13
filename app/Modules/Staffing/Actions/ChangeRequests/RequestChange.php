@@ -64,9 +64,7 @@ final class RequestChange
         }
 
         $load = AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
+            ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
             ->first();
 
         if ($load === null || ! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true)) {
@@ -83,7 +81,7 @@ final class RequestChange
 
         $request = ChangeRequest::query()->create([
             'term_id' => $group->term_id,
-            'campus_id' => $group->campus_id,
+            'modality_id' => $group->modality_id,
             'department_id' => $group->department_id,
             'group_id' => $group->getKey(),
             'requested_by' => $actor->getKey(),

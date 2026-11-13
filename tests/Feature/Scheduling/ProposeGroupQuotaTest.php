@@ -36,7 +36,7 @@ beforeEach(function () {
         'subject_id' => Subject::factory()->create(['department_id' => $this->imparte->id])->id,
     ]);
     CareerCampus::factory()->create(['career_id' => $this->foreign->id, 'campus_id' => $this->group->campus_id]);
-    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'campus_id' => $this->group->campus_id, 'department_id' => $this->imparte->id]);
+    $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->group->term_id, 'modality_id' => $this->group->modality_id, 'department_id' => $this->imparte->id]);
 });
 
 function errorsOf(Closure $callback): array
@@ -50,13 +50,14 @@ function errorsOf(Closure $callback): array
     return [];
 }
 
-it('propone con el periodo, campus y departamento del grupo, sin darle cupo', function () {
+it('propone con el periodo, la modalidad y el departamento del grupo, sin campus (su lugar es el del grupo) ni cupo', function () {
     $agreement = app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 8, $this->actor);
 
     expect($agreement->status)->toBe(AgreementStatus::Proposed)
         ->and($agreement->group_id)->toBe($this->group->id)
         ->and($agreement->term_id)->toBe($this->group->term_id)
-        ->and($agreement->campus_id)->toBe($this->group->campus_id)
+        ->and($agreement->campus_id)->toBeNull()
+        ->and($agreement->modality_id)->toBe($this->group->modality_id)
         ->and($agreement->from_department_id)->toBe($this->imparte->id)
         ->and($agreement->to_department_id)->toBe($this->otro->id)
         ->and($agreement->max_seats)->toBe(8)
@@ -93,12 +94,12 @@ it('no propone ni retira en un grupo cancelado o con la carga cerrada', function
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Proposed);
 })->with([null, LoadStatus::Closed, LoadStatus::Published]);
 
-it('el mensaje de la carga dice el departamento, el campus y el estado', function () {
+it('el mensaje de la carga dice el departamento, la modalidad y el estado', function () {
     $this->load->update(['status' => LoadStatus::Closed]);
 
     $errors = errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 5, $this->actor));
 
-    expect($errors['quotas'][0])->toBe("La carga de {$this->imparte->name} en {$this->group->campus->name} está en cerrada: no se editan cupos.");
+    expect($errors['quotas'][0])->toBe("La carga de {$this->imparte->name} en {$this->group->modality->name} está en cerrada: no se editan cupos.");
 });
 
 it('retira la propuesta', function () {

@@ -24,8 +24,10 @@ final class SyncPublishedTeaching
     /**
      * @param  list<array{teacher_id: string, subject_id: string, group_code: string}>  $taught  lo que dice la versión que se publica
      * @param  list<array{teacher_id: string, subject_id: string, group_code: string}>  $previous  lo que decía la versión anterior de la misma carga (vacío en la primera)
+     * @param  ?string  $campusId  el campus de esos grupos; null en una modalidad sin salones (la carga es por modalidad y
+     *                             quien publica llama una vez por campus de sus grupos)
      */
-    public function handle(string $termCode, string $campusId, array $taught, array $previous): void
+    public function handle(string $termCode, ?string $campusId, array $taught, array $previous): void
     {
         if ($taught === [] && $previous === []) {
             return;

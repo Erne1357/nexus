@@ -67,7 +67,7 @@ final class StartTeachersReviewOnFacultyCapture
             ->where('catalog', Catalog::Teachers)
             ->where('status', ReviewStatus::Pending)
             ->get()
-            ->filter(fn (CatalogReview $review): bool => CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewCorrect, $review->campus_id, $review->department_id))
+            ->filter(fn (CatalogReview $review): bool => CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewCorrect, $review->department_id))
             ->each(fn (CatalogReview $review) => $this->startReview->handle($review, $actor));
     }
 

@@ -1,10 +1,15 @@
 <?php
 
 use App\Modules\Core\Enums\StaffingMode;
-use App\Modules\Core\Models\CampusProfile;
+use App\Modules\Core\Models\ModalityProfile;
+
+/*
+| El perfil de flujo de una modalidad (MS1, supuesto por confirmar; ADR-0025): el de CampusProfile sin
+| `heads_edit_rooms`, que es de la validación de salones y no de la modalidad.
+*/
 
 it('expone los campos del perfil de flujo', function () {
-    $profile = CampusProfile::fromArray([
+    $profile = ModalityProfile::fromArray([
         'uses_rooms' => false,
         'uses_time_blocks' => false,
         'staffing_mode' => 'central',
@@ -28,7 +33,7 @@ it('expone los campos del perfil de flujo', function () {
 });
 
 it('usa el perfil presencial de PROJECT.md para las claves que faltan', function () {
-    $profile = CampusProfile::fromArray([]);
+    $profile = ModalityProfile::fromArray([]);
 
     expect($profile->usesRooms)->toBeTrue()
         ->and($profile->usesTimeBlocks)->toBeTrue()
@@ -40,18 +45,14 @@ it('usa el perfil presencial de PROJECT.md para las claves que faltan', function
 });
 
 it('arranca sin visto bueno obligatorio de Subdirección (ADR-0008) y sin docentes externos', function () {
-    $profile = CampusProfile::fromArray([]);
+    $profile = ModalityProfile::fromArray([]);
 
     expect($profile->requiresSubdireccionApproval)->toBeFalse()
         ->and($profile->allowExternalTeachers)->toBeFalse();
 });
 
-it('ignora heads_edit_rooms, que ya no es del perfil (decisión 5: el jefe corrige sus salones en cualquier campus)', function () {
-    expect(CampusProfile::fromArray(['heads_edit_rooms' => true])->toArray())->not->toHaveKey('heads_edit_rooms');
-});
-
 it('completa con valores por omisión solo las claves que faltan', function () {
-    $profile = CampusProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'uses_rooms' => false]);
+    $profile = ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'uses_rooms' => false]);
 
     expect($profile->days)->toBe([1, 2, 3, 4, 5, 6])
         ->and($profile->usesRooms)->toBeFalse()
@@ -59,15 +60,15 @@ it('completa con valores por omisión solo las claves que faltan', function () {
 });
 
 it('acepta el modo de asignación como enum', function () {
-    expect(CampusProfile::fromArray(['staffing_mode' => StaffingMode::Central])->staffingMode)
+    expect(ModalityProfile::fromArray(['staffing_mode' => StaffingMode::Central])->staffingMode)
         ->toBe(StaffingMode::Central);
 });
 
 it('ordena los días y quita repetidos', function () {
-    expect(CampusProfile::fromArray(['days' => [5, 1, 3, 1]])->days)->toBe([1, 3, 5]);
+    expect(ModalityProfile::fromArray(['days' => [5, 1, 3, 1]])->days)->toBe([1, 3, 5]);
 });
 
-it('se convierte de vuelta en el arreglo que guarda campuses.settings', function () {
+it('se convierte de vuelta en el arreglo que guarda modalities.settings', function () {
     $settings = [
         'uses_rooms' => true,
         'uses_time_blocks' => true,
@@ -80,12 +81,17 @@ it('se convierte de vuelta en el arreglo que guarda campuses.settings', function
         'requires_subdireccion_approval' => true,
     ];
 
-    expect(CampusProfile::fromArray($settings)->toArray())->toBe($settings)
-        ->and(CampusProfile::fromArray([])->toArray())->toHaveKeys(array_keys($settings));
+    expect(ModalityProfile::fromArray($settings)->toArray())->toBe($settings)
+        ->and(ModalityProfile::fromArray([])->toArray())->toBe(ModalityProfile::DEFAULTS);
 });
 
-it('se resume en una línea para la columna Perfil de flujo de la tabla de campus', function (array $settings, string $summary) {
-    expect(CampusProfile::fromArray($settings)->summary())->toBe($summary);
+it('ignora heads_edit_rooms si llega en settings', function () {
+    expect(ModalityProfile::fromArray(['heads_edit_rooms' => true])->toArray())->not->toHaveKey('heads_edit_rooms')
+        ->and(ModalityProfile::DEFAULTS)->not->toHaveKey('heads_edit_rooms');
+});
+
+it('se resume en una línea', function (array $settings, string $summary) {
+    expect(ModalityProfile::fromArray($settings)->summary())->toBe($summary);
 })->with([
     'presencial por omisión' => [[], 'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00'],
     'con visto bueno de Subdirección' => [
@@ -104,14 +110,14 @@ it('se resume en una línea para la columna Perfil de flujo de la tabla de campu
 ]);
 
 it('dice sus días y su horario, como en el resumen', function (array $settings, string $schedule) {
-    expect(CampusProfile::fromArray($settings)->schedule())->toBe($schedule);
+    expect(ModalityProfile::fromArray($settings)->schedule())->toBe($schedule);
 })->with([
     'presencial por omisión' => [[], 'lunes a viernes, 7:00 a 21:00'],
     'dos días seguidos' => [['days' => [5, 6], 'day_start' => '08:00', 'day_end' => '14:00'], 'viernes y sábado, 8:00 a 14:00'],
 ]);
 
 it('rechaza un perfil con valores inválidos', function (array $settings) {
-    expect(fn () => CampusProfile::fromArray($settings))->toThrow(InvalidArgumentException::class);
+    expect(fn () => ModalityProfile::fromArray($settings))->toThrow(InvalidArgumentException::class, 'Perfil de modalidad inválido: ');
 })->with([
     'booleano como texto' => [['uses_rooms' => 'yes']],
     'booleano como entero' => [['requires_subdireccion_approval' => 1]],
@@ -132,3 +138,51 @@ it('rechaza un perfil con valores inválidos', function (array $settings) {
     'día como texto' => [['days' => ['1']]],
     'días que no son lista' => [['days' => 'L-V']],
 ]);
+
+describe('covering (MS11, supuesto por confirmar)', function () {
+    it('la ventana cubre lunes a sábado de 7:00 a 21:00 con dos modalidades activas (MS11)', function () {
+        $window = ModalityProfile::covering([
+            ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5], 'day_start' => '07:00', 'day_end' => '21:00', 'block_minutes' => 60]),
+            ModalityProfile::fromArray(['days' => [1, 2, 3, 4, 5, 6], 'day_start' => '08:00', 'day_end' => '20:00', 'block_minutes' => 60]),
+        ]);
+
+        expect($window->days)->toBe([1, 2, 3, 4, 5, 6])
+            ->and($window->dayStart)->toBe('07:00')
+            ->and($window->dayEnd)->toBe('21:00')
+            ->and($window->blockMinutes)->toBe(60);
+    });
+
+    it('une los días sin repetir y toma el bloque más corto si divide la ventana', function () {
+        $window = ModalityProfile::covering([
+            ModalityProfile::fromArray(['days' => [1, 3], 'block_minutes' => 60]),
+            ModalityProfile::fromArray(['days' => [3, 6], 'block_minutes' => 30]),
+        ]);
+
+        expect($window->days)->toBe([1, 3, 6])
+            ->and($window->blockMinutes)->toBe(30);
+    });
+
+    it('si el bloque más corto no divide la ventana usa el máximo común divisor de los bloques y la ventana', function () {
+        $window = ModalityProfile::covering([
+            ModalityProfile::fromArray(['day_start' => '08:00', 'day_end' => '20:00', 'block_minutes' => 90]),
+            ModalityProfile::fromArray(['day_start' => '07:00', 'day_end' => '14:00', 'block_minutes' => 70]),
+        ]);
+
+        // Ventana 7:00 a 20:00 = 780 min; 70 no la divide; mcd(90, 70, 780) = 10.
+        expect($window->dayStart)->toBe('07:00')
+            ->and($window->dayEnd)->toBe('20:00')
+            ->and($window->blockMinutes)->toBe(10);
+    });
+
+    it('sin perfiles es el presencial por omisión', function () {
+        expect(ModalityProfile::covering([])->toArray())->toBe(ModalityProfile::DEFAULTS);
+    });
+
+    it('con un solo perfil conserva su ventana y toma lo demás de los valores por omisión', function () {
+        $window = ModalityProfile::covering([ModalityProfile::fromArray(['staffing_mode' => 'central', 'allow_external_teachers' => true, 'days' => [2, 4]])]);
+
+        expect($window->days)->toBe([2, 4])
+            ->and($window->allowExternalTeachers)->toBeFalse()
+            ->and($window->staffingMode->value)->toBe('department');
+    });
+});

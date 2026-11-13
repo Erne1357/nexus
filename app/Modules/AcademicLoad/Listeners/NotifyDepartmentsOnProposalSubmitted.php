@@ -7,8 +7,9 @@ use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
 /**
- * Al enviar o reenviar una propuesta, avisa en cola a los jefes de los departamentos con su parte pendiente
- * (NotifyProposalSubmitted). El evento sale después del commit del envío.
+ * Al enviar o reenviar una propuesta, avisa en cola a los jefes de los departamentos con su parte pendiente y a los
+ * demás coordinadores de la carrera en la modalidad (NotifyProposalSubmitted, MS18). El evento sale después del commit
+ * del envío.
  */
 final class NotifyDepartmentsOnProposalSubmitted implements ShouldQueue
 {

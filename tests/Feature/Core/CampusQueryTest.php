@@ -123,7 +123,7 @@ it('activeOptions da solo los campus activos, por código', function () {
     Campus::factory()->create(['code' => 'X1', 'name' => 'Campus I']);
     Campus::factory()->create(['code' => 'X3', 'name' => 'Campus III', 'is_active' => false]);
 
-    expect(collect((new CampusQuery)->activeOptions())->pluck('name')->filter(fn (string $name): bool => str_starts_with($name, 'X'))->values()->all())->toBe(['X1 · Campus I', 'X2 · Campus II']);
+    expect(collect(app(CampusQuery::class)->activeOptions())->pluck('name')->filter(fn (string $name): bool => str_starts_with($name, 'X'))->values()->all())->toBe(['X1 · Campus I', 'X2 · Campus II']);
 });
 
 it('active da los campus activos por código, sin los inactivos', function () {
@@ -131,5 +131,5 @@ it('active da los campus activos por código, sin los inactivos', function () {
     Campus::factory()->create(['code' => 'Y1']);
     Campus::factory()->create(['code' => 'Y3', 'is_active' => false]);
 
-    expect((new CampusQuery)->active()->pluck('code')->filter(fn (string $code): bool => str_starts_with($code, 'Y'))->values()->all())->toBe(['Y1', 'Y2']);
+    expect(app(CampusQuery::class)->active()->pluck('code')->filter(fn (string $code): bool => str_starts_with($code, 'Y'))->values()->all())->toBe(['Y1', 'Y2']);
 });

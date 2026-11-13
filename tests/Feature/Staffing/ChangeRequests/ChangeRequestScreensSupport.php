@@ -44,12 +44,12 @@ function crWorld(): object
         'teacher' => Teacher::factory()->adscribedTo($sc)->create(['user_id' => $teacherUser->id, 'name' => 'Marisol Quiñones Duarte']),
         'otherTeacherUser' => $otherTeacherUser,
         'otherTeacher' => Teacher::factory()->adscribedTo($sc)->create(['user_id' => $otherTeacherUser->id, 'name' => 'Iván Gutiérrez Salcido']),
-        'scLoad' => AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $sc->id, 'status' => LoadStatus::Staffing]),
-        'cbLoad' => AcademicLoad::factory()->create(['term_id' => $term->id, 'campus_id' => $campus->id, 'department_id' => $cb->id, 'status' => LoadStatus::Staffing]),
+        'scLoad' => AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $sc->id, 'status' => LoadStatus::Staffing]),
+        'cbLoad' => AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $cb->id, 'status' => LoadStatus::Staffing]),
         'jefeSc' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sc->id])->create(['name' => 'Alfredo Ríos Carrasco']),
         'jefeCb' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $cb->id])->create(['name' => 'Laura Peña Ochoa']),
-        'coordIsc' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => $isc->id])->create(['name' => 'Karla Beltrán Ochoa']),
-        'coordIind' => User::factory()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => $iind->id])->create(['name' => 'Raúl Tena Prieto']),
+        'coordIsc' => User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('PRES')->id, 'career_id' => $isc->id])->create(['name' => 'Karla Beltrán Ochoa']),
+        'coordIind' => User::factory()->withRole(Role::Coordinador, ['modality_id' => modalityOf('PRES')->id, 'career_id' => $iind->id])->create(['name' => 'Raúl Tena Prieto']),
     ];
 }
 

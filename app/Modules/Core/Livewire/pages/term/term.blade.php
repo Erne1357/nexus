@@ -1,11 +1,13 @@
 {{--
     Ficha del periodo (DESIGN.md, "Ficha del periodo"), la maqueta B «Línea de tiempo»: un enlace de regreso a Periodos,
     el encabezado con el nombre, el código en Mono y «Actual», las fechas y, a la derecha, «Editar» y «Marcar como
-    actual» (deshabilitado con su motivo en el periodo actual); el resumen de campus en un renglón («Abierto en» con
-    los códigos y un «Abrir en <campus>» por cada campus activo sin abrir, o un solo menú «Abrir en…» si faltan más de
-    dos); la sección «Calendario» con la línea de tiempo de las etapas (core::terms.timeline); y al final la lista
-    «Campus» con quién abrió y cuándo, y «Completar apertura». Tocar una etapa abre su panel lateral, un x-drawer: fechas generales y, por cada
-    campus activo, una ventana propia opcional. «Editar» abre el mismo formulario que la tabla de periodos.
+    actual» (deshabilitado con su motivo en el periodo actual); el resumen de modalidades en un renglón («Abierto en»
+    con las claves y un «Abrir en <modalidad>» por cada modalidad activa sin abrir, o un solo menú «Abrir en…» si faltan
+    más de dos; M4); la sección «Calendario» con la línea de tiempo de las etapas (core::terms.timeline); y al final la
+    lista «Modalidades» con quién abrió y cuándo, y «Completar apertura». Tocar una etapa abre su panel lateral, un
+    x-drawer: fechas generales y, por cada modalidad activa, una ventana propia opcional. «Editar» abre el mismo
+    formulario que la tabla de periodos. «Abrir en…» y «Completar apertura» abren el panel «Abrir el periodo» (x-drawer,
+    core::terms.open-panel) con lo que se crea antes de confirmar.
 --}}
 <div class="space-y-6">
     <a href="{{ route('core.terms') }}" wire:navigate data-testid="back-to-terms" class="inline-flex items-center gap-1.5 font-medium text-primary max-md:min-h-11">
@@ -58,18 +60,18 @@
         </div>
     </div>
 
-    <section aria-label="Apertura por campus" class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="campus-summary">
+    <section aria-label="Apertura por modalidad" class="flex flex-wrap items-center gap-x-3 gap-y-2" data-testid="modality-summary">
         <span class="font-medium">Abierto en</span>
 
         @forelse ($openedRows as $row)
             <span
-                wire:key="opened-chip-{{ $row['campus']->id }}"
+                wire:key="opened-chip-{{ $row['modality']->id }}"
                 @class(['rounded border border-base-300 bg-base-100 px-2 py-0.5 font-mono text-[15px] font-semibold', 'text-neutral' => ! $row['actionable']])
-                @if (! $row['actionable']) title="{{ $row['campus']->name }} · {{ $row['campus']->trashed() ? 'Campus borrado' : 'Campus inactivo' }}" @endif
-                data-testid="opened-{{ $row['campus']->code }}"
-            >{{ $row['campus']->code }}</span>
+                title="{{ $row['modality']->name }}{{ $row['actionable'] ? '' : ' · '.($row['modality']->trashed() ? 'Modalidad borrada' : 'Modalidad inactiva') }}"
+                data-testid="opened-{{ $row['modality']->code }}"
+            >{{ $row['modality']->code }}</span>
         @empty
-            <span class="text-neutral" data-testid="opened-none">ningún campus</span>
+            <span class="text-neutral" data-testid="opened-none">ninguna modalidad</span>
         @endforelse
 
         @if ($pendingRows->count() > 2)
@@ -84,17 +86,13 @@
                     <summary class="btn btn-outline btn-sm max-md:h-11">Abrir en…<x-icon name="o-chevron-down" class="h-4 w-4" aria-hidden="true" /></summary>
                     <ul class="menu dropdown-content z-10 mt-1 w-max max-w-[calc(100vw-2rem)] rounded-box border border-base-300 bg-base-100 p-1 shadow-lg" x-on:click="$el.closest('details').removeAttribute('open')">
                         @foreach ($pendingRows as $row)
-                            <li wire:key="open-item-{{ $row['campus']->id }}">
+                            <li wire:key="open-item-{{ $row['modality']->id }}">
                                 <button
                                     type="button"
                                     class="max-md:min-h-11"
-                                    wire:click="openIn('{{ $row['campus']->id }}')"
-                                    x-confirm="Se crean la carga académica y las revisiones de catálogo de cada departamento activo."
-                                    data-confirm-title="¿Abrir el periodo {{ $term->code }} en {{ $row['campus']->name }}?"
-                                    data-confirm-button="Abrir"
-                                    data-confirm-tone="warning"
-                                    data-testid="open-{{ $row['campus']->code }}"
-                                >{{ $row['campus']->name }}</button>
+                                    wire:click="prepareOpen('{{ $row['modality']->id }}')"
+                                    data-testid="open-{{ $row['modality']->code }}"
+                                >{{ $row['modality']->name }}</button>
                             </li>
                         @endforeach
                     </ul>
@@ -108,20 +106,16 @@
             @foreach ($pendingRows as $row)
                 @if ($canOpen)
                     <x-button
-                        wire:key="open-{{ $row['campus']->id }}"
-                        label="Abrir en {{ $row['campus']->name }}"
+                        wire:key="open-{{ $row['modality']->id }}"
+                        label="Abrir en {{ $row['modality']->name }}"
                         class="btn-outline btn-sm max-md:h-11"
-                        wire:click="openIn('{{ $row['campus']->id }}')"
-                        x-confirm="Se crean la carga académica y las revisiones de catálogo de cada departamento activo."
-                        data-confirm-title="¿Abrir el periodo {{ $term->code }} en {{ $row['campus']->name }}?"
-                        data-confirm-button="Abrir"
-                        data-confirm-tone="warning"
-                        spinner="openIn('{{ $row['campus']->id }}')"
-                        data-testid="open-{{ $row['campus']->code }}"
+                        wire:click="prepareOpen('{{ $row['modality']->id }}')"
+                        spinner="prepareOpen('{{ $row['modality']->id }}')"
+                        data-testid="open-{{ $row['modality']->code }}"
                     />
                 @else
                     <span class="tooltip" data-tip="Solo el administrador o la subdirección abren periodos.">
-                        <x-button label="Abrir en {{ $row['campus']->name }}" class="btn-outline btn-sm max-md:h-11" disabled data-testid="open-{{ $row['campus']->code }}" />
+                        <x-button label="Abrir en {{ $row['modality']->name }}" class="btn-outline btn-sm max-md:h-11" disabled data-testid="open-{{ $row['modality']->code }}" />
                     </span>
                 @endif
             @endforeach
@@ -141,22 +135,22 @@
         </div>
     </section>
 
-    <section aria-labelledby="term-campuses-title" class="space-y-3">
-        <h2 id="term-campuses-title" class="text-xl font-bold leading-tight">Campus</h2>
+    <section aria-labelledby="term-modalities-title" class="space-y-3">
+        <h2 id="term-modalities-title" class="text-xl font-bold leading-tight">Modalidades</h2>
 
-        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100 divide-y divide-base-300" data-testid="term-campuses">
-            @foreach ($campusRows as $row)
-                @php($campus = $row['campus'])
+        <div class="overflow-hidden rounded-box border border-base-300 bg-base-100 divide-y divide-base-300" data-testid="term-modalities">
+            @foreach ($modalityRows as $row)
+                @php($modality = $row['modality'])
                 @php($opening = $row['opening'])
                 <div
-                    wire:key="campus-row-{{ $campus->id }}"
-                    data-testid="campus-{{ $campus->code }}"
-                    class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3.5 md:grid-cols-[48px_minmax(0,1fr)_auto_auto]"
+                    wire:key="modality-row-{{ $modality->id }}"
+                    data-testid="modality-{{ $modality->code }}"
+                    class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 px-4 py-3.5 md:grid-cols-[64px_minmax(0,1fr)_auto_auto]"
                 >
-                    <span @class(['font-mono text-[15px] font-semibold', 'text-neutral' => $opening === null || ! $row['actionable']])>{{ $campus->code }}</span>
+                    <span @class(['font-mono text-[15px] font-semibold', 'text-neutral' => $opening === null || ! $row['actionable']])>{{ $modality->code }}</span>
 
                     <div class="col-span-full row-start-2 min-w-0 md:col-span-1 md:row-start-auto">
-                        <b @class(['block text-base font-bold', 'text-neutral' => $opening === null || ! $row['actionable']])>{{ $campus->name }}</b>
+                        <b @class(['block text-base font-bold', 'text-neutral' => $opening === null || ! $row['actionable']])>{{ $modality->name }}</b>
                         <small class="block text-sm text-neutral">
                             @if ($opening === null)
                                 No abierto en este periodo
@@ -177,15 +171,15 @@
 
                     <div class="col-span-full row-start-3 flex justify-end md:col-span-1 md:col-start-4 md:row-start-auto md:min-w-[156px]">
                         @if (! $row['actionable'])
-                            <span class="text-sm text-neutral">{{ $campus->trashed() ? 'Campus borrado' : 'Campus inactivo' }}</span>
+                            <span class="text-sm text-neutral">{{ $modality->trashed() ? 'Modalidad borrada' : 'Modalidad inactiva' }}</span>
                         @elseif ($opening !== null)
-                            <x-core::row-menu :name="$campus->code" class="max-md:[&>button]:min-h-11">
+                            <x-core::row-menu :name="$modality->code" class="max-md:[&>button]:min-h-11">
                                 @if ($canOpen)
                                     <x-core::row-menu-item
                                         label="Completar apertura"
-                                        wire:click="completeIn('{{ $campus->id }}')"
-                                        :spinner="'completeIn(\''.$campus->id.'\')'"
-                                        :data-testid="'complete-'.$campus->code"
+                                        wire:click="prepareOpen('{{ $modality->id }}')"
+                                        :spinner="'prepareOpen(\''.$modality->id.'\')'"
+                                        :data-testid="'complete-'.$modality->code"
                                     />
                                 @else
                                     <x-core::row-menu-item label="Completar apertura" reason="Solo el administrador o la subdirección abren periodos." disabled />
@@ -278,6 +272,12 @@
             @endif
         </x-slot:actions>
     </x-modal>
+
+    <x-drawer wire:model.live="showOpen" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="open-drawer-title" data-testid="open-drawer">
+        @if ($openModality !== null)
+            @include('core::terms.open-panel')
+        @endif
+    </x-drawer>
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="stage-drawer-title" data-testid="stage-drawer">
         @if ($editing !== null)

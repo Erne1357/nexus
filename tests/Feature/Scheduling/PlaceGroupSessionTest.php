@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -28,7 +29,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | PlaceGroupSession (tarea 3.5): coloca una sesión sin salón en un grupo. Solo con la carga de su departamento en
-| propuesta, asignación o ajustes y el grupo sin cancelar; HC-04 (días, ventana y bloques del campus) se exige antes de
+| propuesta, asignación o ajustes y el grupo sin cancelar; HC-04 (días, ventana y bloques de la modalidad) se exige antes de
 | validar. Un empalme de docente (HC-01) o del mismo grupo no se guarda y da su mensaje; las demás reglas duras se
 | guardan y vuelven en el resultado (confirmado el 7 de noviembre de 2026). Un bloque pegado a otra sesión del grupo
 | del mismo día, tipo y salón se une con ella.
@@ -40,7 +41,7 @@ beforeEach(function () {
     $this->campus = Campus::factory()->create(['name' => 'Campus II']);
     $this->department = Department::factory()->create(['name' => 'Sistemas y Computación']);
     $this->load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'department_id' => $this->department->id,
+        'term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id,
     ]);
     $this->group = Group::factory()->create([
         'term_id' => $this->term->id,
@@ -131,7 +132,7 @@ it('rechaza con la carga en cualquier otro estado, sin escribir', function (Load
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(["La carga de Sistemas y Computación en Campus II está en {$label}: no se editan horarios."]))
+            ->toBe(["La carga de Sistemas y Computación en Presencial está en {$label}: no se editan horarios."]))
         ->and($this->group->sessions()->count())->toBe(0)
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
@@ -146,7 +147,7 @@ it('rechaza si el departamento no tiene carga en el campus y el periodo', functi
     $this->load->delete();
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
-        ->toThrow(ValidationException::class, 'Sistemas y Computación no tiene carga en Campus II en este periodo: no se editan horarios.');
+        ->toThrow(ValidationException::class, 'Sistemas y Computación no tiene carga en Presencial en este periodo: no se editan horarios.');
 });
 
 it('rechaza un grupo cancelado', function () {
@@ -157,27 +158,27 @@ it('rechaza un grupo cancelado', function () {
         ->and($this->group->sessions()->count())->toBe(0);
 });
 
-it('HC-04: rechaza lo que cae fuera de los días, la ventana o los bloques del campus', function (int $day, string $startsAt, string $endsAt, string $message) {
+it('HC-04: rechaza lo que cae fuera de los días, la ventana o los bloques de la modalidad', function (int $day, string $startsAt, string $endsAt, string $message) {
     expect(fn () => placeSession($this->group, $day, $startsAt, $endsAt))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])->toBe([$message]))
         ->and($this->group->sessions()->count())->toBe(0);
 })->with([
-    'sábado' => [6, '07:00', '08:00', 'HC-04: Campus II no da clases el sábado (lunes a viernes, 7:00 a 21:00).'],
-    'antes de abrir' => [1, '06:00', '07:00', 'HC-04: la sesión debe caer dentro del horario de Campus II (lunes a viernes, 7:00 a 21:00).'],
-    'después de cerrar' => [1, '20:00', '22:00', 'HC-04: la sesión debe caer dentro del horario de Campus II (lunes a viernes, 7:00 a 21:00).'],
+    'sábado' => [6, '07:00', '08:00', 'HC-04: Presencial no da clases el sábado (lunes a viernes, 7:00 a 21:00).'],
+    'antes de abrir' => [1, '06:00', '07:00', 'HC-04: la sesión debe caer dentro del horario de Presencial (lunes a viernes, 7:00 a 21:00).'],
+    'después de cerrar' => [1, '20:00', '22:00', 'HC-04: la sesión debe caer dentro del horario de Presencial (lunes a viernes, 7:00 a 21:00).'],
     'a media hora' => [1, '07:30', '08:30', 'HC-04: la sesión debe empezar y terminar en bloques de 60 minutos desde las 7:00.'],
     'fin antes del inicio' => [1, '09:00', '08:00', 'La sesión debe terminar después de empezar.'],
     'hora mal escrita' => [1, '7am', '08:00', 'La hora «7am» no es válida: se escribe como 07:00.'],
 ]);
 
-it('HC-04: sigue el perfil del campus, no un horario fijo', function () {
-    $this->campus->update(['settings' => [...$this->campus->settings, 'days' => [5, 6], 'block_minutes' => 30, 'day_start' => '08:00']]);
+it('HC-04: sigue el perfil de la modalidad del grupo, no un horario fijo (el campus no tiene perfil, MS3)', function () {
+    $this->group->modality->update(['settings' => [...ModalityProfile::DEFAULTS, 'days' => [5, 6], 'block_minutes' => 30, 'day_start' => '08:00']]);
 
     placeSession($this->group, 6, '08:30', '09:00');
 
     expect(placedSessionsOf($this->group))->toBe(['6 08:30-09:00 teoria'])
         ->and(fn () => placeSession($this->group, 1, '08:00', '09:00'))
-        ->toThrow(ValidationException::class, 'HC-04: Campus II no da clases el lunes (viernes y sábado, 8:00 a 21:00).');
+        ->toThrow(ValidationException::class, 'HC-04: Presencial no da clases el lunes (viernes y sábado, 8:00 a 21:00).');
 });
 
 it('une un bloque pegado a otra sesión del mismo tipo y sin salón: la que existía se extiende', function () {

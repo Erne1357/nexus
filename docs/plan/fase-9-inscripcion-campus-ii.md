@@ -49,7 +49,7 @@ Que los alumnos de Campus II se inscriban para Ago-Dic 2027 dentro de Nexus: con
 - `student_progress` y `EligibleStudentsQuery` de fase 1 (elegibilidad por seriación).
 - Snapshot publicado de fase 4 y re-análisis de fase 8 (la carga sobre la que se inscribe debe estar cerrada antes de abrir citas).
 - Fortify y provisión de usuarios de fase 0 y 1, extendida a alumnos.
-- Perfil de flujo del campus (`campuses.settings`) para fechas de etapa `enrollment` en `term_stages`.
+- Perfil de flujo de la modalidad (`modalities.settings`) para fechas de etapa `enrollment` en `term_stages`.
 - Respuesta a P4 y P5 (posibles importaciones o exportaciones nuevas en `Imports`).
 
 ## Bosquejo de tareas (sin detalle)

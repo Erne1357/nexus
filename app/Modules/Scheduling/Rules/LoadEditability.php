@@ -5,7 +5,7 @@ namespace App\Modules\Scheduling\Rules;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use Closure;
@@ -17,8 +17,9 @@ use PDOException;
 
 /**
  * La única regla de «grupo editable» del editor de horarios (3.5) y de los cupos (3.6): el grupo no está cancelado y
- * la carga de su departamento en su campus y periodo está en propuesta, asignación o ajustes ("Aprobaciones y
- * permisos"). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más restrictivo).
+ * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en propuesta, asignación o
+ * ajustes ("Aprobaciones y permisos"). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más
+ * restrictivo).
  *
  * Orden de candados: las Actions toman la carga con lockLoad() (FOR SHARE) antes de bloquear el grupo (FOR UPDATE),
  * como las transiciones de carga, para no provocar un deadlock; si aun así la base lo detecta, guard() lo traduce, también
@@ -37,9 +38,7 @@ final class LoadEditability
     public function lockLoad(Group $group): ?AcademicLoad
     {
         return AcademicLoad::query()
-            ->where('term_id', $group->term_id)
-            ->where('campus_id', $group->campus_id)
-            ->where('department_id', $group->department_id)
+            ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
             ->sharedLock()
             ->first(['id', 'status']);
     }
@@ -60,7 +59,7 @@ final class LoadEditability
         $reason = self::isEditable($status) ? null : self::reason(
             $status,
             Department::withTrashed()->whereKey($group->department_id)->value('name'),
-            Campus::withTrashed()->whereKey($group->campus_id)->value('name'),
+            Modality::withTrashed()->whereKey($group->modality_id)->value('name'),
             $what,
         );
 
@@ -71,8 +70,8 @@ final class LoadEditability
 
     /**
      * El motivo por el que cada grupo no se edita, o null si se edita. Una consulta de cargas por las tuplas (periodo,
-     * campus, departamento) de los grupos y, solo si alguno está bloqueado, una de departamentos y una de campus para los
-     * mensajes, sin importar cuántos grupos sean (el tablero del editor).
+     * modalidad, departamento) de los grupos y, solo si alguno está bloqueado, una de departamentos y una de modalidades
+     * para los mensajes, sin importar cuántos grupos sean (el tablero del editor).
      *
      * @param  iterable<Group>  $groups
      * @return array<string, ?string>
@@ -80,22 +79,22 @@ final class LoadEditability
     public function blockedReasons(iterable $groups, string $what = 'horarios'): array
     {
         $groups = collect($groups)->values();
-        $key = fn (Group|AcademicLoad $row): string => $row->term_id.'|'.$row->campus_id.'|'.$row->department_id;
+        $key = fn (Group|AcademicLoad $row): string => $row->term_id.'|'.$row->modality_id.'|'.$row->department_id;
         $tuples = $groups->reject(fn (Group $group): bool => $group->status === GroupStatus::Cancelled)->unique($key)->values();
 
         $statuses = $tuples->isEmpty() ? collect() : AcademicLoad::query()
             ->where(function (Builder $query) use ($tuples): void {
                 foreach ($tuples as $group) {
-                    $query->orWhere(fn (Builder $tuple) => $tuple->where('term_id', $group->term_id)->where('campus_id', $group->campus_id)->where('department_id', $group->department_id));
+                    $query->orWhere(fn (Builder $tuple) => $tuple->ofDepartment($group->term_id, $group->modality_id, $group->department_id));
                 }
             })
-            ->get(['term_id', 'campus_id', 'department_id', 'status'])
+            ->get(['term_id', 'modality_id', 'department_id', 'status'])
             ->mapWithKeys(fn (AcademicLoad $load): array => [$key($load) => $load->status]);
 
         $departments = null;
-        $campuses = null;
+        $modalities = null;
 
-        return $groups->mapWithKeys(function (Group $group) use ($statuses, $key, $tuples, $what, &$departments, &$campuses): array {
+        return $groups->mapWithKeys(function (Group $group) use ($statuses, $key, $tuples, $what, &$departments, &$modalities): array {
             if ($group->status === GroupStatus::Cancelled) {
                 return [$group->id => "El grupo {$group->code} está cancelado: no se editan {$what}."];
             }
@@ -107,9 +106,9 @@ final class LoadEditability
             }
 
             $departments ??= Department::withTrashed()->whereIn('id', $tuples->pluck('department_id')->unique()->all())->pluck('name', 'id');
-            $campuses ??= Campus::withTrashed()->whereIn('id', $tuples->pluck('campus_id')->unique()->all())->pluck('name', 'id');
+            $modalities ??= Modality::withTrashed()->whereIn('id', $tuples->pluck('modality_id')->unique()->all())->pluck('name', 'id');
 
-            return [$group->id => self::reason($status, $departments[$group->department_id] ?? null, $campuses[$group->campus_id] ?? null, $what)];
+            return [$group->id => self::reason($status, $departments[$group->department_id] ?? null, $modalities[$group->modality_id] ?? null, $what)];
         })->all();
     }
 
@@ -157,10 +156,10 @@ final class LoadEditability
         return $status !== null && in_array($status, self::EDITABLE, true);
     }
 
-    private static function reason(?LoadStatus $status, ?string $department, ?string $campus, string $what): string
+    private static function reason(?LoadStatus $status, ?string $department, ?string $modality, string $what): string
     {
         return $status === null
-            ? "{$department} no tiene carga en {$campus} en este periodo: no se editan {$what}."
-            : "La carga de {$department} en {$campus} está en ".mb_strtolower($status->label()).": no se editan {$what}.";
+            ? "{$department} no tiene carga en {$modality} en este periodo: no se editan {$what}."
+            : "La carga de {$department} en {$modality} está en ".mb_strtolower($status->label()).": no se editan {$what}.";
     }
 }

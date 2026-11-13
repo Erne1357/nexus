@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /*
-| Rendimiento del validador (fase 3, «Pruebas de la fase»): validar la carga de un campus completo (estimado 400
+| Rendimiento del validador (fase 3, «Pruebas de la fase»): validar la carga de una modalidad completa (estimado 400
 | grupos) en menos de 5 segundos, y que el editor responda en menos de 300 ms por movimiento.
 */
 
@@ -38,7 +38,7 @@ beforeEach(function () {
         $id = (string) Str::uuid7();
 
         $groups[] = [
-            'id' => $id, 'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'subject_id' => $subject->id,
+            'id' => $id, 'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => modalityOf('PRES')->id, 'subject_id' => $subject->id,
             'department_id' => $subject->department_id, 'owner_career_id' => $plan->career_id, 'study_plan_id' => $plan->id,
             'semester' => $i % 9 + 1, 'code' => "G{$i}", 'teacher_id' => $teachers[$i % 80]->id, 'capacity' => 30,
             'status' => 'planned', 'created_at' => $now, 'updated_at' => $now,
@@ -57,10 +57,10 @@ beforeEach(function () {
     DB::table('group_sessions')->insert($sessions);
 });
 
-it('valida la carga de un campus de 400 grupos en menos de 5 segundos', function () {
+it('valida la carga de una modalidad de 400 grupos en menos de 5 segundos', function () {
     $started = hrtime(true);
 
-    $result = app(ScheduleValidator::class)->validateLoad($this->term, $this->campus);
+    $result = app(ScheduleValidator::class)->validateLoad($this->term, modalityOf('PRES'));
 
     $seconds = (hrtime(true) - $started) / 1e9;
 
