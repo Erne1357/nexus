@@ -284,14 +284,14 @@ it('exporta el historial docente y las evaluaciones, y esos archivos validan con
     }
 });
 
-it('MS7 y MS35: exporta la modalidad del alumno como la escribe el SII y omite, con aviso, las que no tiene', function () {
+it('MS7 y MS35: exporta la modalidad del alumno como la escribe el SII y omite, con aviso que nombra sus modalidades, las que no tiene', function () {
     $students = Student::query()->orderBy('control_number')->take(3)->get();
     $students[0]->update(['modality_id' => modalityOf('PRES')->id]);
     $students[1]->update(['modality_id' => modalityOf('EAD')->id]);
     $students[2]->update(['modality_id' => modalityOf('ENL')->id]);
 
     $this->artisan('imports:export-demo')
-        ->expectsOutputToContain('1 alumnos de una modalidad sin valor en el SII (En línea o TecNM Virtual) no se exportan.')
+        ->expectsOutputToContain('1 alumnos de una modalidad sin valor en el SII (En línea) no se exportan.')
         ->assertSuccessful();
 
     $rows = collect(array_slice(demoCsv('students'), 1))->keyBy(0);

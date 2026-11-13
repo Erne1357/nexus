@@ -219,8 +219,8 @@ final class ExportDemoFiles extends Command
 
     /**
      * Los alumnos con su modalidad como la escribe el SII (StudentsTemplate::SII_MODALITIES: presencial o distancia, MS7).
-     * Los de una modalidad sin valor en el SII (En línea, TecNM Virtual) no se exportan: se avisa cuántos (MS35, supuesto
-     * por confirmar).
+     * Los de una modalidad sin valor en el SII (En línea, TecNM Virtual) no se exportan: se avisa cuántos y de qué
+     * modalidades (MS35, supuesto por confirmar).
      *
      * @return LazyCollection<int, list<scalar|null>>
      */
@@ -232,10 +232,11 @@ final class ExportDemoFiles extends Command
             ->join('campuses as k', 'k.id', '=', 'st.campus_id')
             ->join('modalities as m', 'm.id', '=', 'st.modality_id')
             ->whereNull('st.deleted_at')->whereNull('c.deleted_at')->whereNull('p.deleted_at');
-        $skipped = $students()->whereNotIn('m.code', array_keys(StudentsTemplate::SII_MODALITIES))->count();
+        $skipped = $students()->whereNotIn('m.code', array_keys(StudentsTemplate::SII_MODALITIES))
+            ->groupBy('m.code', 'm.name')->orderBy('m.code')->get(['m.name', DB::raw('count(*) as total')]);
 
-        if ($skipped > 0) {
-            $this->warn("{$skipped} alumnos de una modalidad sin valor en el SII (En línea o TecNM Virtual) no se exportan.");
+        if ($skipped->isNotEmpty()) {
+            $this->warn("{$skipped->sum('total')} alumnos de una modalidad sin valor en el SII ({$skipped->pluck('name')->join(', ', ' o ')}) no se exportan.");
         }
 
         return $this->chunked(
