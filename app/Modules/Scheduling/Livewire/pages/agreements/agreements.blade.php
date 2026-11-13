@@ -40,8 +40,9 @@
     <div>
         <h1 class="text-2xl font-bold leading-tight md:text-3xl">Acuerdos</h1>
         @if ($groups !== null)
-            <p class="mt-1.5 text-neutral">Préstamos de salón y grupos compartidos entre departamentos, <span data-testid="agreements-term">{{ $term->name }}</span> en {{ $campus->name }}.</p>
+            <p class="mt-1.5 text-neutral">Préstamos de salón y grupos compartidos entre departamentos, <span data-testid="agreements-term">{{ $term->name }}</span> en {{ $shownCampus->name }}.</p>
         @endif
+        <x-core::campus-filter :options="$campusOptions" :selected="$campusCode" class="mt-2" />
     </div>
 
     @if ($groups === null)

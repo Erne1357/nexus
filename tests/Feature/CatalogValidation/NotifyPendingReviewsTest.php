@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -41,7 +42,7 @@ function reviewsFor(Term $term, Campus $campus, Department $department, ReviewSt
     foreach (Catalog::cases() as $catalog) {
         CatalogReview::factory()->create([
             'term_id' => $term->id,
-            'campus_id' => $catalog->isGeneral() ? null : $campus->id,
+            'campus_id' => null,
             'department_id' => $department->id,
             'catalog' => $catalog,
             'status' => $status,
@@ -61,7 +62,7 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
         $message = $notification->message($this->jefeSistemas);
 
         return $message->title === 'Tienes catálogos por validar'
-            && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes, materias, planes de estudio, carreras y salones de Campus II'
+            && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes, materias, planes de estudio, carreras y salones'
             && $message->route === 'catalog-validation.review'
             && $message->parameters === ['department' => $this->sistemas->id]
             && $message->termId === $this->term->id
@@ -114,10 +115,15 @@ it('no avisa a los departamentos inactivos ni a quien no es jefe de ese departam
     Notification::assertNotSentTo([$this->jefeSistemas, $jpd], CatalogReviewsPending::class);
 });
 
-it('al abrir el periodo en un campus avisa a los jefes, después de guardar la apertura', function () {
-    $this->actingAs(User::factory()->admin()->create());
+it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', function () {
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin);
 
     app(OpenTerm::class)->handle($this->term, $this->c2);
+
+    expect($this->jefeSistemas->notifications()->count())->toBe(0);
+
+    app(OpenCatalogValidation::class)->handle($this->term, Catalog::cases(), $admin);
 
     expect($this->jefeSistemas->notifications()->count())->toBe(1)
         ->and($this->jefeBasicas->notifications()->count())->toBe(1)

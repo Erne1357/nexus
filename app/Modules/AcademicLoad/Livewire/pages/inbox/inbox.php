@@ -14,6 +14,7 @@ use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Rules\SelfApproval;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -39,6 +40,7 @@ use Mary\Traits\Toast;
 new #[Title('Bandeja del departamento')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     private const array FILTERS = ['todas', 'pendientes'];
 
@@ -106,6 +108,11 @@ new #[Title('Bandeja del departamento')] class extends Component
         $this->mobileDetail = $this->careerId !== '';
         $this->updatedFilter();
         $this->resolve($context, $inbox, $proposals);
+    }
+
+    public function updatedCampus(): void
+    {
+        $this->reopenOnCampus('academic-load.inbox');
     }
 
     /**
@@ -250,7 +257,7 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function with(DepartmentInboxQuery $query): array
     {
         if ($this->departmentId === null) {
-            return ['inbox' => null];
+            return ['inbox' => null, ...$this->campusViewData()];
         }
 
         $inbox = $this->inbox($query);
@@ -270,6 +277,7 @@ new #[Title('Bandeja del departamento')] class extends Component
         $catalogsUrl = Route::has('catalog-validation.review') ? route('catalog-validation.review', ['department' => $inbox->department->getKey()]) : null;
 
         return [
+            ...$this->campusViewData(),
             'inbox' => $inbox,
             'rows' => $rows,
             'visible' => $this->filter === 'pendientes'
@@ -303,13 +311,7 @@ new #[Title('Bandeja del departamento')] class extends Component
         $this->termId = $this->campusId = $this->departmentId = null;
         $this->departments = [];
 
-        $campus = $context->activeCampus();
-
-        if ($campus === null) {
-            $this->message = 'Elige un campus en tu credencial para ver la bandeja del departamento.';
-
-            return;
-        }
+        $campus = $this->requiredCampus();
 
         $term = $context->activeTerm();
 

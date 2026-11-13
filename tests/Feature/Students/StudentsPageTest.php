@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -13,8 +12,8 @@ use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
 /*
-| Listado de alumnos (`/students`, students::pages.students; tarea 1.6). Solo lectura, de un campus: el activo de
-| la credencial. Quién ve a quién, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Consultar
+| Listado de alumnos (`/students`, students::pages.students; tarea 1.6). Solo lectura, de todos los campus del
+| usuario (la credencial ya no elige campus, #415), con un filtro de campus (`?campus=`) con «Todos». Quién ve a quién, según reglas-de-negocio.md, "Aprobaciones y permisos" (fila "Consultar
 | alumnos"): el admin, todos; la subdirección, su campus; el jefe de departamento, las carreras de su
 | departamento; el coordinador, su carrera. El jefe de proyecto docente y el docente no entran.
 */
@@ -45,21 +44,27 @@ function listsStudents(array $controlNumbers): Closure
 
 function studentsPageAs(User $user, ?Campus $campus = null): Testable
 {
-    if ($campus !== null) {
-        session([Actor::ACTIVE_CAMPUS => $campus->id]);
-    }
+    $page = Livewire::actingAs($user)->test('students::pages.students');
 
-    return Livewire::actingAs($user)->test('students::pages.students');
+    return $campus === null ? $page : $page->set('campus', $campus->code);
 }
 
 describe('admin', function () {
-    it('sin campus en la credencial, pide elegir uno', function () {
+    it('sin campus en la página lista los alumnos de todos los campus, con su columna Campus', function () {
         studentsPageAs($this->admin)
-            ->assertSee('Elige un campus en tu credencial para ver a sus alumnos.')
-            ->assertViewHas('students', null);
+            ->assertViewHas('students', listsStudents(['24111234', '24111241', '24111258', '24119999']))
+            ->assertDontSee('Elige un campus en tu credencial')
+            ->assertSeeInOrder(['Control', 'Nombre', 'Campus', 'Carrera']);
     });
 
-    it('lista a los alumnos del campus de la credencial, con su estatus, y no los de otro campus', function () {
+    it('«Todos» vuelve a mostrar todos los campus después de filtrar uno', function () {
+        studentsPageAs($this->admin, $this->other)
+            ->assertViewHas('students', listsStudents(['24119999']))
+            ->set('campus', null)
+            ->assertViewHas('students', listsStudents(['24111234', '24111241', '24111258', '24119999']));
+    });
+
+    it('lista a los alumnos del campus de la página, con su estatus, y no los de otro campus', function () {
         studentsPageAs($this->admin, $this->campus)
             ->assertViewHas('students', listsStudents(['24111234', '24111241', '24111258']))
             ->assertSee('Daniela Ortiz')
@@ -93,7 +98,7 @@ describe('admin', function () {
             ->assertViewHas('students', fn ($students): bool => $students->total() === 26);
     });
 
-    it('olvida un filtro que no aplica en el campus de la credencial, en lugar de dejar la lista vacía sin decir por qué', function () {
+    it('olvida un filtro que no aplica en el campus de la página, en lugar de dejar la lista vacía sin decir por qué', function () {
         studentsPageAs($this->admin, $this->other)
             ->set('career', $this->ind->id)
             ->assertSet('career', '')
@@ -101,12 +106,25 @@ describe('admin', function () {
     });
 
     it('sin alumnos en el campus, dice que llegan con la importación; con una búsqueda sin resultados, que nada coincide', function () {
-        studentsPageAs($this->admin, Campus::factory()->create())
-            ->assertSee('Este campus todavía no tiene alumnos: llegan con la importación de alumnos del SII.');
+        Student::query()->delete();
+
+        studentsPageAs($this->admin)
+            ->assertSee('Todavía no hay alumnos: llegan con la importación de alumnos del SII.');
 
         studentsPageAs($this->admin, $this->campus)
             ->set('search', 'nadie se llama así')
             ->assertSee('Ningún alumno coincide con la búsqueda.');
+    });
+
+    it('al cambiar de campus vuelve a la primera página', function () {
+        $plan = StudyPlan::factory()->for($this->isc)->create(['code' => 'ISC-2020']);
+        foreach (range(1, 30) as $i) {
+            Student::factory()->for($plan)->create(['control_number' => sprintf('2412%04d', $i), 'campus_id' => $this->campus->id]);
+        }
+
+        studentsPageAs($this->admin)
+            ->call('gotoPage', 2)->assertSet('paginators.page', 2)
+            ->set('campus', 'C1')->assertSet('paginators.page', 1)->assertViewHas('students', listsStudents(['24119999']));
     });
 
     it('busca por número de control o nombre', function () {
@@ -125,10 +143,16 @@ describe('admin', function () {
 });
 
 describe('coordinador', function () {
-    it('ve solo a los alumnos de su carrera, y su campus es el de la credencial sin elegirlo', function () {
+    it('ve solo a los alumnos de su carrera, y su campus es el único donde trabaja, sin elegirlo', function () {
         studentsPageAs($this->coordinator)
             ->assertViewHas('students', listsStudents(['24111234', '24111241']))
             ->assertDontSee('María Carrillo');
+    });
+
+    it('no ve alumnos de un campus donde no trabaja aunque lo pida en la URL', function () {
+        studentsPageAs($this->coordinator, $this->other)
+            ->assertViewHas('students', listsStudents(['24111234', '24111241']))
+            ->assertDontSee('24119999');
     });
 
     it('en los filtros solo le ofrece su carrera', function () {

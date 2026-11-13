@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
@@ -35,6 +36,7 @@ use Mary\Traits\Toast;
 new #[Title('Carga por docente')] class extends Component
 {
     use Toast;
+    use WithCampusFilter;
 
     /** Las secciones del tablero, en orden: estado, título, tono y icono. */
     private const array SECTIONS = [
@@ -213,10 +215,11 @@ new #[Title('Carga por docente')] class extends Component
             return;
         }
 
-        $campus = $context->activeCampus();
+        /* La pantalla muestra todos los campus juntos (S6): el campus solo es el contexto del permiso, sin selector. */
+        $campus = $this->defaultCampus();
 
         $departments = Department::query()->whereNull('deleted_at')->where('is_active', true)->orderBy('code')->get()
-            ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(campus: $campus?->getKey(), unit: $department->getKey())))
+            ->filter(fn (Department $department): bool => $context->allows(StaffingPermission::TeacherLoadView, Target::of(campus: $campus->getKey(), unit: $department->getKey())))
             ->values();
 
         $chosen = $this->department === '' ? $departments->first() : $departments->first(fn (Department $department): bool => $department->code === $this->department);
@@ -233,7 +236,7 @@ new #[Title('Carga por docente')] class extends Component
 
         $this->department = $chosen->code;
         $this->termId = $term->getKey();
-        $this->campusId = $campus?->getKey();
+        $this->campusId = $campus->getKey();
         $this->departmentId = $chosen->getKey();
         $this->message = null;
     }

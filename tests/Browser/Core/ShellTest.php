@@ -171,19 +171,19 @@ it('Inicio también se busca: «inicio» lo deja a la vista y Enter lleva a él'
         ->assertNoJavaScriptErrors();
 });
 
-it('la credencial se abre como tarjeta con el campus y el periodo, y Esc la cierra', function () {
+it('la credencial se abre como tarjeta con el periodo, sin campus, y Esc la cierra', function () {
     signInToShell()
-        ->assertMissing('select[name="campus"]')
+        ->assertMissing('select[name="term"]')
         ->click('@credential')
         ->assertAttribute('@credential', 'aria-expanded', 'true')
         ->assertScript('document.activeElement.id', 'nexus-credential')
-        ->assertVisible('select[name="campus"]')
         ->assertVisible('select[name="term"]')
+        ->assertNotPresent('select[name="campus"]')
         ->assertSee('Cambiar contraseña')
         ->assertSee('Cerrar sesión')
         ->keys('select[name="term"]', 'Escape')
         ->assertAttribute('@credential', 'aria-expanded', 'false')
-        ->assertMissing('select[name="campus"]')
+        ->assertMissing('select[name="term"]')
         ->assertScript('document.activeElement.id', 'nexus-credential-toggle')
         ->assertNoJavaScriptErrors();
 });

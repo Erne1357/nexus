@@ -7,7 +7,6 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -100,7 +99,7 @@ function editorGroup(Subject $subject, string $code, array $attributes = []): Gr
  */
 function editorAs(User $user, array $query = []): Testable
 {
-    session([Actor::ACTIVE_CAMPUS => test()->campus->id]);
+    onCampusPage(test()->campus);
 
     return Livewire::withQueryParams(['semestre' => '3', ...$query])->actingAs($user)->test(SCHEDULE_EDITOR);
 }
@@ -217,7 +216,7 @@ describe('coordinador de la carrera dueña', function () {
 
     it('?grupo= abre la carrera, la retícula y el semestre del grupo con el grupo elegido', function () {
         $old = editorGroup(editorSubject('ACF-0901', 'Cálculo Diferencial', $this->cb, theory: 4), 'V', ['study_plan_id' => $this->oldPlan->id, 'semester' => 1]);
-        session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+        onCampusPage($this->campus);
 
         Livewire::withQueryParams(['grupo' => $old->id])->actingAs($this->coordinator)->test(SCHEDULE_EDITOR)
             ->assertSet('careerId', $this->isc->id)
@@ -233,7 +232,7 @@ describe('coordinador de la carrera dueña', function () {
         $shared = editorGroup($this->calculus, 'S', ['owner_career_id' => $this->iind->id, 'study_plan_id' => $industrial->id, 'semester' => 5]);
         GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->iind->id, 'is_owner' => true]);
         GroupQuota::factory()->create(['group_id' => $shared->id, 'career_id' => $this->isc->id, 'is_owner' => false]);
-        session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+        onCampusPage($this->campus);
 
         Livewire::withQueryParams(['grupo' => $shared->id])->actingAs($this->coordinator)->test(SCHEDULE_EDITOR)
             ->assertOk()
@@ -523,7 +522,7 @@ describe('coordinador de otra carrera', function () {
 
         expect(textOf(domOf($page)->querySelector('[data-testid=editor-career]')))->toContain('IIND')->not->toContain('ISC');
 
-        session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+        onCampusPage($this->campus);
         Livewire::withQueryParams(['carrera' => $this->isc->id])->actingAs($this->other)->test(SCHEDULE_EDITOR)->assertNotFound();
         Livewire::withQueryParams(['grupo' => $this->calcGroup->id])->actingAs($this->other)->test(SCHEDULE_EDITOR)->assertForbidden();
     });
@@ -634,7 +633,7 @@ describe('docente', function () {
 describe('otro campus', function () {
     it('el coordinador de la carrera en otro campus no ve sus grupos ni los toca', function () {
         $elsewhere = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->otherCampus->id, 'career_id' => $this->isc->id])->create();
-        session([Actor::ACTIVE_CAMPUS => $this->otherCampus->id]);
+        onCampusPage($this->otherCampus);
 
         Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->assertOk()->assertDontSee('ACF-0904')->assertSee('no ofrece carreras');
         Livewire::actingAs($elsewhere)->test(SCHEDULE_EDITOR)->call('place', $this->calcGroup->id, 1, '07:00')->assertNotFound();
@@ -643,10 +642,21 @@ describe('otro campus', function () {
 });
 
 describe('contexto', function () {
-    it('sin campus activo pide elegirlo', function () {
+    it('sin ningún campus activo donde trabaje, responde 403', function () {
+        Campus::query()->update(['is_active' => false]);
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
-        Livewire::actingAs($subdireccion)->test(SCHEDULE_EDITOR)->assertOk()->assertSee('Elige un campus en tu credencial');
+        Livewire::actingAs($subdireccion)->test(SCHEDULE_EDITOR)->assertForbidden();
+    });
+
+    it('AZ-02: Subdirección elige el campus en la página y cambiarlo la reabre en él, sin el grupo', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        Livewire::withQueryParams(['campus' => $this->otherCampus->code])->actingAs($subdireccion)->test(SCHEDULE_EDITOR)
+            ->assertSee($this->otherCampus->name)
+            ->assertSeeHtml('data-testid="campus-filter-'.$this->campus->code.'"')
+            ->set('campus', $this->campus->code)
+            ->assertRedirect(route('scheduling.editor', ['campus' => $this->campus->code]));
     });
 
     it('el menú lleva a «Horarios» en Académico a quien ve los horarios', function () {
@@ -661,7 +671,7 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     // del grupo, AssignCodeOnScheduleChange, y la validación del grupo antes de colocar, para avisar lo que agrega).
     // Cada llamada es una petición nueva: la Query del editor es `scoped` y memoriza por petición.
     Queue::fake([RecomputeScheduleConflicts::class]);
-    session([Actor::ACTIVE_CAMPUS => $this->campus->id]);
+    onCampusPage($this->campus);
     $this->actingAs($this->coordinator);
     $queries = function (Closure $action): int {
         app()->forgetScopedInstances();

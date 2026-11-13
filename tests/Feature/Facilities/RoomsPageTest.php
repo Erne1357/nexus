@@ -12,6 +12,7 @@ use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Facilities\Queries\RoomQuery;
 use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
@@ -19,8 +20,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | CRUD de Salones (`/facilities/rooms`, facilities::pages.rooms) con los bloqueos del salón en un panel
-| lateral. Los salones son de un campus: la pantalla trabaja con el campus activo de la credencial y, sin
-| uno, pide elegirlo. Solo el admin y la Subdirección de ese campus (RoomPolicy). Cada acción del
+| lateral. Los salones son de un campus y la credencial ya no lo elige (#415): la pantalla lista los de todos los
+| campus del usuario que usan salones, con su campus en una columna y un filtro (`?campus=`) con «Todos»; el
+| campus de un alta es el del edificio elegido. Solo el admin y la Subdirección de ese campus (RoomPolicy). Cada acción del
 | componente vuelve a autorizar.
 */
 
@@ -41,7 +43,6 @@ beforeEach(function () {
 
     $this->admin = User::factory()->admin()->create();
     $this->sub = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c2->id])->create();
-    session([Actor::ACTIVE_CAMPUS => $this->c2->id]);
 });
 
 /**
@@ -62,13 +63,12 @@ function seesRoomsMenu(User $user): bool
 }
 
 describe('admin', function () {
-    it('ve solo los salones del campus activo, con clave, edificio, tipo, capacidad, dueño y estado', function () {
+    it('ve los salones de todos los campus, con clave, campus, edificio, tipo, capacidad, dueño y estado', function () {
         $response = $this->actingAs($this->admin)->get(route('facilities.rooms'));
 
         $response->assertOk()
-            ->assertSeeInOrder(['Clave', 'Edificio', 'Tipo', 'Capacidad', 'Dueño', 'Estado'])
-            ->assertSeeInOrder(['A-101', 'A-102', 'Auditorio Mayor', 'B-201', 'OLD-1', 'Inactivo'])
-            ->assertDontSee('Z-900');
+            ->assertSeeInOrder(['Clave', 'Campus', 'Edificio', 'Tipo', 'Capacidad', 'Dueño', 'Estado'])
+            ->assertSeeInOrder(['A-101', 'A-102', 'Auditorio Mayor', 'B-201', 'OLD-1', 'Inactivo', 'Z-900']);
 
         $rows = collect(domOf($response)->querySelectorAll('table tbody tr'))->mapWithKeys(fn ($row) => [textOf($row->querySelector('td')) => textOf($row)]);
 
@@ -79,31 +79,63 @@ describe('admin', function () {
     it('en el celular apila cada salón en data-testid="room-cards"', function () {
         $cards = domOf($this->actingAs($this->admin)->get(route('facilities.rooms')))->querySelectorAll('[data-testid="room-cards"] > li');
 
-        expect(count($cards))->toBe(4)->and(textOf($cards[1]))->toContain('A-102')->toContain('Auditorio Mayor')->toContain('120 lugares');
+        expect(count($cards))->toBe(5)->and(textOf($cards[1]))->toContain('A-102')->toContain('Auditorio Mayor')->toContain('120 lugares');
     });
 
-    it('sin campus activo pide elegirlo y no lista nada', function () {
-        session()->forget(Actor::ACTIVE_CAMPUS);
-
+    it('sin elegir campus lista todos y ya no pide elegir uno en la credencial', function () {
         $this->actingAs($this->admin)->get(route('facilities.rooms'))
-            ->assertOk()->assertSee('Elige un campus en tu credencial')->assertDontSee('A-101')->assertDontSee('Nuevo salón');
+            ->assertOk()->assertSee('Nuevo salón')->assertDontSee('Elige un campus en tu credencial');
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']));
+    });
+
+    it('filtra por campus (?campus=) y «Todos» los vuelve a mostrar', function () {
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->set('campus', 'C1')->assertViewHas('rooms', listsRooms(['Z-900']))
+            ->set('campus', 'C2')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1']))
+            ->set('campus', null)->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']));
+    });
+
+    it('al cambiar de campus vuelve a la primera página', function () {
+        Room::factory()->for($this->edA)->count(20)->create();
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('gotoPage', 2)->assertSet('paginators.page', 2)
+            ->set('campus', 'C1')->assertSet('paginators.page', 1)->assertViewHas('rooms', listsRooms(['Z-900']));
+    });
+
+    it('con dos campus, el campus va dentro del filtro de edificio (un grupo por campus), sin otro control en la barra', function () {
+        $dom = domOf($this->actingAs($this->admin)->get(route('facilities.rooms')));
+        $select = $dom->querySelector('[data-testid="catalog-filters"] select[data-testid="building-scope"]');
+
+        expect($select)->not->toBeNull()->and(count($select->querySelectorAll('optgroup')))->toBe(2)
+            ->and(textOf($select->querySelector('optgroup option')))->toBe('Todo C1')
+            ->and($dom->querySelector('[data-testid="catalog-filters"] select[aria-label="Campus"]'))->toBeNull();
+    });
+
+    it('elegir «Todo C1» fija el campus, un edificio fija el edificio y la opción vacía lo quita', function () {
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('setBuildingScope', 'campus:C1')->assertSet('campus', 'C1')->assertSet('buildingFilter', '')->assertViewHas('rooms', listsRooms(['Z-900']))
+            ->call('setBuildingScope', $this->edB->id)->assertSet('campus', null)->assertSet('buildingFilter', $this->edB->id)->assertViewHas('rooms', listsRooms(['B-201', 'OLD-1']))
+            ->call('setBuildingScope', 'campus:C99')->assertSet('campus', null)->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']))
+            ->call('setBuildingScope', '')->assertSet('buildingFilter', '');
     });
 
     it('busca por clave o nombre y filtra por edificio, tipo, dueño y estado', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
-            ->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1']))
+            ->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1', 'Z-900']))
             ->set('search', 'mayor')->assertViewHas('rooms', listsRooms(['A-102']))
             ->set('search', '')->set('buildingFilter', $this->edB->id)->assertViewHas('rooms', listsRooms(['B-201', 'OLD-1']))
             ->set('buildingFilter', '')->set('typeFilter', 'laboratorio')->assertViewHas('rooms', listsRooms(['B-201']))
             ->set('typeFilter', '')->set('ownerFilter', $this->ele->id)->assertViewHas('rooms', listsRooms(['OLD-1']))
-            ->set('ownerFilter', 'sin_dueno')->assertViewHas('rooms', listsRooms(['A-101', 'A-102']))
+            ->set('ownerFilter', 'sin_dueno')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'Z-900']))
             ->set('ownerFilter', '')->set('status', 'inactive')->assertViewHas('rooms', listsRooms(['OLD-1']))
-            ->set('status', 'active')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201']));
+            ->set('status', 'active')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'Z-900']));
     });
 
-    it('olvida un filtro de edificio, tipo o dueño que no está entre las opciones del campus', function () {
+    it('olvida un filtro de edificio, tipo o dueño que no está entre las opciones de los campus a la vista', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
-            ->set('buildingFilter', $this->edZ->id)->assertSet('buildingFilter', '')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1']))
+            ->set('campus', 'C2')->set('buildingFilter', $this->edZ->id)->assertSet('buildingFilter', '')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1']))
             ->set('typeFilter', 'bodega')->assertSet('typeFilter', '')
             ->set('ownerFilter', 'no-es-uuid')->assertSet('ownerFilter', '');
     });
@@ -113,13 +145,13 @@ describe('admin', function () {
         $context = app(Actor::class)->forUser($this->admin);
 
         foreach ([['no-es-uuid', null, null], [null, 'bodega', null], [null, null, 'no-es-uuid']] as [$building, $type, $owner]) {
-            expect($query->forTable($context, $this->c2, '', $building, $type, $owner)->total())->toBe(0);
+            expect($query->forTable($context, collect([$this->c2]), '', $building, $type, $owner)->total())->toBe(0);
         }
     });
 
-    it('da de alta un salón en el campus activo con características, sin select de campus', function () {
+    it('da de alta un salón con características; su campus es el del edificio que elige, sin select de campus', function () {
         $component = Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
-            ->call('create')->assertSet('showModal', true)->assertDontSee('Campus')
+            ->call('create')->assertSet('showModal', true)->assertSee('Edificio de C1')
             ->set('building_id', $this->edA->id)->set('code', ' a-103 ')->set('name', 'Aula de posgrado')->set('type', 'aula')
             ->set('capacity', '25')->set('department_id', $this->sis->id)->set('features', 'Proyector, Aire acondicionado, proyector')
             ->call('save')->assertHasNoErrors()->assertSet('showModal', false);
@@ -129,6 +161,16 @@ describe('admin', function () {
         expect($room)->campus_id->toBe($this->c2->id)->building_id->toBe($this->edA->id)->capacity->toBe(25)
             ->department_id->toBe($this->sis->id)->features->toBe(['Proyector', 'Aire acondicionado'])
             ->and(lastToastOf($component)['title'])->toBe('Salón creado');
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('create')->set('building_id', $this->edZ->id)->set('code', 'Z-901')->set('type', 'aula')->set('capacity', '10')->call('save')->assertHasNoErrors();
+
+        expect(Room::where('code', 'Z-901')->sole()->campus_id)->toBe($this->c1->id);
+    });
+
+    it('agrupa los edificios del formulario por campus', function () {
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('create')
+            ->assertViewHas('formBuildings', fn (array $groups): bool => array_keys($groups) === ['C1', 'C2'] && count($groups['C2']) === 2);
     });
 
     it('muestra errores en español: clave repetida, capacidad en cero y campos obligatorios', function () {
@@ -140,10 +182,12 @@ describe('admin', function () {
             ->assertHasErrors(['code', 'building_id', 'type', 'capacity'])->assertSee('El campo clave es obligatorio');
     });
 
-    it('rechaza el edificio de otro campus aunque llegue del navegador', function () {
-        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+    it('rechaza el edificio de un campus donde no puede dar de alta, aunque llegue del navegador', function () {
+        Livewire::actingAs($this->sub)->test('facilities::pages.rooms')
             ->call('create')->set('building_id', $this->edZ->id)->set('code', 'X-1')->set('type', 'aula')->set('capacity', '10')->call('save')
-            ->assertHasErrors('building_id')->assertSee('El edificio no es de este campus');
+            ->assertHasErrors('building_id')->assertSee('El edificio no es de un campus donde puedas dar de alta salones');
+
+        expect(Room::where('code', 'X-1')->exists())->toBeFalse();
     });
 
     it('edita un salón, carga sus datos (características en una línea) y quita al dueño', function () {
@@ -154,6 +198,33 @@ describe('admin', function () {
 
         expect($this->b201->fresh())->capacity->toBe(35)->department_id->toBeNull()->features->toBe(['Proyector', 'Pizarrón'])
             ->and(Activity::where('subject_id', $this->b201->id)->where('event', 'updated')->exists())->toBeTrue();
+    });
+
+    it('al editar ofrece los edificios de todos los campus donde administra salones, agrupados, y mover el salón cambia su campus', function () {
+        $page = Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('edit', $this->b201->id)
+            ->assertViewHas('formBuildings', fn (array $groups): bool => array_keys($groups) === ['C1', 'C2'])
+            ->set('building_id', $this->edZ->id)->call('save')->assertHasNoErrors();
+
+        expect($this->b201->fresh())->building_id->toBe($this->edZ->id)->campus_id->toBe($this->c1->id)
+            ->and(lastToastOf($page)['title'])->toBe('Salón actualizado');
+    });
+
+    it('un salón en uso no se mueve a otro campus: el rechazo sale como error del edificio y no cambia nada', function () {
+        SubjectRoomDefault::factory()->create(['room_id' => $this->b201->id]);
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->call('edit', $this->b201->id)
+            ->set('building_id', $this->edZ->id)->call('save')
+            ->assertHasErrors('building_id')->assertSee('ya se usa en su campus');
+
+        expect($this->b201->fresh())->building_id->toBe($this->edB->id)->campus_id->toBe($this->c2->id);
+    });
+
+    it('la subdirección de C2 no ve ni puede mover un salón a un edificio de C1', function () {
+        Livewire::actingAs($this->sub)->test('facilities::pages.rooms')->call('edit', $this->b201->id)
+            ->assertViewHas('formBuildings', fn (array $groups): bool => array_keys($groups) === ['C2'])
+            ->set('building_id', $this->edZ->id)->call('save')->assertHasErrors('building_id');
+
+        expect($this->b201->fresh()->campus_id)->toBe($this->c2->id);
     });
 
     it('desactiva y activa desde la tabla', function () {
@@ -253,7 +324,6 @@ describe('bloqueos del salón en el panel', function () {
     it('la subdirección de C1 no abre, agrega ni quita bloqueos de un salón de C2', function () {
         vacate(Role::Subdireccion);
         $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
 
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('openBlocks', $this->a101->id)->assertForbidden();
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('removeBlock', $this->monday->id)->assertForbidden();
@@ -311,13 +381,24 @@ describe('robustez y perfil del campus', function () {
             ->set('features', 'Proyector, '.str_repeat('x', 40))->call('save')->assertHasNoErrors();
     });
 
-    it('un campus que no usa salones muestra su estado vacío y no deja crear (por perfil, no por código)', function () {
+    it('un campus que no usa salones no lista salones ni deja crearlos allí (por perfil, no por código)', function () {
         $this->c2->update(['settings' => [...$this->c2->settings, 'uses_rooms' => false]]);
 
-        $this->actingAs($this->admin)->get(route('facilities.rooms'))
-            ->assertOk()->assertSee('no usa salones')->assertDontSee('A-101');
-        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->assertViewHas('rooms', null)->call('create')->assertForbidden();
+        $this->actingAs($this->admin)->get(route('facilities.rooms'))->assertOk()->assertSee('Z-900')->assertDontSee('Auditorio Mayor');
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->assertViewHas('rooms', listsRooms(['Z-900']))
+            ->set('campus', 'C2')->assertViewHas('rooms', null)->assertSee('no usa salones')
+            ->call('create')->set('building_id', $this->edA->id)->set('code', 'N-9')->set('type', 'aula')->set('capacity', '10')->call('save')->assertHasErrors('building_id');
+
+        expect(Room::where('code', 'N-9')->exists())->toBeFalse();
         $this->actingAs($this->admin)->get(route('facilities.buildings'))->assertOk()->assertSee('Edificio A');
+    });
+
+    it('si ningún campus del usuario usa salones, lo dice y no deja crear (403)', function () {
+        $this->c2->update(['settings' => [...$this->c2->settings, 'uses_rooms' => false]]);
+        $this->c1->update(['settings' => [...$this->c1->settings, 'uses_rooms' => false]]);
+
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')->assertViewHas('rooms', null)->assertSee('Ninguno de tus campus usa salones')->call('create')->assertForbidden();
     });
 });
 
@@ -331,10 +412,15 @@ describe('subdirección', function () {
         expect(Room::where('code', 'B-202')->exists())->toBeTrue()->and($this->b201->fresh()->is_active)->toBeFalse();
     });
 
+    it('no ve los salones de otro campus ni da de alta uno allí, aunque pida su campus en la URL', function () {
+        Livewire::actingAs($this->sub)->test('facilities::pages.rooms')
+            ->set('campus', 'C1')->assertViewHas('rooms', listsRooms(['A-101', 'A-102', 'B-201', 'OLD-1']))->assertDontSee('Z-900')
+            ->call('edit', $this->other->id)->assertForbidden();
+    });
+
     it('de C1 no puede editar ni desactivar un salón de C2 llamando directo', function () {
         vacate(Role::Subdireccion);
         $c1 = User::factory()->withRole(Role::Subdireccion, ['campus_id' => $this->c1->id, 'valid_from' => today()->toDateString()])->create();
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
 
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('edit', $this->a101->id)->assertForbidden();
         Livewire::actingAs($c1)->test('facilities::pages.rooms')->call('toggleActive', $this->a101->id)->assertForbidden();
@@ -347,7 +433,6 @@ describe('subdirección', function () {
             ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => careerKey(1)])->create();
 
         actingAsRole($multi, Role::Coordinador);
-        session([Actor::ACTIVE_CAMPUS => $this->c1->id]);
 
         Livewire::test('facilities::pages.rooms')->assertForbidden();
 

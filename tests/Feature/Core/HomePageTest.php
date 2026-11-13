@@ -95,8 +95,9 @@ it('un invitado va al login', function () {
 
 /*
 | Bloque «Calendario» de Inicio (tarea 2.1, maqueta B): las etapas en curso, con los días que quedan, y las dos que
-| siguen, del periodo y el campus activos; la ventana propia del campus gana a la general. Solo lectura; se oculta sin
-| periodo activo o sin etapas con fecha.
+| siguen, del periodo activo; con un solo campus, su ventana propia gana a la general, y con varios se ve la general. El
+| pie dice solo el periodo: la credencial ya no elige campus (#415). Solo lectura; se oculta sin periodo activo o sin
+| etapas con fecha.
 */
 
 function homeCalendarUser(Campus $campus): User
@@ -125,12 +126,13 @@ describe('calendario en Inicio', function () {
         $this->actingAs(homeCalendarUser($this->campus));
 
         Livewire::test('core::pages.home')
-            ->assertSeeInOrder(['Calendario', 'Ene-Jun 2027 · Campus', 'Propuesta por carrera', 'En curso', '10–19 nov', 'quedan 7 días', 'Horarios y cupos', 'Próxima', 'empieza en 8 días', 'Asignación docente', 'empieza en 12 días'])
+            ->assertSeeInOrder(['Calendario', 'Ene-Jun 2027', 'Propuesta por carrera', 'En curso', '10–19 nov', 'quedan 7 días', 'Horarios y cupos', 'Próxima', 'empieza en 8 días', 'Asignación docente', 'empieza en 12 días'])
+            ->assertDontSee('Ene-Jun 2027 ·')
             ->assertDontSee('Validación de catálogos')
             ->assertDontSee('Salones y acuerdos');
     });
 
-    it('para el campus activo, su ventana propia gana a la general', function () {
+    it('con un solo campus, su ventana propia gana a la general', function () {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
         homeCalendarStage($this->term, Stage::Proposal, $this->campus, '2026-11-11', '2026-11-30');
 
@@ -214,13 +216,13 @@ describe('calendario en Inicio', function () {
         Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
     });
 
-    it('sin campus activo usa el calendario general', function () {
+    it('con varios campus usa el calendario general, sin nombrar campus', function () {
         $other = Campus::factory()->create(['code' => 'C1']);
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
         homeCalendarStage($this->term, Stage::Proposal, $this->campus, '2026-11-11', '2026-11-30');
 
         $this->actingAs(User::factory()->admin()->create());
 
-        Livewire::test('core::pages.home')->assertSee('10–19 nov')->assertSee('Ene-Jun 2027');
+        Livewire::test('core::pages.home')->assertSee('10–19 nov')->assertSee('Ene-Jun 2027')->assertDontSee('Ene-Jun 2027 ·');
     });
 });

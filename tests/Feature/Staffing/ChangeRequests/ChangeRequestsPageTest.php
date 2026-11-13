@@ -371,7 +371,7 @@ describe('aplicar', function () {
 
         crPage($this->w->coordIsc, ['solicitud' => $request->id])
             ->assertSeeHtml('data-testid="open-editor"')
-            ->assertSeeHtml('href="'.route('scheduling.editor', ['grupo' => $this->g1->id]).'"');
+            ->assertSeeHtml('href="'.e(route('scheduling.editor', ['campus' => $this->w->campus->code, 'grupo' => $this->g1->id])).'"');
 
         crPage($this->w->jefeSc, ['solicitud' => $request->id])->assertDontSeeHtml('data-testid="open-editor"');
     });

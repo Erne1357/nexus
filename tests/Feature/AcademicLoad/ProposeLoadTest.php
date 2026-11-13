@@ -31,6 +31,19 @@ function loadWith(?Campus $campus = null): AcademicLoad
     ]);
 }
 
+/**
+ * Deja abiertos todos los catálogos del periodo de la carga (con revisiones pendientes de otro departamento): sin esto
+ * ninguno se exige (HC-14, CV9).
+ */
+function openAllCatalogs(AcademicLoad $load): void
+{
+    $other = Department::factory()->create();
+
+    foreach (Catalog::cases() as $catalog) {
+        CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $load->term_id, 'department_id' => $other->id]);
+    }
+}
+
 function validateGenerals(AcademicLoad $load, array $except = []): void
 {
     foreach (Catalog::general() as $catalog) {
@@ -42,7 +55,7 @@ function validateGenerals(AcademicLoad $load, array $except = []): void
 
 function validateRooms(AcademicLoad $load): void
 {
-    CatalogReview::factory()->rooms($load->campus)->validated()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
+    CatalogReview::factory()->rooms()->validated()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
 }
 
 /**
@@ -110,14 +123,21 @@ it('HC-14: bloquea y nombra el catálogo general pendiente', function () {
         ->and($load->transitions()->count())->toBe(0);
 });
 
-it('HC-14: bloquea si las revisiones no existen y lista todos los catálogos', function () {
-    expect(blockedReason(loadWith()))->toBe('HC-14: faltan por validar los catálogos de Docentes, Salones, Materias, Planes de estudio y Carreras.');
+it('HC-14 y CV9: sin ningún catálogo abierto en el periodo no bloquea', function () {
+    expect(collect(blockedReasons(loadWith()))->contains(fn (string $reason): bool => str_starts_with($reason, 'HC-14')))->toBeFalse();
+});
+
+it('HC-14: bloquea si las revisiones del departamento no existen en un periodo con los catálogos abiertos y lista todos', function () {
+    $load = loadWith();
+    openAllCatalogs($load);
+
+    expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Docentes, Salones, Materias, Planes de estudio y Carreras.');
 });
 
 it('HC-14: bloquea si los salones están pendientes', function () {
     $load = loadWith();
     validateGenerals($load);
-    CatalogReview::factory()->rooms($load->campus)->inReview()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
+    CatalogReview::factory()->rooms()->inReview()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
 
     expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Salones.');
 });
@@ -142,12 +162,15 @@ it('HC-14: las revisiones generales de otro departamento no cuentan', function (
     expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Docentes, Materias, Planes de estudio y Carreras.');
 });
 
-it('HC-14: la revisión de salones de otro campus no cuenta', function () {
+it('HC-14: la revisión de salones es una para todos los campus: validada, vale en el campus de la carga (decisión 6)', function () {
     $load = loadWith();
     validateGenerals($load);
     CatalogReview::factory()->rooms()->validated()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
+    partFor($load);
 
-    expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Salones.');
+    app(ProposeLoad::class)->handle($load, test()->user);
+
+    expect($load->fresh()->status)->toBe(LoadStatus::Proposed);
 });
 
 it('HC-14: lee las revisiones con bloqueo compartido al proponer', function () {
@@ -209,6 +232,7 @@ it('HC-20: cuenta la parte aceptada aunque la propuesta esté regresada por otro
 
 it('HC-14 y HC-20: sin catálogos ni partes aceptadas da los dos motivos', function () {
     $load = loadWith();
+    openAllCatalogs($load);
 
     expect(blockedReasons($load))->toBe([
         'HC-14: faltan por validar los catálogos de Docentes, Salones, Materias, Planes de estudio y Carreras.',

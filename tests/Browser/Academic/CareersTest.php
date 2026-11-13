@@ -28,16 +28,14 @@ it('el admin ofrece una carrera en C2 y luego deja de ofrecerla desde la UI', fu
         ->click('#nexus-menu a[data-label="Carreras"]')
         ->assertPathIs('/academic/careers')
         ->assertSee('Ingeniería en Sistemas')
-        ->assertSee('Se ofrece en C2')
-        ->click('table [aria-label="Acciones de ISC"]')
-        ->click('@offering-ISC')
+        ->assertSee('Se ofrece en')
+        ->click('@offering-ISC-C2')
         ->waitForText('Carrera ofrecida')
         ->assertNoJavaScriptErrors();
 
     expect(CareerCampus::where('career_id', $this->career->id)->where('campus_id', $this->c2->id)->sole()->is_active)->toBeTrue();
 
-    $page->click('table [aria-label="Acciones de ISC"]')
-        ->click('@offering-ISC')
+    $page->click('@offering-ISC-C2')
         ->waitForText('Carrera fuera de la oferta')
         ->assertNoJavaScriptErrors();
 

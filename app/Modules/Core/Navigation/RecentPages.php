@@ -9,7 +9,8 @@ use Illuminate\Contracts\Session\Session;
 /**
  * La última página que el usuario visitó de cada área del menú, en su sesión: a ella lleva el icono
  * del área (DESIGN.md, "Navigation"). La anota el menú al pintarse en una página completa; la olvida
- * SetActiveContext al cambiar el campus o el periodo, porque una ficha de otro campus ya no se abriría.
+ * SetActiveContext al cambiar el periodo, porque una ficha de otro periodo ya no aplicaría, y SwitchRole al cambiar
+ * de perfil.
  *
  * Guarda la ruta junto con la página: last() solo la da si la entrada de esa ruta sigue en el área. Así una
  * página anotada antes de que su entrada cambiara de área (el menú por áreas y etapas, MN-01) no se ofrece

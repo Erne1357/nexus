@@ -14,7 +14,6 @@ it('expone los campos del perfil de flujo', function () {
         'days' => [1, 2, 3, 4, 5, 6],
         'allow_external_teachers' => true,
         'requires_subdireccion_approval' => false,
-        'heads_edit_rooms' => true,
     ]);
 
     expect($profile->usesRooms)->toBeFalse()
@@ -25,8 +24,7 @@ it('expone los campos del perfil de flujo', function () {
         ->and($profile->dayEnd)->toBe('20:00')
         ->and($profile->days)->toBe([1, 2, 3, 4, 5, 6])
         ->and($profile->allowExternalTeachers)->toBeTrue()
-        ->and($profile->requiresSubdireccionApproval)->toBeFalse()
-        ->and($profile->headsEditRooms)->toBeTrue();
+        ->and($profile->requiresSubdireccionApproval)->toBeFalse();
 });
 
 it('usa el perfil presencial de PROJECT.md para las claves que faltan', function () {
@@ -48,8 +46,8 @@ it('arranca sin visto bueno obligatorio de Subdirección (ADR-0008) y sin docent
         ->and($profile->allowExternalTeachers)->toBeFalse();
 });
 
-it('por omisión los jefes no corrigen sus salones al validar (supuesto por confirmar)', function () {
-    expect(CampusProfile::fromArray([])->headsEditRooms)->toBeFalse();
+it('ignora heads_edit_rooms, que ya no es del perfil (decisión 5: el jefe corrige sus salones en cualquier campus)', function () {
+    expect(CampusProfile::fromArray(['heads_edit_rooms' => true])->toArray())->not->toHaveKey('heads_edit_rooms');
 });
 
 it('completa con valores por omisión solo las claves que faltan', function () {
@@ -80,7 +78,6 @@ it('se convierte de vuelta en el arreglo que guarda campuses.settings', function
         'days' => [1, 2, 3, 4, 5, 6],
         'allow_external_teachers' => false,
         'requires_subdireccion_approval' => true,
-        'heads_edit_rooms' => true,
     ];
 
     expect(CampusProfile::fromArray($settings)->toArray())->toBe($settings)
@@ -94,14 +91,6 @@ it('se resume en una línea para la columna Perfil de flujo de la tabla de campu
     'con visto bueno de Subdirección' => [
         ['requires_subdireccion_approval' => true],
         'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00 · visto bueno de Subdirección',
-    ],
-    'con jefes que corrigen sus salones' => [
-        ['heads_edit_rooms' => true],
-        'Salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00 · los jefes corrigen salones',
-    ],
-    'sin salones, aunque los jefes los corrijan' => [
-        ['uses_rooms' => false, 'heads_edit_rooms' => true],
-        'Sin salones · bloques de 60 min · lunes a viernes, 7:00 a 21:00',
     ],
     'dos días seguidos' => [
         ['days' => [5, 6], 'block_minutes' => 120, 'day_start' => '08:00', 'day_end' => '14:00'],
@@ -126,7 +115,6 @@ it('rechaza un perfil con valores inválidos', function (array $settings) {
 })->with([
     'booleano como texto' => [['uses_rooms' => 'yes']],
     'booleano como entero' => [['requires_subdireccion_approval' => 1]],
-    'jefes que corrigen salones como texto' => [['heads_edit_rooms' => 'true']],
     'modo de asignación desconocido' => [['staffing_mode' => 'regional']],
     'modo de asignación que no es texto' => [['staffing_mode' => 1]],
     'bloque de cero minutos' => [['block_minutes' => 0]],

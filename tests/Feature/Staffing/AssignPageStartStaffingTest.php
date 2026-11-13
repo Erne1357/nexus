@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
-use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -31,7 +30,7 @@ beforeEach(function () {
 
 function startStaffingPage(User $user): Testable
 {
-    test()->withSession([Actor::ACTIVE_CAMPUS => test()->world->campus->id]);
+    onCampusPage(test()->world->campus);
 
     return Livewire::actingAs($user)->test('staffing::pages.assign');
 }
@@ -52,7 +51,8 @@ it('con grupos sin horario el botón sale deshabilitado con el motivo y la liga 
         ->assertDontSeeHtml('data-testid="start-staffing"')
         ->assertSeeHtml('data-testid="staffing-blockers"')
         ->assertSeeText('2 grupos no tienen horario.')
-        ->assertSeeHtml('href="'.route('scheduling.conflicts').'"')
+        ->assertSeeHtml('href="'.route('scheduling.conflicts', ['campus' => $this->world->campus->code]).'"')
+        ->assertSeeHtml('href="'.route('scheduling.editor', ['campus' => $this->world->campus->code]).'"')
         ->assertDontSeeText('HC-');
 });
 

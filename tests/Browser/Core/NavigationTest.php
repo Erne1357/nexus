@@ -11,7 +11,8 @@ use App\Modules\Core\Models\User;
 | en Servicios escolares, y "Elementos", solo para el admin, en Recursos humanos. Inicio es el primer
 | icono de la franja. Cerrado, el menú muestra el área de la pantalla (en Inicio, la primera); las demás
 | se ven al abrirlo con la liebre. Los iconos de área no abren el menú: llevan a la última página que
-| visitaste del área. El campus, el periodo y el tema están en la tarjeta de la credencial.
+| visitaste del área. El periodo y el tema están en la tarjeta de la credencial; el campus no (#415: lo
+| elige cada pantalla).
 */
 
 beforeEach(function () {
@@ -20,7 +21,8 @@ beforeEach(function () {
 
     $this->c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $this->c2 = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
-    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-18', 'ends_on' => '2027-06-11']);
+    $this->previous = Term::factory()->create(['name' => 'Ago-Dic 2026', 'starts_on' => '2026-08-17', 'ends_on' => '2026-12-11']);
     // Carga en curso (MN-04): el coordinador ve las pantallas de la carga y el admin, sin la insignia «Oculta».
     AcademicLoad::factory()->for($term)->create(['campus_id' => $this->c2->id]);
 
@@ -137,33 +139,26 @@ it('el menú no brinca: lo que espera para moverse sale de su lugar inicial, la 
         ->assertNoJavaScriptErrors();
 });
 
-it('cambia el campus activo desde la credencial y lo confirma con un toast', function () {
-    $page = signInFromBrowser('admin')
-        ->assertSelected('campus', '')
+it('cambia el periodo activo desde la credencial y lo confirma con un toast', function () {
+    signInFromBrowser('admin')
+        ->assertSeeIn('@credential', 'Administración · Ene-Jun 2027')
         ->click('@credential')
-        ->select('campus', (string) $this->c1->id)
-        ->waitForText('Campus I · Ene-Jun 2027')
-        ->assertSee('Contexto actualizado')
+        ->select('term', (string) $this->previous->id)
+        ->waitForText('Periodo actualizado')
         ->refresh()
-        ->assertSelected('campus', (string) $this->c1->id)
-        ->assertSeeIn('@credential', 'Administración · Campus I · Ene-Jun 2027')
+        ->assertSeeIn('@credential', 'Administración · Ago-Dic 2026')
+        ->assertSelected('term', (string) $this->previous->id)
         ->assertNoJavaScriptErrors();
-
-    $page->assertScript('window.Alpine?.$data(document.body).menuOpen === false')
-        ->click('@credential')
-        ->select('campus', (string) $this->c2->id)
-        ->waitForText('Campus II · Ene-Jun 2027')
-        ->refresh()
-        ->assertSelected('campus', (string) $this->c2->id);
 });
 
-it('el coordinador ve fijo su único campus', function () {
-    signInFromBrowser('19110001')
-        ->assertSeeIn('@credential', 'Coordinador de carrera · Campus II · Ene-Jun 2027')
+it('la credencial no lleva campus, ni en el resumen ni en la tarjeta', function (string $username) {
+    signInFromBrowser($username)
+        ->assertDontSeeIn('@credential', 'Campus')
         ->click('@credential')
-        ->assertSeeIn('#nexus-credential', 'Campus II')
-        ->assertNotPresent('select[name="campus"]');
-});
+        ->assertDontSeeIn('#nexus-credential', 'Campus I')
+        ->assertNotPresent('select[name="campus"]')
+        ->assertPresent('select[name="term"]');
+})->with(['admin de dos campus' => 'admin', 'coordinador de uno' => '19110001']);
 
 it('cambia entre el tema claro y el oscuro desde la credencial', function () {
     $page = signInFromBrowser('admin')

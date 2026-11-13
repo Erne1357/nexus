@@ -828,11 +828,13 @@ describe('iconos de área', function () {
         expect(areaIconIn($page, 'administracion')->getAttribute('href'))->toBe(route('imports.wizard'));
     });
 
-    it('al cambiar el campus o el periodo activo, olvida las páginas que visitaste', function () {
+    it('al cambiar el periodo activo, olvida las páginas que visitaste', function () {
+        $term = Term::factory()->create();
+        // Una página de Administración que no es su principal: si no se olvidara, el icono llevaría a ella.
         $this->get(route('academic.subjects', ['search' => 'cal']))->assertOk();
 
         Livewire::test('core::components.context-switcher')
-            ->set('campusId', $this->campus->id)
+            ->set('termId', $term->id)
             ->call('apply')
             ->assertHasNoErrors();
 

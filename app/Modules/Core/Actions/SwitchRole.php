@@ -14,8 +14,8 @@ use Illuminate\Support\Facades\DB;
  * Cambia el perfil con que actúa la sesión (spec 8.1, AZ-S4): fija el puesto en `users.last_role` (el que se usa al
  * entrar la próxima vez) y deja en la bitácora «Cambió al perfil …» con el de antes y el de ahora, en una
  * transacción. El perfil se nombra como en la credencial (RoleTitleQuery: el jefe de Servicios Escolares, por su
- * unidad, AZ-02). Solo si se guardó, lo fija en la sesión; si el campus activo no es de los que ofrece el nuevo perfil,
- * lo olvida, y olvida las páginas recientes del menú (RecentPages), que eran de otro alcance.
+ * unidad, AZ-02). Solo si se guardó, lo fija en la sesión y olvida las páginas recientes del menú (RecentPages), que
+ * eran de otro alcance. El periodo de la credencial se conserva; campus no hay (#415: AZ-S6 quedó sin efecto).
  */
 final class SwitchRole
 {
@@ -50,12 +50,6 @@ final class SwitchRole
         });
 
         $this->session->put(Actor::ACTIVE_ROLE, $role->value);
-
-        $campusId = $this->session->get(Actor::ACTIVE_CAMPUS);
-
-        if ($campusId !== null && ! $this->context->campuses()->contains('id', $campusId)) {
-            $this->session->forget(Actor::ACTIVE_CAMPUS);
-        }
 
         $this->recentPages->forget();
     }

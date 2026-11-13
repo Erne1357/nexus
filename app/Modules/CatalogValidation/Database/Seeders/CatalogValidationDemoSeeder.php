@@ -5,6 +5,8 @@ namespace App\Modules\CatalogValidation\Database\Seeders;
 use App\Modules\Academic\Actions\CreateSubject;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\FlagRecord;
+use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
+use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
@@ -44,11 +46,12 @@ use Spatie\Activitylog\Models\Activity;
 
 /**
  * Validación de catálogos demo y masiva (tareas 2.4 a 2.6), para revisar sus pantallas con volumen. Trabaja sobre los
- * periodos abiertos (term_openings) en orden cronológico, después de que OpenTerm creó sus revisiones; sin periodos
- * abiertos o sin revisiones, no hace nada.
+ * periodos abiertos (term_openings) en orden cronológico, después de que el admin abre su validación con todos los catálogos
+ * (OpenCatalogValidation, CV9); sin periodos abiertos, no hace nada.
  *
  * - Los periodos abiertos anteriores al último se validan completos con ValidateReview y el jefe de cada departamento,
- *   para que quede su foto. Luego se simulan los cambios hacia el último con las Actions de cada módulo (docentes y
+ *   para que quede su foto. Antes de validar una revisión, el jefe marca todos sus registros como revisados
+ *   (MarkRecordsReviewed, CV7). Luego se simulan los cambios hacia el último con las Actions de cada módulo (docentes y
  *   salones desactivados, reactivados y nuevos, materias nuevas): son las altas y bajas de `summary()`.
  * - El último periodo queda con estados fijos por código de departamento, de los que depende el seeder de propuestas:
  *   CB, SC, II y EE todo validado, para que sus partes de propuesta se puedan aceptar (HC-14). CEA y MM dependen del
@@ -127,6 +130,7 @@ class CatalogValidationDemoSeeder extends Seeder
     public function __construct(
         private readonly CatalogContentsQuery $contents,
         private readonly ValidateReview $validate,
+        private readonly MarkRecordsReviewed $mark,
         private readonly ReopenReview $reopen,
         private readonly StartReview $start,
         private readonly FlagRecord $flag,
@@ -162,6 +166,7 @@ class CatalogValidationDemoSeeder extends Seeder
         $started = hrtime(true);
 
         try {
+            $this->openValidation($terms);
             $current = $terms->last();
 
             if ($mode === 'validated') {
@@ -190,6 +195,21 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
+     * El admin abre la validación de todos los catálogos de cada periodo abierto (CV9): ya no nace al abrir el periodo.
+     * Idempotente.
+     *
+     * @param  Collection<int, Term>  $terms
+     */
+    private function openValidation(Collection $terms): void
+    {
+        $admin = User::query()->where('username', 'admin')->first() ?? throw new RuntimeException('Falta el usuario admin (AdminUserSeeder).');
+
+        foreach ($terms as $term) {
+            app(OpenCatalogValidation::class)->handle($term, Catalog::cases(), $admin);
+        }
+    }
+
+    /**
      * Valida, con el jefe de su departamento, las revisiones que falten de un periodo; con `$started`, antes la empieza,
      * como en la pantalla. Da si validó alguna.
      */
@@ -201,11 +221,25 @@ class CatalogValidationDemoSeeder extends Seeder
 
         foreach ($reviews as $review) {
             $head = $this->headOf($review);
-            $this->validate->handle($started ? $this->start->handle($review, $head) : $review, $head);
+            $this->validateReviewed($started ? $this->start->handle($review, $head) : $review, $head);
             $any = true;
         }
 
         return $any;
+    }
+
+    /**
+     * El jefe marca como revisados todos los registros de la revisión (CV7) y la valida.
+     */
+    private function validateReviewed(CatalogReview $review, User $head): CatalogReview
+    {
+        $ids = array_column($this->contents->records($review), 'id');
+
+        if ($ids !== []) {
+            $this->mark->handle($review, $ids, $head);
+        }
+
+        return $this->validate->handle($review, $head);
     }
 
     /**
@@ -354,8 +388,8 @@ class CatalogValidationDemoSeeder extends Seeder
                 }
 
                 match ($target) {
-                    'validated' => $this->validate->handle($review, $actor),
-                    'reopened' => $this->reopen->handle($this->validate->handle($review, $actor), $actor),
+                    'validated' => $this->validateReviewed($review, $actor),
+                    'reopened' => $this->reopen->handle($this->validateReviewed($review, $actor), $actor),
                     'review' => $this->start->handle($review, $actor),
                     default => null,
                 };

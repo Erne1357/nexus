@@ -157,3 +157,21 @@ it('el coordinador entra por el menú, acomoda las horas de tres grupos del seme
         ->and($sessions('AED-1026'))->toBe(['1 09:00-11:00'])
         ->and($sessions('SCC-1005'))->toBe(['2 07:00-09:00']);
 });
+
+it('AZ-02: quien trabaja en varios campus elige el campus en la página y la URL lo lleva', function () {
+    Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);
+    User::factory()->admin()->create(['username' => '19110099']);
+
+    visit('/login')
+        ->fill('username', '19110099')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/scheduling/editor')
+        ->waitForText('Horarios')
+        ->assertPresent('@campus-filter-C2')
+        ->click('@campus-filter-C3')
+        ->wait(1)
+        ->assertQueryStringHas('campus', 'C3')
+        ->assertAttribute('@campus-filter-C3', 'aria-pressed', 'true');
+});
