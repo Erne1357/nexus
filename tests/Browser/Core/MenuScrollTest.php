@@ -50,7 +50,7 @@ it('se desplaza la columna y no la franja: la última entrada se alcanza y los i
         c.scrollTop = c.scrollHeight;
         const last = [...c.querySelectorAll("[data-menu-entry]")].filter((a) => a.offsetParent !== null).pop();
 
-        return last.dataset.label === "Importaciones"
+        return last.dataset.label === "Parámetros"
             && last.getBoundingClientRect().bottom <= window.innerHeight
             && icon.getBoundingClientRect().top === before
             && document.documentElement.scrollTop === 0;

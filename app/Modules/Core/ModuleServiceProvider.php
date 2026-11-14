@@ -6,6 +6,7 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Settings\SettingDefinition;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -152,6 +153,18 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * @return list<class-string>
      */
     public function demoQuietEvents(): array
+    {
+        return [];
+    }
+
+    /**
+     * Parámetros editables que el módulo lee de `settings` (alcance global): llave, etiqueta, ayuda, tipo, valor por
+     * omisión y validación. La pantalla «Parámetros» los agrupa por módulo y una prueba exige que toda llave que el módulo
+     * lee esté aquí (CF-S7).
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
     {
         return [];
     }

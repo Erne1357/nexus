@@ -53,6 +53,7 @@ Route::middleware('auth')->group(function () {
     // 1.22-D Bitácora
     // 1.22-E Avisos y atajos del login
     // 1.22-F Parámetros
+    Route::livewire('/configuracion/parametros', 'core::pages.settings')->name('core.settings');
     // 1.22-G Correos y colas
 });
 

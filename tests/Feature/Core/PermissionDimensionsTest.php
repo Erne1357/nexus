@@ -51,6 +51,7 @@ function dimensionTables(): array
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
         'core.user' => 'users',
+        'core.setting' => 'settings',
         // Ver en el menú lo no disponible depende del periodo activo (MN-02), no de un recurso con campus.
         'core.navigation' => 'terms',
         'academic.department' => 'departments',
