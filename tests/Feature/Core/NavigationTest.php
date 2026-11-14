@@ -378,6 +378,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
             'institucion' => ['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos'],
             'catalogos' => ['Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones'],
             'datos' => ['Importaciones'],
+            'configuracion' => ['Bitácora'],
         ])
         ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos']])
         ->and(navigationGroupsFor($admin, NavigationArea::RecursosHumanos))->toBe(['—' => ['Docentes']]);
@@ -495,7 +496,7 @@ describe('menú', function () {
             ->{'Académico'}->toContain('Validar catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
-            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']);
+            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Bitácora']);
     });
 
     it('muestra al docente su «Mi espacio»', function () {
@@ -603,7 +604,7 @@ describe('menú', function () {
             'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados',
         ])
             ->and(array_map(fn (Element $heading): string => $heading->getAttribute('data-menu-group'), iterator_to_array($page->querySelectorAll('[data-menu-area="administracion"] [data-menu-group]'))))
-            ->toBe(['institucion', 'catalogos', 'datos'])
+            ->toBe(['institucion', 'catalogos', 'datos', 'configuracion'])
             ->and($page->querySelector('[data-menu-group="datos"]')->getAttribute('data-menu-flip'))->toBe('heading');
     });
 

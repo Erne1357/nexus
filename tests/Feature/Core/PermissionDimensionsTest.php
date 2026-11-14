@@ -51,6 +51,8 @@ function dimensionTables(): array
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
         'core.user' => 'users',
+        // La bitácora (1.22-D) es de toda la instalación: no lleva campus.
+        'core.activity' => 'activity_log',
         // Ver en el menú lo no disponible depende del periodo activo (MN-02), no de un recurso con campus.
         'core.navigation' => 'terms',
         'academic.department' => 'departments',
