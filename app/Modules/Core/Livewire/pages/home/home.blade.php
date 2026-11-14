@@ -25,11 +25,15 @@
                     @if ($block['account'] !== null)
                         <div class="mt-4 border-t border-base-300 pt-3" data-testid="role-block-account">
                             <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Tu acceso</h3>
-                            <dl class="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1">
-                                <dt class="text-neutral">Usuario</dt>
-                                <dd class="font-mono font-semibold">{{ $block['account']['username'] }}</dd>
-                                <dt class="text-neutral">Correo institucional</dt>
-                                <dd @class(['[overflow-wrap:anywhere]', 'text-neutral' => $block['account']['email'] === null])>{{ $block['account']['email'] ?? 'Sin correo institucional' }}</dd>
+                            <dl class="mt-2 grid gap-2">
+                                <div>
+                                    <dt class="text-sm text-neutral">Usuario</dt>
+                                    <dd class="font-mono font-semibold">{{ $block['account']['username'] }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-sm text-neutral">Correo institucional</dt>
+                                    <dd @class(['[overflow-wrap:anywhere]', 'text-neutral' => $block['account']['email'] === null])>{{ $block['account']['email'] ?? 'Sin correo institucional' }}</dd>
+                                </div>
                             </dl>
                             <x-button label="Cambiar contraseña" :link="route('user-password.edit')" icon="o-key" class="btn-outline btn-sm mt-3" no-wire-navigate />
                         </div>

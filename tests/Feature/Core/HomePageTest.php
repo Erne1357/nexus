@@ -73,7 +73,7 @@ it('a quien no tiene un rol vigente le dice que pida uno', function () {
         ->assertDontSee('Coordinador de carrera');
 });
 
-it('D12: el bloque del docente muestra lo suyo: su usuario, su correo institucional y «Cambiar contraseña»', function () {
+it('IN-01 (D12): el bloque del docente muestra lo suyo: su usuario, su correo institucional y «Cambiar contraseña»', function () {
     $this->actingAs(User::factory()->withRole(Role::Docente)->create(['username' => 'PEAA800101XX1', 'email' => 'ana.perez@cdjuarez.tecnm.mx']));
 
     Livewire::test('core::pages.home')
@@ -82,7 +82,7 @@ it('D12: el bloque del docente muestra lo suyo: su usuario, su correo institucio
         ->assertSee('Cambiar contraseña');
 });
 
-it('D12: sin correo institucional lo dice, y el bloque de otro puesto no lleva sus datos de acceso', function () {
+it('IN-01 (D12): sin correo institucional lo dice, y el bloque de otro puesto no lleva sus datos de acceso', function () {
     $user = User::factory()->withRole(Role::Docente)->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['username' => 'PEAA800101XX1', 'email' => null]);
 
     actingAsRole($user, Role::Docente);
@@ -175,7 +175,7 @@ describe('calendario en Inicio', function () {
         'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
     ]);
 
-    it('D12: se oculta al docente: su Inicio es solo lo suyo', function () {
+    it('IN-01 (D12): se oculta al docente: su Inicio es solo lo suyo', function () {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
 
         $this->actingAs(User::factory()->withRole(Role::Docente)->create());
@@ -186,7 +186,7 @@ describe('calendario en Inicio', function () {
             ->assertDontSee('Propuesta por carrera');
     });
 
-    it('D12: al jefe que también es docente se le oculta solo con el perfil de docente', function () {
+    it('IN-01 (D12): al jefe que también es docente se le oculta solo con el perfil de docente', function () {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
         $user = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->withRole(Role::Docente)->create();
 

@@ -498,7 +498,7 @@ function visibleEntryFor(User $user, string $route): ?NavigationItem
 }
 
 describe('Materias por colocar, en Servicios escolares (tarea 1.21)', function () {
-    it('el jefe de Servicios Escolares y el admin la ven en el área Servicios escolares del menú', function (string $who) {
+    it('MN-01: el jefe de Servicios Escolares y el admin la ven en el área Servicios escolares del menú', function (string $who) {
         $entry = visibleEntryFor($this->{$who}, 'academic.placements');
 
         expect($entry?->label)->toBe('Materias por colocar')
@@ -514,14 +514,14 @@ describe('Materias por colocar, en Servicios escolares (tarea 1.21)', function (
             ->and(textOf($page->querySelector('table')))->not->toContain('IIND-2024');
     });
 
-    it('el Inicio del jefe de Servicios Escolares enlaza a ella', function () {
+    it('IN-02: el Inicio del jefe de Servicios Escolares enlaza a ella', function () {
         $page = domOf($this->actingAs($this->servicesHead)->get(route('home'))->assertOk());
         $link = $page->querySelector('[data-testid="role-block"] a[href="'.route('academic.placements').'"]');
 
         expect(textOf($link))->toBe('Materias por colocar');
     });
 
-    it('el coordinador y el jefe de un departamento académico no la ven, no entran y su Inicio no la enlaza', function (string $who) {
+    it('IN-02: el coordinador y el jefe de un departamento académico no la ven, no entran y su Inicio no la enlaza', function (string $who) {
         expect(visibleEntryFor($this->{$who}, 'academic.placements'))->toBeNull();
 
         $this->actingAs($this->{$who})->get(route('academic.placements'))->assertForbidden();

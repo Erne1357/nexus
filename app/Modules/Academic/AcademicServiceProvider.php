@@ -54,7 +54,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     /**
      * Los catálogos van en Administración. «Materias por colocar» (tarea 1.21, supuesto por confirmar) es la única
      * tarea de Servicios Escolares en Academic, las materias por validar de la migración del SII (D19): va en su área,
-     * solo para quien las coloca, y abre la lista de planes con el filtro «Por validar».
+     * solo para quien las coloca, después de Alumnos, y abre la lista de planes con el filtro «Por validar».
      */
     public function navigation(): array
     {
@@ -68,7 +68,7 @@ final class AcademicServiceProvider extends ModuleServiceProvider
             new NavigationItem('Planes de estudio', 'academic.plans', 'o-rectangle-group', NavigationArea::Administracion, group: NavigationGroup::Catalogos,
                 ability: 'viewAny', arguments: [StudyPlan::class], childRoutes: ['academic.plans.show']),
             new NavigationItem('Materias por colocar', 'academic.placements', 'o-queue-list', NavigationArea::ServiciosEscolares,
-                ability: 'validatePlacements', arguments: [StudyPlan::class]),
+                ability: 'validatePlacements', arguments: [StudyPlan::class], order: 10),
         ];
     }
 
