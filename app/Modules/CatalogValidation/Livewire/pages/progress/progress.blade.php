@@ -1,18 +1,15 @@
 {{--
     Avance de validación (DESIGN.md, "Patrones de pantalla previstos", «Tablero de estado»: variante A, matriz,
-    decidida por el usuario el 2 de noviembre de 2026). Encabezado, su barra de herramientas (búsqueda, campus,
-    estado y «Recordar a todos los pendientes»), tres indicadores (avance global, ventana de la etapa y
-    observaciones abiertas) y la matriz: una tabla desde 1024 px y, debajo, renglones apilados con las mismas
-    celdas. Tocar un departamento abre su drawer.
+    decidida por el usuario el 2 de noviembre de 2026). Encabezado, su barra de herramientas (búsqueda, estado y
+    «Recordar a todos los pendientes»; sin campus: la validación es de todo el Tec), tres indicadores (avance global,
+    ventana de la etapa con su fecha límite y observaciones abiertas, que abre la lista de todas) y la matriz: una tabla
+    desde 1024 px y, debajo, renglones apilados con las mismas celdas. Tocar un departamento abre su drawer.
 --}}
 <div>
     <x-header title="Avance de validación" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             @if ($term)
                 {{ $term->name }} · <span class="font-mono">{{ $term->code }}</span>
-                @if ($open->isNotEmpty())
-                    · {{ \Illuminate\Support\Arr::join($open->pluck('name')->all(), ', ', ' y ') }} {{ $open->count() > 1 ? 'abiertos' : 'abierto' }}
-                @endif
             @else
                 Qué departamentos ya validaron sus catálogos y cuáles faltan.
             @endif
@@ -48,7 +45,6 @@
                 <x-input wire:model.live.debounce.300ms="search" icon="o-magnifying-glass" placeholder="Departamento o jefe" aria-label="Buscar por departamento o jefe" clearable />
             </x-slot:search>
 
-            <x-select wire:model.live="campus" aria-label="Campus" :options="$open->map(fn ($option) => ['id' => $option->id, 'name' => $option->name])->all()" placeholder="Campus" placeholder-value="" />
             <x-select wire:model.live="status" aria-label="Estado" :options="[['id' => 'pending', 'name' => 'Con pendientes'], ['id' => 'validated', 'name' => 'Todo validado']]" placeholder="Estado" placeholder-value="" />
 
             <x-slot:action>
@@ -78,14 +74,19 @@
                     <h2 id="progress-stage" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Validación de catálogos</h2>
                     <p class="flex flex-wrap items-center gap-2"><span class="font-mono text-2xl font-semibold leading-none tabular-nums">{{ \App\Modules\Core\Support\StageTimeline::rangeLabel($stage) }}</span><x-core::status-badge :tone="$stage->status->tone()" :label="$stage->status->label()" /></p>
                     <div class="h-2 overflow-hidden rounded-full bg-base-300" aria-hidden="true"><i class="block h-full bg-primary" style="width: {{ $window['elapsed'] }}%"></i></div>
-                    <p class="text-sm text-neutral">{{ \App\Modules\Core\Support\StageTimeline::daysLeftLabel($stage) ?? 'Etapa terminada' }}</p>
+                    <p class="text-sm text-neutral" data-testid="progress-deadline">Fecha límite: <span class="font-semibold text-base-content tabular-nums">{{ \App\Modules\Core\Support\StageTimeline::dateLabel($stage->endsOn) }}</span> · {{ \App\Modules\Core\Support\StageTimeline::daysLeftLabel($stage) ?? 'etapa terminada' }}</p>
                 </section>
             @endif
 
             <section class="space-y-2 p-4" aria-labelledby="progress-flags" data-testid="progress-flags">
                 <h2 id="progress-flags" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Observaciones abiertas</h2>
                 <p class="flex items-baseline gap-2"><span class="font-mono text-3xl font-semibold leading-none tabular-nums">{{ $board['flags']['open'] }}</span><span class="text-neutral">en {{ $board['flags']['departments'] }} {{ $board['flags']['departments'] === 1 ? 'departamento' : 'departamentos' }}</span></p>
-                <p class="text-sm text-neutral">{{ $board['flags']['resolved'] }} {{ $board['flags']['resolved'] === 1 ? 'resuelta' : 'resueltas' }}</p>
+                <p class="flex flex-wrap items-center gap-x-3 text-sm text-neutral">
+                    <span>{{ $board['flags']['resolved'] }} {{ $board['flags']['resolved'] === 1 ? 'resuelta' : 'resueltas' }}</span>
+                    @if ($board['flags']['open'] > 0)
+                        <button type="button" wire:click="openFlags" class="link font-medium text-base-content underline-offset-4" data-testid="open-all-flags">Ver la lista</button>
+                    @endif
+                </p>
             </section>
         </div>
 
@@ -116,7 +117,7 @@
                                 @php($department = $row['department'])
                                 <tr wire:key="row-{{ $department->id }}" class="align-top" data-testid="progress-row-{{ $department->code }}">
                                     <td class="sticky left-0 z-10 w-52 min-w-52 max-w-52 bg-base-100 px-4 py-2.5">
-                                        @include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses])
+                                        @include('catalog-validation::progress.who', ['row' => $row])
                                     </td>
                                     @foreach ($columns as $column)
                                         <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']]])</td>
@@ -154,7 +155,7 @@
                         @php($department = $row['department'])
                         <li wire:key="card-{{ $department->id }}" class="space-y-2 px-4 py-3.5">
                             <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0">@include('catalog-validation::progress.who', ['row' => $row, 'campuses' => $campuses, 'stacked' => true])</div>
+                                <div class="min-w-0">@include('catalog-validation::progress.who', ['row' => $row, 'stacked' => true])</div>
                                 <p class="whitespace-nowrap text-sm"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></p>
                             </div>
                             @if ($row['pending_columns'] === [])
@@ -210,6 +211,11 @@
                                 <x-checkbox :label="$option['catalog']->label()" value="{{ $option['catalog']->value }}" wire:model="toOpen" :disabled="$option['blocked'] !== null" omit-error />
                                 @if ($option['blocked'])
                                     <p class="ms-8 text-sm text-neutral">{{ $option['blocked'] }}</p>
+                                @elseif ($option['catalog'] === \App\Modules\CatalogValidation\Enums\Catalog::Rooms && $roomsWithoutOwner > 0)
+                                    <p class="ms-8 flex items-start gap-1.5 text-sm" data-testid="rooms-without-owner">
+                                        <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 flex-none text-warning" aria-hidden="true" />
+                                        <span>{{ $roomsWithoutOwner }} {{ $roomsWithoutOwner === 1 ? 'salón sin dueño: ningún jefe lo revisará' : 'salones sin dueño: ningún jefe los revisará' }}. Asígnales un departamento en <a href="{{ route('facilities.rooms') }}" wire:navigate class="link underline-offset-4">Salones</a>.</span>
+                                    </p>
                                 @endif
                             @endif
                         </div>
@@ -223,6 +229,31 @@
             </form>
         </x-drawer>
     @endif
+
+    <x-drawer wire:model="showFlags" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="flags-drawer-title" data-testid="flags-drawer">
+        @if ($allFlags !== null)
+            <div class="flex min-h-dvh flex-col">
+                <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                    <div class="min-w-0 flex-1">
+                        <h2 id="flags-drawer-title" class="text-xl font-bold leading-tight">Observaciones abiertas ({{ $allFlags->count() }})</h2>
+                        <p class="mt-1 text-sm text-neutral">{{ $term?->name }} · de todos los departamentos</p>
+                    </div>
+                    <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />
+                </header>
+                <div class="flex-1 space-y-6 px-5 pt-4 pb-8">
+                    @forelse ($allFlags->groupBy(fn ($flag) => $flag->review->department_id) as $departmentFlags)
+                        @php($flagged = $departmentFlags->first()->review->department)
+                        <section class="space-y-3" wire:key="flags-department-{{ $flagged->id }}" aria-labelledby="flags-department-{{ $flagged->id }}" data-testid="flags-department-{{ $flagged->code }}">
+                            <h3 id="flags-department-{{ $flagged->id }}" class="font-semibold"><span class="font-mono text-neutral">{{ $flagged->code }}</span> {{ $flagged->name }} <span class="font-mono font-normal text-neutral tabular-nums">{{ $departmentFlags->count() }}</span></h3>
+                            @include('catalog-validation::progress.flag-groups', ['flags' => $departmentFlags])
+                        </section>
+                    @empty
+                        <p class="text-sm text-neutral" data-testid="flags-drawer-empty">Sin observaciones abiertas.</p>
+                    @endforelse
+                </div>
+            </div>
+        @endif
+    </x-drawer>
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="progress-drawer-title" data-testid="progress-drawer">
         @if ($detail !== null)

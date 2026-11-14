@@ -67,6 +67,15 @@ final class RoomQuery
     }
 
     /**
+     * Cuántos salones activos, sin borrar, de cualquier campus, no tienen departamento dueño: ningún jefe los revisa en la
+     * validación de salones (CV12, confirmado el 14 de noviembre de 2026; el aviso de «Abrir validación»).
+     */
+    public function withoutOwnerCount(): int
+    {
+        return Room::query()->where('is_active', true)->whereNull('department_id')->count();
+    }
+
+    /**
      * El salón que se va a editar, sin los borrados.
      *
      * @throws ModelNotFoundException<Room>

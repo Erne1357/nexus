@@ -16,8 +16,11 @@
             @endif
             @if ($item->resolved_at !== null)
                 <p class="text-xs">Resuelta por {{ $item->resolver?->name }} · <span class="tabular-nums">{{ $item->resolved_at->timezone(config('app.timezone'))->translatedFormat('j M Y') }}</span></p>
+                @if ($item->resolution_note)
+                    <p class="text-xs" data-testid="resolution-note">Qué se hizo: {{ $item->resolution_note }}</p>
+                @endif
             @elseif ($card['canResolve'])
-                <x-button label="Marcar como resuelta" icon="o-check" class="btn-outline btn-sm" wire:click="resolveFlag('{{ $item->id }}')" spinner="resolveFlag('{{ $item->id }}')" data-testid="resolve-flag" />
+                @include('catalog-validation::flag-resolve', ['flag' => $item, 'testid' => 'resolve-flag', 'buttonClass' => 'btn-outline btn-sm'])
             @endif
         </article>
     @empty

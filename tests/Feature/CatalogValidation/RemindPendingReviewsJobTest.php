@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\Core\Enums\Role;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,7 +21,6 @@ use Spatie\Activitylog\Models\Activity;
 it('es un job en cola que avisa solo a los departamentos dados y deja bitácora de quien lo pidió', function () {
     Notification::fake();
     $term = Term::factory()->current()->create();
-    $campus = Campus::factory()->create(['code' => 'C2']);
     $sis = Department::factory()->create();
     $ele = Department::factory()->create();
     app(CreateTermReviews::class)->handle($term, Catalog::cases());
@@ -30,7 +28,7 @@ it('es un job en cola que avisa solo a los departamentos dados y deja bitácora 
     $jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $ele->id])->create();
     $actor = User::factory()->withRole(Role::Subdireccion, [])->create();
 
-    $job = new RemindPendingReviewsJob($term->id, [$campus->id], $actor->id, [$sis->id]);
+    $job = new RemindPendingReviewsJob($term->id, $actor->id, [$sis->id]);
     $job->handle(app(RemindPendingReviews::class));
 
     expect($job)->toBeInstanceOf(ShouldQueue::class);

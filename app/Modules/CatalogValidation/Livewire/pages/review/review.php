@@ -530,12 +530,15 @@ new #[Title('Validación de catálogos')] class extends Component
         $this->success('Observación agregada', $this->describe($review, $record));
     }
 
-    public function resolveFlag(string $id, ResolveFlag $resolveFlag, CatalogRecordsQuery $records): void
+    /**
+     * Con la nota opcional de lo que se hizo, que le llega al jefe que la puso (CV10).
+     */
+    public function resolveFlag(string $id, ResolveFlag $resolveFlag, CatalogRecordsQuery $records, ?string $note = null): void
     {
         $review = $this->currentReview();
         $this->authorize('resolveFlag', $review);
 
-        $resolveFlag->handle($review, $records->findFlag($review, $id), $this->user());
+        $resolveFlag->handle($review, $records->findFlag($review, $id), $this->user(), $note);
 
         $this->success('Observación resuelta', e($review->title));
     }
