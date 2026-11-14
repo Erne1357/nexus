@@ -18,9 +18,10 @@ use Illuminate\Support\Facades\Schema;
  * - `permission_set_permissions`: las claves (`modulo.recurso.accion`) de un rol que no sigue al código.
  * - `position_permission_sets` y `position_permissions`: los roles y los permisos sueltos de cada puesto. El admin no
  *   lleva ninguno.
- * - `authz_grants_version`: una sola fila con la versión de las concesiones. La suben triggers de sentencia en las
- *   cuatro tablas, como `users.authz_version` (ADR-0018, decisión 9): ningún camino de escritura lo olvida, y es parte
- *   de la llave de caché de GrantTable.
+ * - `authz_grants_version`: una sola fila con la versión de las concesiones y un sello (`token`, un uuid nuevo en cada
+ *   cambio). Los suben triggers de sentencia en las cuatro tablas, como `users.authz_version` (ADR-0018, decisión 9):
+ *   ningún camino de escritura los olvida, y son parte de la llave de caché de GrantTable. El sello separa dos bases
+ *   con la misma versión que comparten la caché (una recién migrada, otra restaurada o la de otro worktree).
  */
 return new class extends Migration
 {
@@ -62,6 +63,7 @@ return new class extends Migration
 
         Schema::create('authz_grants_version', function (Blueprint $table) {
             $table->bigInteger('version')->default(0);
+            $table->uuid('token')->default(DB::raw('uuidv7()'));
         });
 
         DB::unprepared(<<<'SQL'
@@ -82,7 +84,7 @@ return new class extends Migration
             create or replace function authz_grants_bump() returns trigger
             language plpgsql as $$
             begin
-                update authz_grants_version set version = version + 1;
+                update authz_grants_version set version = version + 1, token = uuidv7();
 
                 if not found then
                     insert into authz_grants_version (version) values (1);
