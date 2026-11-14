@@ -51,6 +51,9 @@ function dimensionTables(): array
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
         'core.user' => 'users',
+        // Los de correos y colas (1.22-G) no llevan campus: el registro de correos y los trabajos fallidos son de toda la instalación.
+        'core.mail' => 'mail_log',
+        'core.queue' => 'failed_jobs',
         // Ver en el menú lo no disponible depende del periodo activo (MN-02), no de un recurso con campus.
         'core.navigation' => 'terms',
         'academic.department' => 'departments',
