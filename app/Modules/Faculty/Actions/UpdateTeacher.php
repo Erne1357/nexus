@@ -14,7 +14,6 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -51,7 +50,6 @@ final class UpdateTeacher
      *                            sesión, y lo pasa)
      *
      * @throws ValidationException
-     * @throws RuntimeException si hay que volver a mandar la invitación y falta NEXUS_DEFAULT_PASSWORD
      */
     public function handle(Teacher $teacher, array $data, ?User $actor = null): Teacher
     {

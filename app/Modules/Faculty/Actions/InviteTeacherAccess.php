@@ -8,7 +8,6 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\InvitationRelease;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 
 /**
  * Invita a un docente a activar su acceso (AC-07): manda a su correo institucional la invitación de Core
@@ -33,7 +32,6 @@ final class InviteTeacherAccess
 
     /**
      * @throws ValidationException
-     * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
     public function handle(Teacher $teacher, ?User $actor = null, bool $unlessInvited = false): bool
     {
@@ -62,7 +60,6 @@ final class InviteTeacherAccess
      * de docentes (InvitationRelease); antes, la primera sale con esa validación (AC-07, supuesto por confirmar).
      *
      * @throws ValidationException
-     * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
     public function resend(Teacher $teacher, ?User $actor = null): bool
     {
