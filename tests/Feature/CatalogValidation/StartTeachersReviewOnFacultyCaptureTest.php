@@ -156,7 +156,7 @@ it('la disponibilidad y las horas fuera traen su periodo y ese usa', function ()
         ->and(teachersReviewStatus($this->sis))->toBe(ReviewStatus::Pending);
 });
 
-it('Quitar de mi departamento también inicia la revisión, aunque el docente ya no sea del departamento', function () {
+it('«Quitar de <Departamento>» también inicia la revisión, aunque el docente ya no sea del departamento', function () {
     TeacherDepartment::factory()->for($this->teacher)->for($this->ele)->create(['is_primary' => false]);
     $this->actingAs($this->jefe);
 

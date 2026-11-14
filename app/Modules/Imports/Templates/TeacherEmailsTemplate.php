@@ -30,7 +30,7 @@ use Spatie\Activitylog\Models\Activity;
  * propia entrada en la bitácora, además de la del lote.
  *
  * Si el docente ya tiene otro correo institucional, no se cambia: la fila es error y el resumen la lista como «ya
- * tenía otro correo» (D14, supuesto por confirmar); el mismo que ya tiene no cambia nada. Un RFC que no está en
+ * tenía otro correo» (D14, confirmado el 14 de noviembre de 2026); el mismo que ya tiene no cambia nada. Un RFC que no está en
  * Nexus, un correo de otro dominio, uno que ya es de otro docente, o que el archivo repite para otro RFC, son error
  * de su fila. Un docente borrado es error y uno dado de baja solo avisa, como en toda importación. No ofrece
  * «desactivar faltantes»: el archivo solo trae correos.

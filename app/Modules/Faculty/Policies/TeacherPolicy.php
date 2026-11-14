@@ -117,8 +117,8 @@ final class TeacherPolicy
     }
 
     /**
-     * «Quitar de mi departamento», en Docentes y en la validación del catálogo de docentes («Dar de baja de <depto>»):
-     * quitar la última adscripción da de baja al docente (CV8, confirmado el 12 de noviembre de 2026;
+     * «Quitar de <Departamento>», en Docentes y en la validación del catálogo de docentes (D10, confirmado el 14 de
+     * noviembre de 2026): quitar la última adscripción da de baja al docente (CV8, confirmado el 12 de noviembre de 2026;
      * DischargeTeacherFromDepartment). A un docente cuyo usuario ocupa un puesto vigente o por empezar (un jefe, un
      * coordinador, la Subdirección…) solo lo quitan quienes dan de baja docentes, el admin y la Subdirección (CV-S8,
      * confirmado el 12 de noviembre de 2026 para la baja desde Docentes). La última adscripción solo la quitan el jefe de

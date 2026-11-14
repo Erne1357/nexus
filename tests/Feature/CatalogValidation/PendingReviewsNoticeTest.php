@@ -157,3 +157,18 @@ describe('CV11: por correo (D3)', function () {
         Queue::assertPushed(SendQueuedNotifications::class, fn (SendQueuedNotifications $job) => $job->channels === ['database'] && $job->connection === 'sync');
     });
 });
+
+it('CV-S15: «Ir a validar» del correo abre la revisión del departamento sin periodo, en el activo de quien entra; la campana lleva el periodo del aviso', function () {
+    Notification::fake();
+
+    app(NotifyPendingReviews::class)->handle($this->term);
+
+    Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, function (CatalogReviewsPending $notice) {
+        $mail = $notice->toMail($this->jefe);
+        $bell = $notice->message($this->jefe);
+
+        return $mail->actionUrl === route('catalog-validation.review', ['department' => $this->sis->id])
+            && $bell->parameters === ['department' => $this->sis->id]
+            && $bell->termId === $this->term->id;
+    });
+});

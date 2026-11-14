@@ -29,9 +29,9 @@ use Spatie\Activitylog\Models\Activity;
 | AC-19: importar los correos institucionales de los docentes desde el archivo de TI (tarea 1.21, D4, confirmado el 14
 | de noviembre de 2026): RFC y correo, solo el admin. Cada fila guarda el correo con UpdateTeacher, la misma Action que
 | la ficha (AC-06), así que la invitación sale por el mismo camino: si su departamento ya validó su catálogo de
-| docentes, en ese momento (AC-09); si no, al validar. Si el docente ya tiene otro correo, no se cambia (D14, supuesto
-| por confirmar). El resumen dice cuántos actualizó y cuántos no cambiaron, los RFC que no están en Nexus, los correos
-| fuera del dominio, los repetidos, los que ya tenían otro correo y cuántas invitaciones salieron.
+| docentes, en ese momento (AC-09); si no, al validar. Si el docente ya tiene otro correo, no se cambia (D14, confirmado
+| el 14 de noviembre de 2026). El resumen dice cuántos actualizó y cuántos no cambiaron, los RFC que no están en Nexus,
+| los correos fuera del dominio, los repetidos, los que ya tenían otro correo y cuántas invitaciones salieron.
 */
 
 beforeEach(function () {

@@ -11,8 +11,8 @@ use Livewire\Livewire;
 | La ficha del docente y sus salidas de departamento (validación del 14 de noviembre de 2026, tarea 1.21): «Quitar de
 | <Departamento>» lleva el nombre del departamento y dice la consecuencia (D10), y la ficha muestra el motivo con que
 | un jefe lo quitó de su departamento en la validación de docentes (D8), que la revisión deja en la bitácora del
-| docente (evento `discharged`, propiedad `reason`). Lo ven quienes dan de baja: el admin y la Subdirección (supuesto
-| por confirmar).
+| docente (evento `discharged`, propiedad `reason`). Solo lo ven quienes dan de baja: el admin y la
+| Subdirección (confirmado el 14 de noviembre de 2026).
 */
 
 beforeEach(function () {
@@ -89,7 +89,7 @@ describe('motivo de la salida (D8)', function () {
         'cambio de departamento' => ['department_change', 'Cambio de departamento'],
     ]);
 
-    it('D8: el jefe de un departamento del docente no ve los motivos (supuesto por confirmar)', function () {
+    it('D8: el jefe de un departamento del docente no ve los motivos (confirmado el 14 de noviembre de 2026)', function () {
         logDischarge($this->ana, $this->jefe, $this->sc, false, ['kind' => 'resignation']);
 
         $this->actingAs($this->jefeIi)->get(route('faculty.teachers.show', $this->ana->id))

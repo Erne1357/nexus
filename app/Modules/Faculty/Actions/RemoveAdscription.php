@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * «Quitar de mi departamento»: quita, con borrado lógico, una adscripción de un docente (reglas-de-negocio.md,
+ * «Quitar de <Departamento>»: quita, con borrado lógico, una adscripción de un docente (reglas-de-negocio.md,
  * "Adscripciones"). Si era la principal, la principal pasa a la adscripción más antigua que le quede (confirmado el
  * 30 de octubre de 2026). La más antigua es la de `created_at` menor y, a igual fecha, la de id menor. Cuando exista
  * la carga de la fase 3, pasará a la del departamento donde tenga más horas asignadas (confirmado el 30 de octubre
