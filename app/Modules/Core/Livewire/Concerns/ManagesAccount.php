@@ -10,6 +10,7 @@ use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\PeopleQuery;
+use App\Modules\Core\Support\PasswordResetTokens;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -75,7 +76,7 @@ trait ManagesAccount
     /**
      * CF-08: el enlace de AC-16 a su correo institucional. El resultado, o por qué no se pudo, en un toast.
      */
-    public function sendPasswordReset(PeopleQuery $people, SendUserPasswordReset $sendUserPasswordReset): void
+    public function sendPasswordReset(PeopleQuery $people, SendUserPasswordReset $sendUserPasswordReset, PasswordResetTokens $tokens): void
     {
         $person = $this->accountPerson($people, 'resetPassword');
 
@@ -92,7 +93,7 @@ trait ManagesAccount
             return;
         }
 
-        $this->success('Enlace enviado', e("Enlace enviado a {$email}. Vale una hora."));
+        $this->success('Enlace enviado', e("Enlace enviado a {$email}. Vale {$tokens->minutes()} minutos."));
     }
 
     public function openDeactivate(PeopleQuery $people): void
@@ -122,9 +123,10 @@ trait ManagesAccount
         ]);
 
         $result = $deactivateUser->handle($person, DeactivationReason::from($this->deactivationReason), $this->deactivationNote, auth()->user());
+        $outcome = $deactivateUser->outcome($result);
 
         $this->showDeactivate = false;
-        $this->success('Cuenta dada de baja', e($this->deactivationSummary($result)));
+        $this->success('Cuenta dada de baja', e($outcome === null ? 'No tenía puestos que terminar.' : ucfirst($outcome).'.'));
     }
 
     /**
@@ -170,25 +172,5 @@ trait ManagesAccount
         $this->authorize($ability, $person);
 
         return $person;
-    }
-
-    /**
-     * «Terminó 1 nombramiento y quitó 1 que no empezaba.», «No tenía puestos que terminar.»
-     *
-     * @param  array{ended: int, removed: int}  $result
-     */
-    private function deactivationSummary(array $result): string
-    {
-        $parts = [];
-
-        if ($result['ended'] > 0) {
-            $parts[] = 'terminó '.$result['ended'].($result['ended'] === 1 ? ' nombramiento' : ' nombramientos');
-        }
-
-        if ($result['removed'] > 0) {
-            $parts[] = 'quitó '.$result['removed'].($result['removed'] === 1 ? ' que no empezaba' : ' que no empezaban');
-        }
-
-        return $parts === [] ? 'No tenía puestos que terminar.' : ucfirst(implode(' y ', $parts)).'.';
     }
 }

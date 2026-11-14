@@ -16,14 +16,34 @@ use App\Modules\Core\Models\User;
  */
 final class PasswordResetRules
 {
+    public const string INACTIVE = 'La cuenta está dada de baja.';
+
+    public const string NO_PASSWORD = 'Todavía no tiene acceso: no hay contraseña que restablecer.';
+
+    public const string NO_EMAIL = 'No tiene correo institucional.';
+
+    public const string UNVERIFIED = 'Su correo institucional no está confirmado.';
+
     public function __construct(private readonly Actor $actor) {}
 
     public function allows(User $user): bool
     {
-        return $user->is_active
-            && $user->password !== null
-            && $this->hasInstitutionalEmail($user)
-            && ($user->email_verified_at !== null || $this->acceptsUnverifiedInstitutionalEmail($user));
+        return $this->denial($user) === null;
+    }
+
+    /**
+     * Por qué `$user` no puede restablecer su contraseña por correo; nulo si puede. Es la regla de `allows()`, condición
+     * por condición y en su orden, para que el panel diga el motivo (CF-08); la pantalla pública nunca lo dice (AC-16).
+     */
+    public function denial(User $user): ?string
+    {
+        return match (true) {
+            ! $user->is_active => self::INACTIVE,
+            $user->password === null => self::NO_PASSWORD,
+            ! $this->hasInstitutionalEmail($user) => self::NO_EMAIL,
+            $user->email_verified_at === null && ! $this->acceptsUnverifiedInstitutionalEmail($user) => self::UNVERIFIED,
+            default => null,
+        };
     }
 
     /**

@@ -16,7 +16,8 @@ use App\Modules\Core\Rules\UserAccountRules;
  *
  * Un puesto exclusivo no admite dos titulares en la misma fecha (`role_assignments_one_jefe`,
  * `role_assignments_one_subdireccion`), así que nadie más lo ocupa en los días que el nombramiento deja: se queda sin
- * titular hasta que se nombre a otra persona. Core no conoce a los docentes: sus departamentos salen de
+ * titular hasta que se nombre a otra persona, y como el que termina sigue vigente hoy, el relevo empieza mañana. Core no
+ * conoce a los docentes: sus departamentos salen de
  * UnitAdscriptions, que Faculty liga (el id de un departamento es el de su unidad).
  */
 final class DeactivationPreviewQuery

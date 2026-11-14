@@ -22,7 +22,8 @@ use Illuminate\Validation\ValidationException;
  *   SyncTeacherAccess, y revisa UserAccountRules::deactivationBlocker(): nadie se da de baja a sí mismo, un alumno no
  *   se da de baja aquí (CF-S4) y no se da de baja a quien dejaría algún día sin admin vigente, hoy incluido (AZ-S12);
  * - termina con último día de hoy cada nombramiento vigente y quita los que aún no empiezan, con EndRoleAssignment
- *   (que deja su bitácora por nombramiento), salvo los de docente y alumno (RoleAssignmentRules::accountAssignments()):
+ *   (que deja su bitácora por nombramiento; su rechazo, como que otra sesión ya borró el nombramiento, sale sobre
+ *   `user` y revierte todo), salvo los de docente y alumno (RoleAssignmentRules::accountAssignments()):
  *   el de docente lo maneja Faculty con el registro del docente (AZ-S11), que sigue en el catálogo (CF-09), y el de
  *   alumno la migración del SII (supuesto por confirmar);
  * - deja la cuenta inactiva y sin acceso: sin contraseña (C6), sin invitación pendiente y sin enlace para restablecer,
@@ -65,7 +66,13 @@ final class DeactivateUser
 
             foreach ($this->assignmentRules->accountAssignments($locked)->get() as $assignment) {
                 /** @var RoleAssignment $assignment */
-                match ($this->endRoleAssignment->handle($assignment, $today)) {
+                try {
+                    $ending = $this->endRoleAssignment->handle($assignment, $today);
+                } catch (ValidationException $exception) {
+                    throw ValidationException::withMessages(['user' => (string) collect($exception->errors())->flatten()->first()]);
+                }
+
+                match ($ending) {
                     AssignmentEnding::Ended => $ended[] = $assignment->getKey(),
                     AssignmentEnding::Removed => $removed[] = $assignment->getKey(),
                     AssignmentEnding::Unchanged => null,
@@ -94,7 +101,7 @@ final class DeactivateUser
                     'ended_assignment_ids' => $ended,
                     'removed_assignment_ids' => $removed,
                 ])
-                ->log("Dio de baja la cuenta de {$locked->username} ({$reason->label()})".$this->summary(count($ended), count($removed)));
+                ->log("Dio de baja la cuenta de {$locked->username} ({$reason->label()})".(($outcome = $this->outcome(['ended' => count($ended), 'removed' => count($removed)])) === null ? '' : " y {$outcome}"));
 
             UserDeactivated::dispatch($locked, $reason);
 
@@ -105,10 +112,14 @@ final class DeactivateUser
     }
 
     /**
-     * « y terminó 1 nombramiento», « y quitó 2 nombramientos», « y terminó 1 nombramiento y quitó 1»; vacío sin ninguno.
+     * Lo que hizo con los nombramientos, para la bitácora y el aviso de la pantalla: «terminó 1 nombramiento», «quitó 2
+     * nombramientos», «terminó 1 nombramiento y quitó 1»; nulo si no tenía ninguno.
+     *
+     * @param  array{ended: int, removed: int}  $result
      */
-    private function summary(int $ended, int $removed): string
+    public function outcome(array $result): ?string
     {
+        ['ended' => $ended, 'removed' => $removed] = $result;
         $parts = [];
 
         if ($ended > 0) {
@@ -119,6 +130,6 @@ final class DeactivateUser
             $parts[] = 'quitó '.$removed.($ended > 0 ? '' : ($removed === 1 ? ' nombramiento' : ' nombramientos'));
         }
 
-        return $parts === [] ? '' : ' y '.implode(' y ', $parts);
+        return $parts === [] ? null : implode(' y ', $parts);
     }
 }

@@ -17,6 +17,7 @@ use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\PersonRecordQuery;
 use App\Modules\Core\Queries\UserAccountQuery;
 use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Core\Support\PasswordResetTokens;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -91,7 +92,7 @@ new #[Title('Ficha de la persona')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules, AssignmentLabels $labels, UserAccountQuery $accounts, DeactivationPreviewQuery $previews): array
+    public function with(PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules, AssignmentLabels $labels, UserAccountQuery $accounts, DeactivationPreviewQuery $previews, PasswordResetTokens $tokens): array
     {
         $this->authorize('viewAny', RoleAssignment::class);
 
@@ -105,6 +106,7 @@ new #[Title('Ficha de la persona')] class extends Component
             'account' => $accounts->for($person, auth()->user()),
             'abilities' => $this->accountAbilities($person),
             'preview' => $this->showDeactivate ? $previews->for($person, auth()->user()) : null,
+            'resetMinutes' => $tokens->minutes(),
             'reasons' => array_map(fn (DeactivationReason $reason): array => ['id' => $reason->value, 'name' => $reason->label()], DeactivationReason::cases()),
             'canGrantAccess' => Gate::allows('grantAccess', $person),
             'canAppoint' => $person->is_active,

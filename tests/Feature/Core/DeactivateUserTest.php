@@ -198,6 +198,21 @@ it('CF-05: no se le quita el nombramiento de alumno a quien también es personal
         ->and($this->rosa->fresh()->is_active)->toBeFalse();
 });
 
+it('CF-05: si otra sesión borra un nombramiento a medio camino, el rechazo sale sobre la cuenta y no da de baja', function () {
+    $coordination = accountAssignment($this->rosa, Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->isc->id]);
+    RoleAssignment::retrieved(fn () => DB::table('role_assignments')->where('id', $coordination->id)->delete());
+
+    try {
+        deactivateAccount($this->rosa);
+        $this->fail('Debió rechazar la baja.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toBe(['user' => ['Ese nombramiento ya no existe.']]);
+    }
+
+    expect($this->rosa->fresh()->is_active)->toBeTrue()
+        ->and($this->rosa->fresh()->password)->not->toBeNull();
+});
+
 it('una cuenta ya dada de baja no se vuelve a dar de baja', function () {
     $this->rosa->forceFill(['is_active' => false])->save();
 

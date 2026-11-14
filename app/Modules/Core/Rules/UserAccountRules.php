@@ -27,15 +27,23 @@ final class UserAccountRules
 
     public const string ALREADY_ACTIVE = 'La cuenta ya está activa.';
 
-    public const string RESET_INACTIVE = 'La cuenta está dada de baja.';
+    public const string RESET_INACTIVE = PasswordResetRules::INACTIVE;
 
-    public const string RESET_NO_PASSWORD = 'Todavía no tiene acceso: no hay contraseña que restablecer.';
+    public const string RESET_NO_PASSWORD = PasswordResetRules::NO_PASSWORD;
 
-    public const string RESET_NO_EMAIL = 'No tiene correo institucional.';
+    public const string RESET_NO_EMAIL = PasswordResetRules::NO_EMAIL;
 
-    public const string RESET_UNVERIFIED = 'Su correo institucional no está confirmado.';
+    public const string RESET_UNVERIFIED = PasswordResetRules::UNVERIFIED;
 
     public const string RESET_RECENT = 'Ya se le mandó un enlace hace menos de un minuto.';
+
+    /**
+     * Lo que ya respondió isStudent() para cada usuario: la ficha pregunta varias veces por el mismo en un render. Vive
+     * lo que vive esta instancia, que el contenedor crea en cada resolución (no es singleton).
+     *
+     * @var array<string, bool>
+     */
+    private array $students = [];
 
     public function __construct(
         private readonly RoleAssignmentRules $assignments,
@@ -89,7 +97,7 @@ final class UserAccountRules
      */
     public function isStudent(User $user): bool
     {
-        return $this->assignments->isStudentAccount($user);
+        return $this->students[$user->getKey()] ??= $this->assignments->isStudentAccount($user);
     }
 
     /**
@@ -152,17 +160,11 @@ final class UserAccountRules
     }
 
     /**
-     * CF-08: por qué no se le manda el enlace de AC-16; nulo si sí. Son las condiciones de PasswordResetRules::allows(),
-     * en su orden, cada una con su motivo. Que ya se le mandara uno hace menos de un minuto (AC-17) se sabe al mandarlo.
+     * CF-08: por qué no se le manda el enlace de AC-16; nulo si sí: PasswordResetRules::denial(), la misma regla que
+     * `allows()`. Que ya se le mandara uno hace menos de un minuto (AC-17) se sabe al mandarlo.
      */
     public function resetBlocker(User $user): ?string
     {
-        return match (true) {
-            ! $user->is_active => self::RESET_INACTIVE,
-            $user->password === null => self::RESET_NO_PASSWORD,
-            ! $this->passwordReset->hasInstitutionalEmail($user) => self::RESET_NO_EMAIL,
-            $user->email_verified_at === null && ! $this->passwordReset->acceptsUnverifiedInstitutionalEmail($user) => self::RESET_UNVERIFIED,
-            default => null,
-        };
+        return $this->passwordReset->denial($user);
     }
 }

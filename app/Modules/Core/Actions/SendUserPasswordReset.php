@@ -19,7 +19,8 @@ use Throwable;
  *
  * Crea el token y deja la bitácora con el usuario bloqueado y manda el correo después del commit, en la misma petición:
  * el token no debe viajar en la cola (PasswordResetLink no es ShouldQueue). Si el correo falla, borra el token y deja
- * pasar el error, para que se pueda pedir otro. Devuelve el correo al que lo mandó.
+ * pasar el error, para que se pueda pedir otro; como la bitácora no se edita, deja otra entrada que dice que el correo no
+ * salió. Devuelve el correo al que lo mandó.
  */
 final class SendUserPasswordReset
 {
@@ -56,6 +57,13 @@ final class SendUserPasswordReset
             $locked->notify(new PasswordResetLink($locked->username, $locked->name, $this->tokens->url($locked, $token), $this->tokens->minutes()));
         } catch (Throwable $exception) {
             $this->tokens->delete($locked);
+
+            activity()
+                ->performedOn($locked)
+                ->causedBy($actor)
+                ->event('password-reset-link-failed')
+                ->withProperties(['email' => $locked->email])
+                ->log("No salió el correo con el enlace para restablecer la contraseña de {$locked->username}: el enlace se borró");
 
             throw $exception;
         }

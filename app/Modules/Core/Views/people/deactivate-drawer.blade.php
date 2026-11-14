@@ -1,6 +1,7 @@
 {{--
     «Dar de baja» como cajón (1.22-C1, CF-05 y CF-09; ADR-0023), con la vista previa de DeactivationPreviewQuery: los
-    puestos que terminan hoy o se quitan, con «Queda sin titular» en los exclusivos (AZ-S7); el aviso de que sigue en el
+    puestos que terminan hoy o se quitan, con «Sin titular desde mañana» (o «Queda sin titular», si no empezaba) en los
+    exclusivos (AZ-S7: hoy lo sigue ocupando, así que el relevo empieza mañana); el aviso de que sigue en el
     catálogo de docentes; por qué no se puede (uno mismo, un alumno o el último admin, AZ-S12); el motivo y una nota.
     Espera $person, $preview (nulo mientras está cerrado) y $reasons.
 --}}
@@ -35,7 +36,7 @@
                                 <span class="min-w-0 flex-1">{{ $row['summary'] }}</span>
                                 <span class="text-neutral">{{ $row['removed'] ? 'Se quita: aún no empezaba' : 'Termina hoy' }}</span>
                                 @if ($row['vacates'])
-                                    <x-core::status-badge tone="warning" label="Queda sin titular" />
+                                    <x-core::status-badge tone="warning" :label="$row['removed'] ? 'Queda sin titular' : 'Sin titular desde mañana'" />
                                 @endif
                             </li>
                         @endforeach

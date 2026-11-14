@@ -100,7 +100,7 @@ it('AC-17: un enlace por usuario por minuto', function () {
     Notification::assertSentToTimes($this->rosa, PasswordResetLink::class, 2);
 });
 
-it('si el correo no sale, borra el enlace para que se pueda pedir otro', function () {
+it('si el correo no sale, borra el enlace para que se pueda pedir otro y la bitácora lo dice', function () {
     Notification::swap(new class
     {
         public function send(mixed $notifiables, mixed $notification): void
@@ -116,5 +116,7 @@ it('si el correo no sale, borra el enlace para que se pueda pedir otro', functio
 
     expect(fn () => sendPanelReset($this->rosa))->toThrow(RuntimeException::class, 'El servidor de correo no responde');
 
-    expect(DB::table('password_reset_tokens')->count())->toBe(0);
+    expect(DB::table('password_reset_tokens')->count())->toBe(0)
+        ->and(activitySince()->orderBy('id')->pluck('event')->all())->toBe(['password-reset-link-issued', 'password-reset-link-failed'])
+        ->and(activitySince()->where('event', 'password-reset-link-failed')->sole()->causer_id)->toBe($this->admin->id);
 });

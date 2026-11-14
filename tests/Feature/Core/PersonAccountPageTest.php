@@ -84,7 +84,7 @@ it('CF-08: Restablecer contraseña manda el enlace y dice a qué correo', functi
     $page = accountPage($this->rosa)->call('sendPasswordReset');
 
     Notification::assertSentTo($this->rosa, PasswordResetLink::class);
-    expect(lastToastOf($page))->type->toBe('success')->description->toBe('Enlace enviado a rosa.ruiz@cdjuarez.tecnm.mx. Vale una hora.');
+    expect(lastToastOf($page))->type->toBe('success')->description->toBe('Enlace enviado a rosa.ruiz@cdjuarez.tecnm.mx. Vale 60 minutos.');
 
     $page->call('sendPasswordReset');
 

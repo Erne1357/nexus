@@ -3,7 +3,7 @@
     activa, «Editar datos», «Restablecer contraseña» y «Dar de baja»; dada de baja, «Editar datos» y «Reactivar». Lo que
     no se puede queda deshabilitado con su motivo en un segundo renglón (UserAccountQuery) y sin los atributos de acción.
     Restablecer y Reactivar se confirman con `x-confirm`; Editar abre un `x-modal` y Dar de baja un `x-drawer`
-    (ADR-0023). Espera $account y $abilities.
+    (ADR-0023). Espera $account, $abilities y $resetMinutes.
 --}}
 @php($person = $account->person)
 
@@ -23,7 +23,7 @@
                     label="Restablecer contraseña"
                     wire:click="sendPasswordReset"
                     spinner="sendPasswordReset"
-                    x-confirm="Le llega a {{ $person->email }} un enlace para elegir una contraseña nueva. Vale una hora."
+                    x-confirm="Le llega a {{ $person->email }} un enlace para elegir una contraseña nueva. Vale {{ $resetMinutes }} minutos."
                     data-confirm-title="¿Mandar el enlace a {{ $person->username }}?"
                     data-confirm-button="Mandar enlace"
                     data-confirm-tone="primary"
