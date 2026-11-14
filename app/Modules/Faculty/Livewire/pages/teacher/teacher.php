@@ -1,6 +1,5 @@
 <?php
 
-use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\EndRoleAssignment;
@@ -33,11 +32,13 @@ use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Enums\TeacherDegree;
+use App\Modules\Faculty\Livewire\Concerns\EditsInstitutionalEmail;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Queries\AvailabilityGridQuery;
+use App\Modules\Faculty\Queries\TeacherAccessQuery;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Queries\TeacherRecord;
 use App\Modules\Faculty\Queries\TeacherRecordQuery;
@@ -69,7 +70,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Ficha del docente')] class extends Component
 {
-    use Toast;
+    use EditsInstitutionalEmail, Toast;
 
     /** Las pestañas de la ficha, en su orden. */
     private const array TABS = ['datos', 'plazas', 'disponibilidad', 'perfil', 'historial'];
@@ -87,8 +88,6 @@ new #[Title('Ficha del docente')] class extends Component
     public string $name = '';
 
     public string $email = '';
-
-    public string $institutional_email = '';
 
     /** Valor de TeacherDegree; '' es sin grado. */
     public string $degree = '';
@@ -221,7 +220,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids, TeacherAccessQuery $access): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -283,9 +282,11 @@ new #[Title('Ficha del docente')] class extends Component
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
             'canReset' => Gate::allows('resetPassword', $teacher),
             'grantsAccess' => $record->access?->hasPassword() === false,
-            'inviteReason' => $record->access?->hasPassword() === false ? $this->inviteReason($record, Gate::allows('inviteAccess', $teacher)) : null,
+            'inviteReason' => $record->access?->hasPassword() === false ? $this->inviteReason($teacher, $access, $record->access === UserAccess::Invited) : null,
+            'invited' => $record->access === UserAccess::Invited,
             'institutionalDomain' => config('nexus.institutional_email_domain'),
-            'institutionalEmailReason' => $this->showDataModal && Gate::denies('updateInstitutionalEmail', $teacher) ? $this->institutionalEmailReason($teacher) : null,
+            'institutionalEmailReason' => $this->showDataModal ? $this->institutionalEmailReason($teacher) : null,
+            'departures' => $this->tab === 'datos' && $context->allows(FacultyPermission::TeacherDeactivate) ? $records->departures($teacher) : collect(),
             'canDeactivate' => Gate::allows('deactivate', $teacher),
             'deactivateReason' => $context->allows(FacultyPermission::TeacherDeactivate)
                 ? 'No te puedes dar de baja a ti mismo.'
@@ -331,25 +332,19 @@ new #[Title('Ficha del docente')] class extends Component
             'degree' => ['nullable', Rule::enum(TeacherDegree::class)],
             'hired_on' => ['nullable', 'date_format:Y-m-d'],
         ]);
+        $institutionalEmail = $this->institutionalEmailChange($teacher);
 
-        $changes = [
+        if ($institutionalEmail === null) {
+            return;
+        }
+
+        $teacher = $updateTeacher->handle($teacher, [
             'name' => $data['name'],
             'email' => (string) $data['email'],
             'degree' => (string) $data['degree'],
             'hired_on' => (string) $data['hired_on'],
-        ];
-
-        if (mb_strtolower(trim((string) $data['institutional_email'])) !== (string) $teacher->institutional_email) {
-            if (Gate::denies('updateInstitutionalEmail', $teacher)) {
-                $this->addError('institutional_email', $this->institutionalEmailReason($teacher));
-
-                return;
-            }
-
-            $changes['institutional_email'] = (string) $data['institutional_email'];
-        }
-
-        $teacher = $updateTeacher->handle($teacher, $changes);
+            ...$institutionalEmail,
+        ]);
 
         $this->success('Datos actualizados', e("{$teacher->rfc} · {$teacher->name}"));
         $this->showDataModal = false;
@@ -410,18 +405,23 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * «Reenviar invitación» (AC-07): un enlace nuevo a su correo institucional; el anterior deja de servir. Solo a quien
-     * ya se invitó: la primera sale cuando su departamento valida el catálogo de docentes. Un rechazo, en un toast.
+     * «Reenviar invitación» (AC-07): un enlace nuevo a su correo institucional; el anterior deja de servir. A quien nunca
+     * se invitó es «Enviar invitación», que se puede en cuanto un departamento suyo validó su catálogo de docentes;
+     * antes, la primera sale con esa validación. Un rechazo, en un toast.
      */
     public function resendInvitation(TeacherQuery $teachers, InviteTeacherAccess $inviteTeacherAccess, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('inviteAccess', $teacher);
+        $invited = $teacher->user?->access_invited_at !== null;
 
-        $sent = $this->attempt(fn () => $inviteTeacherAccess->resend($teacher, $context->user()), 'No se pudo reenviar la invitación');
+        $sent = $this->attempt(fn () => $inviteTeacherAccess->resend($teacher, $context->user()), $invited ? 'No se pudo reenviar la invitación' : 'No se pudo enviar la invitación');
 
         if ($sent) {
-            $this->success('Invitación reenviada', e("{$teacher->rfc}: a {$teacher->institutional_email}. El enlace anterior ya no sirve."));
+            $this->success(
+                $invited ? 'Invitación reenviada' : 'Invitación enviada',
+                e("{$teacher->rfc}: a {$teacher->institutional_email}.".($invited ? ' El enlace anterior ya no sirve.' : '')),
+            );
         }
     }
 
@@ -609,12 +609,11 @@ new #[Title('Ficha del docente')] class extends Component
             $removal['outcome'] === null => '',
             default => "; {$removal['outcome']}",
         };
-        $code = Department::withTrashed()->whereKey($adscription->department_id)->value('code');
 
         // Quien quitó la última adscripción de su alcance ya no cubre al docente: vuelve a la lista en lugar de un 403.
         $stillVisible = Gate::allows('view', $teachers->findOrFail($this->teacherId));
 
-        $this->success(e("Quitado de {$code}"), e($teacher->rfc.$outcome), redirectTo: $stillVisible ? null : route('faculty.teachers'));
+        $this->success(e("Quitado de {$adscription->department?->name}"), e($teacher->rfc.$outcome), redirectTo: $stillVisible ? null : route('faculty.teachers'));
     }
 
     public function setPrimary(string $id, TeacherQuery $teachers, TeacherRecordQuery $records, SetPrimaryAdscription $setPrimaryAdscription): void
@@ -926,28 +925,14 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Por qué no puede cambiar el correo institucional (AC-06): de un docente con otro puesto, solo el admin; si no, solo
-     * el jefe de su departamento y el admin.
+     * Por qué «Reenviar invitación» (o «Enviar invitación») está deshabilitado para un usuario sin contraseña, o '' si se
+     * puede (AC-07): primero quién la manda y luego lo que dice TeacherAccessQuery::invitationBlocker().
      */
-    private function institutionalEmailReason(Teacher $teacher): string
+    private function inviteReason(Teacher $teacher, TeacherAccessQuery $access, bool $invited): string
     {
         return Gate::allows('inviteAccess', $teacher)
-            ? 'Tiene otro puesto: su correo institucional solo lo cambia el administrador.'
-            : 'Solo su jefe de departamento o el administrador lo capturan.';
-    }
-
-    /**
-     * Por qué «Reenviar invitación» está deshabilitado para un usuario sin contraseña, o '' si se puede (AC-07).
-     */
-    private function inviteReason(TeacherRecord $record, bool $allowed): string
-    {
-        return match (true) {
-            ! $allowed => 'Solo su jefe de departamento o el administrador la reenvían.',
-            ! $record->user->is_active => 'Su usuario está inactivo.',
-            $record->access !== UserAccess::Invited => InviteTeacherAccess::NOT_INVITED,
-            $record->teacher->institutional_email === null => 'Falta su correo institucional.',
-            default => '',
-        };
+            ? $access->invitationBlocker($teacher) ?? ''
+            : 'Solo su jefe de departamento o el administrador la '.($invited ? 'reenvían.' : 'mandan.');
     }
 
     /**
@@ -972,20 +957,15 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * El aviso del modal de «Quitar de <depto>»: qué principal le queda, con la regla de RemoveAdscription (la más
-     * antigua de las que quedan; las adscripciones llegan en ese orden detrás de la principal), o que sin otra queda dado
-     * de baja (CV8).
+     * El aviso del modal de «Quitar de <Departamento>» (D10): solo sale de ese departamento y qué principal le queda, con
+     * la regla de RemoveAdscription (la más antigua de las que quedan; las adscripciones llegan en ese orden detrás de la
+     * principal), o que sin otra queda dado de baja (CV8), con TeacherQuery::removalConsequence().
      */
     private function removalWarning(TeacherRecord $record, TeacherDepartment $adscription): string
     {
-        $rest = $record->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription))->values();
-        $outcome = match (true) {
-            $rest->isEmpty() => 'No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.',
-            $adscription->is_primary => 'Sigue activo y su adscripción principal pasa a '.$rest->first()->department?->code.'.',
-            default => 'Sigue activo y su adscripción principal no cambia.',
-        };
+        $consequence = app(TeacherQuery::class)->removalConsequence($adscription, $record->adscriptions);
 
-        return "¿Quitar al docente {$record->teacher->rfc} de {$adscription->department?->code}? {$outcome} Queda en la bitácora.";
+        return "¿Quitar al docente {$record->teacher->rfc} de {$adscription->department?->name}? {$consequence} Queda en la bitácora.";
     }
 
     /**
