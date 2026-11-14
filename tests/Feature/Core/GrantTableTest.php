@@ -167,7 +167,23 @@ it('CF-01: un cambio vale en la siguiente petición: la versión sube y la llave
     expect($second->version())->toBe($first->version() + 1)
         ->and($second->cacheKey())->not->toBe($key)
         ->and($second->grants(Role::Coordinador, CorePermission::SettingView))->toBeTrue()
-        ->and($key)->toStartWith('authz:grants:v'.GrantTable::FORMAT.':'.$first->version().':');
+        ->and($key)->toMatch('/^authz:grants:v'.GrantTable::FORMAT.':'.$first->version().':[0-9a-f-]{36}:[0-9a-f]{32}$/');
+});
+
+it('CF-01: dos bases con la misma versión no comparten la llave: el sello cambia en cada cambio', function () {
+    $first = nextGrantTable();
+    $first->grants(Role::Coordinador, CorePermission::SettingView);
+    $token = DB::table('authz_grants_version')->value('token');
+
+    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingView->value]);
+    DB::table('authz_grants_version')->update(['version' => $first->version()]);
+
+    $second = nextGrantTable();
+
+    expect(DB::table('authz_grants_version')->value('token'))->not->toBe($token)
+        ->and($second->version())->toBe($first->version())
+        ->and($second->cacheKey())->not->toBe($first->cacheKey())
+        ->and($second->grants(Role::Coordinador, CorePermission::SettingView))->toBeTrue();
 });
 
 it('CF-01: la versión se lee una vez por petición y, con la misma versión, el mapa sale de la caché', function () {

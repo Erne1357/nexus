@@ -84,10 +84,11 @@ Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por con
    - `Actor` y `RecipientsQuery` le preguntan a ella las concesiones, en lugar de al registro.
    - El admin no se edita (CF-S1): tiene lo del registro, todo menos `adminDenies()`.
    - `PermissionRegistry` sigue siendo el catálogo inmutable: los permisos declarados, lo de fábrica, las excepciones del admin, los candados y la aplicabilidad (D20).
-4. **Caché por versión y huella.**
-   - La llave del mapa es `authz:grants:v1:{versión}:{huella}`.
-   - La versión es la única fila de `authz_grants_version`. La suben triggers **de sentencia** (insert, update, delete y truncate) en las cuatro tablas: ningún camino de escritura lo olvida, como `users.authz_version` (decisión 7).
-   - Se lee una vez por petición y antes que las tablas, así que un mapa nunca es más viejo que su llave.
+4. **Caché por versión, sello y huella.**
+   - La llave del mapa es `authz:grants:v1:{versión}:{sello}:{huella}`.
+   - La versión y el sello son la única fila de `authz_grants_version`. Los suben triggers **de sentencia** (insert, update, delete y truncate) en las cuatro tablas: ningún camino de escritura lo olvida, como `users.authz_version` (decisión 7).
+   - El sello es un uuid nuevo en cada cambio. Sin él, dos bases con la misma versión que comparten Valkey (otro worktree, la demo, una base recién migrada o restaurada) leerían el mapa de la otra.
+   - Se leen una vez por petición. Si el mapa no está en la caché, se arma con una sola consulta que vuelve a leer la versión y el sello junto con las tres tablas: el mapa sale de un solo estado de la base y se guarda con la llave de ese estado, aunque otra petición haya cambiado algo entre medio.
    - La huella sale del código: lo de fábrica, las dimensiones y si es personal cada permiso, los candados y lo que acota cada puesto. Un despliegue que cambie cualquiera de esas cosas no lee el mapa que armó el anterior.
    - Como el snapshot, el mapa se escribe en la caché solo cuando la transacción se confirma. Se lee estricto y vence al día.
    - Un cambio vale en la siguiente petición de cada usuario, sin volver a entrar. No toca `users.authz_version` ni el snapshot de nombramientos, cuyo `FORMAT` no cambia.

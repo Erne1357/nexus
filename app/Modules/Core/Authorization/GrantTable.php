@@ -17,13 +17,16 @@ use Illuminate\Support\Facades\DB;
  * - Lo que la base guarde y las reglas no permitan (un candado, CF-03, o algo que ampliaría el alcance, CF-04) no
  *   cuenta, igual que una clave que ningún módulo declara: las reglas valen aunque algo llegue por otro camino.
  *
- * Caché: el mapa se guarda con la llave `authz:grants:v{FORMAT}:{versión}:{huella}`. La versión es la fila de
- * `authz_grants_version`, que suben triggers de sentencia en las cuatro tablas, así que ningún camino de escritura la
- * olvida; se lee una vez por petición, antes que las tablas, de modo que un mapa nunca es más viejo que su llave. La
- * huella (fingerprint()) sale del código: lo de fábrica, las dimensiones de cada permiso, los candados y lo que acota
- * cada puesto; un despliegue que los cambie no lee lo que armó el anterior. Como AuthorizationSnapshots, el mapa se
- * escribe en la caché solo cuando la transacción en curso se confirma: una revertida deshace la subida de la versión y
- * la siguiente reusaría el número. Lo cacheado se lee estricto y, si no tiene la forma, se vuelve a armar.
+ * Caché: el mapa se guarda con la llave `authz:grants:v{FORMAT}:{versión}:{sello}:{huella}`. La versión y el sello son
+ * la fila de `authz_grants_version`, que suben triggers de sentencia en las cuatro tablas, así que ningún camino de
+ * escritura los olvida. El sello es un uuid nuevo en cada cambio: dos bases con la misma versión (otro worktree contra
+ * el mismo Valkey, una base recién migrada o restaurada) no comparten llave. Se leen una vez por petición. Si el mapa
+ * no está en la caché, se arma con una sola consulta que vuelve a leer la versión y el sello junto con las tres
+ * tablas, así que el mapa sale de un solo estado de la base y se guarda con la llave de ese estado. La huella
+ * (fingerprint()) sale del código: lo de fábrica, las dimensiones de cada permiso, los candados y lo que acota cada
+ * puesto; un despliegue que los cambie no lee lo que armó el anterior. Como AuthorizationSnapshots, el mapa se escribe
+ * en la caché solo cuando la transacción en curso se confirma. Lo cacheado se lee estricto y, si no tiene la forma, se
+ * vuelve a armar.
  *
  * Se registra como `scoped` (Octane): la versión y el mapa se memorizan en la instancia, y la siguiente petición los
  * vuelve a leer. Una Action que cambie concesiones a media petición llama a refresh().
@@ -35,7 +38,8 @@ final class GrantTable
      */
     public const int FORMAT = 1;
 
-    private ?int $version = null;
+    /** @var array{version: int, token: string}|null */
+    private ?array $stamp = null;
 
     /** @var array<string, array<string, true>>|null por `Role->value`, sin el admin */
     private ?array $map = null;
@@ -100,12 +104,14 @@ final class GrantTable
      */
     public function version(): int
     {
-        return $this->version ??= (int) DB::table('authz_grants_version')->value('version');
+        return $this->stamp()['version'];
     }
 
     public function cacheKey(): string
     {
-        return 'authz:grants:v'.self::FORMAT.':'.$this->version().':'.$this->fingerprint();
+        $stamp = $this->stamp();
+
+        return 'authz:grants:v'.self::FORMAT.":{$stamp['version']}:{$stamp['token']}:".$this->fingerprint();
     }
 
     /**
@@ -113,8 +119,21 @@ final class GrantTable
      */
     public function refresh(): void
     {
-        $this->version = null;
+        $this->stamp = null;
         $this->map = null;
+    }
+
+    /**
+     * @return array{version: int, token: string}
+     */
+    private function stamp(): array
+    {
+        if ($this->stamp === null) {
+            $row = DB::table('authz_grants_version')->first(['version', 'token']);
+            $this->stamp = ['version' => (int) ($row->version ?? 0), 'token' => (string) ($row->token ?? '')];
+        }
+
+        return $this->stamp;
     }
 
     /**
@@ -146,7 +165,8 @@ final class GrantTable
             return $this->map = $cached;
         }
 
-        $map = $this->load();
+        [$this->stamp, $map] = $this->load();
+        $key = $this->cacheKey();
         $data = array_map(fn (array $keys): array => array_keys($keys), $map);
 
         DB::afterCommit(fn () => $this->cache->put($key, $data, now()->addDay()));
@@ -185,39 +205,48 @@ final class GrantTable
     }
 
     /**
-     * Arma el mapa desde la base, en tres consultas: los roles activos y no borrados de cada puesto, las filas de los
-     * que no siguen al código y los permisos sueltos.
+     * Arma el mapa desde la base en una sola consulta, que es un solo estado de la base: la versión y el sello, los
+     * roles activos y no borrados que siguen al código (por su puesto de fábrica), las filas de los que no lo siguen y
+     * los permisos sueltos. Da también la versión y el sello de ese estado.
      *
-     * @return array<string, array<string, true>>
+     * @return array{0: array{version: int, token: string}, 1: array<string, array<string, true>>}
      */
     private function load(): array
     {
+        $rows = DB::select(<<<'SQL'
+            select 'stamp' as kind, null::text as role, null::text as factory_role, version, token::text as permission
+                from authz_grants_version
+            union all
+            select 'factory', pps.role, ps.factory_role, null, null
+                from position_permission_sets pps
+                join permission_sets ps on ps.id = pps.permission_set_id
+                where ps.is_active and ps.deleted_at is null and ps.follows_factory
+            union all
+            select 'own', pps.role, null, null, psp.permission
+                from position_permission_sets pps
+                join permission_sets ps on ps.id = pps.permission_set_id
+                join permission_set_permissions psp on psp.permission_set_id = ps.id
+                where ps.is_active and ps.deleted_at is null and not ps.follows_factory
+            union all
+            select 'loose', role, null, null, permission from position_permissions
+            SQL);
+
         $factory = $this->registry->matrix();
+        $stamp = ['version' => 0, 'token' => ''];
         $granted = [];
 
-        $sets = DB::table('position_permission_sets')
-            ->join('permission_sets', 'permission_sets.id', '=', 'position_permission_sets.permission_set_id')
-            ->where('permission_sets.is_active', true)
-            ->whereNull('permission_sets.deleted_at')
-            ->get(['position_permission_sets.role', 'permission_sets.id', 'permission_sets.factory_role', 'permission_sets.follows_factory']);
+        foreach ($rows as $row) {
+            if ($row->kind === 'stamp') {
+                $stamp = ['version' => (int) $row->version, 'token' => (string) $row->permission];
 
-        $own = DB::table('permission_set_permissions')
-            ->whereIn('permission_set_id', $sets->where('follows_factory', false)->pluck('id')->unique()->values()->all())
-            ->get(['permission_set_id', 'permission'])
-            ->groupBy('permission_set_id');
+                continue;
+            }
 
-        foreach ($sets as $set) {
-            $keys = $set->follows_factory
-                ? ($factory[$set->factory_role] ?? [])
-                : ($own->get($set->id)?->pluck('permission')->all() ?? []);
+            $keys = $row->kind === 'factory' ? ($factory[$row->factory_role] ?? []) : [$row->permission];
 
             foreach ($keys as $key) {
-                $granted[$set->role][$key] = true;
+                $granted[$row->role][$key] = true;
             }
-        }
-
-        foreach (DB::table('position_permissions')->get(['role', 'permission']) as $row) {
-            $granted[$row->role][$row->permission] = true;
         }
 
         $map = [];
@@ -236,6 +265,6 @@ final class GrantTable
             }
         }
 
-        return $map;
+        return [$stamp, $map];
     }
 }
