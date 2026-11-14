@@ -319,11 +319,12 @@ it('un aviso que cambia de perfil abre su pantalla con una carga completa, sin r
     expect($switching->effects)->not->toHaveKey('redirectUsingNavigate')
         ->and(session(Actor::ACTIVE_ROLE))->toBe(Role::JefeDepartamento->value);
 
-    // Sin cambio de perfil sigue navegando con wire:navigate y avisa a la campana y a la página.
+    // Sin cambio de perfil sigue navegando con wire:navigate, también sin avisar: la pantalla nueva trae su campana, y
+    // la repintada de la vieja podía llegar después del cambio de pantalla («bellOpen is not defined»).
     $plain = Livewire::test('core::components.bell')
         ->call('open', $ana->notifications()->where('type', TestNotice::class)->value('id'))
         ->assertRedirect(route('home'))
-        ->assertDispatched('notifications-changed');
+        ->assertNotDispatched('notifications-changed');
 
     expect($plain->effects['redirectUsingNavigate'] ?? false)->toBeTrue();
 });

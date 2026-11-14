@@ -2,11 +2,13 @@
     La campana (opción A): botón de la banda con el globo de no leídas y la tarjeta flotante debajo, con
     la misma forma y el mismo movimiento que la de la credencial (encabezado con la banda y su franja roja).
     Se oculta mientras el menú completo está abierto, igual que «Buscar o ir a…». Esc o un clic fuera la
-    cierran; abrir la credencial también.
+    cierran; abrir la credencial también. Repuesta de la caché de wire:navigate (Atrás), se vuelve a pintar
+    (`nexus-notifications-stale`, resources/js/app.js).
 --}}
 <div
     wire:poll.60s.visible
     x-data="{ bellOpen: false }"
+    x-on:nexus-notifications-stale.window="$wire.$refresh()"
     x-init="$watch('cardOpen', (open) => { if (open) bellOpen = false })"
     x-on:click.outside="bellOpen = false"
     x-on:keydown.escape.window="if (bellOpen) { bellOpen = false; $refs.bell.focus() }"
