@@ -12,6 +12,7 @@ use App\Modules\Core\Queries\PermissionCatalogQuery;
 use App\Modules\Core\Queries\PermissionSetsQuery;
 use App\Modules\Core\Queries\PositionsQuery;
 use App\Modules\Students\Enums\StudentsPermission;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 /*
@@ -101,7 +102,7 @@ it('CF-02 y CF-S2: los roles salen sin los borrados, primero los de fábrica, co
         ->and($docente['permission_count'])->toBe(count(app(PermissionRegistry::class)->matrix()['docente']))
         ->and($docente['new_factory'])->toBe([])
         ->and(app(PermissionSetsQuery::class)->findOrFail($own['id'])->name)->toBe('Apoyo')
-        ->and(fn () => app(PermissionSetsQuery::class)->findOrFail('no-es-un-uuid'))->toThrow(Illuminate\Database\Eloquent\ModelNotFoundException::class);
+        ->and(fn () => app(PermissionSetsQuery::class)->findOrFail('no-es-un-uuid'))->toThrow(ModelNotFoundException::class);
 });
 
 it('CF-03 y CF-S1: el catálogo dice de cada permiso su módulo, sus dimensiones, si es candado y quién lo tiene hoy', function () {

@@ -86,7 +86,7 @@ final class PermissionSetsQuery
         $modules = [];
 
         foreach ($keys as $key) {
-            $modules[explode('.', $key)[0]][] = ['key' => $key, 'label' => $this->registry->find($key)?->label() ?? $key];
+            $modules[explode('.', $key)[0]][] = ['key' => $key, 'label' => $this->registry->forKey($key)?->label() ?? $key];
         }
 
         ksort($modules);

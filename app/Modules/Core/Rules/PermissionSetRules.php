@@ -106,7 +106,7 @@ final class PermissionSetRules
         $problems = [];
 
         foreach ($keys as $key) {
-            $permission = $this->registry->find($key);
+            $permission = $this->registry->forKey($key);
             $problems[] = $permission === null
                 ? "El permiso «{$key}» no existe."
                 : $this->grantRules->lockProblem($permission);
@@ -148,7 +148,7 @@ final class PermissionSetRules
 
         foreach ($roles as $role) {
             foreach ($keys as $key) {
-                $permission = $this->registry->find($key);
+                $permission = $this->registry->forKey($key);
 
                 if ($permission !== null && ($problem = $this->grantRules->grantProblem($role, $permission)) !== null) {
                     $problems[] = $problem;
