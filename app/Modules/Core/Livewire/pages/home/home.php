@@ -22,7 +22,7 @@ use Livewire\Component;
  * Al docente tampoco (D12, confirmado el 14 de noviembre de 2026): su Inicio es solo lo suyo, y su bloque lleva su
  * acceso (usuario, correo institucional y «Cambiar contraseña»).
  *
- * El bloque de un puesto puede llevar atajos a entradas del menú (shortcuts()), por nombre de ruta: cada uno sale solo
+ * El bloque de un puesto puede llevar atajos a entradas del menú (Role::homeShortcuts()), por nombre de ruta: cada uno sale solo
  * si el usuario ve esa entrada en su menú (Navigation), así Inicio no depende del módulo que la declara. El jefe de
  * Servicios Escolares, por ejemplo, ve «Materias por colocar» (tarea 1.21); los demás jefes no la ven en el menú.
  */
@@ -35,7 +35,7 @@ new #[Title('Inicio')] class extends Component
     {
         $active = $context->activeRole();
         $roles = $active === null ? [] : [$active];
-        $term = $active === null || ! $active->isStaff() || $active === Role::Docente ? null : $context->activeTerm();
+        $term = $active === null || ! $active->seesTermCalendarOnHome() ? null : $context->activeTerm();
         $modalities = $context->modalities();
         $windows = $term === null ? [] : $calendar->upcoming($term, $modalities->count() === 1 ? $modalities->first() : null);
 
@@ -48,23 +48,10 @@ new #[Title('Inicio')] class extends Component
             'name' => $context->user()?->name ?? '',
             'blocks' => array_map(fn (Role $role): array => [
                 ...$titles->of($context, $role),
-                'account' => $role === Role::Docente ? ['username' => $context->user()->username, 'email' => $context->user()->email] : null,
+                'account' => $role->showsAccessOnHome() ? ['username' => $context->user()->username, 'email' => $context->user()->email] : null,
                 'links' => $this->links($role, $context, $navigation),
             ], $roles),
         ];
-    }
-
-    /**
-     * Las entradas del menú, por nombre de ruta, a las que lleva el bloque de cada puesto.
-     *
-     * @return list<string>
-     */
-    private function shortcuts(Role $role): array
-    {
-        return match ($role) {
-            Role::JefeDepartamento => ['academic.placements'],
-            default => [],
-        };
     }
 
     /**
@@ -76,7 +63,7 @@ new #[Title('Inicio')] class extends Component
     {
         $links = [];
 
-        foreach ($this->shortcuts($role) as $route) {
+        foreach ($role->homeShortcuts() as $route) {
             $item = $navigation->forRoute($route);
 
             if ($item === null || ! $item->isVisibleTo($context) || ($item->whyUnavailable !== null && ($item->whyUnavailable)($context) !== null)) {
