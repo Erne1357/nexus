@@ -6,9 +6,11 @@ use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\ModalityQuery;
 use App\Modules\Facilities\Actions\AddRoomBlock;
+use App\Modules\Facilities\Actions\AssignRoomOwner;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\RemoveRoomBlock;
 use App\Modules\Facilities\Actions\UpdateRoom;
+use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Queries\BuildingQuery;
@@ -62,6 +64,20 @@ new #[Title('Salones')] class extends Component
     /** '' (todos), 'active' o 'inactive'. */
     #[Session]
     public string $status = '';
+
+    /**
+     * Los ids de los salones elegidos para asignarles dueño en bloque. Se vacía al cambiar la búsqueda o un filtro, para
+     * que no queden elegidos salones que la lista ya no muestra; AssignRoomOwner vuelve a autorizar cada uno.
+     *
+     * @var list<string>
+     */
+    public array $selected = [];
+
+    /** Si está abierto el modal de «Asignar dueño». */
+    public bool $showOwnerModal = false;
+
+    /** El departamento que se asigna en bloque; '' deja los salones sin dueño. */
+    public string $bulkOwner = '';
 
     public bool $showModal = false;
 
@@ -151,6 +167,8 @@ new #[Title('Salones')] class extends Component
                 },
             ),
             'canCreate' => $this->creatableCampuses()->isNotEmpty(),
+            'canAssignOwner' => $context->allowsAny(FacilitiesPermission::RoomUpdate),
+            'bulkOwnerOptions' => $this->showOwnerModal ? $departments : [],
             'formBuildings' => collect($this->formBuildings($buildingQuery))->groupBy('campus')->all(),
             'ownerOptions' => $rooms->ownerOptions($this->department_id === '' ? null : $this->department_id),
             'buildingGroups' => $buildingGroups,
@@ -189,7 +207,59 @@ new #[Title('Salones')] class extends Component
     {
         if (in_array($property, ['search', 'campus', 'buildingFilter', 'typeFilter', 'ownerFilter', 'status'], true)) {
             $this->resetPage();
+            $this->selected = [];
         }
+    }
+
+    /**
+     * Elige todos los salones de la lista con la búsqueda y los filtros de ahora, de todas las páginas: con el filtro
+     * de edificio son todos los de un edificio.
+     */
+    public function chooseAll(RoomQuery $rooms, Actor $context): void
+    {
+        $options = $this->campusOptions();
+        $shown = $this->campusFilter();
+
+        $this->selected = $rooms->idsForTable(
+            $context,
+            ($shown === null ? $options : collect([$shown]))->values(),
+            $this->search,
+            $this->buildingFilter === '' ? null : $this->buildingFilter,
+            $this->typeFilter === '' ? null : $this->typeFilter,
+            $this->ownerFilter === '' ? null : $this->ownerFilter,
+            match ($this->status) {
+                'active' => true,
+                'inactive' => false,
+                default => null,
+            },
+        );
+    }
+
+    public function clearSelection(): void
+    {
+        $this->selected = [];
+    }
+
+    public function openOwnerModal(): void
+    {
+        abort_if($this->selected === [], 403);
+
+        $this->resetValidation();
+        $this->bulkOwner = '';
+        $this->showOwnerModal = true;
+    }
+
+    public function assignOwner(AssignRoomOwner $assignOwner): void
+    {
+        $changed = $assignOwner->handle(auth()->user(), $this->selected, $this->bulkOwner === '' ? null : $this->bulkOwner);
+        $total = count($this->selected);
+
+        $this->showOwnerModal = false;
+        $this->selected = [];
+        $this->success(
+            $this->bulkOwner === '' ? 'Salones sin dueño' : 'Dueño asignado',
+            trans_choice('{1} 1 salón cambió de dueño|[0,*] :count salones cambiaron de dueño', $changed).($changed < $total ? ' ('.($total - $changed).' ya lo tenían).' : '.'),
+        );
     }
 
     /**
@@ -334,6 +404,7 @@ new #[Title('Salones')] class extends Component
             'type' => 'tipo',
             'capacity' => 'capacidad',
             'department_id' => 'departamento dueño',
+            'selected' => 'salones',
             'features' => 'características',
             'day' => 'día',
             'starts_at' => 'hora de inicio',
