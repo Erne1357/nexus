@@ -12,9 +12,11 @@ use Livewire\Attributes\On;
 /**
  * Abrir una notificación y marcarlas todas como leídas, igual en la campana y en «Todas las notificaciones»:
  * OpenNotification la marca leída y lleva a su pantalla o, si ya no está disponible, se avisa con un toast y no
- * se lleva. Cada cambio avisa con `notifications-changed` para que el otro componente de la misma pantalla (la
- * campana en la banda y la página) se vuelva a pintar, salvo si abrir el aviso cambió el perfil: entonces la
- * pantalla del aviso se carga completa, sin wire:navigate. Pide el trait Toast de MaryUI.
+ * se lleva. Lo que deja al usuario en la misma pantalla avisa con `notifications-changed`, para que el otro
+ * componente (la campana en la banda y la página) se vuelva a pintar. Abrir un aviso que lleva a su pantalla no
+ * avisa: la pantalla nueva trae su campana, y la respuesta de esa repintada podía llegar después de wire:navigate y
+ * caer sobre la campana vieja, que Alpine ya había limpiado («bellOpen is not defined»). Si abrir el aviso cambió el
+ * perfil, la pantalla del aviso se carga completa, sin wire:navigate. Pide el trait Toast de MaryUI.
  */
 trait OpensNotifications
 {
@@ -41,13 +43,11 @@ trait OpensNotifications
             return null;
         }
 
-        // Con otro perfil, los componentes de esta página ya no pueden actuar (ActiveRoleHook): no se les avisa y la
-        // pantalla del aviso se carga completa, pintada con el perfil nuevo.
+        // Con otro perfil, los componentes de esta página ya no pueden actuar (ActiveRoleHook): la pantalla del aviso
+        // se carga completa, pintada con el perfil nuevo.
         if ($target->switchedRole) {
             return $this->redirect($target->url);
         }
-
-        $this->dispatch('notifications-changed');
 
         return $this->redirect($target->url, navigate: true);
     }

@@ -1,10 +1,12 @@
 {{--
     Anatomía de una pantalla de catálogo (DESIGN.md, "Layout"), la de Campus con los filtros de Materias: encabezado
-    y, en su renglón, la barra de herramientas común (búsqueda, filtros de departamento, tipo de plaza y estado, y a
-    la derecha la acción principal con, a su lado, «Más acciones», que lleva «Dar de alta usuarios»: del admin, y a
-    los demás deshabilitada con su motivo). Tabla en una superficie blanca con filete: el número en Mono, el
-    departamento principal y debajo los otros, las horas base del periodo activo en Mono, si tiene usuario y el
-    estado con su insignia; «Editar» visible y lo demás en «Acciones». Entre 768 y 1199 px se ocultan el usuario y,
+    y, en su renglón, la barra de herramientas común (búsqueda, filtros de departamento, tipo de plaza y estado, que
+    empieza en «Activos», y a la derecha la acción principal con, a su lado, «Más acciones», que lleva «Dar de alta
+    usuarios»: del admin, y a los demás deshabilitada con su motivo). Debajo, si hay docentes activos sin correo
+    institucional, cuántos son y «Ver solo esos», el filtro que no cabe en la barra a 1440 px. Tabla en una
+    superficie blanca con filete: el número en Mono, el departamento principal y debajo los otros, las horas base del
+    periodo activo en Mono, el estado de su acceso (AC-04) y el estado con su insignia; «Editar» visible y lo demás en
+    «Acciones». Al editar, el correo institucional va con el parcial de la ficha (AC-06). Entre 768 y 1199 px se ocultan el acceso y,
     debajo de 1024, la adscripción; debajo de 768 px la tabla cede su lugar a renglones apilados (número, nombre y
     estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
 --}}
@@ -12,9 +14,9 @@
     <x-header title="Docentes" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             @if ($term === null)
-                Los docentes de tu alcance con sus adscripciones y si tienen usuario; sin periodo activo no hay horas base. Un docente no se borra: se da de baja, y su usuario con él.
+                Los docentes de tu alcance con sus adscripciones y su acceso; sin periodo activo no hay horas base. Un docente no se borra: se da de baja, y su usuario con él.
             @else
-                Los docentes de tu alcance con sus adscripciones, sus horas base de {{ $term->name }} y si tienen usuario. Un docente no se borra: se da de baja, y su usuario con él.
+                Los docentes de tu alcance con sus adscripciones, sus horas base de {{ $term->name }} y su acceso. Un docente no se borra: se da de baja, y su usuario con él.
             @endif
         </x-slot:subtitle>
     </x-header>
@@ -57,6 +59,20 @@
         </x-slot:action>
     </x-core::catalog-toolbar>
 
+    @if ($emailFilter === 'missing')
+        <p class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="missing-emails">
+            <x-icon name="o-funnel" class="h-4 w-4 text-neutral" aria-hidden="true" />
+            <span>Solo los que no tienen correo institucional.</span>
+            <button type="button" class="link link-primary font-medium" wire:click="$set('emailFilter', '')">Ver todos</button>
+        </p>
+    @elseif ($missingEmails > 0)
+        <p class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="missing-emails">
+            <x-icon name="o-envelope" class="h-4 w-4 text-neutral" aria-hidden="true" />
+            <span><span class="font-mono font-semibold tabular-nums">{{ $missingEmails }}</span> {{ $missingEmails === 1 ? 'docente activo' : 'docentes activos' }} sin correo institucional: sin él no reciben su invitación de acceso.</span>
+            <button type="button" class="link link-primary font-medium" wire:click="$set('emailFilter', 'missing')">Ver solo {{ $missingEmails === 1 ? 'ese' : 'esos' }}</button>
+        </p>
+    @endif
+
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
         <x-table
             :headers="$headers"
@@ -76,8 +92,9 @@
                 @include('faculty::teachers.base-hours', ['hours' => $hours[$teacher->id] ?? null])
             @endscope
 
-            @scope('cell_has_user', $teacher)
-                {{ $teacher->user_id === null ? 'No' : 'Sí' }}
+            {{-- En texto que se parte en dos renglones y no en insignia: «Debe cambiar su contraseña» no cabe en la tabla a 1440 px. --}}
+            @scope('cell_access', $teacher, $access)
+                <span @class(['block text-sm leading-tight', 'text-neutral' => $access[$teacher->id] === \App\Modules\Core\Enums\UserAccess::None])>{{ $access[$teacher->id]->label() }}</span>
             @endscope
 
             @scope('cell_is_active', $teacher)
@@ -106,7 +123,7 @@
                     <div class="text-neutral">
                         @include('faculty::teachers.adscriptions', ['teacher' => $teacher, 'stacked' => false])
                         · @include('faculty::teachers.base-hours', ['hours' => $hours[$teacher->id] ?? null]) horas base
-                        · {{ $teacher->user_id === null ? 'Sin usuario' : 'Con usuario' }}
+                        · {{ $access[$teacher->id]->label() }}
                     </div>
 
                     @include('faculty::teachers.row-actions', ['teacher' => $teacher, 'actions' => $rowActions[$teacher->id], 'inTable' => false])
@@ -176,7 +193,22 @@
                 </div>
             @endif
 
-            @if ($existingId === null)
+            @if ($editingId !== null)
+                <div class="grid gap-4 md:grid-cols-6">
+                    <div class="md:col-span-3">
+                        <x-input label="Correo" name="email" wire:model="email" type="email" />
+                    </div>
+                    <div class="md:col-span-3">
+                        @include('faculty::teachers.institutional-email-field', ['reason' => $institutionalEmailReason, 'domain' => $institutionalDomain])
+                    </div>
+                    <div class="md:col-span-3">
+                        <x-select label="Grado" name="degree" wire:model="degree" :options="$degrees" placeholder="Sin grado" />
+                    </div>
+                    <div class="md:col-span-3">
+                        <x-input label="Fecha de ingreso" name="hired_on" wire:model="hired_on" type="date" />
+                    </div>
+                </div>
+            @elseif ($existingId === null)
                 <div class="grid gap-4 md:grid-cols-6">
                     <div class="md:col-span-4">
                         <x-input label="Correo" name="email" wire:model="email" type="email" />

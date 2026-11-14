@@ -379,7 +379,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
             'catalogos' => ['Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones'],
             'datos' => ['Importaciones'],
         ])
-        ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos']])
+        ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos', 'Materias por colocar']])
         ->and(navigationGroupsFor($admin, NavigationArea::RecursosHumanos))->toBe(['—' => ['Docentes']]);
 });
 

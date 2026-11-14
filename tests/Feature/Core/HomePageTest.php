@@ -73,6 +73,25 @@ it('a quien no tiene un rol vigente le dice que pida uno', function () {
         ->assertDontSee('Coordinador de carrera');
 });
 
+it('IN-01 (D12): el bloque del docente muestra lo suyo: su usuario, su correo institucional y «Cambiar contraseña»', function () {
+    $this->actingAs(User::factory()->withRole(Role::Docente)->create(['username' => 'PEAA800101XX1', 'email' => 'ana.perez@cdjuarez.tecnm.mx']));
+
+    Livewire::test('core::pages.home')
+        ->assertSeeInOrder(['Tu acceso', 'Usuario', 'PEAA800101XX1', 'Correo institucional', 'ana.perez@cdjuarez.tecnm.mx'])
+        ->assertSeeHtml('href="'.route('user-password.edit').'"')
+        ->assertSee('Cambiar contraseña');
+});
+
+it('IN-01 (D12): sin correo institucional lo dice, y el bloque de otro puesto no lleva sus datos de acceso', function () {
+    $user = User::factory()->withRole(Role::Docente)->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(['username' => 'PEAA800101XX1', 'email' => null]);
+
+    actingAsRole($user, Role::Docente);
+    Livewire::test('core::pages.home')->assertSee('Sin correo institucional');
+
+    actingAsRole($user, Role::JefeDepartamento);
+    Livewire::test('core::pages.home')->assertDontSee('Tu acceso')->assertDontSee('PEAA800101XX1');
+});
+
 it('se muestra dentro del layout de la aplicación', function () {
     $this->actingAs(User::factory()->admin()->create())
         ->get('/')
@@ -145,16 +164,47 @@ describe('calendario en Inicio', function () {
             ->assertDontSee('10–19 nov');
     });
 
-    it('lo ve cualquier usuario con un rol vigente', function (Role $role, array $scope) {
+    it('lo ve el personal con un rol vigente', function (Role $role, array $scope) {
         homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
 
         $this->actingAs(User::factory()->withRole($role, ['campus_id' => $this->campus->id, ...$scope])->create());
 
         Livewire::test('core::pages.home')->assertSee('Propuesta por carrera')->assertSee('quedan 7 días');
     })->with([
-        'docente' => [Role::Docente, []],
+        'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
         'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
     ]);
+
+    it('IN-01 (D12): se oculta al docente: su Inicio es solo lo suyo', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+
+        Livewire::test('core::pages.home')
+            ->assertSee(Role::Docente->label())
+            ->assertDontSee('Calendario')
+            ->assertDontSee('Propuesta por carrera');
+    });
+
+    it('IN-01 (D12): al jefe que también es docente se le oculta solo con el perfil de docente', function () {
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+        $user = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->withRole(Role::Docente)->create();
+
+        actingAsRole($user, Role::JefeDepartamento);
+        Livewire::test('core::pages.home')->assertSee('Propuesta por carrera');
+
+        actingAsRole($user, Role::Docente);
+        Livewire::test('core::pages.home')->assertDontSee('Propuesta por carrera');
+    });
+
+    it('muestra la etapa de validación de catálogos mientras está en curso (tarea 1.21: en la simulación ya había terminado)', function () {
+        homeCalendarStage($this->term, Stage::CatalogValidation, null, '2026-11-02', '2026-11-30');
+        homeCalendarStage($this->term, Stage::Proposal, null, '2026-11-10', '2026-11-19');
+
+        $this->actingAs(homeCalendarUser($this->campus));
+
+        Livewire::test('core::pages.home')->assertSeeInOrder(['Validación de catálogos', 'En curso', '2–30 nov', 'quedan 18 días']);
+    });
 
     it('se oculta sin etapas con fecha', function () {
         $this->actingAs(homeCalendarUser($this->campus));

@@ -18,6 +18,7 @@ use App\Modules\CatalogValidation\Listeners\ReportValidationHomeCard;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
+use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -38,6 +39,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Queries\InvitationRelease;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -54,6 +56,14 @@ use Illuminate\Support\Facades\Event;
  */
 final class CatalogValidationServiceProvider extends ModuleServiceProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        // Faculty pregunta si la primera invitación de un docente ya se liberó con la validación (AC-07, AC-09).
+        $this->app->bind(InvitationRelease::class, TeacherInvitationReleaseQuery::class);
+    }
+
     public function boot(): void
     {
         parent::boot();
