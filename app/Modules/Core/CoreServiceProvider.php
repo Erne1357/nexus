@@ -5,7 +5,9 @@ namespace App\Modules\Core;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\DefaultScopeLabels;
+use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\SeedDemo;
@@ -64,8 +66,15 @@ final class CoreServiceProvider extends ModuleServiceProvider
             fn (): mixed => $app['auth']->user(),
             $app->make(OrgTree::class),
             $app->make(AuthorizationSnapshots::class),
-            $app->make(PermissionRegistry::class),
+            $app->make(GrantTable::class),
             $app['session.store'],
+        ));
+
+        // `scoped` por lo mismo: memoriza la versión de las concesiones y su mapa en la petición en curso (CF-01).
+        $this->app->scoped(GrantTable::class, fn (Application $app): GrantTable => new GrantTable(
+            $app->make(PermissionRegistry::class),
+            new PermissionGrantRules($app->make(PermissionRegistry::class)),
+            $app['cache.store'],
         ));
 
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
@@ -90,8 +99,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Sin estado: quién está adscrito a cada unidad del Organigrama. Faculty lo reemplaza con sus adscripciones.
         $this->app->bindIf(UnitAdscriptions::class, NoUnitAdscriptions::class);
 
-        // Singleton porque es inmutable: el catálogo de permisos y las concesiones por puesto de todos
-        // los módulos, sin nada del usuario ni de la petición.
+        // Singleton porque es inmutable: el catálogo de permisos, lo de fábrica por puesto y los candados de todos
+        // los módulos, sin nada del usuario ni de la petición. Lo que vale hoy lo dice GrantTable.
         $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
             $app->getProviders(ModuleServiceProvider::class),
         ));
@@ -159,6 +168,21 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 CorePermission::TermOpen,
             ],
         ];
+    }
+
+    /**
+     * CF-03 (confirmado el 14 de noviembre de 2026): usuarios, roles y permisos, nombramientos, bitácora, correos y
+     * colas son solo del admin. El organigrama también, porque decide el alcance de todos (supuesto por confirmar).
+     * Los avisos y atajos del login y los parámetros sí se pueden dar.
+     */
+    public function adminOnly(): array
+    {
+        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit'];
+
+        return array_values(array_filter(
+            CorePermission::cases(),
+            fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true),
+        ));
     }
 
     /**

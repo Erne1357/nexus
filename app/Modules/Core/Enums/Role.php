@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Enums;
 
+use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\OrgTree;
 
 /**
@@ -192,6 +193,29 @@ enum Role: string
             self::JefeProyectoDocente, self::Coordinador => ['campus_id'],
             default => [],
         };
+    }
+
+    /**
+     * CF-04: las dimensiones del alcance que el puesto acota, en el orden de Dimension: las que lleva en su nombramiento
+     * (scopeColumns() y optionalScopeColumns()) y en las que es general por regla. El jefe de departamento y la
+     * Subdirección son de todo el Tec en campus y modalidad (AZ-S17). El admin es general en todas, pero no se edita
+     * (CF-S1). El docente y el alumno no acotan ninguna: solo reciben permisos personales.
+     *
+     * @return list<Dimension>
+     */
+    public function boundedDimensions(): array
+    {
+        $general = match ($this) {
+            self::Admin => Dimension::cases(),
+            self::Subdireccion, self::JefeDepartamento => [Dimension::Campus, Dimension::Modality],
+            default => [],
+        };
+        $columns = [...$this->scopeColumns(), ...$this->optionalScopeColumns()];
+
+        return array_values(array_filter(
+            Dimension::cases(),
+            fn (Dimension $dimension): bool => in_array($dimension, $general, true) || in_array($dimension->column(), $columns, true),
+        ));
     }
 
     /**

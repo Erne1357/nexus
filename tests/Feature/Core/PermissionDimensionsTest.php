@@ -48,6 +48,8 @@ function dimensionTables(): array
         'core.term' => 'terms',
         'core.term.open' => 'term_openings',
         'core.term.manage_calendar' => 'term_stages',
+        // Los roles y los permisos de los puestos (1.22-A) son de toda la instalación: sin campus ni modalidad.
+        'core.authz' => 'permission_sets',
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
         'core.user' => 'users',

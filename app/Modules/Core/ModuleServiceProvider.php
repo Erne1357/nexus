@@ -122,6 +122,17 @@ abstract class ModuleServiceProvider extends ServiceProvider
     }
 
     /**
+     * Candados (CF-03): permisos declarados que solo tiene el admin y que el panel no deja dar a otro puesto, ni
+     * sueltos ni dentro de un rol. Tampoco se conceden en grants(): PermissionRegistry falla al arrancar.
+     *
+     * @return list<Permission>
+     */
+    public function adminOnly(): array
+    {
+        return [];
+    }
+
+    /**
      * Pasos con los que el módulo siembra la demo por puntos (`php artisan demo:seed --hasta=`). Un punto es el
      * inicio de una etapa del proceso (`DemoCheckpoint`); un paso **lleva a** un punto terminando la etapa anterior
      * (validar todos los catálogos lleva a «propuesta»). Core los corre por punto en el orden de

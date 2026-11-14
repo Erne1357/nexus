@@ -4,8 +4,8 @@ use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
+use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Authorization\OrgTree;
-use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
@@ -526,7 +526,7 @@ describe('perfil activo', function () {
             ->create();
         // El dispositivo A tiene su propia sesión; cada petición suya arma su contexto con el usuario recién leído.
         $sessionA = new Store('nexus_session', new ArraySessionHandler(120));
-        $requestInA = fn (): Actor => new Actor(fn (): ?User => $user->fresh(), app(OrgTree::class), app(AuthorizationSnapshots::class), app(PermissionRegistry::class), $sessionA);
+        $requestInA = fn (): Actor => new Actor(fn (): ?User => $user->fresh(), app(OrgTree::class), app(AuthorizationSnapshots::class), app(GrantTable::class), $sessionA);
 
         expect($requestInA()->activeRole())->toBe(Role::JefeDepartamento);
 
