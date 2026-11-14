@@ -18,6 +18,7 @@ it('MN-01: declara los grupos en el orden del menú', function () {
         'institucion',
         'catalogos',
         'datos',
+        'configuracion',
     ]);
 });
 
