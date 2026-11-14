@@ -58,9 +58,12 @@
         </x-slot:action>
     </x-core::catalog-toolbar>
 
-    <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+    {{-- overflow-clip y no overflow-hidden: recorta las esquinas sin volverse contenedor de scroll, así la barra de selección (sticky) se pega al pie de la ventana. --}}
+    <div class="overflow-clip rounded-box border border-base-300 bg-base-100">
         <x-table
             :headers="$headers"
+            wire:model.live="selected"
+            :selectable="$canAssignOwner"
             :rows="$rooms"
             :row-decoration="$rowDecoration"
             class="max-md:hidden [&_td]:px-3 [&_td]:py-2 [&_th]:px-3 [&_th]:text-[11.5px] [&_th]:font-medium [&_th]:uppercase [&_th]:tracking-[0.09em] [&_th]:text-secondary-muted [&_thead]:bg-secondary/40"
@@ -116,8 +119,11 @@
 
         <ul class="divide-y divide-base-300 md:hidden" data-testid="room-cards">
             @foreach ($rooms as $room)
-                <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active])>
+                <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active, 'bg-primary/5' => in_array($room->id, $selected, true)])>
                     <div class="flex items-center gap-2.5">
+                        @if ($canAssignOwner)
+                            <input type="checkbox" class="checkbox checkbox-sm" value="{{ $room->id }}" wire:model.live="selected" aria-label="Elegir el salón {{ $room->code }}" data-testid="select-card-{{ $room->code }}">
+                        @endif
                         <span @class(['font-mono text-[15px] tabular-nums', 'font-semibold' => $room->is_active])>{{ $room->code }}</span>
                         <span @class(['min-w-0 flex-1', 'font-semibold' => $room->is_active])>{{ $room->name ?? $room->type->label() }}</span>
 
@@ -136,6 +142,20 @@
                 </li>
             @endforeach
         </ul>
+
+        @if ($canAssignOwner && $selected !== [])
+            <div class="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-base-300 bg-base-200 px-4 py-2.5 shadow-float" role="region" aria-label="Selección" data-testid="selection-bar">
+                <span class="text-sm" aria-live="polite"><b class="font-mono font-semibold">{{ count($selected) }}</b> {{ count($selected) === 1 ? 'elegido' : 'elegidos' }}</span>
+                @if (count($selected) < $rooms->total())
+                    <button type="button" class="link text-sm font-medium underline-offset-4" wire:click="chooseAll" data-testid="choose-all">Elegir los {{ $rooms->total() }} de la lista</button>
+                @endif
+                <button type="button" class="link text-sm font-medium underline-offset-4" wire:click="clearSelection" data-testid="clear-selection">Quitar la selección</button>
+                <button type="button" class="btn btn-primary btn-sm max-md:h-11 max-md:w-full md:ms-auto" wire:click="openOwnerModal" data-testid="assign-owner">
+                    <x-icon name="o-building-office" class="h-4 w-4" aria-hidden="true" />
+                    Asignar dueño
+                </button>
+            </div>
+        @endif
 
         @if ($rooms->isNotEmpty() || $rooms->hasPages())
             <div class="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-2.5 text-sm text-neutral">
@@ -196,6 +216,22 @@
             <x-slot:actions>
                 <x-button label="Cancelar" @click="$wire.showModal = false" />
                 <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
+            </x-slot:actions>
+        </x-form>
+    </x-modal>
+
+    <x-modal wire:model="showOwnerModal" title="Asignar dueño" box-class="max-w-md" separator>
+        <x-form wire:submit="assignOwner" no-separator>
+            <p class="text-sm">
+                Elige el departamento dueño {{ trans_choice('{1} del salón elegido|[2,*] de los :count salones elegidos', count($selected)) }}. Sin departamento, {{ count($selected) === 1 ? 'queda compartido' : 'quedan compartidos' }}.
+            </p>
+            <x-select label="Departamento dueño" name="bulkOwner" wire:model="bulkOwner" :options="$bulkOwnerOptions" placeholder="Sin dueño (compartidos)" />
+            @error('selected') <p class="text-error text-sm">{{ $message }}</p> @enderror
+            @error('department_id') <p class="text-error text-sm">{{ $message }}</p> @enderror
+
+            <x-slot:actions>
+                <x-button label="Cancelar" @click="$wire.showOwnerModal = false" />
+                <x-button label="Asignar" type="submit" icon="o-check" class="btn-primary" spinner="assignOwner" data-testid="confirm-assign-owner" />
             </x-slot:actions>
         </x-form>
     </x-modal>
