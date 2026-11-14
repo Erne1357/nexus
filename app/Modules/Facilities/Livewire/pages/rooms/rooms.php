@@ -191,7 +191,10 @@ new #[Title('Salones')] class extends Component
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
-            'rowDecoration' => ['text-neutral' => fn (Room $room): bool => ! $room->is_active],
+            'rowDecoration' => [
+                'text-neutral' => fn (Room $room): bool => ! $room->is_active,
+                'bg-primary/5' => fn (Room $room): bool => in_array($room->id, $this->selected, true),
+            ],
             'blocksRoom' => $blocksRoom,
             'blocks' => $blocksRoom === null ? collect() : $rooms->blocksOf($blocksRoom),
             'roomsWindow' => $roomsWindow,

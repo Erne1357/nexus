@@ -119,7 +119,7 @@
 
         <ul class="divide-y divide-base-300 md:hidden" data-testid="room-cards">
             @foreach ($rooms as $room)
-                <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active])>
+                <li wire:key="room-card-{{ $room->id }}" @class(['space-y-1 px-4 py-3', 'text-neutral' => ! $room->is_active, 'bg-primary/5' => in_array($room->id, $selected, true)])>
                     <div class="flex items-center gap-2.5">
                         @if ($canAssignOwner)
                             <input type="checkbox" class="checkbox checkbox-sm" value="{{ $room->id }}" wire:model.live="selected" aria-label="Elegir el salón {{ $room->code }}" data-testid="select-card-{{ $room->code }}">
