@@ -97,6 +97,17 @@ describe('pantalla (S12)', function () {
         $page->set('ownerFilter', RoomQuery::WITHOUT_OWNER)->assertSet('selected', []);
     });
 
+    it('con varios campus, cambiar el edificio o el campus del filtro también vacía la selección', function () {
+        Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
+            ->call('chooseAll')
+            ->assertCount('selected', 4)
+            ->call('setBuildingScope', $this->edB->id)
+            ->assertSet('selected', [])
+            ->set('selected', [$this->r3->id])
+            ->call('setBuildingScope', 'campus:C1')
+            ->assertSet('selected', []);
+    });
+
     it('deja sin dueño con el departamento vacío', function () {
         Livewire::actingAs($this->admin)->test('facilities::pages.rooms')
             ->set('selected', [$this->r3->id])

@@ -264,12 +264,14 @@ new #[Title('Salones')] class extends Component
 
     /**
      * El filtro «Edificio» con más de un campus: un solo select con un grupo por campus. «Todo C2» (`campus:C2`) fija
-     * el campus, un edificio fija el edificio y la opción vacía lo quita todo, así la barra no gana otro control.
+     * el campus, un edificio fija el edificio y la opción vacía lo quita todo, así la barra no gana otro control. Como
+     * cualquier otro filtro, vacía la selección (S12).
      */
     public function setBuildingScope(string $value): void
     {
         $this->buildingFilter = '';
         $this->campus = null;
+        $this->selected = [];
 
         if (str_starts_with($value, 'campus:')) {
             $code = substr($value, 7);

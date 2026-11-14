@@ -58,7 +58,8 @@
         </x-slot:action>
     </x-core::catalog-toolbar>
 
-    <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
+    {{-- overflow-clip y no overflow-hidden: recorta las esquinas sin volverse contenedor de scroll, así la barra de selección (sticky) se pega al pie de la ventana. --}}
+    <div class="overflow-clip rounded-box border border-base-300 bg-base-100">
         <x-table
             :headers="$headers"
             wire:model.live="selected"
