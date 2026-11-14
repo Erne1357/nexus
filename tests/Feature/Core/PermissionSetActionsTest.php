@@ -109,9 +109,19 @@ it('CF-02: editar los permisos de un rol de fábrica lo deja de seguir al códig
         ->and(ownKeysOf($set))->toBe([StaffingPermission::MyLoadView->value])
         ->and(app(GrantTable::class)->matrix()[Role::Docente->value])->toBe([StaffingPermission::MyLoadView->value])
         ->and(Activity::sole()->attribute_changes->toArray())->toBe([
-            'attributes' => ['permissions' => [StaffingPermission::MyLoadView->value]],
-            'old' => ['permissions' => $factory],
+            'attributes' => ['permissions' => [StaffingPermission::MyLoadView->value], 'follows_factory' => false],
+            'old' => ['permissions' => $factory, 'follows_factory' => true],
         ]);
+});
+
+it('CF-S2: una clave que el rol tenía y que ningún módulo declara ya se descarta al guardar, en lugar de bloquearlo', function () {
+    $set = PermissionSet::factory()->withPermissions([CorePermission::SettingView, 'scheduling.room.reserve'])->create();
+
+    app(UpdatePermissionSet::class)->handle($set, ['permissions' => [CorePermission::SettingView->value, 'scheduling.room.reserve', CorePermission::LoginNoticeView->value]]);
+
+    expect(ownKeysOf($set))->toBe([CorePermission::LoginNoticeView->value, CorePermission::SettingView->value])
+        ->and(permissionSetErrors(fn () => app(UpdatePermissionSet::class)->handle($set, ['permissions' => ['otra.clave.nueva']])))
+        ->toBe(['permissions' => ['El permiso «otra.clave.nueva» no existe.']]);
 });
 
 it('CF-02: cambiar solo el nombre de un rol de fábrica no lo deja de seguir al código; sin cambios no registra', function () {

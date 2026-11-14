@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Rules\PermissionSetRules;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,12 +26,14 @@ final class PositionsQuery
         private readonly PermissionRegistry $registry,
         private readonly GrantTable $grants,
         private readonly PermissionGrantRules $grantRules,
+        private readonly PermissionSetRules $rules,
     ) {}
 
     /**
      * Un rol activo aporta con el origen «Rol «<nombre>»»; uno desactivado sale en `permission_sets` pero no aporta.
-     * Los borrados no salen.
+     * Los borrados no salen. `$peopleByRoleSet` es peopleByRoleSet(), si ya se leyó.
      *
+     * @param  array<string, int>|null  $peopleByRoleSet
      * @return list<array{
      *     role: Role,
      *     label: string,
@@ -42,10 +45,9 @@ final class PositionsQuery
      *     admin_denies: list<string>,
      * }>
      */
-    public function all(): array
+    public function all(?array $peopleByRoleSet = null): array
     {
-        $holders = $this->holdersByRole();
-        $factory = $this->registry->matrix();
+        $holders = $this->holdersByRole($peopleByRoleSet);
         $sets = DB::table('position_permission_sets')
             ->join('permission_sets', 'permission_sets.id', '=', 'position_permission_sets.permission_set_id')
             ->whereNull('permission_sets.deleted_at')
@@ -62,7 +64,7 @@ final class PositionsQuery
             $origins = [];
 
             foreach ($roleSets->where('is_active', true) as $set) {
-                $keys = $set->follows_factory ? ($factory[$set->factory_role] ?? []) : ($own->get($set->id)?->pluck('permission')->all() ?? []);
+                $keys = $this->rules->contributedKeys((bool) $set->follows_factory, $set->factory_role, $own->get($set->id)?->pluck('permission')->all() ?? []);
 
                 foreach ($keys as $key) {
                     $origins[$key][] = "Rol «{$set->name}»";
@@ -104,13 +106,14 @@ final class PositionsQuery
     /**
      * Cuántas personas ocupan hoy cada puesto: usuarios activos con un nombramiento vigente de ese puesto.
      *
+     * @param  array<string, int>|null  $peopleByRoleSet  peopleByRoleSet(), si ya se leyó
      * @return array<string, int> por `Role->value`
      */
-    public function holdersByRole(): array
+    public function holdersByRole(?array $peopleByRoleSet = null): array
     {
         $byRole = [];
 
-        foreach ($this->peopleByRoleSet() as $roles => $people) {
+        foreach ($peopleByRoleSet ?? $this->peopleByRoleSet() as $roles => $people) {
             foreach (explode(',', $roles) as $role) {
                 $byRole[$role] = ($byRole[$role] ?? 0) + $people;
             }

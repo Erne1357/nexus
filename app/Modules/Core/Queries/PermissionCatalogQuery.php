@@ -38,14 +38,14 @@ final class PermissionCatalogQuery
     public function all(): array
     {
         $byKey = [];
+        $people = $this->positions->peopleByRoleSet();
 
-        foreach ($this->positions->all() as $position) {
+        foreach ($this->positions->all($people) as $position) {
             foreach ($position['effective'] as $permission) {
                 $byKey[$permission['key']][] = ['role' => $position['role'], 'origins' => $permission['origins']];
             }
         }
 
-        $people = $this->positions->peopleByRoleSet();
         $denied = $this->registry->adminDenials();
 
         return array_map(function (Permission $permission) use ($byKey, $people, $denied): array {

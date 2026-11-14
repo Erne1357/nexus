@@ -15,7 +15,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Cambia el nombre, la descripción o los permisos de un rol: solo las claves que recibe (CF-S2, CF-03). Un permiso
  * que agrega debe poderse dar a cada puesto que ya tiene el rol (CF-04). Al cambiar los permisos de un rol de fábrica
  * que sigue al código, deja de seguirlo (CF-02): guarda su propia lista y, como línea base, lo que el código concede
- * hoy a su puesto. Quién puede lo decide PermissionSetPolicy.
+ * hoy a su puesto (la bitácora lo registra en `follows_factory`). Una clave que el rol ya tenía y que ningún módulo
+ * declara ya (la quitó un despliegue) no aporta nada: se descarta al guardar en lugar de bloquear el cambio. Quién
+ * puede lo decide PermissionSetPolicy.
  *
  * Relee el rol con bloqueo; si nada cambió, no escribe ni registra. Si algo cambió, deja en la bitácora lo de antes y
  * lo de después de cada campo (las claves, en `permissions`).
@@ -45,7 +47,8 @@ final class UpdatePermissionSet
         }
 
         if (array_key_exists('permissions', $data)) {
-            $data['permissions'] = $this->rules->permissionKeys($data['permissions']);
+            $stale = array_filter($this->rules->keysOf($set), fn (string $key): bool => ! $this->rules->isDeclared($key));
+            $data['permissions'] = $this->rules->permissionKeys(array_values(array_diff($data['permissions'], $stale)));
         }
 
         $set = DB::transaction(function () use ($set, $data): PermissionSet {
@@ -67,6 +70,9 @@ final class UpdatePermissionSet
 
                 if ($set->follows_factory) {
                     $set->forceFill(['follows_factory' => false, 'factory_baseline' => $old['permissions']]);
+                    $old['follows_factory'] = true;
+                    $new['follows_factory'] = false;
+                    $changed[] = 'follows_factory';
                 }
 
                 $this->rules->replaceKeys($set, $new['permissions']);

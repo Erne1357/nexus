@@ -45,9 +45,7 @@ final class PermissionSetsQuery
             ->sortBy(fn (PermissionSet $set): array => [$set->factory_role === null ? 1 : 0, $set->factory_role !== null ? $order[$set->factory_role->value] : 0, mb_strtolower($set->name)])
             ->values()
             ->map(function (PermissionSet $set) use ($own, $positions): array {
-                $keys = $set->follows_factory && $set->factory_role !== null
-                    ? $this->rules->factoryKeys($set->factory_role)
-                    : ($own->get($set->id)?->pluck('permission')->all() ?? []);
+                $keys = $this->rules->contributedKeys($set->follows_factory, $set->factory_role?->value, $own->get($set->id)?->pluck('permission')->all() ?? []);
                 $held = $positions->get($set->id)?->pluck('role')->all() ?? [];
 
                 return [
@@ -60,7 +58,7 @@ final class PermissionSetsQuery
                     'positions' => array_values(array_filter(Role::cases(), fn (Role $role): bool => in_array($role->value, $held, true))),
                     'permissions' => $this->byModule($keys),
                     'permission_count' => count($keys),
-                    'new_factory' => $this->rules->newFactoryKeys($set),
+                    'new_factory' => $this->rules->newFactoryKeys($set, $keys),
                 ];
             })
             ->all();

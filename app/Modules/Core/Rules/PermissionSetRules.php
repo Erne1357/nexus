@@ -122,6 +122,14 @@ final class PermissionSetRules
     }
 
     /**
+     * Si algún módulo declara la clave.
+     */
+    public function isDeclared(string $key): bool
+    {
+        return $this->registry->forKey($key) !== null;
+    }
+
+    /**
      * CF-S1: el admin no se edita.
      *
      * @throws ValidationException
@@ -168,11 +176,25 @@ final class PermissionSetRules
      */
     public function keysOf(PermissionSet $set): array
     {
-        if ($set->follows_factory && $set->factory_role !== null) {
-            return $this->factoryKeys($set->factory_role);
-        }
+        $followsFactory = $set->follows_factory && $set->factory_role !== null;
 
-        return DB::table('permission_set_permissions')->where('permission_set_id', $set->getKey())->orderBy('permission')->pluck('permission')->all();
+        return $this->contributedKeys($followsFactory, $set->factory_role?->value, $followsFactory ? [] : DB::table('permission_set_permissions')
+            ->where('permission_set_id', $set->getKey())
+            ->orderBy('permission')
+            ->pluck('permission')
+            ->all());
+    }
+
+    /**
+     * CF-02, la regla de lo que aporta un rol, para las piezas que ya leyeron sus filas: si sigue al código, lo que el
+     * código concede a su puesto de fábrica; si no, sus propias claves. GrantTable la aplica igual en su consulta.
+     *
+     * @param  list<string>  $ownKeys
+     * @return list<string>
+     */
+    public function contributedKeys(bool $followsFactory, ?string $factoryRole, array $ownKeys): array
+    {
+        return $followsFactory && $factoryRole !== null ? ($this->registry->matrix()[$factoryRole] ?? []) : $ownKeys;
     }
 
     /**
@@ -187,17 +209,18 @@ final class PermissionSetRules
 
     /**
      * CF-02: las claves de fábrica del puesto del rol que el código agregó después de que el rol dejó de seguirlo, y
-     * que el rol no tiene. Vacío si el rol no es de fábrica o lo sigue.
+     * que el rol no tiene. Vacío si el rol no es de fábrica o lo sigue. `$keys` son las del rol, si ya se leyeron.
      *
+     * @param  list<string>|null  $keys
      * @return list<string>
      */
-    public function newFactoryKeys(PermissionSet $set): array
+    public function newFactoryKeys(PermissionSet $set, ?array $keys = null): array
     {
         if ($set->factory_role === null || $set->follows_factory) {
             return [];
         }
 
-        return array_values(array_diff($this->factoryKeys($set->factory_role), $set->factory_baseline ?? [], $this->keysOf($set)));
+        return array_values(array_diff($this->factoryKeys($set->factory_role), $set->factory_baseline ?? [], $keys ?? $this->keysOf($set)));
     }
 
     /**

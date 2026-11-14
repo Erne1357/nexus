@@ -202,6 +202,21 @@ it('CF-02: restablecer un puesto lo deja solo con su rol de fábrica y sin permi
         ]);
 });
 
+it('CF-04: restablecer un puesto revisa su rol de fábrica si el puesto ya no lo tenía', function () {
+    $set = factorySetOfPosition(Role::Coordinador);
+    app(UnassignPermissionSet::class)->handle(Role::Coordinador, $set);
+    app(UpdatePermissionSet::class)->handle($set, ['permissions' => [StudentsPermission::StudentView->value, FacultyPermission::TeacherView->value]]);
+
+    expect(positionActionErrors(fn () => app(RestoreFactoryPosition::class)->handle(Role::Coordinador)))
+        ->toBe(['role' => ['«Ver docentes» no se da a Coordinador de carrera: el puesto no lleva departamento y el permiso valdría en todos los departamentos.']])
+        ->and(positionSetNames(Role::Coordinador))->toBe([]);
+
+    app(RestoreFactoryPermissionSet::class)->handle($set);
+    app(RestoreFactoryPosition::class)->handle(Role::Coordinador);
+
+    expect(positionSetNames(Role::Coordinador))->toBe(['Coordinador de carrera (de fábrica)']);
+});
+
 it('CF-02: restablecer un rol de fábrica editado lo regresa a seguir al código', function () {
     $set = factorySetOfPosition(Role::Docente);
     app(UpdatePermissionSet::class)->handle($set, ['permissions' => [StaffingPermission::MyLoadView->value]]);
