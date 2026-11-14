@@ -52,6 +52,7 @@ Route::middleware('auth')->group(function () {
     // 1.22-B Puestos y permisos
     // 1.22-D Bitácora
     // 1.22-E Avisos y atajos del login
+    Route::livewire('/configuracion/avisos-y-atajos', 'core::pages.login-content')->name('core.login-content');
     // 1.22-F Parámetros
     // 1.22-G Correos y colas
 });
