@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Actions\CancelAccessInvitation;
 use App\Modules\Core\Actions\SendAccessInvitation;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\RoleAssignment;
@@ -16,10 +17,11 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| La invitación de acceso (tarea 1.16, AC-07 y AC-08). SendAccessInvitation manda al correo institucional un enlace
-| firmado que vence a los 7 días, con el usuario y la contraseña por defecto. Abrir el enlace (GET) solo muestra la
-| página con el botón, porque los filtros de correo abren los enlaces solos; el botón (POST) habilita al usuario. Un
-| enlace vencido, alterado, usado o de un correo que ya cambió muestra la misma página, sin decir si el usuario existe.
+| La invitación de acceso (tarea 1.16, AC-07 y AC-08; sin contraseña en el correo desde el 14 de noviembre de 2026).
+| SendAccessInvitation manda al correo institucional un enlace firmado que vence a los 7 días, con el usuario y sin
+| contraseña. Abrir el enlace (GET) solo muestra el formulario, porque los filtros de correo abren los enlaces solos;
+| mandarlo (POST) con la contraseña que el docente elige habilita al usuario. Un enlace vencido, alterado, usado o de un
+| correo que ya cambió muestra la misma página, sin decir si el usuario existe.
 */
 
 beforeEach(function () {
@@ -46,8 +48,18 @@ function invitationLink(User $user, string $email = 'ana.perez@cdjuarez.tecnm.mx
     return $link;
 }
 
+/**
+ * Lo que manda el formulario de «Activar mi acceso».
+ *
+ * @return array{password: string, password_confirmation: string}
+ */
+function chosenPassword(string $password = 'Propia-clave-2027', ?string $confirmation = null): array
+{
+    return ['password' => $password, 'password_confirmation' => $confirmation ?? $password];
+}
+
 describe('enviar', function () {
-    it('AC-07: pone el correo sin verificar, marca la invitación y manda usuario, contraseña por defecto y enlace al correo institucional', function () {
+    it('AC-07: pone el correo sin verificar, marca la invitación y manda usuario y enlace al correo institucional, sin contraseña', function () {
         Notification::fake();
         config(['mail.default' => 'smtp']);
 
@@ -69,8 +81,9 @@ describe('enviar', function () {
                 && $mail->actionUrl === $invitation->url
                 && str_contains($invitation->url, '/access/')
                 && str_contains($text, 'ABCD800101XX1')
-                && str_contains($text, app(DefaultPassword::class)->value())
-                && str_contains($text, 'cambiar la contraseña');
+                && ! str_contains($text, app(DefaultPassword::class)->value())
+                && ! str_contains(mb_strtolower($text), 'contraseña inicial')
+                && str_contains($text, 'elige tu contraseña');
         });
 
         $log = Activity::where('event', 'access-invited')->sole();
@@ -84,15 +97,15 @@ describe('enviar', function () {
         expect(new AccessInvitation('ABCD800101XX1', 'Ana', 'https://nexus.test/access/x', now()->toImmutable()))->toBeInstanceOf(ShouldBeEncrypted::class);
     });
 
-    it('AC-07: si el correo se escribe en el log o se guarda en memoria, no lleva la contraseña', function (string $mailer) {
+    it('AC-07: ningún transporte lleva la contraseña: el docente la elige al activar', function (string $mailer) {
         config(['mail.default' => $mailer]);
         $invitation = new AccessInvitation('ABCD800101XX1', 'Ana', 'https://nexus.test/access/x', now()->toImmutable());
-        $mail = $invitation->toMail(new AnonymousNotifiable);
-        $text = implode(' ', [...$mail->introLines, ...$mail->outroLines]);
+        $html = (string) $invitation->toMail(new AnonymousNotifiable)->render();
 
-        expect($text)->not->toContain(app(DefaultPassword::class)->value())
-            ->and($text)->toContain('Tu contraseña inicial te la da tu jefe de departamento o la administración de Nexus.');
-    })->with(['log', 'array']);
+        expect($html)->not->toContain(app(DefaultPassword::class)->value())
+            ->and($html)->toContain('ABCD800101XX1')
+            ->and($html)->toContain('https://nexus.test/access/x');
+    })->with(['smtp', 'log', 'array']);
 
     it('AC-07: no invita a un usuario con un puesto distinto de docente, vigente o por empezar: a los jefes los habilita el admin', function (array $assignment) {
         Notification::fake();
@@ -150,55 +163,83 @@ describe('enviar', function () {
         'inactivo' => [['is_active' => false]],
     ]);
 
-    it('AC-07: sin NEXUS_DEFAULT_PASSWORD falla antes de escribir', function () {
+    it('AC-07: invita aunque falte NEXUS_DEFAULT_PASSWORD, porque el correo ya no la lleva', function () {
         Notification::fake();
         config(['auth.default_password' => null]);
 
-        expect(fn () => app(SendAccessInvitation::class)->handle($this->user, 'ana.perez@cdjuarez.tecnm.mx'))
-            ->toThrow(RuntimeException::class, 'NEXUS_DEFAULT_PASSWORD');
+        expect(app(SendAccessInvitation::class)->handle($this->user, 'ana.perez@cdjuarez.tecnm.mx'))->toBeTrue();
 
-        expect($this->user->fresh()->access_invited_at)->toBeNull();
-        Notification::assertNothingSent();
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     });
 });
 
 describe('aceptar', function () {
-    it('AC-08: abrir el enlace muestra la página con el botón y no habilita a nadie', function () {
+    it('AC-08: abrir el enlace muestra el formulario para elegir la contraseña, sin la contraseña actual, y no habilita a nadie', function () {
         $link = invitationLink($this->user);
 
-        $this->get($link)->assertOk()->assertSee('Activar mi acceso')->assertSee('ABCD800101XX1');
+        $this->get($link)
+            ->assertOk()
+            ->assertHeader('Referrer-Policy', 'no-referrer')
+            ->assertSee('Activar mi acceso')
+            ->assertSee('ABCD800101XX1')
+            ->assertSee('name="password"', false)
+            ->assertSee('name="password_confirmation"', false)
+            ->assertDontSee('name="current_password"', false);
 
         expect($this->user->fresh()->password)->toBeNull();
     });
 
-    it('AC-08: el botón habilita con la contraseña por defecto, cambio obligatorio y correo verificado, inicia su sesión y lo lleva a cambiar la contraseña', function () {
+    it('AC-08: con la contraseña que elige queda como propia, sin cambio obligatorio y con el correo verificado; inicia su sesión y lo lleva a Inicio', function () {
         $link = invitationLink($this->user);
 
-        $this->post($link)->assertRedirect(route('user-password.edit'));
+        $this->post($link, chosenPassword())->assertRedirect(route('home'));
         $this->assertAuthenticatedAs($this->user->fresh());
 
         $user = $this->user->fresh();
         $log = Activity::where('event', 'access-accepted')->sole();
 
-        expect(Hash::check(app(DefaultPassword::class)->value(), $user->password))->toBeTrue()
-            ->and($user->must_change_password)->toBeTrue()
+        expect(Hash::check('Propia-clave-2027', $user->password))->toBeTrue()
+            ->and($user->password_origin)->toBe(PasswordOrigin::User)
+            ->and($user->must_change_password)->toBeFalse()
             ->and($user->email_verified_at)->not->toBeNull()
             ->and($log->causer_id)->toBe($user->id)
             ->and($log->description)->toBe('ABCD800101XX1 activó su acceso con la invitación')
-            ->and(json_encode([$log->attribute_changes, $log->properties]))->not->toContain(app(DefaultPassword::class)->value());
+            ->and(json_encode([$log->attribute_changes, $log->properties]))->not->toContain('Propia-clave-2027');
 
-        $this->get(route('home'))->assertRedirect(route('user-password.edit'));
+        $this->get(route('home'))->assertOk();
     });
+
+    it('AC-08: una contraseña débil, sin confirmar o igual a la por defecto regresa al formulario del mismo enlace y no habilita', function (Closure $input, string $field) {
+        $link = invitationLink($this->user);
+
+        $this->from($link)->post($link, $input())
+            ->assertRedirect($link)
+            ->assertSessionHasErrors($field)
+            ->assertSessionMissing('_old_input');
+
+        $this->assertGuest();
+        expect($this->user->fresh()->password)->toBeNull()
+            ->and(Activity::where('event', 'access-accepted')->exists())->toBeFalse();
+
+        // El enlace sigue sirviendo.
+        $this->post($link, chosenPassword())->assertRedirect(route('home'));
+    })->with([
+        'corta' => [fn (): array => chosenPassword('abc12'), 'password'],
+        'sin números' => [fn (): array => chosenPassword('solo-letras'), 'password'],
+        'sin confirmar' => [fn (): array => chosenPassword('Propia-clave-2027', 'Otra-clave-2027'), 'password'],
+        'la por defecto' => [fn (): array => chosenPassword(app(DefaultPassword::class)->value()), 'password'],
+        'vacía' => [fn (): array => [], 'password'],
+    ]);
 
     it('AC-08: un enlace vencido, alterado, ya usado, reenviado o de un usuario dado de baja muestra la misma página y no habilita', function (Closure $spoil) {
         $link = invitationLink($this->user);
         $link = $spoil($this, $link);
 
-        foreach (['get', 'post'] as $method) {
-            $this->{$method}($link)
-                ->assertForbidden()
-                ->assertSee('Este enlace ya no sirve')
-                ->assertDontSee('ABCD800101XX1');
+        $this->get($link)->assertForbidden()->assertSee('Este enlace ya no sirve')->assertDontSee('ABCD800101XX1');
+
+        // Con una contraseña buena o mala, un enlace que no sirve responde igual: no se revisa lo escrito.
+        foreach ([chosenPassword(), chosenPassword('abc')] as $input) {
+            $this->post($link, $input)->assertForbidden()->assertSee('Este enlace ya no sirve')->assertDontSee('ABCD800101XX1')->assertSessionHasNoErrors();
         }
 
         expect($this->user->fresh()->password === null || $this->user->fresh()->is_active)->toBeTrue()
@@ -212,7 +253,7 @@ describe('aceptar', function () {
         }],
         'alterado' => [fn ($test, string $link): string => str_replace('signature=', 'signature=0', $link)],
         'ya usado' => [function ($test, string $link): string {
-            $test->post($link);
+            $test->post($link, chosenPassword());
             auth()->logout();
 
             return $link;
@@ -240,7 +281,7 @@ describe('aceptar', function () {
         $link = invitationLink($this->user);
 
         $this->actingAs($this->admin)->get($link)->assertOk()->assertSee('Activar mi acceso');
-        $this->post($link)->assertRedirect(route('user-password.edit'));
+        $this->post($link, chosenPassword())->assertRedirect(route('home'));
 
         expect($this->user->fresh()->password)->not->toBeNull();
         $this->assertAuthenticatedAs($this->user->fresh());

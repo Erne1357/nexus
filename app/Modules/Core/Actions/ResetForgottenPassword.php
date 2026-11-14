@@ -9,15 +9,14 @@ use App\Modules\Core\Support\PasswordResetTokens;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use SensitiveParameter;
 
 /**
  * Pone la contraseña nueva de quien llegó con el enlace de su correo (AC-18). Con el usuario bloqueado, revisa primero
  * que el enlace siga sirviendo (PasswordResetTokens, AC-17): si no, devuelve null sin mirar la entrada, así que todo
- * enlace que no sirve responde igual. Si sirve, valida la entrada como UpdateUserPassword: una contraseña nueva
- * confirmada, conforme a Password::defaults() y que no sea la por defecto. Luego pone la contraseña como **propia**
+ * enlace que no sirve responde igual. Si sirve, valida la entrada con DefaultPassword::newPasswordRules(): una
+ * contraseña nueva confirmada, conforme a Password::defaults() y que no sea la por defecto. Luego pone la contraseña como **propia**
  * (`password_origin = user`, AC-12), quita el cambio obligatorio, da su correo por confirmado si no lo estaba (el
  * enlace llegó a él), rota el remember token y borra el token, así que el enlace no vuelve a servir. Las demás
  * sesiones abiertas las cierra AuthenticateSession en su siguiente petición, porque cambió el hash. No inicia sesión.
@@ -45,9 +44,7 @@ final class ResetForgottenPassword
                 return null;
             }
 
-            $validated = Validator::make($input, [
-                'password' => ['required', 'string', Password::defaults(), 'confirmed', $this->defaultPassword->rejectionRule()],
-            ])->validate();
+            $validated = Validator::make($input, ['password' => $this->defaultPassword->newPasswordRules()])->validate();
 
             $user->forceFill([
                 'password' => $validated['password'],

@@ -33,7 +33,8 @@ use Mary\Traits\Toast;
  * filtro «Por validar» con cuántos planes tienen alguna (maqueta `.impeccable/mocks/por-validar/planes.html`; la
  * insignia va bajo el nombre y no en una columna propia para que la tabla siga cabiendo en su caja a 1440 px); un plan
  * sin pendientes no muestra nada. Quien entra sin poder editar ve dar de alta, editar y activar deshabilitados con su
- * motivo.
+ * motivo. La ruta `academic.placements` («Materias por colocar», en Servicios escolares) es esta misma lista, abierta
+ * con el filtro «Por validar» puesto; solo la abre quien valida.
  */
 new #[Title('Planes de estudio')] class extends Component
 {
@@ -79,6 +80,12 @@ new #[Title('Planes de estudio')] class extends Component
     public function mount(): void
     {
         $this->authorize('viewAny', StudyPlan::class);
+
+        // «Materias por colocar» (Servicios escolares) abre esta lista con el filtro «Por validar» puesto.
+        if (request()->routeIs('academic.placements')) {
+            $this->authorize('validatePlacements', StudyPlan::class);
+            $this->pendingOnly = true;
+        }
     }
 
     /**

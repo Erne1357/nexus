@@ -12,6 +12,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -484,6 +485,48 @@ describe('alcance', function () {
 
         expect($this->plan->fresh()->toArray())->toBe($snapshot);
     })->with(['edit', 'save', 'toggleActive']);
+});
+
+/**
+ * La entrada del menú que ve el usuario para `$route`, o null si no la ve.
+ */
+function visibleEntryFor(User $user, string $route): ?NavigationItem
+{
+    test()->actingAs($user);
+
+    return collect(app(Navigation::class)->visibleTo(app(Actor::class)))->first(fn (NavigationItem $item): bool => $item->route === $route);
+}
+
+describe('Materias por colocar, en Servicios escolares (tarea 1.21)', function () {
+    it('el jefe de Servicios Escolares y el admin la ven en el área Servicios escolares del menú', function (string $who) {
+        $entry = visibleEntryFor($this->{$who}, 'academic.placements');
+
+        expect($entry?->label)->toBe('Materias por colocar')
+            ->and($entry?->area)->toBe(NavigationArea::ServiciosEscolares);
+    })->with(['servicesHead', 'admin']);
+
+    it('abre la lista de planes con el filtro «Por validar» puesto', function () {
+        $page = domOf($this->actingAs($this->servicesHead)->get(route('academic.placements'))->assertOk());
+
+        expect($page->querySelector('[data-testid="filter-pending"]')->getAttribute('aria-pressed'))->toBe('true')
+            ->and($page->querySelector('table [data-pending-plan="IIND-2004"]'))->not->toBeNull()
+            ->and($page->querySelector('table [data-pending-plan="IIND-2010"]'))->not->toBeNull()
+            ->and(textOf($page->querySelector('table')))->not->toContain('IIND-2024');
+    });
+
+    it('el Inicio del jefe de Servicios Escolares enlaza a ella', function () {
+        $page = domOf($this->actingAs($this->servicesHead)->get(route('home'))->assertOk());
+        $link = $page->querySelector('[data-testid="role-block"] a[href="'.route('academic.placements').'"]');
+
+        expect(textOf($link))->toBe('Materias por colocar');
+    });
+
+    it('el coordinador y el jefe de un departamento académico no la ven, no entran y su Inicio no la enlaza', function (string $who) {
+        expect(visibleEntryFor($this->{$who}, 'academic.placements'))->toBeNull();
+
+        $this->actingAs($this->{$who})->get(route('academic.placements'))->assertForbidden();
+        $this->actingAs($this->{$who})->get(route('home'))->assertOk()->assertDontSee('Materias por colocar');
+    })->with(['coordinator', 'academicHead']);
 });
 
 describe('lista de planes', function () {
