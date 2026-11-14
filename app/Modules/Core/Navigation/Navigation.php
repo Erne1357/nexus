@@ -166,17 +166,28 @@ final readonly class Navigation
     /**
      * La entrada declarada para una ruta, la vea o no el usuario (p. ej. para mostrar
      * «área › pantalla»): la que la declara como suya o como pantalla hija (`childRoutes`), la
-     * primera si varias, y null si ninguna. No adivina por el prefijo del nombre.
+     * primera si varias, y null si ninguna. No adivina por el prefijo del nombre. Con `$context`, si varias
+     * entradas declaran la ruta con distinto nombre según quién la ve («Validar catálogos» para el jefe y
+     * «Validación de catálogos» para quien solo mira, tarea 1.21), da la primera que ese usuario ve, y si no ve
+     * ninguna, la primera: así el menú la marca como actual, la banda la nombra y se anota como su última página.
      */
-    public function forRoute(string $route): ?NavigationItem
+    public function forRoute(string $route, ?Actor $context = null): ?NavigationItem
     {
+        $first = null;
+
         foreach ($this->items as $item) {
-            if ($item->owns($route)) {
+            if (! $item->owns($route)) {
+                continue;
+            }
+
+            if ($context === null || $item->isVisibleTo($context)) {
                 return $item;
             }
+
+            $first ??= $item;
         }
 
-        return null;
+        return $first;
     }
 
     /**

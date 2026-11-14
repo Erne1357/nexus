@@ -347,6 +347,21 @@ describe('entrada de una ruta', function () {
         expect(handBuiltNavigation()->forRoute('home')->label)->toBe('Cargas');
     });
 
+    it('con el contexto, da la primera entrada de la ruta que el usuario ve, y si no ve ninguna, la primera', function () {
+        $navigation = new Navigation([
+            new NavigationItem('Validar', 'core.campuses', 'o-check', NavigationArea::Administracion, visible: static fn (Actor $context): bool => false),
+            new NavigationItem('Consultar', 'core.campuses', 'o-eye', NavigationArea::Administracion, ability: 'viewAny', arguments: [Campus::class]),
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create());
+        expect($navigation->forRoute('core.campuses', app(Actor::class))->label)->toBe('Consultar')
+            ->and($navigation->forRoute('core.campuses')->label)->toBe('Validar');
+
+        $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+        app(Actor::class)->refresh();
+        expect($navigation->forRoute('core.campuses', app(Actor::class))->label)->toBe('Validar');
+    });
+
     it('a una ruta hija que la entrada declara le da esa entrada: la ficha de un alumno es de Alumnos', function () {
         expect(app(Navigation::class)->forRoute('students.show'))
             ->label->toBe('Alumnos')

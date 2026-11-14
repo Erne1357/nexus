@@ -219,6 +219,19 @@ describe('MN-02: el motivo de una entrada para quien la ve marcada', function ()
     });
 });
 
+it('MN-02: si dos entradas declaran la pantalla con distinto nombre según quién la ve, el aviso sale de la que ve el admin', function () {
+    app()->instance(Navigation::class, new Navigation([
+        new NavigationItem('Para el jefe', 'core.campuses', 'o-check', NavigationArea::Administracion, group: NavigationGroup::Institucion,
+            visible: static fn (): bool => false, whyUnavailable: static fn (): string => 'Motivo A'),
+        new NavigationItem('Para quien mira', 'core.campuses', 'o-eye', NavigationArea::Administracion, group: NavigationGroup::Institucion,
+            whyUnavailable: static fn (): string => 'Motivo A'),
+    ]));
+
+    $this->actingAs(User::factory()->admin()->create());
+
+    expect(textOf(domOf(Livewire::test('core::components.hidden-notice', ['route' => 'core.campuses']))->querySelector('[role="note"]')))->toContain('Motivo A');
+});
+
 it('MN-02: el icono de un área no lleva a una página que el menú ya le esconde: la del coordinador, sin carga en curso, va a la principal', function () {
     $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
     $load = AcademicLoad::factory()->for($term)->create();

@@ -10,6 +10,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -17,6 +18,7 @@ use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Navigation\RecentPages;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -471,5 +473,20 @@ describe('el nombre en el menú', function () {
         'jefe' => ['jefe', 'Validar catálogos', 'Validación de catálogos'],
         'admin' => ['admin', 'Validación de catálogos', 'Validar catálogos'],
         'subdirección' => ['subdirección', 'Validación de catálogos', 'Validar catálogos'],
+    ]);
+
+    it('en la pantalla, el menú marca como actual la entrada que ve quien la abre y la anota como su última página del área', function (string $who, string $label) {
+        $user = $who === 'jefe' ? test()->jefe : headViewer($who);
+
+        $current = domOf($this->actingAs($user)->get(route('catalog-validation.review', ['department' => $this->sis->id]))->assertOk())
+            ->querySelectorAll('#nexus-menu [aria-current="page"]');
+
+        expect($current)->toHaveCount(1)
+            ->and(textOf($current->item(0)))->toBe($label)
+            ->and(app(RecentPages::class)->last(NavigationArea::Academico))->toBe(route('catalog-validation.review', ['department' => $this->sis->id], false));
+    })->with([
+        'jefe' => ['jefe', 'Validar catálogos'],
+        'admin' => ['admin', 'Validación de catálogos'],
+        'subdirección' => ['subdirección', 'Validación de catálogos'],
     ]);
 });
