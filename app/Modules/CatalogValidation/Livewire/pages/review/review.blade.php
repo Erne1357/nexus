@@ -89,10 +89,10 @@
         @endif
     @endif
 
-    <x-modal wire:model="showEmpty" :title="$emptyReviews->count() === 1 ? 'Validar el catálogo sin registros' : 'Validar los catálogos sin registros'" box-class="max-w-lg" separator data-testid="empty-modal">
-        @if ($emptyReviews->isNotEmpty())
+    <x-modal wire:model="showEmpty" :title="$emptyConfirming->count() === 1 ? 'Validar el catálogo sin registros' : 'Validar los catálogos sin registros'" box-class="max-w-lg" separator data-testid="empty-modal">
+        @if ($emptyConfirming->isNotEmpty())
             <div class="space-y-3 text-sm">
-                <p>Vas a validar <strong>{{ $emptyReviews->map(fn ($review) => $review->catalog->label())->join(', ', ' y ') }}</strong> de {{ $department?->name }}: {{ $emptyReviews->count() === 1 ? 'no tiene' : 'no tienen' }} registros activos que revisar.</p>
+                <p>Vas a validar <strong>{{ $emptyConfirming->map(fn ($review) => $review->catalog->label())->join(', ', ' y ') }}</strong> de {{ $department?->name }}: {{ $emptyConfirming->count() === 1 ? 'no tiene' : 'no tienen' }} registros activos que revisar.</p>
                 <p class="text-neutral">Queda como con «Validar catálogo»: quién y cuándo validó. Si después se da de alta un registro, reabre el catálogo para revisarlo.</p>
             </div>
         @endif
@@ -100,7 +100,7 @@
         <x-slot:actions>
             <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
                 <x-button label="Cancelar" class="max-sm:h-11" wire:click="cancelEmpty" />
-                <x-button :label="$emptyReviews->count() === 1 ? 'Validarlo' : 'Validarlos'" icon="o-check" class="btn-primary max-sm:h-11" wire:click="validateEmpty" spinner="validateEmpty" data-testid="confirm-empty" />
+                <x-button :label="$emptyConfirming->count() === 1 ? 'Validarlo' : 'Validarlos'" icon="o-check" class="btn-primary max-sm:h-11" wire:click="validateEmpty" spinner="validateEmpty" data-testid="confirm-empty" />
             </div>
         </x-slot:actions>
     </x-modal>

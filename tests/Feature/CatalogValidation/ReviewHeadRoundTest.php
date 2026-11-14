@@ -175,6 +175,28 @@ describe('quitar de <departamento> (CV8, D8, D10)', function () {
             ->and(lastToastOf($component)['title'])->toBe('Docente quitado de Sistemas y Computación');
     });
 
+    it('si otra sesión validó la revisión mientras el modal estaba abierto, lo dice en el modal y no quita', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+        $page = headPage($this->jefe, ['catalogo' => 'teachers'])->call('askDischarge', $teacher->id);
+        headValidate(Catalog::Teachers);
+
+        $page->call('dischargeTeacher')->assertHasErrors('discharge')->assertSet('showDischarge', true)->assertSeeHtml('data-testid="discharge-error"');
+
+        expect($teacher->fresh()->is_active)->toBeTrue();
+    });
+
+    it('cambiar de pestaña cierra el modal y olvida al docente', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
+
+        headPage($this->jefe, ['catalogo' => 'teachers'])
+            ->call('askDischarge', $teacher->id)
+            ->set('catalog', 'subjects')
+            ->assertSet('showDischarge', false)
+            ->assertSet('dischargeId', null)
+            ->set('catalog', 'teachers')
+            ->assertSet('showDischarge', false);
+    });
+
     it('un motivo que no es de la lista se rechaza', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
 
@@ -274,12 +296,25 @@ describe('catálogos sin registros (CV7, D5)', function () {
             ->and(lastToastOf($component)['title'])->toBe('4 catálogos validados');
     });
 
+    it('CV7: valida solo los que nombró la confirmación, y si uno recibió un registro activo mientras tanto no valida ninguno y lo dice', function () {
+        markAllReviewed(headReview(Catalog::Subjects), $this->jefe);
+
+        $page = headPage()->call('confirmEmpty')->assertSee('Docentes, Salones, Planes de estudio y Carreras');
+        Teacher::factory()->adscribedTo($this->sis)->create();
+
+        $page->call('validateEmpty')->assertHasErrors('status')->assertSee('La revisión de Docentes de Sistemas y Computación ya tiene registros activos');
+
+        expect(CatalogReview::query()->where('status', ReviewStatus::Validated)->exists())->toBeFalse();
+    });
+
     it('con uno solo dice «1 catálogo sin registros» y «Validarlo»; los ya validados no cuentan', function () {
         foreach ([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans] as $catalog) {
             headValidate($catalog);
         }
 
-        headPage()->assertSee('1 catálogo sin registros')->assertSee('Validarlo')->assertDontSee('Validarlos');
+        $html = headPage()->assertSee('1 catálogo sin registros')->html();
+
+        expect(textOf(domOf($html)->querySelector('[data-testid="validate-empty"]')))->toBe('Validarlo');
     });
 
     it('sin catálogos vacíos no lo ofrece', function () {
@@ -405,6 +440,12 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
 
         headPage()->assertSee('Revisa cada registro de los catálogos del departamento')->assertDontSee('Consulta cómo va');
     })->with(['admin', 'subdirección']);
+
+    it('un departamento que se desactivó con su validación abierta sigue abriéndose, para que su jefe la termine', function () {
+        $this->sis->update(['is_active' => false]);
+
+        headPage()->assertOk()->assertSee('Sistemas y Computación');
+    });
 
     it('el selector de departamento solo trae los activos, y uno inactivo no se abre', function (string $who) {
         $closed = Department::factory()->create(['code' => '999999', 'name' => 'Departamento cerrado', 'is_active' => false]);

@@ -15,7 +15,7 @@ use Illuminate\Validation\ValidationException;
  * Quién puede lo decide CatalogReviewPolicy::validate, revisión por revisión, antes de llamarla.
  *
  * Todo o nada, en una transacción: si una ya tiene registros activos (alguien dio uno de alta mientras tanto) o ya está
- * validada, no valida ninguna y lo dice. Devuelve cuántas validó.
+ * validada, no valida ninguna y lo dice. Cuenta los activos con la revisión ya bloqueada. Devuelve cuántas validó.
  */
 final class ValidateEmptyReviews
 {
@@ -35,6 +35,8 @@ final class ValidateEmptyReviews
             $validated = 0;
 
             foreach ($reviews as $review) {
+                $review->newQuery()->lockForUpdate()->findOrFail($review->getKey());
+
                 if ($this->contents->progress($review)['total'] > 0) {
                     throw ValidationException::withMessages(['status' => "La revisión de {$review->heading} ya tiene registros activos: valídala desde su lista."]);
                 }

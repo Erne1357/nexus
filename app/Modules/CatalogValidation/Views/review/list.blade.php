@@ -353,6 +353,9 @@
         <x-modal wire:model="showDischarge" :title="$discharging['title'] ?? 'Quitar del departamento'" box-class="max-w-lg" separator data-testid="discharge-modal">
             @if ($discharging !== null)
                 <div class="space-y-4 text-sm">
+                    @error('discharge')
+                        <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm" :title="$message" data-testid="discharge-error" />
+                    @enderror
                     <p>{{ $discharging['message'] }}</p>
                     <x-select label="Motivo (opcional)" wire:model.live="dischargeKind" :options="$dischargeReasons" placeholder="Sin motivo" placeholder-value="" data-testid="discharge-kind" />
                     @if ($dischargeKind === \App\Modules\CatalogValidation\Enums\DischargeReason::Other->value)

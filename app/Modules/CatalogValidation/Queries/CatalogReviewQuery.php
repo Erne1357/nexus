@@ -115,16 +115,21 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Los departamentos activos cuya revisión puede abrir el usuario, por clave: los que cubre como jefe y, en lectura,
-     * todos si es Subdirección o admin (CatalogReviewPolicy::view, CV-S1). Uno inactivo no tiene revisiones (se crean
-     * para los activos, CV9), así que no se ofrece ni se abre.
+     * Los departamentos cuya revisión puede abrir el usuario, por clave: los que cubre como jefe y, en lectura, todos si
+     * es Subdirección o admin (CatalogReviewPolicy::view, CV-S1). Solo los activos y, si se desactivó después de abrir
+     * la validación, uno que tiene revisiones en el periodo activo, para que su jefe la termine: las revisiones se crean
+     * para los activos (CV9), así que un inactivo sin ellas no se ofrece ni se abre (tarea 1.21).
      *
      * @return Collection<int, Department>
      */
     public function departmentsFor(Actor $context): Collection
     {
+        $termId = $context->activeTerm()?->getKey();
+
         return Department::query()
-            ->where('is_active', true)
+            ->where(fn ($query) => $query
+                ->where('is_active', true)
+                ->when($termId !== null, fn ($query) => $query->orWhereIn('id', CatalogReview::query()->where('term_id', $termId)->select('department_id'))))
             ->orderBy('code')
             ->get()
             ->filter(fn (Department $department): bool => self::allowsOnDepartment($context, CatalogValidationPermission::ReviewView, $department->getKey()))
