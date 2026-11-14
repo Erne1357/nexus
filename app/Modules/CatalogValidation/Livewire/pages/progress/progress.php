@@ -19,6 +19,7 @@ use App\Modules\Core\Queries\StageWindow;
 use App\Modules\Facilities\Queries\RoomQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -211,8 +212,12 @@ new #[Title('Avance de validación')] class extends Component
      * Marca como resuelta una observación con la nota opcional de lo que se hizo (CV10), que le llega en la campana al jefe
      * que la puso (NotifyFlagResolved).
      */
-    public function resolveFlag(string $id, ValidationProgressQuery $progress, ResolveFlag $resolveFlag, ?string $note = null): void
+    public function resolveFlag(string $id, ValidationProgressQuery $progress, ResolveFlag $resolveFlag, mixed $note = null): void
     {
+        if ($note !== null && ! is_string($note)) {
+            throw ValidationException::withMessages(['note' => 'La nota tiene que ser texto.']);
+        }
+
         Gate::authorize('viewProgress', CatalogReview::class);
 
         $flag = $progress->findFlag($id);
@@ -221,7 +226,7 @@ new #[Title('Avance de validación')] class extends Component
 
         $resolveFlag->handle($review, $flag, $this->user(), $note);
 
-        $this->success('Observación resuelta', e($review->title));
+        $this->success('Observación resuelta', e($review->heading));
     }
 
     /**

@@ -82,8 +82,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * «Validar catálogos», en Académico, para quien revisa catálogos: el jefe de departamento y Subdirección (que, igual
-     * que el admin, la abre en lectura). Que el departamento sea el suyo lo decide la pantalla.
+     * La pantalla de la revisión, en Académico, con dos nombres según quien la abre (tarea 1.21): «Validar catálogos»
+     * para quien valida (el jefe de departamento) y «Validación de catálogos» para quien solo la ve (Subdirección y el
+     * admin, en lectura, CV-S1). Que el departamento sea el suyo lo decide la pantalla.
      * «Avance de validación», para Subdirección y el admin (tarea 2.5; `has()` incluye al admin).
      */
     public function navigation(): array
@@ -93,7 +94,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
         return [
             new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
-                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewValidate)),
+            new NavigationItem('Validación de catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
+                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView) && ! $context->allowsAny(CatalogValidationPermission::ReviewValidate)),
             new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
         ];

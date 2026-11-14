@@ -1,8 +1,11 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\StartReview;
+use App\Modules\CatalogValidation\Actions\ValidateEmptyReviews;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
@@ -233,5 +236,48 @@ describe('ReopenReview', function () {
         app(ReopenReview::class)->handle($this->validated, $this->actor);
 
         Event::assertDispatched(CatalogReviewReopened::class, fn (CatalogReviewReopened $event): bool => $event->review->is($this->validated));
+    });
+});
+
+describe('ValidateEmptyReviews (CV7, D5)', function () {
+    beforeEach(function () {
+        $this->department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
+        $this->careers = CatalogReview::factory()->general(Catalog::Careers)->create(['department_id' => $this->department->id]);
+        $this->rooms = CatalogReview::factory()->rooms()->create(['department_id' => $this->department->id, 'term_id' => $this->careers->term_id]);
+    });
+
+    it('CV7: valida juntas las revisiones sin registros activos, cada una con ValidateReview y su bitácora', function () {
+        Career::factory()->inactive()->create(['department_id' => $this->department->id]);
+
+        expect(app(ValidateEmptyReviews::class)->handle([$this->careers, $this->rooms], $this->actor))->toBe(2);
+
+        foreach ([$this->careers, $this->rooms] as $review) {
+            expect($review->fresh())->status->toBe(ReviewStatus::Validated)->validated_by->toBe($this->actor->id)
+                ->and(Activity::query()->where('event', 'validated')->where('subject_id', $review->id)->sole()->causer->is($this->actor))->toBeTrue();
+        }
+    });
+
+    it('si una ya tiene registros activos no valida ninguna y lo dice con su nombre', function () {
+        Career::factory()->create(['department_id' => $this->department->id]);
+
+        expect(cvErrorsOf(fn () => app(ValidateEmptyReviews::class)->handle([$this->rooms, $this->careers], $this->actor)))
+            ->toBe(['status' => ['La revisión de Carreras de Ciencias Básicas ya tiene registros activos: valídala desde su lista.']])
+            ->and($this->rooms->fresh()->status)->toBe(ReviewStatus::Pending)
+            ->and($this->careers->fresh()->status)->toBe(ReviewStatus::Pending)
+            ->and(Activity::query()->where('event', 'validated')->exists())->toBeFalse();
+    });
+
+    it('una ya validada se rechaza como en Validar, y sin revisiones no hace nada', function () {
+        $validated = CatalogReview::factory()->general(Catalog::Subjects)->validated()->create(['department_id' => $this->department->id]);
+
+        expect(cvErrorsOf(fn () => app(ValidateEmptyReviews::class)->handle([$this->rooms, $validated], $this->actor)))->toBe(['status' => ['La revisión ya está validada.']])
+            ->and($this->rooms->fresh()->status)->toBe(ReviewStatus::Pending)
+            ->and(app(ValidateEmptyReviews::class)->handle([], $this->actor))->toBe(0);
+    });
+
+    it('cuenta como vacía la que solo tiene inactivos, no la que tiene un activo de otro catálogo del departamento', function () {
+        Subject::factory()->create(['department_id' => $this->department->id]);
+
+        expect(app(ValidateEmptyReviews::class)->handle([$this->careers], $this->actor))->toBe(1);
     });
 });

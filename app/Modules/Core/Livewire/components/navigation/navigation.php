@@ -66,7 +66,7 @@ new class extends Component
     public function with(Navigation $navigation, Actor $context, RecentPages $recentPages): array
     {
         $menu = $navigation->visibleByArea($context);
-        $routeItem = $this->route === null ? null : $navigation->forRoute($this->route);
+        $routeItem = $this->route === null ? null : $navigation->forRoute($this->route, $context);
         $onHome = $this->route === 'home';
         $visibleAreas = array_column($menu, 'area');
         $currentArea = in_array($routeItem?->area, $visibleAreas, true) ? $routeItem->area : ($visibleAreas[0] ?? null);

@@ -151,4 +151,20 @@ describe('en la revisión', function () {
         expect($this->flag->fresh()->resolution_note)->toBe('Se desactivó la carrera.');
         $page()->call('edit', $this->career->id)->assertSee('Qué se hizo: Se desactivó la carrera.');
     });
+
+    it('CV10: una nota que no es texto es un error de validación, no un error del servidor', function () {
+        $subdireccion = User::factory()->withRole(Role::Subdireccion, [])->create();
+
+        Livewire\Livewire::withQueryParams(['department' => $this->sis->id, 'catalogo' => 'careers'])->actingAs($subdireccion)
+            ->test('catalog-validation::pages.review')
+            ->call('edit', $this->career->id)
+            ->call('resolveFlag', $this->flag->id, ['no es texto'])
+            ->assertHasErrors('note');
+
+        Livewire\Livewire::actingAs($this->admin)->test('catalog-validation::pages.progress')
+            ->call('resolveFlag', $this->flag->id, 42)
+            ->assertHasErrors('note');
+
+        expect($this->flag->fresh()->resolved_at)->toBeNull();
+    });
 });

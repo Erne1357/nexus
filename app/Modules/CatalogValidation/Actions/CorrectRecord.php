@@ -32,8 +32,9 @@ use Illuminate\Validation\ValidationException;
  * desactivación: si quiere darlos de baja, les pone la observación «Inactivo» y lo resuelve el admin. Las materias sí,
  * porque SubjectDeactivating las veta. Todo en una transacción con
  * la revisión bloqueada (así no se cruza con ValidateReview): exige que no esté validada y que el registro sea
- * suyo, delega y, si algo cambió, marca el registro como revisado (MarkRecordsReviewed, CV7) y pasa la revisión a en
- * revisión (StartReview, CV-S4). Guardar sin cambios no es una corrección: no marca (CV-S7, supuesto por confirmar).
+ * suyo, delega y marca el registro como revisado (MarkRecordsReviewed, CV7), también si no cambió nada: guardar sin
+ * cambios es decir que está bien (CV-S7, D9, confirmado el 14 de noviembre de 2026). Si algo cambió, pasa la revisión a
+ * en revisión (StartReview, CV-S4); marcar uno nuevo también la pasa.
  */
 final class CorrectRecord
 {
@@ -76,8 +77,9 @@ final class CorrectRecord
                 Catalog::Teachers => $this->updateTeacher->handle($record, $data),
             };
 
+            $this->markRecords->handle($review, [$record->getKey()], $actor);
+
             if ($record->wasChanged()) {
-                $this->markRecords->handle($review, [$record->getKey()], $actor);
                 $this->startReview->handle($review, $actor);
             }
 

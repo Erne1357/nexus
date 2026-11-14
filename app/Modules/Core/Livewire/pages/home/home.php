@@ -75,7 +75,7 @@ new #[Title('Inicio')] class extends Component
         $links = [];
 
         foreach ($role->homeShortcuts() as $route) {
-            $item = $navigation->forRoute($route);
+            $item = $navigation->forRoute($route, $context);
 
             if ($item === null || ! $item->isVisibleTo($context) || ($item->whyUnavailable !== null && ($item->whyUnavailable)($context) !== null)) {
                 continue;
