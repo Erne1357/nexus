@@ -130,6 +130,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [OrgUnit::class]),
             new NavigationItem('Personas y puestos', 'core.people', 'o-users', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [RoleAssignment::class], childRoutes: ['core.people.show']),
+            // Panel de configuración (1.22): cada paquete agrega su entrada debajo de su marca, en el grupo Configuración.
+            // 1.22-B Puestos y permisos
+            // 1.22-D Bitácora
+            // 1.22-E Avisos y atajos del login
+            // 1.22-F Parámetros
+            // 1.22-G Correos y colas
         ];
     }
 

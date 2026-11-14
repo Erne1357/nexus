@@ -48,6 +48,12 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/people', 'core::pages.people')->name('core.people');
     Route::livewire('/people/{user}', 'core::pages.person')->name('core.people.show');
     Route::livewire('/org-chart', 'core::pages.org-chart')->name('core.org-chart');
+    // Panel de configuración (1.22): cada paquete agrega sus rutas debajo de su marca, con el prefijo /configuracion.
+    // 1.22-B Puestos y permisos
+    // 1.22-D Bitácora
+    // 1.22-E Avisos y atajos del login
+    // 1.22-F Parámetros
+    // 1.22-G Correos y colas
 });
 
 /*

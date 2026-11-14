@@ -18,6 +18,7 @@ enum NavigationGroup: string
     case Institucion = 'institucion';
     case Catalogos = 'catalogos';
     case Datos = 'datos';
+    case Configuracion = 'configuracion';
 
     /**
      * Nombre para la interfaz.
@@ -33,6 +34,7 @@ enum NavigationGroup: string
             self::Institucion => 'Institución',
             self::Catalogos => 'Catálogos',
             self::Datos => 'Datos',
+            self::Configuracion => 'Configuración',
         };
     }
 
@@ -43,7 +45,7 @@ enum NavigationGroup: string
     {
         return match ($this) {
             self::Validacion, self::Propuesta, self::Horarios, self::Asignacion, self::CierrePublicacion => NavigationArea::Academico,
-            self::Institucion, self::Catalogos, self::Datos => NavigationArea::Administracion,
+            self::Institucion, self::Catalogos, self::Datos, self::Configuracion => NavigationArea::Administracion,
         };
     }
 }
