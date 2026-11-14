@@ -62,3 +62,28 @@ it('abrir un aviso de la campana lleva a su pantalla sin errores de Alpine en la
     expect($page->script('window.__alpineWarnings'))->toBe([]);
     $page->assertNoJavaScriptErrors();
 });
+
+it('al volver con Atrás, la campana no trae como no leído el aviso que se abrió', function () {
+    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
+    $admin = User::factory()->admin()->create(['username' => 'admin', 'name' => 'Ana Admin']);
+    $admin->notify(new BellOpensTerms);
+
+    $page = visit('/login')
+        ->fill('username', 'admin')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->assertSeeIn('@bell-count', '1');
+
+    $page->click('@bell')
+        ->click('@notification')
+        ->assertPathIs('/terms')
+        ->assertMissing('@bell-count');
+
+    // wire:navigate repone Inicio de su caché, que se guardó antes de abrir el aviso.
+    $page->back()->assertPathIs('/')->wait(1.5);
+
+    expect($page->script('document.querySelector("[data-testid=bell-count]") === null'))->toBeTrue();
+    $page->assertNoJavaScriptErrors();
+});

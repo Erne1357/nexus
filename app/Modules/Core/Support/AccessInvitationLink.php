@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Support;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\URL;
 
@@ -16,6 +17,8 @@ final class AccessInvitationLink
 {
     /** Días que vale un enlace. */
     public const int DAYS = 7;
+
+    public function __construct(private readonly RoleAssignmentRules $rules) {}
 
     /**
      * El enlace de la invitación vigente de `$user`, que ya tiene `email` y `access_invited_at`.
@@ -34,8 +37,10 @@ final class AccessInvitationLink
     }
 
     /**
-     * Si el enlace todavía abre: el usuario sigue activo y sin contraseña, y `$hash` es la huella de su invitación
-     * vigente, que no ha vencido. No revisa la firma: eso lo hace la ruta.
+     * Si el enlace todavía abre: el usuario sigue activo y sin contraseña, `$hash` es la huella de su invitación
+     * vigente, que no ha vencido, y no tiene un puesto distinto de docente vigente o por empezar: si lo recibió después
+     * de la invitación, su acceso lo da el admin (AC-03, como al invitar en AC-07). No revisa la firma: eso lo hace la
+     * ruta.
      */
     public function opens(User $user, string $hash): bool
     {
@@ -44,7 +49,8 @@ final class AccessInvitationLink
             && $user->email !== null
             && $user->access_invited_at !== null
             && $this->expiresAt($user)->isFuture()
-            && hash_equals($this->hash($user), $hash);
+            && hash_equals($this->hash($user), $hash)
+            && ! $this->rules->holdsStaffRole($user->getKey());
     }
 
     private function hash(User $user): string

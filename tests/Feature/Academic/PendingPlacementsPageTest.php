@@ -514,6 +514,16 @@ describe('Materias por colocar, en Servicios escolares (tarea 1.21)', function (
             ->and(textOf($page->querySelector('table')))->not->toContain('IIND-2024');
     });
 
+    it('MN-01: la ruta de la banda y la pestaña dicen «Materias por colocar»; la lista de planes sigue diciendo «Planes de estudio»', function () {
+        $this->actingAs($this->servicesHead);
+
+        $placements = $this->get(route('academic.placements'))->assertOk()->assertSee('<title>Materias por colocar · Nexus</title>', false);
+        $plans = $this->get(route('academic.plans'))->assertOk()->assertSee('<title>Planes de estudio · Nexus</title>', false);
+
+        expect(textOf(domOf($placements)->querySelector('nav[aria-label="Ruta"]')))->toBe('Servicios escolares Materias por colocar')
+            ->and(textOf(domOf($plans)->querySelector('nav[aria-label="Ruta"]')))->toBe('Administración Planes de estudio');
+    });
+
     it('IN-02: el Inicio del jefe de Servicios Escolares enlaza a ella', function () {
         $page = domOf($this->actingAs($this->servicesHead)->get(route('home'))->assertOk());
         $link = $page->querySelector('[data-testid="role-block"] a[href="'.route('academic.placements').'"]');

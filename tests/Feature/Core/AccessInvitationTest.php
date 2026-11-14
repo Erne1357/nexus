@@ -231,7 +231,7 @@ describe('aceptar', function () {
         'vacía' => [fn (): array => [], 'password'],
     ]);
 
-    it('AC-08: un enlace vencido, alterado, ya usado, reenviado o de un usuario dado de baja muestra la misma página y no habilita', function (Closure $spoil) {
+    it('AC-08: un enlace vencido, alterado, ya usado, reenviado, de un usuario dado de baja o de uno con otro puesto (AC-03) muestra la misma página y no habilita', function (Closure $spoil) {
         $link = invitationLink($this->user);
         $link = $spoil($this, $link);
 
@@ -272,6 +272,17 @@ describe('aceptar', function () {
         }],
         'usuario dado de baja' => [function ($test, string $link): string {
             $test->user->forceFill(['is_active' => false])->save();
+
+            return $link;
+        }],
+        // AC-03: a quien recibió un puesto distinto de docente después de la invitación lo habilita el admin.
+        'con un puesto vigente que recibió después' => [function ($test, string $link): string {
+            RoleAssignment::factory()->for($test->user)->create(['role' => Role::Admin, 'valid_from' => '2026-01-01']);
+
+            return $link;
+        }],
+        'con un puesto por empezar que recibió después' => [function ($test, string $link): string {
+            RoleAssignment::factory()->for($test->user)->create(['role' => Role::Admin, 'valid_from' => '2099-01-01']);
 
             return $link;
         }],
