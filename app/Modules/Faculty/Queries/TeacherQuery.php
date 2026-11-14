@@ -53,7 +53,7 @@ final class TeacherQuery
         int $perPage = 15,
         ?bool $withInstitutionalEmail = null,
     ): LengthAwarePaginator {
-        return $this->visible($context)
+        return $this->filtered($context, $search, $departmentId, $kind)
             ->with([
                 'adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions),
                 // Para el estado del acceso (AC-04, UserAccess::resolve()), sin leer la contraseña.
@@ -61,13 +61,6 @@ final class TeacherQuery
                     ->select(['id', 'must_change_password', 'access_invited_at'])
                     ->selectRaw('password is not null as has_password'),
             ])
-            ->tap(fn (Builder $query) => TextSearch::apply($query, ['rfc', 'name'], $search))
-            ->when($departmentId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => Str::isUuid($departmentId)
-                ? $adscription->where('department_id', $departmentId)
-                : $adscription->whereRaw('false')))
-            ->when($kind !== null, fn (Builder $query) => $query->whereHas('positions', fn (Builder $position) => $position
-                ->currentOn($context->activeTerm()?->starts_on ?? today())
-                ->where('kind', $kind)))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
             ->when($withInstitutionalEmail !== null, fn (Builder $query) => $withInstitutionalEmail
                 ? $query->whereNotNull('institutional_email')
@@ -96,11 +89,33 @@ final class TeacherQuery
 
     /**
      * Cuántos docentes activos de los que ve no tienen correo institucional (AC-06): sin él no reciben su invitación de
-     * acceso (AC-07). Para el aviso de la lista, que filtra a esos.
+     * acceso (AC-07). Para el aviso de la lista, con su búsqueda y sus filtros de departamento y tipo de plaza (los de
+     * forTable()), así que «Ver solo esos» muestra exactamente a los que cuenta (AC-04, tarea 1.21).
      */
-    public function missingInstitutionalEmailCount(Actor $context): int
+    public function missingInstitutionalEmailCount(Actor $context, string $search = '', ?string $departmentId = null, ?PositionKind $kind = null): int
     {
-        return $this->visible($context)->where('is_active', true)->whereNull('institutional_email')->count();
+        return $this->filtered($context, $search, $departmentId, $kind)
+            ->where('is_active', true)
+            ->whereNull('institutional_email')
+            ->count();
+    }
+
+    /**
+     * Los docentes que ve `$context` con la búsqueda y los filtros de departamento y tipo de plaza de la lista
+     * (forTable()); `null` no filtra.
+     *
+     * @return Builder<Teacher>
+     */
+    private function filtered(Actor $context, string $search, ?string $departmentId, ?PositionKind $kind): Builder
+    {
+        return $this->visible($context)
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['rfc', 'name'], $search))
+            ->when($departmentId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => Str::isUuid($departmentId)
+                ? $adscription->where('department_id', $departmentId)
+                : $adscription->whereRaw('false')))
+            ->when($kind !== null, fn (Builder $query) => $query->whereHas('positions', fn (Builder $position) => $position
+                ->currentOn($context->activeTerm()?->starts_on ?? today())
+                ->where('kind', $kind)));
     }
 
     /**

@@ -69,7 +69,7 @@
         <p class="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="missing-emails">
             <x-icon name="o-envelope" class="h-4 w-4 text-neutral" aria-hidden="true" />
             <span><span class="font-mono font-semibold tabular-nums">{{ $missingEmails }}</span> {{ $missingEmails === 1 ? 'docente activo' : 'docentes activos' }} sin correo institucional: sin él no reciben su invitación de acceso.</span>
-            <button type="button" class="link link-primary font-medium" wire:click="$set('emailFilter', 'missing')">Ver solo {{ $missingEmails === 1 ? 'ese' : 'esos' }}</button>
+            <button type="button" class="link link-primary font-medium" wire:click="showMissingEmails">Ver solo {{ $missingEmails === 1 ? 'ese' : 'esos' }}</button>
         </p>
     @endif
 

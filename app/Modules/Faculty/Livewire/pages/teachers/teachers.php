@@ -85,7 +85,8 @@ new #[Title('Docentes')] class extends Component
 
     /**
      * '' (con y sin correo institucional) o 'missing'. No va en la barra, donde no cabe un quinto filtro a 1440 px: lo
-     * pone y lo quita el aviso de cuántos docentes activos no tienen correo institucional.
+     * pone el aviso de cuántos docentes activos no tienen correo institucional (showMissingEmails()) y lo quita «Ver
+     * todos».
      */
     #[Session]
     public string $emailFilter = '';
@@ -159,7 +160,12 @@ new #[Title('Docentes')] class extends Component
             'kinds' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
             'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
-            'missingEmails' => $this->emailFilter === 'missing' ? 0 : $teachers->missingInstitutionalEmailCount($context),
+            'missingEmails' => $this->emailFilter === 'missing' ? 0 : $teachers->missingInstitutionalEmailCount(
+                $context,
+                $this->search,
+                $this->departmentFilter === '' ? null : $this->departmentFilter,
+                PositionKind::tryFrom($this->kindFilter),
+            ),
             'institutionalDomain' => config('nexus.institutional_email_domain'),
             'institutionalEmailReason' => $editing === null ? null : $this->institutionalEmailReason($editing),
             'canProvision' => Gate::allows('provisionUsers', Teacher::class),
@@ -182,6 +188,18 @@ new #[Title('Docentes')] class extends Component
         if (in_array($property, ['search', 'departmentFilter', 'kindFilter', 'status', 'emailFilter'], true)) {
             $this->resetPage();
         }
+    }
+
+    /**
+     * «Ver solo esos», del aviso de los docentes activos sin correo institucional (AC-04): filtra a los que no lo tienen
+     * y vuelve el estado a «Activos», así la lista muestra exactamente a los que contó el aviso, que cuenta con la misma
+     * búsqueda y los mismos filtros de departamento y tipo.
+     */
+    public function showMissingEmails(): void
+    {
+        $this->emailFilter = 'missing';
+        $this->status = 'active';
+        $this->resetPage();
     }
 
     /**
