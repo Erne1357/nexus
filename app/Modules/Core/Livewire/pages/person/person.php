@@ -4,14 +4,18 @@ use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Enums\AssignmentEnding;
+use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Livewire\Concerns\AppointsRoles;
+use App\Modules\Core\Livewire\Concerns\ManagesAccount;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AssignmentLabels;
+use App\Modules\Core\Queries\DeactivationPreviewQuery;
 use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\PersonRecordQuery;
+use App\Modules\Core\Queries\UserAccountQuery;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -37,11 +41,17 @@ use Mary\Traits\Toast;
  *
  * El encabezado muestra el estado del acceso de la persona (AC-04) y, si no tiene contraseña, «Dar acceso» (AC-03,
  * UserPolicy): ResetUserPassword le pone la contraseña por defecto con cambio obligatorio. Es la habilitación manual
- * de quien no es docente (Subdirección, Servicios Escolares…).
+ * de quien no es docente (Subdirección, Servicios Escolares…); 1.22-C2 la cambia por la invitación (CF-07).
+ *
+ * El bloque «Cuenta» (UserAccountQuery) muestra usuario, correo, estado, acceso y último acceso, y el menú «Acciones»
+ * del encabezado lleva Editar datos, Restablecer contraseña, Dar de baja y Reactivar según el estado (ManagesAccount,
+ * 1.22-C1); lo que no se puede queda deshabilitado con su motivo. La cuenta de un alumno se ve de solo lectura, salvo
+ * Restablecer (CF-S4). El cajón «Dar de baja» muestra DeactivationPreviewQuery.
  */
 new #[Title('Ficha de la persona')] class extends Component
 {
     use AppointsRoles;
+    use ManagesAccount;
     use Toast;
 
     /** La persona de la ficha. El navegador no la puede cambiar. */
@@ -81,7 +91,7 @@ new #[Title('Ficha de la persona')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules, AssignmentLabels $labels): array
+    public function with(PeopleQuery $people, PersonRecordQuery $records, RoleAssignmentRules $rules, AssignmentLabels $labels, UserAccountQuery $accounts, DeactivationPreviewQuery $previews): array
     {
         $this->authorize('viewAny', RoleAssignment::class);
 
@@ -92,6 +102,10 @@ new #[Title('Ficha de la persona')] class extends Component
         return [
             'record' => $records->for($person),
             'access' => UserAccess::of($person),
+            'account' => $accounts->for($person, auth()->user()),
+            'abilities' => $this->accountAbilities($person),
+            'preview' => $this->showDeactivate ? $previews->for($person, auth()->user()) : null,
+            'reasons' => array_map(fn (DeactivationReason $reason): array => ['id' => $reason->value, 'name' => $reason->label()], DeactivationReason::cases()),
             'canGrantAccess' => Gate::allows('grantAccess', $person),
             'canAppoint' => $person->is_active,
             'offered' => $this->offeredOptions($rules),

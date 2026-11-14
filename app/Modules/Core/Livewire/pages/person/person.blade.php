@@ -3,8 +3,9 @@
     persona»: enlace de regreso, iniciales, nombre, usuario, insignia con sus puestos vigentes y «Nombrar» a la derecha;
     el buscador de otra persona y el último nombramiento; cuatro cifras; la «Línea de vigencias» y las tarjetas de
     «Nombramientos» (core::people.timeline y core::people.assignment); y, en la columna lateral (debajo desde
-    1200 px hacia abajo), «¿Quién ocupa un puesto?» y la bitácora de sus puestos. «Nombrar» abre un modal que pide solo
-    el alcance que el puesto necesita.
+    1200 px hacia abajo), «Cuenta», «¿Quién ocupa un puesto?» y la bitácora de sus puestos. «Nombrar» abre un cajón que
+    pide solo el alcance que el puesto necesita. Junto a «Nombrar», el menú «Acciones» de la cuenta (1.22-C1):
+    «Editar datos» en un modal y «Dar de baja» en un cajón con su vista previa.
 --}}
 @php
     $person = $record->person;
@@ -55,12 +56,20 @@
                     data-testid="grant-access"
                 />
             @endif
-            @if ($canAppoint)
-                <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" wire:click="openAppoint" spinner="openAppoint" data-testid="appoint" />
-            @else
-                <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" disabled data-testid="appoint" />
+            <div class="flex items-center gap-2 max-md:w-full max-md:[&>*:last-child]:flex-1">
+                @if (in_array(true, $abilities, true))
+                    @include('core::people.account-menu')
+                @endif
+
+                @if ($canAppoint)
+                    <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" wire:click="openAppoint" spinner="openAppoint" data-testid="appoint" />
+                @else
+                    <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" disabled data-testid="appoint" />
+                @endif
+            </div>
+            @unless ($canAppoint)
                 <p class="text-sm text-neutral" data-testid="appoint-blocker">El usuario está inactivo.</p>
-            @endif
+            @endunless
         </div>
     </div>
 
@@ -140,6 +149,8 @@
         </div>
 
         <div class="min-w-0 space-y-5">
+            @include('core::people.account')
+
             <section aria-labelledby="who-title" class="rounded-box border border-base-300 bg-base-100 p-4" data-testid="who">
                 <h2 id="who-title" class="mb-3 text-[11.5px] font-medium uppercase tracking-[0.09em] text-secondary-muted">¿Quién ocupa un puesto?</h2>
 
@@ -213,4 +224,10 @@
     <x-drawer wire:model.live="showModal" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="appoint-title" data-testid="appoint-drawer">
         @include('core::people.appoint-drawer', ['person' => $person, 'isCoordinator' => $isCoordinator])
     </x-drawer>
+
+    <x-drawer wire:model.live="showDeactivate" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="deactivate-title" data-testid="deactivate-drawer">
+        @include('core::people.deactivate-drawer', ['person' => $person])
+    </x-drawer>
+
+    @include('core::people.profile-modal', ['person' => $person])
 </div>
