@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -18,6 +19,7 @@ use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Actions\UpdateTeacher;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
+use App\Modules\Faculty\Queries\InvitationRelease;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -142,6 +144,38 @@ it('AC-09: capturar el correo institucional después de validar manda la invitac
     app(UpdateTeacher::class)->handle($teacher, ['institutional_email' => 'ana@cdjuarez.tecnm.mx']);
 
     expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx']);
+});
+
+it('AC-09: capturarlo en «Editar docente» de la lista de Docentes después de validar también la manda, a nombre del jefe', function () {
+    $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', null);
+    validateAllReviewed($this->review, $this->jefe);
+
+    Livewire::actingAs($this->jefe)->test('faculty::pages.teachers')
+        ->call('edit', $teacher->id)
+        ->set('institutional_email', 'ana@cdjuarez.tecnm.mx')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx'])
+        ->and(Activity::query()->where('event', 'access-invited')->where('subject_id', $teacher->user_id)->sole()->causer_id)->toBe($this->jefe->id);
+});
+
+it('AC-09: TeacherInvitationReleaseQuery libera la invitación con la primera revisión de docentes validada de un departamento del docente, en un periodo que no ha terminado', function () {
+    $teacher = teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
+    $releases = app(InvitationRelease::class);
+
+    expect($releases)->toBeInstanceOf(TeacherInvitationReleaseQuery::class)
+        ->and($releases->isReleased($teacher))->toBeFalse();
+
+    CatalogReview::factory()->validated()->create(['term_id' => Term::factory()->create(['ends_on' => today()->subDay()->toDateString(), 'starts_on' => today()->subMonths(5)->toDateString()])->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Teachers]);
+    CatalogReview::factory()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Subjects]);
+
+    expect($releases->isReleased($teacher))->toBeFalse();
+
+    validateAllReviewed($this->review, $this->jefe);
+
+    expect($releases->isReleased($teacher))->toBeTrue()
+        ->and($releases->releasingReview($teacher)->id)->toBe($this->review->id);
 });
 
 it('AC-09: el docente que queda en condiciones después de validar se invita a nombre de quien hizo el cambio', function (Closure $after) {
