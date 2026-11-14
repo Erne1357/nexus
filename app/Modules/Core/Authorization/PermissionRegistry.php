@@ -255,7 +255,7 @@ final class PermissionRegistry
     /**
      * El permiso declarado con esa clave, o null: para leer las claves que guarda la base (roles y permisos sueltos).
      */
-    public function find(string $key): ?Permission
+    public function forKey(string $key): ?Permission
     {
         return $this->byKey[$key] ?? null;
     }

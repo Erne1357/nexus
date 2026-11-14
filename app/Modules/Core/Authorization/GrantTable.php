@@ -228,7 +228,7 @@ final class GrantTable
             }
 
             foreach (array_keys($granted[$role->value] ?? []) as $key) {
-                $permission = $this->registry->find($key);
+                $permission = $this->registry->forKey($key);
 
                 if ($permission !== null && $this->rules->grantProblem($role, $permission) === null) {
                     $map[$role->value][$key] = true;

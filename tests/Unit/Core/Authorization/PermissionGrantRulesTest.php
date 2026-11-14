@@ -96,8 +96,8 @@ it('el registro da los candados, busca por clave y cambia de huella si cambia lo
     expect($registry->adminOnly())->toBe(['fake.thing.view_any'])
         ->and($registry->isAdminOnly(FakePermission::ViewAny))->toBeTrue()
         ->and($registry->isAdminOnly(FakePermission::ViewCampus))->toBeFalse()
-        ->and($registry->find('fake.thing.view_unit'))->toBe(FakePermission::ViewUnit)
-        ->and($registry->find('nadie.declaro.esto'))->toBeNull()
+        ->and($registry->forKey('fake.thing.view_unit'))->toBe(FakePermission::ViewUnit)
+        ->and($registry->forKey('nadie.declaro.esto'))->toBeNull()
         ->and($registry->keyOf(FakePermission::ViewOwn))->toBe('fake.thing.view_own')
         ->and($registry->fingerprint())->toBe($same->fingerprint())
         ->and($registry->fingerprint())->not->toBe($other->fingerprint());
