@@ -7,8 +7,11 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
- * Permisos del módulo Core: campus, modalidades, periodos, nombramientos, organigrama y acceso de usuarios (los de nombramientos,
- * organigrama y acceso son solo del admin). La clave es `core.<recurso>.<accion>`.
+ * Permisos del módulo Core: campus, modalidades, periodos, nombramientos, organigrama, usuarios y su acceso, y el panel de
+ * configuración (1.22: roles y permisos, bitácora, avisos y atajos del login, parámetros, correos y colas). La clave es
+ * `core.<recurso>.<accion>`. Los de usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas son
+ * candados (CF-03): solo los tiene el admin y no se dan a otro puesto.
+ * Los de avisos, atajos y parámetros sí se pueden dar.
  */
 enum CorePermission: string implements Permission
 {
@@ -36,6 +39,24 @@ enum CorePermission: string implements Permission
     case OrgUnitMove = 'core.org_unit.move';
     case OrgUnitDeactivate = 'core.org_unit.deactivate';
     case UserGrantAccess = 'core.user.grant_access';
+    case UserCreate = 'core.user.create';
+    case UserUpdate = 'core.user.update';
+    case UserDeactivate = 'core.user.deactivate';
+    case UserReactivate = 'core.user.reactivate';
+    case UserResetPassword = 'core.user.reset_password';
+    case UserInvite = 'core.user.invite';
+    case AuthzView = 'core.authz.view';
+    case AuthzManage = 'core.authz.manage';
+    case ActivityView = 'core.activity.view';
+    case LoginNoticeView = 'core.login_notice.view';
+    case LoginNoticeManage = 'core.login_notice.manage';
+    case LoginShortcutView = 'core.login_shortcut.view';
+    case LoginShortcutManage = 'core.login_shortcut.manage';
+    case SettingView = 'core.setting.view';
+    case SettingUpdate = 'core.setting.update';
+    case MailView = 'core.mail.view';
+    case QueueView = 'core.queue.view';
+    case QueueManage = 'core.queue.manage';
     case NavigationViewUnavailable = 'core.navigation.view_unavailable';
 
     public function label(): string
@@ -65,6 +86,24 @@ enum CorePermission: string implements Permission
             self::OrgUnitMove => 'Mover unidades del organigrama',
             self::OrgUnitDeactivate => 'Desactivar y activar unidades del organigrama',
             self::UserGrantAccess => 'Dar acceso a un usuario sin contraseña',
+            self::UserCreate => 'Dar de alta usuarios del personal',
+            self::UserUpdate => 'Editar el nombre y el correo de un usuario',
+            self::UserDeactivate => 'Dar de baja la cuenta de un usuario',
+            self::UserReactivate => 'Reactivar la cuenta de un usuario',
+            self::UserResetPassword => 'Mandar el enlace para restablecer la contraseña',
+            self::UserInvite => 'Invitar a un usuario a activar su acceso',
+            self::AuthzView => 'Ver los roles y los permisos de los puestos',
+            self::AuthzManage => 'Editar los roles y los permisos de los puestos',
+            self::ActivityView => 'Ver la bitácora',
+            self::LoginNoticeView => 'Ver los avisos de la pantalla de acceso',
+            self::LoginNoticeManage => 'Manejar los avisos de la pantalla de acceso',
+            self::LoginShortcutView => 'Ver los atajos de la pantalla de acceso',
+            self::LoginShortcutManage => 'Manejar los atajos de la pantalla de acceso',
+            self::SettingView => 'Ver los parámetros',
+            self::SettingUpdate => 'Cambiar los parámetros',
+            self::MailView => 'Ver el registro de correos y las invitaciones pendientes',
+            self::QueueView => 'Ver las colas y los trabajos fallidos',
+            self::QueueManage => 'Reintentar y descartar trabajos fallidos',
             self::NavigationViewUnavailable => 'Ver en el menú las pantallas no disponibles en el periodo (MN-02)',
         };
     }
