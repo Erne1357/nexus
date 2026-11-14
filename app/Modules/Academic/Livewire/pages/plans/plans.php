@@ -53,9 +53,18 @@ new class extends Component
     #[Session]
     public string $status = '';
 
-    /** Solo los planes con materias por validar (D19); lo ve y lo usa quien las valida. */
-    #[Session]
+    /**
+     * Solo los planes con materias por validar (D19); lo ve y lo usa quien las valida. Cada entrada del menú lo recuerda
+     * por su lado (la llave lleva `$entry`), así que el filtro puesto de «Materias por colocar» no se queda puesto en
+     * «Planes de estudio». La sesión se lee antes de mount(), con la llave de «Planes de estudio»: en «Materias por
+     * colocar» no importa, porque mount() lo pone siempre.
+     */
+    #[Session(key: 'academic.plans.pending-only.{entry}')]
     public bool $pendingOnly = false;
+
+    /** La entrada del menú por la que se abrió la lista: 'plans' o 'placements'. El navegador no la puede cambiar. */
+    #[Locked]
+    public string $entry = 'plans';
 
     public bool $showModal = false;
 
@@ -85,6 +94,7 @@ new class extends Component
         // «Materias por colocar» (Servicios escolares) abre esta lista con el filtro «Por validar» puesto.
         if (request()->routeIs('academic.placements')) {
             $this->authorize('validatePlacements', StudyPlan::class);
+            $this->entry = 'placements';
             $this->pendingOnly = true;
         }
     }
@@ -94,7 +104,7 @@ new class extends Component
      */
     public function rendering(View $view): void
     {
-        $view->title(request()->routeIs('academic.placements') ? 'Materias por colocar' : 'Planes de estudio');
+        $view->title($this->entry === 'placements' ? 'Materias por colocar' : 'Planes de estudio');
     }
 
     /**

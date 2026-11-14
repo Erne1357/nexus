@@ -443,13 +443,19 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
         headPage()->assertSee('Revisa cada registro de los catálogos del departamento')->assertDontSee('Consulta cómo va');
     })->with(['admin', 'subdirección']);
 
-    it('un departamento que se desactivó con su validación abierta sigue abriéndose, para que su jefe la termine', function () {
+    it('CV-S14: un departamento que se desactivó con su validación abierta sigue abriéndose, para que su jefe la termine', function () {
         $this->sis->update(['is_active' => false]);
 
         headPage()->assertOk()->assertSee('Sistemas y Computación');
     });
 
-    it('el selector de departamento solo trae los activos, y uno inactivo no se abre', function (string $who) {
+    it('CV-S14: en el selector, el departamento desactivado sigue mientras tenga revisiones en el periodo', function (string $who) {
+        $this->sis->update(['is_active' => false]);
+
+        headPage(headViewer($who))->assertSee('110100 · Sistemas y Computación')->assertSee('110200 · Eléctrica-Electrónica');
+    })->with(['admin', 'subdirección']);
+
+    it('CV-S14: el selector de departamento solo trae los activos, y uno inactivo sin revisiones no se abre', function (string $who) {
         $closed = Department::factory()->create(['code' => '999999', 'name' => 'Departamento cerrado', 'is_active' => false]);
         $viewer = headViewer($who);
 

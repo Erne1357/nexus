@@ -22,7 +22,7 @@ use Illuminate\Validation\ValidationException;
  * CatalogReviewPolicy::correct y TeacherPolicy::removeAdscription (CV-S8) antes de llamarla.
  *
  * Lleva un motivo opcional (D8, confirmado el 14 de noviembre de 2026): jubilación, renuncia, cambio de departamento u
- * otro, que pide su texto (supuesto por confirmar). Queda en la bitácora del docente (evento `discharged`), en
+ * otro, que pide su texto (confirmado el 14 de noviembre de 2026). Queda en la bitácora del docente (evento `discharged`), en
  * `properties.reason` como `{kind, text?}` o null, con la revisión, el departamento y si quedó dado de baja; la ficha
  * del docente lo muestra. El texto solo va con «Otro».
  *

@@ -514,6 +514,21 @@ describe('Materias por colocar, en Servicios escolares (tarea 1.21)', function (
             ->and(textOf($page->querySelector('table')))->not->toContain('IIND-2024');
     });
 
+    it('«Planes de estudio» no hereda el «Por validar» de «Materias por colocar»: cada entrada abre como debe', function () {
+        $this->actingAs($this->servicesHead);
+        $pressed = fn (string $route): string => domOf($this->get(route($route))->assertOk())
+            ->querySelector('[data-testid="filter-pending"]')->getAttribute('aria-pressed');
+
+        expect($pressed('academic.placements'))->toBe('true')
+            ->and($pressed('academic.plans'))->toBe('false');
+
+        // «Planes de estudio» recuerda el suyo: puesto ahí, se queda puesto aunque se pase por «Materias por colocar».
+        Livewire::test('academic::pages.plans')->call('togglePending')->assertSet('pendingOnly', true);
+
+        expect($pressed('academic.placements'))->toBe('true')
+            ->and($pressed('academic.plans'))->toBe('true');
+    });
+
     it('MN-01: la ruta de la banda y la pestaña dicen «Materias por colocar»; la lista de planes sigue diciendo «Planes de estudio»', function () {
         $this->actingAs($this->servicesHead);
 

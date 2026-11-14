@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use Livewire\Livewire;
@@ -87,6 +88,39 @@ it('el aviso dice cuántos docentes activos no tienen correo institucional y «V
         ->assertDontSee('PRUE000006AB1');
 
     $page->set('emailFilter', '')->assertSee('PRUE000005AB1');
+});
+
+it('AC-04: «Ver solo esos» vuelve el estado a «Activos», así la lista muestra exactamente a los que contó el aviso', function () {
+    $this->baja->forceFill(['institutional_email' => null])->save();
+
+    Livewire::actingAs($this->admin)->test('faculty::pages.teachers')
+        ->set('status', '')
+        ->assertSee('PRUE000006AB1')
+        ->call('showMissingEmails')
+        ->assertSet('status', 'active')
+        ->assertSet('emailFilter', 'missing')
+        ->assertViewHas('teachers', fn ($teachers): bool => $teachers->pluck('rfc')->all() === ['PRUE000001AB1', 'PRUE000002AB1']);
+});
+
+it('AC-04: el aviso cuenta con los mismos filtros de búsqueda, departamento y tipo que la lista', function () {
+    $sinCorreoIi = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => 'PRUE000007AB1', 'name' => 'Gael Ríos']);
+    $count = fn ($page): string => textOf(domOf($page->html())->querySelector('[data-testid="missing-emails"] .font-mono'));
+
+    $page = Livewire::actingAs($this->admin)->test('faculty::pages.teachers');
+
+    expect($count($page))->toBe('3');
+
+    $page->set('departmentFilter', $this->ii->id);
+    expect($count($page))->toBe('1');
+
+    $page->call('showMissingEmails')
+        ->assertViewHas('teachers', fn ($teachers): bool => $teachers->pluck('rfc')->all() === [$sinCorreoIi->rfc]);
+
+    $page->set('emailFilter', '')->set('departmentFilter', '')->set('search', 'Beto');
+    expect($count($page))->toBe('1');
+
+    $page->set('search', '')->set('kindFilter', PositionKind::cases()[0]->value);
+    expect(domOf($page->html())->querySelector('[data-testid="missing-emails"]'))->toBeNull();
 });
 
 it('el jefe cuenta solo a los de su departamento, y sin pendientes no hay aviso', function () {
