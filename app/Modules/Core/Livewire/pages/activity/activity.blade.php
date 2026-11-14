@@ -54,8 +54,7 @@
             @endscope
 
             @scope('cell_acting_as', $entry)
-                @php($role = $entry->properties['acting_as'] ?? null)
-                {{ $role === null ? '—' : (\App\Modules\Core\Enums\Role::tryFrom($role)?->listLabel() ?? $role) }}
+                {{ $entry->acting_as_label ?? '—' }}
             @endscope
 
             @scope('cell_description', $entry)

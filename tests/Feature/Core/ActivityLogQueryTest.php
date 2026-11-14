@@ -92,6 +92,7 @@ it('da los tipos de registro con su nombre en español y los eventos que hay', f
 it('nombra el tipo de registro: el mapa de Core y, si no, el nombre corto de la clase', function () {
     expect(ActivityRecordTypes::label(Campus::class))->toBe('Campus')
         ->and(ActivityRecordTypes::label(User::class))->toBe('Usuario')
+        ->and(ActivityRecordTypes::label('App\\Modules\\Academic\\Models\\Career'))->toBe('Carrera')
         ->and(ActivityRecordTypes::label('App\\Modules\\Otro\\Models\\Cosa'))->toBe('Cosa')
         ->and(ActivityRecordTypes::label(null))->toBe('Sin registro');
 });

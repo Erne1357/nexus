@@ -22,11 +22,13 @@ use Throwable;
 final class ActivityLogQuery
 {
     /**
+     * Cada entrada lleva `acting_as_label`, el nombre del puesto con que actuó la persona, o null.
+     *
      * @return Paginator<int, Activity>
      */
     public function forTable(string $who = '', string $subjectType = '', string $event = '', string $search = '', ?CarbonImmutable $from = null, ?CarbonImmutable $to = null, int $perPage = 25): Paginator
     {
-        return Activity::query()
+        $page = Activity::query()
             ->with('causer')
             ->when(trim($who) !== '', fn (Builder $query) => $query
                 ->where('causer_type', (new User)->getMorphClass())
@@ -38,6 +40,10 @@ final class ActivityLogQuery
             ->when($to !== null, fn (Builder $query) => $query->where('created_at', '<=', $to->endOfDay()))
             ->orderByDesc('id')
             ->simplePaginate($perPage);
+
+        $page->getCollection()->each(fn (Activity $activity) => $activity->setAttribute('acting_as_label', $this->actingAsLabel($activity->properties?->get('acting_as'))));
+
+        return $page;
     }
 
     /**
@@ -72,7 +78,7 @@ final class ActivityLogQuery
      */
     public function detail(int|string $id): ActivityDetail
     {
-        $activity = Activity::query()->with('causer')->findOrFail($id);
+        $activity = Activity::query()->with('causer')->whereKey($id)->firstOrFail();
 
         $attributes = (array) ($activity->attribute_changes['attributes'] ?? []);
         $old = (array) ($activity->attribute_changes['old'] ?? []);
@@ -90,10 +96,18 @@ final class ActivityLogQuery
             $activity,
             ActivityRecordTypes::label($activity->subject_type),
             $this->subjectName($activity),
-            is_string($actingAs) ? (Role::tryFrom($actingAs)?->listLabel() ?? $actingAs) : null,
+            $this->actingAsLabel($actingAs),
             $changes,
             $properties,
         );
+    }
+
+    /**
+     * El nombre del puesto con que actuó la persona (`properties.acting_as`); su clave si ya no existe.
+     */
+    private function actingAsLabel(mixed $actingAs): ?string
+    {
+        return is_string($actingAs) ? (Role::tryFrom($actingAs)?->listLabel() ?? $actingAs) : null;
     }
 
     /**
