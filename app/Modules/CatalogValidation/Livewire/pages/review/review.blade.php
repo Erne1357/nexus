@@ -7,12 +7,17 @@
     catálogo por pestaña, con su estado; decidido por el usuario el 2 de noviembre de 2026 con datos masivos). Solo hay
     pestaña y tarjeta de los catálogos con revisión en el periodo (no siempre se validan todos), cada pestaña con «N/M»
     revisados mientras no está validada (CV7). El modal de confirmación de Validar y Reabrir es de la página: un modal
-    dentro de una tarjeta quedaría encerrado en ella.
+    dentro de una tarjeta quedaría encerrado en ella. La cabecera le habla a quien valida o, a quien solo mira
+    (Subdirección, el admin; `$viewOnly`), a él (tarea 1.21). Los textos nombran el departamento, no su clave.
 --}}
 <div>
     <x-header title="Validación de catálogos" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Revisa cada registro de los catálogos del departamento. Con todos revisados, valida el catálogo; con los catálogos validados, la carga académica puede salir de borrador.
+            @if ($viewOnly)
+                Consulta cómo va la revisión de los catálogos de cada departamento y resuelve sus observaciones. Cada jefe de departamento corrige y valida los suyos.
+            @else
+                Revisa cada registro de los catálogos del departamento. Con todos revisados, valida el catálogo; con los catálogos validados, la carga académica puede salir de borrador.
+            @endif
         </x-slot:subtitle>
     </x-header>
 
@@ -84,20 +89,38 @@
         @endif
     @endif
 
+    <x-modal wire:model="showEmpty" :title="$emptyReviews->count() === 1 ? 'Validar el catálogo sin registros' : 'Validar los catálogos sin registros'" box-class="max-w-lg" separator data-testid="empty-modal">
+        @if ($emptyReviews->isNotEmpty())
+            <div class="space-y-3 text-sm">
+                <p>Vas a validar <strong>{{ $emptyReviews->map(fn ($review) => $review->catalog->label())->join(', ', ' y ') }}</strong> de {{ $department?->name }}: {{ $emptyReviews->count() === 1 ? 'no tiene' : 'no tienen' }} registros activos que revisar.</p>
+                <p class="text-neutral">Queda como con «Validar catálogo»: quién y cuándo validó. Si después se da de alta un registro, reabre el catálogo para revisarlo.</p>
+            </div>
+        @endif
+
+        <x-slot:actions>
+            <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+                <x-button label="Cancelar" class="max-sm:h-11" wire:click="cancelEmpty" />
+                <x-button :label="$emptyReviews->count() === 1 ? 'Validarlo' : 'Validarlos'" icon="o-check" class="btn-primary max-sm:h-11" wire:click="validateEmpty" spinner="validateEmpty" data-testid="confirm-empty" />
+            </div>
+        </x-slot:actions>
+    </x-modal>
+
     <x-modal wire:model="showConfirm" :title="$confirming && $confirmAction === 'reopen' ? 'Reabrir la revisión' : 'Validar la revisión'" box-class="max-w-lg" separator>
         @if ($confirming)
             @php($confirmReview = $confirming['review'])
             <div class="space-y-3 text-sm" data-testid="confirm-body">
                 @if ($confirmAction === 'reopen')
-                    <p>Vas a reabrir <strong>{{ $confirmReview->title }}</strong>: queda en revisión, sin quién ni cuándo se validó, y podrás corregir y observar de nuevo.</p>
+                    <p>Vas a reabrir <strong>{{ $confirmReview->heading }}</strong>: queda en revisión, sin quién ni cuándo se validó, y podrás corregir y observar de nuevo.</p>
                     <p class="text-neutral">Hasta que la valides otra vez, la carga académica del departamento no podrá salir de borrador.</p>
                 @else
-                    <p>Vas a validar <strong>{{ $confirmReview->title }}</strong>: <span class="font-mono">{{ $confirming['summary']['active'] }}</span> registros activos y <span class="font-mono">{{ $confirming['summary']['inactive'] }}</span> inactivos.</p>
-                    @if ($confirming['summary']['open_flags'] > 0)
-                        <p>Quedan <span class="font-mono">{{ $confirming['summary']['open_flags'] }}</span> observaciones abiertas; no impiden validar.</p>
+                    @php($active = $confirming['summary']['active'])
+                    @php($flags = $confirming['summary']['open_flags'])
+                    <p>Vas a validar <strong>{{ $confirmReview->heading }}</strong>: <span class="font-mono">{{ $active }}</span> {{ $active === 1 ? 'registro activo' : 'registros activos' }} y <span class="font-mono">{{ $confirming['summary']['inactive'] }}</span> {{ $confirming['summary']['inactive'] === 1 ? 'inactivo' : 'inactivos' }}.</p>
+                    @if ($flags > 0)
+                        <p>{{ $flags === 1 ? 'Queda' : 'Quedan' }} <span class="font-mono">{{ $flags }}</span> {{ $flags === 1 ? 'observación abierta; no impide validar.' : 'observaciones abiertas; no impiden validar.' }}</p>
                     @endif
                     @if ($missingInvitations['email'] > 0)
-                        <p data-testid="without-institutional-email"><span class="font-mono">{{ $missingInvitations['email'] }}</span> {{ $missingInvitations['email'] === 1 ? 'docente activo sin correo institucional no recibirá su acceso.' : 'docentes activos sin correo institucional no recibirán su acceso.' }} Captúralo en su ficha; al guardarlo le llega la invitación.</p>
+                        <p data-testid="without-institutional-email"><span class="font-mono">{{ $missingInvitations['email'] }}</span> {{ $missingInvitations['email'] === 1 ? 'docente activo sin correo institucional no recibirá su acceso.' : 'docentes activos sin correo institucional no recibirán su acceso.' }} Captúralo en su fila de la lista, también después de validar; al guardarlo le llega la invitación.</p>
                     @endif
                     @if ($missingInvitations['user'] > 0)
                         <p data-testid="without-user"><span class="font-mono">{{ $missingInvitations['user'] }}</span> {{ $missingInvitations['user'] === 1 ? 'docente activo no recibirá su invitación porque no tiene un usuario activo o tiene otro puesto' : 'docentes activos no recibirán su invitación porque no tienen un usuario activo o tienen otro puesto' }}: les da acceso el administrador.</p>

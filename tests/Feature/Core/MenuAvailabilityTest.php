@@ -17,12 +17,12 @@ use Illuminate\Support\Facades\DB;
 
 /*
 | El menú sigue al periodo activo de la credencial (MN-02 a MN-04, confirmados el 12 de noviembre de 2026): sin
-| validación abierta no se ven Validar catálogos ni Avance de validación; sin carga en curso no se ven las pantallas
+| validación abierta no se ven Validación de catálogos (Validar catálogos para el jefe) ni Avance de validación; sin carga en curso no se ven las pantallas
 | de la carga. Horarios publicados, Mi carga y Oferta se ven siempre. El admin lo ve todo, con el motivo en lo que
 | los demás no ven.
 */
 
-const VALIDATION_SCREENS = ['Validar catálogos', 'Avance de validación'];
+const VALIDATION_SCREENS = ['Validación de catálogos', 'Avance de validación'];
 
 const LOAD_SCREENS = ['Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre'];
 

@@ -6,8 +6,22 @@
     con su motivo escrito debajo mientras falte revisar alguno, o «Reabrir» si ya está validada (deshabilitado con su
     motivo si la carga salió de borrador, CV5). Toda la tarjeta abre la lista: el título es un enlace estirado con
     `after:absolute after:inset-0` y los botones y avisos van encima (`relative z-10`), así no hay botones dentro de un
-    enlace.
+    enlace. A quien solo mira (Subdirección, el admin) no se le muestran Validar ni Reabrir (tarea 1.21).
+
+    Arriba, al jefe con catálogos abiertos sin registros activos (`$emptyReviews`), «N catálogos sin registros» con
+    sus nombres y «Validarlos», que abre la confirmación de la página (CV7, D5).
 --}}
+@if ($emptyReviews->isNotEmpty())
+    @php($emptyCount = $emptyReviews->count())
+    <section class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-3" aria-labelledby="empty-reviews" data-testid="empty-reviews">
+        <x-icon name="o-inbox" class="h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
+        <div class="min-w-0 flex-1">
+            <p id="empty-reviews" class="font-semibold">{{ $emptyCount === 1 ? '1 catálogo sin registros' : $emptyCount.' catálogos sin registros' }}</p>
+            <p class="text-sm text-neutral">{{ $emptyReviews->map(fn ($review) => $review->catalog->label())->join(', ', ' y ') }}: no hay nada que revisar. {{ $emptyCount === 1 ? 'Valídalo' : 'Valídalos' }} en un paso.</p>
+        </div>
+        <x-button :label="$emptyCount === 1 ? 'Validarlo' : 'Validarlos'" icon="o-check" class="btn-outline btn-sm max-md:h-11 max-md:w-full" wire:click="confirmEmpty" spinner="confirmEmpty" data-testid="validate-empty" />
+    </section>
+@endif
 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" data-testid="review-board">
     <section class="space-y-3.5 rounded-box border border-base-300 bg-base-100 p-4" aria-labelledby="review-progress" data-testid="review-progress">
         <p id="review-progress" class="flex items-baseline gap-2.5">
@@ -82,15 +96,17 @@
                 @include('catalog-validation::review.readiness', ['counts' => $card['readiness'], 'term' => $term, 'department' => $department])
             @endif
 
-            <div class="relative z-10 mt-auto space-y-2">
-                <div class="flex gap-2">
-                    @include('catalog-validation::review.actions', ['card' => $card, 'suffix' => '-card'])
+            @unless ($card['viewOnly'])
+                <div class="relative z-10 mt-auto space-y-2">
+                    <div class="flex gap-2">
+                        @include('catalog-validation::review.actions', ['card' => $card, 'suffix' => '-card'])
+                    </div>
+                    @include('catalog-validation::review.validate-why', ['card' => $card, 'center' => true, 'suffix' => '-card'])
+                    @foreach ($card['reopenVetoes'] as $veto)
+                        <p class="text-center text-xs text-neutral" data-testid="reopen-veto-{{ $review->catalog->value }}">{{ $veto }}</p>
+                    @endforeach
                 </div>
-                @include('catalog-validation::review.validate-why', ['card' => $card, 'center' => true, 'suffix' => '-card'])
-                @foreach ($card['reopenVetoes'] as $veto)
-                    <p class="text-center text-xs text-neutral" data-testid="reopen-veto-{{ $review->catalog->value }}">{{ $veto }}</p>
-                @endforeach
-            </div>
+            @endunless
         </article>
     @endforeach
 </div>

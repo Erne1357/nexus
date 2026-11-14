@@ -368,7 +368,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
     $admin = User::factory()->admin()->create();
 
     expect(navigationGroupsFor($admin, NavigationArea::Academico))->toBe([
-        'validacion' => ['Validar catálogos', 'Avance de validación'],
+        'validacion' => ['Validación de catálogos', 'Avance de validación'],
         'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
@@ -492,7 +492,7 @@ describe('menú', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
-            ->{'Académico'}->toContain('Validar catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
+            ->{'Académico'}->toContain('Validación de catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
             ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones']);
@@ -596,7 +596,7 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation'));
 
         expect(menuRowsIn($page, 'academico'))->toBe([
-            'Validación', 'Validar catálogos', 'Avance de validación',
+            'Validación', 'Validación de catálogos', 'Avance de validación',
             'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento',
             'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
             'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',

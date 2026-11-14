@@ -18,7 +18,11 @@
       queda pegada al pie.
     - «Por revisar» vacío dice «Revisaste los N …» y ofrece «Validar catálogo».
 
-    El drawer del registro (catalog-validation::review.drawer), el de bajas y el de «Agregar docente» van al final.
+    A quien solo mira (Subdirección, el admin; `$current['viewOnly']`) no se le muestran Validar, Reabrir, «Agregar
+    docente» ni el candado del renglón: la cabecera ya dice que solo consulta (tarea 1.21).
+
+    El drawer del registro (catalog-validation::review.drawer), el de bajas, el de «Agregar docente» y el modal «Quitar de
+    <departamento>» (CV8, con el motivo opcional de D8) van al final.
 --}}
 @php($review = $current['review'])
 @php($catalog = $review->catalog)
@@ -50,15 +54,17 @@
 
         @include('catalog-validation::review.counters', ['summary' => $current['summary'], 'inline' => true, 'firstTerm' => $firstTerm])
 
-        <div class="flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-2 md:ms-auto md:w-auto">
-            @include('catalog-validation::review.validate-why', ['card' => $current])
-            @include('catalog-validation::review.actions', ['card' => $current, 'grow' => false, 'small' => true])
-        </div>
+        @unless ($current['viewOnly'])
+            <div class="flex w-full flex-wrap items-center justify-end gap-x-3 gap-y-2 md:ms-auto md:w-auto">
+                @include('catalog-validation::review.validate-why', ['card' => $current])
+                @include('catalog-validation::review.actions', ['card' => $current, 'grow' => false, 'small' => true])
+            </div>
+        @endunless
 
         @foreach ($current['reopenVetoes'] as $veto)
             <p class="w-full text-xs text-neutral">{{ $veto }}</p>
         @endforeach
-        @if (! $canMark && $current['markReason'] !== null)
+        @if (! $canMark && $current['markReason'] !== null && ! $current['viewOnly'])
             <p id="review-locked" class="flex w-full items-center gap-1.5 text-sm text-neutral" data-testid="review-locked"><x-icon name="o-lock-closed" class="h-4 w-4 shrink-0" aria-hidden="true" />{{ $current['markReason'] }}</p>
         @endif
     </section>
@@ -73,7 +79,7 @@
             @include('catalog-validation::review.segments')
         </div>
 
-        <div class="contents [&>*]:w-full md:[&>*]:w-40">
+        <div @class(['contents [&>*]:w-full', 'md:[&>*]:w-52' => $isTeachers, 'md:[&>*]:w-40' => ! $isTeachers])>
             @if ($isTeachers)
                 <x-select wire:model.live="missing" aria-label="Falta" :options="$missingFilters" placeholder="Falta" data-testid="filter-missing" />
             @endif
@@ -86,7 +92,7 @@
             @endif
         </div>
 
-        @if ($isTeachers)
+        @if ($isTeachers && ! $current['viewOnly'])
             <div class="w-full md:ms-auto md:w-auto">
                 @if ($current['canEdit'])
                     <x-button label="Agregar docente" icon="o-user-plus" class="btn-outline w-full md:w-auto" wire:click="$set('showAddTeacher', true)" data-testid="add-teacher" />
@@ -344,6 +350,26 @@
     </x-drawer>
 
     @if ($isTeachers)
+        <x-modal wire:model="showDischarge" :title="$discharging['title'] ?? 'Quitar del departamento'" box-class="max-w-lg" separator data-testid="discharge-modal">
+            @if ($discharging !== null)
+                <div class="space-y-4 text-sm">
+                    <p>{{ $discharging['message'] }}</p>
+                    <x-select label="Motivo (opcional)" wire:model.live="dischargeKind" :options="$dischargeReasons" placeholder="Sin motivo" placeholder-value="" data-testid="discharge-kind" />
+                    @if ($dischargeKind === \App\Modules\CatalogValidation\Enums\DischargeReason::Other->value)
+                        <x-textarea label="¿Cuál es el motivo?" wire:model="dischargeText" rows="2" maxlength="{{ \App\Modules\CatalogValidation\Actions\DischargeReviewTeacher::REASON_MAX }}" data-testid="discharge-text" />
+                    @endif
+                    <p class="text-neutral">El motivo queda en la bitácora del docente.</p>
+                </div>
+            @endif
+
+            <x-slot:actions>
+                <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+                    <x-button label="Cancelar" class="max-sm:h-11" wire:click="cancelDischarge" />
+                    <x-button :label="$discharging['button'] ?? 'Quitar'" icon="o-user-minus" class="btn-error max-sm:h-11" wire:click="dischargeTeacher" spinner="dischargeTeacher" data-testid="confirm-discharge" />
+                </div>
+            </x-slot:actions>
+        </x-modal>
+
         <x-drawer wire:model.live="showAddTeacher" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="add-teacher-title" data-testid="add-teacher-drawer">
             @if ($candidates !== null)
                 @include('catalog-validation::review.add-teacher', ['review' => $review, 'candidates' => $candidates])

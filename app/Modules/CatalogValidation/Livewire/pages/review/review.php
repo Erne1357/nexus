@@ -9,10 +9,13 @@ use App\Modules\CatalogValidation\Actions\FlagRecord;
 use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
+use App\Modules\CatalogValidation\Actions\SetReviewTeacherEmail;
 use App\Modules\CatalogValidation\Actions\UnmarkRecordReviewed;
+use App\Modules\CatalogValidation\Actions\ValidateEmptyReviews;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Enums\DischargeReason;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -61,16 +64,18 @@ use Mary\Traits\Toast;
  * casillas y la columna «Revisión», y un drawer por registro para corregirlo (CV1, CV2) y ver, poner y resolver
  * observaciones (CV4). Las revisiones no son de un campus: la de salones cubre los de todos los campus (decisión 6), y
  * el jefe mueve un salón a un edificio de otro campus (CV-S10). En docentes, el jefe captura el correo institucional en
- * un recuadro junto al nombre (CV1, AC-06), da de baja a uno de su departamento (CV8, CV-S8) y agrega a uno que ya
- * existe, buscándolo por RFC o nombre (CV-S9).
+ * un recuadro junto al nombre (CV1, AC-06), también con la revisión validada (CV-S2, D11); quita a uno de su
+ * departamento desde «Acciones», con un motivo opcional (CV8, CV-S8, D8) y agrega a uno que ya existe, buscándolo por
+ * RFC o nombre (CV-S9). En el tablero valida en un paso los catálogos sin registros activos (CV7, D5).
  * Cada registro se marca como revisado desde su fila, o varios a la vez (la selección vive en el navegador y llega a
  * markSelected()), y Validar solo se activa con todos revisados (CV7); la tarjeta, la pestaña y el renglón de la lista
  * dicen cuántos van.
  *
  * El jefe cubre su departamento; Subdirección y el admin abren cualquiera en lectura, y solo resuelven
- * observaciones (CV-S1). Toda escritura pasa por su Action, después de autorizar con CatalogReviewPolicy en cada
- * método público, porque la petición puede llegar con una pantalla que abrió otra sesión. Los errores de las
- * Actions (vetos, revisión validada) salen en la pantalla.
+ * observaciones (CV-S1): no ven los controles que no pueden usar (marcar, validar, reabrir, quitar, observar) y la
+ * cabecera les habla a ellos (tarea 1.21). Toda escritura pasa por su Action, después de autorizar con
+ * CatalogReviewPolicy en cada método público, porque la petición puede llegar con una pantalla que abrió otra sesión.
+ * Los errores de las Actions (vetos, revisión validada) salen en la pantalla.
  */
 new #[Title('Validación de catálogos')] class extends Component
 {
@@ -171,6 +176,21 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public bool $is_active = true;
 
+    /** El modal «Quitar de <departamento>» (CV8): el docente, que el navegador no cambia, y el motivo opcional (D8). */
+    public bool $showDischarge = false;
+
+    #[Locked]
+    public ?string $dischargeId = null;
+
+    /** Un valor de DischargeReason o vacío (sin motivo). */
+    public string $dischargeKind = '';
+
+    /** El motivo escrito, solo con «Otro». */
+    public string $dischargeText = '';
+
+    /** La confirmación de «Validarlos», los catálogos sin registros activos (CV7, D5). */
+    public bool $showEmpty = false;
+
     /** El tipo de la observación nueva. */
     public string $flag = '';
 
@@ -196,7 +216,7 @@ new #[Title('Validación de catálogos')] class extends Component
     public function with(CatalogReviewQuery $reviews, CatalogRecordsQuery $records, CatalogContentsQuery $contents, TeacherAccessQuery $access): array
     {
         $state = $this->state();
-        $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term']];
+        $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'viewOnly' => $this->viewOnly($state)];
 
         $empty = match (true) {
             $state['department'] === null => 'department',
@@ -206,7 +226,7 @@ new #[Title('Validación de catálogos')] class extends Component
         };
 
         if ($empty !== null) {
-            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'missingInvitations' => ['email' => 0, 'user' => 0]];
+            return [...$data, 'empty' => $empty, 'firstTerm' => false, 'cards' => collect(), 'tabs' => [], 'progress' => null, 'current' => null, 'confirming' => null, 'missingInvitations' => ['email' => 0, 'user' => 0], 'emptyReviews' => collect()];
         }
 
         $reviewed = $contents->progressOf($state['reviews']);
@@ -226,6 +246,7 @@ new #[Title('Validación de catálogos')] class extends Component
         $data += ['empty' => null, 'firstTerm' => $firstTerm, 'cards' => $cards, 'tabs' => $state['reviews']->map(fn (CatalogReview $review): array => ['catalog' => $review->catalog, 'status' => $review->status, 'reviewed' => $reviewed[$review->getKey()]])->all(), 'progress' => $current === null ? $this->progress($state, $reviewed) : null, 'current' => $current];
 
         $data += $this->confirmation($cards, $access);
+        $data['emptyReviews'] = $current === null ? $this->emptyReviews($state['reviews'], $reviewed) : collect();
 
         return [...$data, ...($current === null ? ['page' => null] : $this->list($current, $records, $contents))];
     }
@@ -315,12 +336,51 @@ new #[Title('Validación de catálogos')] class extends Component
         if ($action === 'reopen') {
             $this->authorize('reopen', $review);
             $reopenReview->handle($review, $this->user());
-            $this->success('Revisión reabierta', e($review->title));
+            $this->success('Revisión reabierta', e($review->heading));
         } else {
             $this->authorize('validate', $review);
             $validateReview->handle($review, $this->user());
-            $this->success('Revisión validada', e($review->title));
+            $this->success('Revisión validada', e($review->heading));
         }
+
+        /*
+        | La pantalla se vuelve a leer con quién validó: la revisión memorizada trae la relación de antes.
+        */
+        $this->resolved = null;
+    }
+
+    /**
+     * Pide confirmar «Validarlos»: los catálogos abiertos sin registros activos que el jefe valida (CV7, D5). Solo quien
+     * valida alguna revisión del departamento.
+     */
+    public function confirmEmpty(): void
+    {
+        $this->authorizeValidating();
+        $this->resetValidation();
+        $this->showEmpty = $this->emptyOnes()->isNotEmpty();
+    }
+
+    /**
+     * «Validarlos»: valida juntos, con ValidateReview y su bitácora, los catálogos sin registros activos (CV7, D5).
+     */
+    public function validateEmpty(ValidateEmptyReviews $validateEmpty): void
+    {
+        $this->showEmpty = false;
+        $this->authorizeValidating();
+        $reviews = $this->emptyOnes();
+        $reviews->each(fn (CatalogReview $review) => $this->authorize('validate', $review));
+
+        $count = $validateEmpty->handle($reviews, $this->user());
+        $this->resolved = null;
+
+        if ($count > 0) {
+            $this->success($count === 1 ? '1 catálogo validado' : "{$count} catálogos validados", e($reviews->map(fn (CatalogReview $review): string => $review->catalog->label())->join(', ', ' y ')));
+        }
+    }
+
+    public function cancelEmpty(): void
+    {
+        $this->showEmpty = false;
     }
 
     public function cancelConfirm(): void
@@ -363,13 +423,16 @@ new #[Title('Validación de catálogos')] class extends Component
 
         $record = $correctRecord->handle($review, $record, $this->validatedRecord($review->catalog), $this->user());
 
-        $this->success(match ($review->catalog) {
+        /*
+        | Guardar sin cambios marca el registro como revisado (CV-S7, D9): el aviso dice que no cambió nada.
+        */
+        $this->success($record->wasChanged() ? match ($review->catalog) {
             Catalog::Teachers => 'Docente actualizado',
             Catalog::Rooms => 'Salón actualizado',
             Catalog::StudyPlans => 'Plan actualizado',
             Catalog::Careers => 'Carrera actualizada',
             default => 'Materia actualizada',
-        }, $this->describe($review, $record));
+        } : 'Sin cambios: queda revisado', $this->describe($review, $record));
         $this->closeDrawer();
     }
 
@@ -392,23 +455,47 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * «Dar de baja de <depto>»: el docente sale del departamento y, sin otra adscripción, queda dado de baja (CV8). A
-     * uno que ocupa un puesto solo lo dan de baja el admin o la Subdirección (CV-S8).
+     * Abre «Quitar de <departamento>» de un docente (CV8, D10): el modal dice qué pasa y pide el motivo opcional (D8). A
+     * uno que ocupa un puesto solo lo quitan el admin o la Subdirección (CV-S8).
      */
-    public function dischargeTeacher(string $id, DischargeReviewTeacher $dischargeTeacher, CatalogContentsQuery $contents, CatalogRecordsQuery $records): void
+    public function askDischarge(string $id, CatalogContentsQuery $contents, CatalogRecordsQuery $records): void
+    {
+        $teacher = $this->dischargeable($id, $contents, $records);
+
+        $this->resetValidation();
+        $this->reset('dischargeKind', 'dischargeText');
+        $this->dischargeId = $teacher->getKey();
+        $this->showDischarge = true;
+    }
+
+    /**
+     * Quita al docente del modal de su departamento y, sin otra adscripción, lo deja dado de baja con su cuenta
+     * inhabilitada (CV8), con el motivo en la bitácora (DischargeReviewTeacher, D8): uno de DischargeReason o ninguno;
+     * «Otro» pide escribirlo.
+     */
+    public function dischargeTeacher(DischargeReviewTeacher $dischargeTeacher, CatalogContentsQuery $contents, CatalogRecordsQuery $records): void
     {
         $review = $this->currentReview();
-        $this->authorize('correct', $review);
-        abort_unless($review->catalog === Catalog::Teachers, 404);
-        $teacher = $contents->findOrFail($review, $id);
-        $this->authorize('removeAdscription', [Teacher::class, $records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()]]);
+        $teacher = $this->dischargeable((string) $this->dischargeId, $contents, $records);
 
-        $result = $dischargeTeacher->handle($review, $teacher, $this->user());
+        $data = $this->validate([
+            'dischargeKind' => ['nullable', Rule::enum(DischargeReason::class)],
+            'dischargeText' => ['nullable', 'string', 'max:'.DischargeReviewTeacher::REASON_MAX, 'required_if:dischargeKind,'.DischargeReason::Other->value],
+        ], ['dischargeText.required_if' => 'Escribe el motivo.', 'dischargeKind.enum' => 'Elige un motivo de la lista.']);
 
+        $result = $dischargeTeacher->handle($review, $teacher, $this->user(), DischargeReason::tryFrom((string) $data['dischargeKind']), $data['dischargeText'] ?? null);
+
+        $this->cancelDischarge();
         $this->success(
-            $result['deactivated'] ? 'Docente dado de baja' : "Docente quitado de {$review->department->code}",
+            $result['deactivated'] ? 'Docente dado de baja' : e("Docente quitado de {$review->department?->name}"),
             $this->describe($review, $teacher).e($result['outcome'] === null ? '' : " · {$result['outcome']}"),
         );
+    }
+
+    public function cancelDischarge(): void
+    {
+        $this->showDischarge = false;
+        $this->reset('dischargeId', 'dischargeKind', 'dischargeText');
     }
 
     /**
@@ -436,17 +523,18 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         $this->reset('showAddTeacher', 'teacherSearch');
-        $this->success(e("Agregaste a {$teacher->name}"), e("{$teacher->rfc} · queda revisado en {$review->department->code}."));
+        $this->success(e("Agregaste a {$teacher->name}"), e("{$teacher->rfc} · queda revisado en {$review->department->name}."));
     }
 
     /**
-     * El correo institucional de un docente desde el recuadro de su fila (CV1, AC-06): `$value` es el usuario (se le
-     * agrega el dominio institucional) o el correo completo. Lo guarda CorrectRecord, que lo marca como revisado (CV7).
-     * Devuelve si se guardó y, si no, el motivo, para que el recuadro lo diga sin cerrarse.
+     * El correo institucional de un docente desde el recuadro de su fila (CV1, AC-06; D4): `$value` es el usuario (se le
+     * agrega el dominio institucional) o el correo completo. Lo guarda SetReviewTeacherEmail: con la revisión abierta lo
+     * marca como revisado (CV7); con la revisión validada solo cambia el correo y la invitación sale al guardar (CV-S2,
+     * D11). Devuelve si se guardó y, si no, el motivo, para que el recuadro lo diga sin cerrarse.
      *
      * @return array{saved: bool, error: ?string}
      */
-    public function saveEmail(string $id, string $value, CorrectRecord $correctRecord, CatalogContentsQuery $contents): array
+    public function saveEmail(string $id, string $value, SetReviewTeacherEmail $setEmail, CatalogContentsQuery $contents): array
     {
         $review = $this->currentReview();
         $this->authorize('correct', $review);
@@ -463,12 +551,14 @@ new #[Title('Validación de catálogos')] class extends Component
         $email = str_contains($value, '@') ? $value : $value.'@'.config('nexus.institutional_email_domain');
 
         try {
-            $teacher = $correctRecord->handle($review, $teacher, ['institutional_email' => $email], $this->user());
+            $teacher = $setEmail->handle($review, $teacher, $email, $this->user());
         } catch (ValidationException $exception) {
             return ['saved' => false, 'error' => (string) Arr::first(Arr::flatten($exception->errors()))];
         }
 
-        $this->success('Correo institucional guardado', e("{$teacher->institutional_email} · {$teacher->name} queda revisado."));
+        $this->success('Correo institucional guardado', e($review->status === ReviewStatus::Validated
+            ? "{$teacher->institutional_email} · si {$teacher->name} todavía no tiene acceso, le llega su invitación."
+            : "{$teacher->institutional_email} · {$teacher->name} queda revisado."));
 
         return ['saved' => true, 'error' => null];
     }
@@ -510,7 +600,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
         $count = $markRecords->handle($review, array_values(array_unique($data['selected'])), $this->user());
 
-        $this->success($count === 1 ? '1 registro revisado' : "{$count} registros revisados", e($review->title));
+        $this->success($count === 1 ? '1 registro revisado' : "{$count} registros revisados", e($review->heading));
     }
 
     public function addFlag(FlagRecord $flagRecord, CatalogContentsQuery $contents): void
@@ -550,18 +640,20 @@ new #[Title('Validación de catálogos')] class extends Component
             'theory_hours' => 'horas de teoría',
             'practice_hours' => 'horas de práctica',
             'credits' => 'créditos',
-            'kind' => 'tipo',
+            'kind' => 'tipo de materia',
             'version' => 'versión',
             'semesters_count' => 'semestres',
             'total_credits' => 'créditos del plan',
             'valid_from' => 'vigente desde',
-            'type' => 'tipo',
+            'type' => 'tipo de salón',
             'capacity' => 'capacidad',
             'features' => 'características',
             'flag' => 'tipo de observación',
             'comment' => 'comentario',
             'building_id' => 'edificio',
             'institutional_email' => 'correo institucional',
+            'dischargeKind' => 'motivo',
+            'dischargeText' => 'motivo',
         ];
     }
 
@@ -623,6 +715,108 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
+     * Si quien mira solo ve la revisión del departamento (Subdirección, el admin; CV-S1): no la valida. Entonces la
+     * pantalla no le muestra controles que no puede usar y la cabecera le habla a él.
+     *
+     * @param  array{department: ?Department}  $state
+     */
+    private function viewOnly(array $state): bool
+    {
+        $context = app(Actor::class);
+
+        return $state['department'] === null
+            ? ! $context->allowsAny(CatalogValidationPermission::ReviewValidate)
+            : ! CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewValidate, $state['department']->getKey());
+    }
+
+    /**
+     * 403 si quien pide no valida ninguna revisión de la pantalla.
+     */
+    private function authorizeValidating(): void
+    {
+        abort_unless($this->state()['reviews']->contains(fn (CatalogReview $review): bool => Gate::allows('validate', $review)), 403);
+    }
+
+    /**
+     * Las revisiones de la pantalla sin validar y sin registros activos que el usuario valida (CV7, D5).
+     *
+     * @return Collection<int, CatalogReview>
+     */
+    private function emptyOnes(): Collection
+    {
+        $reviews = $this->state()['reviews'];
+
+        return $this->emptyReviews($reviews, app(CatalogContentsQuery::class)->progressOf($reviews));
+    }
+
+    /**
+     * De `$reviews`, las que no están validadas, no tienen registros activos y el usuario valida: las que «Validarlos»
+     * valida juntas (CV7, D5).
+     *
+     * @param  Collection<int, CatalogReview>  $reviews
+     * @param  array<string, array{reviewed: int, total: int}>  $reviewed
+     * @return Collection<int, CatalogReview>
+     */
+    private function emptyReviews(Collection $reviews, array $reviewed): Collection
+    {
+        return $reviews
+            ->filter(fn (CatalogReview $review): bool => $review->status !== ReviewStatus::Validated
+                && ($reviewed[$review->getKey()]['total'] ?? 1) === 0
+                && Gate::allows('validate', $review))
+            ->values();
+    }
+
+    /**
+     * El docente de la revisión abierta que se quita de su departamento, si quien pide puede (CV8, CV-S8).
+     */
+    private function dischargeable(string $id, CatalogContentsQuery $contents, CatalogRecordsQuery $records): Teacher
+    {
+        $review = $this->currentReview();
+        $this->authorize('correct', $review);
+        abort_unless($review->catalog === Catalog::Teachers, 404);
+        $teacher = $contents->findOrFail($review, $id);
+        $this->authorize('removeAdscription', [Teacher::class, $records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()] ?? abort(404)]);
+
+        return $teacher;
+    }
+
+    /**
+     * Lo que dice el modal «Quitar de <departamento>» del docente que se pidió (CV8): sin otro departamento queda dado
+     * de baja y su cuenta se inhabilita; con otro, sigue allá y, si este era su principal, la principal pasa al más
+     * antiguo de los que le quedan (RemoveAdscription). Null sin modal abierto.
+     *
+     * @return ?array{title: string, message: string, button: string}
+     */
+    private function discharging(CatalogReview $review, CatalogContentsQuery $contents, CatalogRecordsQuery $records): ?array
+    {
+        if (! $this->showDischarge || $this->dischargeId === null || $review->catalog !== Catalog::Teachers) {
+            return null;
+        }
+
+        try {
+            $teacher = $contents->findOrFail($review, $this->dischargeId);
+        } catch (ModelNotFoundException) {
+            $this->cancelDischarge();
+
+            return null;
+        }
+
+        $own = $records->teacherDepartments($review, [$teacher->getKey()])[$teacher->getKey()];
+        $other = $own['others'][0] ?? null;
+        $department = (string) $review->department?->name;
+
+        return [
+            'title' => "¿Quitar a {$teacher->name} de {$department}?",
+            'message' => match (true) {
+                $other === null => 'Es su único departamento: queda dado de baja y su cuenta se inhabilita. Puedes volver a agregarlo con «Agregar docente».',
+                $own['here_primary'] => "Sigue como docente de {$other['name']}, que pasa a ser su adscripción principal. Deja de aparecer en tu departamento y conserva su cuenta.",
+                default => "Sigue como docente de {$other['name']}, su adscripción principal. Solo deja de aparecer en tu departamento y conserva su cuenta.",
+            },
+            'button' => "Quitar de {$department}",
+        ];
+    }
+
+    /**
      * Lo que muestra la tarjeta de una revisión y lo que el usuario puede hacer con ella.
      *
      * @param  array{reviewed: int, total: int}  $reviewed  cuántos registros van revisados (CV7)
@@ -643,9 +837,12 @@ new #[Title('Validación de catálogos')] class extends Component
         };
 
         $canMark = Gate::allows('mark', $review);
+        $canValidate = Gate::allows('validate', $review);
+        $canCorrect = Gate::allows('correct', $review);
 
         return [
             'review' => $review,
+            'viewOnly' => ! $canValidate && ! $canCorrect && ! $isHead && ! $canReopen,
             'summary' => $reviews->summary($review),
             'reviewed' => $reviewed,
             'canMark' => ! $validated && $canMark,
@@ -659,16 +856,17 @@ new #[Title('Validación de catálogos')] class extends Component
                 ...app(TeacherTermReadinessQuery::class)->counts($review->department, $review->term),
                 'no_email' => count(app(CatalogRecordsQuery::class)->teachersWithoutEmail($review)),
             ] : null,
-            'canValidate' => Gate::allows('validate', $review),
+            'canValidate' => $canValidate,
             'canReopen' => $canReopen,
             'reopenVetoes' => $vetoes,
             'canResolve' => Gate::allows('resolveFlag', $review),
-            'canEdit' => ! $validated && Gate::allows('correct', $review),
+            'canEdit' => ! $validated && $canCorrect,
+            'canEmail' => $canCorrect,
             'canFlag' => ! $validated && $isHead,
             'canToggle' => ! $validated && in_array($review->catalog, [Catalog::Subjects, Catalog::Rooms], true) && Gate::allows('correct', $review),
             'toggleReason' => match ($review->catalog) {
                 Catalog::Careers, Catalog::StudyPlans => 'Carreras y planes no se activan ni se desactivan aquí: pon la observación «Debe desactivarse».',
-                Catalog::Teachers => "Un docente se da de baja con «Dar de baja de {$review->department?->code}».",
+                Catalog::Teachers => "Un docente se quita con «Quitar de {$review->department?->name}», en «Acciones».",
                 default => $editReason,
             },
             'editReason' => $editReason,
@@ -784,6 +982,9 @@ new #[Title('Validación de catálogos')] class extends Component
             'page' => $page,
             'readiness' => $readiness,
             'teacherRows' => $review->catalog === Catalog::Teachers ? $this->teacherRows($current, $records, $page->getCollection()) : [],
+            'subjectPlans' => $review->catalog === Catalog::Subjects ? $records->subjectPlans($ids) : [],
+            'discharging' => $this->discharging($review, $contents, $records),
+            'dischargeReasons' => array_map(fn (DischargeReason $reason): array => ['id' => $reason->value, 'name' => $reason->label()], DischargeReason::cases()),
             'buildingGroups' => $buildingGroups,
             'buildingCampus' => $this->campusOfBuilding($buildingGroups, $this->building_id),
             'marks' => $marks,
@@ -894,12 +1095,12 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /**
      * Lo de cada docente de la página (CV8, CV-S8, AC-06): sus otros departamentos («También en», «Principal en»), por
-     * qué no se da de baja o null, la confirmación de la baja según le quede o no otro departamento, y por qué no se
-     * captura su correo institucional o null.
+     * qué no se quita de este departamento o null, y por qué no se captura su correo institucional o null. El correo se
+     * captura también con la revisión validada (CV-S2, D11).
      *
      * @param  array<string, mixed>  $current
      * @param  Collection<int, Model>  $teachers
-     * @return array<string, array{departments: array{here_primary: bool, others: list<array{code: string, name: string, is_primary: bool}>}, dischargeReason: ?string, emailReason: ?string, confirmTitle: string, confirmMessage: string}>
+     * @return array<string, array{departments: array{here_primary: bool, others: list<array{code: string, name: string, is_primary: bool}>}, dischargeReason: ?string, emailReason: ?string}>
      */
     private function teacherRows(array $current, CatalogRecordsQuery $records, Collection $teachers): array
     {
@@ -911,35 +1112,17 @@ new #[Title('Validación de catálogos')] class extends Component
         $unit = Target::of(unit: $current['review']->department_id);
         $canEmail = $context->allows(FacultyPermission::TeacherUpdate, $unit) && $context->allows(FacultyPermission::TeacherUserInvite, $unit);
         $canStaffEmail = $context->allows(FacultyPermission::TeacherStaffEmailUpdate);
-        $departmentName = (string) $current['review']->department?->name;
 
-        return $teachers->mapWithKeys(function (Model $teacher) use ($current, $departments, $staff, $dischargeReasons, $canEmail, $canStaffEmail, $departmentName): array {
-            $own = $departments[$teacher->getKey()];
-            $other = $own['others'][0] ?? null;
-
-            /*
-            | Al darlo de baja (CV8): sin otro departamento, queda inactivo y su cuenta se desactiva; con otro, sigue en él y,
-            | si este era su principal, la principal pasa al más antiguo de los que le quedan (RemoveAdscription).
-            */
-            [$title, $message] = match (true) {
-                $other === null => ["¿Dar de baja a {$teacher->name}?", 'No tiene otro departamento: su registro queda inactivo y su cuenta se desactiva. Puedes volver a agregarlo con «Agregar docente».'],
-                $own['here_primary'] => ["¿Dar de baja a {$teacher->name} de {$departmentName}?", "Sigue como docente de {$other['name']}, que pasa a ser su adscripción principal. Deja de aparecer en tu departamento y conserva su cuenta."],
-                default => ["¿Dar de baja a {$teacher->name} de {$departmentName}?", "Sigue como docente de {$other['name']}, su adscripción principal. Solo deja de aparecer en tu departamento."],
-            };
-
-            return [$teacher->getKey() => [
-                'departments' => $own,
-                'dischargeReason' => $dischargeReasons[$teacher->getKey()],
-                'emailReason' => match (true) {
-                    ! $current['canEdit'] => $current['editReason'],
-                    ! $canEmail => 'Solo quien administra el departamento captura el correo institucional.',
-                    $teacher->user_id !== null && isset($staff[$teacher->user_id]) && ! $canStaffEmail => self::STAFF_EMAIL,
-                    default => null,
-                },
-                'confirmTitle' => $title,
-                'confirmMessage' => $message,
-            ]];
-        })->all();
+        return $teachers->mapWithKeys(fn (Model $teacher): array => [$teacher->getKey() => [
+            'departments' => $departments[$teacher->getKey()],
+            'dischargeReason' => $dischargeReasons[$teacher->getKey()],
+            'emailReason' => match (true) {
+                ! $current['canEmail'] => 'Solo el jefe del departamento captura el correo institucional.',
+                ! $canEmail => 'Solo quien administra el departamento captura el correo institucional.',
+                $teacher->user_id !== null && isset($staff[$teacher->user_id]) && ! $canStaffEmail => self::STAFF_EMAIL,
+                default => null,
+            },
+        ]])->all();
     }
 
     /**
@@ -1021,10 +1204,10 @@ new #[Title('Validación de catálogos')] class extends Component
 
             return [$id => match (true) {
                 ! $current['canEdit'] => $current['editReason'],
-                ! isset($adscriptions[$id]) || ! $canRemove => 'Solo quien administra el departamento da de baja a sus docentes.',
-                $userId !== null && $userId === $me => 'No te puedes dar de baja a ti mismo.',
-                $userId !== null && isset($staff[$userId]) && ! $canDeactivate => 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.',
-                ! $canRemoveLast && ($departments[$id]['others'] ?? []) === [] => 'Es su único departamento: lo dan de baja el jefe de departamento, la Subdirección o el administrador.',
+                ! isset($adscriptions[$id]) || ! $canRemove => 'Solo quien administra el departamento quita a sus docentes.',
+                $userId !== null && $userId === $me => 'No te puedes quitar a ti mismo.',
+                $userId !== null && isset($staff[$userId]) && ! $canDeactivate => 'Ocupa un puesto: lo quitan el administrador o la Subdirección.',
+                ! $canRemoveLast && ($departments[$id]['others'] ?? []) === [] => 'Es su único departamento: lo quitan el jefe de departamento, la Subdirección o el administrador.',
                 default => null,
             }];
         })->all();
@@ -1089,7 +1272,7 @@ new #[Title('Validación de catálogos')] class extends Component
         return match ($catalog) {
             Catalog::Subjects => [
                 $fact('Teoría', $record->theory_hours, true), $fact('Práctica', $record->practice_hours, true), $fact('Créditos', $record->credits, true),
-                $fact('Tipo', $record->kind?->label()), $fact('Requiere laboratorio', $record->needs_lab ? 'Sí' : 'No'),
+                $fact('Tipo de materia', $record->kind?->label()), $fact('Requiere laboratorio', $record->needs_lab ? 'Sí' : 'No'),
             ],
             Catalog::StudyPlans => [
                 $fact('Versión', $record->version), $fact('Vigente desde', $record->valid_from?->translatedFormat('j M Y')),
@@ -1097,7 +1280,7 @@ new #[Title('Validación de catálogos')] class extends Component
             ],
             Catalog::Rooms => [
                 $fact('Campus', $record->campus?->code), $fact('Edificio', $record->building === null ? null : "{$record->building->code} · {$record->building->name}"),
-                $fact('Tipo', $record->type->label()), $fact('Capacidad', $record->capacity, true),
+                $fact('Tipo de salón', $record->type->label()), $fact('Capacidad', $record->capacity, true),
                 $fact('Características', implode(', ', $record->features ?? [])),
             ],
             default => [],
