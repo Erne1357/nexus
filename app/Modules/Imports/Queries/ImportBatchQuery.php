@@ -96,6 +96,31 @@ final class ImportBatchQuery
     }
 
     /**
+     * Los grupos propios del resumen de la plantilla (ImportTemplate::summaryGroups()), contados, con las claves de sus
+     * primeras `$sample` filas en el orden del archivo.
+     *
+     * @return list<array{label: string, hint: ?string, live: bool, count: int, keys: list<string>}>
+     */
+    public function summary(ImportBatch $batch, ImportTemplate $template, int $sample = 10): array
+    {
+        $key = $template->naturalKey()[0];
+
+        return array_map(fn (array $group): array => [
+            'label' => $group['label'],
+            'hint' => $group['hint'] ?? null,
+            'live' => $group['live'] ?? false,
+            'count' => (clone $group['rows'])->count(),
+            'keys' => (clone $group['rows'])
+                ->orderBy('row_number')
+                ->limit($sample)
+                ->selectRaw('normalized ->> ? as natural_key', [$key])
+                ->pluck('natural_key')
+                ->map(fn (mixed $value): string => (string) $value)
+                ->all(),
+        ], $template->summaryGroups($batch));
+    }
+
+    /**
      * Lo que "desactivar faltantes" haría con el lote: cuántos registros activos tiene el catálogo (los
      * del campus del lote si es de un campus) y cuántos de ellos no vienen en el archivo. Solo para una
      * plantilla que lo ofrece (ImportTemplate::deactivatesMissing()).
