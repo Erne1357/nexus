@@ -357,12 +357,13 @@ abstract class ImportTemplate
 
     /**
      * Lo que el resumen del lote cuenta aparte, propio del catálogo, además de las altas, los cambios y las filas con
-     * error: grupos de filas del lote (`import_rows`), cada uno con su etiqueta, una explicación opcional y la consulta
-     * de sus filas. ImportBatchQuery::summary() los cuenta y da las claves de las primeras; el asistente los muestra al
-     * validar y al aplicar. Un grupo `live` puede crecer después de aplicar el lote (lo que la cola hace después del
-     * commit), así que el asistente lo vuelve a leer un minuto más. Por omisión, ninguno.
+     * error: grupos de filas del lote (`import_rows`), cada uno con su etiqueta en plural (`label`) y, si cambia, en
+     * singular (`one`, para un grupo de una sola fila), una explicación opcional y la consulta de sus filas.
+     * ImportBatchQuery::summary() los cuenta y da las claves de las primeras; el asistente los muestra al validar y al
+     * aplicar. Un grupo `live` puede crecer después de aplicar el lote (lo que la cola hace después del commit), así que
+     * el asistente lo vuelve a leer un minuto más. Por omisión, ninguno.
      *
-     * @return list<array{label: string, hint?: string, live?: bool, rows: Builder<ImportRow>}>
+     * @return list<array{label: string, one?: string, hint?: string, live?: bool, rows: Builder<ImportRow>}>
      */
     public function summaryGroups(ImportBatch $batch): array
     {

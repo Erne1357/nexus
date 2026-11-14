@@ -96,8 +96,8 @@ final class ImportBatchQuery
     }
 
     /**
-     * Los grupos propios del resumen de la plantilla (ImportTemplate::summaryGroups()), contados, con las claves de sus
-     * primeras `$sample` filas en el orden del archivo.
+     * Los grupos propios del resumen de la plantilla (ImportTemplate::summaryGroups()), contados, con su etiqueta en
+     * singular si tienen una sola fila (`one`) y las claves de sus primeras `$sample` filas en el orden del archivo.
      *
      * @return list<array{label: string, hint: ?string, live: bool, count: int, keys: list<string>}>
      */
@@ -105,19 +105,23 @@ final class ImportBatchQuery
     {
         $key = $template->naturalKey()[0];
 
-        return array_map(fn (array $group): array => [
-            'label' => $group['label'],
-            'hint' => $group['hint'] ?? null,
-            'live' => $group['live'] ?? false,
-            'count' => (clone $group['rows'])->count(),
-            'keys' => (clone $group['rows'])
-                ->orderBy('row_number')
-                ->limit($sample)
-                ->selectRaw('normalized ->> ? as natural_key', [$key])
-                ->pluck('natural_key')
-                ->map(fn (mixed $value): string => (string) $value)
-                ->all(),
-        ], $template->summaryGroups($batch));
+        return array_map(function (array $group) use ($key, $sample): array {
+            $count = (clone $group['rows'])->count();
+
+            return [
+                'label' => $count === 1 ? ($group['one'] ?? $group['label']) : $group['label'],
+                'hint' => $group['hint'] ?? null,
+                'live' => $group['live'] ?? false,
+                'count' => $count,
+                'keys' => (clone $group['rows'])
+                    ->orderBy('row_number')
+                    ->limit($sample)
+                    ->selectRaw('normalized ->> ? as natural_key', [$key])
+                    ->pluck('natural_key')
+                    ->map(fn (mixed $value): string => (string) $value)
+                    ->all(),
+            ];
+        }, $template->summaryGroups($batch));
     }
 
     /**

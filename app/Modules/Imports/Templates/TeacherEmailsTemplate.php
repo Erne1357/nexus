@@ -149,10 +149,11 @@ class TeacherEmailsTemplate extends ImportTemplate
     public function summaryGroups(ImportBatch $batch): array
     {
         $groups = [
-            ['label' => 'RFC que no están en Nexus', 'rows' => $this->withError($batch, 'rfc', self::NOT_FOUND)],
-            ['label' => 'Correos fuera del dominio', 'rows' => $this->withError($batch, 'email', self::OUTSIDE_DOMAIN)],
+            ['label' => 'RFC que no están en Nexus', 'one' => 'RFC que no está en Nexus', 'rows' => $this->withError($batch, 'rfc', self::NOT_FOUND)],
+            ['label' => 'Correos fuera del dominio', 'one' => 'Correo fuera del dominio', 'rows' => $this->withError($batch, 'email', self::OUTSIDE_DOMAIN)],
             [
                 'label' => 'Repetidos',
+                'one' => 'Repetido',
                 'hint' => 'El archivo repite el RFC o da el mismo correo a dos docentes, o el correo ya es de otro docente.',
                 'rows' => $this->errorRows($batch)->where(fn (Builder $rows) => $rows
                     ->where(fn (Builder $repeated) => $this->hasMessage($repeated, 'rfc', self::REPEATED['rfc']))
@@ -161,6 +162,7 @@ class TeacherEmailsTemplate extends ImportTemplate
             ],
             [
                 'label' => 'Ya tenían otro correo',
+                'one' => 'Ya tenía otro correo',
                 'hint' => 'Su correo no se cambia; si el del archivo es el bueno, corrígelo en su ficha.',
                 'rows' => $this->withError($batch, 'email', self::OTHER_EMAIL),
             ],
@@ -172,6 +174,7 @@ class TeacherEmailsTemplate extends ImportTemplate
 
         $groups[] = [
             'label' => 'Invitaciones enviadas',
+            'one' => 'Invitación enviada',
             'hint' => 'A los docentes de un departamento que todavía no valida su catálogo de docentes les llega al validarlo.',
             'live' => true,
             'rows' => ImportRow::query()

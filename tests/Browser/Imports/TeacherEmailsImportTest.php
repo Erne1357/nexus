@@ -52,19 +52,19 @@ it('AC-19: el admin revisa el resumen de los correos, los aplica y ve cuántas i
         ->assertPathIs('/')
         ->navigate("/imports?lote={$this->batch->id}")
         ->waitForText('Resumen de correos institucionales de docentes')
-        ->assertSeeIn('@batch-summary', 'RFC que no están en Nexus')
+        ->assertSeeIn('@batch-summary', 'RFC que no está en Nexus')
         ->assertSeeIn('@batch-summary', 'PRUE099999AB1')
-        ->assertSeeIn('@batch-summary', 'Correos fuera del dominio')
+        ->assertSeeIn('@batch-summary', 'Correo fuera del dominio')
         ->assertSeeIn('@batch-summary', 'Repetidos')
-        ->assertSeeIn('@batch-summary', 'Ya tenían otro correo')
-        ->assertDontSeeIn('@batch-summary', 'Invitaciones enviadas');
+        ->assertSeeIn('@batch-summary', 'Ya tenía otro correo')
+        ->assertDontSeeIn('@batch-summary', 'Invitación enviada');
 
     $page->press('Aplicar 3 filas')
         ->assertSeeIn('#nexus-confirm', '¿Aplicar 3 filas?')
         ->click('@confirm-accept')
-        ->waitForText('Invitaciones enviadas')
+        ->waitForText('Invitación enviada')
         ->assertSee('Aplicado')
-        ->assertScript("[...document.querySelectorAll('[data-testid=batch-summary] dl > div')].find((group) => group.textContent.includes('Invitaciones enviadas'))?.textContent.replace(/\\s+/g, ' ').trim()", '1 Invitaciones enviadas PRUE090001AB1 A los docentes de un departamento que todavía no valida su catálogo de docentes les llega al validarlo.')
+        ->assertScript("[...document.querySelectorAll('[data-testid=batch-summary] dl > div')].find((group) => group.textContent.includes('Invitación enviada'))?.textContent.replace(/\\s+/g, ' ').trim()", '1 Invitación enviada PRUE090001AB1 A los docentes de un departamento que todavía no valida su catálogo de docentes les llega al validarlo.')
         ->assertNoJavaScriptErrors();
 
     $page->resize(390, 844)

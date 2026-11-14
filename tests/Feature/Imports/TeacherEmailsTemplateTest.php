@@ -201,18 +201,18 @@ describe('el archivo de TI', function () {
 
         $before = emailsSummary($batch);
 
-        expect($before)->not->toHaveKey('Invitaciones enviadas')
-            ->and($before['RFC que no están en Nexus'])->toBe(['count' => 1, 'keys' => ['PRUE099999AB1']])
-            ->and($before['Correos fuera del dominio'])->toBe(['count' => 1, 'keys' => ['PRUE090005AB1']])
+        expect($before)->not->toHaveKey('Invitación enviada')
+            ->and($before['RFC que no está en Nexus'])->toBe(['count' => 1, 'keys' => ['PRUE099999AB1']])
+            ->and($before['Correo fuera del dominio'])->toBe(['count' => 1, 'keys' => ['PRUE090005AB1']])
             ->and($before['Repetidos'])->toBe(['count' => 3, 'keys' => ['PRUE090001AB1', 'PRUE090006AB1', 'PRUE090007AB1']])
-            ->and($before['Ya tenían otro correo'])->toBe(['count' => 1, 'keys' => ['PRUE090004AB1']]);
+            ->and($before['Ya tenía otro correo'])->toBe(['count' => 1, 'keys' => ['PRUE090004AB1']]);
 
         $batch = app(ApplyImportBatch::class)->handle($batch->fresh(), $this->admin);
 
         expect([$batch->created_rows, $batch->updated_rows, $batch->unchanged_rows])->toBe([0, 2, 1])
             ->and(Teacher::where('rfc', 'PRUE090002AB1')->sole()->institutional_email)->toBe('docente.dos@cdjuarez.tecnm.mx')
             ->and(Teacher::where('rfc', 'PRUE090004AB1')->sole()->institutional_email)->toBe('docente.cuatro@cdjuarez.tecnm.mx')
-            ->and(emailsSummary($batch)['Invitaciones enviadas'])->toBe(['count' => 1, 'keys' => ['PRUE090001AB1']]);
+            ->and(emailsSummary($batch)['Invitación enviada'])->toBe(['count' => 1, 'keys' => ['PRUE090001AB1']]);
         Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     });
 
@@ -223,7 +223,7 @@ describe('el archivo de TI', function () {
 
         app(SendAccessInvitation::class)->handle(Teacher::where('rfc', 'PRUE090002AB1')->sole()->user, 'docente.dos@cdjuarez.tecnm.mx', $jefe);
 
-        expect(emailsSummary($batch)['Invitaciones enviadas']['count'])->toBe(1);
+        expect(emailsSummary($batch)['Invitación enviada']['count'])->toBe(1);
     });
 
     it('AC-19: el asistente muestra el resumen de los correos al validar y al aplicar', function () {
@@ -233,13 +233,24 @@ describe('el archivo de TI', function () {
         $page = Livewire::actingAs($this->admin)->withQueryParams(['lote' => $batch->id])->test('imports::pages.import-wizard');
         $summary = textOf(domOf($page->html())->querySelector('[data-testid="batch-summary"]'));
 
-        expect($summary)->toContain('RFC que no están en Nexus', 'PRUE099999AB1', 'Correos fuera del dominio', 'Repetidos', 'Ya tenían otro correo', 'PRUE090004AB1')
-            ->not->toContain('Invitaciones enviadas');
+        expect($summary)->toContain('1 RFC que no está en Nexus PRUE099999AB1', '1 Correo fuera del dominio', '3 Repetidos', '1 Ya tenía otro correo PRUE090004AB1')
+            ->not->toContain('Invitaci');
 
         $page->call('apply');
         $summary = textOf(domOf($page->html())->querySelector('[data-testid="batch-summary"]'));
 
-        expect($summary)->toContain('Invitaciones enviadas', 'PRUE090001AB1');
+        expect($summary)->toContain('1 Invitación enviada PRUE090001AB1');
+    });
+
+    it('AC-19: el resumen nombra en singular el grupo de una sola fila y en plural los demás', function () {
+        emailsFixtureTeachers();
+        $batch = validatedEmailsBatch($this->admin);
+
+        expect(array_keys(emailsSummary($batch)))->toBe(['RFC que no está en Nexus', 'Correo fuera del dominio', 'Repetidos', 'Ya tenía otro correo']);
+
+        $batch->rows()->where('normalized->rfc', 'PRUE099999AB1')->sole()->update(['errors' => [], 'status' => RowStatus::Valid]);
+
+        expect(array_keys(emailsSummary($batch)))->toBe(['RFC que no están en Nexus', 'Correo fuera del dominio', 'Repetidos', 'Ya tenía otro correo']);
     });
 
     it('AC-19: el jefe de departamento no importa correos: no entra al asistente ni sube el archivo', function () {
