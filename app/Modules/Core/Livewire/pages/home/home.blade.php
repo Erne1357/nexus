@@ -16,6 +16,15 @@
         @endif
 
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            @foreach ($cards as $card)
+                <section class="flex flex-col rounded-box border border-base-300 bg-base-100 p-4" aria-labelledby="home-card-{{ $card->key }}" data-testid="home-card-{{ $card->key }}">
+                    <h2 id="home-card-{{ $card->key }}" class="flex items-center gap-2 text-lg font-bold leading-tight"><x-icon :name="$card->icon" class="h-5 w-5 flex-none text-primary" aria-hidden="true" />{{ $card->title }}</h2>
+                    <p class="mt-1.5 flex-1">{{ $card->body }}</p>
+                    <div class="mt-3">
+                        <x-button :label="$card->actionLabel" icon-right="o-arrow-right" :link="$card->url" class="btn-primary btn-sm" />
+                    </div>
+                </section>
+            @endforeach
             @foreach ($blocks as $block)
                 <section class="rounded-box border border-base-300 bg-base-100 p-4" data-testid="role-block">
                     <h2 class="text-lg font-bold leading-tight">{{ $block['title'] }}</h2>

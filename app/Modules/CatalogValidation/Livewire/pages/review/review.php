@@ -641,14 +641,21 @@ new #[Title('Validación de catálogos')] class extends Component
         $this->success('Observación agregada', $this->describe($review, $record));
     }
 
-    public function resolveFlag(string $id, ResolveFlag $resolveFlag, CatalogRecordsQuery $records): void
+    /**
+     * Con la nota opcional de lo que se hizo, que le llega al jefe que la puso (CV10).
+     */
+    public function resolveFlag(string $id, ResolveFlag $resolveFlag, CatalogRecordsQuery $records, mixed $note = null): void
     {
+        if ($note !== null && ! is_string($note)) {
+            throw ValidationException::withMessages(['note' => 'La nota tiene que ser texto.']);
+        }
+
         $review = $this->currentReview();
         $this->authorize('resolveFlag', $review);
 
-        $resolveFlag->handle($review, $records->findFlag($review, $id), $this->user());
+        $resolveFlag->handle($review, $records->findFlag($review, $id), $this->user(), $note);
 
-        $this->success('Observación resuelta', e($review->title));
+        $this->success('Observación resuelta', e($review->heading));
     }
 
     /**

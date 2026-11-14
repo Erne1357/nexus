@@ -197,6 +197,19 @@ it('abrirla deja la credencial en el periodo del aviso y abre la pantalla en su 
         ->and(array_filter(array_keys(session()->all()), fn (string $key): bool => str_contains($key, 'campus')))->toBe([]);
 });
 
+it('abrirla deja la credencial en el periodo del aviso aunque no lleve campus ni modalidad (la validación de catálogos)', function () {
+    Term::factory()->current()->create();
+    $term = Term::factory()->create(['is_current' => false]);
+    $admin = User::factory()->admin()->create();
+    $admin->notify(notice(termId: $term->id));
+    $this->actingAs($admin);
+
+    $target = app(OpenNotification::class)->handle($admin, $admin->notifications()->value('id'));
+
+    expect($target->url)->toBe(route('home'))
+        ->and(app(Actor::class)->activeTerm()?->id)->toBe($term->id);
+});
+
 it('un parámetro campus guardado en el aviso gana al código de su campus', function () {
     $c2 = Campus::factory()->create(['code' => 'C2']);
     $admin = User::factory()->admin()->create();

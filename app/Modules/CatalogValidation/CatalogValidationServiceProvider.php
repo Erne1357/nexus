@@ -7,11 +7,14 @@ use App\Modules\Academic\Events\DepartmentUpdated;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Events\CatalogReviewFlagResolved;
 use App\Modules\CatalogValidation\Events\CatalogReviewValidated;
 use App\Modules\CatalogValidation\Listeners\CreateReviewsForDepartment;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnModalityUpdated;
 use App\Modules\CatalogValidation\Listeners\InviteTeacherAfterValidation;
 use App\Modules\CatalogValidation\Listeners\InviteTeachersOnReviewValidated;
+use App\Modules\CatalogValidation\Listeners\NotifyFlaggerOnFlagResolved;
+use App\Modules\CatalogValidation\Listeners\ReportValidationHomeCard;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
@@ -25,6 +28,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\HomeCardsRequested;
 use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -47,6 +51,8 @@ use Illuminate\Support\Facades\Event;
  * validación por catálogo (OpenCatalogValidation, CV9). Escucha a Faculty: la captura del jefe sobre un docente suyo inicia la
  * revisión de docentes (CV-S4). Validar la revisión de docentes invita a los docentes del departamento a activar su
  * acceso, y el que queda en condiciones después (correo capturado, adscripción, usuario) se invita entonces (AC-09).
+ * Resolver una observación avisa al jefe que la puso (CV10). Contesta a Inicio (HomeCardsRequested, de Core) con la
+ * tarjeta de la validación abierta (CV-S13).
  */
 final class CatalogValidationServiceProvider extends ModuleServiceProvider
 {
@@ -66,6 +72,8 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
         Event::listen([DepartmentCreated::class, DepartmentUpdated::class], CreateReviewsForDepartment::class);
 
         Event::listen(CatalogReviewValidated::class, InviteTeachersOnReviewValidated::class);
+        Event::listen(CatalogReviewFlagResolved::class, NotifyFlaggerOnFlagResolved::class);
+        Event::listen(HomeCardsRequested::class, ReportValidationHomeCard::class);
         Event::listen([TeacherUpdated::class, AdscriptionChanged::class, TeacherAccessChanged::class], InviteTeacherAfterValidation::class);
 
         foreach ([AvailabilityChanged::class, QualificationChanged::class, ExternalLoadChanged::class, TeacherUpdated::class, AdscriptionChanged::class, PositionChanged::class] as $event) {
