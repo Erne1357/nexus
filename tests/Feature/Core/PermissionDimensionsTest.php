@@ -55,8 +55,7 @@ function dimensionTables(): array
         'core.user' => 'users',
         // Los de correos y colas (1.22-G) no llevan campus: el registro de correos y los trabajos fallidos son de toda la instalación.
         'core.mail' => 'mail_log',
-        // Los permisos de roles y de parámetros, avisos y atajos (1.22-A, E y F) no llevan campus: son de toda la instalación.
-        'core.authz' => 'users',
+        // Los permisos de parámetros, avisos y atajos (1.22-E y F) no llevan campus: son de toda la instalación.
         'core.login_notice' => 'login_notices',
         'core.login_shortcut' => 'login_shortcuts',
         'core.setting' => 'settings',
