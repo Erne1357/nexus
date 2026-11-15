@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
@@ -55,6 +56,26 @@ it('AC-15: sin búsqueda ni puesto no lista a los alumnos que solo son alumnos; 
     expect($this->people->forTable()->pluck('name')->all())->toBe(['Ana Sin Puesto', 'Cris Alumna y Docente', 'Dora Exalumna'])
         ->and($this->people->forTable('21110001')->pluck('name')->all())->toBe(['Beto Alumno'])
         ->and($this->people->forTable('', Role::Alumno)->pluck('name')->all())->toBe(['Beto Alumno', 'Cris Alumna y Docente']);
+});
+
+it('1.22-C1: filtra por estado de la cuenta y por estado del acceso (AC-04), sin mostrar a los alumnos', function () {
+    User::factory()->create(['name' => 'Ana Con Acceso']);
+    User::factory()->create(['name' => 'Beto Debe Cambiar', 'must_change_password' => true]);
+    User::factory()->create(['name' => 'Cris Sin Acceso', 'password' => null]);
+    User::factory()->create(['name' => 'Dora Invitada', 'password' => null])->forceFill(['access_invited_at' => now()])->save();
+    User::factory()->create(['name' => 'Eva Inactiva', 'is_active' => false]);
+    User::factory()->withRole(Role::Alumno)->create(['name' => 'Fito Alumno', 'password' => null]);
+
+    $names = fn (?bool $active, ?UserAccess $access): array => $this->people->forTable(active: $active, access: $access)->pluck('name')->all();
+
+    expect($names(true, null))->toBe(['Ana Con Acceso', 'Beto Debe Cambiar', 'Cris Sin Acceso', 'Dora Invitada'])
+        ->and($names(false, null))->toBe(['Eva Inactiva'])
+        ->and($names(null, UserAccess::Granted))->toBe(['Ana Con Acceso', 'Eva Inactiva'])
+        ->and($names(null, UserAccess::MustChangePassword))->toBe(['Beto Debe Cambiar'])
+        ->and($names(null, UserAccess::None))->toBe(['Cris Sin Acceso'])
+        ->and($names(null, UserAccess::Invited))->toBe(['Dora Invitada'])
+        ->and($names(true, UserAccess::Granted))->toBe(['Ana Con Acceso'])
+        ->and($this->people->forTable('Fito', access: UserAccess::None)->pluck('name')->all())->toBe(['Fito Alumno']);
 });
 
 it('filtra por un puesto vigente y trae solo los vigentes', function () {

@@ -1,7 +1,8 @@
 {{--
     «Personas y puestos» (DESIGN.md, «Personas y puestos»), con la anatomía de una pantalla de catálogo: encabezado,
-    barra con la búsqueda y el filtro «Puesto» (sin acción principal) y una tabla con el usuario en Mono, la persona,
-    un chip por puesto vigente y el estado; «Ver puestos» abre la ficha. Debajo de 768 px la tabla cede su lugar a
+    barra con la búsqueda, los filtros «Puesto», «Estado» y «Acceso» y la acción principal «Dar de alta» (1.22-C1, un
+    cajón con usuario, nombre y correo institucional), y una tabla con el usuario en Mono, la persona, un chip por puesto
+    vigente, el estado y el acceso (AC-04); «Ver puestos» abre la ficha. Debajo de 768 px la tabla cede su lugar a
     renglones apilados, que no repiten los data-testid de la tabla. La pestaña «Nombramientos» (U3 opción A) es una
     tabla plana de nombramientos con modalidad, campus y vigencia, y sus filtros.
 --}}
@@ -33,6 +34,16 @@
         </x-slot:search>
 
         <x-select wire:model.live="role" aria-label="Puesto" :options="$roles" placeholder="Puesto" />
+        <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" data-testid="filter-status" />
+        <x-select wire:model.live="access" aria-label="Acceso" :options="$accesses" placeholder="Acceso" data-testid="filter-access" />
+
+        <x-slot:action>
+            @if ($canCreate)
+                <x-button label="Dar de alta" icon="o-plus" class="btn-primary" wire:click="openCreate" spinner="openCreate" data-testid="create-user" />
+            @else
+                <x-button label="Dar de alta" icon="o-plus" class="btn-primary w-full" disabled data-testid="create-user" />
+            @endif
+        </x-slot:action>
     </x-core::catalog-toolbar>
 
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
@@ -62,6 +73,10 @@
                 @include('core::people.status-cell', ['user' => $user])
             @endscope
 
+            @scope('cell_access', $user, $accessOf)
+                <x-core::status-badge :tone="$accessOf[$user->id]->tone()" :label="$accessOf[$user->id]->label()" />
+            @endscope
+
             @scope('actions', $user)
                 <div class="flex justify-end">
                     <a href="{{ route('core.people.show', $user->id) }}" wire:navigate class="btn btn-ghost btn-sm" data-testid="view-{{ $user->username }}" aria-label="Ver puestos de {{ $user->name }}">Ver puestos</a>
@@ -81,7 +96,10 @@
                         <span @class(['min-w-0 flex-1', 'font-semibold' => $user->is_active])>{{ $user->name }}</span>
                     </div>
 
-                    @include('core::people.status-cell', ['user' => $user])
+                    <div class="flex flex-wrap gap-1.5">
+                        @include('core::people.status-cell', ['user' => $user])
+                        <x-core::status-badge :tone="$accessOf[$user->id]->tone()" :label="$accessOf[$user->id]->label()" />
+                    </div>
 
                     @if ($summaries[$user->id] !== [])
                         <div class="flex flex-wrap gap-1.5">
@@ -110,5 +128,9 @@
             </div>
         @endif
     </div>
+
+    <x-drawer wire:model.live="showCreate" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="create-user-title" data-testid="create-user-drawer">
+        @include('core::people.create-drawer')
+    </x-drawer>
     @endif
 </div>
