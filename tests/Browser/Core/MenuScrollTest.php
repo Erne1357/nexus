@@ -66,9 +66,9 @@ it('al cargar deja a la vista la entrada activa y se desvanece donde hay más, t
     signInWithShortWindow()
         ->navigate('/campus')
         ->assertScript(MENU_SCROLL_COLUMN.'.scrollTop', 0)
-        ->click('#nexus-menu a[data-label="Importaciones"]')
-        ->assertPathIs('/imports')
-        ->assertAttribute('#nexus-menu a[data-label="Importaciones"]', 'aria-current', 'page')
+        ->click('#nexus-menu a[data-label="Correos y colas"]')
+        ->assertPathIs('/configuracion/correos-y-colas')
+        ->assertAttribute('#nexus-menu a[data-label="Correos y colas"]', 'aria-current', 'page')
         ->assertScript('(() => {
             const c = '.MENU_SCROLL_COLUMN.';
             const box = c.getBoundingClientRect();
