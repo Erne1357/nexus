@@ -33,7 +33,7 @@ final class DefaultPassword
         $value = $this->config->get('auth.default_password');
 
         if (! is_string($value) || $value === '') {
-            throw new RuntimeException('Define NEXUS_DEFAULT_PASSWORD en el .env para crear usuarios de personal o reiniciar contraseñas.');
+            throw new RuntimeException('Define NEXUS_DEFAULT_PASSWORD en el .env para comparar o rechazar la contraseña por defecto. El alta del personal ya no la usa: nace sin acceso y entra por invitación (CF-07).');
         }
 
         return $value;

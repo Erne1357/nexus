@@ -11,7 +11,7 @@ use Spatie\Activitylog\Models\Activity;
 final readonly class ActivityDetail
 {
     /**
-     * @param  list<array{field: string, old: string, new: string}>  $changes
+     * @param  list<array{field: string, old: string, new: string}>  $changes  el nombre de la columna y los valores, ya legibles (ActivityAttributes)
      * @param  array<string, mixed>  $properties  lo de `properties` sin `acting_as` ni lo que ya salió en `$changes`
      */
     public function __construct(

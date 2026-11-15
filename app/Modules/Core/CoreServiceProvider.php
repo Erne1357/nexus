@@ -25,9 +25,14 @@ use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\DemoCheckpoint;
 use App\Modules\Core\Enums\DemoVolume;
+use App\Modules\Core\Enums\LoginShortcutKind;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
+use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\Stage;
+use App\Modules\Core\Enums\StageStatus;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
@@ -37,6 +42,8 @@ use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Livewire\BlockViewDataCalls;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\LoginNotice;
+use App\Modules\Core\Models\LoginShortcut;
 use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
@@ -45,12 +52,15 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
+use App\Modules\Core\Models\TermStage;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
+use App\Modules\Core\Support\ActivityAttributes;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Mail\Events\MessageSent;
@@ -120,6 +130,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->getProviders(ModuleServiceProvider::class),
         ));
 
+        // Singleton porque es inmutable: las etiquetas de columnas y enums que declaran los módulos para la bitácora.
+        $this->app->singleton(ActivityAttributes::class, fn (Application $app): ActivityAttributes => ActivityAttributes::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
+
         // Singleton porque es inmutable: el catálogo de permisos, lo de fábrica por puesto y los candados de todos
         // los módulos, sin nada del usuario ni de la petición. Lo que vale hoy lo dice GrantTable.
         $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
@@ -148,6 +163,49 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->make(PermissionRegistry::class);
             $app->make(SettingRegistry::class);
         });
+    }
+
+    /**
+     * Las columnas que se repiten en toda la bitácora (`*`) y las de los modelos de Core cuyo nombre cambia de sentido.
+     */
+    public function activityAttributes(): array
+    {
+        return [
+            '*' => [
+                'code' => 'Código', 'name' => 'Nombre', 'username' => 'Usuario', 'email' => 'Correo',
+                'institutional_email' => 'Correo institucional', 'email_verified_at' => 'Correo confirmado',
+                'is_active' => 'Activo', 'is_primary' => 'Principal', 'is_current' => 'Vigente', 'deleted' => 'Borrado',
+                'must_change_password' => 'Debe cambiar su contraseña', 'access' => ['Acceso', UserAccess::class],
+                'password_origin' => ['Origen de la contraseña', PasswordOrigin::class],
+                'access_invited_at' => 'Invitación enviada', 'access_invited_by' => 'Invitación enviada por',
+                'deactivated_at' => 'Dada de baja', 'deactivated_by' => 'Dada de baja por', 'last_login_at' => 'Último acceso',
+                'role' => ['Puesto', Role::class], 'stage' => ['Etapa', Stage::class],
+                'title' => 'Título', 'description' => 'Descripción', 'note' => 'Nota', 'notes' => 'Notas', 'comment' => 'Comentario',
+                'reason' => 'Motivo', 'url' => 'Enlace', 'link_url' => 'Enlace', 'image_path' => 'Imagen', 'file_path' => 'Archivo',
+                'starts_at' => 'Inicio', 'ends_at' => 'Fin', 'starts_on' => 'Empieza', 'ends_on' => 'Termina',
+                'valid_from' => 'Vigente desde', 'valid_to' => 'Vigente hasta', 'day' => 'Día', 'sort_order' => 'Orden', 'sort' => 'Orden',
+                'order' => 'Orden', 'semester' => 'Semestre', 'level' => 'Nivel', 'capacity' => 'Capacidad', 'features' => 'Características',
+                'settings' => 'Configuración', 'permissions' => 'Permisos', 'columns' => 'Columnas', 'quotas' => 'Cupos',
+                'availability' => 'Disponibilidad', 'status' => 'Estado', 'kind' => 'Tipo', 'type' => 'Tipo', 'key' => 'Parámetro', 'value' => 'Valor',
+                'campus_id' => 'Campus', 'department_id' => 'Departamento', 'career_id' => 'Carrera', 'building_id' => 'Edificio',
+                'room_id' => 'Salón', 'term_id' => 'Periodo', 'modality_id' => 'Modalidad', 'user_id' => 'Usuario',
+                'teacher_id' => 'Docente', 'subject_id' => 'Materia', 'group_id' => 'Grupo', 'parent_id' => 'Unidad superior',
+                'study_plan_id' => 'Plan de estudios', 'org_unit_id' => 'Unidad del organigrama', 'specialty_id' => 'Especialidad',
+                'prerequisite_subject_id' => 'Materia requisito', 'review_id' => 'Validación',
+                'applied_at' => 'Aplicado', 'applied_by' => 'Aplicado por', 'decided_at' => 'Decidido', 'decided_by' => 'Decidido por',
+                'validated_at' => 'Validado', 'validated_by' => 'Validado por', 'resolved_at' => 'Resuelto', 'resolved_by' => 'Resuelto por',
+                'resolution_note' => 'Nota de la resolución', 'follows_factory' => 'Sigue lo de fábrica',
+            ],
+            Setting::class => ['key' => 'Parámetro', 'value' => 'Valor', 'scope' => 'Alcance', 'scope_id' => 'Alcance (registro)'],
+            Term::class => ['code' => 'Clave', 'name' => 'Nombre', 'starts_on' => 'Inicio del periodo', 'ends_on' => 'Fin del periodo', 'is_current' => 'Periodo vigente'],
+            TermStage::class => ['status' => ['Estado', StageStatus::class]],
+            OrgUnit::class => ['kind' => 'Tipo de unidad', 'sort' => 'Orden', 'name' => 'Nombre de la unidad'],
+            RoleAssignment::class => ['valid_from' => 'Desde', 'valid_to' => 'Hasta'],
+            LoginNotice::class => ['title' => 'Título', 'link_url' => 'Enlace', 'image_path' => 'Imagen'],
+            LoginShortcut::class => ['kind' => ['Tipo', LoginShortcutKind::class]],
+            PermissionSet::class => ['name' => 'Nombre del puesto', 'description' => 'Descripción'],
+            User::class => ['name' => 'Nombre', 'is_active' => 'Activo'],
+        ];
     }
 
     public function navigation(): array

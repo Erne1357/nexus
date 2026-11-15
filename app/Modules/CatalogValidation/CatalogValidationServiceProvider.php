@@ -5,7 +5,9 @@ namespace App\Modules\CatalogValidation;
 use App\Modules\Academic\Events\DepartmentCreated;
 use App\Modules\Academic\Events\DepartmentUpdated;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewFlagResolved;
 use App\Modules\CatalogValidation\Events\CatalogReviewValidated;
@@ -17,6 +19,7 @@ use App\Modules\CatalogValidation\Listeners\NotifyFlaggerOnFlagResolved;
 use App\Modules\CatalogValidation\Listeners\ReportValidationHomeCard;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
 use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
 use App\Modules\Core\Authorization\Actor;
@@ -181,6 +184,14 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
             new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)->where('validated_by', $demo->admin()->getKey())->count()) === 0
                 ? true
                 : "{$byAdmin} revisiones las validó el admin: a su departamento le falta jefe."),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            CatalogReview::class => ['status' => ['Estado de la validación', ReviewStatus::class], 'catalog' => ['Catálogo', Catalog::class]],
+            CatalogReviewFlag::class => ['flag' => ['Marca', ReviewFlag::class], 'flagged_by' => 'Marcado por', 'flaggable_id' => 'Registro marcado', 'flaggable_type' => 'Tipo de registro marcado'],
         ];
     }
 }

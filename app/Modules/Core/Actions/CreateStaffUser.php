@@ -2,40 +2,30 @@
 
 namespace App\Modules\Core\Actions;
 
-use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Events\StaffUserCreated;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Support\DefaultPassword;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Da de alta un usuario de personal, activo y obligado a cambiar su contraseña en su primer acceso. Quien lo da de alta
- * decide siempre si nace con acceso (`$withAccess` no tiene valor por omisión): sin acceso, sin contraseña, hasta que
- * reciba su invitación (AC-01, AC-02 y AC-05), así nacen los de los docentes y los del panel, que después invita
- * (CF-07); con acceso, con la contraseña por defecto, que ningún camino del panel pide desde 1.22-C2, y sin
- * NEXUS_DEFAULT_PASSWORD falla antes de escribir. Un username repetido es una ValidationException sobre
+ * Da de alta un usuario de personal, activo y obligado a cambiar su contraseña en su primer acceso. Siempre nace sin
+ * acceso, sin contraseña, hasta que reciba su invitación (AC-01, AC-05 y CF-07): así nacen los de los docentes y los
+ * del panel, que después invita. Un username repetido es una ValidationException sobre
  * `username`, también si otra sesión lo toma entre la revisión y el insert; un correo que otro usuario ya tiene (sin
  * importar mayúsculas, lo garantiza la base) es una sobre `email`. El correo se guarda como llega: quien llama lo
- * normaliza (el panel, con UserAccountRules, CF-S3). La bitácora nunca lleva la contraseña.
+ * normaliza (el panel, con UserAccountRules, CF-S3).
  * Después del commit avisa con StaffUserCreated.
  */
 final class CreateStaffUser
 {
-    public function __construct(private readonly DefaultPassword $defaultPassword) {}
-
     /**
      * @throws ValidationException
-     * @throws RuntimeException si `$withAccess` y falta NEXUS_DEFAULT_PASSWORD
      */
-    public function handle(string $username, string $name, bool $withAccess, ?string $email = null): User
+    public function handle(string $username, string $name, ?string $email = null): User
     {
-        $passwordHash = $withAccess ? $this->defaultPassword->hash() : null;
-
-        return DB::transaction(function () use ($username, $name, $email, $passwordHash): User {
+        return DB::transaction(function () use ($username, $name, $email): User {
             if (User::where('username', $username)->exists()) {
                 throw $this->usernameTaken();
             }
@@ -45,8 +35,8 @@ final class CreateStaffUser
                     'username' => $username,
                     'name' => $name,
                     'email' => $email,
-                    'password' => $passwordHash,
-                    'password_origin' => $passwordHash === null ? null : PasswordOrigin::Default,
+                    'password' => null,
+                    'password_origin' => null,
                     'is_active' => true,
                     'must_change_password' => true,
                 ]);
@@ -58,7 +48,7 @@ final class CreateStaffUser
                 ->performedOn($user)
                 ->event(ActivityEvent::Created)
                 ->withChanges(['attributes' => $user->only(['username', 'name', 'email', 'is_active', 'must_change_password'])])
-                ->log("Dio de alta al usuario {$user->username}".($passwordHash === null ? ', sin acceso' : ''));
+                ->log("Dio de alta al usuario {$user->username}, sin acceso");
 
             StaffUserCreated::dispatch($user);
 

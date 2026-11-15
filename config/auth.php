@@ -132,9 +132,8 @@ return [
     | Contraseña por defecto del personal
     |--------------------------------------------------------------------------
     |
-    | La reciben los usuarios de personal que se dan de alta con acceso
-    | (CreateStaffUser con withAccess). El panel ya no la usa: invita por
-    | enlace (CF-07). Quien entra con ella queda obligado a cambiarla y no
+    | El alta del personal ya no la pone: todo usuario nace sin acceso y
+    | entra por la invitación con enlace (CF-07). Quien entra con ella queda obligado a cambiarla y no
     | puede volver a elegirla. Solo vive en .env (NEXUS_DEFAULT_PASSWORD):
     | el repositorio es público.
     |

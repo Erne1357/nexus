@@ -10,10 +10,13 @@
     una pantalla de catálogo"): el botón es solo ese icono, del alto de la acción principal, y `label` es su
     nombre accesible. Sin `name` ni `label`, el nombre accesible es «Acciones».
 
+    Con `size="md"` el botón mide como un botón normal (el de un encabezado, junto a otro botón; 44 px en celular, como
+    los botones de la ficha); por omisión, `sm`, el de las tablas.
+
     <x-core::row-menu :name="$campus->code" :compact="$inTable"> ...elementos... </x-core::row-menu>
     <x-core::row-menu icon="o-ellipsis-vertical" label="Más acciones"> ...elementos... </x-core::row-menu>
 --}}
-@props(['name' => null, 'compact' => false, 'icon' => null, 'label' => null])
+@props(['name' => null, 'compact' => false, 'icon' => null, 'label' => null, 'size' => 'sm'])
 
 <div
     x-data="{
@@ -67,7 +70,7 @@
         :popovertarget="$id('row-menu')"
         aria-haspopup="menu"
         aria-label="{{ $label ?? ($name === null ? 'Acciones' : 'Acciones de '.$name) }}"
-        @class(['btn btn-ghost', 'btn-sm' => $icon === null, 'btn-square' => $icon !== null])
+        @class(['btn btn-ghost', 'btn-sm' => $icon === null && $size === 'sm', 'max-md:h-11' => $size === 'md', 'btn-square' => $icon !== null])
     >
         @if ($icon !== null)
             <x-icon :name="$icon" class="h-5 w-5" aria-hidden="true" />

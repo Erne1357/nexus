@@ -181,6 +181,19 @@ abstract class ModuleServiceProvider extends ServiceProvider
         return [];
     }
 
+    /**
+     * Cómo muestra la bitácora (CF-S5) las columnas de los modelos del módulo: `modelo => [columna => etiqueta]`, o
+     * `[etiqueta, EnumClass]` si la columna guarda un enum con `label()`. La llave `'*'` vale para cualquier tipo de
+     * registro; la de un modelo (su clase) gana cuando la columna cambia de sentido (`status`, `kind`). Lo que falte
+     * sale con la columna y los guiones bajos como espacios (ActivityAttributes).
+     *
+     * @return array<string, array<string, string|array{0: string, 1: class-string<\BackedEnum>}>>
+     */
+    public function activityAttributes(): array
+    {
+        return [];
+    }
+
     protected function moduleAlias(): string
     {
         return Str::kebab(basename($this->modulePath()));
