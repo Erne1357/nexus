@@ -479,6 +479,42 @@ describe('observaciones', function () {
             ->and(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::InReview);
     });
 
+    it('CV13: «Guardar» con una observación a medias no guarda ni marca el registro, pide agregarla o quitarla junto al campo y lleva la vista a ese campo', function (array $draft, string $field) {
+        $component = reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->call('edit', $this->subject->id)
+            ->set('name', 'Programación Orientada a Objetos I')
+            ->set($draft)
+            ->call('save')
+            ->assertHasErrors([$field => 'Agrega la observación o quítala antes de guardar.'])
+            ->assertDispatched('pending-flag', field: $field)
+            ->assertSet('showDrawer', true)
+            ->assertSet('editingId', $this->subject->id)
+            ->assertSee('Agrega la observación o quítala antes de guardar.');
+
+        expect($this->subject->fresh()->name)->toBe('Programación Orientada a Objetos')
+            ->and(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeFalse()
+            ->and(CatalogReviewFlag::query()->exists())->toBeFalse()
+            ->and(lastToastOf($component))->toBeNull();
+    })->with([
+        'con el tipo y el comentario' => [['flag' => 'missing_data', 'comment' => 'Las horas de práctica están en 0.'], 'flag'],
+        'solo con el tipo' => [['flag' => 'duplicate'], 'flag'],
+        'solo con el comentario' => [['comment' => 'Revisar las horas.'], 'comment'],
+    ]);
+
+    it('CV13: después de agregar la observación o de quitarla, «Guardar» guarda y marca el registro', function (bool $adds) {
+        $component = reviewPage($this->jefe, ['catalogo' => 'subjects'])
+            ->call('edit', $this->subject->id)
+            ->set('flag', 'missing_data')
+            ->set('comment', 'Las horas de práctica están en 0.');
+
+        $adds ? $component->call('addFlag') : $component->set('flag', '')->set('comment', '  ');
+
+        $component->call('save')->assertHasNoErrors()->assertNotDispatched('pending-flag')->assertSet('showDrawer', false);
+
+        expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeTrue()
+            ->and(CatalogReviewFlag::query()->count())->toBe($adds ? 1 : 0);
+    })->with(['agregada' => true, 'quitada' => false]);
+
     it('«Otra» exige comentario y capacidad incorrecta no se ofrece en materias', function () {
         reviewPage($this->jefe, ['catalogo' => 'subjects'])
             ->call('edit', $this->subject->id)

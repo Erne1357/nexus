@@ -28,7 +28,8 @@ use Illuminate\Support\Facades\Queue;
 | CV11 (D3 y D6, confirmados el 14 de noviembre de 2026): la apertura y el recordatorio de la validación llevan la fecha límite
 | (el fin de la ventana general de la etapa «Validación de catálogos» del periodo) y llegan también al correo del jefe;
 | el recordatorio tiene su propio título y cuerpo, con lo que le falta. Sin correo institucional el aviso va solo a la
-| campana (CV11, supuesto por confirmar). El aviso ya no lleva campus: la validación es de todo el Tec.
+| campana; a qué correo va (el de la ficha del jefe o el de su usuario) lo prueba PendingReviewsMailAddressTest (CV11,
+| confirmado el 15 de noviembre de 2026). El aviso ya no lleva campus: la validación es de todo el Tec.
 */
 
 beforeEach(function () {

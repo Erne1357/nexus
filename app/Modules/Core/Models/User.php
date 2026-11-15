@@ -5,6 +5,7 @@ namespace App\Modules\Core\Models;
 use App\Modules\Core\Database\Factories\UserFactory;
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Notifications\RoutesMailAddress;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Notifications\Notification;
 
 /**
  * Usuario de Nexus. Entra con `username` (RFC o de control del SII); el correo
@@ -24,6 +26,7 @@ use Illuminate\Notifications\Notifiable;
  * trigger en cada cambio de sus nombramientos; `last_role` es el último perfil que usó (AZ-S4). `deactivated_at` y
  * `deactivated_by` dicen cuándo y quién dio de baja la cuenta en el panel (DeactivateUser, CF-05): mientras estén, solo
  * el admin la reactiva (CF-09).
+ * Su correo de avisos es `email`, salvo que la notificación elija otro (RoutesMailAddress, CV11).
  */
 #[Fillable(['username', 'name', 'email', 'password', 'password_origin', 'is_active', 'must_change_password', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -60,5 +63,14 @@ class User extends Authenticatable
     public function roleAssignments(): HasMany
     {
         return $this->hasMany(RoleAssignment::class);
+    }
+
+    /**
+     * A qué correo le llega una notificación: al que ella elige si implementa RoutesMailAddress (null: a ninguno); si
+     * no, a `email`, como en Laravel.
+     */
+    public function routeNotificationForMail(?Notification $notification = null): ?string
+    {
+        return $notification instanceof RoutesMailAddress ? $notification->mailAddressFor($this) : $this->email;
     }
 }
