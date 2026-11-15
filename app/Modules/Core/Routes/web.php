@@ -13,10 +13,11 @@ use Illuminate\Support\Facades\Route;
 */
 
 /*
-| El enlace de la invitación de acceso (AC-08): el GET muestra el botón y el POST, al mismo enlace firmado, activa el
-| acceso. Sirve con o sin sesión (en una computadora compartida puede haber otra abierta) y no inicia ninguna. La firma
-| la revisa AccessInvitationPage, que responde igual a todo enlace que no sirve. El límite es por IP y holgado, porque
-| una red del Tec sale por una sola IP y las invitaciones salen juntas al validar.
+| El enlace de la invitación de acceso (AC-08): el GET muestra el formulario para elegir la contraseña y el POST, al
+| mismo enlace firmado, activa el acceso con ella. Sirve con o sin sesión (en una computadora compartida puede haber otra
+| abierta); al activar, inicia la del invitado. La firma la revisa AccessInvitationPage, que responde igual a todo
+| enlace que no sirve. El límite es por IP y holgado, porque una red del Tec sale por una sola IP y las invitaciones
+| salen juntas al validar.
 */
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/access/{user}/{hash}', [AccessInvitationPage::class, 'show'])->name('access.accept');

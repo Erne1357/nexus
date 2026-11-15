@@ -2,16 +2,13 @@
 
 namespace App\Modules\CatalogValidation\Listeners;
 
-use App\Modules\CatalogValidation\Enums\Catalog;
-use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Jobs\InviteReviewTeachersJob;
-use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
 use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Faculty\Models\Teacher;
-use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Un docente que queda en condiciones de recibir su invitación después de que su departamento validó la revisión de
@@ -20,11 +17,13 @@ use Illuminate\Database\Eloquent\Builder;
  * por confirmar). Encola InviteReviewTeachersJob solo para ese docente, que lo invita si sigue sin acceso ni invitación
  * vigente, a nombre de quien hizo el cambio o, sin él, de quien validó.
  *
- * Cuenta una revisión de docentes validada de cualquiera de sus departamentos en un periodo que no ha terminado (el
- * actual o uno que se prepara; supuesto por confirmar), la primera que se validó. Sale después del commit de Faculty.
+ * Cuenta la revisión que libera su invitación (TeacherInvitationReleaseQuery): una de docentes validada de cualquiera de
+ * sus departamentos en un periodo que no ha terminado, la primera que se validó. Sale después del commit de Faculty.
  */
 final class InviteTeacherAfterValidation
 {
+    public function __construct(private readonly TeacherInvitationReleaseQuery $releases) {}
+
     public function handle(TeacherUpdated|AdscriptionChanged|TeacherAccessChanged $event): void
     {
         $teacher = match (true) {
@@ -37,13 +36,7 @@ final class InviteTeacherAfterValidation
             return;
         }
 
-        $review = CatalogReview::query()
-            ->where('catalog', Catalog::Teachers)
-            ->where('status', ReviewStatus::Validated)
-            ->whereIn('department_id', $teacher->adscriptions()->select('department_id'))
-            ->whereHas('term', fn (Builder $term) => $term->where('ends_on', '>=', today()->toDateString()))
-            ->orderBy('validated_at')
-            ->first();
+        $review = $this->releases->releasingReview($teacher);
 
         if ($review !== null) {
             InviteReviewTeachersJob::dispatch($review->getKey(), $teacher->getKey(), $event instanceof TeacherAccessChanged ? null : $event->actor?->getKey());

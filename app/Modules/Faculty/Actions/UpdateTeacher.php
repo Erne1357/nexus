@@ -14,7 +14,6 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
@@ -47,12 +46,15 @@ final class UpdateTeacher
 
     /**
      * @param  array{name?: string, email?: ?string, institutional_email?: ?string, degree?: TeacherDegree|string|null, hired_on?: ?string}  $data
+     * @param  User|null  $actor  quien hace el cambio; sin él, el de la sesión (una importación corre en la cola, sin
+     *                            sesión, y lo pasa)
      *
      * @throws ValidationException
-     * @throws RuntimeException si hay que volver a mandar la invitación y falta NEXUS_DEFAULT_PASSWORD
      */
-    public function handle(Teacher $teacher, array $data): Teacher
+    public function handle(Teacher $teacher, array $data, ?User $actor = null): Teacher
     {
+        $actor ??= auth()->user() instanceof User ? auth()->user() : null;
+
         $data = Arr::only($data, self::FIELDS);
 
         if (array_key_exists('name', $data)) {
@@ -73,7 +75,7 @@ final class UpdateTeacher
             }
         }
 
-        return DB::transaction(function () use ($teacher, $data): Teacher {
+        return DB::transaction(function () use ($teacher, $data, $actor): Teacher {
             $teacher->setRawAttributes($teacher->newQuery()->lockForUpdate()->findOrFail($teacher->getKey())->getAttributes(), sync: true);
             $old = $this->rules->logged($teacher, self::FIELDS);
 
@@ -100,6 +102,7 @@ final class UpdateTeacher
 
             activity()
                 ->performedOn($teacher)
+                ->causedBy($actor)
                 ->event(ActivityEvent::Updated)
                 ->withChanges([
                     'attributes' => $this->rules->logged($teacher, $changed),
@@ -107,10 +110,8 @@ final class UpdateTeacher
                 ])
                 ->log("Actualizó al docente {$teacher->rfc}");
 
-            $actor = auth()->user();
-
             if (in_array('institutional_email', $changed, true)) {
-                $this->refreshInvitation($teacher, $actor instanceof User ? $actor : null);
+                $this->refreshInvitation($teacher, $actor);
             }
 
             TeacherUpdated::dispatch($teacher, $changed, $actor);

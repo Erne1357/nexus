@@ -7,14 +7,18 @@ use App\Modules\Academic\Events\DepartmentUpdated;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Events\CatalogReviewFlagResolved;
 use App\Modules\CatalogValidation\Events\CatalogReviewValidated;
 use App\Modules\CatalogValidation\Listeners\CreateReviewsForDepartment;
 use App\Modules\CatalogValidation\Listeners\CreateRoomsReviewsOnModalityUpdated;
 use App\Modules\CatalogValidation\Listeners\InviteTeacherAfterValidation;
 use App\Modules\CatalogValidation\Listeners\InviteTeachersOnReviewValidated;
+use App\Modules\CatalogValidation\Listeners\NotifyFlaggerOnFlagResolved;
+use App\Modules\CatalogValidation\Listeners\ReportValidationHomeCard;
 use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
+use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -24,6 +28,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\HomeCardsRequested;
 use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
@@ -34,6 +39,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Events\QualificationChanged;
 use App\Modules\Faculty\Events\TeacherAccessChanged;
 use App\Modules\Faculty\Events\TeacherUpdated;
+use App\Modules\Faculty\Queries\InvitationRelease;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -45,9 +51,19 @@ use Illuminate\Support\Facades\Event;
  * validación por catálogo (OpenCatalogValidation, CV9). Escucha a Faculty: la captura del jefe sobre un docente suyo inicia la
  * revisión de docentes (CV-S4). Validar la revisión de docentes invita a los docentes del departamento a activar su
  * acceso, y el que queda en condiciones después (correo capturado, adscripción, usuario) se invita entonces (AC-09).
+ * Resolver una observación avisa al jefe que la puso (CV10). Contesta a Inicio (HomeCardsRequested, de Core) con la
+ * tarjeta de la validación abierta (CV-S13).
  */
 final class CatalogValidationServiceProvider extends ModuleServiceProvider
 {
+    public function register(): void
+    {
+        parent::register();
+
+        // Faculty pregunta si la primera invitación de un docente ya se liberó con la validación (AC-07, AC-09).
+        $this->app->bind(InvitationRelease::class, TeacherInvitationReleaseQuery::class);
+    }
+
     public function boot(): void
     {
         parent::boot();
@@ -56,6 +72,8 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
         Event::listen([DepartmentCreated::class, DepartmentUpdated::class], CreateReviewsForDepartment::class);
 
         Event::listen(CatalogReviewValidated::class, InviteTeachersOnReviewValidated::class);
+        Event::listen(CatalogReviewFlagResolved::class, NotifyFlaggerOnFlagResolved::class);
+        Event::listen(HomeCardsRequested::class, ReportValidationHomeCard::class);
         Event::listen([TeacherUpdated::class, AdscriptionChanged::class, TeacherAccessChanged::class], InviteTeacherAfterValidation::class);
 
         foreach ([AvailabilityChanged::class, QualificationChanged::class, ExternalLoadChanged::class, TeacherUpdated::class, AdscriptionChanged::class, PositionChanged::class] as $event) {
@@ -64,8 +82,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * «Validar catálogos», en Académico, para quien revisa catálogos: el jefe de departamento y Subdirección (que, igual
-     * que el admin, la abre en lectura). Que el departamento sea el suyo lo decide la pantalla.
+     * La pantalla de la revisión, en Académico, con dos nombres según quien la abre (tarea 1.21): «Validar catálogos»
+     * para quien valida (el jefe de departamento) y «Validación de catálogos» para quien solo la ve (Subdirección y el
+     * admin, en lectura, CV-S1). Que el departamento sea el suyo lo decide la pantalla.
      * «Avance de validación», para Subdirección y el admin (tarea 2.5; `has()` incluye al admin).
      */
     public function navigation(): array
@@ -75,7 +94,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
         return [
             new NavigationItem('Validar catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
-                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView)),
+                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewValidate)),
+            new NavigationItem('Validación de catálogos', 'catalog-validation.review', 'o-clipboard-document-check', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
+                visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ReviewView) && ! $context->allowsAny(CatalogValidationPermission::ReviewValidate)),
             new NavigationItem('Avance de validación', 'catalog-validation.progress', 'o-chart-bar-square', NavigationArea::Academico, group: NavigationGroup::Validacion, whyUnavailable: $validationOpen,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CatalogValidationPermission::ProgressView)),
         ];

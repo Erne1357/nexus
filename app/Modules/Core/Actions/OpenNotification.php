@@ -22,7 +22,8 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * acepta sus parámetros), da el motivo en lugar de la dirección, para que la campana lo avise. Si el aviso es
  * de una modalidad (los de la carga, MS14), la pantalla se abre en ella (`?modalidad=<clave>`); si es de un campus, en
  * ese campus (`?campus=<código>`, #415: la credencial ya no lo elige); y la credencial queda en el periodo del aviso
- * (SetActiveContext), para que la pantalla muestre lo que dice el aviso. Si el usuario ya no trabaja en esa modalidad o
+ * (SetActiveContext), también si no es de una modalidad ni de un campus (la validación de catálogos, tarea 1.21), para
+ * que la pantalla muestre lo que dice el aviso. Si el usuario ya no trabaja en esa modalidad o
  * ese campus, tampoco lo lleva. Solo abre notificaciones del usuario, que es el de la
  * sesión: la credencial que cambia es la suya.
  *
@@ -89,7 +90,7 @@ final class OpenNotification
             }
         }
 
-        if ($modality !== null || $campus !== null) {
+        if ($message->termId !== null || $modality !== null || $campus !== null) {
             $term = $message->termId === null ? $this->context->activeTerm() : KeyLookup::find(Term::query(), $message->termId);
 
             if (! $term instanceof Term) {

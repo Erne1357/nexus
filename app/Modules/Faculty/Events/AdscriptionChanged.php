@@ -10,7 +10,7 @@ use Illuminate\Queue\SerializesModels;
 
 /**
  * Cambió una adscripción de un docente: se agregó o se restauró una que se había quitado (AddAdscription), o se
- * quitó con «Quitar de mi departamento» (RemoveAdscription; la que llega está borrada, y si era la principal, la
+ * quitó con «Quitar de <Departamento>» (RemoveAdscription; la que llega está borrada, y si era la principal, la
  * principal pasó a otra). Sale después del commit y trae a quien lo hizo (`actor`, null sin sesión) para quien lo escuche, aunque sea en un job.
  */
 final class AdscriptionChanged implements ShouldDispatchAfterCommit

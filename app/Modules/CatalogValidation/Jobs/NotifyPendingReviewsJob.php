@@ -4,7 +4,6 @@ namespace App\Modules\CatalogValidation\Jobs;
 
 use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -19,10 +18,9 @@ final class NotifyPendingReviewsJob implements ShouldQueue
     use Queueable;
 
     /**
-     * @param  list<string>  $campusIds
      * @param  list<string>  $catalogs  los valores de Catalog recién abiertos
      */
-    public function __construct(public readonly string $termId, public readonly array $campusIds, public readonly array $catalogs) {}
+    public function __construct(public readonly string $termId, public readonly array $catalogs) {}
 
     public function handle(NotifyPendingReviews $notify): void
     {
@@ -32,10 +30,6 @@ final class NotifyPendingReviewsJob implements ShouldQueue
             return;
         }
 
-        $notify->notifyOpened(
-            $term,
-            Campus::query()->whereIn('id', $this->campusIds)->orderBy('code')->get(),
-            array_values(array_filter(array_map(fn (string $value): ?Catalog => Catalog::tryFrom($value), $this->catalogs))),
-        );
+        $notify->notifyOpened($term, array_values(array_filter(array_map(fn (string $value): ?Catalog => Catalog::tryFrom($value), $this->catalogs))));
     }
 }

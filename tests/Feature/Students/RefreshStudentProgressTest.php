@@ -192,3 +192,42 @@ it('espera un solo recálculo en la cola aunque lleguen varias importaciones', f
 
     Queue::assertPushed(RecomputeStudentProgress::class, 1);
 });
+
+it('el recálculo acotado a un plan solo toca a sus alumnos y deja a los demás como estaban', function () {
+    $otherPlan = StudyPlan::factory()->create();
+    $x = Subject::factory()->create(['credits' => 7]);
+    placeInPlan($otherPlan, $x);
+    $other = Student::factory()->for($otherPlan)->create(['career_id' => $otherPlan->career_id]);
+    kardexOf($this->student, $this->a);
+    kardexOf($other, $x);
+    app(RefreshStudentProgress::class)->handle();
+
+    // Se desactualizan los dos avances a mano: el acotado arregla solo el del plan.
+    StudentProgress::query()->update(['credits_approved' => 999, 'computed_at' => now()->subDay()]);
+
+    app(RefreshStudentProgress::class)->handle($this->plan->id);
+
+    expect(StudentProgress::where('student_id', $this->student->id)->sole()->credits_approved)->toBe(5)
+        ->and(StudentProgress::where('student_id', $other->id)->sole()->credits_approved)->toBe(999);
+});
+
+it('el recálculo acotado da lo mismo que el completo para los alumnos del plan', function () {
+    $plan2 = StudyPlan::factory()->create();
+    placeInPlan($plan2, Subject::factory()->create());
+    $others = Student::factory()->for($plan2)->count(2)->create(['career_id' => $plan2->career_id]);
+    $mine = Student::factory()->for($this->plan)->count(3)->create(['career_id' => $this->plan->career_id])->push($this->student);
+    kardexOf($mine[0], $this->a);
+    kardexOf($mine[1], $this->a);
+    KardexRecord::factory()->for($mine[1])->for($this->f)->inProgress()->create(['term_code' => '20261']);
+    kardexOf($mine[3], $this->f);
+    $snapshot = fn () => StudentProgress::query()->whereIn('student_id', $mine->modelKeys())->orderBy('student_id')->get()
+        ->map->only(['student_id', 'study_plan_id', 'credits_approved', 'subjects_approved', 'subjects_pending', 'subjects_available'])->all();
+
+    app(RefreshStudentProgress::class)->handle();
+    $full = $snapshot();
+    StudentProgress::query()->whereIn('student_id', $mine->modelKeys())->delete();
+    app(RefreshStudentProgress::class)->handle($this->plan->id);
+
+    expect($snapshot())->toBe($full)->not->toBeEmpty()
+        ->and(StudentProgress::whereIn('student_id', $others->modelKeys())->count())->toBe(2);
+});

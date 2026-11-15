@@ -45,7 +45,7 @@ new class extends Component
         $user = $context->user();
         $role = $context->activeRole();
         $roleLabel = $role === null ? null : $titles->of($context, $role)['title'];
-        $item = $this->route === null ? null : $navigation->forRoute($this->route);
+        $item = $this->route === null ? null : $navigation->forRoute($this->route, $context);
 
         return [
             'areaLabel' => $item?->area->label(),

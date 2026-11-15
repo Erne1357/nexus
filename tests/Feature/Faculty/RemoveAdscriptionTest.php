@@ -14,7 +14,7 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| «Quitar de mi departamento» (RemoveAdscription; reglas-de-negocio.md, "Adscripciones"): quita la adscripción con
+| «Quitar de <Departamento>» (RemoveAdscription; reglas-de-negocio.md, "Adscripciones"): quita la adscripción con
 | borrado lógico; si era la principal, la principal pasa a la adscripción más antigua que le quede, y si no le queda
 | ninguna el docente sigue activo y sin departamento (confirmado el 30 de octubre de 2026). Deja bitácora de la
 | quitada y de la principal nueva, y avisa con AdscriptionChanged después del commit.
