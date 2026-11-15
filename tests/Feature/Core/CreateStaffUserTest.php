@@ -51,6 +51,15 @@ it('deja bitácora de la alta sin la contraseña', function () {
         ->and($json)->not->toContain($user->fresh()->password);
 });
 
+it('CF-S3: un correo que otro usuario ya tiene, sin importar mayúsculas, es un error del correo y no del usuario', function () {
+    User::factory()->create(['email' => 'Ana.Perez@cdjuarez.tecnm.mx']);
+
+    expect(fn () => app(CreateStaffUser::class)->handle('docente05', 'Ana', withAccess: false, email: 'ana.perez@cdjuarez.tecnm.mx'))
+        ->toThrow(ValidationException::class, 'Otro usuario ya tiene el correo ana.perez@cdjuarez.tecnm.mx.');
+
+    expect(User::where('username', 'docente05')->exists())->toBeFalse();
+});
+
 it('rechaza un username repetido', function () {
     User::factory()->create(['username' => 'docente04']);
 

@@ -31,7 +31,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   personal; eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser **sin acceso** (sin contraseña, AC-02,
  *   confirmado el 11 de noviembre de 2026) y con cambio obligatorio, con el correo del docente si ningún otro usuario
  *   lo usa (supuesto por confirmar). Un usuario ya existente conserva lo que tenga. Luego activa el usuario ya ligado (reactivar al docente
- *   lo devuelve) y le da su nombramiento de `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
+ *   lo devuelve), salvo que el admin le haya dado de baja la cuenta en el panel (`users.deactivated_at`, CF-09,
+ *   confirmado el 14 de noviembre de 2026: esa baja se respeta y solo el admin la reactiva), y le da su nombramiento de
+ *   `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
  *   ahí sale que su alcance de `docente` sea uno solo, sin campus, y que no dependa de sus adscripciones: un docente
  *   sin departamento conserva usuario y nombramiento. Uno sin campus que todavía no empieza cuenta como el suyo y no
  *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
@@ -163,7 +165,8 @@ final class SyncTeacherAccess
 
     /**
      * Activa el usuario, le deja un alcance de `docente` sin campus y cierra los que tienen
-     * campus. Devuelve si cambió algo.
+     * campus. Devuelve si cambió algo. Una cuenta que el admin dio de baja en el panel (`deactivated_at`, CF-09) no se
+     * activa: el docente sigue en el catálogo, y solo el admin la reactiva (CF-06).
      */
     private function grantAccess(Teacher $teacher, User $user): bool
     {
@@ -171,7 +174,7 @@ final class SyncTeacherAccess
         $new = [];
         $done = [];
 
-        if (! $user->is_active) {
+        if (! $user->is_active && $user->deactivated_at === null) {
             $user->forceFill(['is_active' => true])->save();
             [$old['is_active'], $new['is_active']] = [false, true];
             $done[] = 'activó su usuario';
