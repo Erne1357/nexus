@@ -2,8 +2,8 @@
     «Agregar permisos sueltos» (core::pages.permissions; ADR-0023), dentro del x-drawer: la lista de permisos por
     grupo (core::permissions.picker). Lo que ya tiene va marcado y deshabilitado con «Ya lo tiene: …»; los candados
     (CF-03) y lo que el puesto no acota (CF-04) van deshabilitados con su motivo. Un puesto sin alcance (docente,
-    alumno) lo dice una vez arriba: solo recibe permisos personales. Confirmar llama a `grantLoose`, que revisa todos
-    antes de dar el primero; sus errores salen arriba. `close()` es del x-drawer. Espera `$addLoose`.
+    alumno) lo dice una vez arriba: solo recibe permisos personales. Confirmar llama a `grantLoose`, que los da todos o
+    ninguno en una sola transacción (GrantPositionPermissions); sus errores salen arriba. `close()` es del x-drawer. Espera `$addLoose`.
 --}}
 <div class="flex h-dvh flex-col" data-testid="add-loose-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
@@ -25,7 +25,7 @@
             </div>
         @endif
 
-        @foreach (['looseKeys', 'role', 'permission'] as $field)
+        @foreach (['looseKeys', 'permissions', 'role'] as $field)
             @error($field)
                 <x-alert icon="o-x-circle" class="alert-error alert-soft" data-testid="add-loose-error">
                     @foreach ($errors->get($field) as $line)

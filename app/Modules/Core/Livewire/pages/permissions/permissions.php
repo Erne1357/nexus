@@ -5,20 +5,23 @@ use App\Modules\Core\Actions\AssignPermissionSet;
 use App\Modules\Core\Actions\CreatePermissionSet;
 use App\Modules\Core\Actions\DeletePermissionSet;
 use App\Modules\Core\Actions\GrantPositionPermission;
+use App\Modules\Core\Actions\GrantPositionPermissions;
 use App\Modules\Core\Actions\RestoreFactoryPermissionSet;
 use App\Modules\Core\Actions\RestoreFactoryPosition;
 use App\Modules\Core\Actions\RevokePositionPermission;
 use App\Modules\Core\Actions\SetPermissionSetActive;
 use App\Modules\Core\Actions\UnassignPermissionSet;
 use App\Modules\Core\Actions\UpdatePermissionSet;
+use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Queries\PermissionCatalogQuery;
 use App\Modules\Core\Queries\PermissionSetsQuery;
 use App\Modules\Core\Queries\PositionsQuery;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -111,36 +114,74 @@ new #[Title('Puestos y permisos')] class extends Component
     }
 
     /**
+     * Arma solo lo de la pestaña activa y lo de los drawers abiertos. Las Queries se leen una vez por petición
+     * (#[Computed]): toggleGroup() y el render comparten lo leído.
+     *
      * @return array<string, mixed>
      */
-    public function with(PositionsQuery $positions, PermissionSetsQuery $sets, PermissionCatalogQuery $catalog): array
+    public function with(PermissionSetsQuery $sets, PermissionCatalogQuery $catalog): array
     {
         $this->authorize('viewAny', PermissionSet::class);
 
-        $people = $positions->peopleByRoleSet();
-        $positionRows = $positions->all($people);
-        $setRows = $sets->all();
-        $catalogRows = $catalog->all($positionRows, $people);
-        $setsById = array_column($setRows, null, 'id');
-        $catalogByKey = array_column($catalogRows, null, 'key');
-        $role = $this->role();
-        $current = collect($positionRows)->firstWhere('role', $role);
         $view = in_array($this->tab, ['roles', 'quien'], true) ? $this->tab : '';
+        $role = $this->role();
+        $setsById = array_column($this->setRows, null, 'id');
+
+        if ($this->showEditor && $this->editingSetId !== null && ! isset($setsById[$this->editingSetId])) {
+            $this->closeEditorOfDeletedRole();
+        }
 
         return [
             'view' => $view,
-            'cards' => array_map(fn (array $row): array => $this->card($row, $setsById, $role), $positionRows),
-            'current' => $view === '' ? $this->detail($current, $setsById, $catalogByKey) : null,
-            'positionCount' => count($positionRows),
-            'setCount' => count($setRows),
-            'roleRows' => $view === 'roles' ? array_map(fn (array $set): array => $this->roleRow($set), $sets->forTable($this->rolesSearch, $this->rolesKind, $setRows)) : [],
+            'positionCount' => count(Role::cases()),
+            'setCount' => count($this->setRows),
+            'cards' => $view === '' ? array_map(fn (array $row): array => $this->card($row, $setsById, $role), $this->positionRows) : [],
+            'current' => $view === '' ? $this->detail($this->currentRow(), $setsById, array_column($this->catalogRows, null, 'key')) : null,
+            'roleRows' => $view === 'roles' ? array_map(fn (array $set): array => $this->roleRow($set), $sets->forTable($this->rolesSearch, $this->rolesKind, $this->setRows)) : [],
             'kinds' => [['id' => 'factory', 'name' => 'De fábrica'], ['id' => 'own', 'name' => 'Propios']],
-            'who' => $view === 'quien' ? $this->who($catalog, $catalogRows, $positionRows) : null,
-            'addRole' => $this->showAddRole ? $this->addRoleData($role, $current, $setRows, $sets, $catalogRows) : null,
-            'addLoose' => $this->showAddLoose ? $this->addLooseData($role, $current, $catalogRows, $catalog) : null,
-            'editor' => $this->showEditor ? $this->editorData($setRows, $sets, $catalogRows, $positionRows) : null,
-            'canManage' => Gate::allows('managePositions', PermissionSet::class),
+            'who' => $view === 'quien' ? $this->who($catalog, $this->catalogRows, $this->positionRows) : null,
+            'addRole' => $this->showAddRole ? $this->addRoleData($role, $this->currentRow(), $this->setRows, $sets, $this->catalogRows) : null,
+            'addLoose' => $this->showAddLoose ? $this->addLooseData($role, $this->currentRow(), $this->catalogRows, $catalog) : null,
+            'editor' => $this->showEditor ? $this->editorData($this->setRows, $sets, $this->catalogRows, $this->positionRows) : null,
         ];
+    }
+
+    /**
+     * Cuántas personas tienen cada combinación de puestos (PositionsQuery::peopleByRoleSet()), una vez por petición.
+     *
+     * @return array<string, int>
+     */
+    #[Computed]
+    public function people(): array
+    {
+        return app(PositionsQuery::class)->peopleByRoleSet();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    #[Computed]
+    public function positionRows(): array
+    {
+        return app(PositionsQuery::class)->all($this->people);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    #[Computed]
+    public function setRows(): array
+    {
+        return app(PermissionSetsQuery::class)->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    #[Computed]
+    public function catalogRows(): array
+    {
+        return app(PermissionCatalogQuery::class)->all($this->positionRows, $this->people);
     }
 
     public function updatedPosition(): void
@@ -170,8 +211,9 @@ new #[Title('Puestos y permisos')] class extends Component
         $set = $sets->findOrFail($this->addRoleId);
         $assign->handle($role, $set);
 
+        $this->forgetRows();
         $this->showAddRole = false;
-        $this->success("{$role->listLabel()} tiene el rol «{$set->name}»", 'Lo tienen desde su siguiente acción.');
+        $this->success(e("{$role->listLabel()} tiene el rol «{$set->name}»"), 'Lo tienen desde su siguiente acción.');
     }
 
     public function unassignRole(string $setId, PermissionSetsQuery $sets, UnassignPermissionSet $unassign): void
@@ -189,6 +231,7 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
+        $this->forgetRows();
         $this->success('Rol quitado', e("«{$set->name}» · {$role->listLabel()}"));
     }
 
@@ -201,15 +244,16 @@ new #[Title('Puestos y permisos')] class extends Component
     }
 
     /**
-     * Da los permisos sueltos marcados. Revisa todos antes de dar el primero (CF-S1, CF-03, CF-04), para no dar solo una
-     * parte; cada uno pasa además por GrantPositionPermission, que revisa las reglas otra vez.
+     * Da los permisos sueltos marcados, todos o ninguno, en una sola transacción (GrantPositionPermissions, que revisa
+     * CF-S1, CF-03 y CF-04 y deja la bitácora de cada uno).
      */
-    public function grantLoose(GrantPositionPermission $grant, PermissionCatalogQuery $catalog): void
+    public function grantLoose(GrantPositionPermissions $grant, PermissionCatalogQuery $catalog): void
     {
         $this->authorize('managePositions', PermissionSet::class);
+        $this->validate(['looseKeys' => ['array'], 'looseKeys.*' => ['string']]);
 
         $role = $this->role();
-        $keys = array_values(array_unique(array_map('strval', $this->looseKeys)));
+        $keys = array_values(array_unique($this->looseKeys));
 
         if ($keys === []) {
             $this->addError('looseKeys', 'Elige al menos un permiso.');
@@ -217,24 +261,22 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
-        $problems = $catalog->grantProblems($role);
-        $found = array_values(array_unique(array_filter(array_map(
-            fn (string $key): ?string => array_key_exists($key, $problems) ? $problems[$key] : "El permiso «{$key}» no existe.",
-            $keys,
-        ))));
+        $unknown = array_values(array_filter($keys, fn (string $key): bool => $catalog->find($key) === null));
 
-        if ($found !== []) {
-            throw ValidationException::withMessages(['looseKeys' => $found]);
+        if ($unknown !== []) {
+            throw ValidationException::withMessages(['looseKeys' => array_map(fn (string $key): string => "El permiso «{$key}» no existe.", $unknown)]);
         }
 
-        foreach ($keys as $key) {
-            $grant->handle($role, $catalog->find($key));
-        }
+        $grant->handle($role, array_map(fn (string $key): Permission => $catalog->find($key), $keys));
 
+        $this->forgetRows();
         $this->showAddLoose = false;
-        $this->success($this->plural(count($keys), 'permiso suelto', 'permisos sueltos')." para {$role->listLabel()}", 'Lo tienen desde su siguiente acción.');
+        $this->success(e($this->plural(count($keys), 'permiso suelto', 'permisos sueltos')." para {$role->listLabel()}"), 'Lo tienen desde su siguiente acción.');
     }
 
+    /**
+     * Quita un permiso suelto, también uno cuya clave ya no declara ningún módulo.
+     */
     public function revokeLoose(string $key, PermissionCatalogQuery $catalog, RevokePositionPermission $revoke): void
     {
         $this->authorize('managePositions', PermissionSet::class);
@@ -243,15 +285,15 @@ new #[Title('Puestos y permisos')] class extends Component
         $permission = $catalog->find($key);
 
         try {
-            $permission ?? throw ValidationException::withMessages(['permission' => "El permiso «{$key}» no existe."]);
-            $revoke->handle($role, $permission);
+            $revoke->handle($role, $permission ?? $key);
         } catch (ValidationException $exception) {
             $this->report($exception, 'No se quitó el permiso');
 
             return;
         }
 
-        $this->success('Permiso suelto quitado', e("«{$permission->label()}» · {$role->listLabel()}"));
+        $this->forgetRows();
+        $this->success('Permiso suelto quitado', e('«'.($permission?->label() ?? $key)."» · {$role->listLabel()}"));
     }
 
     public function restorePosition(RestoreFactoryPosition $restore): void
@@ -268,6 +310,7 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
+        $this->forgetRows();
         $this->success('Puesto restablecido', e("{$role->listLabel()} se queda solo con su rol de fábrica."));
     }
 
@@ -291,7 +334,8 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
-        $this->success("{$role->listLabel()} ya puede «{$permission->label()}»", 'Como permiso suelto.');
+        $this->forgetRows();
+        $this->success(e("{$role->listLabel()} ya puede «{$permission->label()}»"), 'Como permiso suelto.');
     }
 
     public function openNewRole(): void
@@ -318,7 +362,13 @@ new #[Title('Puestos y permisos')] class extends Component
 
     public function saveRole(CreatePermissionSet $create, UpdatePermissionSet $update, PermissionSetsQuery $sets): void
     {
-        $set = $this->editingSetId === null ? null : $sets->findOrFail($this->editingSetId);
+        $editing = $this->editingSetId !== null;
+        $set = $this->editedSet($sets);
+
+        if ($editing && $set === null) {
+            return;
+        }
+
         $this->authorize($set === null ? 'create' : 'update', $set ?? PermissionSet::class);
 
         $this->validate([
@@ -336,6 +386,7 @@ new #[Title('Puestos y permisos')] class extends Component
             $this->success('Rol guardado', e("«{$set->name}» vale desde la siguiente acción de cada usuario."));
         }
 
+        $this->forgetRows();
         $this->showEditor = false;
     }
 
@@ -352,6 +403,7 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
+        $this->forgetRows();
         $this->reloadEditor($set->id, $sets);
         $this->success('Rol restablecido', e("«{$set->name}» vuelve a seguir al código."));
     }
@@ -369,6 +421,7 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
+        $this->forgetRows();
         $this->reloadEditor($set->id, $sets);
         $this->success('Permisos nuevos aplicados', e("«{$set->name}»"));
     }
@@ -386,6 +439,7 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
+        $this->forgetRows();
         $this->success($active ? 'Rol activado' : 'Rol desactivado', e("«{$set->name}»"));
     }
 
@@ -402,35 +456,39 @@ new #[Title('Puestos y permisos')] class extends Component
             return;
         }
 
+        $this->forgetRows();
         $this->success('Rol borrado', e("«{$set->name}»"));
     }
 
     /**
      * Marca o desmarca de un jalón los permisos que se ven y se pueden marcar de un grupo, en `loose` (Agregar permiso
      * suelto) o en `editor` (Editar rol): si ya están marcados todos los del grupo que se pueden marcar, desmarca los que
-     * se ven; si no, marca los que se ven.
+     * se ven; si no, marca los que se ven. Lee lo mismo que el render de esta petición.
      */
-    public function toggleGroup(string $target, string $group, PositionsQuery $positions, PermissionSetsQuery $sets, PermissionCatalogQuery $catalog): void
+    public function toggleGroup(string $target, string $group, PermissionSetsQuery $sets, PermissionCatalogQuery $catalog): void
     {
+        $property = $target === 'editor' ? 'permissions' : 'looseKeys';
+
         if ($target === 'editor') {
-            $set = $this->editingSetId === null ? null : $sets->findOrFail($this->editingSetId);
+            $editing = $this->editingSetId !== null;
+            $set = $this->editedSet($sets);
+
+            if ($editing && $set === null) {
+                return;
+            }
+
             $this->authorize($set === null ? 'create' : 'update', $set ?? PermissionSet::class);
         } else {
             $this->authorize('managePositions', PermissionSet::class);
         }
 
-        $people = $positions->peopleByRoleSet();
-        $positionRows = $positions->all($people);
-        $catalogRows = $catalog->all($positionRows, $people);
+        $this->validate([$property => ['array'], "{$property}.*" => ['string']]);
 
-        $rows = match ($target) {
-            'loose' => $this->looseRows($this->role(), collect($positionRows)->firstWhere('role', $this->role()), $catalogRows, $catalog),
-            'editor' => $this->editorRows($sets->all(), $sets, $catalogRows),
-            default => [],
-        };
+        $rows = $target === 'editor'
+            ? $this->editorRows($this->setRows, $sets, $this->catalogRows)
+            : $this->looseRows($this->role(), $this->currentRow(), $this->catalogRows, $catalog);
         $enabled = array_filter($rows, fn (array $row): bool => $row['group'] === $group && ! $row['disabled']);
         $keys = array_column(array_filter($enabled, fn (array $row): bool => $this->isVisible($row)), 'key');
-        $property = $target === 'editor' ? 'permissions' : 'looseKeys';
         $selected = $this->{$property};
 
         $this->{$property} = array_values(array_diff(array_column($enabled, 'key'), $selected) === []
@@ -446,10 +504,54 @@ new #[Title('Puestos y permisos')] class extends Component
         return Role::tryFrom($this->position) ?? Role::Subdireccion;
     }
 
+    /**
+     * El renglón de PositionsQuery del puesto elegido.
+     *
+     * @return array<string, mixed>
+     */
+    private function currentRow(): array
+    {
+        return collect($this->positionRows)->firstWhere('role', $this->role());
+    }
+
+    /**
+     * Después de un cambio, la siguiente lectura de esta petición vuelve a las Queries.
+     */
+    private function forgetRows(): void
+    {
+        unset($this->people, $this->positionRows, $this->setRows, $this->catalogRows);
+    }
+
     private function closeDrawers(): void
     {
         $this->resetValidation();
         $this->reset('showAddRole', 'addRoleId', 'showAddLoose', 'looseKeys', 'showEditor', 'editingSetId', 'name', 'description', 'permissions', 'pickerSearch', 'pickerMarked');
+    }
+
+    /**
+     * El rol que se edita (null en un alta). Si lo borraron mientras el editor estaba abierto, cierra el editor con un
+     * aviso y da null.
+     */
+    private function editedSet(PermissionSetsQuery $sets): ?PermissionSet
+    {
+        if ($this->editingSetId === null) {
+            return null;
+        }
+
+        try {
+            return $sets->findOrFail($this->editingSetId);
+        } catch (ModelNotFoundException) {
+            $this->authorize('viewAny', PermissionSet::class);
+            $this->closeEditorOfDeletedRole();
+
+            return null;
+        }
+    }
+
+    private function closeEditorOfDeletedRole(): void
+    {
+        $this->closeDrawers();
+        $this->warning('El rol ya no existe', 'Lo borraron mientras lo editabas; no se guardó nada.');
     }
 
     /**
@@ -472,6 +574,17 @@ new #[Title('Puestos y permisos')] class extends Component
         $row = collect($sets->all())->firstWhere('id', $setId);
 
         return array_column(array_merge(...array_values($row['permissions'] ?? [])), 'key');
+    }
+
+    /**
+     * Solo los textos de una lista que mandó el navegador: un arreglo manipulado no rompe el render.
+     *
+     * @param  array<mixed>  $values
+     * @return list<string>
+     */
+    private function strings(array $values): array
+    {
+        return array_values(array_filter($values, 'is_string'));
     }
 
     private function report(ValidationException $exception, string $title): void
@@ -568,7 +681,7 @@ new #[Title('Puestos y permisos')] class extends Component
                     'badge' => $info !== null && ($set['factory_role'] === $role || ! $set['is_active']) ? $this->badge($info) : null,
                 ];
             }, $this->ownFactoryFirst($row['permission_sets'], $role)),
-            'loose' => array_map(fn (string $key): array => ['key' => $key, 'label' => $label($key)], $row['permissions']),
+            'loose' => array_map(fn (string $key): array => ['key' => $key, 'label' => $label($key), 'stale' => ! isset($catalogByKey[$key])], $row['permissions']),
             'newFactory' => $new === null || $new['keys'] === [] ? null : ['id' => $new['id'], 'labels' => array_map($label, $new['keys'])],
             'groups' => $groups,
             'filtering' => $filtering,
@@ -773,7 +886,7 @@ new #[Title('Puestos y permisos')] class extends Component
             'noScope' => $role->boundedDimensions() === [],
             'groups' => $this->pickerGroups($rows, $firstOpen, fn (array $group): string => ($n = count(array_filter($group, fn (array $row): bool => ! $row['disabled']))) > 0 ? "{$n} se pueden dar" : '—'),
             'remaining' => count($free),
-            'selected' => count(array_intersect($this->looseKeys, array_column($free, 'key'))),
+            'selected' => count(array_intersect($this->strings($this->looseKeys), array_column($free, 'key'))),
         ];
     }
 
@@ -798,7 +911,7 @@ new #[Title('Puestos y permisos')] class extends Component
                 'label' => $permission['label'],
                 'group' => $permission['group'],
                 'group_label' => $permission['group_label'],
-                'checked' => $had !== null || in_array($permission['key'], $this->looseKeys, true),
+                'checked' => $had !== null || in_array($permission['key'], $this->strings($this->looseKeys), true),
                 'disabled' => $had !== null || $problem !== null,
                 'problem' => $noScope && ! $permission['admin_only'] ? null : $problem,
                 'locked' => $permission['admin_only'],
@@ -861,7 +974,7 @@ new #[Title('Puestos y permisos')] class extends Component
         $holders = array_column(array_map(fn (array $row): array => ['value' => $row['role']->value, 'holders' => $row['holders']], $positionRows), 'holders', 'value');
         $labels = array_column($catalogRows, 'label', 'key');
         $original = $set === null ? [] : array_column(array_merge(...array_values($set['permissions'])), 'key');
-        $chosen = array_values(array_unique($this->permissions));
+        $chosen = array_values(array_unique($this->strings($this->permissions)));
         sort($chosen);
         sort($original);
         $factory = $set['factory_role'] ?? null;
@@ -898,7 +1011,7 @@ new #[Title('Puestos y permisos')] class extends Component
         $holders = $set['positions'] ?? [];
 
         return array_map(function (array $permission) use ($problems, $original, $holders): array {
-            $checked = in_array($permission['key'], $this->permissions, true);
+            $checked = in_array($permission['key'], $this->strings($this->permissions), true);
             $problem = $problems[$permission['key']] ?? null;
             $wide = in_array($permission['key'], $original, true) ? [] : array_values(array_filter($holders, fn (Role $role): bool => in_array($role, $permission['institution_wide_for'], true)));
 

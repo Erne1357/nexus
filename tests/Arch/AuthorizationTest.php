@@ -210,10 +210,18 @@ const GRANT_TABLES_READERS = [
     'app/Modules/Core/Actions/AssignPermissionSet.php',
     'app/Modules/Core/Actions/UnassignPermissionSet.php',
     'app/Modules/Core/Actions/GrantPositionPermission.php',
+    'app/Modules/Core/Actions/GrantPositionPermissions.php',
     'app/Modules/Core/Actions/RevokePositionPermission.php',
     'app/Modules/Core/Actions/RestoreFactoryPermissionSet.php',
     'app/Modules/Core/Actions/RestoreFactoryPosition.php',
     'app/Modules/Core/Actions/ApplyFactoryUpdates.php',
+];
+
+/**
+ * La pantalla «Puestos y permisos» y la entrada del menú solo nombran el modelo para autorizar con su Policy: en ellas
+ * se permite el nombre `PermissionSet`, pero no las tablas (salvo como llave de un renglón de las Queries).
+ */
+const PERMISSION_SET_NAMERS = [
     'app/Modules/Core/Livewire/pages/permissions/permissions.php',
     'app/Modules/Core/CoreServiceProvider.php',
 ];
@@ -229,7 +237,17 @@ it('fuera de Core/Authorization y de las piezas de roles editables, nadie lee la
             continue;
         }
 
-        if (preg_match('/\b(permission_sets|permission_set_permissions|position_permission_sets|position_permissions|authz_grants_version|PermissionSet)\b/', $file->getContents()) === 1) {
+        $tables = 'permission_sets|permission_set_permissions|position_permission_sets|position_permissions|authz_grants_version';
+        $contents = $file->getContents();
+
+        // En la pantalla, `$row['permission_sets']` es la llave de un renglón de PositionsQuery, no la tabla.
+        if (in_array($path, PERMISSION_SET_NAMERS, true)) {
+            $contents = (string) preg_replace("/\\['(".$tables.")'\\]/", '', $contents);
+        }
+
+        $names = in_array($path, PERMISSION_SET_NAMERS, true) ? $tables : $tables.'|PermissionSet';
+
+        if (preg_match('/\b('.$names.')\b/', $contents) === 1) {
             $offenders[] = $path;
         }
     }
@@ -241,7 +259,7 @@ it('cada pieza que puede leer las tablas de roles existe', function () {
     $root = dirname(__DIR__, 2);
 
     expect(array_values(array_filter(
-        GRANT_TABLES_READERS,
+        [...GRANT_TABLES_READERS, ...PERMISSION_SET_NAMERS],
         fn (string $allowed): bool => glob("{$root}/{$allowed}*") === [],
     )))->toBe([]);
 });

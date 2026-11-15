@@ -12,7 +12,6 @@
         aria-label="Editar {{ $role['name'] }}"
         class="btn-ghost btn-sm max-md:h-11"
         spinner="editRole('{{ $role['id'] }}')"
-        :disabled="! $canManage"
     >
         <span @class(['max-[1200px]:hidden' => $inTable])>Editar</span>
     </x-button>

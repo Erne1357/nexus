@@ -14,7 +14,7 @@
         <x-select wire:model.live="rolesKind" aria-label="Tipo" :options="$kinds" placeholder="Tipo" />
 
         <x-slot:action>
-            <x-button label="Nuevo rol" icon="o-plus" class="btn-primary" wire:click="openNewRole" spinner="openNewRole" :disabled="! $canManage" />
+            <x-button label="Nuevo rol" icon="o-plus" class="btn-primary" wire:click="openNewRole" spinner="openNewRole" />
         </x-slot:action>
     </x-core::catalog-toolbar>
 

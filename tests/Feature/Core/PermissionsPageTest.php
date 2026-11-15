@@ -243,7 +243,7 @@ describe('Puestos', function () {
 
         $page->set('looseKeys', [CorePermission::SettingView->value, FacultyPermission::TeacherView->value, CorePermission::UserCreate->value])
             ->call('grantLoose')
-            ->assertHasErrors(['looseKeys']);
+            ->assertHasErrors(['permissions']);
 
         expect(loosePermissionsOf(Role::Coordinador))->toBe([]);
     });
@@ -256,6 +256,46 @@ describe('Puestos', function () {
         $page->call('toggleGroup', 'loose', 'core_accounts');
 
         expect($page->get('looseKeys'))->toBe([]);
+    });
+
+    it('el aviso escapa el nombre del rol: MaryUI pinta el título con x-html', function () {
+        $set = PermissionSet::factory()->withPermissions([CorePermission::SettingView])->create(['name' => '<b>Negritas</b>']);
+
+        $page = permissionsPage(['puesto' => 'coordinador'])->call('openAddRole')->set('addRoleId', $set->id)->call('assignRole')->assertHasNoErrors();
+
+        expect(lastToastOf($page)['title'])->toBe('Coordinador de carrera tiene el rol «&lt;b&gt;Negritas&lt;/b&gt;»');
+
+        $page->call('setRoleActive', $set->id, false);
+
+        expect(lastToastOf($page)['description'])->toBe('«&lt;b&gt;Negritas&lt;/b&gt;»');
+    });
+
+    it('quita un permiso suelto cuya clave ya no declara ningún módulo, y lo marca en la lista', function () {
+        DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => 'core.cosa.vieja']);
+
+        $page = permissionsPage(['puesto' => 'coordinador']);
+
+        expect(textOf(domOf($page)->querySelector('[data-testid="position-loose"]')))->toContain('core.cosa.vieja', 'Ningún módulo lo declara ya: no aporta nada.');
+
+        $page->call('revokeLoose', 'core.cosa.vieja')->assertHasNoErrors();
+
+        expect(loosePermissionsOf(Role::Coordinador))->toBe([])
+            ->and(Activity::query()->latest('id')->first()->description)->toBe('Quitó el permiso «core.cosa.vieja» del puesto Coordinador de carrera');
+    });
+
+    it('un arreglo manipulado de casillas no rompe la pantalla: se rechaza al usarlo', function () {
+        $page = permissionsPage(['puesto' => 'coordinador'])->call('openAddLoose')->set('looseKeys', [['x'], 'core.setting.view'])->assertOk();
+
+        $page->call('grantLoose')->assertHasErrors(['looseKeys.0']);
+        $page->call('toggleGroup', 'loose', 'core_accounts')->assertHasErrors(['looseKeys.0']);
+
+        $editor = permissionsPage()->call('openNewRole')->set('permissions', [['x'], 'core.term.view'])->assertOk()->assertSee('1 marcado');
+
+        $editor->call('toggleGroup', 'editor', 'core_institution')->assertHasErrors(['permissions.0']);
+        $editor->set('name', 'Otro')->call('saveRole')->assertHasErrors(['permissions.0']);
+
+        expect(loosePermissionsOf(Role::Coordinador))->toBe([])
+            ->and(PermissionSet::query()->where('name', 'Otro')->exists())->toBeFalse();
     });
 
     it('CF-01: quita un permiso suelto', function () {
@@ -415,6 +455,24 @@ describe('Editar rol', function () {
 
         expect($page->get('permissions'))->toContain($missing);
     });
+});
+
+it('si borran el rol mientras el editor está abierto, cierra el editor con un aviso y no guarda nada', function () {
+    $set = PermissionSet::factory()->withPermissions([CorePermission::TermView])->create(['name' => 'Efímero']);
+    $page = permissionsPage(['vista' => 'roles'])->call('editRole', $set->id)->set('name', 'Renombrado');
+
+    $set->delete();
+
+    $page->call('saveRole')->assertHasNoErrors()->assertSet('showEditor', false);
+
+    expect(lastToastOf($page)['title'])->toBe('El rol ya no existe')
+        ->and(PermissionSet::query()->whereIn('name', ['Renombrado', 'Efímero'])->exists())->toBeFalse();
+
+    $other = PermissionSet::factory()->withPermissions([CorePermission::TermView])->create(['name' => 'Otro efímero']);
+    $page->call('editRole', $other->id);
+    $other->delete();
+
+    $page->call('$refresh')->assertSet('showEditor', false)->assertDontSee('Nuevo rol</h2>', false);
 });
 
 describe('Roles', function () {

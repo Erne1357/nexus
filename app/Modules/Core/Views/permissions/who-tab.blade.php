@@ -109,7 +109,6 @@
                                             data-confirm-button="Dar permiso"
                                             data-confirm-tone="warning"
                                             spinner="grantFromWho('{{ $missing['value'] }}', '{{ $selected['key'] }}')"
-                                            :disabled="! $canManage"
                                             aria-label="Dar «{{ $selected['label'] }}» a {{ $missing['label'] }}"
                                         />
                                     @endif

@@ -6,7 +6,7 @@
     «Agregar permiso suelto» y «Más acciones» (Restablecer puesto); el aviso de lo nuevo de fábrica con «Aplicar»; sus
     roles, sus permisos sueltos y sus permisos efectivos por grupo, con buscador, «Todos / Fuera de fábrica» y una
     insignia de origen. Administración es de solo lectura: todo menos sus excepciones, que se listan (CF-S1). Espera
-    `$cards`, `$current` y `$canManage`.
+    `$cards` y `$current`.
 --}}
 <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-5 desktop:grid-cols-[300px_minmax(0,1fr)]">
     <nav
@@ -57,8 +57,8 @@
 
             @unless ($current['locked'])
                 <div class="flex flex-wrap gap-2 max-md:w-full">
-                    <x-button label="Agregar rol" icon="o-plus" class="btn-outline max-md:h-11 max-md:basis-full" wire:click="openAddRole" spinner="openAddRole" :disabled="! $canManage" data-testid="add-role" />
-                    <x-button label="Agregar permiso suelto" icon="o-plus" class="btn-outline max-md:h-11 max-md:flex-1" wire:click="openAddLoose" spinner="openAddLoose" :disabled="! $canManage" data-testid="add-loose" />
+                    <x-button label="Agregar rol" icon="o-plus" class="btn-outline max-md:h-11 max-md:basis-full" wire:click="openAddRole" spinner="openAddRole" data-testid="add-role" />
+                    <x-button label="Agregar permiso suelto" icon="o-plus" class="btn-outline max-md:h-11 max-md:flex-1" wire:click="openAddLoose" spinner="openAddLoose" data-testid="add-loose" />
                     <x-core::row-menu icon="o-ellipsis-vertical" label="Más acciones">
                         <x-core::row-menu-item
                             label="Restablecer puesto"
@@ -104,7 +104,7 @@
                         <p class="font-semibold">{{ $newCount }} {{ $newCount === 1 ? 'permiso nuevo de fábrica' : 'permisos nuevos de fábrica' }}</p>
                         <p class="text-sm">{{ implode(' · ', $current['newFactory']['labels']) }}</p>
                     </div>
-                    <x-button label="Aplicar" class="btn-sm btn-outline bg-base-100 max-md:h-11" wire:click="applyFactoryUpdates('{{ $current['newFactory']['id'] }}')" spinner="applyFactoryUpdates('{{ $current['newFactory']['id'] }}')" :disabled="! $canManage" data-testid="apply-new" />
+                    <x-button label="Aplicar" class="btn-sm btn-outline bg-base-100 max-md:h-11" wire:click="applyFactoryUpdates('{{ $current['newFactory']['id'] }}')" spinner="applyFactoryUpdates('{{ $current['newFactory']['id'] }}')" data-testid="apply-new" />
                 </div>
             @endif
 
@@ -125,7 +125,7 @@
                                     <x-core::status-badge :tone="$set['badge']['tone']" :label="$set['badge']['label']" :icon="$set['badge']['icon']" />
                                 @endif
                                 <div class="ms-auto flex gap-1">
-                                    <x-button label="Editar" class="btn-ghost btn-sm max-md:h-11" wire:click="editRole('{{ $set['id'] }}')" spinner="editRole('{{ $set['id'] }}')" :disabled="! $canManage" aria-label="Editar {{ $set['name'] }}" />
+                                    <x-button label="Editar" class="btn-ghost btn-sm max-md:h-11" wire:click="editRole('{{ $set['id'] }}')" spinner="editRole('{{ $set['id'] }}')" aria-label="Editar {{ $set['name'] }}" />
                                     <x-button
                                         label="Quitar"
                                         class="btn-ghost btn-sm max-md:h-11"
@@ -135,7 +135,7 @@
                                         data-confirm-button="Quitar rol"
                                         data-confirm-tone="error"
                                         spinner="unassignRole('{{ $set['id'] }}')"
-                                        :disabled="! $canManage"
+                                       
                                         aria-label="Quitar {{ $set['name'] }}"
                                     />
                                 </div>
@@ -157,6 +157,9 @@
                                 <div class="grid min-w-0 flex-1 gap-px">
                                     <span class="font-semibold">{{ $loose['label'] }}</span>
                                     <span class="break-all font-mono text-[12.5px] text-neutral">{{ $loose['key'] }}</span>
+                                    @if ($loose['stale'])
+                                        <span class="text-[12.5px] text-neutral" data-testid="stale-loose">Ningún módulo lo declara ya: no aporta nada.</span>
+                                    @endif
                                 </div>
                                 <x-button
                                     label="Quitar"
@@ -167,7 +170,7 @@
                                     data-confirm-button="Quitar permiso"
                                     data-confirm-tone="error"
                                     spinner="revokeLoose('{{ $loose['key'] }}')"
-                                    :disabled="! $canManage"
+                                   
                                     aria-label="Quitar {{ $loose['label'] }}"
                                 />
                             </li>
