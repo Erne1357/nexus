@@ -21,7 +21,9 @@ use Illuminate\Notifications\Notifiable;
  * su NIP del SII (AC-10). Un usuario nuevo debe cambiar su contraseña en el primer acceso (supuesto 2 de
  * PROJECT.md). Sus puestos son sus nombramientos (`role_assignments`, ADR-0018).
  * Qué puede ver o hacer se pregunta a Actor, nunca a los roles directamente. `authz_version` la sube un
- * trigger en cada cambio de sus nombramientos; `last_role` es el último perfil que usó (AZ-S4).
+ * trigger en cada cambio de sus nombramientos; `last_role` es el último perfil que usó (AZ-S4). `deactivated_at` y
+ * `deactivated_by` dicen cuándo y quién dio de baja la cuenta en el panel (DeactivateUser, CF-05): mientras estén, solo
+ * el admin la reactiva (CF-09).
  */
 #[Fillable(['username', 'name', 'email', 'password', 'password_origin', 'is_active', 'must_change_password', 'last_login_at'])]
 #[Hidden(['password', 'remember_token'])]
@@ -44,6 +46,7 @@ class User extends Authenticatable
             'must_change_password' => 'boolean',
             'last_login_at' => 'immutable_datetime',
             'access_invited_at' => 'immutable_datetime',
+            'deactivated_at' => 'immutable_datetime',
             'last_role' => Role::class,
             'authz_version' => 'integer',
         ];

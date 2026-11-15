@@ -27,7 +27,9 @@ use Illuminate\Validation\ValidationException;
  *   el de docente lo maneja Faculty con el registro del docente (AZ-S11), que sigue en el catálogo (CF-09), y el de
  *   alumno la migración del SII (supuesto por confirmar);
  * - deja la cuenta inactiva y sin acceso: sin contraseña (C6), sin invitación pendiente y sin enlace para restablecer,
- *   con el remember token rotado; la sesión abierta se cierra en su siguiente petición (EnsureUserIsActive).
+ *   con el remember token rotado; la sesión abierta se cierra en su siguiente petición (EnsureUserIsActive). Marca
+ *   `deactivated_at` y `deactivated_by`: así ningún otro camino la reactiva (CF-09: SyncTeacherAccess, la migración del
+ *   SII), y la base lo garantiza (`users_deactivated_inactive`).
  *
  * La bitácora guarda el motivo, la nota, quién la dio y los nombramientos terminados y quitados, nunca la contraseña.
  * Avisa con UserDeactivated después del commit. Quién puede lo decide UserPolicy. Devuelve cuántos nombramientos
@@ -83,7 +85,14 @@ final class DeactivateUser
 
             $this->tokens->delete($locked);
 
-            $locked->forceFill(['is_active' => false, 'password' => null, 'password_origin' => null, 'access_invited_at' => null]);
+            $locked->forceFill([
+                'is_active' => false,
+                'deactivated_at' => now(),
+                'deactivated_by' => $actor->getKey(),
+                'password' => null,
+                'password_origin' => null,
+                'access_invited_at' => null,
+            ]);
             $locked->setRememberToken(Str::random(60));
             $locked->save();
 

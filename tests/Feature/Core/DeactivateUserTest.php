@@ -13,6 +13,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Core\Support\PasswordResetTokens;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -74,7 +75,16 @@ it('CF-05: la baja termina hoy los nombramientos vigentes, quita los que aún no
         ->and(RoleAssignment::find($headship->id))->toBeNull()
         ->and($rosa->is_active)->toBeFalse()
         ->and($rosa->password)->toBeNull()
-        ->and($rosa->password_origin)->toBeNull();
+        ->and($rosa->password_origin)->toBeNull()
+        ->and($rosa->deactivated_at->toIso8601String())->toBe(now()->toIso8601String())
+        ->and($rosa->deactivated_by)->toBe($this->admin->id);
+});
+
+it('CF-09: la base no deja activa una cuenta que el admin dio de baja, venga de donde venga la escritura', function () {
+    deactivateAccount($this->rosa);
+
+    expect(fn () => DB::table('users')->where('id', $this->rosa->id)->update(['is_active' => true]))
+        ->toThrow(QueryException::class, 'users_deactivated_inactive');
 });
 
 it('CF-05: la bitácora guarda el motivo, la nota, quién la dio y los nombramientos terminados, sin la contraseña', function () {

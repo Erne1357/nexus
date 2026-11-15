@@ -53,6 +53,8 @@ it('CF-06: reactivar deja la cuenta activa y sin acceso, sin regresarle los pues
     expect($rosa->is_active)->toBeTrue()
         ->and($rosa->password)->toBeNull()
         ->and(UserAccess::of($rosa))->toBe(UserAccess::None)
+        ->and($rosa->deactivated_at)->toBeNull()
+        ->and($rosa->deactivated_by)->toBeNull()
         ->and($coordination->fresh()->valid_to->toDateString())->toBe('2026-11-14')
         ->and(RoleAssignment::where('user_id', $rosa->id)->count())->toBe(1);
 
@@ -60,7 +62,7 @@ it('CF-06: reactivar deja la cuenta activa y sin acceso, sin regresarle los pues
 
     expect($entry->event)->toBe('reactivated')
         ->and($entry->causer_id)->toBe($this->admin->id)
-        ->and($entry->attribute_changes->toArray())->toBe(['attributes' => ['is_active' => true], 'old' => ['is_active' => false]])
+        ->and($entry->attribute_changes->toArray())->toBe(['attributes' => ['is_active' => true, 'deactivated_at' => null], 'old' => ['is_active' => false, 'deactivated_at' => '2026-11-14T10:00:00-07:00']])
         ->and($entry->description)->toBe('Reactivó la cuenta de RURR800101AB1, sin acceso');
 });
 

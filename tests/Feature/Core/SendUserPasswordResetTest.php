@@ -1,9 +1,12 @@
 <?php
 
+use App\Modules\Core\Actions\ResetForgottenPassword;
+use App\Modules\Core\Actions\SendPasswordResetLink;
 use App\Modules\Core\Actions\SendUserPasswordReset;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\PasswordResetLink;
+use App\Modules\Core\Rules\PasswordResetRules;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PasswordResetTokens;
 use Illuminate\Support\Facades\DB;
@@ -75,8 +78,59 @@ it('CF-08: no lo manda, y dice por qué, si la cuenta no puede restablecer', fun
     'sin contraseña' => [fn (User $user) => $user->forceFill(['password' => null])->save(), UserAccountRules::RESET_NO_PASSWORD],
     'sin correo' => [fn (User $user) => $user->forceFill(['email' => null])->save(), UserAccountRules::RESET_NO_EMAIL],
     'correo de otro dominio' => [fn (User $user) => $user->forceFill(['email' => 'rosa@gmail.com'])->save(), UserAccountRules::RESET_NO_EMAIL],
-    'correo sin confirmar' => [fn (User $user) => $user->forceFill(['email_verified_at' => null])->save(), UserAccountRules::RESET_UNVERIFIED],
 ]);
+
+it('CF-08: el enlace del admin sale aunque el correo del personal no esté confirmado, abre, y al usarlo lo confirma (AC-18)', function () {
+    $this->rosa->forceFill(['email_verified_at' => null])->save();
+
+    sendPanelReset($this->rosa->fresh());
+
+    $link = null;
+    Notification::assertSentTo($this->rosa, PasswordResetLink::class, function (PasswordResetLink $mail) use (&$link): bool {
+        $link = $mail->url;
+
+        return true;
+    });
+    parse_str((string) parse_url($link, PHP_URL_QUERY), $query);
+
+    expect(app(PasswordResetTokens::class)->opens($this->rosa->fresh(), $query['token']))->toBeTrue()
+        ->and(DB::table('password_reset_tokens')->sole()->issued_by)->toBe($this->admin->id);
+
+    $user = app(ResetForgottenPassword::class)->handle('RURR800101AB1', $query['token'], ['password' => 'Nueva-clave-2027', 'password_confirmation' => 'Nueva-clave-2027']);
+
+    expect($user)->not->toBeNull()
+        ->and($this->rosa->fresh()->email_verified_at)->not->toBeNull();
+});
+
+it('AC-16: «¿Olvidaste tu contraseña?» sigue pidiendo el correo confirmado del personal, y su enlace no abre sin él', function () {
+    $this->rosa->forceFill(['email_verified_at' => null])->save();
+    $rosa = $this->rosa->fresh();
+    $tokens = app(PasswordResetTokens::class);
+
+    expect(app(SendPasswordResetLink::class)->handle('RURR800101AB1'))->toBeFalse()
+        ->and(app(PasswordResetRules::class)->allows($rosa))->toBeFalse()
+        ->and(app(PasswordResetRules::class)->allows($rosa, issuedByAdmin: true))->toBeTrue();
+
+    Notification::assertNothingSent();
+
+    $selfService = $tokens->create($rosa);
+
+    expect(DB::table('password_reset_tokens')->sole()->issued_by)->toBeNull()
+        ->and($tokens->opens($rosa, $selfService))->toBeFalse();
+});
+
+it('AC-17: un enlace del autoservicio reemplaza al del admin, y con él vuelve a pedir el correo confirmado', function () {
+    $this->rosa->forceFill(['email_verified_at' => null])->save();
+    $tokens = app(PasswordResetTokens::class);
+
+    sendPanelReset($this->rosa->fresh());
+    $this->travel(61)->seconds();
+    $selfService = $tokens->create($this->rosa->fresh());
+
+    expect(DB::table('password_reset_tokens')->count())->toBe(1)
+        ->and(DB::table('password_reset_tokens')->sole()->issued_by)->toBeNull()
+        ->and($tokens->opens($this->rosa->fresh(), $selfService))->toBeFalse();
+});
 
 it('CF-S4: al alumno sí, con su correo institucional sin confirmar', function () {
     $student = User::factory()->withRole(Role::Alumno)->create(['email' => 'l19110001@cdjuarez.tecnm.mx', 'email_verified_at' => null]);

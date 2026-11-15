@@ -15,7 +15,8 @@ use Illuminate\Validation\ValidationException;
  *   (RoleAssignmentRules::isStudentAccount()); solo se le restablece la contraseña.
  * - CF-05: nadie se da de baja a sí mismo (supuesto por confirmar) y no se da de baja a quien dejaría algún día sin admin
  *   vigente (AZ-S12, RoleAssignmentRules::deactivationGap()).
- * - CF-08: el restablecimiento sigue AC-16 (PasswordResetRules); `resetBlocker()` dice por qué no, en el mismo orden.
+ * - CF-08: el restablecimiento sigue AC-16 (PasswordResetRules) sin pedir el correo confirmado; `resetBlocker()` dice
+ *   por qué no.
  */
 final class UserAccountRules
 {
@@ -32,8 +33,6 @@ final class UserAccountRules
     public const string RESET_NO_PASSWORD = PasswordResetRules::NO_PASSWORD;
 
     public const string RESET_NO_EMAIL = PasswordResetRules::NO_EMAIL;
-
-    public const string RESET_UNVERIFIED = PasswordResetRules::UNVERIFIED;
 
     public const string RESET_RECENT = 'Ya se le mandó un enlace hace menos de un minuto.';
 
@@ -160,11 +159,12 @@ final class UserAccountRules
     }
 
     /**
-     * CF-08: por qué no se le manda el enlace de AC-16; nulo si sí: PasswordResetRules::denial(), la misma regla que
-     * `allows()`. Que ya se le mandara uno hace menos de un minuto (AC-17) se sabe al mandarlo.
+     * CF-08: por qué el admin no le manda el enlace de AC-16; nulo si sí: PasswordResetRules::denial() del enlace del
+     * admin, que no pide el correo confirmado (confirmado el 14 de noviembre de 2026). Que ya se le mandara uno hace
+     * menos de un minuto (AC-17) se sabe al mandarlo.
      */
     public function resetBlocker(User $user): ?string
     {
-        return $this->passwordReset->denial($user);
+        return $this->passwordReset->denial($user, issuedByAdmin: true);
     }
 }

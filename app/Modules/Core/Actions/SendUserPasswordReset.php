@@ -15,7 +15,9 @@ use Throwable;
  * AC-16 al correo institucional del usuario; el admin nunca ve ni pone una contraseña. Es la base de
  * SendPasswordResetLink (las reglas de AC-16, los enlaces de PasswordResetTokens y el correo PasswordResetLink), pero
  * la dispara el admin: dice por qué no (UserAccountRules::resetBlocker(), o que ya se le mandó uno hace menos de un
- * minuto, AC-17) y la bitácora lleva quién lo pidió como causante, a qué correo va y nunca el token.
+ * minuto, AC-17) y la bitácora lleva quién lo pidió como causante, a qué correo va y nunca el token. El token lleva al
+ * admin (`issued_by`), así que sirve aunque el correo del personal no esté confirmado, y al usarlo queda confirmado
+ * (AC-18; confirmado el 14 de noviembre de 2026).
  *
  * Crea el token y deja la bitácora con el usuario bloqueado y manda el correo después del commit, en la misma petición:
  * el token no debe viajar en la cola (PasswordResetLink no es ShouldQueue). Si el correo falla, borra el token y deja
@@ -41,7 +43,7 @@ final class SendUserPasswordReset
                 throw ValidationException::withMessages(['user' => $blocker]);
             }
 
-            $token = $this->tokens->create($locked) ?? throw ValidationException::withMessages(['user' => UserAccountRules::RESET_RECENT]);
+            $token = $this->tokens->create($locked, issuedBy: $actor) ?? throw ValidationException::withMessages(['user' => UserAccountRules::RESET_RECENT]);
 
             activity()
                 ->performedOn($locked)
