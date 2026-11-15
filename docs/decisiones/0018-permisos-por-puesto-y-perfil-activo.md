@@ -96,21 +96,24 @@ Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por con
    - `ModuleServiceProvider::adminOnly()` declara los permisos que solo tiene el admin y que no se dan a otro puesto, ni sueltos ni dentro de un rol.
    - Core declara `core.user.*`, `core.authz.*`, `core.assignment.*`, `core.activity.*`, `core.mail.*`, `core.queue.*` y `core.org_unit.*`. El organigrama es un supuesto por confirmar, porque decide el alcance de todos.
    - El registro falla al arrancar si un candado se concede en `grants()` o es también excepción del admin.
-6. **Alcance (CF-04).**
+6. **Alcance (CF-04, «departamento o carrera», confirmado el 14 de noviembre de 2026).**
    - `Role::boundedDimensions()` dice qué dimensiones acota cada puesto:
-     - las que lleva en su nombramiento, también el campus opcional del coordinador y del jefe de proyecto docente;
+     - las que lleva en su nombramiento, también el campus opcional del coordinador y del jefe de proyecto docente (supuesto por confirmar);
      - las que cubre por regla: el jefe de departamento y la Subdirección, en campus y modalidad.
-   - El docente y el alumno no acotan ninguna.
-   - `PermissionGrantRules` da el motivo en español de cada bloqueo: el admin no se edita; un permiso es candado; un permiso de gestión va a un puesto sin alcance; o el puesto no acota una dimensión del permiso.
+   - El docente y el alumno no acotan ninguna: solo reciben permisos personales.
+   - Un permiso de gestión se le da a un puesto si este acota el campus y la modalidad que el permiso declare y, si el permiso declara unidad o carrera, al menos una de las que declare. Si no declara ni unidad ni carrera, el puesto acota todas sus dimensiones.
+   - `PermissionGrantRules` da el motivo en español de cada bloqueo: el admin no se edita; un permiso es candado; un permiso de gestión va a un puesto sin alcance; o el puesto no acota el campus, la modalidad, o ni el departamento ni la carrera del permiso.
    - Lo de fábrica siempre vale, porque se revisó por PR.
    - Las Actions lo revisan al dar un rol o un permiso a un puesto. `GrantTable` lo vuelve a aplicar al armar el mapa. Así no vale lo que llegue a la base por otro camino, ni lo que un rol de fábrica, si sigue al código y está dado a otro puesto, le traiga después de un despliegue.
-7. **Hallazgo sobre CF-04 (por confirmar con el usuario).** Con la regla tal como está («acota **cada** dimensión»), doce concesiones de fábrica se bloquearían si no fueran de fábrica. `PermissionGrantRulesTest` las congela:
-   - `students.student.view`, de la Subdirección, el jefe de departamento y el coordinador;
-   - `academic_load.proposal.view`, de la Subdirección;
-   - `scheduling.schedule.view`, de la Subdirección, el jefe de departamento, el jefe de proyecto docente y el coordinador;
-   - `scheduling.group.manage` y `scheduling.session.edit`, del jefe de departamento y el coordinador.
-
-   Todos declaran la carrera, y casi todos también la unidad. El coordinador acota la carrera y no la unidad, y los demás acotan la unidad y no la carrera, así que cada uno deja abierta la otra dimensión y el alcance sale de la que sí lleva. La guardia de `PermissionDimensionsTest` pide menos: al menos una dimensión que el puesto lleve. Mientras el usuario no decida, queda la regla más restrictiva: esos permisos no se pueden dar a otro puesto.
+7. **Lo de fábrica frente a CF-04.**
+   - Con la primera redacción («acota **cada** dimensión»), doce concesiones de fábrica se bloquearían si no fueran de fábrica:
+     - `students.student.view`, de la Subdirección, el jefe de departamento y el coordinador;
+     - `academic_load.proposal.view`, de la Subdirección;
+     - `scheduling.schedule.view`, de la Subdirección, el jefe de departamento, el jefe de proyecto docente y el coordinador;
+     - `scheduling.group.manage` y `scheduling.session.edit`, del jefe de departamento y el coordinador.
+   - Todas declaran la carrera, y casi todas también la unidad. Cada puesto acota una de las dos: el coordinador, la carrera; los demás, la unidad. Por eso el usuario decidió «departamento o carrera».
+   - Con esa regla pasan once.
+   - Sigue necesitando la excepción de fábrica `academic_load.proposal.view` de la Subdirección: declara la carrera sin la unidad, y la Subdirección acota la unidad. `PermissionGrantRulesTest` la congela. Dar a otro puesto lo que declara solo la unidad sigue bloqueado para el coordinador: `academic_load.load.close`, por ejemplo.
 8. **Excepción documentada a «las escrituras pasan por Actions»:** los triggers de versión, igual que la decisión 9.
 
 **Consecuencias.**

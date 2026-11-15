@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Actions\ApplyFactoryUpdates;
 use App\Modules\Core\Actions\AssignPermissionSet;
 use App\Modules\Core\Actions\GrantPositionPermission;
@@ -111,7 +112,8 @@ it('CF-04: no se da un rol con un permiso que el puesto no acota, salvo lo de f�
     $coordinatorFactory = factorySetOfPosition(Role::Coordinador);
 
     expect(positionActionErrors(fn () => app(AssignPermissionSet::class)->handle(Role::JefeProyectoDocente, $coordinatorFactory))['permission_set'])
-        ->toContain('«Ver alumnos» no se da a Jefe de proyecto docente: el puesto no lleva carrera y el permiso valdría en todas las carreras.')
+        ->toContain('«Ver la propuesta de una carrera» no se da a Jefe de proyecto docente: el puesto no lleva carrera y el permiso valdría en todas las carreras.')
+        ->not->toContain('«Ver alumnos» no se da a Jefe de proyecto docente: el puesto no lleva carrera y el permiso valdría en todas las carreras.')
         ->and(positionActionErrors(fn () => app(AssignPermissionSet::class)->handle(Role::Docente, PermissionSet::factory()->withPermissions([CorePermission::SettingView])->create())))
         ->toBe(['permission_set' => ['«Ver los parámetros» no se da a Docente: el puesto no lleva alcance y solo recibe permisos personales.']]);
 
@@ -161,7 +163,7 @@ it('CF-01: da y quita un permiso suelto, con la bitácora del puesto', function 
         ]);
 });
 
-it('CF-03 y CF-04: un permiso suelto no es candado ni amplía el alcance del puesto', function (Role $role, CorePermission|FacultyPermission|StudentsPermission|StaffingPermission $permission, ?string $problem) {
+it('CF-03 y CF-04: un permiso suelto no es candado ni amplía el alcance del puesto', function (Role $role, CorePermission|FacultyPermission|StudentsPermission|StaffingPermission|AcademicLoadPermission $permission, ?string $problem) {
     $action = fn () => app(GrantPositionPermission::class)->handle($role, $permission);
 
     if ($problem === null) {
@@ -178,7 +180,8 @@ it('CF-03 y CF-04: un permiso suelto no es candado ni amplía el alcance del pue
     'candado' => [Role::JefeDepartamento, CorePermission::OrgUnitView, '«Ver el organigrama» es solo del admin: no se da a otro puesto.'],
     'el docente no recibe gestión' => [Role::Docente, CorePermission::TermView, '«Ver periodos» no se da a Docente: el puesto no lleva alcance y solo recibe permisos personales.'],
     'el coordinador no lleva departamento' => [Role::Coordinador, FacultyPermission::TeacherView, '«Ver docentes» no se da a Coordinador de carrera: el puesto no lleva departamento y el permiso valdría en todos los departamentos.'],
-    'el jefe de proyecto docente no lleva carrera' => [Role::JefeProyectoDocente, StudentsPermission::StudentView, '«Ver alumnos» no se da a Jefe de proyecto docente: el puesto no lleva carrera y el permiso valdría en todas las carreras.'],
+    'con unidad y carrera, al jefe de proyecto docente le basta el departamento' => [Role::JefeProyectoDocente, StudentsPermission::StudentView, null],
+    'el coordinador no lleva el departamento de lo que solo declara unidad' => [Role::Coordinador, AcademicLoadPermission::LoadClose, '«Cerrar la carga de un departamento» no se da a Coordinador de carrera: el puesto no lleva departamento y el permiso valdría en todos los departamentos.'],
     'el jefe de proyecto docente acota la unidad' => [Role::JefeProyectoDocente, FacultyPermission::TeacherView, null],
     'el alumno recibe un permiso personal' => [Role::Alumno, StaffingPermission::MyLoadView, null],
 ]);

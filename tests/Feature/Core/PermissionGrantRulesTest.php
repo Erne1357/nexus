@@ -1,15 +1,18 @@
 <?php
 
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Students\Enums\StudentsPermission;
 
 /*
 | CF-03 y CF-04 sobre los permisos reales: qué es candado y qué concesiones de fábrica se bloquearían si no fueran de
-| fábrica (CF-04 las deja valer porque se revisaron por PR). La segunda lista se revisa con el usuario: si crece, una
-| concesión nueva de fábrica amplía el alcance que el puesto lleva en su nombramiento.
+| fábrica (CF-04 las deja valer porque se revisaron por PR). Si la lista crece, una concesión nueva de fábrica amplía
+| el alcance que el puesto lleva en su nombramiento: revísala con el usuario.
 */
 
 it('CF-03: los candados son los de usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas', function () {
@@ -46,24 +49,37 @@ it('CF-04: las concesiones de fábrica que se bloquearían sin la excepción de 
         }
     }
 
-    // El coordinador acota la carrera y no la unidad; el jefe, la Subdirección y el jefe de proyecto docente, la unidad y
-    // no la carrera. Estos permisos declaran la carrera (y casi todos también la unidad), así que cada puesto deja
-    // abierta la que no lleva. CF-04 pide acotar cada dimensión: darlos a otro puesto se bloquea (supuesto por
-    // confirmar; ver la adenda del 14 de noviembre de 2026 a ADR-0018).
-    expect($blocked)->toBe([
-        'subdireccion → students.student.view',
-        'jefe_departamento → students.student.view',
-        'coordinador → students.student.view',
-        'subdireccion → academic_load.proposal.view',
-        'subdireccion → scheduling.schedule.view',
-        'jefe_departamento → scheduling.schedule.view',
-        'jefe_proyecto_docente → scheduling.schedule.view',
-        'coordinador → scheduling.schedule.view',
-        'jefe_departamento → scheduling.group.manage',
-        'coordinador → scheduling.group.manage',
-        'jefe_departamento → scheduling.session.edit',
-        'coordinador → scheduling.session.edit',
-    ]);
+    // CF-04 «departamento o carrera» (confirmado el 14 de noviembre de 2026): las once que declaran unidad y carrera a la
+    // vez ya pasan sin la excepción. La propuesta declara la carrera sin la unidad, y la Subdirección acota la unidad:
+    // esa sigue valiendo solo por ser de fábrica.
+    expect($blocked)->toBe(['subdireccion → academic_load.proposal.view']);
+});
+
+it('CF-04: con unidad y carrera basta acotar una; lo que declara solo la unidad sigue bloqueado para el coordinador', function () {
+    $rules = app(PermissionGrantRules::class);
+    $passing = [
+        [Role::Subdireccion, StudentsPermission::StudentView],
+        [Role::JefeDepartamento, StudentsPermission::StudentView],
+        [Role::Coordinador, StudentsPermission::StudentView],
+        [Role::Subdireccion, SchedulingPermission::ScheduleView],
+        [Role::JefeDepartamento, SchedulingPermission::ScheduleView],
+        [Role::JefeProyectoDocente, SchedulingPermission::ScheduleView],
+        [Role::Coordinador, SchedulingPermission::ScheduleView],
+        [Role::JefeDepartamento, SchedulingPermission::GroupManage],
+        [Role::Coordinador, SchedulingPermission::GroupManage],
+        [Role::JefeDepartamento, SchedulingPermission::SessionEdit],
+        [Role::Coordinador, SchedulingPermission::SessionEdit],
+    ];
+
+    foreach ($passing as [$role, $permission]) {
+        expect($rules->scopeProblem($role, $permission))->toBeNull("{$role->value} → {$permission->value}");
+    }
+
+    expect($rules->grantProblem(Role::Coordinador, AcademicLoadPermission::LoadClose))
+        ->toBe('«Cerrar la carga de un departamento» no se da a Coordinador de carrera: el puesto no lleva departamento y el permiso valdría en todos los departamentos.')
+        ->and($rules->grantProblem(Role::JefeProyectoDocente, StudentsPermission::StudentView))->toBeNull()
+        ->and($rules->grantProblem(Role::JefeDepartamento, AcademicLoadPermission::ProposalView))
+        ->toBe('«Ver la propuesta de una carrera» no se da a Jefe de departamento: el puesto no lleva carrera y el permiso valdría en todas las carreras.');
 });
 
 it('CF-04: ningún puesto sin alcance tiene de fábrica un permiso de gestión', function () {

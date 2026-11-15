@@ -9,7 +9,7 @@ use Tests\Fixtures\Authorization\FakePermission;
 /*
 | Qué permiso se le puede dar a qué puesto en el panel: CF-S1 (el admin no se edita), CF-03 (candados) y CF-04 (nada
 | que amplíe el alcance; lo de fábrica siempre vale). Con el registro de prueba: el jefe de departamento tiene de
-| fábrica ViewCareer, que sin la excepción se bloquearía; ViewCampusUnitCareer es candado.
+| fábrica ViewCareer, que sin la excepción se bloquearía; ViewUnit es candado.
 */
 
 function fakeGrantRules(): PermissionGrantRules
@@ -18,7 +18,7 @@ function fakeGrantRules(): PermissionGrantRules
         [FakePermission::class],
         [Role::JefeDepartamento->value => [FakePermission::ViewCareer], Role::Docente->value => [FakePermission::ViewOwn]],
         [],
-        [FakePermission::ViewCampusUnitCareer],
+        [FakePermission::ViewUnit],
     ));
 }
 
@@ -49,8 +49,8 @@ it('CF-S1: el admin no se edita', function () {
 it('CF-03: un candado no se da a ningún puesto ni va en un rol', function () {
     $rules = fakeGrantRules();
 
-    expect($rules->lockProblem(FakePermission::ViewCampusUnitCareer))->toBe('«fake.thing.view_campus_unit_career» es solo del admin: no se da a otro puesto.')
-        ->and($rules->grantProblem(Role::Subdireccion, FakePermission::ViewCampusUnitCareer))->toBe($rules->lockProblem(FakePermission::ViewCampusUnitCareer))
+    expect($rules->lockProblem(FakePermission::ViewUnit))->toBe('«fake.thing.view_unit» es solo del admin: no se da a otro puesto.')
+        ->and($rules->grantProblem(Role::Subdireccion, FakePermission::ViewUnit))->toBe($rules->lockProblem(FakePermission::ViewUnit))
         ->and($rules->lockProblem(FakePermission::ViewCampus))->toBeNull();
 });
 
@@ -61,7 +61,7 @@ it('CF-04: el docente y el alumno solo reciben permisos personales', function (R
         ->and($rules->grantProblem($role, FakePermission::ViewOwn))->toBeNull();
 })->with([Role::Docente, Role::Alumno]);
 
-it('CF-04: un permiso de gestión se bloquea si el puesto no acota una de sus dimensiones', function (Role $role, FakePermission $permission, ?string $problem) {
+it('CF-04: un permiso de gestión se bloquea si el puesto no acota su campus o su modalidad, o ni su departamento ni su carrera', function (Role $role, FakePermission $permission, ?string $problem) {
     expect(fakeGrantRules()->grantProblem($role, $permission))->toBe($problem);
 })->with([
     'el coordinador no lleva departamento' => [Role::Coordinador, FakePermission::ViewCampusUnit, '«fake.thing.view_campus_unit» no se da a Coordinador de carrera: el puesto no lleva departamento y el permiso valdría en todos los departamentos.'],
@@ -71,6 +71,10 @@ it('CF-04: un permiso de gestión se bloquea si el puesto no acota una de sus di
     'la Subdirección es general en campus y modalidad' => [Role::Subdireccion, FakePermission::ViewModalityUnit, null],
     'la Subdirección no lleva carrera' => [Role::Subdireccion, FakePermission::ViewCampusCareer, '«fake.thing.view_campus_career» no se da a Subdirección Académica: el puesto no lleva carrera y el permiso valdría en todas las carreras.'],
     'un permiso sin dimensiones no amplía nada' => [Role::Coordinador, FakePermission::ViewAny, null],
+    'con unidad y carrera, al coordinador le basta la carrera' => [Role::Coordinador, FakePermission::ViewCampusUnitCareer, null],
+    'con unidad y carrera, al jefe le basta el departamento' => [Role::JefeDepartamento, FakePermission::ViewCampusUnitCareer, null],
+    'con unidad y carrera, a la Subdirección le basta el departamento' => [Role::Subdireccion, FakePermission::ViewCampusUnitCareer, null],
+    'con carrera y sin unidad, el jefe no la acota' => [Role::JefeDepartamento, FakePermission::ViewModalityCareer, '«fake.thing.view_modality_career» no se da a Jefe de departamento: el puesto no lleva carrera y el permiso valdría en todas las carreras.'],
 ]);
 
 it('CF-04: lo que el código concede de fábrica siempre vale, aunque sin la excepción se bloquearía', function () {
