@@ -11,10 +11,12 @@ use App\Modules\Core\Enums\Role;
  * - CF-S1: el admin no se edita; tiene todo lo declarado menos adminDenies(), en código.
  * - CF-03: un candado (adminOnly()) no se da a otro puesto, ni suelto ni dentro de un rol. Un rol puede llevar
  *   cualquier otro permiso: lo demás se revisa al darlo a un puesto.
- * - CF-04: un permiso de gestión solo se le da a un puesto que acota cada dimensión que el permiso declara
- *   (Role::boundedDimensions()); si no, valdría sin límite en esa dimensión. El docente y el alumno no acotan ninguna:
- *   solo reciben permisos personales. Las concesiones de fábrica del puesto (grants()) siempre valen, porque se
- *   revisaron por PR; scopeProblem() responde sin esa excepción.
+ * - CF-04 (confirmado el 14 de noviembre de 2026, «departamento o carrera»): un permiso de gestión solo se le da a un
+ *   puesto que acota (Role::boundedDimensions()) el campus y la modalidad que el permiso declare y, si declara unidad
+ *   o carrera, al menos una de las que declare: el departamento o la carrera bastan para acotarlo. Si no, valdría
+ *   sin límite. El docente y el alumno no acotan ninguna dimensión: solo reciben permisos personales. Las concesiones
+ *   de fábrica del puesto (grants()) siempre valen, porque se revisaron por PR; scopeProblem() responde sin esa
+ *   excepción.
  *
  * Sin estado: solo lee el registro, que es inmutable. GrantTable la usa también al armar su mapa, así que nada de lo
  * que bloquea vale aunque llegue a la base por otro camino.
@@ -56,7 +58,8 @@ final class PermissionGrantRules
 
     /**
      * CF-04 sin la excepción de fábrica: el motivo por el que dar `$permission` a `$role` ampliaría su alcance, o null.
-     * Un permiso personal nunca lo amplía: vale solo sobre lo propio.
+     * Un permiso personal nunca lo amplía: vale solo sobre lo propio. El campus y la modalidad que declare, cada uno; la
+     * unidad y la carrera que declare, al menos una.
      */
     public function scopeProblem(Role $role, Permission $permission): ?string
     {
@@ -70,19 +73,26 @@ final class PermissionGrantRules
             return "«{$permission->label()}» no se da a {$role->listLabel()}: el puesto no lleva alcance y solo recibe permisos personales.";
         }
 
-        foreach ($permission->dimensions() as $dimension) {
-            if (! in_array($dimension, $bounded, true)) {
-                [$noun, $all] = match ($dimension) {
-                    Dimension::Campus => ['campus', 'todos los campus'],
-                    Dimension::Unit => ['departamento', 'todos los departamentos'],
-                    Dimension::Career => ['carrera', 'todas las carreras'],
-                    Dimension::Modality => ['modalidad', 'todas las modalidades'],
-                };
+        $declared = $permission->dimensions();
+        $open = array_values(array_filter(
+            $declared,
+            fn (Dimension $dimension): bool => in_array($dimension, [Dimension::Campus, Dimension::Modality], true) && ! in_array($dimension, $bounded, true),
+        ));
+        $scoping = array_values(array_filter($declared, fn (Dimension $dimension): bool => in_array($dimension, [Dimension::Unit, Dimension::Career], true)));
 
-                return "«{$permission->label()}» no se da a {$role->listLabel()}: el puesto no lleva {$noun} y el permiso valdría en {$all}.";
-            }
+        if ($open === [] && ($scoping === [] || array_any($scoping, fn (Dimension $dimension): bool => in_array($dimension, $bounded, true)))) {
+            return null;
         }
 
-        return null;
+        $missing = $open !== [] ? [$open[0]] : $scoping;
+        $nouns = array_map(fn (Dimension $dimension): array => match ($dimension) {
+            Dimension::Campus => ['campus', 'todos los campus'],
+            Dimension::Unit => ['departamento', 'todos los departamentos'],
+            Dimension::Career => ['carrera', 'todas las carreras'],
+            Dimension::Modality => ['modalidad', 'todas las modalidades'],
+        }, $missing);
+
+        return "«{$permission->label()}» no se da a {$role->listLabel()}: el puesto no lleva ".implode(' ni ', array_column($nouns, 0))
+            .' y el permiso valdría en '.implode(' y ', array_column($nouns, 1)).'.';
     }
 }
