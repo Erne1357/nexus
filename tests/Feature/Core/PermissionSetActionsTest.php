@@ -178,6 +178,16 @@ it('CF-S2: un rol propio se desactiva y se activa; el de fábrica no se desactiv
         ->toBe(['permission_set' => ['«Docente (de fábrica)» es un rol de fábrica: no se desactiva.']]);
 });
 
+it('CF-S2: un rol de fábrica que quedó desactivado por otro camino sí se activa', function () {
+    $set = factorySetFor(Role::Docente);
+    DB::table('permission_sets')->where('id', $set->id)->update(['is_active' => false]);
+
+    app(SetPermissionSetActive::class)->handle($set, true);
+
+    expect($set->fresh()->is_active)->toBeTrue()
+        ->and(app(GrantTable::class)->matrix()['docente'])->toBe(app(PermissionRegistry::class)->matrix()['docente']);
+});
+
 it('CF-S2: un rol se borra (soft delete) solo si ningún puesto lo tiene, y nunca el de fábrica', function () {
     $assigned = PermissionSet::factory()->withPermissions([CorePermission::SettingView])->assignedTo(Role::Coordinador, Role::JefeDepartamento)->create(['name' => 'Parámetros']);
     $free = PermissionSet::factory()->withPermissions([CorePermission::SettingView])->create(['name' => 'Libre']);

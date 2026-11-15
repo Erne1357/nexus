@@ -252,15 +252,4 @@ final class PermissionSetRules
             'permissions' => DB::table('position_permissions')->where('role', $role->value)->orderBy('permission')->pluck('permission')->all(),
         ];
     }
-
-    /**
-     * Cambia las filas del rol por `$keys`.
-     *
-     * @param  list<string>  $keys
-     */
-    public function replaceKeys(PermissionSet $set, array $keys): void
-    {
-        DB::table('permission_set_permissions')->where('permission_set_id', $set->getKey())->delete();
-        DB::table('permission_set_permissions')->insert(array_map(fn (string $key): array => ['permission_set_id' => $set->getKey(), 'permission' => $key], $keys));
-    }
 }

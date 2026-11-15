@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Actions\Concerns\ReplacesPermissionSetKeys;
 use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Rules\PermissionSetRules;
@@ -17,6 +18,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  */
 final class CreatePermissionSet
 {
+    use ReplacesPermissionSetKeys;
+
     public function __construct(
         private readonly PermissionSetRules $rules,
         private readonly GrantTable $grants,
@@ -37,12 +40,12 @@ final class CreatePermissionSet
             $this->rules->ensureNameIsFree($name);
 
             try {
-                $set = PermissionSet::query()->create(['name' => $name, 'description' => $description, 'follows_factory' => false, 'is_active' => true]);
+                $set = PermissionSet::query()->forceCreate(['name' => $name, 'description' => $description, 'follows_factory' => false, 'is_active' => true]);
             } catch (UniqueConstraintViolationException) {
                 throw $this->rules->nameTaken($name);
             }
 
-            $this->rules->replaceKeys($set, $keys);
+            $this->replaceKeys($set, $keys);
 
             activity()
                 ->performedOn($set)

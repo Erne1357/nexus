@@ -129,3 +129,25 @@ it('CF-03 y CF-S1: el catálogo dice de cada permiso su módulo, sus dimensiones
         ->and($catalog['staffing.my_load.view']['admin_denied'])->toBeTrue()
         ->and($catalog['staffing.my_load.view']['people'])->toBe(1);
 });
+
+it('CF-03 y CF-04: el catálogo marca para el drawer de agregar lo que valdría en todo el Tec y por qué no se da a un puesto', function () {
+    $catalog = collect(app(PermissionCatalogQuery::class)->all())->keyBy('key');
+
+    expect($catalog['core.term.create']['institution_wide'])->toBeTrue()
+        ->and($catalog['core.term.create']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente, Role::Coordinador])
+        ->and($catalog['core.term.open']['institution_wide'])->toBeTrue()
+        ->and($catalog['core.term.open']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento])
+        ->and($catalog['core.modality.view']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento])
+        ->and($catalog['students.student.view']['institution_wide'])->toBeFalse()
+        ->and($catalog['students.student.view']['institution_wide_for'])->toBe([])
+        ->and($catalog['staffing.my_load.view']['institution_wide'])->toBeFalse()
+        ->and($catalog['core.campus.update']['blocked_for'])->toBe(array_fill_keys(
+            ['subdireccion', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'docente', 'alumno'],
+            '«Editar datos y estado de un campus» es solo del admin: no se da a otro puesto.',
+        ))
+        ->and(array_keys($catalog['academic_load.load.close']['blocked_for']))->toBe(['coordinador', 'docente', 'alumno'])
+        ->and($catalog['core.term.create']['blocked_for'])->toBe([
+            'docente' => '«Dar de alta periodos» no se da a Docente: el puesto no lleva alcance y solo recibe permisos personales.',
+            'alumno' => '«Dar de alta periodos» no se da a Alumno: el puesto no lleva alcance y solo recibe permisos personales.',
+        ]);
+});

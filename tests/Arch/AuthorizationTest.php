@@ -196,6 +196,7 @@ const GRANT_TABLES_READERS = [
     'app/Modules/Core/Models/PermissionSet.php',
     'app/Modules/Core/Database/Factories/PermissionSetFactory.php',
     'app/Modules/Core/Rules/PermissionSetRules.php',
+    'app/Modules/Core/Actions/Concerns/ReplacesPermissionSetKeys.php',
     'app/Modules/Core/Policies/PermissionSetPolicy.php',
     'app/Modules/Core/Queries/PositionsQuery.php',
     'app/Modules/Core/Queries/PermissionSetsQuery.php',
