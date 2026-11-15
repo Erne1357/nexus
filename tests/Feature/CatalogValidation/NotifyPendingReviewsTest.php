@@ -13,16 +13,14 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Notifications\DatabaseNotification;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
 /*
 | Tarea 2.9: el aviso a los jefes de que tienen catálogos por validar (reglas-de-negocio.md, «Periodo y
 | calendario»). Le llega al jefe de departamento, el único que valida, de cada departamento con revisiones
-| pendientes del periodo en el campus, con la misma cuenta que HC-14 (CatalogReviewQuery::pendingFor). Lo
+| pendientes del periodo, con la misma cuenta que HC-14 (CatalogReviewQuery::pendingFor). Lo
 | manda NotifyPendingReviews al abrir el periodo y, a demanda, el recordatorio del tablero (tarea 2.5).
 */
 
@@ -56,7 +54,7 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
     reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
 
-    $notified = app(NotifyPendingReviews::class)->handle($this->term, $this->c2);
+    $notified = app(NotifyPendingReviews::class)->handle($this->term);
 
     expect($notified)->toBe(1);
     Notification::assertSentTo($this->jefeSistemas, CatalogReviewsPending::class, function (CatalogReviewsPending $notification) {
@@ -67,7 +65,7 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
             && $message->route === 'catalog-validation.review'
             && $message->parameters === ['department' => $this->sistemas->id]
             && $message->termId === $this->term->id
-            && $message->campusId === $this->c2->id;
+            && $message->campusId === null;
     });
     Notification::assertNotSentTo($this->jefeBasicas, CatalogReviewsPending::class);
 });
@@ -77,7 +75,7 @@ it('MS34: el aviso cuenta lo que el admin abrió, sin un perfil de campus: con l
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
     CatalogReview::query()->where('department_id', $this->basicas->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
 
-    app(NotifyPendingReviews::class)->handle($this->term, $this->c2);
+    app(NotifyPendingReviews::class)->handle($this->term);
 
     Notification::assertSentTo($this->jefeBasicas, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification) => $notification->message($this->jefeBasicas)->body === 'Ene-Jun 2027 · Ciencias Básicas: docentes');
 });
@@ -87,7 +85,7 @@ it('con un departamento, solo avisa a su jefe (el recordatorio del tablero)', fu
     reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Pending);
 
-    expect(app(NotifyPendingReviews::class)->handle($this->term, $this->c2, $this->basicas->id))->toBe(1);
+    expect(app(NotifyPendingReviews::class)->handle($this->term, $this->basicas->id))->toBe(1);
 
     Notification::assertSentTo($this->jefeBasicas, CatalogReviewsPending::class);
     Notification::assertNotSentTo($this->jefeSistemas, CatalogReviewsPending::class);
@@ -97,7 +95,7 @@ it('con un id que no es de un departamento activo, no avisa a nadie', function (
     Notification::fake();
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Pending);
 
-    expect(app(NotifyPendingReviews::class)->handle($this->term, $this->c2, $id))->toBe(0);
+    expect(app(NotifyPendingReviews::class)->handle($this->term, $id))->toBe(0);
 
     Notification::assertNothingSent();
 })->with(['no es uuid' => 'abc', 'no existe' => fn () => fakeKey(99)]);
@@ -109,7 +107,7 @@ it('no avisa a los departamentos inactivos ni a quien no es jefe de ese departam
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['department_id' => $this->basicas->id, 'campus_id' => $this->c2->id])->create();
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Pending);
 
-    expect(app(NotifyPendingReviews::class)->handle($this->term, $this->c2))->toBe(1);
+    expect(app(NotifyPendingReviews::class)->handle($this->term))->toBe(1);
 
     Notification::assertSentTo($this->jefeBasicas, CatalogReviewsPending::class);
     Notification::assertNotSentTo([$this->jefeSistemas, $jpd], CatalogReviewsPending::class);
@@ -130,28 +128,16 @@ it('CV9: al abrir la validación avisa a los jefes y abrir el periodo no', funct
         ->and($this->jefeSistemas->notifications()->first()->data['title'])->toBe('Tienes catálogos por validar');
 });
 
-it('CV9: con varios campus avisa una vez por jefe y departamento, con el primer campus, y cuenta lo pendiente una vez por departamento', function () {
+it('CV9: avisa una vez por jefe y departamento, sin campus, con solo los catálogos recién abiertos', function () {
     reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
-    $c1 = Campus::factory()->create(['code' => 'C1']);
-    $queriesWith = function (EloquentCollection $campuses): int {
-        DB::flushQueryLog();
-        DB::enableQueryLog();
-        app(NotifyPendingReviews::class)->notifyOpened($this->term, $campuses, Catalog::cases());
-        DB::disableQueryLog();
-
-        return count(DB::getQueryLog());
-    };
-
     Notification::fake();
-    $queriesWith(new EloquentCollection([$c1]));
-    Notification::fake();
-    $alone = $queriesWith(new EloquentCollection([$c1]));
-    $both = $queriesWith(new EloquentCollection([$c1, $this->c2]));
 
-    expect($both)->toBe($alone);
-    Notification::assertSentToTimes($this->jefeSistemas, CatalogReviewsPending::class, 2);
-    Notification::assertSentTo($this->jefeSistemas, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification, array $channels, User $notifiable): bool => $notification->message($notifiable)->campusId === $c1->id);
+    app(NotifyPendingReviews::class)->notifyOpened($this->term, [Catalog::Subjects, Catalog::Careers]);
+
+    Notification::assertSentToTimes($this->jefeSistemas, CatalogReviewsPending::class, 1);
+    Notification::assertSentTo($this->jefeSistemas, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification, array $channels, User $notifiable): bool => $notification->message($notifiable)->campusId === null
+        && str_ends_with($notification->message($notifiable)->body, ': materias y carreras'));
     Notification::assertNotSentTo($this->jefeBasicas, CatalogReviewsPending::class);
 });
 
@@ -169,16 +155,16 @@ it('notify() da los usuarios avisados y handle() sigue dando cuántos', function
     reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
 
-    $users = app(NotifyPendingReviews::class)->notify($this->term, $this->c2);
+    $users = app(NotifyPendingReviews::class)->notify($this->term);
 
     expect($users->pluck('id')->all())->toBe([$this->jefeSistemas->id])
-        ->and(app(NotifyPendingReviews::class)->handle($this->term, $this->c2))->toBe(1);
+        ->and(app(NotifyPendingReviews::class)->handle($this->term))->toBe(1);
 });
 
 it('guarda el puesto de jefe en el aviso', function () {
     reviewsFor($this->term, $this->c2, $this->sistemas, ReviewStatus::Pending);
 
-    app(NotifyPendingReviews::class)->handle($this->term, $this->c2);
+    app(NotifyPendingReviews::class)->handle($this->term);
 
     expect($this->jefeSistemas->notifications()->first()->data['role'])->toBe('jefe_departamento');
 });

@@ -21,7 +21,6 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
-use Illuminate\Support\Collection;
 
 /*
 | Tarea 2.5: lo que lee el tablero de avance de validación. El total sigue la regla de HC-14 (las cuatro que no son
@@ -42,8 +41,7 @@ beforeEach(function () {
     TermOpening::factory()->create(['term_id' => $this->term->id]);
     app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
-    $this->progress = fn (?Collection $campuses = null, string $search = '', string $status = '') => app(ValidationProgressQuery::class)
-        ->board($this->term, $campuses ?? app(ValidationProgressQuery::class)->openCampuses($this->term), $search, $status);
+    $this->progress = fn (string $search = '', string $status = '') => app(ValidationProgressQuery::class)->board($this->term, $search, $status);
 });
 
 function progressValidate(Department $department, Catalog $catalog, ReviewStatus $status = ReviewStatus::Validated): void
@@ -92,11 +90,11 @@ it('una revisión que falta cuenta como pendiente y cuadra con pendingFor', func
         ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis)));
 });
 
-it('con un solo campus filtrado que usa salones cuenta la de salones y cuadra con pendingFor', function () {
+it('cuenta la de salones, una para todo el Tec, y cuadra con pendingFor', function () {
     progressValidate($this->sis, Catalog::Teachers);
     progressValidate($this->sis, Catalog::Rooms);
 
-    $board = ($this->progress)(collect([$this->c2]));
+    $board = ($this->progress)();
     $row = collect($board['rows'])->firstWhere('department.code', 'SIS');
 
     expect($board['global']['total'])->toBe(10)
@@ -104,10 +102,10 @@ it('con un solo campus filtrado que usa salones cuenta la de salones y cuadra co
         ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis)));
 });
 
-it('CV9: las columnas y el total son los catálogos abiertos en el periodo, sin importar el campus del filtro', function () {
+it('CV9: las columnas y el total son los catálogos abiertos en el periodo', function () {
     CatalogReview::query()->whereIn('catalog', [Catalog::Rooms->value, Catalog::Careers->value])->delete();
 
-    $board = ($this->progress)(collect([$this->c3]));
+    $board = ($this->progress)();
 
     expect($board['global']['total'])->toBe(6)
         ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans']);
@@ -174,20 +172,17 @@ it('«Recordar» queda bloqueado si no falta nada, y la insignia cuenta jefes di
 });
 
 it('con un departamento dado arma solo su fila', function () {
-    $board = app(ValidationProgressQuery::class)->board($this->term, collect([$this->c2]), '', 'validated', $this->ele->id);
+    $board = app(ValidationProgressQuery::class)->board($this->term, '', 'validated', $this->ele->id);
 
     expect($board['rows'])->toBe([])
-        ->and(app(ValidationProgressQuery::class)->board($this->term, collect([$this->c2]), departmentId: $this->ele->id)['rows'])->toHaveCount(1);
+        ->and(app(ValidationProgressQuery::class)->board($this->term, departmentId: $this->ele->id)['rows'])->toHaveCount(1);
 });
 
-it('el último recordatorio solo cuenta los campus del alcance', function () {
+it('el último recordatorio cuenta los de cualquier campus: la validación es de todo el Tec', function () {
     activity()->performedOn($this->sis)->event('reminded')->withProperties(['term_id' => $this->term->id, 'campuses' => ['C1'], 'notified' => 1, 'recipients' => []])->log('x');
+    activity()->performedOn($this->ele)->event('reminded')->withProperties(['term_id' => fakeKey(1), 'notified' => 1, 'recipients' => []])->log('x');
 
-    $query = app(ValidationProgressQuery::class);
-
-    expect($query->lastReminders($this->term, [$this->sis->id], ['C2']))->toBe([])
-        ->and($query->lastReminders($this->term, [$this->sis->id], ['C2', 'C1']))->toHaveKey($this->sis->id)
-        ->and($query->lastReminders($this->term, [$this->sis->id], []))->toBe([]);
+    expect(app(ValidationProgressQuery::class)->lastReminders($this->term, [$this->sis->id, $this->ele->id]))->toHaveKey($this->sis->id)->not->toHaveKey($this->ele->id);
 });
 
 it('filtra por departamento o jefe y por estado', function () {
@@ -196,7 +191,7 @@ it('filtra por departamento o jefe y por estado', function () {
         progressValidate($this->sis, $catalog);
     }
 
-    $codes = fn (string $search = '', string $status = '') => array_map(fn (array $row) => $row['department']->code, ($this->progress)(null, $search, $status)['rows']);
+    $codes = fn (string $search = '', string $status = '') => array_map(fn (array $row) => $row['department']->code, ($this->progress)($search, $status)['rows']);
 
     expect($codes('sist'))->toBe(['SIS'])
         ->and($codes('raul'))->toBe(['ELE'])
@@ -204,7 +199,7 @@ it('filtra por departamento o jefe y por estado', function () {
         ->and($codes('', 'validated'))->toBe(['SIS'])
         ->and($codes('nadie'))->toBe([])
         // El global no cambia con los filtros de la tabla.
-        ->and(($this->progress)(null, 'nadie')['global']['total'])->toBe(10);
+        ->and(($this->progress)('nadie')['global']['total'])->toBe(10);
 });
 
 it('reporta el estado de la carga de cada departamento en la modalidad de los campus mediante el evento con reporte (M1)', function () {

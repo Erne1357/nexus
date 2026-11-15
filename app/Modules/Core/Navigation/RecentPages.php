@@ -37,7 +37,7 @@ final readonly class RecentPages
      */
     public function remember(string $route, string $uri): void
     {
-        $item = $this->navigation->forRoute($route);
+        $item = $this->navigation->forRoute($route, $this->context);
 
         if ($item !== null && $item->isVisibleTo($this->context)) {
             $this->session->put(self::KEY.'.'.$item->area->value, ['route' => $route, 'uri' => '/'.ltrim($uri, '/')]);
@@ -66,7 +66,7 @@ final readonly class RecentPages
             return null;
         }
 
-        return $this->navigation->forRoute($page['route'])?->area === $area ? ['route' => $page['route'], 'uri' => $page['uri']] : null;
+        return $this->navigation->forRoute($page['route'], $this->context)?->area === $area ? ['route' => $page['route'], 'uri' => $page['uri']] : null;
     }
 
     public function forget(): void

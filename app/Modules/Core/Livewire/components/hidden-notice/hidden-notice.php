@@ -29,7 +29,7 @@ new class extends Component
      */
     public function with(Navigation $navigation, Actor $context): array
     {
-        $item = $this->route === null ? null : $navigation->forRoute($this->route);
+        $item = $this->route === null ? null : $navigation->forRoute($this->route, $context);
 
         return ['reason' => $item === null ? null : $navigation->hiddenReasonFor($item, $context)];
     }
