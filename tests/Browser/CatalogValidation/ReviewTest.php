@@ -26,7 +26,8 @@ use Spatie\Activitylog\Models\Activity;
 | que faltan juntos con «Elegir los N por revisar» y, con todo revisado, valida el catálogo desde «Revisaste los N
 | docentes». En la segunda prueba, el jefe valida en un paso los catálogos sin registros (CV7, D5) y, con Docentes ya
 | validado, sigue el enlace «N sin correo institucional» y captura el correo en la fila: la revisión sigue validada
-| (CV-S2, D11), y ve quién validó sin recargar.
+| (CV-S2, D11), y ve quién validó sin recargar. En la tercera, abre una materia con «Agregar observación», elige el tipo
+| y oprime «Guardar»: no guarda y le pide agregarla o quitarla (CV-S16); la agrega y entonces guarda.
 */
 
 it('el jefe revisa salones y docentes registro por registro, con teclado y en lote, y valida', function () {
@@ -173,4 +174,39 @@ it('el jefe valida en un paso los catálogos sin registros y, ya validados sus d
     expect($teacher->fresh()->institutional_email)->toBe('adriana.beltran@cdjuarez.tecnm.mx')
         ->and(CatalogReview::query()->where('catalog', Catalog::Teachers)->sole()->status)->toBe(ReviewStatus::Validated)
         ->and($jefe->exists)->toBeTrue();
+});
+
+it('CV-S16: el jefe no pierde una observación a medias al oprimir «Guardar»: la agrega y luego guarda', function () {
+    Term::factory()->current()->create();
+    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
+    TermOpening::factory()->create(['term_id' => Term::query()->sole()->id, 'modality_id' => modalityOf('PRES')->id]);
+    app(CreateTermReviews::class)->handle(Term::query()->sole(), [Catalog::Subjects]);
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);
+    $subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
+
+    $page = visit('/login')
+        ->fill('username', 'jefe')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->navigate('/catalog-validation?catalogo=subjects')
+        ->waitForText('0 de 1 revisados')
+        ->click('table [aria-label="Acciones de SCD-1027"]')
+        ->click('@flag-SCD-1027')
+        ->waitForText('Tipo de observación')
+        ->select('flag', 'missing_data')
+        ->fill('comment', 'Faltan las horas de práctica.')
+        ->click('@save-record')
+        ->waitForText('Agrega la observación o quítala antes de guardar.')
+        ->assertVisible('@record-panel')
+        ->assertSee('0 de 1 revisados')
+        ->click('@add-flag')
+        ->waitForText('Observación agregada')
+        ->assertSeeIn('@flags-section', 'Faltan las horas de práctica.')
+        ->click('@save-record')
+        ->waitForText('Sin cambios: queda revisado')
+        ->assertSee('1 de 1 revisados')
+        ->assertNoJavaScriptErrors();
+
+    expect(CatalogReviewMark::query()->where('record_id', $subject->id)->exists())->toBeTrue();
 });

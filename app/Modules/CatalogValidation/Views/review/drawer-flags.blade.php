@@ -1,6 +1,7 @@
 {{--
     Las observaciones de un registro en el drawer (catalog-validation::review.drawer): `$card`, `$editing`, `$flagOptions`.
-    A quien solo mira no se le dice por qué no observa: ya lo dice la cabecera (tarea 1.21).
+    A quien solo mira no se le dice por qué no observa: ya lo dice la cabecera (tarea 1.21). Si el jefe oprime «Guardar»
+    con el tipo o el comentario sin agregar, el error sale aquí, junto al campo (CV-S16).
 --}}
 <section class="space-y-3" aria-labelledby="drawer-flags" data-testid="flags-section">
     <h3 id="drawer-flags" class="flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">

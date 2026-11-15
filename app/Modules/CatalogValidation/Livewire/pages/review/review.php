@@ -432,6 +432,8 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->authorize('updateInstitutionalEmail', $record);
         }
 
+        $this->ensureNoPendingFlag();
+
         $record = $correctRecord->handle($review, $record, $this->validatedRecord($review->catalog), $this->user());
 
         /*
@@ -767,6 +769,20 @@ new #[Title('Validación de catálogos')] class extends Component
     private function authorizeValidating(): void
     {
         abort_unless($this->state()['reviews']->contains(fn (CatalogReview $review): bool => Gate::allows('validate', $review)), 403);
+    }
+
+    /**
+     * CV-S16 (supuesto por confirmar): «Guardar» no pierde una observación a medias. Con un tipo elegido o un comentario
+     * escrito sin «Agregar observación», no guarda ni marca el registro y lo dice junto al campo: el tipo, o el
+     * comentario si solo hay comentario.
+     */
+    private function ensureNoPendingFlag(): void
+    {
+        if ($this->flag === '' && trim($this->comment) === '') {
+            return;
+        }
+
+        throw ValidationException::withMessages([$this->flag !== '' ? 'flag' : 'comment' => 'Agrega la observación o quítala antes de guardar.']);
     }
 
     /**
