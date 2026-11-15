@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Actions\ResetSetting;
 use App\Modules\Core\Actions\UpdateSetting;
+use App\Modules\Core\Actions\UpdateSettings;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Settings\SettingRegistry;
@@ -110,4 +111,28 @@ it('CF-S7: volver al valor por omisión de uno que no se cambió no hace nada', 
     app(ResetSetting::class)->handle(settingDefinitionOf('staffing.history_terms'));
 
     expect(Activity::query()->count())->toBe(0);
+});
+
+it('CF-S7: los topes superiores se respetan', function (string $key, mixed $value) {
+    expect(fn () => app(UpdateSetting::class)->handle(settingDefinitionOf($key), $value))->toThrow(ValidationException::class);
+})->with([
+    'historial' => ['staffing.history_terms', 21],
+    'tolerancia' => ['staffing.extra_hours_tolerance', 41],
+    'honorarios' => ['staffing.honorarios_max_hours', 41],
+    'traslado' => ['staffing.min_campus_travel_minutes', 241],
+    'tamaño de grupo' => ['demand.min_group_size', 101],
+    'peso' => ['staffing.weights', ['per_group_taught' => 101, 'preferente' => 1, 'apto' => 1, 'evaluation' => 1]],
+]);
+
+it('CF-S7: UpdateSettings guarda toda la tarjeta o nada, con la bitácora de cada parámetro', function () {
+    $registry = app(SettingRegistry::class);
+    $definitions = [$registry->get('staffing.history_terms'), $registry->get('staffing.extra_hours_tolerance')];
+
+    expect(fn () => app(UpdateSettings::class)->handle($definitions, ['staffing.history_terms' => 8, 'staffing.extra_hours_tolerance' => 99]))
+        ->toThrow(ValidationException::class)
+        ->and(Setting::query()->count())->toBe(0);
+
+    app(UpdateSettings::class)->handle($definitions, ['staffing.history_terms' => 8, 'staffing.extra_hours_tolerance' => 5]);
+
+    expect(Setting::query()->count())->toBe(2)->and(Activity::query()->count())->toBe(2);
 });

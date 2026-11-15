@@ -22,7 +22,7 @@
                     @foreach ($module['settings'] as $row)
                         @php
                             $definition = $row['definition'];
-                            $id = $this->idOf($definition);
+                            $id = str_replace('.', '__', $definition->key);
                             $isTable = $definition->type->isTable();
                             $step = in_array($definition->type, [\App\Modules\Core\Settings\SettingType::Decimal, \App\Modules\Core\Settings\SettingType::DecimalTable], true) ? 'any' : '1';
                         @endphp

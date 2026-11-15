@@ -1,7 +1,7 @@
 <?php
 
 use App\Modules\Core\Actions\ResetSetting;
-use App\Modules\Core\Actions\UpdateSetting;
+use App\Modules\Core\Actions\UpdateSettings;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Queries\SettingsQuery;
 use App\Modules\Core\Settings\SettingDefinition;
@@ -52,35 +52,29 @@ new #[Title('Parámetros')] class extends Component
         ];
     }
 
-    public function save(string $module, SettingsQuery $settings, SettingRegistry $registry, UpdateSetting $update): void
+    public function save(string $module, SettingsQuery $settings, SettingRegistry $registry, UpdateSettings $update): void
     {
         $this->authorize('update', Setting::class);
         $definitions = $registry->byModule()[$module] ?? abort(404);
 
         $this->resetErrorBag();
-        $valid = [];
+
+        $values = [];
 
         foreach ($definitions as $definition) {
-            $id = $this->idOf($definition);
-
-            try {
-                $definition->validated($this->values[$id] ?? null);
-                $valid[] = $definition;
-            } catch (ValidationException $e) {
-                foreach ($e->errors() as $field => $messages) {
-                    $this->addError('values.'.$id.substr($field, strlen('value')), $messages[0]);
-                }
-            }
+            $values[$definition->key] = $this->values[$this->idOf($definition)] ?? null;
         }
 
-        if (count($valid) !== count($definitions)) {
+        try {
+            $update->handle($definitions, $values);
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $field => $messages) {
+                $this->addError('values.'.$field, $messages[0]);
+            }
+
             $this->error('Revisa los valores marcados', 'No se guardó nada de este módulo.');
 
             return;
-        }
-
-        foreach ($valid as $definition) {
-            $update->handle($definition, $this->values[$this->idOf($definition)] ?? null);
         }
 
         $this->loadValues($settings);
@@ -102,7 +96,7 @@ new #[Title('Parámetros')] class extends Component
     /**
      * La llave sin puntos, para usarla en el nombre de un campo.
      */
-    public function idOf(SettingDefinition $definition): string
+    protected function idOf(SettingDefinition $definition): string
     {
         return str_replace('.', '__', $definition->key);
     }

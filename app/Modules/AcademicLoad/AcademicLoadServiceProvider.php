@@ -142,11 +142,11 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             new SettingDefinition(SuggestedGroups::SETTING, ...$module, label: 'Alumnos por grupo que se buscan',
                 help: 'El tamaño de grupo con el que la propuesta de carrera sugiere cuántos grupos abrir: el general y el de las materias con laboratorio. Cada tamaño es un entero de uno en adelante.',
-                type: SettingType::IntegerTable, default: ['default' => SuggestedGroups::DEFAULT_SIZE, 'lab' => SuggestedGroups::LAB_SIZE], rules: ['min:1'],
+                type: SettingType::IntegerTable, default: ['default' => SuggestedGroups::DEFAULT_SIZE, 'lab' => SuggestedGroups::LAB_SIZE], rules: ['min:1', 'max:100'],
                 fields: ['default' => 'Materias sin laboratorio', 'lab' => 'Materias con laboratorio'], unit: 'alumnos'),
             new SettingDefinition(ProposalAnomalies::SETTING, ...$module, label: 'Mínimo de alumnos por grupo',
                 help: 'Si la propuesta de una materia deja menos alumnos esperados por grupo que este número, la fila se marca como rara. No bloquea el envío.',
-                type: SettingType::Integer, default: ProposalAnomalies::DEFAULT_MINIMUM, rules: ['min:1'], unit: 'alumnos'),
+                type: SettingType::Integer, default: ProposalAnomalies::DEFAULT_MINIMUM, rules: ['min:1', 'max:100'], unit: 'alumnos'),
         ];
     }
 
