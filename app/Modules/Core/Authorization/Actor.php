@@ -37,9 +37,9 @@ use LogicException;
  * de consola que fija el usuario del guard sí recibe el predeterminado): sus puestos efectivos son todos los que tiene,
  * porque responden «quién podría», que es lo que preguntan los avisos y las policies sobre otra persona.
  *
- * API de permisos (spec 7.1; el registro de permisos dice qué puesto concede qué):
- * - Qué nombramientos aportan un permiso (AZ-02; mecanismo AZ-S16, contributing()): los de un puesto al que el
- *   registro se lo concede y cuya unidad, o una de sus descendientes, es de las que el permiso declara en
+ * API de permisos (spec 7.1; GrantTable dice qué puesto concede qué hoy, CF-01):
+ * - Qué nombramientos aportan un permiso (AZ-02; mecanismo AZ-S16, contributing()): los de un puesto que lo tiene
+ *   concedido (GrantTable) y cuya unidad, o una de sus descendientes, es de las que el permiso declara en
  *   Permission::appliesTo() (OrgTree::fits()). Un nombramiento sin unidad, o un permiso sin aplicabilidad, lo aporta siempre. Así el jefe de
  *   Servicios Escolares no aporta lo académico aunque su puesto (jefe de departamento) lo tenga concedido. Todo lo de
  *   abajo cuenta solo esos nombramientos, y un puesto concede un permiso si el admin lo es o si alguno de sus
@@ -131,7 +131,7 @@ final class Actor
         private readonly Closure $resolveUser,
         private readonly OrgTree $orgTree,
         private readonly AuthorizationSnapshots $snapshots,
-        private readonly PermissionRegistry $permissions,
+        private readonly GrantTable $grants,
         private readonly ?Session $session = null,
     ) {}
 
@@ -146,7 +146,7 @@ final class Actor
         }
 
         if (! isset($this->others[$user->getKey()])) {
-            $other = new self(fn (): User => $user, $this->orgTree, $this->snapshots, $this->permissions);
+            $other = new self(fn (): User => $user, $this->orgTree, $this->snapshots, $this->grants);
             $other->catalogSource = $this;
             $this->others[$user->getKey()] = $other;
         }
@@ -164,7 +164,7 @@ final class Actor
     public function asRole(Role $role): self
     {
         $user = $this->user();
-        $context = new self(fn (): ?User => $user, $this->orgTree, $this->snapshots, $this->permissions);
+        $context = new self(fn (): ?User => $user, $this->orgTree, $this->snapshots, $this->grants);
         $context->catalogSource = $this;
         $context->pinnedRole = $role;
 
@@ -542,7 +542,7 @@ final class Actor
     }
 
     /**
-     * Los de `$roles` que le conceden `$permission` a esta persona: el registro se lo concede al puesto y es el admin o
+     * Los de `$roles` que le conceden `$permission` a esta persona: el puesto lo tiene (GrantTable) y es el admin o
      * alguno de sus nombramientos lo aporta (contributing()). Lanza LogicException si nadie lo declaró.
      *
      * @param  list<Role>  $roles
@@ -550,14 +550,14 @@ final class Actor
      */
     private function rolesGranting(Permission $permission, array $roles): array
     {
-        return array_values(array_filter($roles, fn (Role $role): bool => $this->permissions->grants($role, $permission)
+        return array_values(array_filter($roles, fn (Role $role): bool => $this->grants->grants($role, $permission)
             && ($role === Role::Admin || $this->contributing($permission, [$role]) !== [])));
     }
 
     /**
      * AZ-02 (mecanismo, AZ-S16): los nombramientos de `$roles` que aportan `$permission`: sin unidad, o con una unidad
      * a la que el permiso aplica (ella o una descendiente, OrgTree::fits()). Sin aplicabilidad declarada, todos. No
-     * revisa que el registro se lo conceda al puesto: eso es de rolesGranting(), que pasa antes.
+     * revisa que el puesto lo tenga: eso es de rolesGranting(), que pasa antes.
      *
      * @param  list<Role>  $roles
      * @return list<AssignmentScope>

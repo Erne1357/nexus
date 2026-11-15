@@ -52,6 +52,15 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     }
 
     /**
+     * Candados (CF-03, confirmado el 15 de noviembre de 2026): borrar una carrera o un departamento termina los
+     * nombramientos de otros (CloseRoleScopes), así que solo lo hace el admin y no se da a otro puesto.
+     */
+    public function adminOnly(): array
+    {
+        return [AcademicPermission::CareerDelete, AcademicPermission::DepartmentDelete];
+    }
+
+    /**
      * Los catálogos van en Administración. «Materias por colocar» (tarea 1.21, supuesto por confirmar) es la única
      * tarea de Servicios Escolares en Academic, las materias por validar de la migración del SII (D19): va en su área,
      * solo para quien las coloca, después de Alumnos, y abre la lista de planes con el filtro «Por validar».

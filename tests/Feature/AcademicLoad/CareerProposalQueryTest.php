@@ -206,6 +206,8 @@ it('no consulta por fila: las mismas consultas con 2 que con 12 materias', funct
     };
     overviewRow($this->cb, 'ACF-0901', 1, 1);
     overviewRow($this->sc, 'SCD-1015', 5, 1);
+    // La primera vez la petición lee la versión de las concesiones y arma su mapa (GrantTable, CF-01); se mide después.
+    $count();
     $few = $count();
 
     foreach (range(1, 10) as $n) {

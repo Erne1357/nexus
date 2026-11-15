@@ -181,3 +181,43 @@ it('nadie importa el enum Role con otro nombre', function () {
 
     expect($offenders)->toBe([]);
 });
+
+/*
+| Roles editables (CF-01, adenda del 14 de noviembre de 2026 a ADR-0018): lo que cada puesto puede lo dice GrantTable.
+| Las tablas de roles y su versión solo las tocan Core/Authorization, sus migraciones, el modelo PermissionSet y su
+| factory, y las Actions, Queries y Policy del panel «Puestos y permisos». Nadie más las lee para decidir.
+*/
+const GRANT_TABLES_READERS = [
+    'app/Modules/Core/Authorization/',
+    'app/Modules/Core/Database/Migrations/2026_11_15_0001',
+    'app/Modules/Core/Models/PermissionSet.php',
+    'app/Modules/Core/Database/Factories/PermissionSetFactory.php',
+];
+
+it('fuera de Core/Authorization y de las piezas de roles editables, nadie lee las tablas de roles ni nombra PermissionSet', function () {
+    $root = dirname(__DIR__, 2);
+    $offenders = [];
+
+    foreach (Finder::create()->files()->in(["{$root}/app", "{$root}/database", "{$root}/resources", "{$root}/routes"]) as $file) {
+        $path = substr($file->getPathname(), strlen($root) + 1);
+
+        if (array_any(GRANT_TABLES_READERS, fn (string $allowed): bool => str_starts_with($path, $allowed))) {
+            continue;
+        }
+
+        if (preg_match('/\b(permission_sets|permission_set_permissions|position_permission_sets|position_permissions|authz_grants_version|PermissionSet)\b/', $file->getContents()) === 1) {
+            $offenders[] = $path;
+        }
+    }
+
+    expect($offenders)->toBe([]);
+});
+
+it('cada pieza que puede leer las tablas de roles existe', function () {
+    $root = dirname(__DIR__, 2);
+
+    expect(array_values(array_filter(
+        GRANT_TABLES_READERS,
+        fn (string $allowed): bool => glob("{$root}/{$allowed}*") === [],
+    )))->toBe([]);
+});
