@@ -151,6 +151,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new NavigationItem('Bitácora', 'core.activity', 'o-clipboard-document-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [Activity::class]),
             // 1.22-E Avisos y atajos del login
+            new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView)),
             // 1.22-F Parámetros
             // 1.22-G Correos y colas
             new NavigationItem('Correos y colas', 'core.mail-and-queues', 'o-envelope', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
