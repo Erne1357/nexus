@@ -39,6 +39,7 @@ use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Navigation\Navigation;
@@ -46,6 +47,7 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
+use App\Modules\Core\Settings\SettingRegistry;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Mail\Events\MessageSent;
@@ -103,6 +105,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Sin estado: quién está adscrito a cada unidad del Organigrama. Faculty lo reemplaza con sus adscripciones.
         $this->app->bindIf(UnitAdscriptions::class, NoUnitAdscriptions::class);
 
+        // Singleton porque es inmutable: los parámetros que declaran los módulos, sin valores ni nada de la petición.
+        $this->app->singleton(SettingRegistry::class, fn (Application $app): SettingRegistry => SettingRegistry::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
+
         // Singleton porque es inmutable: el catálogo de permisos y las concesiones por puesto de todos
         // los módulos, sin nada del usuario ni de la petición.
         $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
@@ -129,6 +136,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         $this->app->booted(function (Application $app): void {
             $app->make(Navigation::class);
             $app->make(PermissionRegistry::class);
+            $app->make(SettingRegistry::class);
         });
     }
 
@@ -154,6 +162,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView)),
             // 1.22-F Parámetros
+            new NavigationItem('Parámetros', 'core.settings', 'o-adjustments-horizontal', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [Setting::class]),
             // 1.22-G Correos y colas
             new NavigationItem('Correos y colas', 'core.mail-and-queues', 'o-envelope', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [MailLog::class]),
