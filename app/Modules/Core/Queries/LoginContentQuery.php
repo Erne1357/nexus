@@ -30,6 +30,19 @@ final class LoginContentQuery
         return $this->list(LoginShortcut::query(), $search, $active);
     }
 
+    /**
+     * Cuántos avisos hay sin borrar, con cualquier filtro.
+     */
+    public function noticeCount(): int
+    {
+        return LoginNotice::query()->count();
+    }
+
+    public function shortcutCount(): int
+    {
+        return LoginShortcut::query()->count();
+    }
+
     public function findNotice(string $id): LoginNotice
     {
         return KeyLookup::findOrFail(LoginNotice::query(), $id);

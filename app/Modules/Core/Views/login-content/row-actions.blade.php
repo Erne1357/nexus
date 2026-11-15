@@ -6,6 +6,7 @@
 @php
     $first = $row->is($items->first());
     $last = $row->is($items->last());
+    $filtered = $search !== '' || $status !== '';
 @endphp
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>
     @can('update', $row)
@@ -22,8 +23,8 @@
 
     <x-core::row-menu :name="$row->title" :compact="$inTable">
         @can('update', $row)
-            <x-core::row-menu-item label="Subir" wire:click="move('{{ $row->id }}', -1)" :disabled="$first" :reason="$first ? 'Ya es el primero.' : null" />
-            <x-core::row-menu-item label="Bajar" wire:click="move('{{ $row->id }}', 1)" :disabled="$last" :reason="$last ? 'Ya es el último.' : null" />
+            <x-core::row-menu-item label="Subir" wire:click="move('{{ $row->id }}', -1)" :disabled="$first || $filtered" :reason="$filtered ? 'Quita el filtro para cambiar el orden.' : ($first ? 'Ya es el primero.' : null)" />
+            <x-core::row-menu-item label="Bajar" wire:click="move('{{ $row->id }}', 1)" :disabled="$last || $filtered" :reason="$filtered ? 'Quita el filtro para cambiar el orden.' : ($last ? 'Ya es el último.' : null)" />
             <x-core::row-menu-item
                 :label="$row->is_active ? 'Desactivar' : 'Activar'"
                 wire:click="toggleActive('{{ $row->id }}')"

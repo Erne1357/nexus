@@ -102,7 +102,7 @@ new #[Title('Avisos y atajos')] class extends Component
                 $this->canSeeShortcuts() ? ['key' => 'shortcuts', 'label' => 'Atajos'] : null,
             ])),
             'items' => $this->tab === 'notices' ? $content->notices($this->search, $active) : $content->shortcuts($this->search, $active),
-            'total' => $this->tab === 'notices' ? LoginNotice::query()->count() : LoginShortcut::query()->count(),
+            'total' => $this->tab === 'notices' ? $content->noticeCount() : $content->shortcutCount(),
             'canManage' => $this->canManage(),
             'now' => $now,
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],

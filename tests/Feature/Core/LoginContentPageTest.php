@@ -228,3 +228,19 @@ it('la entrada «Avisos y atajos» está en el menú del admin, en Configuració
 
     expect($html)->toContain('href="'.route('core.login-content').'"')->toContain('Configuración');
 });
+
+it('CF-S6: con un filtro activo, «Subir» y «Bajar» se deshabilitan con su motivo', function () {
+    LoginNotice::factory()->create(['title' => 'Alfa', 'sort_order' => 1]);
+    LoginNotice::factory()->create(['title' => 'Beta', 'sort_order' => 2]);
+
+    $moves = fn ($html): array => collect(domOf($html)->querySelectorAll('table tbody tr:last-child [role="menuitem"]'))
+        ->filter(fn ($i): bool => str_starts_with(textOf($i), 'Subir') || str_starts_with(textOf($i), 'Bajar'))
+        ->map(fn ($i): string => textOf($i).'|'.$i->getAttribute('aria-disabled'))->values()->all();
+
+    expect($moves(Livewire::actingAs($this->admin)->test('core::pages.login-content')->html()))
+        ->toBe(['Subir|', 'Bajar Ya es el último.|true']);
+
+    $filtered = Livewire::actingAs($this->admin)->test('core::pages.login-content')->set('search', 'Beta')->html();
+
+    expect($moves($filtered))->toBe(['Subir Quita el filtro para cambiar el orden.|true', 'Bajar Quita el filtro para cambiar el orden.|true']);
+});
