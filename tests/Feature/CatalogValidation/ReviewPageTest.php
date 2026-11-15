@@ -511,12 +511,12 @@ describe('observaciones', function () {
 
 describe('acciones de fila', function () {
     it('una acción deshabilitada no lleva wire:click, wire:confirm ni data-testid', function () {
-        $admin = User::factory()->admin()->create();
+        reviewOf(Catalog::Subjects)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefe->id, 'validated_at' => now()]);
 
-        reviewPage($admin, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
+        reviewPage($this->jefe, ['catalogo' => 'subjects'])
             ->assertDontSeeHtml("wire:click=\"toggleActive('{$this->subject->id}')\"")
             ->assertDontSeeHtml('data-testid="flag-SCD-1027"')
-            ->assertSee('Solo el jefe del departamento pone observaciones.');
+            ->assertSee('La revisión ya está validada: reábrela para observar.');
     });
 
     it('las filas de docentes tienen un control habilitado que abre el drawer de observaciones, también en lectura y con la revisión validada', function (string $who) {
@@ -739,12 +739,12 @@ describe('pestañas de catálogo y lista compacta', function () {
         reviewPage()->assertDontSee('Abrir lista')->assertSeeHtml('data-testid="reopen-subjects"')->assertSeeHtml('data-testid="open-subjects"');
     });
 
-    it('en solo lectura Validar y Reabrir se ven deshabilitados con su motivo', function () {
+    it('CV-S1: en solo lectura no se ven Validar ni Reabrir (tarea 1.21: sin controles deshabilitados para quien solo mira)', function () {
         $admin = User::factory()->admin()->create();
 
         reviewPage($admin, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
-            ->assertSeeHtml('data-testid="validate-subjects"')
-            ->assertSee('Solo el jefe del departamento valida.');
+            ->assertDontSeeHtml('data-testid="validate-subjects"')
+            ->assertDontSee('Solo el jefe del departamento valida.');
     });
 
     it('la lista de salones trae la columna Nombre', function () {
@@ -969,13 +969,14 @@ describe('marcas de revisado (CV7)', function () {
 });
 
 describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
-    it('CV8: el jefe da de baja a un docente de su departamento desde la fila, con confirmación', function () {
+    it('CV8: el jefe quita a un docente de su departamento desde «Acciones» de la fila, con confirmación', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1']);
 
         $component = reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->assertSeeHtml("wire:click=\"dischargeTeacher('{$teacher->id}')\"")
+            ->assertSeeHtml("wire:click=\"askDischarge('{$teacher->id}')\"")
             ->assertSeeHtml('data-testid="discharge-AAAA800101AA1"')
-            ->call('dischargeTeacher', $teacher->id)
+            ->call('askDischarge', $teacher->id)
+            ->call('dischargeTeacher')
             ->assertHasNoErrors();
 
         expect($teacher->fresh()->is_active)->toBeFalse()
@@ -986,9 +987,9 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'BBBB800101BB1', 'user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create()->id]);
 
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->assertDontSeeHtml("wire:click=\"dischargeTeacher('{$teacher->id}')\"")
-            ->assertSee('Ocupa un puesto: lo da de baja el administrador o la Subdirección.')
-            ->call('dischargeTeacher', $teacher->id)
+            ->assertDontSeeHtml("wire:click=\"askDischarge('{$teacher->id}')\"")
+            ->assertSee('Ocupa un puesto: lo quitan el administrador o la Subdirección.')
+            ->call('askDischarge', $teacher->id)
             ->assertForbidden();
 
         expect($teacher->fresh()->is_active)->toBeTrue();
@@ -1059,7 +1060,7 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
 
         $page = reviewPage($this->jefe, ['catalogo' => 'teachers']);
         $this->actingAs($user);
-        $page->call('dischargeTeacher', $teacher->id)->assertForbidden();
+        $page->call('askDischarge', $teacher->id)->assertForbidden();
 
         $page = reviewPage($this->jefe, ['catalogo' => 'teachers']);
         $this->actingAs($user);
@@ -1142,7 +1143,7 @@ describe('revisión por registro (opción A)', function () {
 
         reviewPage($user, ['department' => $this->sis->id, 'catalogo' => 'subjects'])
             ->assertSee('Por revisar')
-            ->assertSee('Solo el jefe del departamento marca lo revisado.')
+            ->assertDontSee('Solo el jefe del departamento marca lo revisado.')
             ->assertDontSeeHtml('data-testid="select-SCD-1027"')
             ->assertDontSeeHtml('data-testid="mark-SCD-1027"')
             ->assertDontSeeHtml('data-testid="keyboard-hint"')
@@ -1155,14 +1156,17 @@ describe('revisión por registro (opción A)', function () {
         $mainThere = Teacher::factory()->adscribedTo($this->ele)->adscribedTo($this->sis, primary: false)->create(['rfc' => 'ELSE800101AA1', 'name' => 'Leticia Barraza']);
 
         reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->assertSee('¿Dar de baja a Martha Ríos?')
-            ->assertSee('No tiene otro departamento: su registro queda inactivo y su cuenta se desactiva.')
-            ->assertSee('¿Dar de baja a Eduardo Carrasco de Sistemas y Computación?')
-            ->assertSee('Sigue como docente de Eléctrica-Electrónica, que pasa a ser su adscripción principal.')
             ->assertSee('También en Eléctrica-Electrónica')
-            ->assertSee('Sigue como docente de Eléctrica-Electrónica, su adscripción principal. Solo deja de aparecer en tu departamento.')
             ->assertSee('Principal en Eléctrica-Electrónica')
-            ->call('dischargeTeacher', $mainThere->id)
+            ->call('askDischarge', $alone->id)
+            ->assertSee('¿Quitar a Martha Ríos de Sistemas y Computación?')
+            ->assertSee('Es su único departamento: queda dado de baja y su cuenta se inhabilita.')
+            ->call('askDischarge', $mainHere->id)
+            ->assertSee('¿Quitar a Eduardo Carrasco de Sistemas y Computación?')
+            ->assertSee('Sigue como docente de Eléctrica-Electrónica, que pasa a ser su adscripción principal.')
+            ->call('askDischarge', $mainThere->id)
+            ->assertSee('Sigue como docente de Eléctrica-Electrónica, su adscripción principal. Solo deja de aparecer en tu departamento')
+            ->call('dischargeTeacher')
             ->assertHasNoErrors();
 
         expect($mainThere->fresh()->is_active)->toBeTrue()
@@ -1170,11 +1174,13 @@ describe('revisión por registro (opción A)', function () {
             ->and($alone->fresh()->is_active)->toBeTrue();
     });
 
-    it('CV-S8: el motivo de la baja deshabilitada va escrito en la fila, no en un tooltip', function () {
+    it('CV-S8: «Quitar de <departamento>» deshabilitado lleva su motivo escrito en su renglón del menú, no en un tooltip', function () {
         Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'BBBB800101BB1', 'user_id' => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create()->id]);
 
-        reviewPage($this->jefe, ['catalogo' => 'teachers'])
-            ->assertSeeInOrder(['data-testid="discharge-reason-BBBB800101BB1"', 'Ocupa un puesto: lo da de baja el administrador o la Subdirección.'], escape: false);
+        $item = collect(iterator_to_array(domOf(reviewPage($this->jefe, ['catalogo' => 'teachers'])->html())->querySelectorAll('[role="menuitem"][aria-disabled="true"]')))
+            ->first(fn ($element): bool => str_contains(textOf($element), 'Quitar de Sistemas y Computación'));
+
+        expect(textOf($item))->toBe('Quitar de Sistemas y Computación Ocupa un puesto: lo quitan el administrador o la Subdirección.');
     });
 
     it('AC-06: el recuadro arma el correo con el dominio institucional, acepta el correo completo y devuelve el motivo si no se guarda', function () {

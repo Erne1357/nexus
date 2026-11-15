@@ -1732,6 +1732,24 @@ document.addEventListener('livewire:init', () => {
 });
 
 /*
+| Al volver con Atrás o Adelante, wire:navigate repone la pantalla de su caché, con la campana y «Todas las
+| notificaciones» como estaban al irse. Abrir un aviso lleva a su pantalla sin avisar antes con `notifications-changed`
+| (OpensNotifications), así que lo repuesto puede traer como no leído el aviso que se abrió. Al terminar de reponerla
+| se avisa con `nexus-notifications-stale` en window, que las dos escuchan con Alpine para volver a pintarse: los
+| componentes repuestos de la caché ya no traen sus listeners de Livewire, así que `notifications-changed` no les llega.
+*/
+let notificationsFromCache = false;
+document.addEventListener('livewire:navigate', (event) => {
+    notificationsFromCache = Boolean(event.detail?.history && event.detail?.cached);
+});
+document.addEventListener('livewire:navigated', () => {
+    if (notificationsFromCache) {
+        notificationsFromCache = false;
+        window.dispatchEvent(new CustomEvent('nexus-notifications-stale'));
+    }
+});
+
+/*
 | Confirmar sin diálogos del navegador (ADR-0023). `x-confirm="mensaje"` en un botón o enlace detiene su clic (en
 | captura, antes que su wire:click o su enlace) y abre el diálogo de Core (`x-core::confirm-dialog`, uno por layout);
 | al confirmar, vuelve a pulsar el mismo elemento y esta vez lo deja pasar. `data-confirm-title`, `data-confirm-button`

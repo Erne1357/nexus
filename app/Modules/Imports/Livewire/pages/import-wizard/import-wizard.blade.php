@@ -263,6 +263,30 @@
                     @endif
                 @endif
 
+                @if ($summary !== [])
+                    <div class="mt-6 border-t border-base-300 pt-4" wire:key="batch-summary" data-testid="batch-summary">
+                        <h3 class="font-semibold">Resumen de {{ mb_strtolower($batchTemplate) }}</h3>
+                        <dl class="mt-2 divide-y divide-base-300">
+                            @foreach ($summary as $group)
+                                <div wire:key="summary-{{ $loop->index }}" class="grid gap-x-4 gap-y-1 py-2 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
+                                    <dt class="flex items-baseline gap-2">
+                                        <span class="font-mono font-semibold tabular-nums">{{ number_format($group['count']) }}</span>
+                                        <span>{{ $group['label'] }}</span>
+                                    </dt>
+                                    <dd class="min-w-0 text-sm text-neutral">
+                                        @if ($group['keys'] !== [])
+                                            <span class="break-words font-mono text-base-content">{{ implode(', ', $group['keys']) }}</span>@if ($group['count'] > count($group['keys'])) <span>y {{ number_format($group['count'] - count($group['keys'])) }} más</span>@endif
+                                        @endif
+                                        @if ($group['hint'] !== null)
+                                            <span class="block">{{ $group['hint'] }}</span>
+                                        @endif
+                                    </dd>
+                                </div>
+                            @endforeach
+                        </dl>
+                    </div>
+                @endif
+
                 @if ($issueRows !== null)
                     <div class="mt-6 flex flex-wrap items-end justify-between gap-4">
                         <x-select label="Filas" wire:model.live="issues" :options="$issueKinds" class="w-56" />

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Faculty\Queries;
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\AssignmentStatus;
 use App\Modules\Core\Enums\Role;
@@ -24,6 +25,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Collection;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * Lecturas de la ficha de un docente (tarea 1.13). Quién la ve lo decide TeacherPolicy (`view`) antes de llamarla.
@@ -140,6 +142,52 @@ final class TeacherRecordQuery
         );
     }
 
+    /** Las etiquetas del motivo con que un jefe quita a un docente de su departamento en la validación (D8). */
+    private const array DEPARTURE_REASONS = [
+        'retirement' => 'Jubilación',
+        'resignation' => 'Renuncia',
+        'department_change' => 'Cambio de departamento',
+        'other' => 'Otro',
+    ];
+
+    /**
+     * Las salidas del docente de un departamento que la revisión de docentes deja en su bitácora (evento `discharged`,
+     * D8, confirmado el 14 de noviembre de 2026): cuándo, de qué departamento (aunque esté borrado), quién, si quedó
+     * dado de baja y el motivo, con su etiqueta; la más reciente primero, hasta `$limit`. La validación de catálogos
+     * está a la derecha de Faculty: solo se lee su bitácora, con las etiquetas de su motivo. La bitácora no se edita.
+     *
+     * @return Collection<int, array{at: CarbonImmutable, department: ?string, by: ?string, deactivated: bool, reason: ?string}>
+     */
+    public function departures(Teacher $teacher, int $limit = 10): Collection
+    {
+        $entries = Activity::query()
+            ->where('subject_type', $teacher->getMorphClass())
+            ->where('subject_id', $teacher->getKey())
+            ->where('event', 'discharged')
+            ->with('causer')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+        $names = Department::withTrashed()
+            ->whereIn('id', $entries->map(fn (Activity $entry): mixed => $entry->properties->get('department_id'))->filter()->unique()->values()->all())
+            ->pluck('name', 'id');
+
+        return $entries->map(function (Activity $entry) use ($names): array {
+            $reason = $entry->properties->get('reason');
+            $label = is_array($reason) ? (self::DEPARTURE_REASONS[$reason['kind'] ?? ''] ?? null) : null;
+            $text = is_array($reason) && filled($reason['text'] ?? null) ? (string) $reason['text'] : null;
+
+            return [
+                'at' => CarbonImmutable::parse($entry->created_at),
+                'department' => $names[$entry->properties->get('department_id')] ?? null,
+                'by' => $entry->causer?->getAttribute('name'),
+                'deactivated' => (bool) $entry->properties->get('deactivated'),
+                'reason' => $label === null ? null : ($text === null ? $label : "{$label}: {$text}"),
+            ];
+        })->values();
+    }
+
     /**
      * Una adscripción sin borrar de ese docente. El id llega del navegador: uno que no es uuid, o de otro docente, no
      * existe (ADR-0014).
@@ -148,7 +196,9 @@ final class TeacherRecordQuery
      */
     public function findAdscription(Teacher $teacher, string $id): TeacherDepartment
     {
-        return KeyLookup::findOrFail(TeacherDepartment::query()->where('teacher_id', $teacher->getKey()), $id);
+        return KeyLookup::findOrFail(TeacherDepartment::query()
+            ->where('teacher_id', $teacher->getKey())
+            ->with(['department' => fn (BelongsTo $department) => $department->withTrashed()->select(['id', 'code', 'name'])]), $id);
     }
 
     /**

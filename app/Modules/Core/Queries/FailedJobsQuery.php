@@ -27,4 +27,12 @@ final class FailedJobsQuery
     {
         return FailedJob::query()->where('uuid', $uuid)->firstOrFail();
     }
+
+    /**
+     * El trabajo fallido con ese uuid, o null si ya no está (otro lo reintentó o lo descartó).
+     */
+    public function firstByUuid(string $uuid): ?FailedJob
+    {
+        return FailedJob::query()->where('uuid', $uuid)->first();
+    }
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\DischargeReason;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\Core\Enums\StatusTone;
@@ -52,3 +53,13 @@ it('la capacidad incorrecta solo se observa en salones; lo demás, en cualquier 
         ->and(ReviewFlag::Inactive->appliesTo($catalog))->toBeTrue()
         ->and(ReviewFlag::Other->appliesTo($catalog))->toBeTrue();
 })->with(Catalog::cases());
+
+it('CV8: cada motivo de la baja tiene su valor para la bitácora y su etiqueta (D8)', function (DischargeReason $reason, string $value, string $label) {
+    expect($reason->value)->toBe($value)
+        ->and($reason->label())->toBe($label);
+})->with([
+    [DischargeReason::Retirement, 'retirement', 'Jubilación'],
+    [DischargeReason::Resignation, 'resignation', 'Renuncia'],
+    [DischargeReason::DepartmentChange, 'department_change', 'Cambio de departamento'],
+    [DischargeReason::Other, 'other', 'Otro'],
+]);

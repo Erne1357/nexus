@@ -13,7 +13,9 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Recalcula `student_progress` de todos los alumnos (sin los borrados) desde su kardex y la retícula de su
+ * Recalcula `student_progress` de todos los alumnos (sin los borrados), o solo de los de un plan si recibe `$studyPlanId`
+ * (un cambio de retícula de ese plan, CurriculumChanged con plan; el resultado para esos alumnos es el mismo que el del
+ * recálculo completo) desde su kardex y la retícula de su
  * plan (PlanGrid), de 500 en 500. Lo aprobado da créditos y materias; lo aprobado y lo que está cursando dicen
  * su especialidad, y su semestre limita hasta dónde puede cursar. Escribe por alumno con un upsert por bloque:
  * volver a calcular reescribe el avance, también si el alumno cambió de plan. Un alumno cuyo plan todavía no
@@ -36,21 +38,22 @@ final class RefreshStudentProgress
         private readonly TermInProgressQuery $terms,
     ) {}
 
-    public function handle(): void
+    public function handle(?string $studyPlanId = null): void
     {
-        DB::transaction(function (): void {
-            $this->refresh();
+        DB::transaction(function () use ($studyPlanId): void {
+            $this->refresh($studyPlanId);
         });
 
         $this->terms->refresh();
     }
 
-    private function refresh(): void
+    private function refresh(?string $studyPlanId): void
     {
         /** @var array<string, PlanGrid> $grids */
         $grids = [];
 
         Student::query()
+            ->when($studyPlanId !== null, fn ($query) => $query->where('study_plan_id', $studyPlanId))
             ->select(['id', 'study_plan_id', 'current_semester'])
             ->chunkById(self::CHUNK_STUDENTS, function (Collection $students) use (&$grids): void {
                 $kardex = KardexRecord::query()
@@ -104,6 +107,9 @@ final class RefreshStudentProgress
                 }
             });
 
-        StudentProgress::query()->whereDoesntHave('student')->delete();
+        StudentProgress::query()
+            ->when($studyPlanId !== null, fn ($query) => $query->where('study_plan_id', $studyPlanId))
+            ->whereDoesntHave('student')
+            ->delete();
     }
 }

@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Jobs\NotifyPendingReviewsJob;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\CampusQuery;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -27,7 +26,6 @@ final class OpenCatalogValidation
     public function __construct(
         private readonly CreateTermReviews $createTermReviews,
         private readonly CatalogReviewQuery $reviews,
-        private readonly CampusQuery $campuses,
     ) {}
 
     /**
@@ -71,13 +69,7 @@ final class OpenCatalogValidation
         });
 
         if ($createdBy !== []) {
-            NotifyPendingReviewsJob::dispatch(
-                $term->getKey(),
-                // Los campus activos donde se dan los grupos de las modalidades donde se abrió el periodo (M4, MS4; MS15,
-                // supuesto por confirmar: antes, los campus donde se abrió aunque después se desactivaran).
-                $this->campuses->openIn($term)->modelKeys(),
-                array_keys($createdBy),
-            )->afterCommit();
+            NotifyPendingReviewsJob::dispatch($term->getKey(), array_keys($createdBy))->afterCommit();
         }
 
         return array_sum($createdBy);

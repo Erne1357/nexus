@@ -23,10 +23,10 @@ use Spatie\Activitylog\Models\Activity;
 | Docentes (`/faculty/teachers`, faculty::pages.teachers; spec 4.3 con la adenda del 30 de octubre de 2026). Los
 | docentes son de todo el Tec: la adscripción es solo de un departamento. Lo ven el admin y la Subdirección (a
 | todos) y los jefes de departamento y de proyecto docente (a los de su departamento). Tabla con número, nombre,
-| adscripción principal y otras, horas base del periodo activo, usuario y estado; filtros de departamento, tipo de
-| plaza y estado. Alta en un modal con el departamento de quien da de alta (el jefe, el suyo; el admin y la
+| adscripción principal y otras, horas base del periodo activo, acceso y estado; filtros de departamento, tipo de
+| plaza y estado (por omisión, los activos), y los que no tienen correo institucional. Alta en un modal con el departamento de quien da de alta (el jefe, el suyo; el admin y la
 | Subdirección lo eligen); con un número que ya existe, el admin y la Subdirección pueden adscribirlo y a los jefes
-| solo se les dice que está registrado (S9). En «Acciones»: «Quitar de <código>»
+| solo se les dice que está registrado (S9). En «Acciones»: «Quitar de <Departamento>»
 | por cada departamento que cubre (RemoveAdscription) y «Desactivar/Activar» (solo admin y Subdirección); nadie se
 | quita ni se da de baja a sí mismo. «Dar de alta usuarios» va en «Más acciones», es del admin y encola
 | ProvisionTeacherUsersJob.
@@ -67,13 +67,16 @@ function seesTeachersMenu(User $user): bool
 }
 
 /**
- * Los renglones de la tabla, por RFC, con su texto.
+ * Los renglones de la tabla, por RFC, con su texto; con `$inactiveToo`, sin el filtro de estado, que por omisión deja a
+ * los activos.
  *
  * @return array<string, string>
  */
-function teacherRowsFor(User $user): array
+function teacherRowsFor(User $user, bool $inactiveToo = false): array
 {
-    $response = test()->actingAs($user)->get(route('faculty.teachers'))->assertOk();
+    $response = $inactiveToo
+        ? Livewire::actingAs($user)->test('faculty::pages.teachers')->set('status', '')->html()
+        : test()->actingAs($user)->get(route('faculty.teachers'))->assertOk();
 
     return collect(domOf($response)->querySelectorAll('table tbody tr'))
         ->mapWithKeys(fn ($row): array => [(string) textOf($row->querySelector('td')) => textOf($row)])
@@ -85,17 +88,19 @@ function teacherRowsFor(User $user): array
  *
  * @return list<string>
  */
-function teacherNumbersOnPage(User $user): array
+function teacherNumbersOnPage(User $user, bool $inactiveToo = false): array
 {
-    return array_map('strval', array_keys(teacherRowsFor($user)));
+    return array_map('strval', array_keys(teacherRowsFor($user, $inactiveToo)));
 }
 
 /**
  * El texto del menú «Acciones» de la fila del docente `$number`, en la página que ve `$user`.
  */
-function teacherRowMenu(User $user, string $number): ?Element
+function teacherRowMenu(User $user, string $number, bool $inactiveToo = false): ?Element
 {
-    $dom = domOf(test()->actingAs($user)->get(route('faculty.teachers'))->assertOk());
+    $dom = domOf($inactiveToo
+        ? Livewire::actingAs($user)->test('faculty::pages.teachers')->set('status', '')->html()
+        : test()->actingAs($user)->get(route('faculty.teachers'))->assertOk());
 
     return collect($dom->querySelectorAll('table tbody tr'))
         ->first(fn ($row): bool => textOf($row->querySelector('td')) === $number)
@@ -103,18 +108,18 @@ function teacherRowMenu(User $user, string $number): ?Element
 }
 
 describe('admin', function () {
-    it('ve la tabla con número en Mono, nombre, adscripción principal y otras, horas base del periodo activo, usuario y estado', function () {
+    it('ve la tabla con número en Mono, nombre, adscripción principal y otras, horas base del periodo activo, acceso y estado', function () {
         $response = $this->actingAs($this->admin)
             ->get(route('faculty.teachers'))
             ->assertOk()
             ->assertSee('Ene-Jun 2027')
-            ->assertSeeInOrder(['Número', 'Nombre', 'Adscripción', 'Horas base', 'Usuario', 'Estado']);
-        $rows = teacherRowsFor($this->admin);
+            ->assertSeeInOrder(['Número', 'Nombre', 'Adscripción', 'Horas base', 'Acceso', 'Estado']);
+        $rows = teacherRowsFor($this->admin, inactiveToo: true);
 
         expect(array_map('strval', array_keys($rows)))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000004AB1', 'PRUE000005AB1'])
-            ->and($rows['PRUE000001AB1'])->toContain('Ana Pérez', 'II', 'También SC', '45', 'No', 'Activo')->not->toContain(' en C')
+            ->and($rows['PRUE000001AB1'])->toContain('Ana Pérez', 'II', 'También SC', '45', 'Sin acceso', 'Activo')->not->toContain(' en C')
             ->and($rows['PRUE000003AB1'])->toContain('Carla Díaz', 'II', 'Inactivo')
-            ->and($rows['PRUE000004AB1'])->toContain('Darío Soto', 'SC', 'Sí')
+            ->and($rows['PRUE000004AB1'])->toContain('Darío Soto', 'SC')
             ->and($rows['PRUE000005AB1'])->toContain('Elsa Mora', 'Sin departamento')
             ->and(domOf($response)->querySelector('table tbody tr td span.font-mono')?->textContent)->toBe('PRUE000001AB1');
     });
@@ -133,6 +138,7 @@ describe('admin', function () {
 
         Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
+            ->set('status', '')
             ->set('search', 'beto')
             ->assertSee('Beto Ruiz')->assertDontSee('Ana Pérez')
             ->set('search', '')
@@ -316,22 +322,22 @@ describe('admin', function () {
             ->and(lastToastOf($page))->title->toBe('Docente activado');
     });
 
-    it('«Acciones» de cada fila ofrece «Quitar de <código>» por cada departamento que cubre y «Desactivar» o «Activar»', function () {
-        expect(textOf(teacherRowMenu($this->admin, 'PRUE000001AB1')))->toContain('Quitar de II', 'Quitar de SC', 'Desactivar')
-            ->and(textOf(teacherRowMenu($this->admin, 'PRUE000003AB1')))->toContain('Activar')
+    it('«Acciones» de cada fila ofrece «Quitar de <Departamento>» por cada departamento que cubre y «Desactivar» o «Activar»', function () {
+        expect(textOf(teacherRowMenu($this->admin, 'PRUE000001AB1')))->toContain('Quitar de Ingeniería Industrial', 'Quitar de Sistemas y Computación', 'Desactivar')
+            ->and(textOf(teacherRowMenu($this->admin, 'PRUE000003AB1', inactiveToo: true)))->toContain('Activar')
             // Sin departamento no hay nada que quitar.
             ->and(textOf(teacherRowMenu($this->admin, 'PRUE000005AB1')))->not->toContain('Quitar');
     });
 
-    it('en la fila de su propio docente, «Quitar de <código>» y «Desactivar» salen deshabilitados con su motivo', function (string $viewer) {
+    it('en la fila de su propio docente, «Quitar de <Departamento>» y «Desactivar» salen deshabilitados con su motivo', function (string $viewer) {
         $user = $this->{$viewer};
         $own = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000009AB1', 'user_id' => $user->id]);
         $items = collect(teacherRowMenu($user, 'PRUE000009AB1')->querySelectorAll('[role="menuitem"]'));
-        $remove = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de SC'));
+        $remove = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de Sistemas y Computación'));
         $deactivate = $items->first(fn ($item): bool => str_starts_with(textOf($item), 'Desactivar'));
 
         expect($remove->getAttribute('aria-disabled'))->toBe('true')
-            ->and(textOf($remove))->toBe('Quitar de SC No te puedes quitar a ti mismo de un departamento.')
+            ->and(textOf($remove))->toBe('Quitar de Sistemas y Computación No te puedes quitar a ti mismo de un departamento.')
             ->and($remove->hasAttribute('wire:click'))->toBeFalse()
             ->and($deactivate->getAttribute('aria-disabled'))->toBe('true')
             ->and(textOf($deactivate))->toBe('Desactivar No te puedes dar de baja a ti mismo.')
@@ -346,14 +352,14 @@ describe('admin', function () {
 
         expect($this->ana->adscriptions()->sole())->department_id->toBe($this->sc->id)->is_primary->toBeTrue()
             ->and($this->ana->fresh()->is_active)->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de II')->description->toBe('PRUE000001AB1 · Ana Pérez; su adscripción principal pasa a SC');
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de Ingeniería Industrial')->description->toBe('PRUE000001AB1 · Ana Pérez; su adscripción principal pasa a SC');
     });
 
     it('el aviso de quitar la principal dice qué principal queda', function () {
         $menu = teacherRowMenu($this->admin, 'PRUE000001AB1');
-        $item = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de II'));
+        $item = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de Ingeniería Industrial'));
 
-        expect($item->getAttribute('x-confirm'))->toContain('su adscripción principal pasa a SC');
+        expect($item->getAttribute('x-confirm'))->toContain('su adscripción principal pasa a Sistemas y Computación');
     });
 
     it('«Más acciones» junto a «Nuevo docente» lleva «Dar de alta usuarios»', function () {
@@ -427,7 +433,7 @@ describe('admin', function () {
 
 describe('Subdirección, una para todo el Tec', function () {
     it('ve a todos los docentes, también sin departamento', function () {
-        expect(teacherNumbersOnPage($this->subdireccion))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000004AB1', 'PRUE000005AB1']);
+        expect(teacherNumbersOnPage($this->subdireccion, inactiveToo: true))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000004AB1', 'PRUE000005AB1']);
     });
 
     it('elige el departamento del alta', function () {
@@ -535,11 +541,11 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
         expect($this->beto->adscriptions()->count())->toBe(1);
     });
 
-    it('en «Acciones» solo ofrece «Quitar de SC»; «Desactivar» queda deshabilitado con su motivo', function () {
+    it('en «Acciones» solo ofrece «Quitar de Sistemas y Computación»; «Desactivar» queda deshabilitado con su motivo', function () {
         $menu = teacherRowMenu($this->jefe, 'PRUE000001AB1');
         $deactivate = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Desactivar'));
 
-        expect(textOf($menu))->toContain('Quitar de SC')->not->toContain('Quitar de II')
+        expect(textOf($menu))->toContain('Quitar de Sistemas y Computación')->not->toContain('Quitar de Ingeniería Industrial')
             ->and($deactivate->getAttribute('aria-disabled'))->toBe('true')
             ->and(textOf($deactivate))->toBe('Desactivar Solo el administrador y la Subdirección dan de baja a un docente.')
             ->and($deactivate->hasAttribute('wire:click'))->toBeFalse();
@@ -554,7 +560,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
         expect($this->dario->adscriptions()->count())->toBe(0)
             ->and($this->dario->fresh()->is_active)->toBeFalse()
             ->and($this->dario->fresh()->user->is_active)->toBeFalse()
-            ->and(lastToastOf($page))->title->toBe('Docente dado de baja de SC')->description->toBe('PRUE000004AB1 · Darío Soto; queda sin departamento');
+            ->and(lastToastOf($page))->title->toBe('Docente dado de baja de Sistemas y Computación')->description->toBe('PRUE000004AB1 · Darío Soto; queda sin departamento');
     });
 
     it('CV-S8: a un docente que ocupa un puesto, «Quitar» se ve deshabilitado con su motivo y llamarlo es 403', function () {
@@ -638,7 +644,7 @@ describe('jefe de proyecto docente de SC en C2', function () {
             ->call('removeAdscription', $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole()->id);
 
         expect($this->ana->adscriptions()->sole())->department_id->toBe($this->ii->id)->is_primary->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de SC')->description->toBe('PRUE000001AB1 · Ana Pérez');
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de Sistemas y Computación')->description->toBe('PRUE000001AB1 · Ana Pérez');
     });
 
     it('recibe 403 al quitar a un docente de otro departamento', function () {

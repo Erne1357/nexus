@@ -23,6 +23,12 @@ use App\Modules\Core\Enums\Role;
  */
 final class PermissionGrantRules
 {
+    /**
+     * Versión de estas reglas en la huella de GrantTable. Súbela cada vez que cambie lo que bloquean, para que un
+     * despliegue que solo cambie las reglas no lea el mapa que armaron las anteriores.
+     */
+    public const int VERSION = 2;
+
     public function __construct(private readonly PermissionRegistry $registry) {}
 
     /**
@@ -54,6 +60,36 @@ final class PermissionGrantRules
         return $this->positionProblem($role)
             ?? $this->lockProblem($permission)
             ?? ($this->registry->grants($role, $permission) ? null : $this->scopeProblem($role, $permission));
+    }
+
+    /**
+     * Si dar `$permission` a `$role` valdría en todo el Tec (confirmado el 15 de noviembre de 2026): es de gestión, no
+     * declara ni unidad ni carrera, y el puesto no fija en su nombramiento ninguna de las dimensiones que declara (el
+     * campus o la modalidad; el jefe y la Subdirección son generales en ellas). Se puede dar, pero el panel lo avisa
+     * («Valdrá en todo el Tec»). Crear periodos, abrir la validación o importar lo son para cualquier puesto; abrir el
+     * periodo en una modalidad, para el jefe y la Subdirección, no para el coordinador, que lleva modalidad.
+     */
+    public function isInstitutionWide(Role $role, Permission $permission): bool
+    {
+        if ($permission->isPersonal() || ! self::declaresNoUnitNorCareer($permission)) {
+            return false;
+        }
+
+        $carried = [...$role->scopeColumns(), ...$role->optionalScopeColumns()];
+
+        return ! array_any($permission->dimensions(), fn (Dimension $dimension): bool => in_array($dimension->column(), $carried, true));
+    }
+
+    /**
+     * Si el permiso es de gestión y no declara ni unidad ni carrera: el que podría valer en todo el Tec según el puesto
+     * (isInstitutionWide()).
+     */
+    public static function declaresNoUnitNorCareer(Permission $permission): bool
+    {
+        return ! $permission->isPersonal() && ! array_any(
+            $permission->dimensions(),
+            fn (Dimension $dimension): bool => in_array($dimension, [Dimension::Unit, Dimension::Career], true),
+        );
     }
 
     /**

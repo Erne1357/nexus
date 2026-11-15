@@ -347,6 +347,21 @@ describe('entrada de una ruta', function () {
         expect(handBuiltNavigation()->forRoute('home')->label)->toBe('Cargas');
     });
 
+    it('con el contexto, da la primera entrada de la ruta que el usuario ve, y si no ve ninguna, la primera', function () {
+        $navigation = new Navigation([
+            new NavigationItem('Validar', 'core.campuses', 'o-check', NavigationArea::Administracion, visible: static fn (Actor $context): bool => false),
+            new NavigationItem('Consultar', 'core.campuses', 'o-eye', NavigationArea::Administracion, ability: 'viewAny', arguments: [Campus::class]),
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create());
+        expect($navigation->forRoute('core.campuses', app(Actor::class))->label)->toBe('Consultar')
+            ->and($navigation->forRoute('core.campuses')->label)->toBe('Validar');
+
+        $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+        app(Actor::class)->refresh();
+        expect($navigation->forRoute('core.campuses', app(Actor::class))->label)->toBe('Validar');
+    });
+
     it('a una ruta hija que la entrada declara le da esa entrada: la ficha de un alumno es de Alumnos', function () {
         expect(app(Navigation::class)->forRoute('students.show'))
             ->label->toBe('Alumnos')
@@ -368,7 +383,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
     $admin = User::factory()->admin()->create();
 
     expect(navigationGroupsFor($admin, NavigationArea::Academico))->toBe([
-        'validacion' => ['Validar catálogos', 'Avance de validación'],
+        'validacion' => ['Validación de catálogos', 'Avance de validación'],
         'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
@@ -378,9 +393,9 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
             'institucion' => ['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos'],
             'catalogos' => ['Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones'],
             'datos' => ['Importaciones'],
-            'configuracion' => ['Correos y colas'],
+            'configuracion' => ['Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas'],
         ])
-        ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos']])
+        ->and(navigationGroupsFor($admin, NavigationArea::ServiciosEscolares))->toBe(['—' => ['Alumnos', 'Materias por colocar']])
         ->and(navigationGroupsFor($admin, NavigationArea::RecursosHumanos))->toBe(['—' => ['Docentes']]);
 });
 
@@ -493,10 +508,10 @@ describe('menú', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
-            ->{'Académico'}->toContain('Validar catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
+            ->{'Académico'}->toContain('Validación de catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
-            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Correos y colas']);
+            ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas']);
     });
 
     it('muestra al docente su «Mi espacio»', function () {
@@ -597,7 +612,7 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation'));
 
         expect(menuRowsIn($page, 'academico'))->toBe([
-            'Validación', 'Validar catálogos', 'Avance de validación',
+            'Validación', 'Validación de catálogos', 'Avance de validación',
             'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento',
             'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
             'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
