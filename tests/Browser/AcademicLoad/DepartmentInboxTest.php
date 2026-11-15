@@ -66,6 +66,7 @@ it('el jefe elige una carrera pendiente y la acepta; su carga queda en Propuesta
         ->click('@accept-part')
         ->assertSee('Lo aceptado ya no cambia.')
         ->click('@confirm-accept')
+        ->assertSee('Aceptaste la parte de ISC')
         ->assertSee('Aceptada')
         ->assertSee('Propuesta')
         ->assertNoJavaScriptErrors();
