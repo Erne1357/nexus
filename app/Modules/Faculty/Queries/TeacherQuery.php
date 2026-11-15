@@ -5,6 +5,7 @@ namespace App\Modules\Faculty\Queries;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\TextSearch;
@@ -37,7 +38,9 @@ final class TeacherQuery
      * departamento, aunque esté borrado. Busca `$search` en el número o el nombre con TextSearch. `$departmentId`
      * filtra por una adscripción sin borrar (un id que no es uuid no trae a nadie); `$kind`, por una plaza de ese
      * tipo vigente el primer día del periodo activo (S1, supuesto por confirmar; sin periodo, hoy); `$active`, por
-     * estado. `null` no filtra.
+     * estado; `$withInstitutionalEmail`, por si tiene correo institucional (AC-06). `null` no filtra. Cada docente
+     * trae su usuario con lo que pide el estado de su acceso (AC-04): si tiene contraseña (`has_password`), si se le
+     * invitó y si debe cambiarla.
      *
      * @return LengthAwarePaginator<int, Teacher>
      */
@@ -48,17 +51,20 @@ final class TeacherQuery
         ?PositionKind $kind = null,
         ?bool $active = null,
         int $perPage = 15,
+        ?bool $withInstitutionalEmail = null,
     ): LengthAwarePaginator {
-        return $this->visible($context)
-            ->with(['adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions)])
-            ->tap(fn (Builder $query) => TextSearch::apply($query, ['rfc', 'name'], $search))
-            ->when($departmentId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => Str::isUuid($departmentId)
-                ? $adscription->where('department_id', $departmentId)
-                : $adscription->whereRaw('false')))
-            ->when($kind !== null, fn (Builder $query) => $query->whereHas('positions', fn (Builder $position) => $position
-                ->currentOn($context->activeTerm()?->starts_on ?? today())
-                ->where('kind', $kind)))
+        return $this->filtered($context, $search, $departmentId, $kind)
+            ->with([
+                'adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions),
+                // Para el estado del acceso (AC-04, UserAccess::resolve()), sin leer la contraseña.
+                'user' => fn (BelongsTo $user) => $user
+                    ->select(['id', 'must_change_password', 'access_invited_at'])
+                    ->selectRaw('password is not null as has_password'),
+            ])
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
+            ->when($withInstitutionalEmail !== null, fn (Builder $query) => $withInstitutionalEmail
+                ? $query->whereNotNull('institutional_email')
+                : $query->whereNull('institutional_email'))
             ->orderBy('rfc')
             ->paginate($perPage);
     }
@@ -79,6 +85,58 @@ final class TeacherQuery
         }
 
         return $term === null || $ids === [] ? [] : $this->baseHours->forTerm($term, $ids);
+    }
+
+    /**
+     * Cuántos docentes activos de los que ve no tienen correo institucional (AC-06): sin él no reciben su invitación de
+     * acceso (AC-07). Para el aviso de la lista, con su búsqueda y sus filtros de departamento y tipo de plaza (los de
+     * forTable()), así que «Ver solo esos» muestra exactamente a los que cuenta (AC-04, tarea 1.21).
+     */
+    public function missingInstitutionalEmailCount(Actor $context, string $search = '', ?string $departmentId = null, ?PositionKind $kind = null): int
+    {
+        return $this->filtered($context, $search, $departmentId, $kind)
+            ->where('is_active', true)
+            ->whereNull('institutional_email')
+            ->count();
+    }
+
+    /**
+     * Los docentes que ve `$context` con la búsqueda y los filtros de departamento y tipo de plaza de la lista
+     * (forTable()); `null` no filtra.
+     *
+     * @return Builder<Teacher>
+     */
+    private function filtered(Actor $context, string $search, ?string $departmentId, ?PositionKind $kind): Builder
+    {
+        return $this->visible($context)
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['rfc', 'name'], $search))
+            ->when($departmentId !== null, fn (Builder $query) => $query->whereHas('adscriptions', fn (Builder $adscription) => Str::isUuid($departmentId)
+                ? $adscription->where('department_id', $departmentId)
+                : $adscription->whereRaw('false')))
+            ->when($kind !== null, fn (Builder $query) => $query->whereHas('positions', fn (Builder $position) => $position
+                ->currentOn($context->activeTerm()?->starts_on ?? today())
+                ->where('kind', $kind)));
+    }
+
+    /**
+     * El estado del acceso de los docentes de una página (AC-04), por id, con el usuario que ya trae forTable(): sin
+     * usuario no tiene acceso.
+     *
+     * @param  iterable<int, Teacher>  $teachers
+     * @return array<string, UserAccess>
+     */
+    public function accessFor(iterable $teachers): array
+    {
+        $access = [];
+
+        foreach ($teachers as $teacher) {
+            $user = $teacher->user;
+            $access[$teacher->getKey()] = $user === null
+                ? UserAccess::None
+                : UserAccess::resolve((bool) $user->getAttribute('has_password'), $user->access_invited_at !== null, (bool) $user->must_change_password);
+        }
+
+        return $access;
     }
 
     /**
@@ -227,6 +285,27 @@ final class TeacherQuery
             ->orderByDesc('is_primary')
             ->orderBy('created_at')
             ->orderBy('id');
+    }
+
+    /**
+     * Qué pasa si se quita al docente de esa adscripción (D10, confirmado el 14 de noviembre de 2026), para la
+     * confirmación de «Quitar de <Departamento>» en la lista y en la ficha: si era su último departamento, queda dado
+     * de baja y su cuenta se inhabilita (CV8); si no, solo sale de ese departamento, y si era la principal dice cuál
+     * queda, con la regla de RemoveAdscription (la más antigua de las que quedan: `$adscriptions` llegan en ese orden
+     * detrás de la principal, con su departamento).
+     *
+     * @param  iterable<int, TeacherDepartment>  $adscriptions  las adscripciones sin borrar del docente
+     */
+    public function removalConsequence(TeacherDepartment $adscription, iterable $adscriptions): string
+    {
+        $rest = collect($adscriptions)->reject(fn (TeacherDepartment $other): bool => $other->is($adscription))->values();
+        $name = $adscription->department?->name;
+
+        return match (true) {
+            $rest->isEmpty() => 'Es su último departamento: queda dado de baja y su cuenta se inhabilita.',
+            $adscription->is_primary => "Solo sale de {$name}: sigue activo y su adscripción principal pasa a {$rest->first()->department?->name}.",
+            default => "Solo sale de {$name}: sigue activo y su adscripción principal no cambia.",
+        };
     }
 
     /**

@@ -261,13 +261,13 @@ describe('corregir marca', function () {
             ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
     });
 
-    it('CV-S7: guardar sin cambios no es una corrección: no lo marca', function () {
+    it('CV-S7: guardar sin cambios también lo marca como revisado (confirmado el 14 de noviembre de 2026)', function () {
         $this->actingAs($this->actor);
 
         app(CorrectRecord::class)->handle($this->review, $this->first, ['name' => $this->first->name], $this->actor);
 
-        expect(marked($this->review))->toBe([])
-            ->and($this->review->fresh()->status)->toBe(ReviewStatus::Pending);
+        expect(marked($this->review))->toBe([$this->first->id])
+            ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
     });
 
     it('si la corrección falla no queda la marca', function () {

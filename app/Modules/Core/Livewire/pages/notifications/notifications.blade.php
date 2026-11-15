@@ -3,9 +3,10 @@
     leídas», el filtro por tipo (si tiene más de uno) y la lista en una superficie con filete, agrupada por día,
     con el mismo renglón que la tarjeta de la campana (core::notifications.item). Paginada de 25 en 25. La lista
     mide como máximo 48 rem (max-w-3xl) para que en pantallas anchas el punto de «sin leer» no quede lejos del título.
-    Contadores como en la bandeja: «Todas 28», «Sin leer 3».
+    Contadores como en la bandeja: «Todas 28», «Sin leer 3». Repuesta de la caché de wire:navigate (Atrás), se vuelve
+    a pintar (`nexus-notifications-stale`, resources/js/app.js).
 --}}
-<div>
+<div x-data x-on:nexus-notifications-stale.window="$wire.$refresh()">
     <x-header title="Todas las notificaciones" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator />
 
     <div class="max-w-3xl" data-testid="notifications-list">

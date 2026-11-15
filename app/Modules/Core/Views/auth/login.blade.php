@@ -19,25 +19,7 @@
         <main
             class="order-1 mx-auto flex w-full max-w-[560px] flex-col bg-base-100 px-4 pt-6 pb-7 lg:order-2 lg:min-h-svh lg:max-w-none lg:px-[clamp(28px,3.4vw,56px)] lg:pt-[clamp(20px,3vh,32px)] lg:pb-[clamp(28px,5vh,56px)]"
         >
-            <div data-login-logos class="flex items-center justify-between gap-5">
-                <span
-                    role="img"
-                    aria-label="Tecnológico Nacional de México"
-                    class="block aspect-[469/200] h-[58px] bg-primary [mask:var(--logo)_center/contain_no-repeat] lg:h-[clamp(55px,7.9vh,77px)]"
-                    style="--logo: url('{{ Vite::asset('resources/images/login/tecnm.webp') }}')"
-                ></span>
-                <span
-                    role="img"
-                    aria-label="Instituto Tecnológico de Ciudad Juárez"
-                    class="block aspect-[465/220] h-[66px] bg-accent [mask:var(--logo)_center/contain_no-repeat] lg:h-[clamp(61px,8.8vh,84px)]"
-                    style="--logo: url('{{ Vite::asset('resources/images/login/itcj.webp') }}')"
-                ></span>
-            </div>
-
-            <h1 class="mt-3 mb-2 flex justify-center lg:my-auto lg:py-[clamp(14px,2.6vh,30px)]">
-                <span class="sr-only">Nexus</span>
-                <x-core::login.mark data-login-mark class="w-[min(76vw,300px)] lg:w-[clamp(270px,calc(22vh+170px),430px)]" />
-            </h1>
+            <x-core::login.brand />
 
             {{-- El formulario --}}
             <section x-show="view === 'login'" data-login-view="login" aria-label="Iniciar sesión" class="mt-5 lg:mt-[clamp(20px,3.6vh,36px)]">

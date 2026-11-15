@@ -14,6 +14,8 @@ Supuesto por confirmar (11 de noviembre de 2026): la demo y el desarrollo nunca 
 4. **Con `MAIL_MAILER=log` o `array` el correo de la invitación no lleva la contraseña por defecto:** el transporte `log` escribe el correo completo en `storage/logs/laravel.log`, y la contraseña quedaría en un archivo de texto. En su lugar, el correo dice que se la da su jefe de departamento o la administración. Por lo mismo, el correo para restablecer la contraseña (AC-16) no lleva el enlace, que serviría 60 minutos a quien lea el log: dice que se pida otra vez cuando el correo esté configurado. Con Mailpit (`smtp`) los correos van completos, igual que en producción.
 5. No es una dependencia de la aplicación: no entra a `composer.json` ni a `package.json`, ni a `compose.yaml` ni a `compose.prod.yaml`. Producción configura su propio SMTP institucional en su `.env`.
 
+**Actualización (14 de noviembre de 2026, tarea 1.21):** la invitación ya no lleva ninguna contraseña con ningún transporte: el docente elige la suya al activar (AC-07 y AC-08). Lo del punto 4 sigue valiendo para el correo de restablecer la contraseña.
+
 ## Consecuencias
 - Para ver un correo en desarrollo basta abrir `http://127.0.0.1:8025`. La cola (`queue`) es la que manda: la invitación sale de la cola después del commit.
 - Si un `.env` de desarrollo o de la demo apuntara a un SMTP real, saldrían correos de verdad. Por eso `.env.example` trae Mailpit, y el `.env` de la demo se revisa antes de sembrar.

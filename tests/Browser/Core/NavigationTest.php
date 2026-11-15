@@ -93,7 +93,7 @@ it('Inicio, el primer icono de la franja, lleva al inicio; ahí la columna muest
         ->assertPathIs('/')
         ->assertAttribute('#nexus-menu [data-menu-home]', 'aria-current', 'page')
         ->assertNotPresent('#nexus-menu [data-area-current]')
-        ->assertVisible('a[data-label="Validar catálogos"]')
+        ->assertVisible('a[data-label="Validación de catálogos"]')
         ->assertMissing('a[data-label="Campus"]')
         ->assertScript('document.querySelector("#nexus-menu [data-menu-home]").getBoundingClientRect().top < document.querySelector(\'[data-menu-area="academico"] [data-menu-flip="icon"]\').getBoundingClientRect().top')
         ->assertNoJavaScriptErrors();

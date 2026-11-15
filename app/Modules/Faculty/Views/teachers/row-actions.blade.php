@@ -4,8 +4,9 @@
     botones quedan solo con su icono entre 768 y 1199 px y «Editar» lleva el data-testid del browser test; en el
     celular siempre llevan su texto y no repiten el data-testid.
 
-    `$actions` (del componente, ya decidido con TeacherPolicy): un «Quitar de <depto>» por cada adscripción a un
-    departamento que cubre, con su aviso de qué principal queda (las de otros departamentos no se muestran), y el
+    `$actions` (del componente, ya decidido con TeacherPolicy): un «Quitar de <Departamento>» por cada adscripción a un
+    departamento que cubre, con su consecuencia (D10: solo sale de ahí, o queda dado de baja; las de otros
+    departamentos no se muestran), y el
     motivo por el que «Desactivar/Activar» está deshabilitado, o null. No hay «Borrar»: un docente se da de baja.
 --}}
 <div @class(['flex gap-1', 'justify-end' => $inTable, '-ms-3' => ! $inTable])>

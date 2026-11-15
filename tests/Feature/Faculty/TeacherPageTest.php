@@ -132,7 +132,7 @@ describe('adscripciones', function () {
         $page->call('removeAdscription');
 
         expect($sc->fresh()->trashed())->toBeTrue()
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Quitado de SC');
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Quitado de Sistemas y Computación');
     });
 
     it('el jefe de SC que quita la de SC ya no cubre al docente: vuelve a la lista', function () {
@@ -148,7 +148,7 @@ describe('adscripciones', function () {
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
 
         $page = teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $primary->id)
-            ->assertSee('su adscripción principal pasa a SC')
+            ->assertSee('su adscripción principal pasa a Sistemas y Computación')
             ->call('removeAdscription');
 
         expect($primary->fresh()->trashed())->toBeTrue()
@@ -158,7 +158,7 @@ describe('adscripciones', function () {
 
     it('CV8: quitar la única adscripción da de baja al docente, y el aviso lo dice', function () {
         $page = teacherRecord($this->admin, $this->beto)->call('confirmRemoveAdscription', $this->beto->adscriptions()->sole()->id)
-            ->assertSee('No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.')
+            ->assertSee('Es su último departamento: queda dado de baja y su cuenta se inhabilita.')
             ->call('removeAdscription');
 
         expect($this->beto->fresh()->is_active)->toBeFalse()
@@ -202,10 +202,10 @@ describe('adscripciones', function () {
         expect($sc->fresh()->trashed())->toBeFalse();
     });
 
-    it('lista las adscripciones sin campus, con «Quitar de <depto>» por renglón', function () {
+    it('lista las adscripciones sin campus, con «Quitar de <Departamento>» por renglón', function () {
         $page = teacherRecord($this->admin, $this->ana);
 
-        $page->assertSee('Quitar de II')->assertSee('Quitar de SC')->assertDontSee(' en C2');
+        $page->assertSee('Quitar de Ingeniería Industrial')->assertSee('Quitar de Sistemas y Computación')->assertDontSee(' en C2');
     });
 
     it('hace principal a otra y deja una sola', function () {

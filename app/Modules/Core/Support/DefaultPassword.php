@@ -5,6 +5,7 @@ namespace App\Modules\Core\Support;
 use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 use RuntimeException;
 
 /**
@@ -14,7 +15,9 @@ use RuntimeException;
  * usuario sin acceso (AC-01) no la necesita: nace sin contraseña.
  *
  * `hash()` calcula el hash una vez por instancia, para reutilizarlo en una corrida masiva. `rejectionRule()` es la
- * regla de validación que no la deja como contraseña nueva (cambio de contraseña y restablecimiento por correo).
+ * regla de validación que no la deja como contraseña nueva (cambio de contraseña), y `newPasswordRules()`, las reglas
+ * completas de la contraseña que alguien elige con un enlace de su correo: el restablecimiento (AC-18) y la activación
+ * con la invitación (AC-08).
  */
 final class DefaultPassword
 {
@@ -60,6 +63,17 @@ final class DefaultPassword
                 $fail('No puedes usar la contraseña por defecto.');
             }
         };
+    }
+
+    /**
+     * Las reglas de `password` cuando alguien elige su contraseña con un enlace de su correo (AC-08 y AC-18): una nueva
+     * confirmada (`password_confirmation`), conforme a Password::defaults() y que no sea la por defecto.
+     *
+     * @return list<mixed>
+     */
+    public function newPasswordRules(): array
+    {
+        return ['required', 'string', Password::defaults(), 'confirmed', $this->rejectionRule()];
     }
 
     public function hash(): string

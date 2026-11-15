@@ -71,7 +71,7 @@ describe('admin', function () {
             ->assertSeeInOrder(['Clave', 'Campus', 'Edificio', 'Tipo', 'Capacidad', 'Dueño', 'Estado'])
             ->assertSeeInOrder(['A-101', 'A-102', 'Auditorio Mayor', 'B-201', 'OLD-1', 'Inactivo', 'Z-900']);
 
-        $rows = collect(domOf($response)->querySelectorAll('table tbody tr'))->mapWithKeys(fn ($row) => [textOf($row->querySelector('td')) => textOf($row)]);
+        $rows = collect(domOf($response)->querySelectorAll('table tbody tr'))->mapWithKeys(fn ($row) => [textOf($row->querySelector('td:nth-child(2)')) => textOf($row)]);
 
         expect($rows['A-102'])->toContain('A')->toContain('Auditorio')->toContain('120')->toContain('Sin dueño')
             ->and($rows['B-201'])->toContain('Laboratorio')->toContain('SIS');

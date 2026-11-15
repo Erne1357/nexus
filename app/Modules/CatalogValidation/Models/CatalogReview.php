@@ -110,4 +110,15 @@ class CatalogReview extends Model
     {
         return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->code}");
     }
+
+    /**
+     * «Materias de Sistemas y Computación»: lo que dicen la pantalla, sus modales y sus avisos, con el nombre del
+     * departamento y no su clave (tarea 1.21).
+     *
+     * @return Attribute<string, never>
+     */
+    protected function heading(): Attribute
+    {
+        return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->name}");
+    }
 }

@@ -13,8 +13,8 @@ use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Jobs\ProvisionTeacherUsersJob;
+use App\Modules\Faculty\Livewire\Concerns\EditsInstitutionalEmail;
 use App\Modules\Faculty\Models\Teacher;
-use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Queries\TeacherQuery;
 use App\Modules\Faculty\Rules\TeacherRfc;
 use App\Modules\Faculty\Rules\TeacherRules;
@@ -31,8 +31,11 @@ use Mary\Traits\Toast;
 
 /**
  * Catálogo de Docentes (tarea 1.12, spec 4.3 con la adenda del 30 de octubre de 2026), con la forma de Campus y los
- * filtros de Materias: tabla con búsqueda por número o nombre y filtros de departamento, tipo de plaza y estado;
- * alta y edición en un modal; en «Acciones», «Quitar de <depto>» y «Desactivar/Activar». Un docente no se borra: se
+ * filtros de Materias: tabla con búsqueda por número o nombre y filtros de departamento, tipo de plaza y estado (por
+ * omisión, los activos), más el aviso de cuántos activos no tienen correo institucional, que los filtra, y el estado
+ * del acceso de cada uno (AC-04); alta y edición en un
+ * modal, y al editar, el correo institucional con las reglas de la ficha (AC-06, EditsInstitutionalEmail); en
+ * «Acciones», «Quitar de <Departamento>» con su consecuencia (D10) y «Desactivar/Activar». Un docente no se borra: se
  * da de baja, y su usuario con él. Los docentes son de todo el Tec: la adscripción es solo de un departamento.
  *
  * Lo ven el admin y la Subdirección, a todos, y los jefes de departamento y de proyecto docente, a los de su
@@ -50,7 +53,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Docentes')] class extends Component
 {
-    use Toast, WithPagination;
+    use EditsInstitutionalEmail, Toast, WithPagination;
 
     /** El número es de un docente borrado: no se reutiliza ni se adscribe. */
     private const string DELETED_RFC = 'Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.';
@@ -73,9 +76,20 @@ new #[Title('Docentes')] class extends Component
     #[Session]
     public string $kindFilter = '';
 
-    /** '' (todos), 'active' o 'inactive'. */
+    /**
+     * '' (activos e inactivos), 'active' o 'inactive'. Por omisión, los activos (tarea 1.21); la llave de la sesión es
+     * otra que la de antes para que el nuevo valor por omisión llegue también a quien ya había abierto la lista.
+     */
+    #[Session(key: 'faculty.teachers.status.v2')]
+    public string $status = 'active';
+
+    /**
+     * '' (con y sin correo institucional) o 'missing'. No va en la barra, donde no cabe un quinto filtro a 1440 px: lo
+     * pone el aviso de cuántos docentes activos no tienen correo institucional (showMissingEmails()) y lo quita «Ver
+     * todos».
+     */
     #[Session]
-    public string $status = '';
+    public string $emailFilter = '';
 
     public bool $showModal = false;
 
@@ -129,12 +143,15 @@ new #[Title('Docentes')] class extends Component
                 'inactive' => false,
                 default => null,
             },
+            withInstitutionalEmail: $this->emailFilter === 'missing' ? false : null,
         );
+        $editing = $this->showModal && $this->editingId !== null ? $teachers->findOrFail($this->editingId) : null;
         $targets = $this->showModal && $this->editingId === null ? $teachers->adscriptionTargets($context) : [];
 
         return [
             'teachers' => $page,
             'hours' => $teachers->baseHoursFor($term, $page),
+            'access' => $teachers->accessFor($page),
             'rowActions' => $this->rowActions($page, $context),
             'term' => $term,
             'options' => $options,
@@ -143,14 +160,22 @@ new #[Title('Docentes')] class extends Component
             'kinds' => array_map(fn (PositionKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], PositionKind::cases()),
             'degrees' => array_map(fn (TeacherDegree $degree): array => ['id' => $degree->value, 'name' => $degree->label()], TeacherDegree::cases()),
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
+            'missingEmails' => $this->emailFilter === 'missing' ? 0 : $teachers->missingInstitutionalEmailCount(
+                $context,
+                $this->search,
+                $this->departmentFilter === '' ? null : $this->departmentFilter,
+                PositionKind::tryFrom($this->kindFilter),
+            ),
+            'institutionalDomain' => config('nexus.institutional_email_domain'),
+            'institutionalEmailReason' => $editing === null ? null : $this->institutionalEmailReason($editing),
             'canProvision' => Gate::allows('provisionUsers', Teacher::class),
-            // La adscripción y el usuario son las columnas descriptivas: se ocultan debajo de 1024 y de 1200 px.
+            // La adscripción y el acceso son las columnas descriptivas: se ocultan debajo de 1024 y de 1200 px.
             'headers' => [
                 ['key' => 'rfc', 'label' => 'RFC'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'adscriptions', 'label' => 'Adscripción', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'base_hours', 'label' => 'Horas base', 'class' => 'text-right'],
-                ['key' => 'has_user', 'label' => 'Usuario', 'class' => 'max-[1200px]:hidden'],
+                ['key' => 'access', 'label' => 'Acceso', 'class' => 'max-[1200px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
             ],
             // DESIGN.md, "Insignias de estado": la fila de un inactivo pasa a text-neutral.
@@ -160,9 +185,21 @@ new #[Title('Docentes')] class extends Component
 
     public function updated(string $property): void
     {
-        if (in_array($property, ['search', 'departmentFilter', 'kindFilter', 'status'], true)) {
+        if (in_array($property, ['search', 'departmentFilter', 'kindFilter', 'status', 'emailFilter'], true)) {
             $this->resetPage();
         }
+    }
+
+    /**
+     * «Ver solo esos», del aviso de los docentes activos sin correo institucional (AC-04): filtra a los que no lo tienen
+     * y vuelve el estado a «Activos», así la lista muestra exactamente a los que contó el aviso, que cuenta con la misma
+     * búsqueda y los mismos filtros de departamento y tipo.
+     */
+    public function showMissingEmails(): void
+    {
+        $this->emailFilter = 'missing';
+        $this->status = 'active';
+        $this->resetPage();
     }
 
     /**
@@ -184,7 +221,7 @@ new #[Title('Docentes')] class extends Component
         $this->authorize('create', Teacher::class);
 
         $this->resetValidation();
-        $this->reset('editingId', 'existingId', 'existingLabel', 'rfc', 'name', 'email', 'degree', 'hired_on', 'department_id');
+        $this->reset('editingId', 'existingId', 'existingLabel', 'rfc', 'name', 'email', 'institutional_email', 'degree', 'hired_on', 'department_id');
 
         // Si solo puede dar de alta en un departamento (el jefe, el suyo), ya va elegido.
         $targets = $teachers->adscriptionTargets($context);
@@ -203,6 +240,7 @@ new #[Title('Docentes')] class extends Component
         $this->rfc = $teacher->rfc;
         $this->name = $teacher->name;
         $this->email = (string) $teacher->email;
+        $this->institutional_email = (string) $teacher->institutional_email;
         $this->degree = $teacher->degree?->value ?? '';
         $this->hired_on = $teacher->hired_on?->toDateString() ?? '';
         $this->showModal = true;
@@ -213,7 +251,14 @@ new #[Title('Docentes')] class extends Component
         if ($this->editingId !== null) {
             $teacher = $teachers->findOrFail($this->editingId);
             $this->authorize('update', $teacher);
-            $teacher = $updateTeacher->handle($teacher, $this->validatedData());
+            $data = $this->validatedData();
+            $institutionalEmail = $this->institutionalEmailChange($teacher);
+
+            if ($institutionalEmail === null) {
+                return;
+            }
+
+            $teacher = $updateTeacher->handle($teacher, [...$data, ...$institutionalEmail]);
             $this->success('Docente actualizado', $this->describe($teacher));
             $this->showModal = false;
 
@@ -274,7 +319,7 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * «Quitar de mi departamento»: quita una adscripción del docente; si era la principal, la principal pasa a la más
+     * «Quitar de <Departamento>» (D10): quita una adscripción del docente; si era la principal, la principal pasa a la más
      * antigua que le quede, y sin ninguna el docente queda dado de baja y su cuenta se inhabilita
      * (DischargeTeacherFromDepartment, CV8, confirmado el 12 de noviembre de 2026).
      */
@@ -287,7 +332,7 @@ new #[Title('Docentes')] class extends Component
         $removal = $discharge->handle($adscription);
 
         $this->success(
-            e($removal['deactivated'] ? "Docente dado de baja de {$adscription->department?->code}" : "Docente quitado de {$adscription->department?->code}"),
+            e($removal['deactivated'] ? "Docente dado de baja de {$adscription->department?->name}" : "Docente quitado de {$adscription->department?->name}"),
             $this->describe($teacher).($removal['outcome'] === null ? '' : e("; {$removal['outcome']}")),
         );
     }
@@ -324,6 +369,7 @@ new #[Title('Docentes')] class extends Component
             'rfc' => 'RFC',
             'name' => 'nombre',
             'email' => 'correo',
+            'institutional_email' => 'correo institucional',
             'degree' => 'grado',
             'hired_on' => 'fecha de ingreso',
             'department_id' => 'departamento',
@@ -344,6 +390,7 @@ new #[Title('Docentes')] class extends Component
             ] : []),
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
+            ...($creating ? [] : ['institutional_email' => ['nullable', 'string', 'max:255']]),
             'degree' => ['nullable', Rule::enum(TeacherDegree::class)],
             'hired_on' => ['nullable', 'date_format:Y-m-d'],
         ]);
@@ -376,9 +423,9 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * Las acciones de cada fila del menú «Acciones», ya decididas con TeacherPolicy: «Quitar de <depto>» por cada
-     * adscripción a un departamento que cubre (las de otros departamentos no se muestran), con el aviso de qué
-     * principal queda o de que queda dado de baja (CV8), deshabilitado con su motivo si es él mismo o si ocupa un puesto
+     * Las acciones de cada fila del menú «Acciones», ya decididas con TeacherPolicy: «Quitar de <Departamento>» por cada
+     * adscripción a un departamento que cubre (las de otros departamentos no se muestran), con su consecuencia (D10:
+     * solo sale de ahí y qué principal queda, o queda dado de baja, CV8), deshabilitado con su motivo si es él mismo o si ocupa un puesto
      * (CV-S8); y «Desactivar/Activar», deshabilitado con su motivo si no le toca. Las adscripciones ya vienen con la
      * página; los puestos salen de una sola consulta.
      *
@@ -388,7 +435,8 @@ new #[Title('Docentes')] class extends Component
     private function rowActions(LengthAwarePaginator $teachers, Actor $context): array
     {
         $actions = [];
-        $staff = app(TeacherQuery::class)->staffUserIds($teachers->getCollection()->pluck('user_id')->filter()->values()->all());
+        $queries = app(TeacherQuery::class);
+        $staff = $queries->staffUserIds($teachers->getCollection()->pluck('user_id')->filter()->values()->all());
         $canDeactivate = $context->allows(FacultyPermission::TeacherDeactivate);
 
         foreach ($teachers as $teacher) {
@@ -402,9 +450,9 @@ new #[Title('Docentes')] class extends Component
                 $adscription->setRelation('teacher', $teacher);
                 $removals[] = [
                     'id' => $adscription->id,
-                    'label' => 'Quitar de '.$adscription->department?->code,
-                    'title' => "¿Quitar al docente {$teacher->rfc} de {$adscription->department?->code}?",
-                    'confirm' => $this->removalWarning($adscription, $teacher),
+                    'label' => 'Quitar de '.$adscription->department?->name,
+                    'title' => "¿Quitar al docente {$teacher->rfc} de {$adscription->department?->name}?",
+                    'confirm' => $queries->removalConsequence($adscription, $teacher->adscriptions),
                     'reason' => match (true) {
                         $teacher->user_id !== null && $teacher->user_id === $context->user()?->getKey() => 'No te puedes quitar a ti mismo de un departamento.',
                         $teacher->user_id !== null && isset($staff[$teacher->user_id]) && ! $canDeactivate => 'Ocupa un puesto: lo quitan el administrador o la Subdirección.',
@@ -425,22 +473,6 @@ new #[Title('Docentes')] class extends Component
         }
 
         return $actions;
-    }
-
-    /**
-     * El aviso antes de quitar una adscripción: qué principal le queda, con la regla de RemoveAdscription (la más
-     * antigua de las que quedan; las adscripciones llegan en ese orden detrás de la principal).
-     */
-    private function removalWarning(TeacherDepartment $adscription, Teacher $teacher): string
-    {
-        $rest = $teacher->adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($adscription));
-        $outcome = match (true) {
-            $rest->isEmpty() => 'No le queda otro departamento: queda dado de baja y su cuenta se inhabilita.',
-            $adscription->is_primary => 'Sigue activo y su adscripción principal pasa a '.$rest->first()->department?->code.'.',
-            default => 'Sigue activo y su adscripción principal no cambia.',
-        };
-
-        return $outcome;
     }
 
     /**
@@ -482,8 +514,8 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * Olvida el departamento o el tipo del filtro que no están entre las opciones: los filtros se recuerdan en la
-     * sesión, y uno que ya no existe dejaría la lista vacía sin verse en su select.
+     * Olvida el departamento, el tipo, el correo o el estado del filtro que no están entre las opciones: los filtros se
+     * recuerdan en la sesión, y uno que ya no existe dejaría la lista vacía sin verse en su select.
      *
      * @param  array{departments: list<array{id: string, name: string}>}  $options
      */
@@ -495,6 +527,14 @@ new #[Title('Docentes')] class extends Component
 
         if ($this->kindFilter !== '' && PositionKind::tryFrom($this->kindFilter) === null) {
             $this->kindFilter = '';
+        }
+
+        if (! in_array($this->emailFilter, ['', 'missing'], true)) {
+            $this->emailFilter = '';
+        }
+
+        if (! in_array($this->status, ['', 'active', 'inactive'], true)) {
+            $this->status = 'active';
         }
     }
 

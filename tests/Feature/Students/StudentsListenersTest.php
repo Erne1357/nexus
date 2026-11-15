@@ -108,6 +108,28 @@ describe('recálculo del avance', function () {
         'plan' => [fn () => ['studyPlanId' => fakeKey(2)]],
     ]);
 
+    it('CurriculumChanged con plan encola el recálculo solo de ese plan, un job único por plan; sin plan, el completo', function () {
+        Queue::fake();
+
+        event(new CurriculumChanged(studyPlanId: fakeKey(2)));
+        event(new CurriculumChanged(studyPlanId: fakeKey(3)));
+        event(new CurriculumChanged(subjectId: fakeKey(1)));
+
+        Queue::assertPushed(RecomputeStudentProgress::class, 3);
+        Queue::assertPushed(RecomputeStudentProgress::class, fn (RecomputeStudentProgress $job): bool => $job->studyPlanId === fakeKey(2) && $job->uniqueId() === fakeKey(2));
+        Queue::assertPushed(RecomputeStudentProgress::class, fn (RecomputeStudentProgress $job): bool => $job->studyPlanId === null && $job->uniqueId() === 'all');
+    });
+
+    it('dos CurriculumChanged seguidos del mismo plan encolan un solo RecomputeStudentProgress: el job es único por plan', function () {
+        Queue::fake();
+
+        event(new CurriculumChanged(studyPlanId: fakeKey(2)));
+        event(new CurriculumChanged(studyPlanId: fakeKey(2)));
+
+        Queue::assertPushed(RecomputeStudentProgress::class, 1);
+        Queue::assertPushed(RecomputeStudentProgress::class, fn (RecomputeStudentProgress $job): bool => $job->studyPlanId === fakeKey(2));
+    });
+
     it('cambiar los créditos de una materia encola el recálculo después del commit', function () {
         Queue::fake();
 
