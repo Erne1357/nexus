@@ -3,8 +3,8 @@
 namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Authorization\Permission;
-use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
@@ -17,14 +17,15 @@ use Illuminate\Database\Eloquent\Builder;
  * de su subárbol. Cuenta solo el nombramiento: el admin lo puede todo sin tenerlo, y los avisos van a quien hace el
  * trabajo; un admin que además tiene el nombramiento sí los recibe, con ese puesto.
  *
- * En SQL solo se acota a los usuarios activos con un nombramiento vigente de un puesto que concede el permiso; el
+ * En SQL solo se acota a los usuarios activos con un nombramiento vigente de un puesto que tiene el permiso hoy
+ * (GrantTable, CF-01); el
  * alcance, que es jerárquico en la unidad, lo decide rolesAllowing().
  */
 final class RecipientsQuery
 {
     public function __construct(
         private readonly Actor $context,
-        private readonly PermissionRegistry $permissions,
+        private readonly GrantTable $grants,
     ) {}
 
     /**
@@ -50,7 +51,7 @@ final class RecipientsQuery
      */
     public function holdersByKey(Permission $permission, array $targets): array
     {
-        $roles = $this->permissions->rolesGranting($permission);
+        $roles = $this->grants->rolesGranting($permission);
         $holders = array_map(fn (): array => [], $targets);
 
         if ($roles === [] || $targets === []) {
