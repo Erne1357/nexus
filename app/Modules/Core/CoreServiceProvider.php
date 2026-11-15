@@ -203,17 +203,23 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
     /**
      * CF-03 (confirmado el 14 de noviembre de 2026): usuarios, roles y permisos, nombramientos, bitácora, correos y
-     * colas son solo del admin. El organigrama también, porque decide el alcance de todos (supuesto por confirmar).
-     * Los avisos y atajos del login y los parámetros sí se pueden dar.
+     * colas son solo del admin. El organigrama también, porque decide el alcance de todos (supuesto por confirmar). Y,
+     * desde el 15 de noviembre de 2026, editar un campus o una modalidad, porque desactivarlos les quita el alcance a
+     * todos (confirmado). El perfil de flujo de una modalidad no es candado: la Subdirección lo tiene de fábrica. Los
+     * avisos y atajos del login y los parámetros sí se pueden dar.
      */
     public function adminOnly(): array
     {
         $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit'];
 
-        return array_values(array_filter(
-            CorePermission::cases(),
-            fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true),
-        ));
+        return [
+            ...array_values(array_filter(
+                CorePermission::cases(),
+                fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true),
+            )),
+            CorePermission::CampusUpdate,
+            CorePermission::ModalityUpdate,
+        ];
     }
 
     /**

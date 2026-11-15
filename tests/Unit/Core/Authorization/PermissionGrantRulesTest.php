@@ -85,6 +85,18 @@ it('CF-04: lo que el código concede de fábrica siempre vale, aunque sin la exc
         ->and($rules->grantProblem(Role::JefeProyectoDocente, FakePermission::ViewCareer))->not->toBeNull();
 });
 
+it('marca lo que valdría en todo el Tec: de gestión, sin unidad ni carrera, y sin dimensión que el puesto fije', function (Role $role, FakePermission $permission, bool $wide) {
+    expect(fakeGrantRules()->isInstitutionWide($role, $permission))->toBe($wide);
+})->with([
+    'sin dimensiones, para cualquiera' => [Role::Coordinador, FakePermission::ViewAny, true],
+    'modalidad, para el jefe' => [Role::JefeDepartamento, FakePermission::ViewModality, true],
+    'modalidad, no para el coordinador' => [Role::Coordinador, FakePermission::ViewModality, false],
+    'campus, para la Subdirección' => [Role::Subdireccion, FakePermission::ViewCampus, true],
+    'campus, no para el jefe de proyecto docente (lo admite)' => [Role::JefeProyectoDocente, FakePermission::ViewCampus, false],
+    'con unidad, no' => [Role::JefeDepartamento, FakePermission::ViewModalityUnit, false],
+    'personal, no' => [Role::Docente, FakePermission::ViewOwn, false],
+]);
+
 it('CF-03: el registro rechaza conceder un candado de fábrica o hacerlo excepción del admin', function () {
     expect(fn () => PermissionRegistry::fromDeclarations([FakePermission::class], [Role::Coordinador->value => [FakePermission::ViewAny]], [], [FakePermission::ViewAny]))
         ->toThrow(LogicException::class, 'fake.thing.view_any')

@@ -15,17 +15,20 @@ use App\Modules\Students\Enums\StudentsPermission;
 | el alcance que el puesto lleva en su nombramiento: revísala con el usuario.
 */
 
-it('CF-03: los candados son los de usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas', function () {
+it('CF-03: los candados son usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas, y editar o borrar lo que da el alcance', function () {
     $registry = app(PermissionRegistry::class);
     $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit'];
     $expected = collect(CorePermission::cases())
         ->filter(fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true))
         ->map(fn (CorePermission $permission): string => $permission->value)
+        ->push('core.campus.update', 'core.modality.update', 'academic.career.delete', 'academic.department.delete')
         ->sort()->values()->all();
 
     expect($registry->adminOnly())->toBe($expected)
         ->and($registry->adminOnly())->toContain('core.authz.manage', 'core.org_unit.view', 'core.user.create', 'core.activity.view')
-        ->and(array_filter($registry->adminOnly(), fn (string $key): bool => preg_match('/^core\.(login_notice|login_shortcut|setting)\./', $key) === 1))->toBe([]);
+        ->and(array_filter($registry->adminOnly(), fn (string $key): bool => preg_match('/^core\.(login_notice|login_shortcut|setting)\./', $key) === 1))->toBe([])
+        ->and($registry->isAdminOnly(CorePermission::ModalityUpdateProfile))->toBeFalse()
+        ->and($registry->grants(Role::Subdireccion, CorePermission::ModalityUpdateProfile))->toBeTrue();
 
     foreach ($registry->permissions() as $permission) {
         if ($registry->isAdminOnly($permission)) {
@@ -81,6 +84,19 @@ it('CF-04: con unidad y carrera basta acotar una; lo que declara solo la unidad 
         ->and($rules->grantProblem(Role::JefeDepartamento, AcademicLoadPermission::ProposalView))
         ->toBe('«Ver la propuesta de una carrera» no se da a Jefe de departamento: el puesto no lleva carrera y el permiso valdría en todas las carreras.');
 });
+
+it('lo que vale en todo el Tec se puede dar con aviso: abrir el periodo y ver modalidades, para el jefe y la Subdirección', function (Role $role) {
+    $rules = app(PermissionGrantRules::class);
+
+    foreach ([CorePermission::TermOpen, CorePermission::ModalityView, CorePermission::TermCreate] as $permission) {
+        expect($rules->grantProblem($role, $permission))->toBeNull()
+            ->and($rules->isInstitutionWide($role, $permission))->toBeTrue();
+    }
+
+    expect($rules->isInstitutionWide(Role::Coordinador, CorePermission::TermOpen))->toBeFalse()
+        ->and($rules->isInstitutionWide(Role::Coordinador, CorePermission::TermCreate))->toBeTrue()
+        ->and($rules->isInstitutionWide($role, StudentsPermission::StudentView))->toBeFalse();
+})->with([Role::JefeDepartamento, Role::Subdireccion]);
 
 it('CF-04: ningún puesto sin alcance tiene de fábrica un permiso de gestión', function () {
     $registry = app(PermissionRegistry::class);

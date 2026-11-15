@@ -44,6 +44,9 @@ final class GrantTable
     /** @var array<string, array<string, true>>|null por `Role->value`, sin el admin */
     private ?array $map = null;
 
+    /** El nivel de transacción en que se leyeron el sello y el mapa (forgetIfTransactionEnded()). */
+    private int $readAtLevel = 0;
+
     public function __construct(
         private readonly PermissionRegistry $registry,
         private readonly PermissionGrantRules $rules,
@@ -128,7 +131,10 @@ final class GrantTable
      */
     private function stamp(): array
     {
+        $this->forgetIfTransactionEnded();
+
         if ($this->stamp === null) {
+            $this->readAtLevel = DB::transactionLevel();
             $row = DB::table('authz_grants_version')->first(['version', 'token']);
             $this->stamp = ['version' => (int) ($row->version ?? 0), 'token' => (string) ($row->token ?? '')];
         }
@@ -146,7 +152,20 @@ final class GrantTable
             Role::cases(),
         );
 
-        return hash('xxh128', $this->registry->fingerprint().'|'.implode(';', $bounded));
+        return hash('xxh128', $this->registry->fingerprint().'|rules='.PermissionGrantRules::VERSION.'|'.implode(';', $bounded));
+    }
+
+    /**
+     * Lo que se leyó dentro de una transacción que ya terminó (confirmada o revertida) se olvida: si se revirtió, no
+     * existió. Cuesta una lectura más cuando se confirmó; dentro de la misma transacción o fuera de toda, se conserva.
+     */
+    private function forgetIfTransactionEnded(): void
+    {
+        if (DB::transactionLevel() < $this->readAtLevel) {
+            $this->stamp = null;
+            $this->map = null;
+            $this->readAtLevel = 0;
+        }
     }
 
     /**
@@ -154,6 +173,8 @@ final class GrantTable
      */
     private function map(): array
     {
+        $this->forgetIfTransactionEnded();
+
         if ($this->map !== null) {
             return $this->map;
         }
@@ -166,6 +187,7 @@ final class GrantTable
         }
 
         [$this->stamp, $map] = $this->load();
+        $this->readAtLevel = DB::transactionLevel();
         $key = $this->cacheKey();
         $data = array_map(fn (array $keys): array => array_keys($keys), $map);
 
@@ -175,7 +197,8 @@ final class GrantTable
     }
 
     /**
-     * El mapa guardado, si tiene la forma: `Role->value` => lista de claves. Si no, null.
+     * El mapa guardado, si tiene la forma: `Role->value` => lista de claves. Si no, null. Las claves que ya nadie declara
+     * o que las reglas bloquean hoy no cuentan, aunque estén en la caché.
      *
      * @return array<string, array<string, true>>|null
      */
@@ -197,7 +220,11 @@ final class GrantTable
                     return null;
                 }
 
-                $map[$role][$permission] = true;
+                $declared = $this->registry->forKey($permission);
+
+                if ($declared !== null && $this->rules->grantProblem(Role::from($role), $declared) === null) {
+                    $map[$role][$permission] = true;
+                }
             }
         }
 
