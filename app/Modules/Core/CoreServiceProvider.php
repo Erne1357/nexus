@@ -43,6 +43,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use Illuminate\Auth\Events\Login;
@@ -56,6 +57,13 @@ use Spatie\Activitylog\Models\Activity;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * La bitácora es de un paquete (spatie/activitylog), así que su policy no sale de la convención.
+     *
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [Activity::class => ActivityPolicy::class];
+
     public function register(): void
     {
         // Estático y en register(): Livewire cablea sus hooks al arrancar (ComponentHookRegistry::boot()), y un hook
@@ -140,6 +148,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // Panel de configuración (1.22): cada paquete agrega su entrada debajo de su marca, en el grupo Configuración.
             // 1.22-B Puestos y permisos
             // 1.22-D Bitácora
+            new NavigationItem('Bitácora', 'core.activity', 'o-clipboard-document-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [Activity::class]),
             // 1.22-E Avisos y atajos del login
             new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView)),
