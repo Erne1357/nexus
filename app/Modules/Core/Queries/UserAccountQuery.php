@@ -9,7 +9,7 @@ use App\Modules\Core\Rules\UserAccountRules;
 /**
  * La cuenta de una persona para su ficha en «Personas y puestos» (1.22-C1): el estado de su acceso (AC-04), si es de un
  * alumno (CF-S4) y, con UserAccountRules, por qué no se editan sus datos, no se le restablece la contraseña (CF-08), no
- * la da de baja `$viewer` (CF-05, AZ-S12) o no se reactiva (CF-06).
+ * la da de baja `$viewer` (CF-05, AZ-S12), no se reactiva (CF-06) o no se le manda la invitación (CF-07).
  */
 final class UserAccountQuery
 {
@@ -26,6 +26,8 @@ final class UserAccountQuery
             resetBlocker: $person->is_active ? $this->rules->resetBlocker($person) : null,
             deactivateBlocker: $person->is_active ? $this->rules->deactivationBlocker($person, $viewer) : null,
             reactivateBlocker: $person->is_active ? null : $this->rules->reactivationBlocker($person),
+            inviteBlocker: $person->is_active && $person->password === null ? $this->rules->invitationBlocker($person) : null,
+            reactivationEmail: $person->is_active ? null : $this->rules->reactivationInviteEmail($person),
         );
     }
 }

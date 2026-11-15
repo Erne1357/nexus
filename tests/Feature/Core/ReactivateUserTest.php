@@ -11,20 +11,24 @@ use App\Modules\Core\Events\UserReactivated;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Rules\UserAccountRules;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
 | ReactivateUser, «Reactivar» una cuenta dada de baja (CF-06): vuelve activa y sin acceso, y sus puestos no regresan
-| solos. La invitación automática llega con 1.22-C2 (CF-07); mientras, la cuenta queda «Sin acceso». No reactiva a un
+| solos. Con correo institucional le llega una invitación nueva (CF-07); sin él queda «Sin acceso». No reactiva a un
 | alumno (CF-S4).
 */
 
 beforeEach(function () {
     $this->travelTo('2026-11-14 10:00:00');
+    Notification::fake();
 
     $this->admin = User::factory()->admin()->create(['name' => 'Ada Admin']);
     $this->rosa = User::factory()->create(['name' => 'Rosa Ruiz', 'username' => 'RURR800101AB1', 'email' => 'rosa.ruiz@cdjuarez.tecnm.mx']);
@@ -33,9 +37,9 @@ beforeEach(function () {
     $this->activityBase = (int) Activity::max('id');
 });
 
-function reactivateAccount(User $user, ?User $actor = null): void
+function reactivateAccount(User $user, ?User $actor = null): ?string
 {
-    app(ReactivateUser::class)->handle($user, $actor ?? test()->admin);
+    return app(ReactivateUser::class)->handle($user, $actor ?? test()->admin);
 }
 
 /**
@@ -60,11 +64,12 @@ function deactivatedToday(User $user, User $admin): array
 
 it('CF-06: reactivar deja la cuenta activa y sin acceso, sin regresarle los puestos que terminó la baja', function () {
     $this->travelTo('2026-11-14 08:00:00');
+    $this->rosa->forceFill(['email' => null])->save();
     [$since] = deactivatedToday($this->rosa, $this->admin);
     $this->travelTo('2026-11-16 09:00:00');
     $this->activityBase = (int) Activity::max('id');
 
-    reactivateAccount($this->rosa);
+    expect(reactivateAccount($this->rosa))->toBeNull();
 
     $rosa = $this->rosa->fresh();
 
@@ -82,6 +87,31 @@ it('CF-06: reactivar deja la cuenta activa y sin acceso, sin regresarle los pues
         ->and($entry->causer_id)->toBe($this->admin->id)
         ->and($entry->attribute_changes->toArray())->toBe(['attributes' => ['is_active' => true, 'deactivated_at' => null], 'old' => ['is_active' => false, 'deactivated_at' => '2026-11-14T08:00:00-07:00']])
         ->and($entry->description)->toBe('Reactivó la cuenta de RURR800101AB1, sin acceso');
+    Notification::assertNothingSent();
+});
+
+it('CF-06 y CF-07: con correo institucional, después de reactivarla le llega una invitación nueva del admin', function () {
+    app(DeactivateUser::class)->handle($this->rosa, DeactivationReason::Otro, null, $this->admin);
+    $this->activityBase = (int) Activity::max('id');
+
+    expect(reactivateAccount($this->rosa))->toBe('rosa.ruiz@cdjuarez.tecnm.mx');
+
+    $rosa = $this->rosa->fresh();
+
+    expect(UserAccess::of($rosa))->toBe(UserAccess::Invited)
+        ->and($rosa->access_invited_by)->toBe($this->admin->id)
+        ->and(activitySince()->orderBy('id')->pluck('event')->all())->toBe(['reactivated', 'access-invited']);
+    Notification::assertSentOnDemand(AccessInvitation::class, fn (AccessInvitation $invitation, array $channels, AnonymousNotifiable $notifiable): bool => $notifiable->routes['mail'] === 'rosa.ruiz@cdjuarez.tecnm.mx');
+});
+
+it('CF-06 y CF-07: con un correo que no es institucional se reactiva sin invitación', function () {
+    $this->rosa->forceFill(['email' => 'rosa@itcj.edu.mx'])->save();
+    app(DeactivateUser::class)->handle($this->rosa, DeactivationReason::Otro, null, $this->admin);
+
+    expect(reactivateAccount($this->rosa))->toBeNull()
+        ->and($this->rosa->fresh()->is_active)->toBeTrue()
+        ->and(UserAccess::of($this->rosa->fresh()))->toBe(UserAccess::None);
+    Notification::assertNothingSent();
 });
 
 it('CF-06: reactivar el mismo día de la baja no le devuelve los puestos hasta la medianoche: terminan ayer o se quitan', function () {

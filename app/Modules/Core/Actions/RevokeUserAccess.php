@@ -25,7 +25,7 @@ final class RevokeUserAccess
                 return false;
             }
 
-            $user->forceFill(['password' => null, 'password_origin' => null, 'must_change_password' => false, 'access_invited_at' => null]);
+            $user->forceFill(['password' => null, 'password_origin' => null, 'must_change_password' => false, 'access_invited_at' => null, 'access_invited_by' => null]);
             $user->setRememberToken(Str::random(60));
             $user->save();
 

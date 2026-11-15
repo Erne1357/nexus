@@ -9,6 +9,7 @@ use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PasswordResetTokens;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -16,8 +17,9 @@ use Illuminate\Validation\ValidationException;
  * «Reactivar» una cuenta dada de baja en el panel (CF-06, confirmado el 14 de noviembre de 2026): vuelve activa y sin
  * acceso, y sus puestos no regresan solos (se nombran otra vez en la ficha). Solo reactiva una cuenta que dio de baja el
  * panel (`deactivated_at`, UserAccountRules::reactivationBlocker(); supuesto por confirmar): la de un docente inactivo se
- * reactiva en Docentes. Es el único camino que quita esa marca (CF-09). La invitación automática a su correo
- * institucional llega con 1.22-C2 (CF-07); mientras, queda «Sin acceso».
+ * reactiva en Docentes. Es el único camino que quita esa marca (CF-09). Después del commit, si tiene correo
+ * institucional y quien reactiva puede invitar, le manda la invitación del admin (InviteUser, CF-07); si no, o si no se
+ * pudo mandar, queda «Sin acceso» hasta que el admin capture su correo y la mande desde la ficha.
  *
  * La baja termina los puestos con último día de hoy, que todavía cuenta como vigente: si se reactiva el mismo día, esos
  * nombramientos terminan ayer, o se quitan si empezaban hoy, con EndRoleAssignment, para que los puestos no regresen
@@ -27,7 +29,7 @@ use Illuminate\Validation\ValidationException;
  * dada de baja.
  *
  * Deja bitácora sobre el usuario (sin contraseña) y avisa con UserReactivated después del commit. Quién puede lo decide
- * UserPolicy.
+ * UserPolicy. Devuelve el correo al que mandó la invitación, o null si no la mandó.
  */
 final class ReactivateUser
 {
@@ -36,12 +38,13 @@ final class ReactivateUser
         private readonly RoleAssignmentRules $assignmentRules,
         private readonly EndRoleAssignment $endRoleAssignment,
         private readonly PasswordResetTokens $tokens,
+        private readonly InviteUser $inviteUser,
     ) {}
 
     /**
      * @throws ValidationException sobre `user`
      */
-    public function handle(User $user, User $actor): void
+    public function handle(User $user, User $actor): ?string
     {
         DB::transaction(function () use ($user, $actor): void {
             DB::select('select pg_advisory_xact_lock(hashtext(?))', [RoleAssignmentRules::ADMIN_SEATS_LOCK]);
@@ -62,7 +65,7 @@ final class ReactivateUser
 
             if ($access !== UserAccess::None) {
                 [$old['access'], $new['access']] = [$access->value, UserAccess::None->value];
-                $locked->forceFill(['password' => null, 'password_origin' => null, 'access_invited_at' => null]);
+                $locked->forceFill(['password' => null, 'password_origin' => null, 'access_invited_at' => null, 'access_invited_by' => null]);
                 $locked->setRememberToken(Str::random(60));
             }
 
@@ -81,6 +84,26 @@ final class ReactivateUser
 
             $user->setRawAttributes($locked->getAttributes(), sync: true);
         });
+
+        return $this->invite($user, $actor);
+    }
+
+    /**
+     * CF-06 y CF-07: la invitación de la cuenta ya reactiva, si tiene correo institucional y `$actor` puede invitar
+     * (UserPolicy, `invite`). Un rechazo (otra sesión le cambió algo en medio) no deshace la reactivación: queda «Sin
+     * acceso».
+     */
+    private function invite(User $user, User $actor): ?string
+    {
+        if (Gate::forUser($actor)->denies('invite', $user) || $this->rules->invitationBlocker($user) !== null) {
+            return null;
+        }
+
+        try {
+            return $this->inviteUser->handle($user, $actor);
+        } catch (ValidationException) {
+            return null;
+        }
     }
 
     /**

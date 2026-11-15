@@ -19,6 +19,8 @@ use Illuminate\Validation\ValidationException;
  *   vigente (AZ-S12, RoleAssignmentRules::deactivationGap()).
  * - CF-08: el restablecimiento sigue AC-16 (PasswordResetRules) sin pedir el correo confirmado; `resetBlocker()` dice
  *   por qué no.
+ * - CF-07: el admin invita a una cuenta activa, sin contraseña y con correo institucional, tenga o no un puesto;
+ *   `invitationBlocker()` dice por qué no.
  */
 final class UserAccountRules
 {
@@ -43,6 +45,12 @@ final class UserAccountRules
     public const string RESET_NO_EMAIL = PasswordResetRules::NO_EMAIL;
 
     public const string RESET_RECENT = 'Ya se le mandó un enlace hace menos de un minuto.';
+
+    public const string INVITE_INACTIVE = PasswordResetRules::INACTIVE;
+
+    public const string INVITE_HAS_ACCESS = 'Ya tiene acceso.';
+
+    public const string INVITE_NO_EMAIL = 'Captura su correo institucional.';
 
     /**
      * Lo que ya respondió isStudent() para cada usuario: la ficha pregunta varias veces por el mismo en un render. Vive
@@ -193,5 +201,34 @@ final class UserAccountRules
     public function resetBlocker(User $user): ?string
     {
         return $this->passwordReset->denial($user, issuedByAdmin: true);
+    }
+
+    /**
+     * CF-06 y CF-07: el correo al que le llegará la invitación al reactivar la cuenta dada de baja `$user`, para que el
+     * admin lo vea antes de confirmar; nulo si no saldrá, porque no tiene correo institucional o, ya reactivada, sería la
+     * cuenta de un alumno (CF-S4).
+     */
+    public function reactivationInviteEmail(User $user): ?string
+    {
+        return $this->passwordReset->isInstitutionalEmail($user->email) && ! $this->assignments->isStudentAccount($user)
+            ? mb_strtolower((string) $user->email)
+            : null;
+    }
+
+    /**
+     * CF-07: por qué el admin no le manda la invitación de acceso a `$user`; nulo si sí. La cuenta tiene que estar activa
+     * (una dada de baja se reactiva antes, CF-06), sin contraseña y no ser de un alumno (CF-S4: su acceso sigue su
+     * estatus), y el correo al que va (`$email`, o el suyo) tiene que ser del dominio institucional. Que tenga un puesto
+     * no lo impide: la invitación del admin es para todo el personal.
+     */
+    public function invitationBlocker(User $user, ?string $email = null): ?string
+    {
+        return match (true) {
+            ! $user->is_active => self::INVITE_INACTIVE,
+            $this->isStudent($user) => self::STUDENT,
+            $user->password !== null => self::INVITE_HAS_ACCESS,
+            ! $this->passwordReset->isInstitutionalEmail($email ?? $user->email) => self::INVITE_NO_EMAIL,
+            default => null,
+        };
     }
 }

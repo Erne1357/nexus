@@ -39,7 +39,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
  *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
  * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
- *   desactiva su usuario, salvo que sea admin vigente o que su Administración programada haga falta para que ningún
+ *   desactiva su usuario (y, si no tiene contraseña, deja sin efecto su invitación: `access_invited_at` y
+ *   `access_invited_by` nulos), salvo que sea admin vigente o que su Administración programada haga falta para que ningún
  *   día se quede sin admin (AZ-S12 y P3, confirmado el 3 de noviembre de 2026: el docente queda de baja y el usuario
  *   sigue activo; toma ADMIN_SEATS_LOCK antes del candado del usuario), y termina con fecha de ayer cada jefatura suya vigente o por
  *   empezar (supuesto por confirmar; EndRoleAssignment quita las que empiezan hoy o después). Sin usuario no hace
@@ -118,9 +119,20 @@ final class SyncTeacherAccess
         if ($user->is_active
             && ! $user->roleAssignments()->current()->where('role', Role::Admin)->exists()
             && $this->rules->deactivationGap($user) === null) {
-            $user->forceFill(['is_active' => false])->save();
+            $old = ['is_active' => true];
+            $new = ['is_active' => false];
+            $done = ['desactivó su usuario'];
+            $user->forceFill($new);
 
-            $this->logAccess($teacher, $user, ['is_active' => true], ['is_active' => false], ['desactivó su usuario']);
+            if ($user->password === null && $user->access_invited_at !== null) {
+                [$old['access_invited_at'], $new['access_invited_at']] = [$user->access_invited_at->toIso8601String(), null];
+                $done[] = 'dejó sin efecto su invitación';
+                $user->forceFill(['access_invited_at' => null, 'access_invited_by' => null]);
+            }
+
+            $user->save();
+
+            $this->logAccess($teacher, $user, $old, $new, $done);
             $changed = true;
         }
 

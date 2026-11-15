@@ -97,6 +97,7 @@ final class DeactivateUser
                 'password' => null,
                 'password_origin' => null,
                 'access_invited_at' => null,
+                'access_invited_by' => null,
             ]);
             $locked->setRememberToken(Str::random(60));
             $locked->save();

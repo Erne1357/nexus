@@ -10,6 +10,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 
 /**
  * Invita a un usuario sin acceso a activarlo (AC-07, confirmado el 11 de noviembre de 2026): su correo pasa a ser
@@ -19,10 +20,13 @@ use Illuminate\Validation\ValidationException;
  * nueva deja sin efecto la anterior: su hora siempre es posterior, aunque caigan en el mismo segundo. Quién puede lo
  * deciden las Actions y pantallas que la llaman.
  *
- * Solo a un usuario activo, sin contraseña y sin un puesto distinto de docente vigente o por empezar: a los jefes y
- * demás personal con puesto los habilita el admin a mano (AC-03), así que nadie puede llevar su invitación a otro
- * buzón. Si otro usuario ya tiene ese correo (sin importar mayúsculas), no escribe. En una transacción bloquea al
- * usuario y deja en la bitácora el correo; el correo sale de la cola después del commit.
+ * Solo a un usuario activo y sin contraseña. Las invitaciones automáticas (la validación del catálogo de docentes,
+ * AC-09, y la captura del correo institucional, AC-07) no van a quien tiene un puesto distinto de docente vigente o por
+ * empezar, así que nadie puede llevar a otro buzón el acceso de un jefe. La del admin (`$byAdmin`, InviteUser, CF-07,
+ * confirmado el 14 de noviembre de 2026) sí, porque él revisa el correo al mandarla: deja `access_invited_by` con
+ * `$actor`, y AccessInvitationLink la abre aunque tenga un puesto; cualquier otra la deja nula. Si otro usuario ya tiene
+ * ese correo (sin importar mayúsculas), no escribe. En una transacción bloquea al usuario y deja en la bitácora el
+ * correo (y `by_admin` en la del admin); el correo sale de la cola después del commit.
  * Con `$unlessInvited`, si el usuario ya tiene una invitación vigente no hace nada: se revisa con el usuario
  * bloqueado, así dos corridas a la vez no le mandan dos. Devuelve si la mandó.
  */
@@ -36,13 +40,18 @@ final class SendAccessInvitation
     ) {}
 
     /**
-     * @throws ValidationException si el usuario ya tiene acceso, está inactivo o el correo es de otro usuario
+     * @throws ValidationException si el usuario ya tiene acceso, está inactivo, tiene otro puesto (salvo `$byAdmin`) o el
+     *                             correo es de otro usuario
      */
-    public function handle(User $user, string $email, ?User $actor = null, bool $unlessInvited = false): bool
+    public function handle(User $user, string $email, ?User $actor = null, bool $unlessInvited = false, bool $byAdmin = false): bool
     {
         $email = mb_strtolower(trim($email));
 
-        return DB::transaction(function () use ($user, $email, $actor, $unlessInvited): bool {
+        if ($byAdmin && $actor === null) {
+            throw new LogicException('La invitación del admin necesita a quien la manda.');
+        }
+
+        return DB::transaction(function () use ($user, $email, $actor, $unlessInvited, $byAdmin): bool {
             $user = User::query()->lockForUpdate()->findOrFail($user->getKey());
 
             if ($unlessInvited && $user->access_invited_at !== null && $this->link->expiresAt($user)->isFuture()) {
@@ -53,7 +62,7 @@ final class SendAccessInvitation
                 throw ValidationException::withMessages(['user' => $user->is_active ? 'Ya tiene acceso.' : 'Su usuario está inactivo.']);
             }
 
-            if ($this->rules->holdsStaffRole($user->getKey())) {
+            if (! $byAdmin && $this->rules->holdsStaffRole($user->getKey())) {
                 throw ValidationException::withMessages(['user' => self::STAFF]);
             }
 
@@ -68,7 +77,12 @@ final class SendAccessInvitation
             }
 
             try {
-                $user->forceFill(['email' => $email, 'email_verified_at' => null, 'access_invited_at' => $invitedAt])->save();
+                $user->forceFill([
+                    'email' => $email,
+                    'email_verified_at' => null,
+                    'access_invited_at' => $invitedAt,
+                    'access_invited_by' => $byAdmin ? $actor->getKey() : null,
+                ])->save();
             } catch (UniqueConstraintViolationException) {
                 throw $this->emailTaken($email);
             }
@@ -79,7 +93,7 @@ final class SendAccessInvitation
                 ->performedOn($user)
                 ->causedBy($actor)
                 ->event('access-invited')
-                ->withProperties(['email' => $email])
+                ->withProperties(['email' => $email, ...($byAdmin ? ['by_admin' => true] : [])])
                 ->log("Invitó a {$user->username} a Nexus en {$email}");
 
             Notification::route('mail', $email)->notify(new AccessInvitation(

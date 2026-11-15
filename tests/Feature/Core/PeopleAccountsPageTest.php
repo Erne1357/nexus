@@ -6,6 +6,10 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AccessInvitation;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -44,7 +48,9 @@ it('CF-S3: «Dar de alta» es la acción principal y abre el cajón con usuario,
         ->assertSeeHtml('data-testid="new-email"');
 });
 
-it('CF-S3: da de alta sin acceso, con el correo en minúsculas, y lleva a su ficha', function () {
+it('CF-S3 y CF-07: da de alta sin acceso, con el correo en minúsculas, le manda la invitación y lleva a su ficha', function () {
+    Notification::fake();
+
     $page = peopleAccountsPage()
         ->call('openCreate')
         ->set('newUsername', ' RURR800101AB1 ')
@@ -60,15 +66,37 @@ it('CF-S3: da de alta sin acceso, con el correo en minúsculas, y lleva a su fic
     expect($rosa->name)->toBe('Rosa Ruiz')
         ->and($rosa->email)->toBe('rosa.ruiz@cdjuarez.tecnm.mx')
         ->and($rosa->is_active)->toBeTrue()
-        ->and(UserAccess::of($rosa))->toBe(UserAccess::None)
-        ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Usuario dado de alta')
-        ->and(activitySince()->where('event', 'created')->sole()->causer_id)->toBe($this->admin->id);
+        ->and($rosa->password)->toBeNull()
+        ->and(UserAccess::of($rosa))->toBe(UserAccess::Invited)
+        ->and($rosa->access_invited_by)->toBe($this->admin->id)
+        ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Usuario dado de alta')->description->toBe('Invitación enviada a rosa.ruiz@cdjuarez.tecnm.mx. Nómbralo en su ficha.')
+        ->and(activitySince()->where('event', 'created')->sole()->causer_id)->toBe($this->admin->id)
+        ->and(activitySince()->where('event', 'access-invited')->sole()->causer_id)->toBe($this->admin->id);
+    Notification::assertSentOnDemand(AccessInvitation::class, fn (AccessInvitation $invitation, array $channels, AnonymousNotifiable $notifiable): bool => $notifiable->routes['mail'] === 'rosa.ruiz@cdjuarez.tecnm.mx'
+        && $invitation->username === 'RURR800101AB1');
 });
 
-it('CF-S3: el correo es opcional', function () {
-    peopleAccountsPage()->call('openCreate')->set('newUsername', '777')->set('newName', 'Sin Correo')->call('createUser')->assertHasNoErrors();
+it('CF-S3 y CF-07: el correo es opcional; sin él queda sin acceso y no se manda nada', function () {
+    Notification::fake();
 
-    expect(User::where('username', '777')->sole()->email)->toBeNull();
+    $page = peopleAccountsPage()->call('openCreate')->set('newUsername', '777')->set('newName', 'Sin Correo')->call('createUser')->assertHasNoErrors();
+    $user = User::where('username', '777')->sole();
+
+    expect($user->email)->toBeNull()
+        ->and(UserAccess::of($user))->toBe(UserAccess::None)
+        ->and(lastToastOf($page))->description->toBe('777 queda sin acceso hasta que captures su correo institucional. Nómbralo en su ficha.');
+    Notification::assertNothingSent();
+});
+
+it('CF-07: si quien da de alta no puede invitar, el alta queda sin acceso y no se manda nada', function () {
+    Notification::fake();
+    Gate::before(fn (User $user, string $ability): ?bool => $ability === 'invite' ? false : null);
+
+    $page = peopleAccountsPage()->call('openCreate')->set('newUsername', 'RURR800101AB1')->set('newName', 'Rosa Ruiz')->set('newEmail', 'rosa.ruiz@cdjuarez.tecnm.mx')->call('createUser')->assertHasNoErrors();
+
+    expect(UserAccess::of(User::where('username', 'RURR800101AB1')->sole()))->toBe(UserAccess::None)
+        ->and(lastToastOf($page))->description->toBe('RURR800101AB1 queda sin acceso: no puedes mandarle la invitación. Nómbralo en su ficha.');
+    Notification::assertNothingSent();
 });
 
 it('CF-S3: los errores salen junto a su campo y no da de alta', function (array $fields, string $field, string $message) {

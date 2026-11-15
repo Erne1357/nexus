@@ -50,8 +50,9 @@ use Illuminate\Support\Collection;
  *   `faculty.teacher_department.set_primary`, `faculty.teacher_qualification.manage`) sobre ese departamento.
  *   `view_all` no lo abre: la Subdirección cubre los de su subárbol, Subdirección Académica, como antes.
  * - Sin dimensiones: `faculty.teacher.deactivate` y `faculty.teacher.adscribe` (la Subdirección), y
- *   `faculty.teacher_user.provision` y `faculty.teacher_user.reset_password`, que
- *   no se conceden a nadie: solo el admin, que tiene todo.
+ *   `faculty.teacher_user.provision`, que no se concede a nadie: solo el admin, que tiene todo. Invitar a un docente
+ *   como admin y restablecer su contraseña son de su usuario (UserPolicy, `core.user.invite` y
+ *   `core.user.reset_password`, candados de CF-03).
  * «No sobre sí mismo» es una condición del recurso y se queda aquí.
  *
  * No hay `delete`: un docente se da de baja. TeacherQuery lista con la misma regla, en SQL; si cambia aquí, cambia
@@ -199,11 +200,6 @@ final class TeacherPolicy
     public function provisionUsers(User $user): bool
     {
         return $this->actor($user)->allows(FacultyPermission::TeacherUserProvision);
-    }
-
-    public function resetPassword(User $user, Teacher $teacher): bool
-    {
-        return $this->actor($user)->allows(FacultyPermission::TeacherUserResetPassword);
     }
 
     /**

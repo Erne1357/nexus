@@ -341,6 +341,23 @@ it('la baja no termina los puestos que no son jefaturas', function () {
     expect($coordinator->fresh()->valid_to)->toBeNull();
 });
 
+it('CF-07: la baja del docente deja sin efecto la invitación de su usuario sin contraseña, también la del admin', function () {
+    $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '1234567']);
+    syncAccess($teacher);
+    $user = $teacher->fresh()->user;
+    $admin = User::factory()->admin()->create();
+    $user->forceFill(['access_invited_at' => now()->startOfSecond(), 'access_invited_by' => $admin->id])->save();
+
+    $teacher->update(['is_active' => false]);
+    syncAccess($teacher);
+
+    $log = Activity::where('subject_id', $user->id)->where('description', 'like', '%desactivó%')->sole();
+
+    expect($user->fresh())->is_active->toBeFalse()->access_invited_at->toBeNull()->access_invited_by->toBeNull()
+        ->and($log->description)->toBe('Sincronizó el acceso del docente 1234567: desactivó su usuario y dejó sin efecto su invitación')
+        ->and($log->attribute_changes['attributes'])->toBe(['is_active' => false, 'access_invited_at' => null]);
+});
+
 it('la baja de un docente sin departamento desactiva su usuario', function () {
     $teacher = Teacher::factory()->create(['rfc' => '1234567']);
     syncAccess($teacher);
