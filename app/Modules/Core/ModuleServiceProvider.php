@@ -102,8 +102,9 @@ abstract class ModuleServiceProvider extends ServiceProvider
     }
 
     /**
-     * Permisos que el módulo concede a cada puesto, con llave `Role->value`. Solo se pueden conceder
-     * permisos declarados; el admin no se lista: tiene todo menos adminDenies().
+     * Permisos que el módulo concede **de fábrica** a cada puesto, con llave `Role->value` (CF-02): los aporta el rol de
+     * fábrica del puesto mientras siga al código; lo que vale hoy lo dice GrantTable. Solo se pueden conceder
+     * permisos declarados y que no sean candado; el admin no se lista: tiene todo menos adminDenies().
      *
      * @return array<string, list<Permission>>
      */
