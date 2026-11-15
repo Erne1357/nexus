@@ -16,10 +16,41 @@
         @endif
 
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            @foreach ($cards as $card)
+                <section class="flex flex-col rounded-box border border-base-300 bg-base-100 p-4" aria-labelledby="home-card-{{ $card->key }}" data-testid="home-card-{{ $card->key }}">
+                    <h2 id="home-card-{{ $card->key }}" class="flex items-center gap-2 text-lg font-bold leading-tight"><x-icon :name="$card->icon" class="h-5 w-5 flex-none text-primary" aria-hidden="true" />{{ $card->title }}</h2>
+                    <p class="mt-1.5 flex-1">{{ $card->body }}</p>
+                    <div class="mt-3">
+                        <x-button :label="$card->actionLabel" icon-right="o-arrow-right" :link="$card->url" class="btn-primary btn-sm" />
+                    </div>
+                </section>
+            @endforeach
             @foreach ($blocks as $block)
                 <section class="rounded-box border border-base-300 bg-base-100 p-4" data-testid="role-block">
                     <h2 class="text-lg font-bold leading-tight">{{ $block['title'] }}</h2>
                     <p class="mt-1.5">{{ $block['description'] }}</p>
+
+                    {{-- D12: lo suyo del docente, su acceso. --}}
+                    @if ($block['account'] !== null)
+                        <div class="mt-4 border-t border-base-300 pt-3" data-testid="role-block-account">
+                            <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Tu acceso</h3>
+                            <dl class="mt-2 grid gap-2">
+                                <div>
+                                    <dt class="text-sm text-neutral">Usuario</dt>
+                                    <dd class="font-mono font-semibold">{{ $block['account']['username'] }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-sm text-neutral">Correo institucional</dt>
+                                    <dd @class(['[overflow-wrap:anywhere]', 'text-neutral' => $block['account']['email'] === null])>{{ $block['account']['email'] ?? 'Sin correo institucional' }}</dd>
+                                </div>
+                            </dl>
+                            <x-button label="Cambiar contraseña" :link="route('user-password.edit')" icon="o-key" class="btn-outline btn-sm mt-3" no-wire-navigate />
+                        </div>
+                    @endif
+
+                    @foreach ($block['links'] as $link)
+                        <x-button :label="$link['label']" :link="$link['url']" :icon="$link['icon']" icon-right="o-arrow-right" class="btn-outline btn-sm mt-3" />
+                    @endforeach
                 </section>
             @endforeach
         </div>

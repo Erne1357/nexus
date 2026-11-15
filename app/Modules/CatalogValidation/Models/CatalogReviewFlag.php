@@ -15,9 +15,10 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 /**
  * Observación del jefe sobre un registro de una revisión de catálogo: una materia, una carrera, un plan, un
- * docente o un salón. No bloquea validar (CV4, confirmado el 2 de noviembre de 2026); se resuelve, no se borra.
+ * docente o un salón. No bloquea validar (CV4, confirmado el 2 de noviembre de 2026); se resuelve, no se borra. Al
+ * resolverla se puede dejar qué se hizo (`resolution_note`, CV10).
  */
-#[Fillable(['review_id', 'flaggable_type', 'flaggable_id', 'flag', 'comment', 'flagged_by', 'resolved_at', 'resolved_by'])]
+#[Fillable(['review_id', 'flaggable_type', 'flaggable_id', 'flag', 'comment', 'flagged_by', 'resolved_at', 'resolved_by', 'resolution_note'])]
 #[UseFactory(CatalogReviewFlagFactory::class)]
 class CatalogReviewFlag extends Model
 {

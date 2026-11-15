@@ -1,0 +1,323 @@
+/*
+| Tema de los correos de Nexus (DESIGN.md): los colores son los tokens del sistema escritos en hexadecimal, porque el
+| correo no lee las variables de daisyUI y el CSS se pasa en línea a cada elemento. Azul espacio #092d48 en la banda,
+| el texto y el botón; rojo Tec #c2201e solo en la franja de 3 px bajo la banda; platino #f3f4f7 de fondo; blanco con
+| filete #e3e0de en la tarjeta, sin sombra; gris tenue #666567 en el texto secundario y banda tenue #b4c3d1 bajo
+| «Nexus». La letra es Atkinson Hyperlegible Next si el lector la tiene; si no, la del sistema.
+*/
+
+/* Base */
+
+body,
+body *:not(html):not(style):not(br):not(tr):not(code) {
+    box-sizing: border-box;
+    font-family: 'Atkinson Hyperlegible Next', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+        sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol';
+    position: relative;
+}
+
+body {
+    -webkit-text-size-adjust: none;
+    background-color: #f3f4f7;
+    color: #092d48;
+    height: 100%;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+    width: 100% !important;
+}
+
+p,
+ul,
+ol,
+blockquote {
+    line-height: 1.4;
+    text-align: start;
+}
+
+a {
+    color: #092d48;
+}
+
+a img {
+    border: none;
+}
+
+/* Typography */
+
+h1 {
+    color: #092d48;
+    font-size: 20px;
+    font-weight: bold;
+    margin-top: 0;
+    text-align: start;
+}
+
+h2 {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 0;
+    text-align: start;
+}
+
+h3 {
+    font-size: 14px;
+    font-weight: bold;
+    margin-top: 0;
+    text-align: left;
+}
+
+p {
+    font-size: 16px;
+    line-height: 1.5em;
+    margin-top: 0;
+    text-align: left;
+}
+
+p.sub {
+    font-size: 12px;
+}
+
+img {
+    max-width: 100%;
+}
+
+/* Layout */
+
+.wrapper {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    background-color: #f3f4f7;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.content {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+/* Header */
+
+.header {
+    background-color: #092d48;
+    padding: 22px 16px 18px;
+    text-align: center;
+}
+
+.header a {
+    color: #ffffff;
+    font-size: 26px;
+    font-weight: bold;
+    letter-spacing: -0.01em;
+    text-decoration: none;
+}
+
+.header-tagline {
+    color: #b4c3d1;
+    display: block;
+    font-size: 13px;
+    font-weight: normal;
+    letter-spacing: 0;
+    margin-top: 4px;
+}
+
+.header-stripe {
+    background-color: #c2201e;
+    font-size: 0;
+    height: 3px;
+    line-height: 3px;
+}
+
+/* Logo */
+
+.logo {
+    height: 75px;
+    margin-top: 15px;
+    margin-bottom: 10px;
+    max-height: 75px;
+    width: 75px;
+}
+
+/* Body */
+
+.body {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    background-color: #f3f4f7;
+    border-bottom: 1px solid #f3f4f7;
+    border-top: 1px solid #f3f4f7;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+
+.inner-body {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 570px;
+    background-color: #ffffff;
+    border: 1px solid #e3e0de;
+    border-radius: 10px;
+    margin: 24px auto 0;
+    padding: 0;
+    width: 570px;
+}
+
+.inner-body a {
+    word-break: break-all;
+}
+
+/* Subcopy */
+
+.subcopy {
+    border-top: 1px solid #e3e0de;
+    margin-top: 25px;
+    padding-top: 25px;
+}
+
+.subcopy p {
+    color: #666567;
+    font-size: 14px;
+}
+
+/* Footer */
+
+.footer {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 570px;
+    margin: 0 auto;
+    padding: 0;
+    text-align: center;
+    width: 570px;
+}
+
+.footer p {
+    color: #666567;
+    font-size: 12px;
+    text-align: center;
+}
+
+.footer a {
+    color: #666567;
+    text-decoration: underline;
+}
+
+/* Tables */
+
+.table table {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    margin: 30px auto;
+    width: 100%;
+}
+
+.table th {
+    border-bottom: 1px solid #e3e0de;
+    margin: 0;
+    padding-bottom: 8px;
+}
+
+.table td {
+    color: #092d48;
+    font-size: 15px;
+    line-height: 18px;
+    margin: 0;
+    padding: 10px 0;
+}
+
+.content-cell {
+    max-width: 100vw;
+    padding: 32px;
+}
+
+/* Buttons */
+
+.action {
+    -premailer-cellpadding: 0;
+    -premailer-cellspacing: 0;
+    -premailer-width: 100%;
+    margin: 30px auto;
+    padding: 0;
+    text-align: center;
+    width: 100%;
+    float: unset;
+}
+
+.button {
+    -webkit-text-size-adjust: none;
+    border-radius: 6px;
+    color: #fff;
+    display: inline-block;
+    font-weight: bold;
+    overflow: hidden;
+    text-decoration: none;
+}
+
+.button-blue,
+.button-primary {
+    background-color: #092d48;
+    border-bottom: 12px solid #092d48;
+    border-left: 24px solid #092d48;
+    border-right: 24px solid #092d48;
+    border-top: 12px solid #092d48;
+}
+
+.button-green,
+.button-success {
+    background-color: #1f6f4f;
+    border-bottom: 12px solid #1f6f4f;
+    border-left: 24px solid #1f6f4f;
+    border-right: 24px solid #1f6f4f;
+    border-top: 12px solid #1f6f4f;
+}
+
+.button-red,
+.button-error {
+    background-color: #b42318;
+    border-bottom: 12px solid #b42318;
+    border-left: 24px solid #b42318;
+    border-right: 24px solid #b42318;
+    border-top: 12px solid #b42318;
+}
+
+/* Panels */
+
+.panel {
+    border-left: #092d48 solid 4px;
+    margin: 21px 0;
+}
+
+.panel-content {
+    background-color: #f3f4f7;
+    color: #092d48;
+    padding: 16px;
+}
+
+.panel-content p {
+    color: #092d48;
+}
+
+.panel-item {
+    padding: 0;
+}
+
+.panel-item p:last-of-type {
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+/* Utilities */
+
+.break-all {
+    word-break: break-all;
+}

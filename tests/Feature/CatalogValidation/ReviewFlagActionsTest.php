@@ -115,7 +115,7 @@ describe('ResolveFlag', function () {
             ->and($entry->event)->toBe('resolved')
             ->and($entry->subject->is($this->flag))->toBeTrue()
             ->and($entry->causer->is($this->actor))->toBeTrue()
-            ->and($entry->attribute_changes['old'])->toBe(['resolved_at' => null, 'resolved_by' => null])
+            ->and($entry->attribute_changes['old'])->toBe(['resolved_at' => null, 'resolved_by' => null, 'resolution_note' => null])
             ->and($entry->attribute_changes['attributes']['resolved_by'])->toBe($this->actor->id);
         Event::assertDispatched(CatalogReviewFlagResolved::class, fn (CatalogReviewFlagResolved $event): bool => $event->flag->is($this->flag));
     });

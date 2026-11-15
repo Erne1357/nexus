@@ -5,6 +5,7 @@ namespace App\Modules\Core\Actions;
 use App\Modules\Core\Enums\MailStatus;
 use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\RedactsSecrets;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -28,7 +29,7 @@ final class RecordMail
             'kind' => $kind,
             'user_id' => $this->userOf($recipients)?->getKey(),
             'status' => $status,
-            'error' => $error === null ? null : Str::limit($error, 1000),
+            'error' => $error === null ? null : Str::limit(RedactsSecrets::redact($error), 1000),
             'sent_at' => now(),
         ]);
     }

@@ -51,6 +51,9 @@ use Mary\Traits\Toast;
  * 4. Muestra el avance de la aplicación y, al terminar, lo que escribió, las filas que se saltaron y,
  *    si se eligió, cuántos registros desactivó y cuáles.
  *
+ * En los pasos 3 y 4, la plantilla que lo pide suma su propio resumen (ImportTemplate::summaryGroups()): por
+ * ejemplo, los correos institucionales dicen los RFC que no están, los repetidos y cuántas invitaciones salieron.
+ *
  * Los pasos 3 y 4 leen el lote de la URL (`?lote=`), así que se retoman al volver a la página o desde
  * los lotes recientes. Mientras la cola trabaja, o prepara el archivo de errores, la vista se refresca
  * sola con `wire:poll`.
@@ -156,6 +159,11 @@ new #[Title('Importaciones')] class extends Component
         $offersDeactivation = $reviewing && $this->step === 3 && $batch->status === BatchStatus::Validated && $batchDefinition?->deactivatesMissing();
         $missing = $offersDeactivation ? $batches->missingSummary($batch, $batchDefinition, $importContext) : null;
         $deactivating = $this->deactivateMissing && ($missing['missing'] ?? 0) > 0;
+        $summary = $reviewing && $batchDefinition !== null && in_array($batch->status, [BatchStatus::Validated, BatchStatus::Applied], true)
+            ? $batches->summary($batch, $batchDefinition)
+            : [];
+        // Lo que la cola hace después de aplicar (las invitaciones de los correos) se vuelve a leer un minuto más.
+        $settling = $batch?->status === BatchStatus::Applied && $batch->applied_at?->gt(now()->subMinute()) && collect($summary)->contains('live', true);
 
         return [
             // La vista recibe las propiedades antes de with(): el paso de este render va aparte.
@@ -164,7 +172,8 @@ new #[Title('Importaciones')] class extends Component
             'batchTemplate' => $batch === null ? null : ($labels[$batch->template] ?? $batch->template),
             'batchFields' => $batchDefinition?->fields() ?? [],
             'batchKey' => $batchDefinition?->naturalKey() ?? [],
-            'polling' => $batch !== null && ($batch->status->inProgress() || $applyQueued || ($errorsPending && ! $errorsLost)),
+            'polling' => $batch !== null && ($batch->status->inProgress() || $applyQueued || ($errorsPending && ! $errorsLost) || $settling),
+            'summary' => $summary,
             'applyQueued' => $applyQueued,
             'errorsLost' => $errorsLost,
             'warningRows' => $reviewing && $this->step === 3 ? $batches->warningRows($batch) : 0,

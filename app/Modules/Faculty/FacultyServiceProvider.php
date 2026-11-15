@@ -18,6 +18,8 @@ use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Listeners\BlockDepartmentDeletionWithTeachers;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Queries\InvitationRelease;
+use App\Modules\Faculty\Queries\NoInvitationRelease;
 use App\Modules\Faculty\Queries\TeacherUnitAdscriptions;
 use Illuminate\Support\Facades\Event;
 
@@ -33,6 +35,9 @@ final class FacultyServiceProvider extends ModuleServiceProvider
 
         // Las adscripciones de los docentes, para contar las personas de cada unidad del Organigrama (reemplaza el de Core).
         $this->app->bind(UnitAdscriptions::class, TeacherUnitAdscriptions::class);
+
+        // Sin la validación de catálogos la primera invitación no se libera; CatalogValidation lo reemplaza (AC-09).
+        $this->app->bindIf(InvitationRelease::class, NoInvitationRelease::class);
     }
 
     public function boot(): void

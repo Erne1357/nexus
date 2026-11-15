@@ -74,7 +74,7 @@
                             <x-input label="Práctica" name="practice_hours" wire:model="practice_hours" type="number" min="0" inputmode="numeric" class="font-mono" />
                             <x-input label="Créditos" name="credits" wire:model="credits" type="number" min="0" inputmode="numeric" class="font-mono" />
                         </div>
-                        <x-select label="Tipo" name="kind" wire:model="kind" :options="$kinds" placeholder="Sin tipo" placeholder-value="" />
+                        <x-select label="Tipo de materia" name="kind" wire:model="kind" :options="$kinds" placeholder="Sin tipo" placeholder-value="" />
                         <x-toggle label="Requiere laboratorio" name="needs_lab" wire:model="needs_lab" />
                     @elseif ($catalog === \App\Modules\CatalogValidation\Enums\Catalog::StudyPlans)
                         <div class="grid grid-cols-2 gap-3">
@@ -107,7 +107,7 @@
                             @endif
                         @endif
                         <div class="grid grid-cols-2 gap-3">
-                            <x-select label="Tipo" name="type" wire:model="type" :options="$roomTypes" />
+                            <x-select label="Tipo de salón" name="type" wire:model="type" :options="$roomTypes" />
                             <x-input label="Capacidad" name="capacity" wire:model="capacity" type="number" min="1" inputmode="numeric" class="font-mono" />
                         </div>
                         <x-input label="Características" name="features" wire:model="features" hint="Separadas por comas" />

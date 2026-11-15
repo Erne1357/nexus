@@ -4,7 +4,9 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\AddReviewTeacher;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Actions\DischargeReviewTeacher;
+use App\Modules\CatalogValidation\Actions\SetReviewTeacherEmail;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\DischargeReason;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
@@ -73,6 +75,57 @@ describe('correo institucional (CV1, AC-06)', function () {
     });
 });
 
+describe('correo institucional desde la fila (CV1, CV-S2, AC-06; D4 y D11)', function () {
+    it('CV1: con la revisión abierta, guardar el correo es corregir: lo marca como revisado aunque no cambie (CV-S7)', function () {
+        $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['institutional_email' => 'ana@cdjuarez.tecnm.mx']);
+
+        app(SetReviewTeacherEmail::class)->handle($this->review, $teacher, 'ana@cdjuarez.tecnm.mx', $this->jefe);
+
+        expect(CatalogReviewMark::query()->where('record_id', $teacher->id)->exists())->toBeTrue()
+            ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
+    });
+
+    it('CV-S2: con la revisión validada solo cambia el correo: sigue validada, sin marca nueva, y sale la invitación (AC-09)', function () {
+        Notification::fake();
+        $user = User::factory()->create(['username' => 'AAAA800101AA1', 'email' => null, 'password' => null, 'must_change_password' => true]);
+        $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'AAAA800101AA1', 'institutional_email' => null, 'user_id' => $user->id]);
+        $review = validateAllReviewed($this->review, $this->jefe);
+        CatalogReviewMark::query()->delete();
+
+        app(SetReviewTeacherEmail::class)->handle($review, $teacher, 'ana@cdjuarez.tecnm.mx', $this->jefe);
+
+        expect($teacher->fresh()->institutional_email)->toBe('ana@cdjuarez.tecnm.mx')
+            ->and($review->fresh())->status->toBe(ReviewStatus::Validated)->validated_by->toBe($this->jefe->id)
+            ->and(CatalogReviewMark::query()->count())->toBe(0);
+
+        Notification::assertSentOnDemand(AccessInvitation::class, fn (AccessInvitation $invitation, array $channels, AnonymousNotifiable $notifiable): bool => $notifiable->routes['mail'] === 'ana@cdjuarez.tecnm.mx');
+    });
+
+    it('AC-06: con la revisión validada también rechaza un correo de otro dominio o que ya tiene otro docente', function () {
+        Teacher::factory()->create(['institutional_email' => 'ocupado@cdjuarez.tecnm.mx']);
+        $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['institutional_email' => null]);
+        $review = validateAllReviewed($this->review, $this->jefe);
+
+        expect(teachersErrors(fn () => app(SetReviewTeacherEmail::class)->handle($review, $teacher, 'ana@itcj.edu.mx', $this->jefe)))->toHaveKey('institutional_email')
+            ->and(teachersErrors(fn () => app(SetReviewTeacherEmail::class)->handle($review, $teacher, 'OCUPADO@cdjuarez.tecnm.mx', $this->jefe)))->toHaveKey('institutional_email')
+            ->and($teacher->fresh()->institutional_email)->toBeNull();
+    });
+
+    it('rechaza a un docente que no es de la revisión, también validada, y fuera de la revisión de docentes', function () {
+        $foreign = Teacher::factory()->adscribedTo($this->ii)->create(['institutional_email' => null]);
+        $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id]);
+        $own = Teacher::factory()->adscribedTo($this->sc)->create(['institutional_email' => null]);
+
+        expect(teachersErrors(fn () => app(SetReviewTeacherEmail::class)->handle($subjects, $own, 'ana@cdjuarez.tecnm.mx', $this->jefe)))->toBe(['record' => ['El registro no es de esta revisión.']]);
+
+        $review = validateAllReviewed($this->review, $this->jefe);
+
+        expect(teachersErrors(fn () => app(SetReviewTeacherEmail::class)->handle($review, $foreign, 'ana@cdjuarez.tecnm.mx', $this->jefe)))->toBe(['record' => ['El registro no es de esta revisión.']])
+            ->and($foreign->fresh()->institutional_email)->toBeNull()
+            ->and($own->fresh()->institutional_email)->toBeNull();
+    });
+});
+
 describe('dar de baja (CV8)', function () {
     it('CV8: sin otra adscripción, sale de la revisión y queda dado de baja; la revisión pasa a en revisión', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['user_id' => User::factory()->create()->id]);
@@ -118,6 +171,34 @@ describe('dar de baja (CV8)', function () {
 
         expect(teachersErrors(fn () => app(DischargeReviewTeacher::class)->handle($subjects, $teacher, $this->jefe)))->toBe(['record' => ['El registro no es de esta revisión.']]);
     });
+
+    it('CV8: deja en la bitácora del docente la baja con su motivo en `reason`, quién y en qué departamento', function (?DischargeReason $kind, ?string $text, ?array $reason) {
+        $this->sc->update(['name' => 'Ciencias Básicas']);
+        $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'AAAA800101AA1']);
+
+        app(DischargeReviewTeacher::class)->handle($this->review, $teacher, $this->jefe, $kind, $text);
+
+        $activity = Activity::query()->where('event', 'discharged')->sole();
+
+        expect($activity->subject->is($teacher))->toBeTrue()
+            ->and($activity->causer->is($this->jefe))->toBeTrue()
+            ->and($activity->description)->toBe('Quitó al docente AAAA800101AA1 de Ciencias Básicas en la validación de docentes')
+            ->and($activity->properties->except('acting_as')->all())->toBe(['review_id' => $this->review->id, 'department_id' => $this->sc->id, 'deactivated' => true, 'reason' => $reason]);
+    })->with([
+        'sin motivo' => [null, null, null],
+        'jubilación' => [DischargeReason::Retirement, null, ['kind' => 'retirement']],
+        'renuncia: el texto solo va con «Otro»' => [DischargeReason::Resignation, 'no va', ['kind' => 'resignation']],
+        'cambio de departamento' => [DischargeReason::DepartmentChange, null, ['kind' => 'department_change']],
+        'otro, con su texto' => [DischargeReason::Other, '  Se cambia de institución  ', ['kind' => 'other', 'text' => 'Se cambia de institución']],
+    ]);
+
+    it('CV8: con el motivo «Otro» pide el texto y no da de baja', function (?string $text) {
+        $teacher = Teacher::factory()->adscribedTo($this->sc)->create();
+
+        expect(teachersErrors(fn () => app(DischargeReviewTeacher::class)->handle($this->review, $teacher, $this->jefe, DischargeReason::Other, $text)))->toBe(['reason' => ['Escribe el motivo.']])
+            ->and(inTeachersReview($teacher))->toBeTrue()
+            ->and(Activity::query()->where('event', 'discharged')->exists())->toBeFalse();
+    })->with(['sin texto' => [null], 'en blanco' => ['   ']]);
 });
 
 describe('agregar docente (CV-S9)', function () {
