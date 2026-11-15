@@ -54,6 +54,7 @@ Route::middleware('auth')->group(function () {
     // 1.22-E Avisos y atajos del login
     // 1.22-F Parámetros
     // 1.22-G Correos y colas
+    Route::livewire('/configuracion/correos-y-colas', 'core::pages.mail-and-queues')->name('core.mail-and-queues');
 });
 
 /*

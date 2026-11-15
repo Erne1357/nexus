@@ -29,10 +29,13 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
+use App\Modules\Core\Listeners\LogFailedMailNotification;
+use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Livewire\BlockViewDataCalls;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
@@ -44,6 +47,8 @@ use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Notifications\Events\NotificationFailed;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Livewire\ComponentHookRegistry;
@@ -108,6 +113,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
+        Event::listen(MessageSent::class, LogSentMail::class);
+        Event::listen(NotificationFailed::class, LogFailedMailNotification::class);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
@@ -136,6 +143,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // 1.22-E Avisos y atajos del login
             // 1.22-F Parámetros
             // 1.22-G Correos y colas
+            new NavigationItem('Correos y colas', 'core.mail-and-queues', 'o-envelope', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [MailLog::class]),
         ];
     }
 
