@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\Core\Actions\DeactivateUser;
+use App\Modules\Core\Actions\ResetUserPassword;
+use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
@@ -50,6 +53,19 @@ it('AC-03: a quien ya tiene contraseña no se le ofrece y la llamada no la cambi
 
     expect(lastToastOf($page))->type->toBe('error')->description->toBe('El usuario está inactivo.')
         ->and($this->rosa->fresh()->password)->toBeNull();
+});
+
+it('AC-03 y CF-05: ResetUserPassword revisa con el renglón bloqueado que la cuenta siga activa y no dada de baja en el panel', function () {
+    $this->rosa->forceFill(['is_active' => false])->save();
+
+    expect(fn () => app(ResetUserPassword::class)->handle($this->rosa, $this->admin))->toThrow(RuntimeException::class, 'Su usuario está inactivo.');
+
+    app(DeactivateUser::class)->handle(User::factory()->create(), DeactivationReason::Otro, null, $this->admin);
+    $panel = User::where('deactivated_at', '!=', null)->sole();
+
+    expect(fn () => app(ResetUserPassword::class)->handle($panel, $this->admin))->toThrow(RuntimeException::class, 'Su usuario está inactivo.')
+        ->and($this->rosa->fresh()->password)->toBeNull()
+        ->and($panel->fresh()->password)->toBeNull();
 });
 
 it('AC-03: quien no es admin (aquí un docente) no entra a la ficha ni da acceso, aunque llame la acción sobre una ficha que abrió el admin', function () {
