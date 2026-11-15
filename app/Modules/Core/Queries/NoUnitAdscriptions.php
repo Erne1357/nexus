@@ -12,4 +12,9 @@ final class NoUnitAdscriptions implements UnitAdscriptions
     {
         return [];
     }
+
+    public function unitIdsOf(string $userId): array
+    {
+        return [];
+    }
 }

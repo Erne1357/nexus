@@ -17,7 +17,7 @@ use SensitiveParameter;
  * `password_reset_tokens` (uno por correo, guardado con hash, que vence a los `auth.passwords.*.expire` minutos). El
  * enlace lleva el token y el usuario en la consulta, no en la ruta, para que no quede en las líneas de petición que
  * escribe Octane. Uno nuevo deja sin efecto al anterior, y cambiar el correo del usuario deja sin efecto al suyo,
- * porque el token se guarda por correo.
+ * porque el token se guarda por correo. `issued_by` dice si lo mandó el admin desde el panel (CF-08).
  *
  * opens() decide si un enlace sirve sin delatar por el tiempo si el usuario existe o tiene un token pendiente: compara
  * siempre un hash, contra uno señuelo si no hay token. Por eso no usa `tokenExists()` del broker, que no compara nada
@@ -35,8 +35,10 @@ final class PasswordResetTokens
 
     /**
      * Un token nuevo para `$user`, o null si ya se le creó uno hace menos de `auth.passwords.*.throttle` segundos.
+     * `$issuedBy` es el admin que lo manda desde el panel (CF-08): su enlace no pide el correo confirmado. Sin él, es el
+     * del autoservicio (AC-16). El token nuevo reemplaza la fila, así que solo cuenta quién pidió el último.
      */
-    public function create(User $user): ?string
+    public function create(User $user, ?User $issuedBy = null): ?string
     {
         $broker = $this->broker();
 
@@ -44,7 +46,13 @@ final class PasswordResetTokens
             return null;
         }
 
-        return $broker->createToken($user);
+        $token = $broker->createToken($user);
+
+        if ($issuedBy !== null) {
+            DB::table($this->table())->where('email', $user->getEmailForPasswordReset())->update(['issued_by' => $issuedBy->getKey()]);
+        }
+
+        return $token;
     }
 
     public function delete(User $user): void
@@ -77,7 +85,7 @@ final class PasswordResetTokens
 
     /**
      * Si el enlace sirve: `$user` existe, AC-16 lo deja restablecer, tiene un token que no ha vencido y `$token` es
-     * ese token.
+     * ese token. Si el token lo mandó el admin (`issued_by`, CF-08), AC-16 no pide el correo confirmado.
      */
     public function opens(?User $user, #[SensitiveParameter] string $token): bool
     {
@@ -88,7 +96,7 @@ final class PasswordResetTokens
             && $record !== null
             && $matches
             && Carbon::parse($record->created_at)->addMinutes($this->minutes())->isFuture()
-            && $this->rules->allows($user);
+            && $this->rules->allows($user, issuedByAdmin: ($record->issued_by ?? null) !== null);
     }
 
     private function broker(): PasswordBroker

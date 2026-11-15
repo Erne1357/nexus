@@ -301,6 +301,73 @@ final class RoleAssignmentRules
     }
 
     /**
+     * CF-S4 (supuesto por confirmar): si la cuenta de `$user` es de alumno para el panel: tiene algún nombramiento de
+     * `alumno` y nunca ha tenido otro puesto, ni vigente ni ya terminado. Su acceso sigue su estatus (AC-10), así que el
+     * panel no la da de alta, de baja ni la edita. Quien fue personal y además alumno se maneja como personal. Una sola
+     * consulta.
+     */
+    public function isStudentAccount(User $user): bool
+    {
+        $row = RoleAssignment::query()
+            ->where('user_id', $user->getKey())
+            ->toBase()
+            ->selectRaw('bool_and(role = ?) as only_student', [Role::Alumno->value])
+            ->first();
+
+        return (bool) ($row->only_student ?? false);
+    }
+
+    /**
+     * CF-09: si `$user` es docente: tiene un nombramiento de `docente` vigente o por empezar.
+     */
+    public function isTeacher(User $user): bool
+    {
+        return RoleAssignment::query()->where('user_id', $user->getKey())->where('role', Role::Docente)->notEnded()->exists();
+    }
+
+    /**
+     * CF-05: los nombramientos de `$user` vigentes o por empezar que termina la baja de su cuenta, por inicio: los que se
+     * manejan en «Personas y puestos» (`managedElsewhere()`, AZ-S11). El de docente lo maneja Faculty con el registro del
+     * docente y el de alumno la migración del SII, así que la baja no los toca (supuesto por confirmar). Uno que ya
+     * termina hoy no cambia, así que no se lista.
+     *
+     * @return Builder<RoleAssignment>
+     */
+    public function accountAssignments(User $user): Builder
+    {
+        $today = today()->toDateString();
+
+        return $this->managedHereOf($user)
+            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>', $today));
+    }
+
+    /**
+     * CF-06: los nombramientos de `$user` que se manejan en «Personas y puestos» y terminan hoy, por inicio. Si se
+     * reactiva la cuenta el mismo día de la baja, estos terminan ayer (o se quitan, si empezaban hoy), porque hoy
+     * todavía cuentan como vigentes y los puestos no regresan con la cuenta.
+     *
+     * @return Builder<RoleAssignment>
+     */
+    public function accountAssignmentsEndingToday(User $user): Builder
+    {
+        return $this->managedHereOf($user)->where('valid_to', today()->toDateString());
+    }
+
+    /**
+     * @return Builder<RoleAssignment>
+     */
+    private function managedHereOf(User $user): Builder
+    {
+        $managedHere = array_values(array_filter(Role::cases(), fn (Role $role): bool => $this->managedElsewhere($role) === null));
+
+        return RoleAssignment::query()
+            ->where('user_id', $user->getKey())
+            ->whereIn('role', $managedHere)
+            ->orderBy('valid_from')
+            ->orderBy('id');
+    }
+
+    /**
      * @return Builder<RoleAssignment>
      */
     private function staffAssignments(): Builder

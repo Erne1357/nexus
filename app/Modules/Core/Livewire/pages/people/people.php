@@ -1,20 +1,29 @@
 <?php
 
+use App\Modules\Core\Actions\CreateStaffUser;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\AppointmentsQuery;
 use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\PeopleQuery;
+use App\Modules\Core\Rules\UserAccountRules;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Mary\Traits\Toast;
 
 /**
- * Lista de «Personas y puestos» (3.P7, maqueta C): todos los usuarios con sus puestos vigentes, con búsqueda por
- * número o nombre y filtro por puesto. Sin acción principal: nombrar y terminar se hacen en la ficha de la persona
- * (core::pages.person), a la que lleva «Ver puestos». Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy);
+ * Lista de «Personas y puestos» (3.P7, maqueta C): todos los usuarios con sus puestos vigentes y el estado de su acceso
+ * (AC-04), con búsqueda por número o nombre y filtros por puesto, por estado de la cuenta y por acceso (1.22-C1).
+ * Nombrar y terminar se hacen en la ficha de la persona (core::pages.person), a la que lleva «Ver puestos». La acción
+ * principal es «Dar de alta» (CF-S3, UserPolicy): un cajón pide usuario, nombre y correo institucional opcional,
+ * CreateStaffUser la da de alta sin acceso y la pantalla lleva a su ficha; la invitación llega con 1.22-C2 (CF-07).
+ * Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy);
  * el componente autoriza en mount(), al renderizar y en cada cambio, porque una petición puede llegar con una página
  * que abrió otra sesión.
  *
@@ -23,6 +32,7 @@ use Livewire\WithPagination;
  */
 new #[Title('Personas y puestos')] class extends Component
 {
+    use Toast;
     use WithPagination;
 
     /** Búsqueda por usuario o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
@@ -32,6 +42,22 @@ new #[Title('Personas y puestos')] class extends Component
     /** '' (todos) o el valor de un Role; se recuerda en la sesión del usuario. */
     #[Session]
     public string $role = '';
+
+    /** '' (todas), `active` o `inactive`; se recuerda en la sesión del usuario. */
+    #[Session]
+    public string $status = '';
+
+    /** '' (todos) o el valor de un UserAccess; se recuerda en la sesión del usuario. */
+    #[Session]
+    public string $access = '';
+
+    public bool $showCreate = false;
+
+    public string $newUsername = '';
+
+    public string $newName = '';
+
+    public string $newEmail = '';
 
     /** `people` o `appointments`. */
     #[Session]
@@ -65,27 +91,102 @@ new #[Title('Personas y puestos')] class extends Component
             return $this->appointmentsData($people, $labels, $appointments);
         }
 
-        $page = $people->forTable($this->search, Role::tryFrom($this->role));
+        $page = $people->forTable(
+            $this->search,
+            Role::tryFrom($this->role),
+            active: match ($this->status) {
+                'active' => true,
+                'inactive' => false,
+                default => null,
+            },
+            access: UserAccess::tryFrom($this->access),
+        );
         $described = $labels->describe($page->getCollection()->flatMap(fn (User $user) => $user->roleAssignments));
 
         $summaries = [];
+        $access = [];
 
         foreach ($page as $user) {
             $summaries[$user->id] = $user->roleAssignments->map(fn (RoleAssignment $assignment): string => $described[$assignment->getKey()]->summary)->all();
+            $access[$user->id] = UserAccess::of($user);
         }
 
         return [
             'people' => $page,
             'summaries' => $summaries,
+            'accessOf' => $access,
             'headers' => [
                 ['key' => 'username', 'label' => 'Usuario'],
                 ['key' => 'name', 'label' => 'Persona', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
                 ['key' => 'roles', 'label' => 'Puestos vigentes', 'sortable' => false],
                 ['key' => 'is_active', 'label' => 'Estado', 'sortable' => false],
+                ['key' => 'access', 'label' => 'Acceso', 'sortable' => false],
             ],
             'rowDecoration' => ['text-neutral' => fn (User $user): bool => ! $user->is_active],
             'roles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], Role::cases()),
+            'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
+            'accesses' => array_map(fn (UserAccess $access): array => ['id' => $access->value, 'name' => $access->label()], UserAccess::cases()),
+            'canCreate' => Gate::allows('create', User::class),
         ];
+    }
+
+    public function openCreate(): void
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+        $this->authorize('create', User::class);
+
+        $this->reset('newUsername', 'newName', 'newEmail');
+        $this->resetValidation();
+        $this->showCreate = true;
+    }
+
+    /**
+     * «Dar de alta» (CF-S3): el usuario se guarda como llega, sin los espacios de los extremos; el correo, en minúsculas y
+     * del dominio institucional, único sin importar mayúsculas (UserAccountRules). Nace activo y sin acceso
+     * (CreateStaffUser con `withAccess: false`) y la pantalla lleva a su ficha para nombrarlo. Los errores de las reglas y
+     * de la Action salen junto a su campo.
+     */
+    public function createUser(CreateStaffUser $createStaffUser, UserAccountRules $rules): void
+    {
+        $this->authorize('viewAny', RoleAssignment::class);
+        $this->authorize('create', User::class);
+
+        $this->newUsername = trim($this->newUsername);
+        $this->newName = trim($this->newName);
+
+        $this->validate([
+            'newUsername' => ['required', 'string', 'max:255'],
+            'newName' => ['required', 'string', 'max:160'],
+            'newEmail' => ['nullable', 'string', 'max:255'],
+        ], [
+            'newUsername.required' => 'Escribe el usuario.',
+            'newUsername.max' => 'El usuario no puede pasar de 255 caracteres.',
+            'newName.required' => 'Escribe el nombre.',
+            'newName.max' => 'El nombre no puede pasar de 160 caracteres.',
+            'newEmail.max' => 'El correo no puede pasar de 255 caracteres.',
+        ]);
+
+        try {
+            $email = $rules->institutionalEmail($this->newEmail);
+
+            if ($email !== null) {
+                $rules->ensureEmailIsFree($email);
+            }
+
+            $user = $createStaffUser->handle($this->newUsername, $this->newName, withAccess: false, email: $email);
+        } catch (ValidationException $exception) {
+            throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => [
+                match ($key) {
+                    'username' => 'newUsername',
+                    'email' => 'newEmail',
+                    default => 'newName',
+                } => $messages,
+            ])->all());
+        }
+
+        $this->showCreate = false;
+
+        $this->success('Usuario dado de alta', e("{$user->username} queda sin acceso. Nómbralo en su ficha."), redirectTo: route('core.people.show', $user->id));
     }
 
     public function showTab(string $tab): void
@@ -151,7 +252,7 @@ new #[Title('Personas y puestos')] class extends Component
             $this->resetPage('appointmentsPage');
         }
 
-        if (in_array($property, ['search', 'role'], true)) {
+        if (in_array($property, ['search', 'role', 'status', 'access'], true)) {
             $this->resetPage();
         }
     }

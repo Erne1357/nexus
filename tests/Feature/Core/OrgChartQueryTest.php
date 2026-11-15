@@ -138,6 +138,11 @@ it('cuenta personas distintas con adscripción o puesto vigente en el subárbol'
         {
             return $this->byUnit;
         }
+
+        public function unitIdsOf(string $userId): array
+        {
+            return array_keys(array_filter($this->byUnit, fn (array $userIds): bool => in_array($userId, $userIds, true)));
+        }
     });
 
     RoleAssignment::factory()->for($dora)->create(['role' => Role::JefeProyectoDocente, 'org_unit_id' => $systems->id, 'campus_id' => $c2->id]);

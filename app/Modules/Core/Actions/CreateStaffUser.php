@@ -17,7 +17,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * decide siempre si nace con acceso (`$withAccess` no tiene valor por omisión): sin acceso, sin contraseña, hasta que
  * se le dé (AC-01 y AC-02), así nacen los de los docentes; con acceso, con la contraseña por defecto, que es el alta
  * manual del admin (AC-05, supuesto por confirmar), y sin NEXUS_DEFAULT_PASSWORD falla antes de escribir. Un username repetido es una ValidationException sobre
- * `username`, también si otra sesión lo toma entre la revisión y el insert. La bitácora nunca lleva la contraseña.
+ * `username`, también si otra sesión lo toma entre la revisión y el insert; un correo que otro usuario ya tiene (sin
+ * importar mayúsculas, lo garantiza la base) es una sobre `email`. El correo se guarda como llega: quien llama lo
+ * normaliza (el panel, con UserAccountRules, CF-S3). La bitácora nunca lleva la contraseña.
  * Después del commit avisa con StaffUserCreated.
  */
 final class CreateStaffUser
@@ -47,8 +49,8 @@ final class CreateStaffUser
                     'is_active' => true,
                     'must_change_password' => true,
                 ]);
-            } catch (UniqueConstraintViolationException) {
-                throw $this->usernameTaken();
+            } catch (UniqueConstraintViolationException $exception) {
+                throw str_contains($exception->getMessage(), 'users_email') ? $this->emailTaken((string) $email) : $this->usernameTaken();
             }
 
             activity()
@@ -66,5 +68,10 @@ final class CreateStaffUser
     private function usernameTaken(): ValidationException
     {
         return ValidationException::withMessages(['username' => 'Ya existe un usuario con ese nombre de usuario.']);
+    }
+
+    private function emailTaken(string $email): ValidationException
+    {
+        return ValidationException::withMessages(['email' => 'Otro usuario ya tiene el correo '.mb_strtolower($email).'.']);
     }
 }
