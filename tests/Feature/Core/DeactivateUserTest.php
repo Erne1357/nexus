@@ -167,6 +167,16 @@ it('CF-05 y AZ-S12: tampoco si otro admin solo cubre hasta una fecha y quedaría
         ->and($this->admin->roleAssignments()->sole()->valid_to->toDateString())->toBe('2026-11-14');
 });
 
+it('CF-05: quien ya quedó dado de baja no da de baja a nadie: se relee bajo el candado de Administración', function () {
+    $beto = User::factory()->admin()->create(['name' => 'Beto Bravo']);
+    deactivateAccount($beto, $this->admin);
+
+    expect(fn () => deactivateAccount($this->admin, $beto))
+        ->toThrow(ValidationException::class, UserAccountRules::ACTOR_INACTIVE);
+
+    expect($this->admin->fresh()->is_active)->toBeTrue();
+});
+
 it('CF-05: nadie se da de baja a sí mismo', function () {
     accountAssignment($this->rosa, Role::Admin);
 

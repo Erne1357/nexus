@@ -18,8 +18,9 @@ use Illuminate\Validation\ValidationException;
 /**
  * «Dar de baja» la cuenta de un usuario del personal (CF-05, confirmado el 14 de noviembre de 2026). En una transacción:
  *
- * - toma RoleAssignmentRules::ADMIN_SEATS_LOCK y luego bloquea al usuario, en el orden de EndRoleAssignment y de
- *   SyncTeacherAccess, y revisa UserAccountRules::deactivationBlocker(): nadie se da de baja a sí mismo, un alumno no
+ * - toma RoleAssignmentRules::ADMIN_SEATS_LOCK, relee a quien la da (si otra baja ya lo dejó inactivo, no sigue) y
+ *   luego bloquea al usuario, en el orden de EndRoleAssignment y de SyncTeacherAccess, y revisa
+ *   UserAccountRules::deactivationBlocker(): nadie se da de baja a sí mismo, un alumno no
  *   se da de baja aquí (CF-S4) y no se da de baja a quien dejaría algún día sin admin vigente, hoy incluido (AZ-S12);
  * - termina con último día de hoy cada nombramiento vigente y quita los que aún no empiezan, con EndRoleAssignment
  *   (que deja su bitácora por nombramiento; su rechazo, como que otra sesión ya borró el nombramiento, sale sobre
@@ -55,6 +56,10 @@ final class DeactivateUser
 
         return DB::transaction(function () use ($user, $reason, $note, $actor): array {
             DB::select('select pg_advisory_xact_lock(hashtext(?))', [RoleAssignmentRules::ADMIN_SEATS_LOCK]);
+
+            if (! $this->rules->actorStillActive($actor)) {
+                throw ValidationException::withMessages(['user' => UserAccountRules::ACTOR_INACTIVE]);
+            }
 
             $locked = User::query()->lockForUpdate()->findOrFail($user->getKey());
 

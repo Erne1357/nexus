@@ -11,6 +11,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
+use App\Modules\Core\Queries\DeactivationPreviewQuery;
+use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\ProvisionTeacherUsers;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
@@ -107,6 +109,16 @@ it('CF-09: la migración del SII no reactiva ni le da su NIP a quien también es
 
     expect($this->account->fresh()->is_active)->toBeFalse()
         ->and($this->account->fresh()->password)->toBeNull();
+});
+
+it('CF-09: la vista previa de la baja lee de Faculty solo los departamentos de esa persona', function () {
+    $other = panelTeacher($this->sc, 'CCCC800101CC1', 'cora@cdjuarez.tecnm.mx');
+    app(AddAdscription::class)->handle($other, $this->cb);
+    panelTeacher($this->cb, 'DDDD800101DD1', 'dani@cdjuarez.tecnm.mx');
+
+    expect(app(DeactivationPreviewQuery::class)->for($other->user, $this->admin)->teacherDepartments)
+        ->toBe([['code' => 'CB', 'name' => $this->cb->name], ['code' => 'SC', 'name' => $this->sc->name]])
+        ->and(app(UnitAdscriptions::class)->unitIdsOf($this->jefe->id))->toBe([]);
 });
 
 it('CF-06: solo el admin la reactiva desde el panel; después, Faculty la vuelve a sincronizar', function () {

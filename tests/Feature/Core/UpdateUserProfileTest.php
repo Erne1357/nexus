@@ -4,10 +4,14 @@ use App\Modules\Core\Actions\UpdateUserProfile;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\UserProfileUpdated;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\UserEmailChanged;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PasswordResetTokens;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -20,6 +24,7 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->travelTo('2026-11-14 10:00:00');
+    Notification::fake();
 
     $this->admin = User::factory()->admin()->create(['name' => 'Ada Admin']);
     $this->rosa = User::factory()->create([
@@ -48,7 +53,7 @@ it('CF-S3: cambia el nombre y el correo, en minúsculas, con bitácora de lo de 
         ->and($updated->email)->toBe('rosa.almanza@cdjuarez.tecnm.mx')
         ->and($this->rosa->fresh()->email)->toBe('rosa.almanza@cdjuarez.tecnm.mx');
 
-    $entry = activitySince()->sole();
+    $entry = activitySince()->where('event', 'updated')->sole();
 
     expect($entry->event)->toBe('updated')
         ->and($entry->causer_id)->toBe($this->admin->id)
@@ -110,7 +115,48 @@ it('CF-S3: cambiar el correo de quien tiene una invitación pendiente la deja si
     updateProfile($this->rosa, ['email' => 'rosa.almanza@cdjuarez.tecnm.mx']);
 
     expect($this->rosa->fresh()->access_invited_at)->toBeNull()
-        ->and(activitySince()->sole()->attribute_changes['old'])->toHaveKey('access_invited_at');
+        ->and(activitySince()->where('event', 'updated')->sole()->attribute_changes['old'])->toHaveKey('access_invited_at');
+});
+
+it('CF-S3: al cambiar el correo avisa al anterior quién lo cambió y cuándo, con el nuevo oculto y sin enlaces, y lo deja en la bitácora', function () {
+    updateProfile($this->rosa, ['email' => 'rosa.almanza@cdjuarez.tecnm.mx']);
+
+    $mail = null;
+    Notification::assertSentOnDemand(UserEmailChanged::class, function (UserEmailChanged $notice, array $channels, AnonymousNotifiable $notifiable) use (&$mail): bool {
+        $mail = $notice->toMail($notifiable);
+
+        return $notifiable->routes['mail'] === 'rosa.ruiz@cdjuarez.tecnm.mx';
+    });
+
+    $text = implode("\n", [...$mail->introLines, ...$mail->outroLines]);
+
+    expect($mail->subject)->toBe('Cambió el correo de tu cuenta de Nexus')
+        ->and($text)->toContain('Ada Admin cambió el correo de tu usuario RURR800101AB1')
+        ->and($text)->toContain('14 de noviembre de 2026 a las 10:00')
+        ->and($text)->toContain('ro•••@cdjuarez.tecnm.mx')
+        ->and($text)->not->toContain('rosa.almanza')
+        ->and($text)->not->toContain('http')
+        ->and($mail->actionUrl)->toBeNull()
+        ->and(activitySince()->where('event', 'email-change-notified')->sole()->properties->get('email'))->toBe('rosa.ruiz@cdjuarez.tecnm.mx');
+
+    expect(new UserEmailChanged('u', 'n', 'a', now()->toImmutable(), 'ab@x.mx'))->toBeInstanceOf(ShouldQueue::class)
+        ->and(UserEmailChanged::maskedEmail('ab@cdjuarez.tecnm.mx'))->toBe('a•••@cdjuarez.tecnm.mx');
+});
+
+it('CF-S3: si se quita el correo, el aviso al anterior lo dice', function () {
+    updateProfile($this->rosa, ['email' => '']);
+
+    Notification::assertSentOnDemand(UserEmailChanged::class, fn (UserEmailChanged $notice, array $channels, AnonymousNotifiable $notifiable): bool => $notifiable->routes['mail'] === 'rosa.ruiz@cdjuarez.tecnm.mx'
+        && in_array('Tu cuenta ya no tiene correo institucional.', $notice->toMail($notifiable)->introLines, true));
+});
+
+it('CF-S3: sin correo anterior no se avisa, y cambiar solo el nombre tampoco', function () {
+    updateProfile($this->rosa, ['name' => 'Rosa R.']);
+    $this->rosa->forceFill(['email' => null])->save();
+    updateProfile($this->rosa, ['email' => 'rosa.nueva@cdjuarez.tecnm.mx']);
+
+    Notification::assertNothingSent();
+    expect(activitySince()->where('event', 'email-change-notified')->count())->toBe(0);
 });
 
 it('CF-S3: vaciar el correo lo quita, y el nombre solo no toca el correo ni su confirmación', function () {

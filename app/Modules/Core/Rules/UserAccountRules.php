@@ -12,7 +12,9 @@ use Illuminate\Validation\ValidationException;
  * - CF-S3: el correo institucional es opcional, va en minúsculas, es único sin importar mayúsculas y solo vale del
  *   dominio `nexus.institutional_email_domain` (la misma forma que AC-06).
  * - CF-S4 (supuesto por confirmar): la cuenta de un alumno no se edita, no se da de baja ni se reactiva en el panel
- *   (RoleAssignmentRules::isStudentAccount()); solo se le restablece la contraseña.
+ *   (RoleAssignmentRules::isStudentAccount()); solo se le restablece la contraseña. Una que dio de baja el panel no
+ *   cuenta como de alumno.
+ * - CF-06 (supuesto por confirmar): solo se reactiva una cuenta que dio de baja el panel.
  * - CF-05: nadie se da de baja a sí mismo (supuesto por confirmar) y no se da de baja a quien dejaría algún día sin admin
  *   vigente (AZ-S12, RoleAssignmentRules::deactivationGap()).
  * - CF-08: el restablecimiento sigue AC-16 (PasswordResetRules) sin pedir el correo confirmado; `resetBlocker()` dice
@@ -27,6 +29,12 @@ final class UserAccountRules
     public const string ALREADY_INACTIVE = 'La cuenta ya está dada de baja.';
 
     public const string ALREADY_ACTIVE = 'La cuenta ya está activa.';
+
+    public const string FROM_TEACHERS = 'Se reactiva desde Docentes.';
+
+    public const string NOT_FROM_PANEL = 'No la dio de baja el panel: no se reactiva aquí.';
+
+    public const string ACTOR_INACTIVE = 'Tu cuenta ya no está activa.';
 
     public const string RESET_INACTIVE = PasswordResetRules::INACTIVE;
 
@@ -92,10 +100,16 @@ final class UserAccountRules
     }
 
     /**
-     * CF-S4: si la cuenta es de un alumno.
+     * CF-S4: si la cuenta es de un alumno para el panel. Una que dio de baja el panel (`deactivated_at`) nunca lo es: la
+     * baja pudo quitar el puesto del personal que todavía no empezaba y dejarle solo el de alumno, pero el panel la dio de
+     * baja y el panel la reactiva.
      */
     public function isStudent(User $user): bool
     {
+        if ($user->deactivated_at !== null) {
+            return false;
+        }
+
         return $this->students[$user->getKey()] ??= $this->assignments->isStudentAccount($user);
     }
 
@@ -147,15 +161,28 @@ final class UserAccountRules
     }
 
     /**
-     * Por qué no se reactiva (CF-06, CF-S4); nulo si sí.
+     * Por qué no se reactiva (CF-06, CF-S4); nulo si sí. Solo se reactiva una cuenta que dio de baja el panel
+     * (`deactivated_at`, supuesto por confirmar): la de un docente inactivo la desactivó Faculty y se reactiva en
+     * Docentes, la de un alumno sigue su estatus, y otra que esté inactiva no la dio de baja el panel.
      */
     public function reactivationBlocker(User $user): ?string
     {
         return match (true) {
-            $this->isStudent($user) => self::STUDENT,
             $user->is_active => self::ALREADY_ACTIVE,
-            default => null,
+            $user->deactivated_at !== null => null,
+            $this->isStudent($user) => self::STUDENT,
+            $this->assignments->isTeacher($user) => self::FROM_TEACHERS,
+            default => self::NOT_FROM_PANEL,
         };
+    }
+
+    /**
+     * Si quien da de baja sigue activo, releído de la base: dos admin que se dan de baja uno al otro a la vez no se
+     * quitan los dos (CF-05). Quien escribe lo pregunta bajo RoleAssignmentRules::ADMIN_SEATS_LOCK.
+     */
+    public function actorStillActive(User $actor): bool
+    {
+        return (bool) User::query()->whereKey($actor->getKey())->value('is_active');
     }
 
     /**

@@ -335,13 +335,34 @@ final class RoleAssignmentRules
      */
     public function accountAssignments(User $user): Builder
     {
-        $managedHere = array_values(array_filter(Role::cases(), fn (Role $role): bool => $this->managedElsewhere($role) === null));
         $today = today()->toDateString();
+
+        return $this->managedHereOf($user)
+            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>', $today));
+    }
+
+    /**
+     * CF-06: los nombramientos de `$user` que se manejan en «Personas y puestos» y terminan hoy, por inicio. Si se
+     * reactiva la cuenta el mismo día de la baja, estos terminan ayer (o se quitan, si empezaban hoy), porque hoy
+     * todavía cuentan como vigentes y los puestos no regresan con la cuenta.
+     *
+     * @return Builder<RoleAssignment>
+     */
+    public function accountAssignmentsEndingToday(User $user): Builder
+    {
+        return $this->managedHereOf($user)->where('valid_to', today()->toDateString());
+    }
+
+    /**
+     * @return Builder<RoleAssignment>
+     */
+    private function managedHereOf(User $user): Builder
+    {
+        $managedHere = array_values(array_filter(Role::cases(), fn (Role $role): bool => $this->managedElsewhere($role) === null));
 
         return RoleAssignment::query()
             ->where('user_id', $user->getKey())
             ->whereIn('role', $managedHere)
-            ->where(fn (Builder $query) => $query->whereNull('valid_to')->orWhere('valid_to', '>', $today))
             ->orderBy('valid_from')
             ->orderBy('id');
     }

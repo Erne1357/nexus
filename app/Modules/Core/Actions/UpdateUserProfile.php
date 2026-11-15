@@ -4,11 +4,14 @@ namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Events\UserProfileUpdated;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\UserEmailChanged;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PasswordResetTokens;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
@@ -24,7 +27,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * por confirmar): a quien no tiene contraseña lo confirma la invitación que le llegue ahí, y al personal que ya la tiene
  * no se le restablece por enlace (AC-16) hasta que se decida cómo confirmarlo. Relee al usuario con `lockForUpdate`; sin
  * cambios no escribe, no deja bitácora ni avisa. La bitácora lleva lo de antes y lo de después; avisa con
- * UserProfileUpdated después del commit.
+ * UserProfileUpdated después del commit. Si había un correo anterior, le avisa del cambio (`notifyPreviousEmail()`).
  */
 final class UpdateUserProfile
 {
@@ -102,11 +105,38 @@ final class UpdateUserProfile
                 ->withChanges(['attributes' => $new, 'old' => $old])
                 ->log("Editó los datos de {$locked->username}");
 
+            if (in_array('email', $changed, true) && $old['email'] !== null) {
+                $this->notifyPreviousEmail($locked, (string) $old['email'], $actor);
+            }
+
             UserProfileUpdated::dispatch($locked, $changed);
 
             $user->setRawAttributes($locked->getAttributes(), sync: true);
 
             return $locked;
         });
+    }
+
+    /**
+     * CF-S3 (confirmado el 15 de noviembre de 2026): avisa al correo anterior quién cambió el correo y cuándo, con el
+     * nuevo parcialmente oculto y sin enlaces (UserEmailChanged, de la cola después del commit), y lo deja en la
+     * bitácora.
+     */
+    private function notifyPreviousEmail(User $user, string $previous, ?User $actor): void
+    {
+        Notification::route('mail', $previous)->notify(new UserEmailChanged(
+            $user->username,
+            $user->name,
+            $actor?->name ?? 'La administración de Nexus',
+            CarbonImmutable::now(),
+            $user->email,
+        ));
+
+        activity()
+            ->performedOn($user)
+            ->causedBy($actor)
+            ->event('email-change-notified')
+            ->withProperties(['email' => $previous])
+            ->log("Avisó del cambio de correo de {$user->username} a su correo anterior, {$previous}");
     }
 }

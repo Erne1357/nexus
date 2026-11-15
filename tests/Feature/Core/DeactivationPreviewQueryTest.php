@@ -49,6 +49,11 @@ function fakeAdscriptions(array $byUnit): void
         {
             return $this->byUnit;
         }
+
+        public function unitIdsOf(string $userId): array
+        {
+            return array_keys(array_filter($this->byUnit, fn (array $userIds): bool => in_array($userId, $userIds, true)));
+        }
     });
 }
 

@@ -57,10 +57,7 @@ final class DeactivationPreviewQuery
      */
     private function departmentsOf(User $person): array
     {
-        $unitIds = array_keys(array_filter(
-            $this->adscriptions->userIdsByUnit(),
-            fn (array $userIds): bool => in_array($person->getKey(), $userIds, true),
-        ));
+        $unitIds = $this->adscriptions->unitIdsOf($person->getKey());
 
         if ($unitIds === []) {
             return [];

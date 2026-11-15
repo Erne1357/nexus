@@ -3,6 +3,8 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Actions\DeactivateUser;
+use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
@@ -147,7 +149,8 @@ it('CF-05: el admin no se da de baja a sí mismo: sale deshabilitado con su moti
 });
 
 it('CF-06: una cuenta dada de baja ofrece Reactivar y Editar datos; al reactivar queda sin acceso', function () {
-    $this->rosa->forceFill(['is_active' => false])->save();
+    $this->actingAs($this->admin);
+    app(DeactivateUser::class)->handle($this->rosa, DeactivationReason::Renuncia, null, $this->admin);
 
     $dom = domOf($this->actingAs($this->admin)->get(route('core.people.show', $this->rosa->id)));
 
@@ -162,6 +165,22 @@ it('CF-06: una cuenta dada de baja ofrece Reactivar y Editar datos; al reactivar
     expect($this->rosa->fresh()->is_active)->toBeTrue()
         ->and($this->rosa->fresh()->password)->toBeNull()
         ->and(lastToastOf($page))->title->toBe('Cuenta reactivada');
+});
+
+it('CF-06: la cuenta de un docente inactivo no se reactiva aquí: el menú dice que se reactiva desde Docentes', function () {
+    RoleAssignment::factory()->create(['user_id' => $this->rosa->id, 'role' => Role::Docente, 'valid_from' => '2026-08-01']);
+    $this->rosa->forceFill(['is_active' => false])->save();
+
+    $dom = domOf($this->actingAs($this->admin)->get(route('core.people.show', $this->rosa->id)));
+    $item = collect($dom->querySelectorAll('[role="menuitem"]'))->first(fn ($node): bool => str_starts_with(textOf($node), 'Reactivar'));
+
+    expect($item->getAttribute('aria-disabled'))->toBe('true')
+        ->and(textOf($item))->toContain(UserAccountRules::FROM_TEACHERS);
+
+    $page = accountPage($this->rosa)->call('reactivate');
+
+    expect($this->rosa->fresh()->is_active)->toBeFalse()
+        ->and(lastToastOf($page))->type->toBe('error')->description->toBe(UserAccountRules::FROM_TEACHERS);
 });
 
 it('CF-S4: la cuenta de un alumno es de solo lectura, salvo Restablecer contraseña', function () {
