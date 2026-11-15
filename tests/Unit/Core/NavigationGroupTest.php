@@ -34,4 +34,5 @@ it('MN-01: cada grupo vive en un área y se nombra en español', function (Navig
     'institución' => [NavigationGroup::Institucion, NavigationArea::Administracion, 'Institución'],
     'catálogos' => [NavigationGroup::Catalogos, NavigationArea::Administracion, 'Catálogos'],
     'datos' => [NavigationGroup::Datos, NavigationArea::Administracion, 'Datos'],
+    'configuración' => [NavigationGroup::Configuracion, NavigationArea::Administracion, 'Configuración'],
 ]);

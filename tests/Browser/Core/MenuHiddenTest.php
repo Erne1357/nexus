@@ -147,15 +147,8 @@ it('abierto, si el motivo no cabe debajo de su entrada, sale arriba', function (
         ->click('@hare')
         ->assertScript('Alpine.$data(document.body).busy === false');
 
-    // Se deja a la vista en la orilla de abajo del menú abierto y luego se enfoca sin que el navegador la mueva: si lo
-    // hiciera, la centraría cuando hay entradas de sobra debajo y el motivo cabría debajo, sin depender de cuántas haya.
-    $page->script('(() => {
-        const column = document.querySelector("#nexus-menu [data-menu-column]");
-        const entry = document.querySelector(\'a[data-label="Acuerdos"]\');
-
-        column.scrollTop += entry.getBoundingClientRect().bottom - column.getBoundingClientRect().bottom;
-        entry.focus({ preventScroll: true });
-    })()');
+    // Se deja en la orilla de abajo del menú abierto (con más entradas debajo, enfocarla sola la centraría) y se enfoca.
+    $page->script('(() => { const entry = document.querySelector(\'a[data-label="Acuerdos"]\'); entry.scrollIntoView({ block: "end" }); entry.focus({ preventScroll: true }); })()');
     $page->assertScript('(() => {
         const entry = document.querySelector(\'a[data-label="Acuerdos"]\').getBoundingClientRect();
         const tip = document.querySelector("[data-menu-why-tip]").getBoundingClientRect();

@@ -55,6 +55,8 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Bitácora** | `activity_log` | Registro inmutable de quién cambió qué y cuándo. Nunca se borra. |
 | **Aviso** | `LoginNotice` (`login_notices`) | Una entrada del carrusel de la pantalla de acceso (LG-01): título, foto y enlace opcionales, con orden y vigencia. Se maneja en «Avisos y atajos» (CF-S6). |
 | **Atajo** | `LoginShortcut` (`login_shortcuts`) | Un enlace o la descarga de un pdf que sale en el botón de atajos de la pantalla de acceso, sin iniciar sesión (LG-02). Se maneja en «Avisos y atajos» (CF-S6). |
+| **Registro de correos** | `MailLog` (`mail_log`) | Una fila por correo que sale de Nexus: destinatario, asunto, tipo, usuario, estado y hora; nunca el cuerpo. Se ve en «Correos y colas». |
+| **Trabajo fallido** | `FailedJob` (`failed_jobs`) | Trabajo de la cola que agotó sus intentos. El admin lo reintenta o lo descarta desde «Correos y colas»; ambas cosas dejan bitácora. |
 | **Permiso** | `Permission` (interfaz; un enum por módulo) | Una acción sobre un recurso de un módulo (`faculty.teacher.update`). Lo declara el módulo dueño, con su etiqueta en español, las dimensiones de alcance que revisa y si es personal. |
 | **Dimensión de alcance** | `Dimension` (enum) | Atributo por el que se limita un permiso. Hoy cuatro: unidad (jerárquica), campus, carrera y modalidad. Se agregan más cuando un módulo las necesite. |
 | **Puesto** | `Role` (enum; «puesto» en la interfaz) | Conjunto de permisos. Cada puesto declara qué pide su nombramiento (tipo de unidad, campus, carrera, modalidad) y si es exclusivo. La matriz puesto→permisos vive en código (ADR-0018). |
