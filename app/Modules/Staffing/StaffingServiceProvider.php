@@ -378,7 +378,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     public function activityAttributes(): array
     {
         return [
-            ChangeRequest::class => ['status' => ['Estado de la solicitud', ChangeRequestStatus::class], 'kind' => ['Tipo de solicitud', ChangeRequestKind::class], 'current' => 'Antes', 'proposed' => 'Propuesto', 'decision_comment' => 'Comentario de la decisión'],
+            ChangeRequest::class => ['status' => ['Estado de la solicitud', ChangeRequestStatus::class], 'kind' => ['Tipo de solicitud', ChangeRequestKind::class], 'current' => 'Valor actual', 'proposed' => 'Valor propuesto', 'decision_comment' => 'Comentario de la decisión'],
         ];
     }
 }

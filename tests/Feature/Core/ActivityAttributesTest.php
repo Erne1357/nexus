@@ -79,3 +79,15 @@ it('CF-S5: los módulos declaran sus columnas y enums, y la aplicación los reú
         ->and($attributes->label('App\\Modules\\Facilities\\Models\\Room', 'type'))->toBe('Tipo de salón')
         ->and($attributes->format('App\\Modules\\Facilities\\Models\\Room', 'type', 'laboratorio'))->not->toBe('laboratorio');
 });
+
+it('CF-S5: una fecha que llega como ISO a medianoche de Ciudad Juárez sale sin hora', function () {
+    expect(activityLabels()->format(null, 'valid_from', '2026-11-15T00:00:00-07:00'))->toBe('15/11/2026')
+        ->and(activityLabels()->format(null, 'valid_from', '2026-11-15T07:00:00+00:00'))->toBe('15/11/2026')
+        ->and(activityLabels()->format(null, 'x', '2026-11-15T00:30:00-07:00'))->toBe('15/11/2026 00:30');
+});
+
+it('CF-S5: un texto libre que empieza con una fecha o una hora queda igual', function () {
+    expect(activityLabels()->format(null, 'note', '2026-11-15 se pidió el cambio'))->toBe('2026-11-15 se pidió el cambio')
+        ->and(activityLabels()->format(null, 'reason', '2026-11-15T10:00 junta'))->toBe('2026-11-15T10:00 junta')
+        ->and(activityLabels()->format(null, 'reason', '07:30 en la mañana'))->toBe('07:30 en la mañana');
+});

@@ -17,7 +17,7 @@ use Throwable;
  */
 final readonly class ActivityAttributes
 {
-    private const string DATETIME = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/';
+    private const string DATETIME = '/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?$/';
 
     /**
      * @param  array<string, array<string, string|array{0: string, 1: class-string<BackedEnum>}>>  $declared  por nombre corto del modelo, o `*`
@@ -115,7 +115,9 @@ final readonly class ActivityAttributes
             }
 
             if (preg_match(self::DATETIME, $value) === 1) {
-                return CarbonImmutable::parse($value, $timezone)->setTimezone($timezone)->format('d/m/Y H:i');
+                $moment = CarbonImmutable::parse($value, $timezone)->setTimezone($timezone);
+
+                return $moment->format($moment->format('H:i') === '00:00' ? 'd/m/Y' : 'd/m/Y H:i');
             }
         } catch (Throwable) {
         }
