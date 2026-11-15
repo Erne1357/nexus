@@ -9,17 +9,17 @@ use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
+use App\Modules\CatalogValidation\Queries\ValidationWindowQuery;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StageStatus;
-use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\StageWindow;
-use App\Modules\Core\Queries\TermCalendarQuery;
+use App\Modules\Facilities\Queries\RoomQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -28,11 +28,13 @@ use Mary\Traits\Toast;
 
 /**
  * Avance de validación (tarea 2.5; docs/dominio/reglas-de-negocio.md, "Validación de catálogos"), variante A
- * «matriz» (DESIGN.md): el avance global del periodo activo, la ventana de la etapa de validación de catálogos y
- * una fila por departamento con el estado de cada catálogo, de las observaciones y de su carga. Lo ven y recuerdan
- * Subdirección y el admin (CatalogReviewPolicy::viewProgress y remind, supuesto por confirmar); cada método público
- * vuelve a autorizar, porque la petición puede llegar con una pantalla que abrió otra sesión. Resolver una
- * observación desde el drawer sigue a CatalogReviewPolicy::resolveFlag sobre la revisión de la observación.
+ * «matriz» (DESIGN.md): el avance global del periodo activo, la ventana de la etapa de validación de catálogos con su
+ * fecha límite (la ventana general, CV11) y una fila por departamento activo con el estado de cada catálogo, de las
+ * observaciones y de su carga. La validación es de cada departamento para todo el Tec: la pantalla no filtra por campus
+ * (14 de noviembre de 2026). Lo ven y recuerdan Subdirección y el admin (CatalogReviewPolicy::viewProgress y remind,
+ * supuesto por confirmar); cada método público vuelve a autorizar, porque la petición puede llegar con una pantalla
+ * que abrió otra sesión. «Observaciones abiertas» junta las de todos los departamentos (CV10); resolver una, con la nota
+ * de lo que se hizo, desde ese drawer o el de un departamento sigue a CatalogReviewPolicy::resolveFlag sobre su revisión.
  */
 new #[Title('Avance de validación')] class extends Component
 {
@@ -40,10 +42,6 @@ new #[Title('Avance de validación')] class extends Component
 
     #[Session]
     public string $search = '';
-
-    /** El campus filtrado, entre los abiertos; vacío son todos. */
-    #[Session]
-    public string $campus = '';
 
     /** '' (todos), 'pending' (con algo sin validar) o 'validated' (todo validado). */
     #[Session]
@@ -53,6 +51,9 @@ new #[Title('Avance de validación')] class extends Component
 
     /** El drawer «Abrir validación» (CV9) y los catálogos que se marcaron para abrir. */
     public bool $showOpen = false;
+
+    /** El drawer «Observaciones abiertas» de todos los departamentos (CV10). */
+    public bool $showFlags = false;
 
     /** @var list<string> */
     public array $toOpen = [];
@@ -69,38 +70,31 @@ new #[Title('Avance de validación')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(ValidationProgressQuery $progress, TermCalendarQuery $calendar, CatalogReviewQuery $reviews, Actor $context): array
+    public function with(ValidationProgressQuery $progress, ValidationWindowQuery $windows, CatalogReviewQuery $reviews, RoomQuery $rooms, Actor $context): array
     {
         Gate::authorize('viewProgress', CatalogReview::class);
 
         $term = $context->activeTerm();
         $open = $term === null ? new Collection : $progress->openCampuses($term);
-        $campuses = $this->scope($open);
         $canOpen = Gate::allows('open', CatalogReview::class);
 
         if ($term === null || $open->isEmpty()) {
-            return ['term' => $term, 'open' => $open, 'campuses' => $campuses, 'board' => null, 'window' => null, 'detail' => null, 'canOpen' => $canOpen, 'options' => []];
+            return ['term' => $term, 'open' => $open, 'board' => null, 'window' => null, 'detail' => null, 'canOpen' => $canOpen, 'options' => [], 'allFlags' => null, 'roomsWithoutOwner' => 0];
         }
 
-        $board = $progress->board($term, $campuses, $this->search, $this->status);
+        $board = $progress->board($term, $this->search, $this->status);
 
         return [
             'term' => $term,
             'open' => $open,
-            'campuses' => $campuses,
             'board' => $board,
-            'window' => $this->window($calendar, $term, $progress->openModalities($term)->modelKeys()),
-            'detail' => $this->showDrawer && $this->detailId !== null ? $this->detail($progress, $term, $campuses, $board) : null,
+            'window' => $this->window($windows, $term),
+            'detail' => $this->showDrawer && $this->detailId !== null ? $this->detail($progress, $term, $board) : null,
             'canOpen' => $canOpen,
             'options' => $reviews->openingOptions($term),
+            'allFlags' => $this->showFlags ? $progress->allOpenFlags($term) : null,
+            'roomsWithoutOwner' => $canOpen && $this->showOpen ? $rooms->withoutOwnerCount() : 0,
         ];
-    }
-
-    public function updated(string $property): void
-    {
-        if ($property === 'campus') {
-            $this->reset('showDrawer', 'detailId');
-        }
     }
 
     /**
@@ -135,7 +129,8 @@ new #[Title('Avance de validación')] class extends Component
         $this->showOpen = false;
         $this->toOpen = [];
         if ($created > 0) {
-            $this->success('Validación abierta', e($term->name).': se avisó a los jefes.');
+            // La página se vuelve a pintar entera, con el menú y la franja «Oculta para los demás» al día.
+            $this->success('Validación abierta', e($term->name).': se avisó a los jefes.', redirectTo: route('catalog-validation.progress'));
 
             return;
         }
@@ -162,19 +157,28 @@ new #[Title('Avance de validación')] class extends Component
     }
 
     /**
-     * Recuerda a los jefes con pendientes. De un departamento, en línea y en cada campus del filtro; sin
-     * departamento («Recordar a todos los pendientes»), de los departamentos de las filas visibles (búsqueda, estado y
-     * campus) en un job en cola, porque tarda.
+     * Abre el drawer «Observaciones abiertas» con las de todos los departamentos (CV10).
+     */
+    public function openFlags(): void
+    {
+        Gate::authorize('viewProgress', CatalogReview::class);
+
+        $this->showFlags = true;
+    }
+
+    /**
+     * Recuerda a los jefes con pendientes (el recordatorio, CV11: campana y correo). De un departamento, en línea; sin
+     * departamento («Recordar a todos los pendientes»), de los departamentos de las filas visibles (búsqueda y estado) en
+     * un job en cola, porque tarda.
      */
     public function remind(RemindPendingReviews $remind, ValidationProgressQuery $progress, Actor $context, ?string $departmentId = null): void
     {
         Gate::authorize('remind', CatalogReview::class);
 
         $term = $context->activeTerm() ?? abort(404);
-        $campuses = $this->scope($progress->openCampuses($term));
 
         if ($departmentId === null) {
-            $ids = collect($progress->board($term, $campuses, $this->search, $this->status)['rows'])
+            $ids = collect($progress->board($term, $this->search, $this->status)['rows'])
                 ->filter(fn (array $row): bool => $row['remind_blocked_reason'] === null)
                 ->map(fn (array $row): string => $row['department']->getKey())
                 ->values()
@@ -186,14 +190,14 @@ new #[Title('Avance de validación')] class extends Component
                 return;
             }
 
-            RemindPendingReviewsJob::dispatch($term->getKey(), $campuses->pluck('id')->all(), $this->user()->getKey(), $ids);
+            RemindPendingReviewsJob::dispatch($term->getKey(), $this->user()->getKey(), $ids);
             $this->info('Enviando recordatorios a '.count($ids).(count($ids) === 1 ? ' departamento' : ' departamentos'), e($term->name));
 
             return;
         }
 
         $department = KeyLookup::findOrFail(Department::query()->where('is_active', true), $departmentId);
-        $notified = $remind->handle($term, $campuses, $this->user(), [$department->getKey()]);
+        $notified = $remind->handle($term, $this->user(), [$department->getKey()]);
 
         if ($notified === 0) {
             $this->info('Nadie por recordar', 'Ningún jefe tiene catálogos pendientes que recordar.');
@@ -204,43 +208,36 @@ new #[Title('Avance de validación')] class extends Component
         $this->success($notified === 1 ? 'Se avisó a 1 jefe' : "Se avisó a {$notified} jefes", e($department->name));
     }
 
-    public function resolveFlag(string $id, ValidationProgressQuery $progress, ResolveFlag $resolveFlag): void
+    /**
+     * Marca como resuelta una observación con la nota opcional de lo que se hizo (CV10), que le llega en la campana al jefe
+     * que la puso (NotifyFlagResolved).
+     */
+    public function resolveFlag(string $id, ValidationProgressQuery $progress, ResolveFlag $resolveFlag, mixed $note = null): void
     {
+        if ($note !== null && ! is_string($note)) {
+            throw ValidationException::withMessages(['note' => 'La nota tiene que ser texto.']);
+        }
+
         Gate::authorize('viewProgress', CatalogReview::class);
 
         $flag = $progress->findFlag($id);
         $review = $flag->review;
         Gate::authorize('resolveFlag', $review);
 
-        $resolveFlag->handle($review, $flag, $this->user());
+        $resolveFlag->handle($review, $flag, $this->user(), $note);
 
-        $this->success('Observación resuelta', e($review->title));
+        $this->success('Observación resuelta', e($review->heading));
     }
 
     /**
-     * Los campus del filtro: el elegido si sigue abierto, y si no todos los abiertos.
+     * La ventana general de la etapa de validación de catálogos y cuánto de ella pasó, si tiene fechas (CV11: su fin es la
+     * fecha límite de los avisos).
      *
-     * @param  Collection<int, Campus>  $open
-     * @return Collection<int, Campus>
-     */
-    private function scope(Collection $open): Collection
-    {
-        $chosen = $this->campus === '' ? null : $open->firstWhere('id', $this->campus);
-
-        return $chosen === null ? $open : collect([$chosen]);
-    }
-
-    /**
-     * La ventana de la etapa de validación de catálogos y cuánto de ella pasó, si tiene fechas; si el periodo se abrió en
-     * una sola modalidad con campus (ValidationProgressQuery::openModalities), la de esa modalidad si la tiene propia (M4).
-     *
-     * @param  list<string>  $modalityIds
      * @return array{window: StageWindow, elapsed: int}|null
      */
-    private function window(TermCalendarQuery $calendar, Term $term, array $modalityIds): ?array
+    private function window(ValidationWindowQuery $windows, Term $term): ?array
     {
-        $window = collect($calendar->for($term, count($modalityIds) === 1 ? $modalityIds[0] : null))
-            ->first(fn (StageWindow $candidate): bool => $candidate->stage === Stage::CatalogValidation);
+        $window = $windows->window($term);
 
         if ($window === null || $window->startsOn === null) {
             return null;
@@ -259,11 +256,10 @@ new #[Title('Avance de validación')] class extends Component
     /**
      * Lo del drawer de un departamento: su fila, sus observaciones abiertas y su último recordatorio.
      *
-     * @param  Collection<int, Campus>  $campuses
      * @param  array<string, mixed>  $board
      * @return array<string, mixed>|null
      */
-    private function detail(ValidationProgressQuery $progress, Term $term, Collection $campuses, array $board): ?array
+    private function detail(ValidationProgressQuery $progress, Term $term, array $board): ?array
     {
         $department = KeyLookup::find(Department::query(), $this->detailId);
 
@@ -272,9 +268,9 @@ new #[Title('Avance de validación')] class extends Component
         }
 
         $row = collect($board['rows'])->first(fn (array $candidate): bool => $candidate['department']->getKey() === $this->detailId)
-            ?? ($progress->board($term, $campuses, departmentId: $this->detailId)['rows'][0] ?? null);
+            ?? ($progress->board($term, departmentId: $this->detailId)['rows'][0] ?? null);
 
-        return $row === null ? null : ['row' => $row, 'flags' => $progress->openFlags($term, $department, $campuses)];
+        return $row === null ? null : ['row' => $row, 'flags' => $progress->openFlags($term, $department)];
     }
 
     private function user(): User

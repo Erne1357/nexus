@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
@@ -143,4 +144,20 @@ it('AC-06: da los docentes activos de la revisión sin correo institucional', fu
 
     expect($this->records->teachersWithoutEmail($review))->toBe([$without->id])
         ->and($this->records->teachersWithoutEmail(recordsReview(Catalog::Subjects, $this->department)))->toBe([]);
+});
+
+it('cada materia dice en qué planes está, por clave, sin los que la quitaron de su retícula ni los planes borrados', function () {
+    $chemistry = Subject::factory()->create(['code' => 'A-1', 'name' => 'Química', 'department_id' => $this->department->id]);
+    $alone = Subject::factory()->create(['code' => 'A-2', 'name' => 'Química', 'department_id' => $this->department->id]);
+    placeInPlan(StudyPlan::factory()->create(['code' => 'IMCT-2005-284']), $chemistry);
+    placeInPlan(StudyPlan::factory()->create(['code' => 'IELC-2004-292']), $chemistry, 2);
+    placeInPlan(StudyPlan::factory()->create(['code' => 'ZZZZ-2010-001']), $chemistry)->delete();
+    $gone = StudyPlan::factory()->create(['code' => 'YYYY-2010-001']);
+    placeInPlan($gone, $chemistry);
+    $gone->delete();
+
+    expect($this->records->subjectPlans([$chemistry->id, $alone->id]))->toBe([
+        $chemistry->id => ['IELC-2004-292', 'IMCT-2005-284'],
+        $alone->id => [],
+    ])->and($this->records->subjectPlans([]))->toBe([]);
 });

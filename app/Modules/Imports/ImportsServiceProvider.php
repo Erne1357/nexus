@@ -39,6 +39,7 @@ use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\StudyPlansTemplate;
 use App\Modules\Imports\Templates\SubjectAliasesTemplate;
 use App\Modules\Imports\Templates\SubjectsTemplate;
+use App\Modules\Imports\Templates\TeacherEmailsTemplate;
 use App\Modules\Imports\Templates\TeacherHistoryTemplate;
 use App\Modules\Imports\Templates\TeachersTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
@@ -65,6 +66,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         StudentsTemplate::class,
         KardexTemplate::class,
         TeachersTemplate::class,
+        TeacherEmailsTemplate::class,
         PositionsTemplate::class,
         TeacherHistoryTemplate::class,
         EvaluationsTemplate::class,

@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -101,3 +102,41 @@ it('con dos campus, Edificios y Salones siguen en un renglón a 1440 px con el f
         ->assertScript("(() => { const select = document.querySelector('[data-testid=catalog-filters] select[aria-label={$label}]'); return select !== null && [...select.options].every((option) => option.text.length > 0) && select.scrollWidth <= select.clientWidth; })()", true)
         ->assertNoJavaScriptErrors();
 })->with(['salones' => ['/facilities/rooms', 'Edificio'], 'edificios' => ['/facilities/buildings', 'Campus']]);
+
+it('la subdirección de C2 elige todos los salones de la lista y les asigna un departamento dueño (S12)', function () {
+    $sistemas = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
+    Room::factory()->for($this->edificio)->create(['code' => 'A-102']);
+
+    signInToRooms('subdireccion')
+        ->navigate('/facilities/rooms')
+        ->click('table tbody tr:first-child input[type=checkbox]')
+        ->waitForText('1 elegido')
+        ->click('@choose-all')
+        ->waitForText('2 elegidos')
+        ->click('@assign-owner')
+        ->waitForText('Asignar dueño')
+        ->select('bulkOwner', $sistemas->id)
+        ->click('@confirm-assign-owner')
+        ->waitForText('Dueño asignado')
+        ->assertNoJavaScriptErrors();
+
+    expect(Room::where('department_id', $sistemas->id)->count())->toBe(2);
+});
+
+it('la barra de selección queda pegada al pie de la ventana al elegir el primer salón (S12)', function (int $width, int $height, string $checkbox) {
+    foreach (range(102, 125) as $number) {
+        Room::factory()->for($this->edificio)->create(['code' => "A-{$number}"]);
+    }
+
+    signInToRooms('subdireccion')
+        ->resize($width, $height)
+        ->navigate('/facilities/rooms')
+        ->click($checkbox)
+        ->waitForText('1 elegido')
+        ->assertScript("(() => { const bar = document.querySelector('[data-testid=selection-bar]').getBoundingClientRect(); return bar.top >= 0 && bar.bottom <= window.innerHeight; })()", true)
+        ->assertScript('document.documentElement.scrollWidth <= document.documentElement.clientWidth', true)
+        ->assertNoJavaScriptErrors();
+})->with([
+    '1440 px' => [1440, 900, 'table tbody tr:first-child input[type=checkbox]'],
+    '390 px' => [390, 844, '[data-testid=select-card-A-101]'],
+]);

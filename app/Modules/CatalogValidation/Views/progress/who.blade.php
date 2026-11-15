@@ -1,11 +1,11 @@
 {{--
-    El departamento de una fila del tablero de avance: clave, nombre (abre el drawer), jefe vigente y su carga en cada
-    modalidad de los campus del filtro (la carga es por departamento y modalidad, M1; lo reporta AcademicLoad con
-    LoadStatusesRequested). `$row` es de progress.php.
+    El departamento de una fila del tablero de avance: clave, nombre completo, en varias líneas si hace falta (abre el
+    drawer), jefe vigente y su carga en cada modalidad donde se abrió el periodo (la carga es por departamento y
+    modalidad, M1; lo reporta AcademicLoad con LoadStatusesRequested). `$row` es de progress.php.
 --}}
 @php($department = $row['department'])
 <div class="min-w-0 space-y-0.5">
-    <button type="button" wire:click="open('{{ $department->id }}')" class="group block max-w-full truncate text-start" title="{{ $department->name }}" data-testid="open-{{ $department->code }}" aria-label="Abrir el detalle de {{ $department->name }}">
+    <button type="button" wire:click="open('{{ $department->id }}')" class="group block max-w-full text-start text-pretty" title="{{ $department->name }}" data-testid="open-{{ $department->code }}" aria-label="Abrir el detalle de {{ $department->name }}">
         <span class="font-mono text-[15px] font-semibold text-neutral">{{ $department->code }}</span>
         <span class="font-semibold leading-snug underline decoration-transparent underline-offset-4 group-hover:decoration-current group-focus-visible:decoration-current">{{ $department->name }}</span>
     </button>

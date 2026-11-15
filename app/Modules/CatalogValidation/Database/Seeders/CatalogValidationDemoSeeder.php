@@ -468,7 +468,6 @@ class CatalogValidationDemoSeeder extends Seeder
 
     private function remindDepartments(Term $term): void
     {
-        $campuses = $this->openedCampuses($term);
         $actor = User::query()->where('username', 'admin')->first();
 
         if ($actor === null) {
@@ -479,7 +478,7 @@ class CatalogValidationDemoSeeder extends Seeder
             $done = Activity::query()->where('event', 'reminded')->where('subject_id', $department->getKey())->where('properties->term_id', $term->getKey())->exists();
 
             if (! $done) {
-                $this->remind->handle($term, $campuses, $actor, [$department->getKey()]);
+                $this->remind->handle($term, $actor, [$department->getKey()]);
             }
         }
     }

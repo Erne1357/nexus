@@ -8,6 +8,7 @@ use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -119,14 +120,16 @@ it('CV2: corrige capacidad, tipo y edificio de un salón, también a uno de otro
         ->type->value->toBe('laboratorio');
 });
 
-it('sin cambios no escribe ni pasa la revisión a en revisión', function () {
+it('CV-S7: guardar sin cambios no escribe en el catálogo, pero marca el registro como revisado (D9)', function () {
     $review = cvReviewOf(Catalog::Careers);
     $career = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->department->id]);
 
     cvCorrect($review, $career, ['code' => 'OTRA', 'name' => $career->name]);
 
-    expect($review->fresh()->status)->toBe(ReviewStatus::Pending)
-        ->and(Activity::count())->toBe(0);
+    expect($career->fresh()->code)->toBe('ISC')
+        ->and(Activity::query()->where('subject_type', $career->getMorphClass())->exists())->toBeFalse()
+        ->and(CatalogReviewMark::query()->where('catalog_review_id', $review->id)->pluck('record_id')->all())->toBe([$career->id])
+        ->and($review->fresh()->status)->toBe(ReviewStatus::InReview);
 });
 
 it('CV-S3: el jefe no activa ni desactiva carreras ni planes; lo resuelve el admin', function () {
@@ -140,9 +143,10 @@ it('CV-S3: el jefe no activa ni desactiva carreras ni planes; lo resuelve el adm
         ->and($plan->fresh())->name->toBe('Otro plan')->is_active->toBeTrue();
 });
 
-it('un modelo que ya se guardó antes en la petición y una corrección sin cambios no pasan la revisión a en revisión', function () {
+it('un modelo que ya se guardó antes en la petición y una corrección sin cambios de un registro ya revisado no pasan la revisión a en revisión', function () {
     $review = cvReviewOf(Catalog::Careers);
     $career = Career::factory()->create(['department_id' => $this->department->id]);
+    markAllReviewed($review);
     $career->update(['name' => 'Cambiada antes']);
 
     cvCorrect($review, $career, ['name' => 'Cambiada antes']);

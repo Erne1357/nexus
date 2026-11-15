@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
@@ -14,14 +15,18 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | Validación de catálogos en el navegador, opción A «Tabla con columna Revisión» (12 de noviembre de 2026): el jefe de
 | departamento entra por el menú, mueve un salón a un edificio de otro campus desde su drawer (el campus sigue al
 | edificio y queda revisado, CV-S10, CV7); en Docentes escribe en la búsqueda sin que los atajos corran, marca registros
-| con el teclado (J, Espacio, R), captura un correo institucional en el recuadro de la fila (AC-06), da de baja a un
-| docente con su confirmación (CV8), marca los que faltan juntos con «Elegir los N por revisar» y, con todo revisado,
-| valida el catálogo desde «Revisaste los N docentes».
+| con el teclado (J, Espacio, R), captura un correo institucional en el recuadro de la fila (AC-06), quita a un
+| docente de su departamento desde «Acciones», con su consecuencia y el motivo «Jubilación» (CV8, D8, D10), marca los
+| que faltan juntos con «Elegir los N por revisar» y, con todo revisado, valida el catálogo desde «Revisaste los N
+| docentes». En la segunda prueba, el jefe valida en un paso los catálogos sin registros (CV7, D5) y, con Docentes ya
+| validado, sigue el enlace «N sin correo institucional» y captura el correo en la fila: la revisión sigue validada
+| (CV-S2, D11), y ve quién validó sin recargar.
 */
 
 it('el jefe revisa salones y docentes registro por registro, con teclado y en lote, y valida', function () {
@@ -87,10 +92,12 @@ it('el jefe revisa salones y docentes registro por registro, con teclado y en lo
         ->click('@save-email')
         ->waitForText('Correo institucional guardado')
         ->assertSee('4 de 7 revisados')
+        ->click('table [aria-label="Acciones de EEEE800101EE1"]')
         ->click('@discharge-EEEE800101EE1')
-        ->assertSeeIn('#nexus-confirm', '¿Dar de baja a Elena Saucedo?')
-        ->assertSeeIn('#nexus-confirm', 'No tiene otro departamento')
-        ->click('#nexus-confirm [data-testid="confirm-accept"]')
+        ->waitForText('¿Quitar a Elena Saucedo de Sistemas y Computación?')
+        ->assertSee('Es su único departamento: queda dado de baja y su cuenta se inhabilita.')
+        ->select('select[data-testid="discharge-kind"]', 'retirement')
+        ->click('@confirm-discharge')
         ->waitForText('Docente dado de baja')
         ->assertSee('4 de 6 revisados')
         ->click('@select-FFFF800101FF1')
@@ -108,5 +115,62 @@ it('el jefe revisa salones y docentes registro por registro, con teclado y en lo
     expect($review->status)->toBe(ReviewStatus::Validated)
         ->and(CatalogReviewMark::query()->where('catalog_review_id', $review->id)->count())->toBe(6)
         ->and($withoutEmail->fresh()->institutional_email)->toBe('daniel.esparza@cdjuarez.tecnm.mx')
-        ->and($leaving->fresh()->is_active)->toBeFalse();
+        ->and($leaving->fresh()->is_active)->toBeFalse()
+        ->and(Activity::query()->where('event', 'discharged')->sole()->properties['reason'])->toBe(['kind' => 'retirement']);
+});
+
+it('el jefe valida en un paso los catálogos sin registros y, ya validados sus docentes, captura un correo desde «sin correo institucional»', function () {
+    $term = Term::factory()->current()->create();
+    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $cb = Department::factory()->create(['code' => '110100', 'name' => 'Ciencias Básicas']);
+    TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
+    app(CreateTermReviews::class)->handle($term, Catalog::cases());
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $cb->id])->create(['username' => 'jefe', 'name' => 'Laura Ramos']);
+
+    $teacher = Teacher::factory()->adscribedTo($cb)->create(['rfc' => 'AAAA800101AA1', 'name' => 'Adriana Beltrán', 'institutional_email' => null]);
+    Teacher::factory()->adscribedTo($cb)->create(['rfc' => 'BBBB800101BB1', 'name' => 'Beatriz Olivas', 'institutional_email' => 'bbbb@cdjuarez.tecnm.mx']);
+    Subject::factory()->create(['code' => 'AEC-1058', 'name' => 'Química', 'department_id' => $cb->id]);
+
+    $page = visit('/login')
+        ->fill('username', 'jefe')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->click('#nexus-menu a[data-label="Validar catálogos"]')
+        ->assertPathIs('/catalog-validation')
+        ->assertSeeIn('@empty-reviews', '3 catálogos sin registros')
+        ->assertSeeIn('@empty-reviews', 'Salones, Planes de estudio y Carreras')
+        ->click('@validate-empty')
+        ->waitForText('Vas a validar Salones, Planes de estudio y Carreras de Ciencias Básicas')
+        ->click('@confirm-empty')
+        ->waitForText('3 catálogos validados')
+        ->assertMissing('@empty-reviews')
+        ->assertSee('3 de 5');
+
+    expect(CatalogReview::query()->where('status', ReviewStatus::Validated)->pluck('catalog')->map->value->sort()->values()->all())->toBe(['careers', 'rooms', 'study_plans']);
+
+    $page->click('@tab-teachers')
+        ->waitForText('0 de 2 revisados')
+        ->click('@select-page')
+        ->click('@mark-selected')
+        ->waitForText('Revisaste los 2 docentes.')
+        ->click('@validate-teachers-done')
+        ->click('@confirm-accept')
+        ->waitForText('Revisión validada')
+        ->assertSee('Validó Laura Ramos')
+        ->assertDontSee('un usuario ya dado de baja')
+        ->click('@tab-board')
+        ->click('@missing-correo')
+        ->waitForText('Adriana Beltrán')
+        ->assertDontSee('Beatriz Olivas')
+        ->click('@add-email-AAAA800101AA1')
+        ->assertSeeIn('@email-popover', 'Al guardar le llega su invitación a Nexus')
+        ->fill('#review-email-input', 'adriana.beltran')
+        ->click('@save-email')
+        ->waitForText('Correo institucional guardado')
+        ->assertNoJavaScriptErrors();
+
+    expect($teacher->fresh()->institutional_email)->toBe('adriana.beltran@cdjuarez.tecnm.mx')
+        ->and(CatalogReview::query()->where('catalog', Catalog::Teachers)->sole()->status)->toBe(ReviewStatus::Validated)
+        ->and($jefe->exists)->toBeTrue();
 });

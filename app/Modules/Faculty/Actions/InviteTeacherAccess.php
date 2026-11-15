@@ -5,9 +5,9 @@ namespace App\Modules\Faculty\Actions;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Queries\InvitationRelease;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
-use RuntimeException;
 
 /**
  * Invita a un docente a activar su acceso (AC-07): manda a su correo institucional la invitación de Core
@@ -25,11 +25,13 @@ final class InviteTeacherAccess
 {
     public const string NOT_INVITED = 'Sale cuando su departamento valida el catálogo de docentes.';
 
-    public function __construct(private readonly SendAccessInvitation $sendAccessInvitation) {}
+    public function __construct(
+        private readonly SendAccessInvitation $sendAccessInvitation,
+        private readonly InvitationRelease $releases,
+    ) {}
 
     /**
      * @throws ValidationException
-     * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
     public function handle(Teacher $teacher, ?User $actor = null, bool $unlessInvited = false): bool
     {
@@ -54,15 +56,14 @@ final class InviteTeacherAccess
     }
 
     /**
-     * «Reenviar invitación»: solo a quien ya se invitó; la primera sale cuando su departamento valida el catálogo de
-     * docentes (AC-07, supuesto por confirmar).
+     * «Reenviar invitación» de la ficha: a quien ya se invitó, o la primera si un departamento suyo ya validó su catálogo
+     * de docentes (InvitationRelease); antes, la primera sale con esa validación (AC-07, supuesto por confirmar).
      *
      * @throws ValidationException
-     * @throws RuntimeException si falta NEXUS_DEFAULT_PASSWORD
      */
     public function resend(Teacher $teacher, ?User $actor = null): bool
     {
-        if ($teacher->user_id !== null && $teacher->user()->value('access_invited_at') === null) {
+        if ($teacher->user_id !== null && $teacher->user()->value('access_invited_at') === null && ! $this->releases->isReleased($teacher)) {
             throw ValidationException::withMessages(['access' => self::NOT_INVITED]);
         }
 

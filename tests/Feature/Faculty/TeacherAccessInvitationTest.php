@@ -1,10 +1,14 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Faculty\Actions\InviteTeacherAccess;
@@ -233,13 +237,73 @@ describe('reenviar invitación en la ficha', function () {
         Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     });
 
-    it('AC-07: sin invitación previa no se reenvía: sale con la validación del catálogo', function () {
+    it('AC-07: sin invitación previa y con su departamento sin validar, «Enviar invitación» sale deshabilitado: sale con la validación del catálogo', function () {
         $this->user->forceFill(['access_invited_at' => null])->save();
+        CatalogReview::factory()->create(['term_id' => Term::factory()->current()->create()->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Teachers]);
 
         $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk());
         $item = $dom->querySelector('[data-testid="resend-invitation"]');
 
-        expect(textOf($item))->toBe('Reenviar invitación Sale cuando su departamento valida el catálogo de docentes.')
+        expect(textOf($item))->toBe('Enviar invitación Sale cuando su departamento valida el catálogo de docentes.')
             ->and($item->getAttribute('aria-disabled'))->toBe('true');
+
+        Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     });
+
+    it('AC-07: sin invitación previa y con su departamento ya validado, el jefe la manda desde la ficha', function () {
+        $this->user->forceFill(['access_invited_at' => null])->save();
+        CatalogReview::factory()->validated()->create(['term_id' => Term::factory()->current()->create()->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Teachers]);
+
+        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="resend-invitation"]');
+
+        expect(textOf($item))->toBe('Enviar invitación')
+            ->and($item->getAttribute('x-confirm'))->toBe('Se manda la invitación a ana.perez@cdjuarez.tecnm.mx.');
+
+        $page = Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+
+        expect(lastToastOf($page))->type->toBe('success')->title->toBe('Invitación enviada')
+            ->and($this->user->fresh()->access_invited_at)->not->toBeNull();
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 2);
+    });
+
+    it('AC-07: con su departamento ya validado pero sin correo institucional, el motivo es que falta el correo, no la validación', function () {
+        $this->user->forceFill(['access_invited_at' => null])->save();
+        $this->teacher->update(['institutional_email' => null]);
+        CatalogReview::factory()->validated()->create(['term_id' => Term::factory()->current()->create()->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Teachers]);
+
+        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="resend-invitation"]')))->toBe('Enviar invitación Falta su correo institucional: captúralo en «Editar datos».');
+    });
+
+    it('AC-07: con una invitación vigente, «Reenviar invitación» queda habilitado y avisa que el enlace anterior deja de servir', function () {
+        $item = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk())->querySelector('[data-testid="resend-invitation"]');
+
+        expect(textOf($item))->toBe('Reenviar invitación')
+            ->and($item->getAttribute('x-confirm'))->toBe('Se manda un enlace nuevo a ana.perez@cdjuarez.tecnm.mx; el anterior deja de servir.');
+    });
+
+    it('AC-07: a quien tiene otro puesto le sale deshabilitado con su motivo: le da acceso el administrador', function () {
+        makeTeacherHeadElsewhere();
+
+        $item = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk())->querySelector('[data-testid="resend-invitation"]');
+
+        expect(textOf($item))->toBe('Reenviar invitación Tiene un puesto además de docente: le da acceso el administrador.');
+    });
+});
+
+it('AC-07: InviteTeacherAccess::resend manda la primera solo si un departamento del docente ya validó su catálogo de docentes', function () {
+    $this->teacher->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
+    $term = Term::factory()->current()->create();
+    $review = CatalogReview::factory()->create(['term_id' => $term->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Teachers]);
+
+    expect(fn () => app(InviteTeacherAccess::class)->resend($this->teacher, $this->jefe))->toThrow(ValidationException::class, InviteTeacherAccess::NOT_INVITED);
+
+    $review->update(['status' => ReviewStatus::Validated, 'validated_at' => now(), 'validated_by' => $this->jefe->id]);
+
+    expect(app(InviteTeacherAccess::class)->resend($this->teacher, $this->jefe))->toBeTrue();
+    Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
 });

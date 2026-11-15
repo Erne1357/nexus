@@ -2,6 +2,7 @@
 
 namespace App\Modules\CatalogValidation\Queries;
 
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -192,6 +193,36 @@ final class CatalogRecordsQuery
                 }
 
                 $result[$adscription->teacher_id]['others'][] = ['code' => (string) $adscription->department?->code, 'name' => (string) $adscription->department?->name, 'is_primary' => $adscription->is_primary];
+            });
+
+        return $result;
+    }
+
+    /**
+     * En qué planes de estudio está cada una de las materias dadas, por clave del plan: así se distinguen en la lista
+     * las que se llaman igual («Química» de IMCT-2005-284 y de IELC-2010-211). Sin las que se quitaron de la retícula ni
+     * los planes borrados; una materia sin plan trae una lista vacía.
+     *
+     * @param  list<string>  $subjectIds
+     * @return array<string, list<string>>
+     */
+    public function subjectPlans(array $subjectIds): array
+    {
+        if ($subjectIds === []) {
+            return [];
+        }
+
+        $result = array_fill_keys($subjectIds, []);
+
+        StudyPlanSubject::query()
+            ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
+            ->whereNull('study_plans.deleted_at')
+            ->whereIn('study_plan_subjects.subject_id', $subjectIds)
+            ->orderBy('study_plans.code')
+            ->distinct()
+            ->get(['study_plan_subjects.subject_id', 'study_plans.code'])
+            ->each(function (StudyPlanSubject $placement) use (&$result): void {
+                $result[$placement->subject_id][] = (string) $placement->getAttribute('code');
             });
 
         return $result;

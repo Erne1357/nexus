@@ -79,7 +79,7 @@
                 @else
                     <x-core::row-menu-item label="Restablecer contraseña" reason="Solo el administrador restablece contraseñas." disabled data-testid="reset-password" />
                 @endif
-                @if ($inviteReason === '')
+                @if ($inviteReason === '' && $invited)
                     <x-core::row-menu-item
                         label="Reenviar invitación"
                         wire:click="resendInvitation"
@@ -90,8 +90,19 @@
                         spinner="resendInvitation"
                         data-testid="resend-invitation"
                     />
+                @elseif ($inviteReason === '')
+                    <x-core::row-menu-item
+                        label="Enviar invitación"
+                        wire:click="resendInvitation"
+                        x-confirm="Se manda la invitación a {{ $record->teacher->institutional_email }}."
+                        data-confirm-title="¿Enviar la invitación de {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Enviar"
+                        data-confirm-tone="primary"
+                        spinner="resendInvitation"
+                        data-testid="resend-invitation"
+                    />
                 @elseif ($inviteReason !== null)
-                    <x-core::row-menu-item label="Reenviar invitación" :reason="$inviteReason" disabled data-testid="resend-invitation" />
+                    <x-core::row-menu-item :label="$invited ? 'Reenviar invitación' : 'Enviar invitación'" :reason="$inviteReason" disabled data-testid="resend-invitation" />
                 @endif
             </x-core::row-menu>
         </div>
@@ -330,33 +341,50 @@
                     </header>
 
                     @foreach ($record->adscriptions as $adscription)
-                        <div wire:key="adscription-{{ $adscription->id }}" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 last:border-b-0">
-                            <div class="min-w-0">
+                        {{-- El nombre arriba y las acciones debajo: «Quitar de <Departamento>» lleva el nombre completo (D10) y no cabe a un lado. --}}
+                        <div wire:key="adscription-{{ $adscription->id }}" class="space-y-1 border-b border-base-300 px-5 py-3 last:border-b-0">
+                            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
                                 <span class="font-mono text-neutral">{{ $adscription->department?->code }}</span> <span class="font-semibold">{{ $adscription->department?->name }}</span>
-                            </div>
-                            <div class="flex flex-wrap items-center justify-end gap-1 max-md:col-span-2 max-md:justify-start max-md:-ms-3">
                                 @if ($adscription->is_primary)
-                                    <x-core::status-badge tone="primary" label="Principal" class="me-2" />
-                                @else
+                                    <x-core::status-badge tone="primary" label="Principal" />
+                                @endif
+                            </div>
+                            <div class="-ms-3 flex flex-wrap items-center gap-1">
+                                @unless ($adscription->is_primary)
                                     @if ($primaryReasons[$adscription->id] === null)
                                         <x-button label="Hacer principal" class="btn-ghost btn-sm" wire:click="setPrimary('{{ $adscription->id }}')" spinner="setPrimary('{{ $adscription->id }}')" :data-testid="'set-primary-'.$adscription->id" />
                                     @else
-                                        <span class="tooltip tooltip-left" data-tip="{{ $primaryReasons[$adscription->id] }}">
+                                        <span class="tooltip tooltip-right" data-tip="{{ $primaryReasons[$adscription->id] }}">
                                             <x-button label="Hacer principal" class="btn-ghost btn-sm" disabled :data-testid="'set-primary-'.$adscription->id" aria-label="Hacer principal: {{ $primaryReasons[$adscription->id] }}" />
                                         </span>
                                     @endif
-                                @endif
+                                @endunless
 
                                 @if ($removal[$adscription->id] === null)
-                                    <x-button label="Quitar de {{ $adscription->department?->code }}" icon="o-trash" class="btn-ghost btn-sm text-error" wire:click="confirmRemoveAdscription('{{ $adscription->id }}')" spinner="confirmRemoveAdscription('{{ $adscription->id }}')" :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar la adscripción a {{ $adscription->department?->name }}" />
+                                    <x-button label="Quitar de {{ $adscription->department?->name }}" icon="o-trash" class="btn-ghost btn-sm h-auto min-h-8 shrink whitespace-normal py-1 text-start text-error" wire:click="confirmRemoveAdscription('{{ $adscription->id }}')" spinner="confirmRemoveAdscription('{{ $adscription->id }}')" :data-testid="'remove-adscription-'.$adscription->id" />
                                 @else
-                                    <span class="tooltip tooltip-left" data-tip="{{ $removal[$adscription->id] }}">
-                                        <x-button label="Quitar de {{ $adscription->department?->code }}" icon="o-trash" class="btn-ghost btn-sm" disabled :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar la adscripción a {{ $adscription->department?->name }}: {{ $removal[$adscription->id] }}" />
+                                    <span class="tooltip tooltip-right" data-tip="{{ $removal[$adscription->id] }}">
+                                        <x-button label="Quitar de {{ $adscription->department?->name }}" icon="o-trash" class="btn-ghost btn-sm h-auto min-h-8 shrink whitespace-normal py-1 text-start" disabled :data-testid="'remove-adscription-'.$adscription->id" aria-label="Quitar de {{ $adscription->department?->name }}: {{ $removal[$adscription->id] }}" />
                                     </span>
                                 @endif
                             </div>
                         </div>
                     @endforeach
+
+                    @if ($departures->isNotEmpty())
+                        <footer class="border-t border-base-300 bg-base-200/40 px-5 py-3" data-testid="departures">
+                            <h3 class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Salidas de departamento</h3>
+                            <ul class="mt-1.5 space-y-1.5 text-sm">
+                                @foreach ($departures as $departure)
+                                    <li wire:key="departure-{{ $loop->index }}">
+                                        <span class="font-medium">{{ $departure['department'] ?? 'Un departamento borrado' }}</span>
+                                        <span class="text-neutral">· {{ $departure['at']->format('d/m/Y') }}{{ $departure['by'] ? ' · '.$departure['by'] : '' }}{{ $departure['deactivated'] ? ' · Quedó dado de baja' : '' }}</span>
+                                        <span class="block">{{ $departure['reason'] ?? 'Sin motivo' }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </footer>
+                    @endif
                 </section>
             </div>
 
@@ -457,11 +485,7 @@
                     <x-input label="Correo" name="email" wire:model="email" type="email" />
                 </div>
                 <div class="md:col-span-3">
-                    @if ($institutionalEmailReason === null)
-                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" :hint="'@'.$institutionalDomain.'. A él va su invitación de acceso.'" />
-                    @else
-                        <x-input label="Correo institucional" name="institutional_email" wire:model="institutional_email" type="email" disabled :hint="$institutionalEmailReason" />
-                    @endif
+                    @include('faculty::teachers.institutional-email-field', ['reason' => $institutionalEmailReason, 'domain' => $institutionalDomain])
                 </div>
                 <div class="md:col-span-3">
                     <x-select label="Grado" name="degree" wire:model="degree" :options="$degrees" placeholder="Sin grado" />
@@ -512,14 +536,14 @@
         </x-form>
     </x-modal>
 
-    <x-modal wire:model="showRemoveAdscriptionModal" :title="$removing ? 'Quitar de '.$removing->department?->code : 'Quitar de un departamento'" :subtitle="$removing?->department?->name" box-class="max-w-lg" separator>
+    <x-modal wire:model="showRemoveAdscriptionModal" :title="$removing ? 'Quitar de '.$removing->department?->name : 'Quitar de un departamento'" box-class="max-w-lg" separator>
         @if ($removing)
             <p>{{ $removingWarning }}</p>
         @endif
 
         <x-slot:actions>
             <x-button label="Cancelar" @click="$wire.showRemoveAdscriptionModal = false" />
-            <x-button label="Quitar de {{ $removing?->department?->code }}" icon="o-trash" class="btn-error" wire:click="removeAdscription" spinner="removeAdscription" data-testid="confirm-remove-adscription" />
+            <x-button label="Quitar" icon="o-trash" class="btn-error" wire:click="removeAdscription" spinner="removeAdscription" data-testid="confirm-remove-adscription" />
         </x-slot:actions>
     </x-modal>
 

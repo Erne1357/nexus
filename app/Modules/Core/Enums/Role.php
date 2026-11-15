@@ -158,6 +158,37 @@ enum Role: string
     }
 
     /**
+     * Si Inicio le muestra el calendario del periodo: al personal (isStaff()), salvo al docente, cuyo Inicio es solo lo
+     * suyo (IN-01, confirmado el 14 de noviembre de 2026).
+     */
+    public function seesTermCalendarOnHome(): bool
+    {
+        return $this->isStaff() && $this !== self::Docente;
+    }
+
+    /**
+     * Si su bloque de Inicio lleva su acceso: usuario, correo institucional y «Cambiar contraseña» (IN-01, el docente).
+     */
+    public function showsAccessOnHome(): bool
+    {
+        return $this === self::Docente;
+    }
+
+    /**
+     * Las entradas del menú, por nombre de ruta, a las que lleva su bloque de Inicio, si el usuario las ve en su menú
+     * (IN-02): el del jefe de departamento, a «Materias por colocar», que solo ve el de Servicios Escolares.
+     *
+     * @return list<string>
+     */
+    public function homeShortcuts(): array
+    {
+        return match ($this) {
+            self::JefeDepartamento => ['academic.placements'],
+            default => [],
+        };
+    }
+
+    /**
      * Columnas de `role_assignments` que un nombramiento de este puesto debe llenar para contar en Actor
      * (columna "Alcance" de PROJECT.md). Admin no necesita alcance y el docente es de todo el Tec. El alumno tampoco
      * lleva alcance: sus permisos son personales (AC-10). La Subdirección

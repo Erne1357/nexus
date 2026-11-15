@@ -47,7 +47,7 @@ it('cada página llega con su propia sesión: lo que otra dejó pendiente no la 
 
 it('la liebre abre el menú con el cursor en el buscador; buscar filtra por grupos y Esc lo cierra', function () {
     $page = signInToShell()
-        ->assertVisible('a[data-label="Validar catálogos"]')
+        ->assertVisible('a[data-label="Validación de catálogos"]')
         ->assertVisible('[data-menu-group="validacion"]')
         ->assertMissing('a[data-label="Importaciones"]')
         ->click('@hare')
@@ -75,7 +75,7 @@ it('la liebre abre el menú con el cursor en el buscador; buscar filtra por grup
         ->assertScript('document.body.dataset.menu', 'closed')
         ->assertAttribute('@hare', 'aria-expanded', 'false')
         ->assertScript('document.activeElement.id', 'nexus-hare')
-        ->assertVisible('a[data-label="Validar catálogos"]')
+        ->assertVisible('a[data-label="Validación de catálogos"]')
         ->assertVisible('[data-menu-home]')
         ->assertMissing('a[data-label="Importaciones"]')
         ->assertDontSee('Sin resultados')
@@ -118,11 +118,11 @@ it('con el menú abierto, ↓ y ↑ recorren las entradas que quedan y Enter en 
         ->click('@hare')
         ->assertScript('document.activeElement.id', 'nexus-menu-search')
         ->keys('#nexus-menu-search', 'ArrowDown')
-        ->assertScript('document.activeElement.dataset.label', 'Validar catálogos')
-        ->keys('a[data-label="Validar catálogos"]', 'ArrowDown')
+        ->assertScript('document.activeElement.dataset.label', 'Validación de catálogos')
+        ->keys('a[data-label="Validación de catálogos"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Avance de validación')
         ->keys('a[data-label="Avance de validación"]', 'ArrowUp')
-        ->keys('a[data-label="Validar catálogos"]', 'ArrowUp')
+        ->keys('a[data-label="Validación de catálogos"]', 'ArrowUp')
         ->assertScript('document.activeElement.dataset.label', 'Correos y colas');
 
     $page->click('#nexus-menu-search')
