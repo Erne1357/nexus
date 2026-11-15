@@ -48,9 +48,20 @@ function dimensionTables(): array
         'core.term' => 'terms',
         'core.term.open' => 'term_openings',
         'core.term.manage_calendar' => 'term_stages',
+        // Los roles y los permisos de los puestos (1.22-A) son de toda la instalación: sin campus ni modalidad.
+        'core.authz' => 'permission_sets',
         'core.assignment' => 'role_assignments',
         'core.org_unit' => 'org_units',
         'core.user' => 'users',
+        // Los de correos y colas (1.22-G) no llevan campus: el registro de correos y los trabajos fallidos son de toda la instalación.
+        'core.mail' => 'mail_log',
+        // Los permisos de parámetros, avisos y atajos (1.22-E y F) no llevan campus: son de toda la instalación.
+        'core.login_notice' => 'login_notices',
+        'core.login_shortcut' => 'login_shortcuts',
+        'core.setting' => 'settings',
+        // La bitácora (1.22-D) es de toda la instalación: no lleva campus.
+        'core.activity' => 'activity_log',
+        'core.queue' => 'failed_jobs',
         // Ver en el menú lo no disponible depende del periodo activo (MN-02), no de un recurso con campus.
         'core.navigation' => 'terms',
         'academic.department' => 'departments',

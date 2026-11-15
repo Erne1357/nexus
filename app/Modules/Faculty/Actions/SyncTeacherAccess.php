@@ -31,13 +31,16 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   personal; eso lo resuelve el admin. Si no existe, lo crea CreateStaffUser **sin acceso** (sin contraseña, AC-02,
  *   confirmado el 11 de noviembre de 2026) y con cambio obligatorio, con el correo del docente si ningún otro usuario
  *   lo usa (supuesto por confirmar). Un usuario ya existente conserva lo que tenga. Luego activa el usuario ya ligado (reactivar al docente
- *   lo devuelve) y le da su nombramiento de `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
+ *   lo devuelve), salvo que el admin le haya dado de baja la cuenta en el panel (`users.deactivated_at`, CF-09,
+ *   confirmado el 14 de noviembre de 2026: esa baja se respeta y solo el admin la reactiva), y le da su nombramiento de
+ *   `docente`. El docente no es de un campus (confirmado el 30 de octubre de 2026); de
  *   ahí sale que su alcance de `docente` sea uno solo, sin campus, y que no dependa de sus adscripciones: un docente
  *   sin departamento conserva usuario y nombramiento. Uno sin campus que todavía no empieza cuenta como el suyo y no
  *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
  *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
  * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
- *   desactiva su usuario, salvo que sea admin vigente o que su Administración programada haga falta para que ningún
+ *   desactiva su usuario (y, si no tiene contraseña, deja sin efecto su invitación: `access_invited_at` y
+ *   `access_invited_by` nulos), salvo que sea admin vigente o que su Administración programada haga falta para que ningún
  *   día se quede sin admin (AZ-S12 y P3, confirmado el 3 de noviembre de 2026: el docente queda de baja y el usuario
  *   sigue activo; toma ADMIN_SEATS_LOCK antes del candado del usuario), y termina con fecha de ayer cada jefatura suya vigente o por
  *   empezar (supuesto por confirmar; EndRoleAssignment quita las que empiezan hoy o después). Sin usuario no hace
@@ -116,9 +119,20 @@ final class SyncTeacherAccess
         if ($user->is_active
             && ! $user->roleAssignments()->current()->where('role', Role::Admin)->exists()
             && $this->rules->deactivationGap($user) === null) {
-            $user->forceFill(['is_active' => false])->save();
+            $old = ['is_active' => true];
+            $new = ['is_active' => false];
+            $done = ['desactivó su usuario'];
+            $user->forceFill($new);
 
-            $this->logAccess($teacher, $user, ['is_active' => true], ['is_active' => false], ['desactivó su usuario']);
+            if ($user->password === null && $user->access_invited_at !== null) {
+                [$old['access_invited_at'], $new['access_invited_at']] = [$user->access_invited_at->toIso8601String(), null];
+                $done[] = 'dejó sin efecto su invitación';
+                $user->forceFill(['access_invited_at' => null, 'access_invited_by' => null]);
+            }
+
+            $user->save();
+
+            $this->logAccess($teacher, $user, $old, $new, $done);
             $changed = true;
         }
 
@@ -163,7 +177,8 @@ final class SyncTeacherAccess
 
     /**
      * Activa el usuario, le deja un alcance de `docente` sin campus y cierra los que tienen
-     * campus. Devuelve si cambió algo.
+     * campus. Devuelve si cambió algo. Una cuenta que el admin dio de baja en el panel (`deactivated_at`, CF-09) no se
+     * activa: el docente sigue en el catálogo, y solo el admin la reactiva (CF-06).
      */
     private function grantAccess(Teacher $teacher, User $user): bool
     {
@@ -171,7 +186,7 @@ final class SyncTeacherAccess
         $new = [];
         $done = [];
 
-        if (! $user->is_active) {
+        if (! $user->is_active && $user->deactivated_at === null) {
             $user->forceFill(['is_active' => true])->save();
             [$old['is_active'], $new['is_active']] = [false, true];
             $done[] = 'activó su usuario';

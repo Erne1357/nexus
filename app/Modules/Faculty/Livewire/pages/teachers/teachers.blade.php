@@ -92,9 +92,13 @@
                 @include('faculty::teachers.base-hours', ['hours' => $hours[$teacher->id] ?? null])
             @endscope
 
-            {{-- En texto que se parte en dos renglones y no en insignia: «Debe cambiar su contraseña» no cabe en la tabla a 1440 px. --}}
+            {{-- En texto que se parte en dos renglones y no en insignia: «Debe cambiar su contraseña» no cabe en la tabla a 1440 px. Una cuenta que el admin dio de baja en el panel lo dice (CF-09). --}}
             @scope('cell_access', $teacher, $access)
-                <span @class(['block text-sm leading-tight', 'text-neutral' => $access[$teacher->id] === \App\Modules\Core\Enums\UserAccess::None])>{{ $access[$teacher->id]->label() }}</span>
+                @if ($teacher->user?->deactivated_at !== null)
+                    <span class="block text-sm leading-tight text-neutral" data-testid="access-{{ $teacher->rfc }}">Cuenta dada de baja por el admin</span>
+                @else
+                    <span @class(['block text-sm leading-tight', 'text-neutral' => $access[$teacher->id] === \App\Modules\Core\Enums\UserAccess::None]) data-testid="access-{{ $teacher->rfc }}">{{ $access[$teacher->id]->label() }}</span>
+                @endif
             @endscope
 
             @scope('cell_is_active', $teacher)
@@ -123,7 +127,7 @@
                     <div class="text-neutral">
                         @include('faculty::teachers.adscriptions', ['teacher' => $teacher, 'stacked' => false])
                         · @include('faculty::teachers.base-hours', ['hours' => $hours[$teacher->id] ?? null]) horas base
-                        · {{ $access[$teacher->id]->label() }}
+                        · {{ $teacher->user?->deactivated_at !== null ? 'Cuenta dada de baja por el admin' : $access[$teacher->id]->label() }}
                     </div>
 
                     @include('faculty::teachers.row-actions', ['teacher' => $teacher, 'actions' => $rowActions[$teacher->id], 'inTable' => false])

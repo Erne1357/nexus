@@ -4,6 +4,7 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
@@ -31,14 +32,18 @@ final class PeopleQuery
      * La tabla de personas, por nombre, con sus nombramientos vigentes. Busca `$search` en el nombre o el usuario con
      * TextSearch; `$role` deja a quienes tienen ese puesto vigente. Sin búsqueda ni puesto no salen los alumnos que no
      * tienen otro puesto vigente (AC-15, supuesto por confirmar): son decenas de miles y la lista es del personal; salen
-     * al buscarlos o con el puesto «Alumno».
+     * al buscarlos o con el puesto «Alumno». `$active` deja solo las cuentas activas (true) o las dadas de baja (false), y
+     * `$access`, las de ese estado del acceso (AC-04, con la misma regla que UserAccess::resolve()); los dos son filtros de
+     * 1.22-C1 y no cambian lo de los alumnos.
      *
      * @return LengthAwarePaginator<int, User>
      */
-    public function forTable(string $search = '', ?Role $role = null, int $perPage = 15): LengthAwarePaginator
+    public function forTable(string $search = '', ?Role $role = null, int $perPage = 15, ?bool $active = null, ?UserAccess $access = null): LengthAwarePaginator
     {
         return User::query()
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['name', 'username'], $search))
+            ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
+            ->when($access !== null, fn (Builder $query) => $this->withAccess($query, $access))
             ->when($role !== null, fn (Builder $query) => $query->whereHas(
                 'roleAssignments',
                 fn (Builder $assignments) => $assignments->current()->where('role', $role),
@@ -50,6 +55,22 @@ final class PeopleQuery
             ->orderBy('name')
             ->orderBy('id')
             ->paginate($perPage);
+    }
+
+    /**
+     * Las cuentas con ese estado del acceso: sin contraseña, sin invitación o con ella; con contraseña, con el cambio
+     * obligatorio pendiente o sin él (UserAccess::resolve()).
+     *
+     * @param  Builder<User>  $query
+     */
+    private function withAccess(Builder $query, UserAccess $access): void
+    {
+        match ($access) {
+            UserAccess::None => $query->whereNull('password')->whereNull('access_invited_at'),
+            UserAccess::Invited => $query->whereNull('password')->whereNotNull('access_invited_at'),
+            UserAccess::MustChangePassword => $query->whereNotNull('password')->where('must_change_password', true),
+            UserAccess::Granted => $query->whereNotNull('password')->where('must_change_password', false),
+        };
     }
 
     /**

@@ -50,7 +50,7 @@ it('se desplaza la columna y no la franja: la última entrada se alcanza y los i
         c.scrollTop = c.scrollHeight;
         const last = [...c.querySelectorAll("[data-menu-entry]")].filter((a) => a.offsetParent !== null).pop();
 
-        return last.dataset.label === "Importaciones"
+        return last.dataset.label === "Correos y colas"
             && last.getBoundingClientRect().bottom <= window.innerHeight
             && icon.getBoundingClientRect().top === before
             && document.documentElement.scrollTop === 0;
@@ -66,9 +66,9 @@ it('al cargar deja a la vista la entrada activa y se desvanece donde hay más, t
     signInWithShortWindow()
         ->navigate('/campus')
         ->assertScript(MENU_SCROLL_COLUMN.'.scrollTop', 0)
-        ->click('#nexus-menu a[data-label="Importaciones"]')
-        ->assertPathIs('/imports')
-        ->assertAttribute('#nexus-menu a[data-label="Importaciones"]', 'aria-current', 'page')
+        ->click('#nexus-menu a[data-label="Correos y colas"]')
+        ->assertPathIs('/configuracion/correos-y-colas')
+        ->assertAttribute('#nexus-menu a[data-label="Correos y colas"]', 'aria-current', 'page')
         ->assertScript('(() => {
             const c = '.MENU_SCROLL_COLUMN.';
             const box = c.getBoundingClientRect();

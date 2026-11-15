@@ -2,21 +2,21 @@
 
 namespace App\Modules\Core\Events;
 
+use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Models\User;
 use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Se reinició la contraseña de un usuario a la de defecto (ResetUserPassword). Sale después del
- * commit.
+ * Se dio de baja la cuenta de un usuario del personal (DeactivateUser, CF-05), con su motivo. Sale después del commit.
  */
-final class UserPasswordReset implements ShouldDispatchAfterCommit
+final class UserDeactivated implements ShouldDispatchAfterCommit
 {
     use Dispatchable, SerializesModels;
 
     public function __construct(
         public User $user,
-        public ?User $actor = null,
+        public DeactivationReason $reason,
     ) {}
 }

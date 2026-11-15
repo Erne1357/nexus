@@ -6,6 +6,7 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoStep;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Settings\SettingDefinition;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -101,8 +102,9 @@ abstract class ModuleServiceProvider extends ServiceProvider
     }
 
     /**
-     * Permisos que el módulo concede a cada puesto, con llave `Role->value`. Solo se pueden conceder
-     * permisos declarados; el admin no se lista: tiene todo menos adminDenies().
+     * Permisos que el módulo concede **de fábrica** a cada puesto, con llave `Role->value` (CF-02): los aporta el rol de
+     * fábrica del puesto mientras siga al código; lo que vale hoy lo dice GrantTable. Solo se pueden conceder
+     * permisos declarados y que no sean candado; el admin no se lista: tiene todo menos adminDenies().
      *
      * @return array<string, list<Permission>>
      */
@@ -117,6 +119,17 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * @return list<Permission>
      */
     public function adminDenies(): array
+    {
+        return [];
+    }
+
+    /**
+     * Candados (CF-03): permisos declarados que solo tiene el admin y que el panel no deja dar a otro puesto, ni
+     * sueltos ni dentro de un rol. Tampoco se conceden en grants(): PermissionRegistry falla al arrancar.
+     *
+     * @return list<Permission>
+     */
+    public function adminOnly(): array
     {
         return [];
     }
@@ -152,6 +165,18 @@ abstract class ModuleServiceProvider extends ServiceProvider
      * @return list<class-string>
      */
     public function demoQuietEvents(): array
+    {
+        return [];
+    }
+
+    /**
+     * Parámetros editables que el módulo lee de `settings` (alcance global): llave, etiqueta, ayuda, tipo, valor por
+     * omisión y validación. La pantalla «Parámetros» los agrupa por módulo y una prueba exige que toda llave que el módulo
+     * lee esté aquí (CF-S7).
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
     {
         return [];
     }

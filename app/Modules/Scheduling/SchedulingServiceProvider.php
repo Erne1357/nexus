@@ -31,6 +31,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Core\Settings\SettingType;
 use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Events\RoomBlockRemoved;
 use App\Modules\Facilities\Events\RoomUpdated;
@@ -165,6 +167,21 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
      * aunque el puesto tenga un campus (MS6; confirmado el 7 de noviembre de 2026). Crear grupos y editar sesiones es del coordinador de la carrera dueña y del jefe del
      * departamento; asignar salón y repartir cupos, del jefe del departamento que imparte.
      */
+    /**
+     * El parámetro de `settings` que lee Horarios (CF-S7): la tolerancia de las horas semanales de un grupo (HC-12), que usan
+     * las modalidades que no tienen la suya en su perfil.
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
+    {
+        return [
+            new SettingDefinition('scheduling.weekly_hours_tolerance', 'scheduling', 'Horarios', label: 'Tolerancia de las horas semanales de un grupo',
+                help: 'Cuántos minutos de diferencia se aceptan entre las horas semanales que suman las sesiones de un grupo y las de su materia. La modalidad puede traer la suya en su perfil.',
+                type: SettingType::Integer, default: 0, rules: ['min:0'], unit: 'minutos'),
+        ];
+    }
+
     public function grants(): array
     {
         return [

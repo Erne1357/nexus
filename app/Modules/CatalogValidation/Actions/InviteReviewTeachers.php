@@ -51,7 +51,12 @@ final class InviteReviewTeachers
                 ->causedBy($actor)
                 ->event('teachers-invited')
                 ->withProperties(['invited' => $invited, 'failed' => $failed])
-                ->log("Invitó a {$invited} docentes de {$review->title} a activar su acceso".($failed === [] ? '' : '; '.count($failed).' no se pudieron invitar'));
+                ->log('Invitó a '.($invited === 1 ? '1 docente' : "{$invited} docentes")." a activar su acceso al validar «{$review->title}»"
+                    .match (count($failed)) {
+                        0 => '',
+                        1 => '; 1 no se pudo invitar',
+                        default => '; '.count($failed).' no se pudieron invitar',
+                    });
         }
 
         return ['invited' => $invited, 'failed' => $failed];

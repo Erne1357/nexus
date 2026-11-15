@@ -32,6 +32,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   en un alumno que ya existe. Al volverse vigente se activa y al dejar de serlo se desactiva (supuestos por
  *   confirmar), salvo que el usuario tenga un puesto de personal vigente o por empezar (el admin incluido,
  *   RoleAssignmentRules::holdsStaffRole()): ese se queda activo y se reporta, como en la baja del docente (AZ-S12).
+ *   Una cuenta que el admin dio de baja en el panel (`users.deactivated_at`, CF-09) no se reactiva ni recibe su NIP:
+ *   solo el admin la reactiva (CF-06).
  * - Su contraseña es el NIP (bcrypt, SiiNip::hash(), con ceros a 4 dígitos si es corto: AC-11) mientras el usuario
  *   no tenga contraseña o siga con la del SII (`password_origin = sii_nip`); si ya la cambió por una propia o el admin
  *   le dio la por defecto, no se toca (AC-12, supuesto por confirmar). Un NIP vacío deja sin acceso a quien todavía
@@ -171,6 +173,10 @@ final class SyncStudentAccounts
      */
     private function fillActive(User $user, Student $student): bool
     {
+        if ($user->deactivated_at !== null) {
+            return true;
+        }
+
         $current = ! $student->trashed() && in_array($student->status, self::CURRENT, true);
 
         if (! $current && $user->exists && $user->is_active && $this->rules->holdsStaffRole($user->getKey())) {
@@ -211,7 +217,7 @@ final class SyncStudentAccounts
      */
     private function fillPassword(User $user, #[\SensitiveParameter] ?string $nip): bool
     {
-        if ($user->password !== null && $user->password_origin !== PasswordOrigin::SiiNip) {
+        if ($user->deactivated_at !== null || ($user->password !== null && $user->password_origin !== PasswordOrigin::SiiNip)) {
             return true;
         }
 

@@ -13,17 +13,42 @@ use App\Modules\Core\Models\User;
  * confirmado (`email_verified_at`, lo deja la invitación de AC-08); el del alumno, no
  * (acceptsUnverifiedInstitutionalEmail()). Lo preguntan SendPasswordResetLink, para mandar el enlace, y
  * PasswordResetTokens, para dejarlo usar.
+ *
+ * CF-08 (confirmado el 14 de noviembre de 2026): el enlace que manda el admin desde el panel (`$issuedByAdmin`,
+ * SendUserPasswordReset) no pide el correo confirmado, porque el admin lo capturó; al usarlo queda confirmado (AC-18).
+ * El autoservicio («¿Olvidaste tu contraseña?», sin el parámetro) sigue pidiéndolo.
  */
 final class PasswordResetRules
 {
+    public const string INACTIVE = 'La cuenta está dada de baja.';
+
+    public const string NO_PASSWORD = 'Todavía no tiene acceso: no hay contraseña que restablecer.';
+
+    public const string NO_EMAIL = 'No tiene correo institucional.';
+
+    public const string UNVERIFIED = 'Su correo institucional no está confirmado.';
+
     public function __construct(private readonly Actor $actor) {}
 
-    public function allows(User $user): bool
+    public function allows(User $user, bool $issuedByAdmin = false): bool
     {
-        return $user->is_active
-            && $user->password !== null
-            && $this->hasInstitutionalEmail($user)
-            && ($user->email_verified_at !== null || $this->acceptsUnverifiedInstitutionalEmail($user));
+        return $this->denial($user, $issuedByAdmin) === null;
+    }
+
+    /**
+     * Por qué `$user` no puede restablecer su contraseña por correo; nulo si puede. Es la regla de `allows()`, condición
+     * por condición y en su orden, para que el panel diga el motivo (CF-08); la pantalla pública nunca lo dice (AC-16).
+     * Con `$issuedByAdmin` (el enlace del panel) no pide el correo confirmado.
+     */
+    public function denial(User $user, bool $issuedByAdmin = false): ?string
+    {
+        return match (true) {
+            ! $user->is_active => self::INACTIVE,
+            $user->password === null => self::NO_PASSWORD,
+            ! $this->hasInstitutionalEmail($user) => self::NO_EMAIL,
+            ! $issuedByAdmin && $user->email_verified_at === null && ! $this->acceptsUnverifiedInstitutionalEmail($user) => self::UNVERIFIED,
+            default => null,
+        };
     }
 
     /**

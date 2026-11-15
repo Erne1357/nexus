@@ -1,12 +1,9 @@
 <?php
 
 use App\Modules\Core\Actions\RequirePasswordChange;
-use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Actions\UpdateUserPassword;
-use App\Modules\Core\Events\UserPasswordReset;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\DefaultPassword;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -67,61 +64,6 @@ it('RequirePasswordChange no repite el aviso si ya estaba obligado', function ()
     app(RequirePasswordChange::class)->handle($user);
 
     expect(Activity::where('event', 'password-change-required')->count())->toBe(0);
-});
-
-it('ResetUserPassword vuelve a la de defecto, obliga a cambiarla y cierra las demás sesiones', function () {
-    $user = User::factory()->create(['remember_token' => 'viejo']);
-    $oldHash = $user->password;
-
-    app(ResetUserPassword::class)->handle($user);
-
-    $fresh = $user->fresh();
-    expect($fresh->must_change_password)->toBeTrue()
-        ->and($fresh->password)->not->toBe($oldHash)
-        ->and(Hash::check(app(DefaultPassword::class)->value(), $fresh->password))->toBeTrue()
-        ->and($fresh->remember_token)->not->toBe('viejo');
-
-    $log = Activity::where('event', 'password-reset')->where('subject_id', $user->id)->first();
-    expect($log)->not->toBeNull()
-        ->and(json_encode([$log->attribute_changes, $log->properties]))->not->toContain(app(DefaultPassword::class)->value());
-});
-
-it('ResetUserPassword atribuye el reinicio a quien lo hizo y avisa con UserPasswordReset', function () {
-    Event::fake([UserPasswordReset::class]);
-    $admin = User::factory()->create();
-    $user = User::factory()->create();
-
-    app(ResetUserPassword::class)->handle($user, $admin);
-
-    $log = Activity::where('event', 'password-reset')->where('subject_id', $user->id)->sole();
-    expect($log->causer_id)->toBe($admin->id);
-    Event::assertDispatched(UserPasswordReset::class, fn ($e) => $e->user->is($user) && $e->actor->is($admin));
-});
-
-it('ResetUserPassword sin actor no atribuye el reinicio a nadie', function () {
-    $user = User::factory()->create();
-
-    app(ResetUserPassword::class)->handle($user);
-
-    expect(Activity::where('event', 'password-reset')->sole()->causer_id)->toBeNull();
-});
-
-it('AC-03: ResetUserPassword a un usuario sin contraseña le da acceso con la de defecto y lo registra como acceso dado', function () {
-    $admin = User::factory()->create();
-    $user = User::factory()->create(['username' => 'ABCD800101XX1', 'password' => null, 'must_change_password' => true]);
-
-    app(ResetUserPassword::class)->handle($user, $admin);
-
-    $fresh = $user->fresh();
-    $log = Activity::where('subject_id', $user->id)->sole();
-
-    expect($fresh->must_change_password)->toBeTrue()
-        ->and(Hash::check(app(DefaultPassword::class)->value(), $fresh->password))->toBeTrue()
-        ->and($log->event)->toBe('access-granted')
-        ->and($log->description)->toBe('Dio acceso a ABCD800101XX1 con la contraseña por defecto')
-        ->and($log->causer_id)->toBe($admin->id)
-        ->and(json_encode([$log->attribute_changes, $log->properties]))->not->toContain(app(DefaultPassword::class)->value())
-        ->and(json_encode([$log->attribute_changes, $log->properties]))->not->toContain($fresh->password);
 });
 
 it('RequirePasswordChange marca al usuario y deja una sola entrada aunque se repita', function () {

@@ -3,7 +3,9 @@
 namespace App\Modules\Faculty\Queries;
 
 use App\Modules\Core\Actions\SendAccessInvitation;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Faculty\Actions\InviteTeacherAccess;
 use App\Modules\Faculty\Models\Teacher;
@@ -19,6 +21,7 @@ final class TeacherAccessQuery
     public function __construct(
         private readonly RoleAssignmentRules $rules,
         private readonly InvitationRelease $releases,
+        private readonly UserAccountRules $accounts,
     ) {}
 
     /**
@@ -42,6 +45,36 @@ final class TeacherAccessQuery
             $user->access_invited_at === null && ! $this->releases->isReleased($teacher) => InviteTeacherAccess::NOT_INVITED,
             default => null,
         };
+    }
+
+    /**
+     * CF-07: por qué el admin no le manda ahora su invitación desde la ficha (InviteTeacherAccess::byAdmin()), o null si
+     * se puede, en el orden en que se arregla. A diferencia de la del jefe, sale aunque tenga otro puesto y aunque su
+     * departamento todavía no valide el catálogo de docentes.
+     */
+    public function adminInvitationBlocker(Teacher $teacher): ?string
+    {
+        $user = $this->userOf($teacher);
+
+        return match (true) {
+            $user === null => 'El docente no tiene usuario.',
+            ! $user->is_active => 'Su usuario está inactivo.',
+            ! $teacher->is_active || $teacher->trashed() => 'El docente está inactivo.',
+            $user->password !== null => 'Ya tiene acceso.',
+            $teacher->institutional_email === null => 'Falta su correo institucional: captúralo en «Editar datos».',
+            default => $this->accounts->invitationBlocker($user, $teacher->institutional_email),
+        };
+    }
+
+    /**
+     * CF-08: por qué el admin no le manda desde la ficha el enlace para restablecer su contraseña (SendUserPasswordReset),
+     * o null si se puede: va al correo de su usuario.
+     */
+    public function resetBlocker(Teacher $teacher): ?string
+    {
+        $user = $this->userOf($teacher);
+
+        return $user === null ? 'El docente no tiene usuario.' : $this->accounts->resetBlocker($user);
     }
 
     /**
@@ -94,6 +127,11 @@ final class TeacherAccessQuery
                             ->orWhereIn('users.id', $this->rules->staffUserIds()))))
                 ->count(),
         ];
+    }
+
+    private function userOf(Teacher $teacher): ?User
+    {
+        return $teacher->user_id === null ? null : User::query()->whereKey($teacher->user_id)->first();
     }
 
     /**

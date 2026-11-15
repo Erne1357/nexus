@@ -94,7 +94,8 @@ it('AC-09: validar la revisión de docentes invita a los activos del departament
         ->and($log->subject->is($this->review))->toBeTrue()
         ->and($log->causer_id)->toBe($this->jefe->id)
         ->and($log->properties['invited'])->toBe(2)
-        ->and($log->properties['failed'])->toBe([]);
+        ->and($log->properties['failed'])->toBe([])
+        ->and($log->description)->toBe("Invitó a 2 docentes a activar su acceso al validar «{$this->review->title}»");
 });
 
 it('AC-09: validar otro catálogo no invita a nadie', function () {
@@ -128,7 +129,8 @@ it('AC-09: si una invitación falla, sigue con los demás y la falla queda en la
     $log = Activity::where('event', 'teachers-invited')->sole();
 
     expect(invitedEmails())->toBe(['beto@cdjuarez.tecnm.mx'])
-        ->and($log->properties['failed'])->toBe(['AAAA800101AA1' => 'Otro usuario ya tiene el correo ana@cdjuarez.tecnm.mx.']);
+        ->and($log->properties['failed'])->toBe(['AAAA800101AA1' => 'Otro usuario ya tiene el correo ana@cdjuarez.tecnm.mx.'])
+        ->and($log->description)->toBe("Invitó a 1 docente a activar su acceso al validar «{$this->review->title}»; 1 no se pudo invitar");
 });
 
 it('AC-09: capturar el correo institucional después de validar manda la invitación en ese momento; antes, no', function () {

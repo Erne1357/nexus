@@ -2,7 +2,6 @@
 
 use App\Modules\Core\Actions\AcceptAccessInvitation;
 use App\Modules\Core\Actions\CreateStaffUser;
-use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Actions\UpdateUserPassword;
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Models\User;
@@ -135,12 +134,9 @@ it('AC-12: la contraseña actual equivocada se rechaza con el mensaje de siempre
     expect($user->fresh()->password_origin)->toBe(PasswordOrigin::SiiNip);
 });
 
-it('AC-12: el alta manual y el reinicio del admin dejan la contraseña por defecto como origen; la invitación aceptada, la propia (AC-08)', function () {
+it('AC-12: el alta con acceso deja la contraseña por defecto como origen; la invitación aceptada, la propia (AC-08)', function () {
     $created = app(CreateStaffUser::class)->handle('ABCD800101XX1', 'Ana Pérez', withAccess: true);
     $withoutAccess = app(CreateStaffUser::class)->handle('ABCD800101XX2', 'Beto Pérez', withAccess: false);
-
-    $student = studentWithNip('123');
-    app(ResetUserPassword::class)->handle($student);
 
     $invited = User::factory()->create(['email' => 'carla@cdjuarez.tecnm.mx', 'password' => null, 'password_origin' => null, 'access_invited_at' => now()->startOfSecond()]);
     $hash = Str::before(Str::after(app(AccessInvitationLink::class)->url($invited), "/access/{$invited->id}/"), '?');
@@ -148,6 +144,5 @@ it('AC-12: el alta manual y el reinicio del admin dejan la contraseña por defec
 
     expect($created->fresh()->password_origin)->toBe(PasswordOrigin::Default)
         ->and($withoutAccess->fresh()->password_origin)->toBeNull()
-        ->and($student->fresh()->password_origin)->toBe(PasswordOrigin::Default)
         ->and($invited->fresh()->password_origin)->toBe(PasswordOrigin::User);
 });
