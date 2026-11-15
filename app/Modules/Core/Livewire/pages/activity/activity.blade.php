@@ -66,11 +66,11 @@
             @endscope
 
             @scope('cell_event', $entry)
-                <span class="font-mono text-sm">{{ $entry->event ?? '—' }}</span>
+                {{ \App\Modules\Core\Support\ActivityEvents::label($entry->event) }}
             @endscope
 
             @scope('actions', $entry)
-                <x-button label="Detalle" icon="o-eye" wire:click="openEntry({{ $entry->id }})" spinner="openEntry({{ $entry->id }})" class="btn-ghost btn-sm" @click.stop :data-testid="'detail-'.$entry->id" />
+                <x-button label="Detalle" icon="o-eye" wire:click.stop="openEntry({{ $entry->id }})" spinner="openEntry({{ $entry->id }})" class="btn-ghost btn-sm" :data-testid="'detail-'.$entry->id" />
             @endscope
 
             <x-slot:empty>
@@ -79,14 +79,16 @@
         </x-table>
 
         <ul class="divide-y divide-base-300 md:hidden" data-testid="activity-cards">
-            @foreach ($entries as $entry)
+            @forelse ($entries as $entry)
                 <li wire:key="activity-card-{{ $entry->id }}" class="space-y-1 px-4 py-3">
                     <p class="font-mono text-xs tabular-nums text-neutral">{{ $entry->created_at->format('d/m/Y H:i') }} · {{ $entry->causer?->username ?? 'Sistema' }}</p>
                     <p class="break-words">{{ $entry->description }}</p>
-                    <p class="text-xs text-neutral">{{ \App\Modules\Core\Support\ActivityRecordTypes::label($entry->subject_type) }} · <span class="font-mono">{{ $entry->event ?? '—' }}</span></p>
-                    <x-button label="Detalle" icon="o-eye" wire:click="openEntry({{ $entry->id }})" class="btn-ghost btn-sm -ms-3" />
+                    <p class="text-xs text-neutral">{{ \App\Modules\Core\Support\ActivityRecordTypes::label($entry->subject_type) }} · {{ \App\Modules\Core\Support\ActivityEvents::label($entry->event) }}</p>
+                    <x-button label="Detalle" icon="o-eye" wire:click="openEntry({{ $entry->id }})" class="btn-ghost btn-sm -ms-3 max-md:h-11" />
                 </li>
-            @endforeach
+            @empty
+                <li class="px-4 py-6 text-center text-neutral">Ninguna entrada coincide con los filtros.</li>
+            @endforelse
         </ul>
 
         @if ($entries->hasPages())
@@ -108,7 +110,7 @@
                     <dt class="text-neutral">Puesto</dt>
                     <dd>{{ $detail->actingAs ?? '—' }}</dd>
                     <dt class="text-neutral">Evento</dt>
-                    <dd class="font-mono">{{ $detail->activity->event ?? '—' }}</dd>
+                    <dd>{{ \App\Modules\Core\Support\ActivityEvents::label($detail->activity->event) }}</dd>
                     <dt class="text-neutral">Registro</dt>
                     <dd>
                         {{ $detail->typeLabel }}@if ($detail->subjectName) · {{ $detail->subjectName }}@endif
@@ -123,20 +125,19 @@
                     @if ($detail->changes === [])
                         <p class="text-sm text-neutral">Esta entrada no guardó campos antes y después.</p>
                     @else
-                        <div class="overflow-x-auto rounded-box border border-base-300">
-                            <table class="table table-sm" data-testid="activity-changes">
-                                <thead><tr><th>Campo</th><th>Antes</th><th>Después</th></tr></thead>
-                                <tbody>
-                                    @foreach ($detail->changes as $change)
-                                        <tr>
-                                            <td class="font-mono text-sm">{{ $change['field'] }}</td>
-                                            <td class="break-all text-neutral">{{ $change['old'] }}</td>
-                                            <td class="break-all font-medium">{{ $change['new'] }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
+                        <ul class="divide-y divide-base-300 rounded-box border border-base-300" data-testid="activity-changes">
+                            @foreach ($detail->changes as $change)
+                                <li class="space-y-1 px-3 py-2.5 text-sm">
+                                    <p class="break-all font-mono text-[12.5px] text-neutral">{{ $change['field'] }}</p>
+                                    <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
+                                        <dt class="text-neutral">Antes</dt>
+                                        <dd class="break-words text-neutral">{{ $change['old'] }}</dd>
+                                        <dt class="text-neutral">Después</dt>
+                                        <dd class="break-words font-medium">{{ $change['new'] }}</dd>
+                                    </dl>
+                                </li>
+                            @endforeach
+                        </ul>
                     @endif
                 </section>
 
