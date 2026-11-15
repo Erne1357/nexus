@@ -16,9 +16,11 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
+use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Listeners\BlockDepartmentDeletionWithRooms;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\RoomBlock;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -104,6 +106,14 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
 
                 return $missing === [] ? true : implode('; ', $missing).'.';
             }),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            Room::class => ['type' => ['Tipo de salón', RoomType::class], 'name' => 'Nombre'],
+            RoomBlock::class => ['reason' => 'Motivo del bloqueo'],
         ];
     }
 }

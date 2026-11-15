@@ -145,7 +145,7 @@ new #[Title('Personas y puestos')] class extends Component
     /**
      * «Dar de alta» (CF-S3): el usuario se guarda como llega, sin los espacios de los extremos; el correo, en minúsculas y
      * del dominio institucional, único sin importar mayúsculas (UserAccountRules). Nace activo y sin acceso
-     * (CreateStaffUser con `withAccess: false`); con correo, después del commit le llega la invitación (InviteUser,
+     * (CreateStaffUser); con correo, después del commit le llega la invitación (InviteUser,
      * CF-07) si quien la da de alta puede invitar (UserPolicy, `invite`), y la pantalla lleva a su ficha para nombrarlo.
      * Los errores de las reglas y de la Action salen junto a su campo; si la invitación no sale, el alta queda y el aviso
      * dice por qué.
@@ -177,7 +177,7 @@ new #[Title('Personas y puestos')] class extends Component
                 $rules->ensureEmailIsFree($email);
             }
 
-            $user = $createStaffUser->handle($this->newUsername, $this->newName, withAccess: false, email: $email);
+            $user = $createStaffUser->handle($this->newUsername, $this->newName, email: $email);
         } catch (ValidationException $exception) {
             throw ValidationException::withMessages(collect($exception->errors())->mapWithKeys(fn (array $messages, string $key): array => [
                 match ($key) {

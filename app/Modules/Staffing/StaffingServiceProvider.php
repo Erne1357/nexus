@@ -43,6 +43,8 @@ use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
+use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Listeners\BlockClosingWithPendingChangeRequests;
 use App\Modules\Staffing\Listeners\BlockReturnWithApprovedChangeRequests;
@@ -370,6 +372,13 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             new DemoCheck([DemoCheckpoint::Publication], 'Las cargas sin grupos siguen en borrador', fn (DemoContext $demo): true|string => ($moved = $loads($demo, false)->where('status', '!=', LoadStatus::Draft)->count()) === 0
                 ? true
                 : "{$moved} cargas sin grupos salieron de borrador."),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            ChangeRequest::class => ['status' => ['Estado de la solicitud', ChangeRequestStatus::class], 'kind' => ['Tipo de solicitud', ChangeRequestKind::class], 'current' => 'Antes', 'proposed' => 'Propuesto', 'decision_comment' => 'Comentario de la decisión'],
         ];
     }
 }

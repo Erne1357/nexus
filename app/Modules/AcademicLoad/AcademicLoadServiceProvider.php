@@ -8,6 +8,8 @@ use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -26,6 +28,7 @@ use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
@@ -279,6 +282,15 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
                 return $behind === 0 ? true : "{$behind} cargas con partes aceptadas no están en propuesta.";
             }),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            AcademicLoad::class => ['status' => ['Estado de la carga', LoadStatus::class], 'current_version' => 'Versión vigente', 'closed_at' => 'Cerrada', 'closed_by' => 'Cerrada por', 'approved_at' => 'Aprobada', 'approved_by' => 'Aprobada por', 'published_at' => 'Publicada', 'published_by' => 'Publicada por'],
+            CareerProposal::class => ['status' => ['Estado de la propuesta', ProposalReviewStatus::class], 'submitted_at' => 'Enviada', 'submitted_by' => 'Enviada por'],
+            InterdepartmentalAgreement::class => ['status' => ['Estado', AgreementStatus::class], 'kind' => ['Tipo de acuerdo', AgreementKind::class], 'max_seats' => 'Cupo máximo', 'from_department_id' => 'Departamento que da', 'to_department_id' => 'Departamento que recibe', 'cancelled_at' => 'Cancelado', 'cancelled_by' => 'Cancelado por'],
         ];
     }
 }

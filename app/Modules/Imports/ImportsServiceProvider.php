@@ -8,8 +8,10 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Imports\Console\ExportDemoFiles;
 use App\Modules\Imports\Console\MigrateSii;
+use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
+use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\ArchiveStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
@@ -126,5 +128,13 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         // Como Navigation: se arma al arrancar, antes de la primera petición, para que Octane lo cree
         // una vez por worker y una plantilla mal declarada falle al arrancar y no al subir un lote.
         $this->app->booted(fn (Application $app): TemplateRegistry => $app->make(TemplateRegistry::class));
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            ImportBatch::class => ['status' => ['Estado', BatchStatus::class], 'template' => 'Plantilla', 'original_name' => 'Archivo', 'total_rows' => 'Filas', 'valid_rows' => 'Filas válidas', 'error_rows' => 'Filas con error', 'deactivate_missing' => 'Desactivar los que faltan'],
+            ImportMapping::class => ['template' => 'Plantilla', 'columns' => 'Columnas'],
+        ];
     }
 }
