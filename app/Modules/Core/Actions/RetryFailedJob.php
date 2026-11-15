@@ -31,9 +31,11 @@ final class RetryFailedJob
                 ->withProperties(['uuid' => $job->uuid, 'job' => $job->job_name, 'queue' => $job->queue, 'error' => $job->summary()])
                 ->log("Reintentó el trabajo fallido {$job->job_name} de la cola {$job->queue}");
 
-            $exit = Artisan::call('queue:retry', ['id' => [$job->uuid]]);
+            // `queue:retry` siempre devuelve 0: la prueba real es que el trabajo ya no esté en los fallidos. Ojo: el push a
+            // Valkey no es transaccional; si algo falla después de él, el trabajo ya quedó encolado.
+            Artisan::call('queue:retry', ['id' => [$job->uuid]]);
 
-            if ($exit !== 0 || FailedJob::query()->where('uuid', $job->uuid)->exists()) {
+            if (FailedJob::query()->where('uuid', $job->uuid)->exists()) {
                 throw new RuntimeException("No se pudo reintentar el trabajo {$job->uuid}.");
             }
         });

@@ -52,7 +52,7 @@
                 @scope('cell_status', $mail)
                     <x-core::status-badge :tone="$mail->status === \App\Modules\Core\Enums\MailStatus::Sent ? 'success' : 'error'" :label="$mail->status->label()" />
                     @if ($mail->error)
-                        <span class="mt-1 block max-w-xs text-xs text-neutral">{{ $mail->error }}</span>
+                        <span class="mt-1 block max-w-xs text-xs text-neutral">{{ \App\Modules\Core\Support\RedactsSecrets::redact($mail->error) }}</span>
                     @endif
                 @endscope
 

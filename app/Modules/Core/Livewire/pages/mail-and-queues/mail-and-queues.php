@@ -82,7 +82,7 @@ new #[Title('Correos y colas')] class extends Component
             default => [
                 'sizes' => $sizes->all(),
                 'failedJobs' => $failed->forTable(),
-                'errorJob' => $this->showError && $this->errorUuid !== null ? $failed->findOrFail($this->errorUuid) : null,
+                'errorJob' => $this->showError && $this->errorUuid !== null ? $this->errorJobOrClose($failed) : null,
             ],
         };
     }
@@ -120,7 +120,12 @@ new #[Title('Correos y colas')] class extends Component
     public function retry(string $uuid, FailedJobsQuery $failed, RetryFailedJob $retry): void
     {
         $this->authorize('viewAny', FailedJob::class);
-        $job = $failed->findOrFail($uuid);
+        if (($job = $failed->firstByUuid($uuid)) === null) {
+            $this->gone();
+
+            return;
+        }
+
         $this->authorize('retry', $job);
 
         $retry->handle($job, auth()->user());
@@ -130,7 +135,12 @@ new #[Title('Correos y colas')] class extends Component
     public function forget(string $uuid, FailedJobsQuery $failed, ForgetFailedJob $forget): void
     {
         $this->authorize('viewAny', FailedJob::class);
-        $job = $failed->findOrFail($uuid);
+        if (($job = $failed->firstByUuid($uuid)) === null) {
+            $this->gone();
+
+            return;
+        }
+
         $this->authorize('forget', $job);
 
         $forget->handle($job, auth()->user());
@@ -141,8 +151,31 @@ new #[Title('Correos y colas')] class extends Component
     {
         $this->authorize('viewAny', FailedJob::class);
 
-        $this->errorUuid = $failed->findOrFail($uuid)->uuid;
+        if (($job = $failed->firstByUuid($uuid)) === null) {
+            $this->gone();
+
+            return;
+        }
+
+        $this->errorUuid = $job->uuid;
         $this->showError = true;
+    }
+
+    private function errorJobOrClose(FailedJobsQuery $failed): ?FailedJob
+    {
+        $job = $failed->firstByUuid($this->errorUuid);
+
+        if ($job === null) {
+            $this->showError = false;
+        }
+
+        return $job;
+    }
+
+    private function gone(): void
+    {
+        $this->showError = false;
+        $this->warning('Ese trabajo ya no está en los fallidos', 'Alguien más lo reintentó o lo descartó.');
     }
 
     /**

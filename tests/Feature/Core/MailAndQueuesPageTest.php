@@ -190,3 +190,20 @@ it('el drawer del error corta la excepción a 40 líneas y oculta tokens y firma
         ->assertDontSee('SECRETOTOKEN')
         ->assertSee('signature=[oculto]', false);
 });
+
+it('si otro admin ya reintentó o descartó el trabajo, avisa en vez de dar 404 y cierra el drawer', function () {
+    $uuid = pageFailedJob();
+
+    $page = Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')
+        ->call('showTab', 'queues')
+        ->call('openError', $uuid)
+        ->assertSet('showError', true);
+
+    DB::table('failed_jobs')->delete();
+
+    $page->call('retry', $uuid)->assertOk()->assertSet('showError', false);
+    expect(lastToastOf($page))->title->toBe('Ese trabajo ya no está en los fallidos');
+
+    $page->call('forget', $uuid)->assertOk();
+    $page->call('openError', $uuid)->assertOk()->assertSet('showError', false);
+});

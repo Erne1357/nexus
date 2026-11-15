@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Models;
 
+use App\Modules\Core\Support\RedactsSecrets;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -54,7 +55,7 @@ class FailedJob extends Model
      */
     protected function exceptionHead(): Attribute
     {
-        return Attribute::get(fn (): string => self::redact(implode("\n", array_slice(preg_split('/\R/', $this->exception) ?: [], 0, self::HEAD_LINES))));
+        return Attribute::get(fn (): string => RedactsSecrets::redact(implode("\n", array_slice(preg_split('/\R/', $this->exception) ?: [], 0, self::HEAD_LINES))));
     }
 
     /**
@@ -68,23 +69,15 @@ class FailedJob extends Model
             $lines = preg_split('/\R/', $this->exception) ?: [];
             $shown = implode("\n", array_slice($lines, 0, self::SHOWN_LINES));
 
-            return self::redact($shown).(count($lines) > self::SHOWN_LINES ? "\n… (".(count($lines) - self::SHOWN_LINES).' líneas más)' : '');
+            return RedactsSecrets::redact($shown).(count($lines) > self::SHOWN_LINES ? "\n… (".(count($lines) - self::SHOWN_LINES).' líneas más)' : '');
         });
     }
 
     /**
-     * Oculta el valor de `token=` y `signature=` (enlaces con firma de las invitaciones y de restablecer contraseña).
-     */
-    public static function redact(string $text): string
-    {
-        return (string) preg_replace('/\b((?:token|signature)=)[^&\s"\')\]]+/i', '$1[oculto]', $text);
-    }
-
-    /**
-     * El mensaje de la excepción en una línea, para la bitácora.
+     * El mensaje de la excepción en una línea y sin secretos, para la bitácora (que no se edita).
      */
     public function summary(): string
     {
-        return Str::limit(strtok($this->exception, "\n") ?: '', 200);
+        return Str::limit(RedactsSecrets::redact(strtok($this->exception, "\n") ?: ''), 200);
     }
 }

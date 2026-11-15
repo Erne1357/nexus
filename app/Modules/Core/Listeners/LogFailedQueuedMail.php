@@ -31,13 +31,13 @@ final class LogFailedQueuedMail
 
     public function handle(JobFailed $event): void
     {
-        $name = $event->job->payload()['data']['commandName'] ?? null;
-
-        if (! in_array($name, [SendQueuedNotifications::class, SendQueuedMailable::class], true)) {
-            return;
-        }
-
         try {
+            $name = $event->job->payload()['data']['commandName'] ?? null;
+
+            if (! in_array($name, [SendQueuedNotifications::class, SendQueuedMailable::class], true)) {
+                return;
+            }
+
             $command = $this->command($event);
             [$recipients, $subject, $kind] = $command instanceof SendQueuedNotifications
                 ? $this->fromNotification($command)
