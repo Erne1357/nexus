@@ -154,7 +154,12 @@ it('CF-06: una cuenta dada de baja ofrece Reactivar y Editar datos; al reactivar
 
     $dom = domOf($this->actingAs($this->admin)->get(route('core.people.show', $this->rosa->id)));
 
-    expect($dom->querySelector('[data-testid="account-reactivate"]')?->getAttribute('data-confirm-title'))->toBe('¿Reactivar la cuenta de RURR800101AB1?')
+    $reactivate = $dom->querySelector('[data-testid="account-reactivate"]');
+
+    expect($reactivate?->getAttribute('data-confirm-title'))->toBe('¿Reactivar la cuenta de RURR800101AB1?')
+        ->and($reactivate->tagName)->toBe('BUTTON')
+        ->and($reactivate->getAttribute('role'))->toBe('menuitem')
+        ->and($reactivate->getAttribute('x-confirm'))->toStartWith('La cuenta vuelve activa y sin puestos')
         ->and($dom->querySelector('[data-testid="account-edit"]'))->not->toBeNull()
         ->and($dom->querySelector('[data-testid="account-deactivate"]'))->toBeNull()
         ->and($dom->querySelector('[data-testid="account-reset"]'))->toBeNull()

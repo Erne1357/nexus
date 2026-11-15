@@ -82,11 +82,11 @@ it('CF-S5: pagina sin contar el total', function () {
         ->and(method_exists($page, 'total'))->toBeFalse();
 });
 
-it('da los tipos de registro con su nombre en español y los eventos que hay', function () {
+it('da los tipos de registro y los eventos que hay, con su nombre en español y en orden', function () {
     $query = app(ActivityLogQuery::class);
 
     expect($query->subjectTypes())->toBe([['id' => Campus::class, 'name' => 'Campus'], ['id' => User::class, 'name' => 'Usuario']])
-        ->and($query->events())->toBe([['id' => 'access-invited', 'name' => 'access-invited'], ['id' => 'created', 'name' => 'created'], ['id' => 'updated', 'name' => 'updated']]);
+        ->and($query->events())->toBe([['id' => 'created', 'name' => 'Alta'], ['id' => 'updated', 'name' => 'Cambio'], ['id' => 'access-invited', 'name' => 'Invitación de acceso']]);
 });
 
 it('nombra el tipo de registro: el mapa de Core y, si no, el nombre corto de la clase', function () {

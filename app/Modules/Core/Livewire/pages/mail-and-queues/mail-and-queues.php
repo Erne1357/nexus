@@ -12,6 +12,7 @@ use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\MailLogQuery;
 use App\Modules\Core\Queries\PendingInvitationsQuery;
 use App\Modules\Core\Queries\QueueSizesQuery;
+use App\Modules\Core\Support\MailKinds;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -75,7 +76,7 @@ new #[Title('Correos y colas')] class extends Component
         return $data + match ($tab) {
             'mail' => [
                 'mailLog' => $mail->forTable($this->search, $this->kind, MailStatus::tryFrom($this->status), $this->date($this->from), $this->date($this->to)),
-                'kinds' => array_map(fn (string $kind): array => ['id' => $kind, 'name' => $kind], $mail->kinds()),
+                'kinds' => array_map(fn (string $kind): array => ['id' => $kind, 'name' => MailKinds::label($kind)], $mail->kinds()),
                 'statuses' => array_map(fn (MailStatus $status): array => ['id' => $status->value, 'name' => $status->label()], MailStatus::cases()),
             ],
             'invitations' => ['pending' => $invitations->all()],

@@ -24,10 +24,11 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Cambiar el correo deja sin efecto el enlace para restablecer (AC-17: el token se guarda por correo, y se borra el del
  * correo anterior) y la invitación pendiente de quien no tiene contraseña (`access_invited_at` nulo; su enlace ya no
  * abría, porque su huella lleva el correo), y el correo nuevo queda sin confirmar (`email_verified_at` nulo; supuesto
- * por confirmar): a quien no tiene contraseña lo confirma la invitación que le llegue ahí, y al personal que ya la tiene
- * no se le restablece por enlace (AC-16) hasta que se decida cómo confirmarlo. Relee al usuario con `lockForUpdate`; sin
- * cambios no escribe, no deja bitácora ni avisa. La bitácora lleva lo de antes y lo de después; avisa con
- * UserProfileUpdated después del commit. Si había un correo anterior, le avisa del cambio (`notifyPreviousEmail()`).
+ * por confirmar): a quien no tiene contraseña lo confirma la invitación que le llegue ahí, y a quien ya la tiene, el
+ * enlace que le manda el admin (CF-08, AC-18); «¿Olvidaste tu contraseña?» lo sigue pidiendo confirmado (AC-16). Relee
+ * al usuario con `lockForUpdate`; sin cambios no escribe, no deja bitácora ni avisa. La bitácora lleva lo de antes y lo
+ * de después; avisa con UserProfileUpdated después del commit. Si había un correo anterior, le avisa del cambio
+ * (`notifyPreviousEmail()`).
  */
 final class UpdateUserProfile
 {

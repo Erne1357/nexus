@@ -4,6 +4,7 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\ActivityEvents;
 use App\Modules\Core\Support\ActivityRecordTypes;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\Paginator;
@@ -62,14 +63,16 @@ final class ActivityLogQuery
     }
 
     /**
-     * Los eventos que hay en la bitácora, para el filtro.
+     * Los eventos que hay en la bitácora, para el filtro, con su nombre en español (ActivityEvents) y en su orden.
      *
      * @return list<array{id: string, name: string}>
      */
     public function events(): array
     {
-        return Activity::query()->whereNotNull('event')->distinct()->orderBy('event')->pluck('event')
-            ->map(fn (string $event): array => ['id' => $event, 'name' => $event])
+        return Activity::query()->whereNotNull('event')->distinct()->pluck('event')
+            ->map(fn (string $event): array => ['id' => $event, 'name' => ActivityEvents::label($event)])
+            ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values()
             ->all();
     }
 

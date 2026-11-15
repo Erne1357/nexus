@@ -65,11 +65,13 @@
         @endif
     @elseif ($abilities['reactivate'])
         @if ($account->reactivateBlocker === null)
+            {{-- El mensaje va aparte: unas comillas dobles dentro del atributo de un componente lo dejan sin compilar. --}}
+            @php($reactivateMessage = 'La cuenta vuelve activa y sin puestos: nómbralo otra vez si hace falta. '.($abilities['invite'] && $account->reactivationEmail !== null ? "Le llega una invitación a {$account->reactivationEmail}." : 'Queda sin acceso; captura su correo institucional.'))
             <x-core::row-menu-item
                 label="Reactivar"
                 wire:click="reactivate"
                 spinner="reactivate"
-                x-confirm="La cuenta vuelve activa y sin puestos: nómbralo otra vez si hace falta. {{ $abilities['invite'] && $account->reactivationEmail !== null ? "Le llega una invitación a {$account->reactivationEmail}." : 'Queda sin acceso; captura su correo institucional.' }}"
+                x-confirm="{{ $reactivateMessage }}"
                 data-confirm-title="¿Reactivar la cuenta de {{ $person->username }}?"
                 data-confirm-button="Reactivar"
                 data-confirm-tone="warning"
