@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Models;
 
+use App\Modules\Core\Support\RedactsSecrets;
 use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -25,6 +26,9 @@ class FailedJob extends Model
 
     /** Renglones de la excepción que se muestran en la lista. */
     public const int HEAD_LINES = 3;
+
+    /** Renglones de la excepción que se muestran en el drawer. */
+    public const int SHOWN_LINES = 40;
 
     /**
      * @return array<string, string>
@@ -51,14 +55,29 @@ class FailedJob extends Model
      */
     protected function exceptionHead(): Attribute
     {
-        return Attribute::get(fn (): string => implode("\n", array_slice(preg_split('/\R/', $this->exception) ?: [], 0, self::HEAD_LINES)));
+        return Attribute::get(fn (): string => RedactsSecrets::redact(implode("\n", array_slice(preg_split('/\R/', $this->exception) ?: [], 0, self::HEAD_LINES))));
     }
 
     /**
-     * El mensaje de la excepción en una línea, para la bitácora.
+     * La excepción para el drawer: las primeras `SHOWN_LINES` líneas y sin lo que parezca un token.
+     *
+     * @return Attribute<string, never>
+     */
+    protected function exceptionShown(): Attribute
+    {
+        return Attribute::get(function (): string {
+            $lines = preg_split('/\R/', $this->exception) ?: [];
+            $shown = implode("\n", array_slice($lines, 0, self::SHOWN_LINES));
+
+            return RedactsSecrets::redact($shown).(count($lines) > self::SHOWN_LINES ? "\n… (".(count($lines) - self::SHOWN_LINES).' líneas más)' : '');
+        });
+    }
+
+    /**
+     * El mensaje de la excepción en una línea y sin secretos, para la bitácora (que no se edita).
      */
     public function summary(): string
     {
-        return Str::limit(strtok($this->exception, "\n") ?: '', 200);
+        return Str::limit(RedactsSecrets::redact(strtok($this->exception, "\n") ?: ''), 200);
     }
 }
