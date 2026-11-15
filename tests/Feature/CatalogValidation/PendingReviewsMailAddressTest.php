@@ -124,6 +124,15 @@ it('CV11: el canal de correo se decide con la misma dirección que recibe el cor
         && $this->jefe->routeNotificationFor('mail', $notice) === 'ana.soto@cdjuarez.tecnm.mx');
 });
 
+it('CV11: con la ficha inactiva, sin borrar, el aviso va igual a su correo institucional (confirmado el 15 de noviembre de 2026)', function (string $kind) {
+    $this->jefe->update(['email' => 'asoto@cdjuarez.tecnm.mx']);
+    Teacher::factory()->create(['user_id' => $this->jefe->id, 'institutional_email' => 'ana.soto@cdjuarez.tecnm.mx', 'is_active' => false]);
+
+    noticeHeads($kind);
+
+    expect(mailedTo())->toBe(['ana.soto@cdjuarez.tecnm.mx']);
+})->with(['apertura', 'recordatorio']);
+
 it('CV11: una ficha borrada o con un correo que no es del dominio institucional no cuenta (supuesto por confirmar)', function (string $case) {
     $this->jefe->update(['email' => 'ana.soto@cdjuarez.tecnm.mx']);
     $record = headRecord($case === 'borrada' ? 'asoto@cdjuarez.tecnm.mx' : 'asoto@itcj.edu.mx');

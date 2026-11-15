@@ -27,7 +27,8 @@ use Spatie\Activitylog\Models\Activity;
 | docentes». En la segunda prueba, el jefe valida en un paso los catálogos sin registros (CV7, D5) y, con Docentes ya
 | validado, sigue el enlace «N sin correo institucional» y captura el correo en la fila: la revisión sigue validada
 | (CV-S2, D11), y ve quién validó sin recargar. En la tercera, abre una materia con «Agregar observación», elige el tipo
-| y oprime «Guardar»: no guarda y le pide agregarla o quitarla (CV-S16); la agrega y entonces guarda.
+| y oprime «Guardar»: no guarda y le pide agregarla o quitarla (CV13); la agrega y entonces guarda. En la cuarta, en
+| celular, elige el tipo, sube a corregir el nombre y oprime «Guardar»: la vista baja al tipo, con su error y el foco.
 */
 
 it('el jefe revisa salones y docentes registro por registro, con teclado y en lote, y valida', function () {
@@ -176,7 +177,7 @@ it('el jefe valida en un paso los catálogos sin registros y, ya validados sus d
         ->and($jefe->exists)->toBeTrue();
 });
 
-it('CV-S16: el jefe no pierde una observación a medias al oprimir «Guardar»: la agrega y luego guarda', function () {
+it('CV13: el jefe no pierde una observación a medias al oprimir «Guardar»: la agrega y luego guarda', function () {
     Term::factory()->current()->create();
     Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
@@ -209,4 +210,44 @@ it('CV-S16: el jefe no pierde una observación a medias al oprimir «Guardar»: 
         ->assertNoJavaScriptErrors();
 
     expect(CatalogReviewMark::query()->where('record_id', $subject->id)->exists())->toBeTrue();
+});
+
+it('CV13: en celular, «Guardar» con el tipo elegido y la vista arriba lleva la vista y el foco al tipo con su error', function () {
+    Term::factory()->current()->create();
+    Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
+    $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
+    TermOpening::factory()->create(['term_id' => Term::query()->sole()->id, 'modality_id' => modalityOf('PRES')->id]);
+    app(CreateTermReviews::class)->handle(Term::query()->sole(), [Catalog::Subjects]);
+    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);
+    $subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
+
+    $page = visit('/login')
+        ->resize(390, 844)
+        ->fill('username', 'jefe')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->navigate('/catalog-validation?catalogo=subjects')
+        ->waitForText('0 de 1 revisados')
+        ->click('[data-testid="record-cards"] [aria-label="Editar SCD-1027"]')
+        ->waitForText('Tipo de observación')
+        ->select('flag', 'missing_data');
+
+    $page->script('document.querySelector(\'[name="name"]\').scrollIntoView({ block: \'center\' })');
+
+    $page->fill('name', 'Programación Orientada a Objetos I')
+        ->click('@save-record')
+        ->waitForText('Agrega la observación o quítala antes de guardar.')
+        ->wait(0.5)
+        ->assertScript(<<<'JS'
+            (() => {
+                const field = document.querySelector('[name="flag"]');
+                const box = field.getBoundingClientRect();
+                const footer = document.querySelector('[data-testid="save-record"]').closest('footer').getBoundingClientRect();
+                return box.top >= 0 && box.bottom <= footer.top && document.activeElement === field;
+            })()
+            JS, true)
+        ->assertNoJavaScriptErrors();
+
+    expect($subject->fresh()->name)->toBe('Programación Orientada a Objetos')
+        ->and(CatalogReviewMark::query()->where('record_id', $subject->id)->exists())->toBeFalse();
 });

@@ -479,13 +479,14 @@ describe('observaciones', function () {
             ->and(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::InReview);
     });
 
-    it('CV-S16: «Guardar» con una observación a medias no guarda ni marca el registro y pide agregarla o quitarla junto al campo', function (array $draft, string $field) {
+    it('CV13: «Guardar» con una observación a medias no guarda ni marca el registro, pide agregarla o quitarla junto al campo y lleva la vista a ese campo', function (array $draft, string $field) {
         $component = reviewPage($this->jefe, ['catalogo' => 'subjects'])
             ->call('edit', $this->subject->id)
             ->set('name', 'Programación Orientada a Objetos I')
             ->set($draft)
             ->call('save')
             ->assertHasErrors([$field => 'Agrega la observación o quítala antes de guardar.'])
+            ->assertDispatched('pending-flag', field: $field)
             ->assertSet('showDrawer', true)
             ->assertSet('editingId', $this->subject->id)
             ->assertSee('Agrega la observación o quítala antes de guardar.');
@@ -500,7 +501,7 @@ describe('observaciones', function () {
         'solo con el comentario' => [['comment' => 'Revisar las horas.'], 'comment'],
     ]);
 
-    it('CV-S16: después de agregar la observación o de quitarla, «Guardar» guarda y marca el registro', function (bool $adds) {
+    it('CV13: después de agregar la observación o de quitarla, «Guardar» guarda y marca el registro', function (bool $adds) {
         $component = reviewPage($this->jefe, ['catalogo' => 'subjects'])
             ->call('edit', $this->subject->id)
             ->set('flag', 'missing_data')
@@ -508,7 +509,7 @@ describe('observaciones', function () {
 
         $adds ? $component->call('addFlag') : $component->set('flag', '')->set('comment', '  ');
 
-        $component->call('save')->assertHasNoErrors()->assertSet('showDrawer', false);
+        $component->call('save')->assertHasNoErrors()->assertNotDispatched('pending-flag')->assertSet('showDrawer', false);
 
         expect(CatalogReviewMark::query()->where('record_id', $this->subject->id)->exists())->toBeTrue()
             ->and(CatalogReviewFlag::query()->count())->toBe($adds ? 1 : 0);

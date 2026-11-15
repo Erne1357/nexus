@@ -1,7 +1,8 @@
 {{--
     Las observaciones de un registro en el drawer (catalog-validation::review.drawer): `$card`, `$editing`, `$flagOptions`.
     A quien solo mira no se le dice por qué no observa: ya lo dice la cabecera (tarea 1.21). Si el jefe oprime «Guardar»
-    con el tipo o el comentario sin agregar, el error sale aquí, junto al campo (CV-S16).
+    con el tipo o el comentario sin agregar, el error sale aquí, junto al campo, y `pending-flag` lleva la vista y el foco a
+    ese campo (CV13).
 --}}
 <section class="space-y-3" aria-labelledby="drawer-flags" data-testid="flags-section">
     <h3 id="drawer-flags" class="flex items-center gap-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
@@ -32,7 +33,8 @@
     @endforelse
 
     @if ($card['canFlag'])
-        <form wire:submit="addFlag" class="space-y-3 border-t border-dashed border-base-300 pt-4" data-testid="flag-form">
+        <form wire:submit="addFlag" class="space-y-3 border-t border-dashed border-base-300 pt-4" data-testid="flag-form"
+            x-on:pending-flag.window="$nextTick(() => { const field = $el.querySelector('[name=' + $event.detail.field + ']'); field?.scrollIntoView({ block: 'center' }); field?.focus({ preventScroll: true }) })">
             <x-select label="Tipo de observación" name="flag" wire:model="flag" :options="$flagOptions" placeholder="Elige el tipo" placeholder-value="" />
             <x-textarea label="Comentario" name="comment" wire:model="comment" rows="3" hint="Obligatorio en «Otra»" />
             <x-button label="Agregar observación" type="submit" icon="o-chat-bubble-left-ellipsis" class="btn-outline btn-sm" spinner="addFlag" data-testid="add-flag" />
