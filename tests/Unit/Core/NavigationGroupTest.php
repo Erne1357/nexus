@@ -18,6 +18,7 @@ it('MN-01: declara los grupos en el orden del menú', function () {
         'institucion',
         'catalogos',
         'datos',
+        'configuracion',
     ]);
 });
 
@@ -33,4 +34,5 @@ it('MN-01: cada grupo vive en un área y se nombra en español', function (Navig
     'institución' => [NavigationGroup::Institucion, NavigationArea::Administracion, 'Institución'],
     'catálogos' => [NavigationGroup::Catalogos, NavigationArea::Administracion, 'Catálogos'],
     'datos' => [NavigationGroup::Datos, NavigationArea::Administracion, 'Datos'],
+    'configuración' => [NavigationGroup::Configuracion, NavigationArea::Administracion, 'Configuración'],
 ]);
