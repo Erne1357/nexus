@@ -2,7 +2,7 @@
     «Agregar rol» (core::pages.permissions; ADR-0023), dentro del x-drawer: los roles como opciones, primero los que se
     le pueden dar al puesto, luego los que ya tiene («Ya lo tiene.») y al final los que traen un candado (CF-03) o algo
     que el puesto no acota (CF-04), deshabilitados con el motivo de las reglas. Uno desactivado se puede dar, pero no
-    aporta hasta que se active (CF-S2). Abajo, «Nuevo rol» abre el editor. Confirmar llama a `assignRole`; los errores
+    aporta hasta que se active (CF-S2). Lo que le valdría en todo el Tec lo avisa (15 de noviembre de 2026). Abajo, «Nuevo rol» abre el editor. Confirmar llama a `assignRole`; los errores
     de la Action salen arriba. `close()` es del x-drawer. Espera `$addRole`.
 --}}
 <div class="flex h-dvh flex-col" data-testid="add-role-panel">
@@ -40,6 +40,12 @@
                         <span class="text-sm text-neutral">{{ $option['count'] }} {{ $option['count'] === 1 ? 'permiso' : 'permisos' }}@if ($option['positions'] !== []) · lo tienen {{ implode(', ', $option['positions']) }}@endif</span>
                         @if (! $option['is_active'])
                             <span class="text-[12.5px] text-neutral">Desactivado: no aporta hasta que se active.</span>
+                        @endif
+                        @if ($free && $option['wide'] !== null)
+                            <span class="mt-0.5 flex items-start gap-1.5 text-[12.5px] text-warning" data-testid="wide-notice">
+                                <x-icon name="o-globe-alt" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                <span>{{ $option['wide'] }}</span>
+                            </span>
                         @endif
                         @if ($option['state'] === 'mine')
                             <span class="text-[12.5px] text-neutral">Ya lo tiene.</span>

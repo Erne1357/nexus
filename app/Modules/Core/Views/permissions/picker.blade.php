@@ -2,7 +2,8 @@
     La lista de permisos con casillas de los drawers de core::pages.permissions («Agregar permiso suelto» y «Editar
     rol»): un buscador por etiqueta o clave, «Todos / Marcados» y los permisos por grupo, cada grupo plegable con una
     casilla que marca o desmarca lo que se ve y se puede marcar (toggleGroup) y su cifra. Lo que no se puede marcar va
-    deshabilitado con su motivo escrito (CF-03, CF-04, CF-S2) o con «Ya lo tiene: …». Espera `$groups`, `$target`
+    deshabilitado con su motivo escrito (CF-03, CF-04, CF-S2) o con «Ya lo tiene: …»; lo que valdría en todo el Tec lo
+    avisa (15 de noviembre de 2026). Espera `$groups`, `$target`
     (`loose` o `editor`) y `$model` (la propiedad de las casillas).
 --}}
 <div class="space-y-2.5">
@@ -64,6 +65,12 @@
                                 @endif
                                 @if ($row['note'] !== null)
                                     <span class="mt-0.5 text-[12.5px] text-neutral">{{ $row['note'] }}</span>
+                                @endif
+                                @if ($row['wide'] !== null)
+                                    <span class="mt-0.5 flex items-start gap-1.5 text-[12.5px] text-warning" data-testid="wide-notice">
+                                        <x-icon name="o-globe-alt" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                        <span>{{ $row['wide'] }}</span>
+                                    </span>
                                 @endif
                             </span>
                         </label>

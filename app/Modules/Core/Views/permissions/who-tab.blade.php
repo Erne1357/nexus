@@ -3,7 +3,8 @@
     lista (360 px desde 1200 px; antes, una caja baja que se desplaza) y a la derecha el elegido (`?permiso=`): su
     etiqueta, su clave, su grupo, cómo se acota, a qué unidades aplica (AZ-02, CF-S1), y si es candado (CF-03) o
     excepción del admin; la tabla de los puestos que lo tienen, por qué (Todo, Fábrica, otro rol o Suelto) y cuántas
-    personas; y los que no lo tienen, con el motivo de las reglas (CF-04) o «Dar» como suelto. Espera `$who`.
+    personas; y los que no lo tienen, con el motivo de las reglas (CF-04) o «Dar» como suelto, avisando si le valdría en
+    todo el Tec (15 de noviembre de 2026). Espera `$who`.
 --}}
 <div>
     <div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -92,12 +93,18 @@
                                             <span>{{ $missing['problem'] }}</span>
                                         </span>
                                     @else
+                                        @if ($missing['wide'])
+                                            <span class="order-last flex basis-full items-start gap-1.5 text-[12.5px] text-warning" data-testid="wide-notice">
+                                                <x-icon name="o-globe-alt" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                                                <span>Valdrá en todo el Tec.</span>
+                                            </span>
+                                        @endif
                                         <x-button
                                             label="Dar"
                                             icon="o-plus"
                                             class="btn-ghost btn-sm max-md:h-11"
                                             wire:click="grantFromWho('{{ $missing['value'] }}', '{{ $selected['key'] }}')"
-                                            x-confirm="{{ $missing['label'] }} lo recibe como permiso suelto desde su siguiente acción."
+                                            x-confirm="{{ $missing['label'] }} lo recibe como permiso suelto desde su siguiente acción.{{ $missing['wide'] ? ' Valdrá en todo el Tec.' : '' }}"
                                             data-confirm-title="¿Dar «{{ $selected['label'] }}» a {{ $missing['label'] }}?"
                                             data-confirm-button="Dar permiso"
                                             data-confirm-tone="warning"

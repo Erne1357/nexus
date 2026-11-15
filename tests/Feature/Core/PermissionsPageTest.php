@@ -11,6 +11,7 @@ use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Queries\PermissionCatalogQuery;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use Illuminate\Support\Facades\DB;
@@ -291,6 +292,42 @@ describe('Puestos', function () {
 
         expect(DB::table('permission_set_permissions')->where('permission_set_id', $set->id)->where('permission', $missing)->exists())->toBeTrue()
             ->and(lastToastOf($page)['title'])->toBe('Permisos nuevos aplicados');
+    });
+});
+
+describe('Valdrá en todo el Tec', function () {
+    it('«Agregar permiso suelto» avisa lo que valdría en todo el Tec, y no lo que el puesto acota', function () {
+        $page = permissionsPage(['puesto' => 'coordinador'])->call('openAddLoose')->set('pickerSearch', 'core.setting.view');
+        $wide = domOf($page)->querySelector('[data-testid="loose-row-core.setting.view"]');
+
+        expect(in_array(Role::Coordinador, collect(app(PermissionCatalogQuery::class)->all())->firstWhere('key', 'core.setting.view')['institution_wide_for'], true))->toBeTrue()
+            ->and(textOf($wide->querySelector('[data-testid="wide-notice"]')))->toBe('Valdrá en todo el Tec.');
+
+        $page->set('pickerSearch', 'core.campus.view');
+
+        expect(domOf($page)->querySelector('[data-testid="loose-row-core.campus.view"] [data-testid="wide-notice"]'))->toBeNull();
+    });
+
+    it('«Agregar rol» avisa qué de lo que trae el rol valdría en todo el Tec', function () {
+        $set = PermissionSet::factory()->withPermissions([CorePermission::SettingView, CorePermission::CampusView])->create(['name' => 'Parámetros']);
+
+        $option = domOf(permissionsPage(['puesto' => 'coordinador'])->call('openAddRole'))->querySelector('[data-testid="add-role-option-'.$set->id.'"]');
+
+        expect(textOf($option->querySelector('[data-testid="wide-notice"]')))->toBe('Valdrá en todo el Tec: «Ver los parámetros».');
+    });
+
+    it('el editor avisa lo que valdría en todo el Tec para los puestos que tienen el rol', function () {
+        $set = PermissionSet::factory()->withPermissions([CorePermission::CampusView])->assignedTo(Role::Coordinador)->create(['name' => 'Consulta']);
+
+        $page = permissionsPage()->call('editRole', $set->id)->set('pickerMarked', false)->set('pickerSearch', 'core.setting.view');
+
+        expect(textOf(domOf($page)->querySelector('[data-testid="editor-row-core.setting.view"] [data-testid="wide-notice"]')))->toBe('Valdrá en todo el Tec para Coordinador de carrera.');
+    });
+
+    it('«¿Quién puede…?» avisa junto a «Dar» si le valdría en todo el Tec', function () {
+        $result = domOf(permissionsPage(['vista' => 'quien', 'permiso' => 'core.setting.view']))->querySelector('[data-testid="who-result"]');
+
+        expect(textOf($result->querySelector('[data-testid="who-missing-coordinador"] [data-testid="wide-notice"]')))->toBe('Valdrá en todo el Tec.');
     });
 });
 

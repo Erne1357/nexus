@@ -136,7 +136,7 @@ new #[Title('Puestos y permisos')] class extends Component
             'roleRows' => $view === 'roles' ? array_map(fn (array $set): array => $this->roleRow($set), $sets->forTable($this->rolesSearch, $this->rolesKind, $setRows)) : [],
             'kinds' => [['id' => 'factory', 'name' => 'De fábrica'], ['id' => 'own', 'name' => 'Propios']],
             'who' => $view === 'quien' ? $this->who($catalog, $catalogRows, $positionRows) : null,
-            'addRole' => $this->showAddRole ? $this->addRoleData($role, $current, $setRows, $sets) : null,
+            'addRole' => $this->showAddRole ? $this->addRoleData($role, $current, $setRows, $sets, $catalogRows) : null,
             'addLoose' => $this->showAddLoose ? $this->addLooseData($role, $current, $catalogRows, $catalog) : null,
             'editor' => $this->showEditor ? $this->editorData($setRows, $sets, $catalogRows, $positionRows) : null,
             'canManage' => Gate::allows('managePositions', PermissionSet::class),
@@ -674,7 +674,7 @@ new #[Title('Puestos y permisos')] class extends Component
 
     /**
      * «¿Quién puede…?»: la lista de permisos que deja la búsqueda y el elegido, con quién lo tiene y por qué, y por qué
-     * no lo tienen los demás.
+     * no lo tienen los demás; a quien se le puede dar y le valdría en todo el Tec, se le avisa (15 de noviembre de 2026).
      *
      * @param  list<array<string, mixed>>  $catalogRows
      * @param  list<array<string, mixed>>  $positionRows
@@ -698,7 +698,12 @@ new #[Title('Puestos y permisos')] class extends Component
                 if ($holders->has($value)) {
                     $result['has'][] = ['value' => $value, 'label' => $row['label'], 'holders' => $row['holders'], 'chips' => $this->chips($holders[$value]['sources'])];
                 } else {
-                    $result['missing'][] = ['value' => $value, 'label' => $row['label'], 'problem' => $problems[$value] ?? null];
+                    $result['missing'][] = [
+                        'value' => $value,
+                        'label' => $row['label'],
+                        'problem' => $problems[$value] ?? null,
+                        'wide' => in_array($row['role'], $selected['institution_wide_for'], true),
+                    ];
                 }
             }
         }
@@ -712,19 +717,23 @@ new #[Title('Puestos y permisos')] class extends Component
 
     /**
      * «Agregar rol»: los roles, primero los que se pueden dar, luego los que ya tiene y al final los bloqueados con su
-     * motivo (CF-03, CF-04). Uno desactivado se puede dar, pero no aporta hasta que se active (CF-S2).
+     * motivo (CF-03, CF-04). Uno desactivado se puede dar, pero no aporta hasta que se active (CF-S2). Cada uno dice qué
+     * de lo que trae, y el puesto no tiene, le valdría en todo el Tec (15 de noviembre de 2026).
      *
      * @param  array<string, mixed>  $current
      * @param  list<array<string, mixed>>  $setRows
+     * @param  list<array<string, mixed>>  $catalogRows
      * @return array<string, mixed>
      */
-    private function addRoleData(Role $role, array $current, array $setRows, PermissionSetsQuery $sets): array
+    private function addRoleData(Role $role, array $current, array $setRows, PermissionSetsQuery $sets, array $catalogRows): array
     {
         $problems = $sets->assignProblems($role, $setRows);
         $mine = array_column($current['permission_sets'], 'id');
         $rank = ['free' => 0, 'mine' => 1, 'blocked' => 2];
-        $options = array_map(function (array $set) use ($problems, $mine): array {
+        $wide = $this->wideFor($role, $current, $catalogRows);
+        $options = array_map(function (array $set) use ($problems, $mine, $wide): array {
             $found = $problems[$set['id']] ?? [];
+            $keys = array_column(array_merge(...array_values($set['permissions'])), 'key');
 
             return [
                 'id' => $set['id'],
@@ -735,6 +744,7 @@ new #[Title('Puestos y permisos')] class extends Component
                 'state' => in_array($set['id'], $mine, true) ? 'mine' : ($found !== [] ? 'blocked' : 'free'),
                 'problem' => $found[0] ?? null,
                 'more' => max(0, count($found) - 1),
+                'wide' => $this->wideText(array_values(array_intersect_key($wide, array_flip($keys)))),
             ];
         }, $setRows);
         usort($options, fn (array $a, array $b): int => $rank[$a['state']] <=> $rank[$b['state']]);
@@ -743,8 +753,9 @@ new #[Title('Puestos y permisos')] class extends Component
     }
 
     /**
-     * «Agregar permiso suelto»: cada permiso declarado, con lo que ya tiene marcado y deshabilitado y lo que no se le
-     * puede dar deshabilitado con su motivo.
+     * «Agregar permiso suelto»: cada permiso declarado, con lo que ya tiene marcado y deshabilitado, lo que no se le
+     * puede dar deshabilitado con su motivo, y «Valdrá en todo el Tec» en lo que le valdría sin límite (15 de noviembre
+     * de 2026).
      *
      * @param  array<string, mixed>  $current
      * @param  list<array<string, mixed>>  $catalogRows
@@ -776,8 +787,9 @@ new #[Title('Puestos y permisos')] class extends Component
         $problems = $catalog->grantProblems($role);
         $effective = array_column($current['effective'], null, 'key');
         $noScope = $role->boundedDimensions() === [];
+        $wide = $this->wideFor($role, $current, $catalogRows);
 
-        return array_map(function (array $permission) use ($problems, $effective, $noScope): array {
+        return array_map(function (array $permission) use ($problems, $effective, $noScope, $wide): array {
             $had = $effective[$permission['key']] ?? null;
             $problem = $had === null ? ($problems[$permission['key']] ?? null) : null;
 
@@ -791,8 +803,47 @@ new #[Title('Puestos y permisos')] class extends Component
                 'problem' => $noScope && ! $permission['admin_only'] ? null : $problem,
                 'locked' => $permission['admin_only'],
                 'note' => $had === null ? null : 'Ya lo tiene: '.implode(', ', array_map(fn (array $source): string => $this->sourceLabel($source), $had['sources'])),
+                'wide' => isset($wide[$permission['key']]) ? 'Valdrá en todo el Tec.' : null,
             ];
         }, $catalogRows);
+    }
+
+    /**
+     * «Valdrá en todo el Tec: «A», «B», «C» y N más.», o null si no hay nada.
+     *
+     * @param  list<string>  $labels
+     */
+    private function wideText(array $labels): ?string
+    {
+        if ($labels === []) {
+            return null;
+        }
+
+        $more = count($labels) - 3;
+
+        return 'Valdrá en todo el Tec: «'.implode('», «', array_slice($labels, 0, 3)).'»'.($more > 0 ? " y {$more} más" : '').'.';
+    }
+
+    /**
+     * Lo que el puesto no tiene hoy, se le puede dar y le valdría en todo el Tec (`institution_wide_for`; confirmado el
+     * 15 de noviembre de 2026: se puede dar, pero se avisa).
+     *
+     * @param  array<string, mixed>  $current
+     * @param  list<array<string, mixed>>  $catalogRows
+     * @return array<string, string> etiqueta por clave
+     */
+    private function wideFor(Role $role, array $current, array $catalogRows): array
+    {
+        $had = array_column($current['effective'], 'key', 'key');
+        $wide = [];
+
+        foreach ($catalogRows as $permission) {
+            if (! isset($had[$permission['key']]) && in_array($role, $permission['institution_wide_for'], true)) {
+                $wide[$permission['key']] = $permission['label'];
+            }
+        }
+
+        return $wide;
     }
 
     /**
@@ -832,6 +883,9 @@ new #[Title('Puestos y permisos')] class extends Component
     }
 
     /**
+     * Los renglones del editor: lo que el rol no trae y valdría en todo el Tec para algún puesto que lo tiene lleva el
+     * aviso (15 de noviembre de 2026).
+     *
      * @param  list<array<string, mixed>>  $setRows
      * @param  list<array<string, mixed>>  $catalogRows
      * @return list<array<string, mixed>>
@@ -839,10 +893,14 @@ new #[Title('Puestos y permisos')] class extends Component
     private function editorRows(array $setRows, PermissionSetsQuery $sets, array $catalogRows): array
     {
         $problems = $sets->addProblems($this->editingSetId, $setRows);
+        $set = $this->editingSetId === null ? null : collect($setRows)->firstWhere('id', $this->editingSetId);
+        $original = $set === null ? [] : array_column(array_merge(...array_values($set['permissions'])), 'key');
+        $holders = $set['positions'] ?? [];
 
-        return array_map(function (array $permission) use ($problems): array {
+        return array_map(function (array $permission) use ($problems, $original, $holders): array {
             $checked = in_array($permission['key'], $this->permissions, true);
             $problem = $problems[$permission['key']] ?? null;
+            $wide = in_array($permission['key'], $original, true) ? [] : array_values(array_filter($holders, fn (Role $role): bool => in_array($role, $permission['institution_wide_for'], true)));
 
             return [
                 'key' => $permission['key'],
@@ -854,6 +912,7 @@ new #[Title('Puestos y permisos')] class extends Component
                 'problem' => $checked ? null : $problem,
                 'locked' => $permission['admin_only'],
                 'note' => null,
+                'wide' => $wide === [] || $problem !== null ? null : 'Valdrá en todo el Tec para '.implode(', ', array_map(fn (Role $role): string => $role->listLabel(), $wide)).'.',
             ];
         }, $catalogRows);
     }
