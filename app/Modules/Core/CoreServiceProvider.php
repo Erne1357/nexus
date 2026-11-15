@@ -37,6 +37,7 @@ use App\Modules\Core\Livewire\BlockViewDataCalls;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
@@ -141,6 +142,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 ability: 'viewAny', arguments: [RoleAssignment::class], childRoutes: ['core.people.show']),
             // Panel de configuración (1.22): cada paquete agrega su entrada debajo de su marca, en el grupo Configuración.
             // 1.22-B Puestos y permisos
+            new NavigationItem('Puestos y permisos', 'core.permissions', 'o-key', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [PermissionSet::class]),
             // 1.22-D Bitácora
             // 1.22-E Avisos y atajos del login
             // 1.22-F Parámetros
