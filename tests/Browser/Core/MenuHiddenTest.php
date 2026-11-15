@@ -147,8 +147,8 @@ it('abierto, si el motivo no cabe debajo de su entrada, sale arriba', function (
         ->click('@hare')
         ->assertScript('Alpine.$data(document.body).busy === false');
 
-    // Enfocarla la deja a la vista en la orilla de abajo del menú abierto.
-    $page->script('document.querySelector(\'a[data-label="Acuerdos"]\').focus()');
+    // Se deja en la orilla de abajo del menú abierto (con más entradas debajo, enfocarla sola la centraría) y se enfoca.
+    $page->script('(() => { const entry = document.querySelector(\'a[data-label="Acuerdos"]\'); entry.scrollIntoView({ block: "end" }); entry.focus({ preventScroll: true }); })()');
     $page->assertScript('(() => {
         const entry = document.querySelector(\'a[data-label="Acuerdos"]\').getBoundingClientRect();
         const tip = document.querySelector("[data-menu-why-tip]").getBoundingClientRect();
