@@ -13,7 +13,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Le quita a un puesto un permiso suelto (CF-01); lo que le dan sus roles no cambia. El admin no se edita (CF-S1). Si
  * no lo tiene suelto, no escribe ni registra. Deja en la bitácora los permisos sueltos y los roles del puesto antes y
- * después.
+ * después. Recibe también la clave como texto: un suelto cuya clave ya no declara ningún módulo (la quitó un
+ * despliegue) no aporta nada, pero se tiene que poder quitar.
  */
 final class RevokePositionPermission
 {
@@ -25,14 +26,16 @@ final class RevokePositionPermission
     /**
      * @throws ValidationException
      */
-    public function handle(Role $role, Permission $permission): void
+    public function handle(Role $role, Permission|string $permission): void
     {
         $this->rules->ensureEditable($role);
+        $key = $permission instanceof Permission ? (string) $permission->value : $permission;
+        $label = $permission instanceof Permission ? $permission->label() : $key;
 
-        DB::transaction(function () use ($role, $permission): void {
+        DB::transaction(function () use ($role, $key, $label): void {
             $old = $this->rules->positionState($role);
 
-            if (DB::table('position_permissions')->where('role', $role->value)->where('permission', $permission->value)->delete() === 0) {
+            if (DB::table('position_permissions')->where('role', $role->value)->where('permission', $key)->delete() === 0) {
                 return;
             }
 
@@ -40,7 +43,7 @@ final class RevokePositionPermission
                 ->event(ActivityEvent::Updated)
                 ->withChanges(['attributes' => $this->rules->positionState($role), 'old' => $old])
                 ->withProperties(['position' => $role->value])
-                ->log("Quitó el permiso «{$permission->label()}» del puesto {$role->listLabel()}");
+                ->log("Quitó el permiso «{$label}» del puesto {$role->listLabel()}");
         });
 
         $this->grants->refresh();

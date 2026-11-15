@@ -59,12 +59,14 @@ const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Core/Livewire/components/context-switcher/context-switcher.php',
     'app/Modules/Core/Livewire/components/org-unit-panel/org-unit-panel.php',
     'app/Modules/Core/Livewire/pages/people/people.php',
+    'app/Modules/Core/Livewire/pages/permissions/permissions.php',
     'app/Modules/Core/Livewire/pages/person/person.php',
     'app/Modules/Core/Notifications/NotificationMessage.php',
     'app/Modules/Core/Queries/ActivityLogQuery.php',
     'app/Modules/Core/Queries/AppointmentsQuery.php',
     'app/Modules/Core/Queries/OrgChartQuery.php',
     'app/Modules/Core/Queries/PeopleQuery.php',
+    'app/Modules/Core/Queries/PermissionCatalogQuery.php',
     'app/Modules/Core/Queries/PermissionSetsQuery.php',
     'app/Modules/Core/Queries/PositionsQuery.php',
     'app/Modules/Core/Rules/PermissionSetRules.php',
@@ -188,7 +190,8 @@ it('nadie importa el enum Role con otro nombre', function () {
 /*
 | Roles editables (CF-01, adenda del 14 de noviembre de 2026 a ADR-0018): lo que cada puesto puede lo dice GrantTable.
 | Las tablas de roles y su versión solo las tocan Core/Authorization, sus migraciones, el modelo PermissionSet y su
-| factory, y las Actions, Queries y Policy del panel «Puestos y permisos». Nadie más las lee para decidir.
+| factory, y las Actions, Queries y Policy del panel «Puestos y permisos». Nadie más las lee para decidir. La pantalla
+| y la entrada del menú solo nombran PermissionSet para autorizar con su Policy.
 */
 const GRANT_TABLES_READERS = [
     'app/Modules/Core/Authorization/',
@@ -207,10 +210,20 @@ const GRANT_TABLES_READERS = [
     'app/Modules/Core/Actions/AssignPermissionSet.php',
     'app/Modules/Core/Actions/UnassignPermissionSet.php',
     'app/Modules/Core/Actions/GrantPositionPermission.php',
+    'app/Modules/Core/Actions/GrantPositionPermissions.php',
     'app/Modules/Core/Actions/RevokePositionPermission.php',
     'app/Modules/Core/Actions/RestoreFactoryPermissionSet.php',
     'app/Modules/Core/Actions/RestoreFactoryPosition.php',
     'app/Modules/Core/Actions/ApplyFactoryUpdates.php',
+];
+
+/**
+ * La pantalla «Puestos y permisos» y la entrada del menú solo nombran el modelo para autorizar con su Policy: en ellas
+ * se permite el nombre `PermissionSet`, pero no las tablas (salvo como llave de un renglón de las Queries).
+ */
+const PERMISSION_SET_NAMERS = [
+    'app/Modules/Core/Livewire/pages/permissions/permissions.php',
+    'app/Modules/Core/CoreServiceProvider.php',
 ];
 
 it('fuera de Core/Authorization y de las piezas de roles editables, nadie lee las tablas de roles ni nombra PermissionSet', function () {
@@ -224,7 +237,17 @@ it('fuera de Core/Authorization y de las piezas de roles editables, nadie lee la
             continue;
         }
 
-        if (preg_match('/\b(permission_sets|permission_set_permissions|position_permission_sets|position_permissions|authz_grants_version|PermissionSet)\b/', $file->getContents()) === 1) {
+        $tables = 'permission_sets|permission_set_permissions|position_permission_sets|position_permissions|authz_grants_version';
+        $contents = $file->getContents();
+
+        // En la pantalla, `$row['permission_sets']` es la llave de un renglón de PositionsQuery, no la tabla.
+        if (in_array($path, PERMISSION_SET_NAMERS, true)) {
+            $contents = (string) preg_replace("/\\['(".$tables.")'\\]/", '', $contents);
+        }
+
+        $names = in_array($path, PERMISSION_SET_NAMERS, true) ? $tables : $tables.'|PermissionSet';
+
+        if (preg_match('/\b('.$names.')\b/', $contents) === 1) {
             $offenders[] = $path;
         }
     }
@@ -236,7 +259,7 @@ it('cada pieza que puede leer las tablas de roles existe', function () {
     $root = dirname(__DIR__, 2);
 
     expect(array_values(array_filter(
-        GRANT_TABLES_READERS,
+        [...GRANT_TABLES_READERS, ...PERMISSION_SET_NAMERS],
         fn (string $allowed): bool => glob("{$root}/{$allowed}*") === [],
     )))->toBe([]);
 });
