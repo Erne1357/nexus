@@ -419,9 +419,12 @@ new #[Title('Ficha del docente')] class extends Component
         $user = $teacher->user;
         $invited = $user?->access_invited_at !== null;
         $failure = $invited ? 'No se pudo reenviar la invitación' : 'No se pudo enviar la invitación';
+        $email = $teacher->institutional_email;
 
         if ($user !== null && Gate::allows('invite', $user)) {
-            $sent = $this->attempt(fn () => $inviteTeacherAccess->byAdmin($teacher, $context->user()), $failure);
+            $sent = $this->attempt(function () use ($inviteTeacherAccess, $teacher, $context, &$email): void {
+                $email = $inviteTeacherAccess->byAdmin($teacher, $context->user());
+            }, $failure);
         } else {
             $this->authorize('inviteAccess', $teacher);
             $sent = $this->attempt(fn () => $inviteTeacherAccess->resend($teacher, $context->user()), $failure);
@@ -430,7 +433,7 @@ new #[Title('Ficha del docente')] class extends Component
         if ($sent) {
             $this->success(
                 $invited ? 'Invitación reenviada' : 'Invitación enviada',
-                e("{$teacher->rfc}: a {$teacher->institutional_email}.".($invited ? ' El enlace anterior ya no sirve.' : '')),
+                e("{$teacher->rfc}: a {$email}.".($invited ? ' El enlace anterior ya no sirve.' : '')),
             );
         }
     }

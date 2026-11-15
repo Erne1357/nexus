@@ -8,6 +8,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Core\Rules\UserAccountRules;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 
@@ -119,3 +120,28 @@ it('CF-07: quien no es admin no entra a la ficha ni invita, aunque llame la acci
     expect($this->rosa->fresh()->access_invited_at)->toBeNull();
     Notification::assertNothingSent();
 })->with([Role::Docente, Role::JefeDepartamento]);
+
+it('CF-06 y CF-07: el aviso de «Reactivar» dice a qué correo irá la invitación, o que queda sin acceso', function (?string $email, string $tail) {
+    $this->rosa->forceFill(['email' => $email])->save();
+    app(DeactivateUser::class)->handle($this->rosa, DeactivationReason::Renuncia, null, $this->admin);
+
+    $item = domOf($this->actingAs($this->admin)->get(route('core.people.show', $this->rosa->id)))->querySelector('[data-testid="account-reactivate"]');
+
+    expect($item->getAttribute('x-confirm'))->toBe('La cuenta vuelve activa y sin puestos: nómbralo otra vez si hace falta. '.$tail);
+})->with([
+    'con correo institucional' => ['rosa.ruiz@cdjuarez.tecnm.mx', 'Le llega una invitación a rosa.ruiz@cdjuarez.tecnm.mx.'],
+    'sin correo' => [null, 'Queda sin acceso; captura su correo institucional.'],
+    'con otro dominio' => ['rosa@itcj.edu.mx', 'Queda sin acceso; captura su correo institucional.'],
+]);
+
+it('CF-07: si quien reactiva no puede invitar, la cuenta se reactiva sin mandar nada', function () {
+    app(DeactivateUser::class)->handle($this->rosa, DeactivationReason::Renuncia, null, $this->admin);
+    Gate::before(fn (User $user, string $ability): ?bool => $ability === 'invite' ? false : null);
+
+    $page = personInvitePage($this->rosa)->call('reactivate');
+
+    expect($this->rosa->fresh()->is_active)->toBeTrue()
+        ->and($this->rosa->fresh()->access_invited_at)->toBeNull()
+        ->and(lastToastOf($page))->title->toBe('Cuenta reactivada')->description->toStartWith('Queda sin acceso: la invitación no salió');
+    Notification::assertNothingSent();
+});

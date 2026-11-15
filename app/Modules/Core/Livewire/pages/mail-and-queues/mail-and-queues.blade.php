@@ -86,7 +86,18 @@
 
                 @scope('actions', $row)
                     @can('resendInvitation', \App\Modules\Core\Models\MailLog::class)
-                        <x-button label="Reenviar" icon="o-paper-airplane" wire:click="resend('{{ $row['user']->id }}')" spinner="resend('{{ $row['user']->id }}')" class="btn-ghost btn-sm" :data-testid="'resend-'.$row['user']->username" />
+                        <x-button
+                            label="Reenviar"
+                            icon="o-paper-airplane"
+                            wire:click="resend('{{ $row['user']->id }}')"
+                            x-confirm="Le llegan a {{ $row['user']->email }} su usuario y un enlace nuevo para activar su acceso; el anterior deja de servir.{{ $row['staff'] ? ' Tiene un puesto: el enlace le dará acceso con él.' : '' }}"
+                            data-confirm-title="¿Reenviar la invitación a {{ $row['user']->username }}?"
+                            data-confirm-button="Reenviar"
+                            data-confirm-tone="{{ $row['staff'] ? 'warning' : 'primary' }}"
+                            spinner="resend('{{ $row['user']->id }}')"
+                            class="btn-ghost btn-sm"
+                            :data-testid="'resend-'.$row['user']->username"
+                        />
                     @else
                         <span class="tooltip tooltip-left" data-tip="Solo el administrador reenvía invitaciones.">
                             <x-button label="Reenviar" icon="o-paper-airplane" class="btn-ghost btn-sm" disabled />

@@ -8,6 +8,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -84,6 +85,17 @@ it('CF-S3 y CF-07: el correo es opcional; sin él queda sin acceso y no se manda
     expect($user->email)->toBeNull()
         ->and(UserAccess::of($user))->toBe(UserAccess::None)
         ->and(lastToastOf($page))->description->toBe('777 queda sin acceso hasta que captures su correo institucional. Nómbralo en su ficha.');
+    Notification::assertNothingSent();
+});
+
+it('CF-07: si quien da de alta no puede invitar, el alta queda sin acceso y no se manda nada', function () {
+    Notification::fake();
+    Gate::before(fn (User $user, string $ability): ?bool => $ability === 'invite' ? false : null);
+
+    $page = peopleAccountsPage()->call('openCreate')->set('newUsername', 'RURR800101AB1')->set('newName', 'Rosa Ruiz')->set('newEmail', 'rosa.ruiz@cdjuarez.tecnm.mx')->call('createUser')->assertHasNoErrors();
+
+    expect(UserAccess::of(User::where('username', 'RURR800101AB1')->sole()))->toBe(UserAccess::None)
+        ->and(lastToastOf($page))->description->toBe('RURR800101AB1 queda sin acceso: no puedes mandarle la invitación. Nómbralo en su ficha.');
     Notification::assertNothingSent();
 });
 

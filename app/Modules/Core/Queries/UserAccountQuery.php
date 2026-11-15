@@ -27,6 +27,7 @@ final class UserAccountQuery
             deactivateBlocker: $person->is_active ? $this->rules->deactivationBlocker($person, $viewer) : null,
             reactivateBlocker: $person->is_active ? null : $this->rules->reactivationBlocker($person),
             inviteBlocker: $person->is_active && $person->password === null ? $this->rules->invitationBlocker($person) : null,
+            reactivationEmail: $person->is_active ? null : $this->rules->reactivationInviteEmail($person),
         );
     }
 }

@@ -78,6 +78,18 @@ it('CF-S8 y CF-07: la pestaña Invitaciones lista los pendientes y «Reenviar» 
         ->and(MailLog::query()->where('to', 'pend@cdjuarez.tecnm.mx')->exists())->toBeTrue();
 });
 
+it('CF-07: «Reenviar» se confirma con el correo y, si tiene un puesto, avisa que el enlace le dará acceso con él', function () {
+    User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])
+        ->create(['username' => 'jefa', 'password' => null, 'email' => 'jefa@cdjuarez.tecnm.mx', 'access_invited_at' => now()->subDay()->startOfSecond()]);
+    User::factory()->withRole(Role::Docente)
+        ->create(['username' => 'docente', 'password' => null, 'email' => 'docente@cdjuarez.tecnm.mx', 'access_invited_at' => now()->subDay()->startOfSecond()]);
+
+    $dom = domOf(Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')->call('showTab', 'invitations')->html());
+
+    expect($dom->querySelector('[data-testid="resend-jefa"]')->getAttribute('x-confirm'))->toBe('Le llegan a jefa@cdjuarez.tecnm.mx su usuario y un enlace nuevo para activar su acceso; el anterior deja de servir. Tiene un puesto: el enlace le dará acceso con él.')
+        ->and($dom->querySelector('[data-testid="resend-docente"]')->getAttribute('x-confirm'))->toBe('Le llegan a docente@cdjuarez.tecnm.mx su usuario y un enlace nuevo para activar su acceso; el anterior deja de servir.');
+});
+
 it('CF-07: «Reenviar» también va a quien tiene un puesto, y sin correo institucional dice el motivo y no manda nada', function () {
     $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])
         ->create(['password' => null, 'email' => 'jefe@cdjuarez.tecnm.mx', 'access_invited_at' => now()->subDay()->startOfSecond()]);

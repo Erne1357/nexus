@@ -200,3 +200,10 @@ it('CF-07: aceptar la invitación del admin deja la contraseña propia y cierra 
     expect(app(AcceptAccessInvitation::class)->handle($rosa->id, $hash, ['password' => 'Propia-clave-2027', 'password_confirmation' => 'Propia-clave-2027']))->not->toBeNull()
         ->and(app(AcceptAccessInvitation::class)->handle($rosa->id, $hash, ['password' => 'Otra-clave-2027', 'password_confirmation' => 'Otra-clave-2027']))->toBeNull();
 });
+
+it('CF-07: el correo dice «Tu usuario es: …» sin llamarlo RFC, porque el del personal puede ser un número de empleado', function () {
+    $mail = (new AccessInvitation('40312', 'Rosa Ruiz', 'https://nexus.test/access/x', now()->toImmutable()))->toMail(new AnonymousNotifiable);
+
+    expect($mail->introLines)->toContain('Tu usuario es: 40312')
+        ->and(implode(' ', $mail->introLines))->not->toContain('RFC');
+});

@@ -9,6 +9,7 @@ use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PasswordResetTokens;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -17,8 +18,8 @@ use Illuminate\Validation\ValidationException;
  * acceso, y sus puestos no regresan solos (se nombran otra vez en la ficha). Solo reactiva una cuenta que dio de baja el
  * panel (`deactivated_at`, UserAccountRules::reactivationBlocker(); supuesto por confirmar): la de un docente inactivo se
  * reactiva en Docentes. Es el único camino que quita esa marca (CF-09). Después del commit, si tiene correo
- * institucional, le manda la invitación del admin (InviteUser, CF-07); si no, o si no se pudo mandar, queda «Sin acceso»
- * hasta que el admin capture su correo y la mande desde la ficha.
+ * institucional y quien reactiva puede invitar, le manda la invitación del admin (InviteUser, CF-07); si no, o si no se
+ * pudo mandar, queda «Sin acceso» hasta que el admin capture su correo y la mande desde la ficha.
  *
  * La baja termina los puestos con último día de hoy, que todavía cuenta como vigente: si se reactiva el mismo día, esos
  * nombramientos terminan ayer, o se quitan si empezaban hoy, con EndRoleAssignment, para que los puestos no regresen
@@ -88,12 +89,13 @@ final class ReactivateUser
     }
 
     /**
-     * CF-06 y CF-07: la invitación de la cuenta ya reactiva, si tiene correo institucional. Un rechazo (otra sesión le
-     * cambió algo en medio) no deshace la reactivación: queda «Sin acceso».
+     * CF-06 y CF-07: la invitación de la cuenta ya reactiva, si tiene correo institucional y `$actor` puede invitar
+     * (UserPolicy, `invite`). Un rechazo (otra sesión le cambió algo en medio) no deshace la reactivación: queda «Sin
+     * acceso».
      */
     private function invite(User $user, User $actor): ?string
     {
-        if ($this->rules->invitationBlocker($user) !== null) {
+        if (Gate::forUser($actor)->denies('invite', $user) || $this->rules->invitationBlocker($user) !== null) {
             return null;
         }
 

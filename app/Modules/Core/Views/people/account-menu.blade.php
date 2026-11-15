@@ -3,8 +3,8 @@
     cuenta activa, «Editar datos», «Enviar invitación» o «Reenviar invitación» si no tiene contraseña (CF-07) o
     «Restablecer contraseña» si la tiene (CF-08), y «Dar de baja»; dada de baja, «Editar datos» y «Reactivar». Lo que
     no se puede queda deshabilitado con su motivo en un segundo renglón (UserAccountQuery) y sin los atributos de acción.
-    Invitar, Restablecer y Reactivar se confirman con `x-confirm`; Editar abre un `x-modal` y Dar de baja un `x-drawer`
-    (ADR-0023). Espera $account, $abilities, $resetMinutes y $inviteDays.
+    Invitar, Restablecer y Reactivar se confirman con `x-confirm`, que dice a qué correo va el enlace (también el de la
+    invitación que sale al reactivar, CF-06); Editar abre un `x-modal` y Dar de baja un `x-drawer` (ADR-0023). Espera $account, $abilities, $resetMinutes y $inviteDays.
 --}}
 @php($person = $account->person)
 
@@ -69,7 +69,7 @@
                 label="Reactivar"
                 wire:click="reactivate"
                 spinner="reactivate"
-                x-confirm="La cuenta vuelve activa y sin puestos: nómbralo otra vez si hace falta. Con correo institucional, le llega una invitación para activar su acceso."
+                x-confirm="La cuenta vuelve activa y sin puestos: nómbralo otra vez si hace falta. {{ $abilities['invite'] && $account->reactivationEmail !== null ? "Le llega una invitación a {$account->reactivationEmail}." : 'Queda sin acceso; captura su correo institucional.' }}"
                 data-confirm-title="¿Reactivar la cuenta de {{ $person->username }}?"
                 data-confirm-button="Reactivar"
                 data-confirm-tone="warning"

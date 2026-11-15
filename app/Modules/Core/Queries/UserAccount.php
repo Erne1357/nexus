@@ -9,7 +9,7 @@ use App\Modules\Core\Models\User;
  * El bloque «Cuenta» de la ficha de la persona y por qué no se puede cada acción de su menú (1.22-C1), armado por
  * UserAccountQuery. Cada motivo es nulo si la acción sí se puede; la baja solo se ofrece a una cuenta activa, la
  * reactivación a una dada de baja y la invitación (CF-07) a una activa sin contraseña, así que el motivo de la que no
- * aplica también es nulo.
+ * aplica también es nulo. `reactivationEmail` es el correo al que irá la invitación al reactivarla (CF-06), o nulo.
  */
 final readonly class UserAccount
 {
@@ -23,5 +23,6 @@ final readonly class UserAccount
         public ?string $deactivateBlocker,
         public ?string $reactivateBlocker,
         public ?string $inviteBlocker,
+        public ?string $reactivationEmail,
     ) {}
 }

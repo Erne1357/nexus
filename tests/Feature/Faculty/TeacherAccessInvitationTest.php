@@ -221,6 +221,43 @@ describe('reenviar invitación en la ficha', function () {
         Notification::assertSentOnDemandTimes(AccessInvitation::class, 2);
     })->with(['jefe', 'admin']);
 
+    it('CF-07: el jefe nunca deja la invitación como del admin: su reenvío la vuelve automática', function () {
+        Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+
+        expect($this->user->fresh()->access_invited_by)->toBeNull();
+
+        $this->travel(1)->minutes();
+        Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+
+        expect($this->user->fresh()->access_invited_by)->toBe($this->admin->id);
+
+        $this->travel(1)->minutes();
+        Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+
+        expect($this->user->fresh()->access_invited_by)->toBeNull();
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 4);
+    });
+
+    it('CF-07: cambiar el correo institucional con UpdateTeacher no deja viva la invitación del admin', function (Closure $change, bool $resent) {
+        $this->travel(1)->minutes();
+        app(InviteTeacherAccess::class)->byAdmin($this->teacher->fresh(), $this->admin);
+        $this->travel(1)->minutes();
+
+        $change($this);
+
+        $user = $this->user->fresh();
+
+        expect($user->access_invited_by)->toBeNull()
+            ->and($user->access_invited_at !== null)->toBe($resent);
+    })->with([
+        'a otro correo, sin otro puesto: sale una automática' => [fn ($test) => app(UpdateTeacher::class)->handle($test->teacher->fresh(), ['institutional_email' => 'ana.p@cdjuarez.tecnm.mx']), true],
+        'a otro correo, con otro puesto: queda sin efecto' => [function ($test) {
+            makeTeacherHeadElsewhere();
+            app(UpdateTeacher::class)->handle($test->teacher->fresh(), ['institutional_email' => 'ana.p@cdjuarez.tecnm.mx']);
+        }, false],
+        'borrarlo: queda sin efecto' => [fn ($test) => app(UpdateTeacher::class)->handle($test->teacher->fresh(), ['institutional_email' => '']), false],
+    ]);
+
     it('AC-07: a la Subdirección y al jefe de proyecto docente les sale deshabilitado con su motivo y reciben 403; el jefe de otro departamento, 403', function () {
         foreach (['subdireccion', 'jpd'] as $who) {
             $dom = domOf($this->actingAs($this->{$who})->get(route('faculty.teachers.show', $this->teacher->id))->assertOk());

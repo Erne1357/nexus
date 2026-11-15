@@ -146,8 +146,9 @@ new #[Title('Personas y puestos')] class extends Component
      * «Dar de alta» (CF-S3): el usuario se guarda como llega, sin los espacios de los extremos; el correo, en minúsculas y
      * del dominio institucional, único sin importar mayúsculas (UserAccountRules). Nace activo y sin acceso
      * (CreateStaffUser con `withAccess: false`); con correo, después del commit le llega la invitación (InviteUser,
-     * CF-07), y la pantalla lleva a su ficha para nombrarlo. Los errores de las reglas y de la Action salen junto a su
-     * campo; si la invitación no sale, el alta queda y el aviso dice por qué.
+     * CF-07) si quien la da de alta puede invitar (UserPolicy, `invite`), y la pantalla lleva a su ficha para nombrarlo.
+     * Los errores de las reglas y de la Action salen junto a su campo; si la invitación no sale, el alta queda y el aviso
+     * dice por qué.
      */
     public function createUser(CreateStaffUser $createStaffUser, InviteUser $inviteUser, UserAccountRules $rules): void
     {
@@ -192,6 +193,12 @@ new #[Title('Personas y puestos')] class extends Component
 
         if ($user->email === null) {
             $this->success('Usuario dado de alta', e("{$user->username} queda sin acceso hasta que captures su correo institucional. Nómbralo en su ficha."), redirectTo: $redirectTo);
+
+            return;
+        }
+
+        if (Gate::denies('invite', $user)) {
+            $this->success('Usuario dado de alta', e("{$user->username} queda sin acceso: no puedes mandarle la invitación. Nómbralo en su ficha."), redirectTo: $redirectTo);
 
             return;
         }

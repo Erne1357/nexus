@@ -11,6 +11,7 @@ use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\PeopleQuery;
+use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Core\Support\PasswordResetTokens;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -155,9 +156,10 @@ trait ManagesAccount
      * CF-06: la cuenta vuelve activa y sin puestos, y con correo institucional le llega la invitación (CF-07). Un
      * rechazo, en un toast.
      */
-    public function reactivate(PeopleQuery $people, ReactivateUser $reactivateUser): void
+    public function reactivate(PeopleQuery $people, ReactivateUser $reactivateUser, UserAccountRules $rules): void
     {
         $person = $this->accountPerson($people, 'reactivate');
+        $institutional = $rules->reactivationInviteEmail($person) !== null;
 
         try {
             $email = $reactivateUser->handle($person, auth()->user());
@@ -167,9 +169,11 @@ trait ManagesAccount
             return;
         }
 
-        $this->success('Cuenta reactivada', e(($email === null
-            ? 'Queda sin acceso: captura su correo institucional y mándale la invitación.'
-            : "Invitación enviada a {$email}.").' Sus puestos no regresan: nómbralo otra vez si hace falta.'));
+        $this->success('Cuenta reactivada', e(match (true) {
+            $email !== null => "Invitación enviada a {$email}.",
+            ! $institutional => 'Queda sin acceso: captura su correo institucional y mándale la invitación.',
+            default => 'Queda sin acceso: la invitación no salió; mándala desde «Acciones».',
+        }.' Sus puestos no regresan: nómbralo otra vez si hace falta.'));
     }
 
     /**
