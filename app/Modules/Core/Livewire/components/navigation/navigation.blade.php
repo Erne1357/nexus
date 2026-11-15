@@ -193,6 +193,12 @@
                         @endif
 
                         @foreach ($group['entries'] as $entry)
+                            {{--
+                                Cerrada en escritorio, la columna mide 224 px: un nombre largo («Validación de catálogos»
+                                en negritas, con el punto de la activa) baja a un segundo renglón en vez de cortarse, y
+                                los de un renglón siguen midiendo 36 px. Abierto, la retícula va en renglones de 36 px: ahí
+                                se queda en uno y se corta.
+                            --}}
                             <a
                                 href="{{ route($entry['item']->route) }}"
                                 wire:navigate
@@ -203,9 +209,9 @@
                                 @if ($entry['active']) data-active aria-current="{{ $entry['page'] ? 'page' : 'true' }}" @endif
                                 @if ($entry['hidden']) aria-describedby="{{ $entry['hidden']['id'] }}" data-why="{{ $entry['hidden']['why'] }}" @endif
                                 style="{{ $entry['style'] }}"
-                                class="relative z-[1] mx-3 my-px hidden h-9 min-w-0 flex-none items-center gap-2.5 rounded-md px-2.5 whitespace-nowrap text-base-content hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary data-active:bg-secondary data-active:font-bold data-active:before:size-1.5 data-active:before:flex-none data-active:before:rounded-full data-active:before:bg-accent in-data-current:flex in-data-[menu=open]:m-0 in-data-[menu=open]:flex {{ $place }} max-md:h-auto max-md:min-h-11 max-md:px-3"
+                                class="relative z-[1] mx-3 my-px hidden min-h-9 min-w-0 flex-none items-center gap-2.5 rounded-md px-2.5 py-1.5 text-base-content hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary data-active:bg-secondary data-active:font-bold data-active:before:size-1.5 data-active:before:flex-none data-active:before:rounded-full data-active:before:bg-accent in-data-current:flex in-data-[menu=open]:m-0 in-data-[menu=open]:flex in-data-[menu=open]:h-9 in-data-[menu=open]:py-0 in-data-[menu=open]:whitespace-nowrap {{ $place }} max-md:h-auto max-md:min-h-11 max-md:px-3"
                             >
-                                <span class="truncate">{{ $entry['item']->label }}</span>
+                                <span class="in-data-[menu=open]:truncate">{{ $entry['item']->label }}</span>
 
                                 {{-- Cerrada en escritorio la columna mide 224 px: la insignia queda solo con su icono. --}}
                                 @if ($entry['hidden']['badge'] ?? false)

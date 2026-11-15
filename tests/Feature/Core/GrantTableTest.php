@@ -110,7 +110,7 @@ it('CF-S2: un rol desactivado o borrado no aporta nada, aunque siga asignado', f
 
 it('CF-02: un rol de fábrica que ya no sigue al código aporta solo su propia lista', function () {
     $set = PermissionSet::query()->where('factory_role', Role::Docente)->sole();
-    $set->update(['follows_factory' => false]);
+    $set->forceFill(['follows_factory' => false])->save();
     DB::table('permission_set_permissions')->insert(['permission_set_id' => $set->id, 'permission' => StaffingPermission::MyLoadView->value]);
 
     expect(nextGrantTable()->matrix()[Role::Docente->value])->toBe([StaffingPermission::MyLoadView->value]);
@@ -202,13 +202,13 @@ it('CF-01: la versión se lee una vez por petición y, con la misma versión, el
         ->and($queries->filter(fn (string $sql): bool => str_contains($sql, 'permission'))->count())->toBe(0);
 });
 
-it('CF-01: lo leído dentro de una transacción que se revierte no queda en la caché', function () {
+it('CF-01: lo leído dentro de una transacción que se revierte no queda en la caché ni en la instancia', function () {
     $key = null;
+    $table = nextGrantTable();
 
     try {
-        DB::transaction(function () use (&$key): void {
+        DB::transaction(function () use (&$key, $table): void {
             DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingView->value]);
-            $table = nextGrantTable();
             $key = $table->cacheKey();
 
             expect($table->grants(Role::Coordinador, CorePermission::SettingView))->toBeTrue();
@@ -219,7 +219,21 @@ it('CF-01: lo leído dentro de una transacción que se revierte no queda en la c
     }
 
     expect(Cache::has($key))->toBeFalse()
+        ->and($table->grants(Role::Coordinador, CorePermission::SettingView))->toBeFalse()
+        ->and($table->cacheKey())->not->toBe($key)
         ->and(nextGrantTable()->grants(Role::Coordinador, CorePermission::SettingView))->toBeFalse();
+});
+
+it('CF-03 y CF-04: un mapa cacheado no da lo que hoy es candado, lo que ya nadie declara ni lo que las reglas bloquean', function () {
+    $table = nextGrantTable();
+    Cache::put($table->cacheKey(), [
+        Role::Coordinador->value => [CorePermission::ActivityView->value, AcademicLoadPermission::ProposalView->value, 'nadie.declaro.esto', FacultyPermission::TeacherView->value],
+        Role::Docente->value => [CorePermission::SettingView->value],
+    ], 60);
+
+    expect($table->matrix())->toBe([Role::Coordinador->value => [AcademicLoadPermission::ProposalView->value]])
+        ->and($table->grants(Role::Coordinador, CorePermission::ActivityView))->toBeFalse()
+        ->and($table->grants(Role::Docente, CorePermission::SettingView))->toBeFalse();
 });
 
 it('un mapa cacheado con otra forma se descarta y se vuelve a armar', function () {

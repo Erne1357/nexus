@@ -4,6 +4,7 @@ use App\Modules\Core\Actions\ForgetFailedJob;
 use App\Modules\Core\Actions\RetryFailedJob;
 use App\Modules\Core\Models\FailedJob;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
@@ -60,4 +61,14 @@ it('CF-S8: si el trabajo ya no existe, ninguna de las dos escribe en la bitácor
     app(ForgetFailedJob::class)->handle($job, $this->admin);
 
     expect(Activity::query()->whereIn('event', ['failed-job-retried', 'failed-job-forgotten'])->count())->toBe(0);
+});
+
+it('CF-S8: si queue:retry no saca el trabajo de los fallidos, lanza y no deja bitácora', function () {
+    Artisan::shouldReceive('call')->once()->andReturn(1);
+
+    expect(fn () => app(RetryFailedJob::class)->handle(FailedJob::query()->where('uuid', $this->uuid)->first(), $this->admin))
+        ->toThrow(RuntimeException::class);
+
+    expect(Activity::query()->where('event', 'failed-job-retried')->count())->toBe(0)
+        ->and(DB::table('failed_jobs')->where('uuid', $this->uuid)->exists())->toBeTrue();
 });

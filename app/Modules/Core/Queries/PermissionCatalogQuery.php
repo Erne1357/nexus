@@ -20,6 +20,11 @@ use App\Modules\Core\Enums\Role;
  *
  * Los motivos por los que un puesto no puede recibir un permiso (problemsFor(), grantProblems()) son los de
  * PermissionGrantRules, los mismos que da la Action al bloquear (CF-S1, CF-03, CF-04).
+ *
+ * Para los drawers de agregar (confirmado el 15 de noviembre de 2026): `institution_wide` dice si el permiso podría
+ * valer en todo el Tec (de gestión, sin unidad ni carrera), e `institution_wide_for` los puestos editables a los que se
+ * puede dar y para los que valdría en todo el Tec (PermissionGrantRules::isInstitutionWide()): ahí la pantalla avisa
+ * «Valdrá en todo el Tec». `blocked_for` da, por puesto editable, el motivo por el que no se le puede dar (CF-03, CF-04).
  */
 final class PermissionCatalogQuery
 {
@@ -52,7 +57,7 @@ final class PermissionCatalogQuery
     public function __construct(
         private readonly PermissionRegistry $registry,
         private readonly PositionsQuery $positions,
-        private readonly PermissionGrantRules $grantRules,
+        private readonly PermissionGrantRules $rules,
     ) {}
 
     /**
@@ -75,14 +80,22 @@ final class PermissionCatalogQuery
      *     admin_denied: bool,
      *     positions: list<array{role: Role, origins: list<string>, sources: list<array{kind: string, name: string|null}>}>,
      *     people: int,
+     *     institution_wide: bool,
+     *     institution_wide_for: list<Role>,
+     *     blocked_for: array<string, string>,
      * }>
      */
     public function all(?array $positions = null, ?array $people = null): array
     {
         $byKey = [];
+        $editable = [];
         $people ??= $this->positions->peopleByRoleSet();
 
         foreach ($positions ?? $this->positions->all($people) as $position) {
+            if ($position['locked'] === null) {
+                $editable[] = $position['role'];
+            }
+
             foreach ($position['effective'] as $permission) {
                 $byKey[$permission['key']][] = ['role' => $position['role'], 'origins' => $permission['origins'], 'sources' => $permission['sources']];
             }
@@ -90,7 +103,7 @@ final class PermissionCatalogQuery
 
         $denied = $this->registry->adminDenials();
 
-        return array_map(function (Permission $permission) use ($byKey, $people, $denied): array {
+        return array_map(function (Permission $permission) use ($byKey, $people, $denied, $editable): array {
             $key = (string) $permission->value;
             $holders = $byKey[$key] ?? [];
             $roles = array_map(fn (array $holder): string => $holder['role']->value, $holders);
@@ -111,6 +124,15 @@ final class PermissionCatalogQuery
                 'admin_denied' => in_array($key, $denied, true),
                 'positions' => $holders,
                 'people' => array_sum(array_filter($people, fn (string $set): bool => array_intersect(explode(',', $set), $roles) !== [], ARRAY_FILTER_USE_KEY)),
+                'institution_wide' => PermissionGrantRules::declaresNoUnitNorCareer($permission),
+                'institution_wide_for' => array_values(array_filter(
+                    $editable,
+                    fn (Role $role): bool => $this->rules->isInstitutionWide($role, $permission) && $this->rules->grantProblem($role, $permission) === null,
+                )),
+                'blocked_for' => array_filter(array_combine(
+                    array_map(fn (Role $role): string => $role->value, $editable),
+                    array_map(fn (Role $role): ?string => $this->rules->grantProblem($role, $permission), $editable),
+                ), fn (?string $problem): bool => $problem !== null),
             ];
         }, $this->registry->permissions());
     }
@@ -138,7 +160,7 @@ final class PermissionCatalogQuery
             $problems[$role->value] = match (true) {
                 $permission === null => "El permiso «{$key}» no existe.",
                 $role === Role::Admin => in_array($key, $this->registry->adminDenials(), true) ? self::ADMIN_DENIED_PROBLEM : null,
-                default => $this->grantRules->grantProblem($role, $permission),
+                default => $this->rules->grantProblem($role, $permission),
             };
         }
 
@@ -155,7 +177,7 @@ final class PermissionCatalogQuery
         $problems = [];
 
         foreach ($this->registry->permissions() as $permission) {
-            $problems[(string) $permission->value] = $this->grantRules->grantProblem($role, $permission);
+            $problems[(string) $permission->value] = $this->rules->grantProblem($role, $permission);
         }
 
         return $problems;

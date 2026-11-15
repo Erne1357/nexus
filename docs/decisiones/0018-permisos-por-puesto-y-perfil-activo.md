@@ -95,6 +95,7 @@ Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por con
 5. **Candados (CF-03).**
    - `ModuleServiceProvider::adminOnly()` declara los permisos que solo tiene el admin y que no se dan a otro puesto, ni sueltos ni dentro de un rol.
    - Core declara `core.user.*`, `core.authz.*`, `core.assignment.*`, `core.activity.*`, `core.mail.*`, `core.queue.*` y `core.org_unit.*`. El organigrama es un supuesto por confirmar, porque decide el alcance de todos.
+   - Desde el 15 de noviembre de 2026 (confirmado) también son candados `core.campus.update` y `core.modality.update` (Core) y `academic.career.delete` y `academic.department.delete` (Academic): desactivar un campus o una modalidad les quita el alcance a todos, y borrar una carrera o un departamento termina nombramientos de otros. `core.modality.update_profile` no lo es, porque la Subdirección lo tiene de fábrica.
    - El registro falla al arrancar si un candado se concede en `grants()` o es también excepción del admin.
 6. **Alcance (CF-04, «departamento o carrera», confirmado el 14 de noviembre de 2026).**
    - `Role::boundedDimensions()` dice qué dimensiones acota cada puesto:
@@ -104,6 +105,8 @@ Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por con
    - Un permiso de gestión se le da a un puesto si este acota el campus y la modalidad que el permiso declare y, si el permiso declara unidad o carrera, al menos una de las que declare. Si no declara ni unidad ni carrera, el puesto acota todas sus dimensiones.
    - `PermissionGrantRules` da el motivo en español de cada bloqueo: el admin no se edita; un permiso es candado; un permiso de gestión va a un puesto sin alcance; o el puesto no acota el campus, la modalidad, o ni el departamento ni la carrera del permiso.
    - Lo de fábrica siempre vale, porque se revisó por PR.
+   - Lo que valdría en todo el Tec se puede dar con aviso (confirmado el 15 de noviembre de 2026): `PermissionGrantRules::isInstitutionWide()` lo marca cuando el permiso no declara ni unidad ni carrera y el puesto no fija ninguna de sus dimensiones.
+   - `PermissionGrantRules::VERSION` va en la huella de `GrantTable`, y lo que sale de la caché se vuelve a revisar con las reglas: un despliegue que solo cambie las reglas no sirve lo que permitían las anteriores.
    - Las Actions lo revisan al dar un rol o un permiso a un puesto. `GrantTable` lo vuelve a aplicar al armar el mapa. Así no vale lo que llegue a la base por otro camino, ni lo que un rol de fábrica, si sigue al código y está dado a otro puesto, le traiga después de un despliegue.
 7. **Lo de fábrica frente a CF-04.**
    - Con la primera redacción («acota **cada** dimensión»), doce concesiones de fábrica se bloquearían si no fueran de fábrica:

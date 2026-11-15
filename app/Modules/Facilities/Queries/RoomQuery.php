@@ -48,11 +48,44 @@ final class RoomQuery
         ?bool $active = null,
         int $perPage = 15,
     ): LengthAwarePaginator {
+        return $this->filtered($context, $campuses, $search, $building, $type, $owner, $active)
+            ->with(['campus:id,code,name', 'building:id,code,name', 'department:id,code,name'])
+            ->withCount('blocks')
+            ->orderBy('code')
+            ->paginate($perPage);
+    }
+
+    /**
+     * Los ids de todos los salones que cumplen los mismos filtros de forTable(), de todas las páginas, para «Elegir los
+     * N de la lista» al asignar dueño en bloque.
+     *
+     * @param  Collection<int, Campus>  $campuses
+     * @return list<string>
+     */
+    public function idsForTable(
+        Actor $context,
+        Collection $campuses,
+        string $search = '',
+        ?string $building = null,
+        ?string $type = null,
+        ?string $owner = null,
+        ?bool $active = null,
+    ): array {
+        return $this->filtered($context, $campuses, $search, $building, $type, $owner, $active)
+            ->orderBy('code')
+            ->pluck('rooms.id')
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, Campus>  $campuses
+     * @return Builder<Room>
+     */
+    private function filtered(Actor $context, Collection $campuses, string $search, ?string $building, ?string $type, ?string $owner, ?bool $active): Builder
+    {
         return Room::query()
             ->whereIn('campus_id', $campuses->pluck('id')->all())
             ->tap(fn (Builder $query) => $context->constrain($query, FacilitiesPermission::RoomView, ['campus' => 'rooms.campus_id']))
-            ->with(['campus:id,code,name', 'building:id,code,name', 'department:id,code,name'])
-            ->withCount('blocks')
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search))
             ->when($building, fn (Builder $query, string $id) => Str::isUuid($id) ? $query->where('building_id', $id) : $query->whereRaw('false'))
             ->when($type, fn (Builder $query, string $value) => RoomType::tryFrom($value) === null ? $query->whereRaw('false') : $query->where('type', $value))
@@ -61,9 +94,16 @@ final class RoomQuery
                 Str::isUuid($value) => $query->where('department_id', $value),
                 default => $query->whereRaw('false'),
             })
-            ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
-            ->orderBy('code')
-            ->paginate($perPage);
+            ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active));
+    }
+
+    /**
+     * Cuántos salones activos, sin borrar, de cualquier campus, no tienen departamento dueño: ningún jefe los revisa en la
+     * validación de salones (CV12, confirmado el 14 de noviembre de 2026; el aviso de «Abrir validación»).
+     */
+    public function withoutOwnerCount(): int
+    {
+        return Room::query()->where('is_active', true)->whereNull('department_id')->count();
     }
 
     /**

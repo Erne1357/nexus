@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Actions\Concerns\ReplacesPermissionSetKeys;
 use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Rules\PermissionSetRules;
@@ -17,6 +18,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  */
 final class ApplyFactoryUpdates
 {
+    use ReplacesPermissionSetKeys;
+
     public function __construct(
         private readonly PermissionSetRules $rules,
         private readonly GrantTable $grants,
@@ -40,7 +43,7 @@ final class ApplyFactoryUpdates
             $new = array_values(array_unique([...$old, ...$added]));
             sort($new);
 
-            $this->rules->replaceKeys($set, $new);
+            $this->replaceKeys($set, $new);
             $set->forceFill(['factory_baseline' => $this->rules->factoryKeys($set->factory_role)])->save();
 
             activity()

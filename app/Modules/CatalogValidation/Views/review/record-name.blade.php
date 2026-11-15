@@ -2,7 +2,8 @@
     El nombre de un registro de la lista con lo que hace falta saber para revisarlo: su observación abierta y si está
     inactivo, como insignias; en docentes, su correo institucional o «Sin correo institucional» con «Agregar» (abre el
     recuadro del correo, AC-06; quien no lo captura ve su motivo en «Acciones») y sus otros departamentos («También en»
-    si este es su principal, «Principal en» si no); en salones, su tipo y su capacidad cuando sus columnas se ocultan.
+    si este es su principal, «Principal en» si no); en materias, en qué planes está (`$subjectPlans`; así se distinguen
+    las que se llaman igual, tarea 1.21); en salones, su tipo y su capacidad cuando sus columnas se ocultan.
     `$record`, `$inTable` (la tabla lleva los data-testid; los renglones apilados no); `$flagMap`, `$teacherRows` y
     `$current` son de review.php.
 --}}
@@ -32,6 +33,15 @@
             <span>{{ $row['departments']['here_primary'] ? 'También en' : 'Principal en' }} {{ $row['departments']['here_primary'] ? collect($row['departments']['others'])->pluck('name')->join(', ') : $row['departments']['others'][0]['name'] }}</span>
         @endif
     </div>
+@elseif ($catalog === \App\Modules\CatalogValidation\Enums\Catalog::Subjects)
+    @php($plans = $subjectPlans[$record->id] ?? [])
+    <p class="mt-0.5 text-[12.5px] text-neutral" @if ($inTable) data-testid="subject-plans-{{ $record->code }}" @endif>
+        @if ($plans === [])
+            En ningún plan
+        @else
+            <span class="font-mono">{{ implode(' · ', array_slice($plans, 0, 3)) }}</span>{{ count($plans) > 3 ? ' · y '.(count($plans) - 3).' más' : '' }}
+        @endif
+    </p>
 @elseif ($catalog === \App\Modules\CatalogValidation\Enums\Catalog::Rooms)
     <p class="mt-0.5 text-[12.5px] text-neutral min-[1536px]:hidden">{{ $record->type->label() }}<span class="min-[1024px]:hidden"> · <span class="font-mono tabular-nums">{{ $record->capacity }}</span> lugares</span></p>
 @endif

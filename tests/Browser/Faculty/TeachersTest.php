@@ -10,7 +10,9 @@ use App\Modules\Faculty\Models\Teacher;
 | Docentes en el navegador: el jefe de Sistemas y Computación (de todo el Tec) entra por el icono de Recursos
 | humanos, da de alta un docente (con su departamento, sin elegirlo) y lo ve en su lista; con el número de uno que
 | ya existe solo se le dice que está registrado, y la Subdirección es quien lo adscribe (S9). A 1440 px la búsqueda,
-| los filtros y la acción caben en un renglón sin cortar ningún texto. El coordinador no ve el área.
+| los filtros y la acción caben en un renglón sin cortar ningún texto, y la tabla con los cuatro estados de acceso
+| (AC-04) cabe sin desplazarse de lado. El jefe filtra a los que no tienen correo institucional y lo captura en
+| «Editar docente» (AC-06). El coordinador no ve el área.
 */
 
 beforeEach(function () {
@@ -108,4 +110,47 @@ it('el coordinador no ve el área de Recursos humanos', function () {
         ->assertPathIs('/')
         ->assertNotPresent('[data-menu-area="recursos_humanos"]')
         ->assertNoJavaScriptErrors();
+});
+
+it('el jefe de SC filtra a los que no tienen correo institucional y lo captura en «Editar docente»; la tabla con los cuatro estados de acceso cabe a 1440 px y la página a 390 px', function () {
+    foreach ([
+        ['PRUE000003AB1', 'María Guadalupe Hernández Villalobos', ['must_change_password' => true]],
+        ['PRUE000004AB1', 'Darío Soto', ['password' => null, 'access_invited_at' => now()]],
+        ['PRUE000005AB1', 'Elsa Mora', ['must_change_password' => false]],
+    ] as [$rfc, $name, $user]) {
+        Teacher::factory()->adscribedTo($this->sc)->create([
+            'rfc' => $rfc,
+            'name' => $name,
+            'institutional_email' => strtolower($rfc).'@cdjuarez.tecnm.mx',
+            'user_id' => User::factory()->withRole(Role::Docente)->create(['username' => $rfc, ...$user])->id,
+        ]);
+    }
+
+    $page = visit('/login')
+        ->fill('username', 'jefe.sc')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->resize(1440, 900)
+        ->navigate('/faculty/teachers')
+        ->assertSeeIn('@missing-emails', '1 docente activo sin correo institucional')
+        ->assertSee('Debe cambiar su contraseña')
+        ->assertSee('Invitación enviada')
+        ->assertSee('Con acceso')
+        ->assertScript("(() => { const box = document.querySelector('table').parentElement; return box.scrollWidth <= box.clientWidth; })()", true)
+        ->click('Ver solo ese')
+        ->waitForText('Solo los que no tienen correo institucional.')
+        ->assertDontSee('Elsa Mora')
+        ->click('@edit-PRUE000001AB1')
+        ->waitForText('A él va su invitación de acceso.')
+        ->fill('institutional_email', 'ana.perez@cdjuarez.tecnm.mx')
+        ->press('Guardar')
+        ->waitForText('Docente actualizado')
+        ->assertNoJavaScriptErrors();
+
+    $page->resize(390, 844)
+        ->navigate('/faculty/teachers')
+        ->assertScript('document.documentElement.scrollWidth <= window.innerWidth', true)
+        ->assertNoJavaScriptErrors();
+
+    expect(Teacher::where('rfc', 'PRUE000001AB1')->sole()->institutional_email)->toBe('ana.perez@cdjuarez.tecnm.mx');
 });

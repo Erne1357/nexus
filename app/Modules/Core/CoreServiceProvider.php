@@ -31,7 +31,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
-use App\Modules\Core\Listeners\LogFailedMailNotification;
+use App\Modules\Core\Listeners\LogFailedQueuedMail;
 use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
@@ -42,16 +42,19 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\RoleAssignment;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
+use App\Modules\Core\Settings\SettingRegistry;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Mail\Events\MessageSent;
-use Illuminate\Notifications\Events\NotificationFailed;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Livewire\ComponentHookRegistry;
@@ -59,6 +62,13 @@ use Spatie\Activitylog\Models\Activity;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * La bitácora es de un paquete (spatie/activitylog), así que su policy no sale de la convención.
+     *
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [Activity::class => ActivityPolicy::class];
+
     public function register(): void
     {
         // Estático y en register(): Livewire cablea sus hooks al arrancar (ComponentHookRegistry::boot()), y un hook
@@ -105,6 +115,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
         // Sin estado: quién está adscrito a cada unidad del Organigrama. Faculty lo reemplaza con sus adscripciones.
         $this->app->bindIf(UnitAdscriptions::class, NoUnitAdscriptions::class);
 
+        // Singleton porque es inmutable: los parámetros que declaran los módulos, sin valores ni nada de la petición.
+        $this->app->singleton(SettingRegistry::class, fn (Application $app): SettingRegistry => SettingRegistry::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
+
         // Singleton porque es inmutable: el catálogo de permisos, lo de fábrica por puesto y los candados de todos
         // los módulos, sin nada del usuario ni de la petición. Lo que vale hoy lo dice GrantTable.
         $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
@@ -124,13 +139,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
         Event::listen(MessageSent::class, LogSentMail::class);
-        Event::listen(NotificationFailed::class, LogFailedMailNotification::class);
+        Event::listen(JobFailed::class, LogFailedQueuedMail::class);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
         $this->app->booted(function (Application $app): void {
             $app->make(Navigation::class);
             $app->make(PermissionRegistry::class);
+            $app->make(SettingRegistry::class);
         });
     }
 
@@ -152,8 +168,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
             new NavigationItem('Puestos y permisos', 'core.permissions', 'o-key', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [PermissionSet::class]),
             // 1.22-D Bitácora
+            new NavigationItem('Bitácora', 'core.activity', 'o-clipboard-document-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [Activity::class]),
             // 1.22-E Avisos y atajos del login
+            new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView)),
             // 1.22-F Parámetros
+            new NavigationItem('Parámetros', 'core.settings', 'o-adjustments-horizontal', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [Setting::class]),
             // 1.22-G Correos y colas
             new NavigationItem('Correos y colas', 'core.mail-and-queues', 'o-envelope', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [MailLog::class]),
@@ -184,17 +206,23 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
     /**
      * CF-03 (confirmado el 14 de noviembre de 2026): usuarios, roles y permisos, nombramientos, bitácora, correos y
-     * colas son solo del admin. El organigrama también, porque decide el alcance de todos (supuesto por confirmar).
-     * Los avisos y atajos del login y los parámetros sí se pueden dar.
+     * colas son solo del admin. El organigrama también, porque decide el alcance de todos (supuesto por confirmar). Y,
+     * desde el 15 de noviembre de 2026, editar un campus o una modalidad, porque desactivarlos les quita el alcance a
+     * todos (confirmado). El perfil de flujo de una modalidad no es candado: la Subdirección lo tiene de fábrica. Los
+     * avisos y atajos del login y los parámetros sí se pueden dar.
      */
     public function adminOnly(): array
     {
         $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit'];
 
-        return array_values(array_filter(
-            CorePermission::cases(),
-            fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true),
-        ));
+        return [
+            ...array_values(array_filter(
+                CorePermission::cases(),
+                fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true),
+            )),
+            CorePermission::CampusUpdate,
+            CorePermission::ModalityUpdate,
+        ];
     }
 
     /**

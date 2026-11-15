@@ -20,6 +20,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
@@ -35,6 +37,7 @@ use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
+use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
@@ -53,6 +56,7 @@ use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -157,6 +161,41 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      * ven los jefes, el jefe de proyecto docente y la Subdirección; decide el jefe del departamento; aplica el
      * coordinador (horario) o el jefe (salón).
      */
+    /**
+     * Los parámetros de `settings` que lee Asignación docente (CF-S7): los pesos y las ventanas del ranking, y los topes
+     * de horas y de traslado que revisan las reglas de horarios (TeacherHourLimit, CampusTravel). Los valores por
+     * omisión y los límites son los de las clases que los leen.
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
+    {
+        $module = ['staffing', 'Asignación docente'];
+
+        return [
+            new SettingDefinition('staffing.weights', ...$module, label: 'Pesos del ranking docente',
+                help: 'Cuánto suma cada cosa al puntaje con el que se ordena a los docentes que pueden tomar un grupo. Cada peso es un número de cero en adelante; con cero, esa cosa no cuenta.',
+                type: SettingType::DecimalTable, default: ['per_group_taught' => 1.0, 'preferente' => 3.0, 'apto' => 1.0, 'evaluation' => 2.0],
+                rules: ['min:0', 'max:100'],
+                fields: ['per_group_taught' => 'Por cada grupo impartido', 'preferente' => 'Perfil preferente en la materia', 'apto' => 'Perfil apto en la materia', 'evaluation' => 'Por punto de evaluación docente']),
+            new SettingDefinition('staffing.history_terms', ...$module, label: 'Semestres del historial',
+                help: 'Cuántos semestres hacia atrás cuenta el ranking los grupos que el docente ya impartió.',
+                type: SettingType::Integer, default: RankingWindowSizes::DEFAULT_HISTORY, rules: ['min:1', 'max:20'], unit: 'semestres'),
+            new SettingDefinition('staffing.evaluation_terms', ...$module, label: 'Semestres de la evaluación',
+                help: 'Cuántos semestres hacia atrás promedia el ranking la evaluación docente.',
+                type: SettingType::Integer, default: RankingWindowSizes::DEFAULT_EVALUATION, rules: ['min:1', 'max:20'], unit: 'semestres'),
+            new SettingDefinition('staffing.extra_hours_tolerance', ...$module, label: 'Horas de más que se toleran',
+                help: 'Cuántas horas semanales puede tener un docente por encima de sus horas base antes de que Nexus marque que se pasó.',
+                type: SettingType::Integer, default: 0, rules: ['min:0', 'max:40'], unit: 'horas'),
+            new SettingDefinition('staffing.honorarios_max_hours', ...$module, label: 'Tope de horas de un docente por honorarios',
+                help: 'Las horas semanales máximas de quien da clases por honorarios. Sin valor, se usan sus horas base más la tolerancia.',
+                type: SettingType::Integer, default: null, rules: ['min:1', 'max:40'], unit: 'horas', nullable: true),
+            new SettingDefinition('staffing.min_campus_travel_minutes', ...$module, label: 'Minutos mínimos para cambiar de campus',
+                help: 'El tiempo que necesita un docente entre dos clases seguidas en campus distintos. Con menos, Nexus avisa del traslado (no bloquea).',
+                type: SettingType::Integer, default: CampusTravel::DEFAULT_MINUTES, rules: ['min:0', 'max:240'], unit: 'minutos'),
+        ];
+    }
+
     public function grants(): array
     {
         return [

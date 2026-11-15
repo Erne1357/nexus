@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
  * "Validación de catálogos"): se da de baja de ese departamento (RemoveAdscription: si era la principal, la principal
  * pasa a la adscripción más antigua que le quede) y, si ya no está adscrito a otro, queda dado de baja y su cuenta se
  * inhabilita (SetTeacherActive, que sincroniza su acceso con SyncTeacherAccess). Quién puede lo decide
- * TeacherPolicy::removeAdscription antes de llamarla (la usan la validación y «Quitar de mi departamento» en Docentes,
+ * TeacherPolicy::removeAdscription antes de llamarla (la usan la validación y «Quitar de <Departamento>» en Docentes,
  * confirmado el 12 de noviembre de 2026): a un docente que ocupa un puesto solo lo dan de baja el admin o la Subdirección
  * (CV-S8).
  *

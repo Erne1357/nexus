@@ -2,7 +2,10 @@
 
 namespace App\Modules\CatalogValidation\Queries;
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
@@ -17,7 +20,12 @@ use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ModalityQuery;
 use App\Modules\Core\Queries\RecipientsQuery;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Models\Teacher;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
@@ -63,21 +71,22 @@ final class ValidationProgressQuery
     }
 
     /**
-     * La matriz del periodo para los campus dados (los abiertos, o el que filtra la pantalla).
+     * La matriz del periodo: la validación es por departamento para todo el Tec, sin campus (decisión 6; desde el 14 de
+     * noviembre de 2026 el tablero tampoco filtra por campus).
      *
      * `columns`: los catálogos abiertos en el periodo, con Salones al final (ninguno si no se abrió la validación). `rows`: cada
      * departamento activo, con sus revisiones por columna (nula si falta), cuántas lleva validadas del total, sus
      * pendientes y en revisión, cuántos registros lleva revisados de cuántos en cada una (`reviewed`, nulo si falta; CV7),
      * las observaciones abiertas, el jefe vigente, el estado de su carga en cada modalidad donde se abrió el periodo (la
-     * carga es por departamento y modalidad, M1; evento LoadStatusesRequested) y el último recordatorio en los campus del alcance. El jefe sale de lo mismo que
+     * carga es por departamento y modalidad, M1; evento LoadStatusesRequested) y el último recordatorio del periodo. El jefe sale de lo mismo que
      * recibe el aviso (RecipientsQuery::holders: permiso de validar la revisión sobre el departamento, usuario activo), `heads` y `head` (el primero), y de
      * ahí `remind_blocked_reason`, el motivo por el que «Recordar» no aplica (nada pendiente o sin jefe), nulo si
      * aplica; `remindable` cuenta los departamentos visibles a los que sí y sus jefes distintos. `totals`: por columna. `global` y `flags` cuentan
      * todos los departamentos; `search` (departamento o jefe) y `status` (`pending`: con algo sin validar;
      * `validated`: todo validado) solo filtran `rows` y `totals`.
      *
-     * @param  Collection<int, Campus>  $campuses
-     *                                             Con `$departmentId`, solo ese departamento (para el drawer de uno que los filtros dejaron fuera).
+     * Con `$departmentId`, solo ese departamento (para el drawer de uno que los filtros dejaron fuera).
+     *
      * @return array{
      *     columns: list<array{key: string, catalog: Catalog}>,
      *     rows: list<array<string, mixed>>,
@@ -87,7 +96,7 @@ final class ValidationProgressQuery
      *     remindable: array{departments: int, heads: int}
      * }
      */
-    public function board(Term $term, Collection $campuses, string $search = '', string $status = '', ?string $departmentId = null): array
+    public function board(Term $term, string $search = '', string $status = '', ?string $departmentId = null): array
     {
         $catalogs = $this->catalogReviews->openedCatalogs($term);
         $ordered = [...array_filter($catalogs, fn (Catalog $catalog): bool => $catalog !== Catalog::Rooms), ...array_filter($catalogs, fn (Catalog $catalog): bool => $catalog === Catalog::Rooms)];
@@ -115,16 +124,15 @@ final class ValidationProgressQuery
             ->get()
             ->keyBy('department_id');
 
-        $campus = $campuses->first();
         $heads = $departments->mapWithKeys(fn (Department $department): array => [
-            $department->getKey() => $campus === null ? collect() : collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey())))->pluck('user'),
+            $department->getKey() => collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey())))->pluck('user'),
         ]);
 
-        $modalities = $campuses->isEmpty() ? collect() : $this->openModalities($term);
+        $modalities = $this->openModalities($term);
         $statuses = new LoadStatusesRequested($term, $modalities->modelKeys());
         event($statuses);
 
-        $reminders = $this->lastReminders($term, $departments->modelKeys(), $campuses->pluck('code')->all());
+        $reminders = $this->lastReminders($term, $departments->modelKeys());
 
         $rows = $departments->map(function (Department $department) use ($columns, $reviews, $reviewed, $flags, $heads, $modalities, $statuses, $reminders): array {
             $cells = [];
@@ -201,20 +209,30 @@ final class ValidationProgressQuery
      * registro observado (aunque se haya borrado), quién la puso y su revisión. Las revisiones no son de un campus
      * (decisión 6): entran las de los catálogos abiertos.
      *
-     * @param  Collection<int, Campus>  $campuses
      * @return Collection<int, CatalogReviewFlag>
      */
-    public function openFlags(Term $term, Department $department, Collection $campuses): Collection
+    public function openFlags(Term $term, Department $department): Collection
     {
-        return CatalogReviewFlag::query()
-            ->whereNull('resolved_at')
-            ->whereHas('review', fn ($query) => $query
-                ->where('term_id', $term->getKey())
-                ->where('department_id', $department->getKey())
-                ->whereIn('catalog', $this->catalogReviews->openedCatalogs($term)))
-            ->with(['review.campus', 'review.department', 'flaggable', 'flagger'])
+        return $this->openFlagsQuery($term)
+            ->whereHas('review', fn ($query) => $query->where('department_id', $department->getKey()))
             ->orderByDesc('created_at')
             ->get();
+    }
+
+    /**
+     * Las observaciones abiertas del periodo de todos los departamentos activos, para «Observaciones abiertas» del
+     * tablero (CV10, confirmado el 14 de noviembre de 2026): por clave del departamento y, dentro de él, de la más reciente a
+     * la más antigua.
+     *
+     * @return Collection<int, CatalogReviewFlag>
+     */
+    public function allOpenFlags(Term $term): Collection
+    {
+        return $this->openFlagsQuery($term)
+            ->whereHas('review.department', fn ($query) => $query->where('is_active', true))
+            ->get()
+            ->sortBy([fn (CatalogReviewFlag $a, CatalogReviewFlag $b): int => $a->review->department->code <=> $b->review->department->code, fn (CatalogReviewFlag $a, CatalogReviewFlag $b): int => $b->created_at <=> $a->created_at])
+            ->values();
     }
 
     /**
@@ -226,30 +244,104 @@ final class ValidationProgressQuery
     }
 
     /**
-     * Cuándo se recordó por última vez a cada departamento el periodo en alguno de los campus dados (códigos), según
-     * la bitácora de RemindPendingReviews (`properties.campuses`).
+     * Cuántos departamentos activos ya validaron todo lo que el admin abrió en el periodo, de cuántos (la tarjeta de
+     * Inicio de la validación, CV-S13). Una revisión que falta cuenta como pendiente, igual que en el tablero.
+     *
+     * @return array{validated: int, total: int}
+     */
+    public function departmentsValidated(Term $term): array
+    {
+        $catalogs = $this->catalogReviews->openedCatalogs($term);
+        $departments = Department::query()->where('is_active', true)->pluck('id');
+
+        $validated = $catalogs === [] ? 0 : CatalogReview::query()
+            ->where('term_id', $term->getKey())
+            ->whereIn('department_id', $departments)
+            ->whereIn('catalog', $catalogs)
+            ->where('status', ReviewStatus::Validated)
+            ->groupBy('department_id')
+            ->havingRaw('count(distinct catalog) = ?', [count($catalogs)])
+            ->pluck('department_id')
+            ->count();
+
+        return ['validated' => $validated, 'total' => $departments->count()];
+    }
+
+    /**
+     * Cuándo se recordó por última vez a cada departamento en el periodo, según la bitácora de RemindPendingReviews. La
+     * validación es de todo el Tec: no importa en qué campus estaba el tablero (las entradas viejas guardan `campuses`).
      *
      * @param  list<string>  $departmentIds
-     * @param  list<string>  $campusCodes
      * @return array<string, CarbonImmutable>
      */
-    public function lastReminders(Term $term, array $departmentIds, array $campusCodes): array
+    public function lastReminders(Term $term, array $departmentIds): array
     {
-        if ($campusCodes === []) {
-            return [];
-        }
-
         return Activity::query()
             ->where('subject_type', (new Department)->getMorphClass())
             ->whereIn('subject_id', $departmentIds)
             ->where('event', 'reminded')
             ->where('properties->term_id', $term->getKey())
-            ->whereRaw("jsonb_exists_any((properties::jsonb)->'campuses', ?::text[])", ['{'.implode(',', array_map(fn (string $code): string => '"'.addcslashes($code, '"\\').'"', $campusCodes)).'}'])
             ->selectRaw('subject_id, max(created_at) as last')
             ->groupBy('subject_id')
             ->pluck('last', 'subject_id')
             ->map(fn (string $last): CarbonImmutable => CarbonImmutable::parse($last))
             ->all();
+    }
+
+    /**
+     * El registro observado como «ISIC-2010 · Ingeniería en Sistemas»: el RFC en los docentes y la clave con su campus en
+     * los salones (CatalogContentsQuery::roomCode). Uno que ya no existe se nombra así.
+     */
+    public static function recordLabel(Catalog $catalog, ?Model $record): string
+    {
+        if ($record === null) {
+            return 'un registro que ya no está';
+        }
+
+        $code = match ($catalog) {
+            Catalog::Teachers => (string) $record->getAttribute('rfc'),
+            Catalog::Rooms => CatalogContentsQuery::roomCode($record),
+            default => (string) $record->getAttribute('code'),
+        };
+
+        return filled($record->getAttribute('name')) ? "{$code} · {$record->getAttribute('name')}" : $code;
+    }
+
+    /**
+     * Dónde se actúa sobre el registro observado, en su catálogo (CV10): la ficha del plan o del docente, y la lista de
+     * carreras, materias o salones, que no abren un registro por su dirección (supuesto por confirmar). Null si el
+     * registro ya no existe o está borrado. Quién lo ve lo decide la Policy del registro en la pantalla.
+     */
+    public static function recordUrl(?Model $record): ?string
+    {
+        if ($record === null || (method_exists($record, 'trashed') && $record->trashed())) {
+            return null;
+        }
+
+        return match (true) {
+            $record instanceof StudyPlan => route('academic.plans.show', $record),
+            $record instanceof Teacher => route('faculty.teachers.show', $record),
+            $record instanceof Career => route('academic.careers'),
+            $record instanceof Subject => route('academic.subjects'),
+            $record instanceof Room => route('facilities.rooms'),
+            default => null,
+        };
+    }
+
+    /**
+     * Las observaciones abiertas del periodo en los catálogos abiertos, con su revisión y departamento, el registro
+     * (aunque se haya borrado, con el campus de un salón), quién la puso.
+     *
+     * @return Builder<CatalogReviewFlag>
+     */
+    private function openFlagsQuery(Term $term): Builder
+    {
+        return CatalogReviewFlag::query()
+            ->whereNull('resolved_at')
+            ->whereHas('review', fn ($query) => $query
+                ->where('term_id', $term->getKey())
+                ->whereIn('catalog', $this->catalogReviews->openedCatalogs($term)))
+            ->with(['review.department', 'flaggable' => fn (MorphTo $morph) => $morph->morphWith([Room::class => ['campus']]), 'flagger']);
     }
 
     /**

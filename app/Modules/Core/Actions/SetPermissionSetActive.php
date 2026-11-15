@@ -10,7 +10,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Desactiva o activa un rol (CF-S2): desactivado deja de aportar en todos sus puestos, pero sigue asignado. Un rol de
- * fábrica no se desactiva. Relee el rol con bloqueo; si el estado no cambia, no escribe ni registra.
+ * fábrica no se desactiva, pero sí se activa (si quedó desactivado por otro camino). Relee el rol con bloqueo; si el
+ * estado no cambia, no escribe ni registra.
  */
 final class SetPermissionSetActive
 {
@@ -28,7 +29,7 @@ final class SetPermissionSetActive
                 return $set;
             }
 
-            if ($set->factory_role !== null) {
+            if (! $active && $set->factory_role !== null) {
                 throw ValidationException::withMessages(['permission_set' => "«{$set->name}» es un rol de fábrica: no se desactiva."]);
             }
 

@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Actions\Concerns\ReplacesPermissionSetKeys;
 use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Rules\PermissionSetRules;
@@ -24,6 +25,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  */
 final class UpdatePermissionSet
 {
+    use ReplacesPermissionSetKeys;
+
     public function __construct(
         private readonly PermissionSetRules $rules,
         private readonly GrantTable $grants,
@@ -75,7 +78,7 @@ final class UpdatePermissionSet
                     $changed[] = 'follows_factory';
                 }
 
-                $this->rules->replaceKeys($set, $new['permissions']);
+                $this->replaceKeys($set, $new['permissions']);
             }
 
             $set->fill(Arr::only($new, ['name', 'description']));

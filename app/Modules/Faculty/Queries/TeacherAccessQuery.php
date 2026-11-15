@@ -2,8 +2,10 @@
 
 namespace App\Modules\Faculty\Queries;
 
+use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use App\Modules\Core\Support\AccessInvitationLink;
+use App\Modules\Faculty\Actions\InviteTeacherAccess;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -14,7 +16,33 @@ use Illuminate\Database\Eloquent\Collection;
  */
 final class TeacherAccessQuery
 {
-    public function __construct(private readonly RoleAssignmentRules $rules) {}
+    public function __construct(
+        private readonly RoleAssignmentRules $rules,
+        private readonly InvitationRelease $releases,
+    ) {}
+
+    /**
+     * Por qué no se le puede mandar ahora la invitación de acceso a un docente desde su ficha (AC-07), o null si se
+     * puede, en el orden en que se arregla: su usuario o el docente están inactivos, no tiene usuario o ya tiene
+     * acceso, falta su correo institucional, tiene otro puesto (le da acceso el admin) o, si nunca se le invitó,
+     * ningún departamento suyo ha validado su catálogo de docentes (InvitationRelease). Con una invitación vigente o
+     * vencida se puede: el enlace nuevo reemplaza al anterior.
+     */
+    public function invitationBlocker(Teacher $teacher): ?string
+    {
+        $user = $teacher->user_id === null ? null : $teacher->user()->first(['id', 'is_active', 'password', 'access_invited_at']);
+
+        return match (true) {
+            $user === null => 'El docente no tiene usuario.',
+            ! $user->is_active => 'Su usuario está inactivo.',
+            ! $teacher->is_active || $teacher->trashed() => 'El docente está inactivo.',
+            $user->password !== null => 'Ya tiene acceso.',
+            $teacher->institutional_email === null => 'Falta su correo institucional: captúralo en «Editar datos».',
+            $this->rules->holdsStaffRole($user->getKey()) => SendAccessInvitation::STAFF,
+            $user->access_invited_at === null && ! $this->releases->isReleased($teacher) => InviteTeacherAccess::NOT_INVITED,
+            default => null,
+        };
+    }
 
     /**
      * Los que se invitan al validar: usuario activo sin contraseña y sin otro puesto vigente o por empezar (a los jefes
