@@ -27,12 +27,21 @@ final class PasswordResetRules
     }
 
     /**
-     * Si su correo es una dirección válida que termina en `@` y el dominio institucional, sin importar mayúsculas: un
-     * subdominio o un dominio que solo lo contiene no cuenta.
+     * Si su correo es institucional (isInstitutionalEmail()).
      */
     public function hasInstitutionalEmail(User $user): bool
     {
-        $email = mb_strtolower((string) $user->email);
+        return $this->isInstitutionalEmail($user->email);
+    }
+
+    /**
+     * Si `$email` es una dirección válida que termina en `@` y el dominio institucional, sin importar mayúsculas: un
+     * subdominio o un dominio que solo lo contiene no cuenta. También lo pregunta el aviso de la validación para el
+     * correo de la ficha del jefe (CV11).
+     */
+    public function isInstitutionalEmail(?string $email): bool
+    {
+        $email = mb_strtolower((string) $email);
         $domain = mb_strtolower((string) config('nexus.institutional_email_domain'));
 
         return $domain !== ''

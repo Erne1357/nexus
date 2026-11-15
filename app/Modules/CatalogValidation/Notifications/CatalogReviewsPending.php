@@ -5,12 +5,14 @@ namespace App\Modules\CatalogValidation\Notifications;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
-use App\Modules\Core\Rules\PasswordResetRules;
+use App\Modules\Core\Notifications\RoutesMailAddress;
 use App\Modules\Core\Support\StageTimeline;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
@@ -25,11 +27,13 @@ use Illuminate\Notifications\Messages\MailMessage;
  *
  * CV11 (D3 y D6, confirmados el 14 de noviembre de 2026): los dos dicen la fecha límite, si la etapa tiene ventana
  * (ValidationWindowQuery), y llegan también al correo del jefe. El recordatorio tiene su propio título y dice cuánto
- * lleva revisado de cada catálogo que falta (`$progress`, CV7). El correo solo va a un correo institucional
- * (PasswordResetRules::hasInstitutionalEmail; CV11, supuesto por confirmar): sin él, solo la campana. Sale de la cola,
- * después del commit; la campana se guarda en el momento (`viaConnections`, conexión `sync`).
+ * lleva revisado de cada catálogo que falta (`$progress`, CV7). El correo va al institucional de la ficha de docente del
+ * jefe y, si no tiene, al de su usuario si es institucional; nunca al personal, y sin ninguno, solo la campana
+ * (HeadMailAddressQuery; CV11, confirmado el 15 de noviembre de 2026). La misma dirección decide el canal y recibe el
+ * correo (RoutesMailAddress). Sale de la cola, después del commit; la campana se guarda en el momento
+ * (`viaConnections`, conexión `sync`).
  */
-final class CatalogReviewsPending extends NexusNotification implements ShouldQueue
+final class CatalogReviewsPending extends NexusNotification implements RoutesMailAddress, ShouldQueue
 {
     use Queueable;
 
@@ -63,7 +67,15 @@ final class CatalogReviewsPending extends NexusNotification implements ShouldQue
      */
     public function via(object $notifiable): array
     {
-        return app(PasswordResetRules::class)->hasInstitutionalEmail($notifiable) ? ['database', 'mail'] : ['database'];
+        return $notifiable instanceof User && $this->mailAddressFor($notifiable) !== null ? ['database', 'mail'] : ['database'];
+    }
+
+    /**
+     * CV11: el institucional de la ficha del jefe, el institucional de su usuario o ninguno.
+     */
+    public function mailAddressFor(User $user): ?string
+    {
+        return app(HeadMailAddressQuery::class)->for($user);
     }
 
     /**

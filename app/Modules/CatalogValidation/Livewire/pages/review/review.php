@@ -432,6 +432,8 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->authorize('updateInstitutionalEmail', $record);
         }
 
+        $this->ensureNoPendingFlag();
+
         $record = $correctRecord->handle($review, $record, $this->validatedRecord($review->catalog), $this->user());
 
         /*
@@ -767,6 +769,24 @@ new #[Title('Validación de catálogos')] class extends Component
     private function authorizeValidating(): void
     {
         abort_unless($this->state()['reviews']->contains(fn (CatalogReview $review): bool => Gate::allows('validate', $review)), 403);
+    }
+
+    /**
+     * CV13 (confirmado el 15 de noviembre de 2026): «Guardar» no pierde una observación a medias. Con un tipo elegido o
+     * un comentario escrito sin «Agregar observación», aunque sea solo el comentario, no guarda ni marca el registro y lo
+     * dice junto al campo: el tipo, o el comentario si solo hay comentario. `pending-flag` lleva la vista y el foco a ese
+     * campo, que en celular puede quedar fuera de la vista al oprimir «Guardar» en el pie.
+     */
+    private function ensureNoPendingFlag(): void
+    {
+        if ($this->flag === '' && trim($this->comment) === '') {
+            return;
+        }
+
+        $field = $this->flag !== '' ? 'flag' : 'comment';
+        $this->dispatch('pending-flag', field: $field);
+
+        throw ValidationException::withMessages([$field => 'Agrega la observación o quítala antes de guardar.']);
     }
 
     /**
