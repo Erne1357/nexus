@@ -128,7 +128,7 @@
                         <ul class="divide-y divide-base-300 rounded-box border border-base-300" data-testid="activity-changes">
                             @foreach ($detail->changes as $change)
                                 <li class="space-y-1 px-3 py-2.5 text-sm">
-                                    <p class="break-all font-mono text-[12.5px] text-neutral">{{ $change['field'] }}</p>
+                                    <p class="text-sm font-medium">{{ $change['field'] }}</p>
                                     <dl class="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
                                         <dt class="text-neutral">Antes</dt>
                                         <dd class="break-words text-neutral">{{ $change['old'] }}</dd>

@@ -10,4 +10,12 @@ enum LoginShortcutKind: string
 {
     case Link = 'enlace';
     case Download = 'descarga';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Link => 'Enlace',
+            self::Download => 'Descarga',
+        };
+    }
 }

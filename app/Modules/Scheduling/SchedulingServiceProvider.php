@@ -346,4 +346,12 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 : "{$assigned} grupos ya tienen docente."),
         ];
     }
+
+    public function activityAttributes(): array
+    {
+        return [
+            Group::class => ['status' => ['Estado del grupo', GroupStatus::class], 'close_justification' => 'Justificación del cierre', 'notes' => 'Notas'],
+            GroupSession::class => ['kind' => ['Tipo de sesión', SessionKind::class]],
+        ];
+    }
 }

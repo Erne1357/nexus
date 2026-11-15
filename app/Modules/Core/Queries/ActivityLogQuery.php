@@ -4,6 +4,7 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityEvents;
 use App\Modules\Core\Support\ActivityRecordTypes;
 use Carbon\CarbonImmutable;
@@ -22,6 +23,8 @@ use Throwable;
  */
 final class ActivityLogQuery
 {
+    public function __construct(private readonly ActivityAttributes $attributeLabels) {}
+
     /**
      * Cada entrada lleva `acting_as_label`, el nombre del puesto con que actuó la persona, o null.
      *
@@ -88,7 +91,11 @@ final class ActivityLogQuery
         $changes = [];
 
         foreach ([...array_keys($attributes), ...array_diff(array_keys($old), array_keys($attributes))] as $field) {
-            $changes[] = ['field' => (string) $field, 'old' => $this->show($old[$field] ?? null, array_key_exists($field, $old)), 'new' => $this->show($attributes[$field] ?? null, array_key_exists($field, $attributes))];
+            $changes[] = [
+                'field' => $this->attributeLabels->label($activity->subject_type, (string) $field),
+                'old' => $this->attributeLabels->format($activity->subject_type, (string) $field, $old[$field] ?? null),
+                'new' => $this->attributeLabels->format($activity->subject_type, (string) $field, $attributes[$field] ?? null),
+            ];
         }
 
         $properties = $activity->properties?->all() ?? [];
@@ -111,19 +118,6 @@ final class ActivityLogQuery
     private function actingAsLabel(mixed $actingAs): ?string
     {
         return is_string($actingAs) ? (Role::tryFrom($actingAs)?->listLabel() ?? $actingAs) : null;
-    }
-
-    /**
-     * Un valor para mostrarlo: texto, «—» si no existía, `sí` o `no` y el JSON de lo compuesto.
-     */
-    private function show(mixed $value, bool $present): string
-    {
-        return match (true) {
-            ! $present, $value === null => '—',
-            is_bool($value) => $value ? 'sí' : 'no',
-            is_scalar($value) => (string) $value,
-            default => (string) json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        };
     }
 
     /**

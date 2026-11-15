@@ -118,3 +118,25 @@ it('CF-03: el menú muestra «Bitácora» solo al admin', function () {
     $docente = User::factory()->withRole(Role::Docente)->create();
     $this->actingAs($docente)->get(route('home'))->assertDontSee('Bitácora');
 });
+
+it('CF-S5: el drawer muestra «Correo» y la fecha legible, no `email` ni el ISO', function () {
+    $entry = activity()
+        ->performedOn($this->campus)
+        ->causedBy($this->admin)
+        ->event('updated')
+        ->withChanges(['attributes' => ['email' => 'ana@cdjuarez.tecnm.mx', 'access_invited_at' => '2026-11-15T14:53:45-07:00'], 'old' => ['email' => null]])
+        ->log('Cambió datos');
+
+    $page = Livewire::actingAs($this->admin)->test('core::pages.activity')->call('openEntry', $entry->id);
+    preg_match('/data-testid="activity-changes".*?<\/ul>/s', $page->html(), $found);
+    $visible = $found[0] ?? '';
+
+    $page->assertSee('Correo')
+        ->assertSee('Invitación enviada')
+        ->assertSee('15/11/2026 14:53');
+
+    expect($visible)->not->toBe('')
+        ->and($visible)->not->toContain('access_invited_at')
+        ->and($visible)->not->toContain('2026-11-15T14:53:45')
+        ->and($visible)->not->toContain('>email<');
+});

@@ -108,8 +108,8 @@ it('CF-S5: el detalle trae el antes y el después por campo, el puesto con que a
     $detail = app(ActivityLogQuery::class)->detail($id);
 
     expect($detail->changes)->toBe([
-        ['field' => 'name', 'old' => 'Campus Nueve', 'new' => 'Campus Diez'],
-        ['field' => 'is_active', 'old' => 'sí', 'new' => 'no'],
+        ['field' => 'Nombre', 'old' => 'Campus Nueve', 'new' => 'Campus Diez'],
+        ['field' => 'Activo', 'old' => 'Sí', 'new' => 'No'],
     ])
         ->and($detail->actingAs)->toBe('Administración')
         ->and($detail->properties)->toBe(['email' => 'x@itcj.test'])

@@ -95,7 +95,7 @@ final class SyncTeacherAccess
             }
 
             $result = $user === null ? AccessSync::Created : AccessSync::Linked;
-            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, withAccess: false, email: $this->freeEmail($teacher->email));
+            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, email: $this->freeEmail($teacher->email));
 
             $this->link($teacher, $user);
         }

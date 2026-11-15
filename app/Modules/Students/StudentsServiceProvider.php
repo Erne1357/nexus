@@ -17,6 +17,7 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
 use App\Modules\Students\Enums\StudentsPermission;
+use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Listeners\BlockPlanCareerChangeWithStudents;
 use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
@@ -98,6 +99,13 @@ final class StudentsServiceProvider extends ModuleServiceProvider
             new DemoCheck(DemoCheckpoint::staged(), 'Hay alumnos con kárdex', fn (): true|string => KardexRecord::query()->exists()
                 ? true
                 : 'No hay renglones de kárdex.'),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            Student::class => ['control_number' => 'Número de control', 'status' => ['Estatus', StudentStatus::class], 'status_reason' => 'Motivo del estatus', 'current_semester' => 'Semestre actual'],
         ];
     }
 }

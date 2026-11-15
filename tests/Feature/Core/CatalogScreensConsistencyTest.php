@@ -136,6 +136,14 @@ it('«Borrar» va en text-error y Planes muestra «Retícula» y «Editar» ante
         ->and(array_values(array_filter($labels)))->toBe(['Retícula de PLN9', 'Editar PLN9', 'Acciones de PLN9']);
 });
 
+it('1.22-I: el menú «Acciones» con size md mide como un botón normal y, por omisión, como el de las tablas', function () {
+    $normal = domOf(Blade::render('<x-core::row-menu size="md"><x-core::row-menu-item label="Algo" /></x-core::row-menu>'))->querySelector('button[aria-haspopup="menu"]')->getAttribute('class');
+    $small = domOf(Blade::render('<x-core::row-menu><x-core::row-menu-item label="Algo" /></x-core::row-menu>'))->querySelector('button[aria-haspopup="menu"]')->getAttribute('class');
+
+    expect($normal)->not->toContain('btn-sm')->and($normal)->toContain('max-md:h-11')
+        ->and($small)->toContain('btn-sm');
+});
+
 it('un menú «Acciones» sin nombre ni etiqueta se anuncia como «Acciones»', function () {
     $html = Blade::render('<x-core::row-menu><x-core::row-menu-item label="Algo" /></x-core::row-menu>');
 

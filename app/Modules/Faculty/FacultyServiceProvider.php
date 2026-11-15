@@ -15,9 +15,16 @@ use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
+use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Enums\FacultyPermission;
+use App\Modules\Faculty\Enums\PositionKind;
+use App\Modules\Faculty\Enums\QualificationLevel;
+use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Faculty\Listeners\BlockDepartmentDeletionWithTeachers;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
+use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use App\Modules\Faculty\Queries\InvitationRelease;
 use App\Modules\Faculty\Queries\NoInvitationRelease;
 use App\Modules\Faculty\Queries\TeacherUnitAdscriptions;
@@ -142,5 +149,15 @@ final class FacultyServiceProvider extends ModuleServiceProvider
         $termId = $demo->term()->getKey();
 
         return Teacher::query()->where('is_active', true)->whereDoesntHave('availability', fn ($query) => $query->where('term_id', $termId))->count();
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            Teacher::class => ['rfc' => 'RFC', 'degree' => ['Grado', TeacherDegree::class], 'hired_on' => 'Fecha de contratación'],
+            TeacherAvailability::class => ['kind' => ['Tipo de disponibilidad', AvailabilityKind::class]],
+            TeacherPosition::class => ['kind' => ['Tipo de plaza', PositionKind::class], 'base_hours' => 'Horas base'],
+            TeacherSubjectQualification::class => ['level' => ['Nivel', QualificationLevel::class]],
+        ];
     }
 }

@@ -6,10 +6,14 @@ use App\Modules\Academic\Authorization\AcademicScopeLabels;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\Academic\Enums\AcademicPermission;
+use App\Modules\Academic\Enums\PrerequisiteKind;
+use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoStep;
@@ -93,6 +97,16 @@ final class AcademicServiceProvider extends ModuleServiceProvider
                 $demo->runSeeder(AcademicDemoSeeder::class, ['campuses' => $demo->campuses]);
                 $demo->runSeeder(DemoStaffSeeder::class, ['campuses' => $demo->campuses, 'allDepartments' => true]);
             }),
+        ];
+    }
+
+    public function activityAttributes(): array
+    {
+        return [
+            Subject::class => ['kind' => ['Tipo de materia', SubjectKind::class], 'theory_hours' => 'Horas de teoría', 'practice_hours' => 'Horas de práctica', 'credits' => 'Créditos', 'needs_lab' => 'Requiere laboratorio'],
+            SubjectPrerequisite::class => ['kind' => ['Tipo de seriación', PrerequisiteKind::class]],
+            StudyPlan::class => ['version' => 'Versión', 'semesters_count' => 'Semestres', 'total_credits' => 'Créditos totales', 'is_historical' => 'Histórico', 'valid_from' => 'Vigente desde'],
+            StudyPlanSubject::class => ['is_required' => 'Obligatoria', 'position' => 'Posición'],
         ];
     }
 }

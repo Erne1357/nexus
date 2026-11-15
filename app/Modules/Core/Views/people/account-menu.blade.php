@@ -8,7 +8,7 @@
 --}}
 @php($person = $account->person)
 
-<x-core::row-menu :name="$person->name" data-testid="account-menu">
+<x-core::row-menu :name="$person->name" size="md" data-testid="account-menu">
     @if ($abilities['update'])
         @if ($account->updateBlocker === null)
             <x-core::row-menu-item label="Editar datos" wire:click="openProfile" spinner="openProfile" data-testid="account-edit" />
