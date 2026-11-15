@@ -12,9 +12,13 @@ use App\Modules\Core\Rules\PermissionSetRules;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Los puestos para «Puestos y permisos» (CF-01, CF-S1): en el orden del enum, cada uno con sus roles, sus permisos
- * sueltos, lo que puede hoy (lo de GrantTable) con el origen de cada permiso, y cuántas personas lo ocupan hoy. El
- * admin sale de solo lectura: tiene todo lo declarado menos sus excepciones, que se listan.
+ * Los puestos para «Puestos y permisos» (CF-01, CF-S1): en el orden del enum, cada uno con a quién cubre, sus roles, sus
+ * permisos sueltos, lo que puede hoy (lo de GrantTable) con el origen de cada permiso, y cuántas personas lo ocupan hoy.
+ * El admin sale de solo lectura: tiene todo lo declarado menos sus excepciones, que se listan.
+ *
+ * El origen va dos veces: como texto (`origins`) y como dato (`sources`) para la pantalla: `factory` es el rol de
+ * fábrica del mismo puesto, `role` cualquier otro rol (también el de fábrica de otro puesto), `loose` el permiso suelto
+ * y `admin` lo que el admin tiene por ser admin.
  */
 final class PositionsQuery
 {
@@ -37,11 +41,12 @@ final class PositionsQuery
      * @return list<array{
      *     role: Role,
      *     label: string,
+     *     scope: string,
      *     locked: string|null,
      *     holders: int,
-     *     permission_sets: list<array{id: string, name: string, is_active: bool, is_factory: bool, follows_factory: bool}>,
+     *     permission_sets: list<array{id: string, name: string, is_active: bool, is_factory: bool, factory_role: Role|null, follows_factory: bool}>,
      *     permissions: list<string>,
-     *     effective: list<array{key: string, label: string, module: string, origins: list<string>}>,
+     *     effective: list<array{key: string, label: string, module: string, origins: list<string>, sources: list<array{kind: 'admin'|'factory'|'role'|'loose', name: string|null}>}>,
      *     admin_denies: list<string>,
      * }>
      */
@@ -62,17 +67,20 @@ final class PositionsQuery
             $roleSets = $sets->where('role', $role->value)->values();
             $looseKeys = $loose->get($role->value)?->pluck('permission')->all() ?? [];
             $origins = [];
+            $sources = [];
 
             foreach ($roleSets->where('is_active', true) as $set) {
                 $keys = $this->rules->contributedKeys((bool) $set->follows_factory, $set->factory_role, $own->get($set->id)?->pluck('permission')->all() ?? []);
 
                 foreach ($keys as $key) {
                     $origins[$key][] = "Rol «{$set->name}»";
+                    $sources[$key][] = ['kind' => $set->factory_role === $role->value ? 'factory' : 'role', 'name' => $set->name];
                 }
             }
 
             foreach ($looseKeys as $key) {
                 $origins[$key][] = self::LOOSE_ORIGIN;
+                $sources[$key][] = ['kind' => 'loose', 'name' => null];
             }
 
             $effective = array_values(array_filter($this->registry->permissions(), fn (Permission $permission): bool => $this->grants->grants($role, $permission)));
@@ -80,6 +88,7 @@ final class PositionsQuery
             $positions[] = [
                 'role' => $role,
                 'label' => $role->listLabel(),
+                'scope' => $this->scopeOf($role),
                 'locked' => $locked,
                 'holders' => $holders[$role->value] ?? 0,
                 'permission_sets' => $roleSets->map(fn (object $set): array => [
@@ -87,6 +96,7 @@ final class PositionsQuery
                     'name' => $set->name,
                     'is_active' => (bool) $set->is_active,
                     'is_factory' => $set->factory_role !== null,
+                    'factory_role' => $set->factory_role === null ? null : Role::tryFrom($set->factory_role),
                     'follows_factory' => (bool) $set->follows_factory,
                 ])->all(),
                 'permissions' => $looseKeys,
@@ -95,12 +105,29 @@ final class PositionsQuery
                     'label' => $permission->label(),
                     'module' => explode('.', (string) $permission->value)[0],
                     'origins' => $locked !== null ? [self::ADMIN_ORIGIN] : ($origins[$permission->value] ?? []),
+                    'sources' => $locked !== null ? [['kind' => 'admin', 'name' => null]] : ($sources[$permission->value] ?? []),
                 ], $effective),
                 'admin_denies' => $locked !== null ? $this->registry->adminDenials() : [],
             ];
         }
 
         return $positions;
+    }
+
+    /**
+     * A quién cubre el puesto, en una línea: lo que acota (Role::boundedDimensions(), CF-04) dicho como lo nombra su
+     * nombramiento.
+     */
+    private function scopeOf(Role $role): string
+    {
+        return match ($role) {
+            Role::Admin => 'Sin alcance: vale en todo Nexus',
+            Role::Subdireccion => 'Su unidad; todo el Tec en campus y modalidad',
+            Role::JefeDepartamento => 'Su departamento; todo el Tec en campus y modalidad',
+            Role::JefeProyectoDocente => 'Su departamento y su modalidad; el campus, si lo lleva',
+            Role::Coordinador => 'Su carrera y su modalidad; el campus, si lo lleva',
+            Role::Docente, Role::Alumno => 'Sin alcance: solo permisos personales',
+        };
     }
 
     /**
