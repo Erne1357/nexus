@@ -29,7 +29,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
-use App\Modules\Core\Listeners\LogFailedMailNotification;
+use App\Modules\Core\Listeners\LogFailedQueuedMail;
 use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
@@ -44,13 +44,14 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Policies\ActivityPolicy;
 use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Mail\Events\MessageSent;
-use Illuminate\Notifications\Events\NotificationFailed;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Livewire\ComponentHookRegistry;
@@ -58,6 +59,13 @@ use Spatie\Activitylog\Models\Activity;
 
 final class CoreServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * La bitácora es de un paquete (spatie/activitylog), así que su policy no sale de la convención.
+     *
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [Activity::class => ActivityPolicy::class];
+
     public function register(): void
     {
         // Estático y en register(): Livewire cablea sus hooks al arrancar (ComponentHookRegistry::boot()), y un hook
@@ -121,7 +129,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
         Event::listen(MessageSent::class, LogSentMail::class);
-        Event::listen(NotificationFailed::class, LogFailedMailNotification::class);
+        Event::listen(JobFailed::class, LogFailedQueuedMail::class);
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
@@ -148,7 +156,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
             // Panel de configuración (1.22): cada paquete agrega su entrada debajo de su marca, en el grupo Configuración.
             // 1.22-B Puestos y permisos
             // 1.22-D Bitácora
+            new NavigationItem('Bitácora', 'core.activity', 'o-clipboard-document-list', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                ability: 'viewAny', arguments: [Activity::class]),
             // 1.22-E Avisos y atajos del login
+            new NavigationItem('Avisos y atajos', 'core.login-content', 'o-megaphone', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
+                visible: static fn (Actor $context): bool => $context->allowsAny(CorePermission::LoginNoticeView) || $context->allowsAny(CorePermission::LoginShortcutView)),
             // 1.22-F Parámetros
             new NavigationItem('Parámetros', 'core.settings', 'o-adjustments-horizontal', NavigationArea::Administracion, group: NavigationGroup::Configuracion,
                 ability: 'viewAny', arguments: [Setting::class]),

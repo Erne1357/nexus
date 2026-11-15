@@ -22,4 +22,18 @@ trait HasVisibilityWindow
             ->orderBy('sort_order')
             ->orderBy('created_at');
     }
+
+    /**
+     * Por qué se ve o no a ese momento: `visible`, `inactive` (apagado), `upcoming` (todavía no empieza) o `expired`
+     * (ya terminó). Es la misma regla que scopeVisibleAt(), para decirla en el panel de configuración.
+     */
+    public function visibilityAt(CarbonInterface $moment): string
+    {
+        return match (true) {
+            ! $this->is_active => 'inactive',
+            $this->starts_at !== null && $this->starts_at->greaterThan($moment) => 'upcoming',
+            $this->ends_at !== null && $this->ends_at->lessThanOrEqualTo($moment) => 'expired',
+            default => 'visible',
+        };
+    }
 }
