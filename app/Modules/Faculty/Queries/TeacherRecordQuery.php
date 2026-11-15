@@ -53,7 +53,7 @@ final class TeacherRecordQuery
         $order = ['vigente' => 0, 'por_empezar' => 1, 'vencida' => 2];
         $positions = $teacher->positions()->get();
         $user = $teacher->user_id === null ? null : $teacher->user()
-            ->select(['id', 'username', 'is_active', 'must_change_password', 'access_invited_at'])
+            ->select(['id', 'username', 'email', 'is_active', 'must_change_password', 'access_invited_at', 'deactivated_at'])
             ->selectRaw('password is not null as has_password')
             ->first();
         $access = $user === null ? null : UserAccess::resolve((bool) $user->has_password, $user->access_invited_at !== null, $user->must_change_password);

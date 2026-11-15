@@ -38,7 +38,6 @@ enum CorePermission: string implements Permission
     case OrgUnitUpdate = 'core.org_unit.update';
     case OrgUnitMove = 'core.org_unit.move';
     case OrgUnitDeactivate = 'core.org_unit.deactivate';
-    case UserGrantAccess = 'core.user.grant_access';
     case UserCreate = 'core.user.create';
     case UserUpdate = 'core.user.update';
     case UserDeactivate = 'core.user.deactivate';
@@ -85,7 +84,6 @@ enum CorePermission: string implements Permission
             self::OrgUnitUpdate => 'Editar unidades del organigrama',
             self::OrgUnitMove => 'Mover unidades del organigrama',
             self::OrgUnitDeactivate => 'Desactivar y activar unidades del organigrama',
-            self::UserGrantAccess => 'Dar acceso a un usuario sin contraseña',
             self::UserCreate => 'Dar de alta usuarios del personal',
             self::UserUpdate => 'Editar el nombre y el correo de un usuario',
             self::UserDeactivate => 'Dar de baja la cuenta de un usuario',

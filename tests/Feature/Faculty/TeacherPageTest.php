@@ -2,10 +2,16 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Actions\DeactivateUser;
+use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AccessInvitation;
+use App\Modules\Core\Notifications\PasswordResetLink;
+use App\Modules\Core\Rules\UserAccountRules;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
@@ -16,7 +22,7 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Faculty\Models\TeacherSubjectQualification;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -25,7 +31,8 @@ use Spatie\Activitylog\Models\Activity;
 | Ficha del docente (`/faculty/teachers/{teacher}`, faculty::pages.teacher; spec 4.3 y S8). Cinco pestañas: Datos
 | (datos, adscripciones: quitar y hacer principal), Plazas (agregar, editar y quitar), Disponibilidad (de solo
 | lectura, con el enlace al editor), Perfil e Historial. Cada quien ve y cambia a los docentes de su alcance
-| (TeacherPolicy); cada método vuelve a autorizar. «Restablecer contraseña» es solo del administrador.
+| (TeacherPolicy); cada método vuelve a autorizar. «Restablecer contraseña» (por enlace) y la invitación del admin son
+| solo del administrador (UserPolicy).
 */
 
 beforeEach(function () {
@@ -268,44 +275,58 @@ describe('plazas', function () {
     });
 });
 
-describe('restablecer contraseña', function () {
-    it('el admin la devuelve a la por defecto y obliga a cambiarla', function () {
-        $this->docente->forceFill(['password' => 'otra-clave-123', 'must_change_password' => false])->save();
+describe('restablecer contraseña (CF-08)', function () {
+    beforeEach(function () {
+        Notification::fake();
+        $this->docente->forceFill(['email' => 'ana.perez@cdjuarez.tecnm.mx', 'password' => 'otra-clave-123', 'must_change_password' => false])->save();
+    });
+
+    it('CF-08: el admin manda el enlace al correo de su usuario, sin la contraseña por defecto', function () {
+        $before = $this->docente->fresh()->password;
+        $item = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk())->querySelector('[data-testid="reset-password"]');
+
+        expect(textOf($item))->toBe('Restablecer contraseña')
+            ->and($item->getAttribute('x-confirm'))->toBe('Le llega a ana.perez@cdjuarez.tecnm.mx un enlace para elegir una contraseña nueva. Vale 60 minutos.');
 
         $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
 
-        expect($this->docente->fresh())->must_change_password->toBeTrue()
-            ->and(Hash::check(config('auth.default_password'), $this->docente->fresh()->password))->toBeTrue()
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Contraseña restablecida');
+        expect(lastToastOf($page))->type->toBe('success')->title->toBe('Enlace enviado')->description->toBe('Enlace enviado a ana.perez@cdjuarez.tecnm.mx. Vale 60 minutos.')
+            ->and($this->docente->fresh()->password)->toBe($before);
+        Notification::assertSentTo($this->docente, PasswordResetLink::class);
+    });
+
+    it('CF-08: sin correo institucional sale deshabilitado con su motivo y la llamada no manda nada', function () {
+        $this->docente->forceFill(['email' => 'ana@example.test'])->save();
+
+        $item = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id)))->querySelector('[data-testid="reset-password"]');
+
+        expect(textOf($item))->toBe('Restablecer contraseña '.UserAccountRules::RESET_NO_EMAIL)
+            ->and($item->getAttribute('aria-disabled'))->toBe('true');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+
+        expect(lastToastOf($page))->type->toBe('error')->description->toBe(UserAccountRules::RESET_NO_EMAIL);
+        Notification::assertNothingSent();
     });
 
     it('sin usuario no hay nada que restablecer', function () {
         $page = teacherRecord($this->admin, $this->beto)->call('resetPassword');
 
-        expect(lastToastOf($page))->type->toBe('error');
+        expect(lastToastOf($page))->type->toBe('error')->description->toBe('El docente no tiene usuario.');
     });
 
-    it('sin NEXUS_DEFAULT_PASSWORD lo dice en un toast y no cambia nada', function () {
-        config(['auth.default_password' => null]);
-        $before = $this->docente->fresh()->password;
+    it('el jefe y la Subdirección lo ven deshabilitado con su motivo y reciben 403 al llamarlo', function (string $who) {
+        $item = domOf($this->actingAs($this->{$who})->get(route('faculty.teachers.show', $this->ana->id))->assertOk())->querySelector('[data-testid="reset-password"]');
 
-        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+        expect(textOf($item))->toBe('Restablecer contraseña Solo el administrador restablece contraseñas.')
+            ->and($item->getAttribute('aria-disabled'))->toBe('true');
 
-        expect(lastToastOf($page))->type->toBe('error')->description->toContain('NEXUS_DEFAULT_PASSWORD')
-            ->and($this->docente->fresh()->password)->toBe($before);
-    });
-
-    it('el jefe no la ve habilitada, con su motivo, y recibe 403 al llamarla', function () {
-        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
-        $item = $dom->querySelector('[data-testid="reset-password"]');
-
-        expect($item)->not->toBeNull()->and($item->getAttribute('aria-disabled'))->toBe('true');
-
-        teacherRecord($this->jefe, $this->ana)->call('resetPassword')->assertForbidden();
-    });
+        teacherRecord($this->{$who}, $this->ana)->call('resetPassword')->assertForbidden();
+        Notification::assertNothingSent();
+    })->with(['jefe', 'subdireccion']);
 });
 
-describe('acceso (AC-03 y AC-04)', function () {
+describe('acceso (AC-04, CF-07 y CF-09)', function () {
     it('AC-04: la sección Datos muestra el estado del acceso del usuario del docente', function (?string $password, bool $mustChange, string $label) {
         $this->docente->forceFill(['password' => $password, 'must_change_password' => $mustChange])->save();
 
@@ -318,49 +339,98 @@ describe('acceso (AC-03 y AC-04)', function () {
         'con la suya' => ['otra-clave-123', false, 'Con acceso'],
     ]);
 
-    it('AC-03: a un docente sin acceso el admin le ve «Dar acceso» y se lo da con la contraseña por defecto y cambio obligatorio', function () {
+    it('CF-07: a un docente sin acceso el admin le manda su invitación, aunque su departamento no haya validado; ya no hay «Dar acceso»', function () {
+        Notification::fake();
         $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
+        $this->ana->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
 
-        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
-        $item = $dom->querySelector('[data-testid="reset-password"]');
+        $response = $this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk()->assertDontSee('Dar acceso');
+        $dom = domOf($response);
+        $item = $dom->querySelector('[data-testid="resend-invitation"]');
 
-        expect(textOf($item))->toBe('Dar acceso')
+        expect(textOf($item))->toBe('Enviar invitación')
             ->and($item->getAttribute('aria-disabled'))->toBeNull()
-            ->and($item->getAttribute('data-confirm-title'))->toBe('¿Dar acceso a 1000001?');
+            ->and($dom->querySelector('[data-testid="reset-password"]'))->toBeNull();
 
-        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+        $page = teacherRecord($this->admin, $this->ana)->call('resendInvitation');
 
-        expect($this->docente->fresh())->must_change_password->toBeTrue()
-            ->and(Hash::check(config('auth.default_password'), $this->docente->fresh()->password))->toBeTrue()
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Acceso dado');
+        expect(lastToastOf($page))->type->toBe('success')->title->toBe('Invitación enviada')
+            ->and($this->docente->fresh())->password->toBeNull()->access_invited_by->toBe($this->admin->id)->email->toBe('ana.perez@cdjuarez.tecnm.mx');
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
     });
 
-    it('AC-03: a un usuario inactivo sin contraseña no se le da acceso: deshabilitado con su motivo y un toast si se llama', function () {
-        $this->docente->forceFill(['password' => null, 'is_active' => false])->save();
+    it('CF-07: el admin invita al docente que también es jefe, y ese enlace abre', function () {
+        Notification::fake();
+        $this->docente->forceFill(['password' => null])->save();
+        $this->ana->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
+        RoleAssignment::factory()->for($this->docente)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => Department::factory()->create()->id, 'valid_from' => today()->subMonth()->toDateString()]);
 
-        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        expect(textOf(domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id)))->querySelector('[data-testid="resend-invitation"]')))->toBe('Enviar invitación');
 
-        expect(textOf($dom->querySelector('[data-testid="reset-password"]')))->toBe('Dar acceso Su usuario está inactivo: reactiva al docente antes.');
+        teacherRecord($this->admin, $this->ana)->call('resendInvitation');
 
-        $page = teacherRecord($this->admin, $this->ana)->call('resetPassword');
+        $link = null;
+        Notification::assertSentOnDemand(AccessInvitation::class, function (AccessInvitation $invitation) use (&$link): bool {
+            $link = $invitation->url;
 
-        expect(lastToastOf($page))->type->toBe('error')->title->toBe('No se pudo dar acceso')
-            ->and($this->docente->fresh()->password)->toBeNull();
+            return true;
+        });
+        $this->get($link)->assertOk()->assertSee('Activar mi acceso');
     });
 
-    it('AC-03: el jefe ve «Dar acceso» deshabilitado con su motivo, recibe 403 al llamarlo y el docente sigue sin acceso', function () {
-        $this->docente->forceFill(['password' => null, 'must_change_password' => true])->save();
+    it('CF-07: sin correo institucional, la del admin sale deshabilitada con su motivo', function () {
+        Notification::fake();
+        $this->docente->forceFill(['password' => null])->save();
 
-        $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
-        $item = $dom->querySelector('[data-testid="reset-password"]');
+        $item = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id)))->querySelector('[data-testid="resend-invitation"]');
 
-        expect(textOf($item))->toBe('Dar acceso Solo el administrador da acceso.')
+        expect(textOf($item))->toBe('Enviar invitación Falta su correo institucional: captúralo en «Editar datos».')
             ->and($item->getAttribute('aria-disabled'))->toBe('true');
 
-        teacherRecord($this->jefe, $this->ana)->call('resetPassword')->assertForbidden();
+        $page = teacherRecord($this->admin, $this->ana)->call('resendInvitation');
 
-        expect($this->docente->fresh()->password)->toBeNull();
+        expect(lastToastOf($page))->type->toBe('error')->description->toBe('Falta su correo institucional.');
+        Notification::assertNothingSent();
     });
+
+    it('CF-07: a un usuario inactivo no se le invita: deshabilitado con su motivo y un toast si se llama', function () {
+        Notification::fake();
+        $this->docente->forceFill(['password' => null, 'is_active' => false])->save();
+        $this->ana->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
+
+        $dom = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+
+        expect(textOf($dom->querySelector('[data-testid="resend-invitation"]')))->toBe('Enviar invitación Su usuario está inactivo.');
+
+        $page = teacherRecord($this->admin, $this->ana)->call('resendInvitation');
+
+        expect(lastToastOf($page))->type->toBe('error')->title->toBe('No se pudo enviar la invitación')
+            ->and($this->docente->fresh()->access_invited_at)->toBeNull();
+        Notification::assertNothingSent();
+    });
+
+    it('CF-09: si el admin dio de baja su cuenta, la ficha lo dice y no ofrece invitar ni restablecer: se reactiva desde el panel', function (string $who, bool $link) {
+        Notification::fake();
+        $this->ana->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
+        app(DeactivateUser::class)->handle($this->docente, DeactivationReason::Otro, null, $this->admin);
+
+        $dom = domOf($this->actingAs($this->{$who})->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $item = $dom->querySelector('[data-testid="reactivate-from-panel"]');
+
+        expect(textOf($dom->querySelector('[data-testid="user-deactivated"]')))->toBe('Cuenta dada de baja por el admin')
+            ->and($dom->querySelector('[data-testid="resend-invitation"]'))->toBeNull()
+            ->and($dom->querySelector('[data-testid="reset-password"]'))->toBeNull()
+            ->and(textOf($item))->toBe('Se reactiva desde el panel Cuenta dada de baja por el admin.')
+            ->and($item->getAttribute('href'))->toBe($link ? route('core.people.show', $this->docente->id) : null);
+
+        $this->actingAs($this->admin)->get(route('faculty.teachers'))->assertSee('Cuenta dada de baja por el admin');
+
+        teacherRecord($this->admin, $this->ana)->call('resendInvitation');
+        Notification::assertNothingSent();
+    })->with([
+        'el admin, con el enlace' => ['admin', true],
+        'el jefe, sin enlace' => ['jefe', false],
+    ]);
 });
 
 describe('alcance', function () {

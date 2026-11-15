@@ -1,8 +1,10 @@
 {{--
     Ficha del docente (DESIGN.md, "Ficha del docente"), con la forma de la ficha del alumno: un enlace de regreso a
     Docentes, el encabezado con su nombre, número y estado, sus datos clave y a la derecha «Editar datos» y
-    «Acciones» (baja o reactivación y «Restablecer contraseña», o «Dar acceso» si su usuario no tiene contraseña,
-    AC-03, deshabilitada con su motivo para quien no es administrador); una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
+    «Acciones» (baja o reactivación y, según su acceso, «Enviar invitación» o «Reenviar invitación» si su usuario no
+    tiene contraseña, CF-07 y AC-07, o «Restablecer contraseña» por enlace si la tiene, CF-08, cada una deshabilitada con
+    su motivo para quien no la puede; con la cuenta dada de baja en el panel, CF-09, solo «Se reactiva desde el panel»);
+    una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
     pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Horas fuera del
     ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
     del periodo activo con el enlace al editor (faculty::teachers.availability-tab). Agregar o editar una plaza y quitar
@@ -50,34 +52,26 @@
                 @else
                     <x-core::row-menu-item :label="$record->teacher->is_active ? 'Desactivar' : 'Activar'" :reason="$deactivateReason" disabled data-testid="toggle-active" />
                 @endif
-                @if ($canReset && $grantsAccess && ! $record->user->is_active)
-                    <x-core::row-menu-item label="Dar acceso" reason="Su usuario está inactivo: reactiva al docente antes." disabled data-testid="reset-password" />
-                @elseif ($canReset && $grantsAccess)
+                @if ($panelDeactivated)
+                    @if ($canOpenPerson)
+                        <x-core::row-menu-item label="Se reactiva desde el panel" reason="Cuenta dada de baja por el admin." :href="route('core.people.show', $record->user->id)" data-testid="reactivate-from-panel" />
+                    @else
+                        <x-core::row-menu-item label="Se reactiva desde el panel" reason="Cuenta dada de baja por el admin." disabled data-testid="reactivate-from-panel" />
+                    @endif
+                @endif
+                @if ($resetReason === '')
                     <x-core::row-menu-item
-                        label="Dar acceso"
+                        label="Restablecer contraseña"
                         wire:click="resetPassword"
-                        x-confirm="Entra con la contraseña por defecto y tendrá que cambiarla al entrar."
-                        data-confirm-title="¿Dar acceso a {{ $record->teacher->rfc }}?"
-                        data-confirm-button="Dar acceso"
+                        x-confirm="Le llega a {{ $record->user->email }} un enlace para elegir una contraseña nueva. Vale {{ $resetMinutes }} minutos."
+                        data-confirm-title="¿Mandar el enlace a {{ $record->teacher->rfc }}?"
+                        data-confirm-button="Mandar enlace"
                         data-confirm-tone="primary"
                         spinner="resetPassword"
                         data-testid="reset-password"
                     />
-                @elseif ($canReset)
-                    <x-core::row-menu-item
-                        label="Restablecer contraseña"
-                        wire:click="resetPassword"
-                        x-confirm="Vuelve a la contraseña por defecto y tendrá que cambiarla al entrar."
-                        data-confirm-title="¿Restablecer la contraseña de {{ $record->teacher->rfc }}?"
-                        data-confirm-button="Restablecer"
-                        data-confirm-tone="warning"
-                        spinner="resetPassword"
-                        data-testid="reset-password"
-                    />
-                @elseif ($grantsAccess)
-                    <x-core::row-menu-item label="Dar acceso" reason="Solo el administrador da acceso." disabled data-testid="reset-password" />
-                @else
-                    <x-core::row-menu-item label="Restablecer contraseña" reason="Solo el administrador restablece contraseñas." disabled data-testid="reset-password" />
+                @elseif ($resetReason !== null)
+                    <x-core::row-menu-item label="Restablecer contraseña" :reason="$resetReason" disabled data-testid="reset-password" />
                 @endif
                 @if ($inviteReason === '' && $invited)
                     <x-core::row-menu-item
@@ -323,7 +317,10 @@
                         <div class="grid gap-x-4 gap-y-1 px-5 py-2.5 @lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] @lg:items-center">
                             <dt class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Usuario</dt>
                             <dd class="flex flex-wrap items-center gap-2">
-                                @if ($record->user)
+                                @if ($record->user && $panelDeactivated)
+                                    <span class="font-mono">{{ $record->user->username }}</span>
+                                    <x-core::status-badge tone="neutral" label="Cuenta dada de baja por el admin" data-testid="user-deactivated" />
+                                @elseif ($record->user)
                                     <span class="font-mono">{{ $record->user->username }}</span>
                                     <x-core::status-badge :tone="$record->user->is_active ? 'success' : 'neutral'" :label="$record->user->is_active ? 'Activo' : 'Inactivo'" />
                                     <x-core::status-badge :tone="$record->access->tone()" :label="$record->access->label()" data-testid="user-access" />

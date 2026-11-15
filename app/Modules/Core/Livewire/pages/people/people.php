@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Actions\CreateStaffUser;
+use App\Modules\Core\Actions\InviteUser;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\RoleAssignment;
@@ -22,7 +23,8 @@ use Mary\Traits\Toast;
  * (AC-04), con búsqueda por número o nombre y filtros por puesto, por estado de la cuenta y por acceso (1.22-C1).
  * Nombrar y terminar se hacen en la ficha de la persona (core::pages.person), a la que lleva «Ver puestos». La acción
  * principal es «Dar de alta» (CF-S3, UserPolicy): un cajón pide usuario, nombre y correo institucional opcional,
- * CreateStaffUser la da de alta sin acceso y la pantalla lleva a su ficha; la invitación llega con 1.22-C2 (CF-07).
+ * CreateStaffUser la da de alta sin acceso, con correo le llega la invitación (InviteUser, CF-07) y la pantalla lleva a
+ * su ficha.
  * Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy);
  * el componente autoriza en mount(), al renderizar y en cada cambio, porque una petición puede llegar con una página
  * que abrió otra sesión.
@@ -143,10 +145,11 @@ new #[Title('Personas y puestos')] class extends Component
     /**
      * «Dar de alta» (CF-S3): el usuario se guarda como llega, sin los espacios de los extremos; el correo, en minúsculas y
      * del dominio institucional, único sin importar mayúsculas (UserAccountRules). Nace activo y sin acceso
-     * (CreateStaffUser con `withAccess: false`) y la pantalla lleva a su ficha para nombrarlo. Los errores de las reglas y
-     * de la Action salen junto a su campo.
+     * (CreateStaffUser con `withAccess: false`); con correo, después del commit le llega la invitación (InviteUser,
+     * CF-07), y la pantalla lleva a su ficha para nombrarlo. Los errores de las reglas y de la Action salen junto a su
+     * campo; si la invitación no sale, el alta queda y el aviso dice por qué.
      */
-    public function createUser(CreateStaffUser $createStaffUser, UserAccountRules $rules): void
+    public function createUser(CreateStaffUser $createStaffUser, InviteUser $inviteUser, UserAccountRules $rules): void
     {
         $this->authorize('viewAny', RoleAssignment::class);
         $this->authorize('create', User::class);
@@ -185,8 +188,23 @@ new #[Title('Personas y puestos')] class extends Component
         }
 
         $this->showCreate = false;
+        $redirectTo = route('core.people.show', $user->id);
 
-        $this->success('Usuario dado de alta', e("{$user->username} queda sin acceso. Nómbralo en su ficha."), redirectTo: route('core.people.show', $user->id));
+        if ($user->email === null) {
+            $this->success('Usuario dado de alta', e("{$user->username} queda sin acceso hasta que captures su correo institucional. Nómbralo en su ficha."), redirectTo: $redirectTo);
+
+            return;
+        }
+
+        try {
+            $email = $inviteUser->handle($user, auth()->user());
+        } catch (ValidationException $exception) {
+            $this->warning('Usuario dado de alta', e("{$user->username} queda sin acceso: la invitación no salió (".collect($exception->errors())->flatten()->first().'). Mándala desde su ficha.'), redirectTo: $redirectTo);
+
+            return;
+        }
+
+        $this->success('Usuario dado de alta', e("Invitación enviada a {$email}. Nómbralo en su ficha."), redirectTo: $redirectTo);
     }
 
     public function showTab(string $tab): void

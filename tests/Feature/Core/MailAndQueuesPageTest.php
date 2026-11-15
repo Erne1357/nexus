@@ -1,10 +1,10 @@
 <?php
 
-use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\UserAccountRules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
@@ -61,31 +61,37 @@ it('filtra los correos por texto y por estado', function () {
         ->assertDontSee('beto@itcj.test');
 });
 
-it('CF-S8: la pestaña Invitaciones lista los pendientes y «Reenviar» llama a SendAccessInvitation', function () {
-    $user = User::factory()->create(['password' => null, 'email' => 'pend@itcj.test', 'access_invited_at' => now()->subDays(3)->startOfSecond()]);
+it('CF-S8 y CF-07: la pestaña Invitaciones lista los pendientes y «Reenviar» manda la invitación del admin', function () {
+    $user = User::factory()->create(['password' => null, 'email' => 'pend@cdjuarez.tecnm.mx', 'access_invited_at' => now()->subDays(3)->startOfSecond()]);
 
     Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')
         ->call('showTab', 'invitations')
-        ->assertSee('pend@itcj.test')
+        ->assertSee('pend@cdjuarez.tecnm.mx')
         ->call('resend', $user->id)
         ->assertHasNoErrors();
 
     $fresh = $user->fresh();
 
     expect($fresh->access_invited_at->isAfter(now()->subMinute()))->toBeTrue()
+        ->and($fresh->access_invited_by)->toBe($this->admin->id)
         ->and(Activity::query()->where('event', 'access-invited')->where('causer_id', $this->admin->id)->exists())->toBeTrue()
-        ->and(MailLog::query()->where('to', 'pend@itcj.test')->exists())->toBeTrue();
+        ->and(MailLog::query()->where('to', 'pend@cdjuarez.tecnm.mx')->exists())->toBeTrue();
 });
 
-it('CF-S8: si el usuario tiene un puesto, «Reenviar» muestra el motivo y no manda nada', function () {
+it('CF-07: «Reenviar» también va a quien tiene un puesto, y sin correo institucional dice el motivo y no manda nada', function () {
     $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])
-        ->create(['password' => null, 'email' => 'jefe@itcj.test', 'access_invited_at' => now()->subDay()->startOfSecond()]);
+        ->create(['password' => null, 'email' => 'jefe@cdjuarez.tecnm.mx', 'access_invited_at' => now()->subDay()->startOfSecond()]);
+    $other = User::factory()->create(['password' => null, 'email' => 'pend@itcj.test', 'access_invited_at' => now()->subDay()->startOfSecond()]);
 
-    $page = Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')
-        ->call('resend', $user->id);
+    $page = Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')->call('resend', $user->id);
 
-    expect(lastToastOf($page))->title->toBe('No se reenvió la invitación')->description->toBe(e(SendAccessInvitation::STAFF))
-        ->and(MailLog::query()->count())->toBe(0);
+    expect(lastToastOf($page))->title->toBe('Invitación reenviada')
+        ->and(MailLog::query()->where('to', 'jefe@cdjuarez.tecnm.mx')->exists())->toBeTrue();
+
+    $page->call('resend', $other->id);
+
+    expect(lastToastOf($page))->title->toBe('No se reenvió la invitación')->description->toBe(UserAccountRules::INVITE_NO_EMAIL)
+        ->and(MailLog::query()->where('to', 'pend@itcj.test')->exists())->toBeFalse();
 });
 
 it('CF-S8: la pestaña Colas muestra los tamaños de default y bulk y los trabajos fallidos', function () {

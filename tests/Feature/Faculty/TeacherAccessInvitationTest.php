@@ -26,7 +26,7 @@ use Spatie\Activitylog\Models\Activity;
 | El correo institucional del docente (AC-06) y su invitación de acceso desde Faculty (AC-07): lo captura en la ficha
 | el jefe de un departamento del docente o el admin, y el de un docente con otro puesto, solo el admin; solo del
 | dominio institucional y único sin importar mayúsculas. Cambiarlo invalida la invitación que tenía. «Reenviar
-| invitación» es del jefe de su departamento y del admin. A quien tiene otro puesto no se le invita.
+| invitación» es del jefe de su departamento y del admin. A quien tiene otro puesto solo lo invita el admin (CF-07).
 */
 
 beforeEach(function () {
@@ -286,12 +286,25 @@ describe('reenviar invitación en la ficha', function () {
             ->and($item->getAttribute('x-confirm'))->toBe('Se manda un enlace nuevo a ana.perez@cdjuarez.tecnm.mx; el anterior deja de servir.');
     });
 
-    it('AC-07: a quien tiene otro puesto le sale deshabilitado con su motivo: le da acceso el administrador', function () {
+    it('AC-07 y CF-07: a quien tiene otro puesto, al jefe le sale deshabilitado con su motivo y el admin sí la reenvía', function () {
         makeTeacherHeadElsewhere();
+
+        $item = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk())->querySelector('[data-testid="resend-invitation"]');
+
+        expect(textOf($item))->toBe('Reenviar invitación Tiene un puesto además de docente: le da acceso el administrador.');
+
+        Livewire::actingAs($this->jefe)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 1);
 
         $item = domOf($this->actingAs($this->admin)->get(route('faculty.teachers.show', $this->teacher->id))->assertOk())->querySelector('[data-testid="resend-invitation"]');
 
-        expect(textOf($item))->toBe('Reenviar invitación Tiene un puesto además de docente: le da acceso el administrador.');
+        expect(textOf($item))->toBe('Reenviar invitación');
+
+        $page = Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])->call('resendInvitation');
+
+        expect(lastToastOf($page))->title->toBe('Invitación reenviada')
+            ->and($this->user->fresh()->access_invited_by)->toBe($this->admin->id);
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 2);
     });
 });
 

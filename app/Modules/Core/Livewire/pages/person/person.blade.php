@@ -4,8 +4,9 @@
     el buscador de otra persona y el último nombramiento; cuatro cifras; la «Línea de vigencias» y las tarjetas de
     «Nombramientos» (core::people.timeline y core::people.assignment); y, en la columna lateral (debajo desde
     1200 px hacia abajo), «Cuenta», «¿Quién ocupa un puesto?» y la bitácora de sus puestos. «Nombrar» abre un cajón que
-    pide solo el alcance que el puesto necesita. Junto a «Nombrar», el menú «Acciones» de la cuenta (1.22-C1):
-    «Editar datos» en un modal y «Dar de baja» en un cajón con su vista previa.
+    pide solo el alcance que el puesto necesita. Junto a «Nombrar», el menú «Acciones» de la cuenta (1.22-C1 y C2):
+    «Editar datos» en un modal, «Enviar invitación» o «Restablecer contraseña» según su acceso, y «Dar de baja» en un
+    cajón con su vista previa.
 --}}
 @php
     $person = $record->person;
@@ -42,20 +43,6 @@
         </div>
 
         <div class="flex flex-col items-end gap-1 max-md:w-full max-md:items-stretch">
-            @if ($canGrantAccess && ! $access->hasPassword() && $person->is_active)
-                <x-button
-                    label="Dar acceso"
-                    icon="o-key"
-                    class="btn-outline max-md:h-11"
-                    wire:click="grantAccess"
-                    x-confirm="Entra con la contraseña por defecto y tendrá que cambiarla al entrar."
-                    data-confirm-title="¿Dar acceso a {{ $person->username }}?"
-                    data-confirm-button="Dar acceso"
-                    data-confirm-tone="primary"
-                    spinner="grantAccess"
-                    data-testid="grant-access"
-                />
-            @endif
             <div class="flex items-center gap-2 max-md:w-full max-md:[&>*:last-child]:flex-1">
                 @if (in_array(true, $abilities, true))
                     @include('core::people.account-menu')

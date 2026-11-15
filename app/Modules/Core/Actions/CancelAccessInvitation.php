@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\DB;
 /**
  * Deja sin efecto la invitación de acceso de un usuario que todavía no tiene contraseña: borra `access_invited_at`, así
  * que su enlace deja de servir (AC-07: cambiar el correo institucional invalida el enlace anterior, supuesto por
- * confirmar), y el correo sin verificar que le puso la invitación. Sin invitación o con contraseña no escribe nada.
+ * confirmar), y el correo sin verificar que le puso la invitación; también olvida quién la mandó (`access_invited_by`,
+ * CF-07). Sin invitación o con contraseña no escribe nada.
  * Deja bitácora sobre el usuario.
  */
 final class CancelAccessInvitation
@@ -29,7 +30,7 @@ final class CancelAccessInvitation
                 [$old['email'], $new['email']] = [$user->email, null];
             }
 
-            $user->forceFill($new)->save();
+            $user->forceFill([...$new, 'access_invited_by' => null])->save();
 
             activity()
                 ->performedOn($user)

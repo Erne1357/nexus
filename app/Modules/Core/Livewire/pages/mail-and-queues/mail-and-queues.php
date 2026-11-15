@@ -1,8 +1,8 @@
 <?php
 
 use App\Modules\Core\Actions\ForgetFailedJob;
+use App\Modules\Core\Actions\InviteUser;
 use App\Modules\Core\Actions\RetryFailedJob;
-use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Enums\MailStatus;
 use App\Modules\Core\Models\FailedJob;
 use App\Modules\Core\Models\MailLog;
@@ -25,7 +25,7 @@ use Mary\Traits\Toast;
 /**
  * «Correos y colas» (CF-S8), solo del administrador (CF-03): tres pestañas. Correos es el registro de lo que salió
  * (sin el cuerpo) con búsqueda, tipo, estado y fechas; Invitaciones, los usuarios invitados que todavía no activan su
- * acceso, con su vencimiento y «Reenviar» (SendAccessInvitation); Colas, cuántos trabajos hay en cada cola y los
+ * acceso, con su vencimiento y «Reenviar» (la invitación del admin, InviteUser, CF-07); Colas, cuántos trabajos hay en cada cola y los
  * fallidos, que se reintentan, se descartan o se leen en un drawer. Cada pestaña y cada acción se autoriza con su
  * policy (MailLogPolicy, FailedJobPolicy), también al llamarla directo.
  */
@@ -100,7 +100,7 @@ new #[Title('Correos y colas')] class extends Component
         $this->resetPage();
     }
 
-    public function resend(string $id, SendAccessInvitation $invite): void
+    public function resend(string $id, InviteUser $invite): void
     {
         $this->authorize('viewAny', MailLog::class);
         $this->authorize('resendInvitation', MailLog::class);
@@ -108,8 +108,7 @@ new #[Title('Correos y colas')] class extends Component
         $user = KeyLookup::findOrFail(User::query(), $id);
 
         try {
-            $invite->handle($user, (string) $user->email, auth()->user());
-            $this->success('Invitación reenviada', e((string) $user->email));
+            $this->success('Invitación reenviada', e($invite->handle($user, auth()->user())));
         } catch (ValidationException $exception) {
             $this->error('No se reenvió la invitación', e(collect($exception->errors())->flatten()->first()));
         } catch (RuntimeException $exception) {

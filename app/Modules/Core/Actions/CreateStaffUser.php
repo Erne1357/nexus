@@ -15,8 +15,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 /**
  * Da de alta un usuario de personal, activo y obligado a cambiar su contraseña en su primer acceso. Quien lo da de alta
  * decide siempre si nace con acceso (`$withAccess` no tiene valor por omisión): sin acceso, sin contraseña, hasta que
- * se le dé (AC-01 y AC-02), así nacen los de los docentes; con acceso, con la contraseña por defecto, que es el alta
- * manual del admin (AC-05, supuesto por confirmar), y sin NEXUS_DEFAULT_PASSWORD falla antes de escribir. Un username repetido es una ValidationException sobre
+ * reciba su invitación (AC-01, AC-02 y AC-05), así nacen los de los docentes y los del panel, que después invita
+ * (CF-07); con acceso, con la contraseña por defecto, que ningún camino del panel pide desde 1.22-C2, y sin
+ * NEXUS_DEFAULT_PASSWORD falla antes de escribir. Un username repetido es una ValidationException sobre
  * `username`, también si otra sesión lo toma entre la revisión y el insert; un correo que otro usuario ya tiene (sin
  * importar mayúsculas, lo garantiza la base) es una sobre `email`. El correo se guarda como llega: quien llama lo
  * normaliza (el panel, con UserAccountRules, CF-S3). La bitácora nunca lleva la contraseña.

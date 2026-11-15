@@ -86,7 +86,7 @@ final class UpdateUserProfile
 
                 if ($locked->password === null && $locked->access_invited_at !== null) {
                     $old['access_invited_at'] = $locked->access_invited_at->toIso8601String();
-                    $locked->forceFill(['access_invited_at' => null]);
+                    $locked->forceFill(['access_invited_at' => null, 'access_invited_by' => null]);
                 }
             }
 

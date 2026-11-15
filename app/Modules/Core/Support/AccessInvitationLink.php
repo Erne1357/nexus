@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\URL;
 
 /**
  * El enlace de la invitación de acceso (AC-07): una URL firmada que vence a los `DAYS` días (supuesto por confirmar)
- * con el id del usuario y una huella de su correo y de la hora de la invitación. Cambiar el correo o mandar otra
- * invitación cambia la huella, así que solo sirve el último enlace; la firma impide alterarlo. No lleva el correo a la
- * vista: solo su huella.
+ * con el id del usuario y una huella de su correo, de la hora de la invitación y, si la mandó el admin, de quién
+ * (`access_invited_by`, CF-07). Cambiar el correo o mandar otra invitación cambia la huella, así que solo sirve el
+ * último enlace; la firma impide alterarlo. No lleva el correo a la vista: solo su huella.
  */
 final class AccessInvitationLink
 {
@@ -38,9 +38,9 @@ final class AccessInvitationLink
 
     /**
      * Si el enlace todavía abre: el usuario sigue activo y sin contraseña, `$hash` es la huella de su invitación
-     * vigente, que no ha vencido, y no tiene un puesto distinto de docente vigente o por empezar: si lo recibió después
-     * de la invitación, su acceso lo da el admin (AC-03, como al invitar en AC-07). No revisa la firma: eso lo hace la
-     * ruta.
+     * vigente, que no ha vencido, y, si la invitación fue automática, no tiene un puesto distinto de docente vigente o
+     * por empezar: si lo recibió después, el acceso se lo manda el admin (AC-07, CF-07). La del admin
+     * (`access_invited_by`) abre aunque lo tenga. No revisa la firma: eso lo hace la ruta.
      */
     public function opens(User $user, string $hash): bool
     {
@@ -50,11 +50,13 @@ final class AccessInvitationLink
             && $user->access_invited_at !== null
             && $this->expiresAt($user)->isFuture()
             && hash_equals($this->hash($user), $hash)
-            && ! $this->rules->holdsStaffRole($user->getKey());
+            && ($user->access_invited_by !== null || ! $this->rules->holdsStaffRole($user->getKey()));
     }
 
     private function hash(User $user): string
     {
-        return hash('sha256', mb_strtolower((string) $user->email).'|'.$user->access_invited_at?->getTimestamp());
+        $print = mb_strtolower((string) $user->email).'|'.$user->access_invited_at?->getTimestamp();
+
+        return hash('sha256', $user->access_invited_by === null ? $print : "{$print}|{$user->access_invited_by}");
     }
 }

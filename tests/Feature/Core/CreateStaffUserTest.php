@@ -17,7 +17,7 @@ it('crea un usuario activo con la contraseña por defecto y cambio obligatorio',
         ->and(Hash::check(app(DefaultPassword::class)->value(), $user->fresh()->password))->toBeTrue();
 });
 
-it('AC-05: el alta manual nace con la contraseña por defecto', function () {
+it('el alta con acceso nace con la contraseña por defecto (el panel ya no la pide: AC-05, CF-07)', function () {
     $user = app(CreateStaffUser::class)->handle('personal01', 'Luis Gómez', withAccess: true);
 
     expect(UserAccess::of($user->fresh()))->toBe(UserAccess::MustChangePassword);

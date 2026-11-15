@@ -2,7 +2,6 @@
 
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\EndRoleAssignment;
-use App\Modules\Core\Actions\ResetUserPassword;
 use App\Modules\Core\Enums\AssignmentEnding;
 use App\Modules\Core\Enums\DeactivationReason;
 use App\Modules\Core\Enums\Role;
@@ -17,6 +16,7 @@ use App\Modules\Core\Queries\PeopleQuery;
 use App\Modules\Core\Queries\PersonRecordQuery;
 use App\Modules\Core\Queries\UserAccountQuery;
 use App\Modules\Core\Rules\RoleAssignmentRules;
+use App\Modules\Core\Support\AccessInvitationLink;
 use App\Modules\Core\Support\PasswordResetTokens;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -40,13 +40,11 @@ use Mary\Traits\Toast;
  * así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy); el componente
  * autoriza en mount(), al renderizar y en cada método público.
  *
- * El encabezado muestra el estado del acceso de la persona (AC-04) y, si no tiene contraseña, «Dar acceso» (AC-03,
- * UserPolicy): ResetUserPassword le pone la contraseña por defecto con cambio obligatorio. Es la habilitación manual
- * de quien no es docente (Subdirección, Servicios Escolares…); 1.22-C2 la cambia por la invitación (CF-07).
- *
- * El bloque «Cuenta» (UserAccountQuery) muestra usuario, correo, estado, acceso y último acceso, y el menú «Acciones»
- * del encabezado lleva Editar datos, Restablecer contraseña, Dar de baja y Reactivar según el estado (ManagesAccount,
- * 1.22-C1); lo que no se puede queda deshabilitado con su motivo. La cuenta de un alumno se ve de solo lectura, salvo
+ * El encabezado muestra el estado del acceso de la persona (AC-04). El bloque «Cuenta» (UserAccountQuery) muestra
+ * usuario, correo, estado, acceso y último acceso, y el menú «Acciones» del encabezado lleva Editar datos, Enviar o
+ * Reenviar invitación (CF-07, a quien no tiene contraseña, tenga o no un puesto), Restablecer contraseña, Dar de baja y
+ * Reactivar según el estado (ManagesAccount, 1.22-C1 y C2); lo que no se puede queda deshabilitado con su motivo. El
+ * panel no usa la contraseña por defecto. La cuenta de un alumno se ve de solo lectura, salvo
  * Restablecer (CF-S4). El cajón «Dar de baja» muestra DeactivationPreviewQuery.
  */
 new #[Title('Ficha de la persona')] class extends Component
@@ -107,8 +105,8 @@ new #[Title('Ficha de la persona')] class extends Component
             'abilities' => $this->accountAbilities($person),
             'preview' => $this->showDeactivate ? $previews->for($person, auth()->user()) : null,
             'resetMinutes' => $tokens->minutes(),
+            'inviteDays' => AccessInvitationLink::DAYS,
             'reasons' => array_map(fn (DeactivationReason $reason): array => ['id' => $reason->value, 'name' => $reason->label()], DeactivationReason::cases()),
-            'canGrantAccess' => Gate::allows('grantAccess', $person),
             'canAppoint' => $person->is_active,
             'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
@@ -121,39 +119,6 @@ new #[Title('Ficha de la persona')] class extends Component
             'who' => $whoRole === null ? null : $this->who($people, $labels, $whoRole),
             'found' => $people->search($this->find)->reject(fn ($found): bool => $found->id === $person->id)->values(),
         ];
-    }
-
-    /**
-     * «Dar acceso» (AC-03): la contraseña por defecto con cambio obligatorio, solo a un usuario activo sin contraseña.
-     * Un rechazo, en un toast.
-     */
-    public function grantAccess(PeopleQuery $people, ResetUserPassword $resetUserPassword): void
-    {
-        $this->authorize('viewAny', RoleAssignment::class);
-        $person = $people->findOrFail($this->personId);
-        $this->authorize('grantAccess', $person);
-
-        $reason = match (true) {
-            $person->password !== null => 'Ya tiene acceso.',
-            ! $person->is_active => 'El usuario está inactivo.',
-            default => null,
-        };
-
-        if ($reason !== null) {
-            $this->error('No se pudo dar acceso', $reason);
-
-            return;
-        }
-
-        try {
-            $resetUserPassword->handle($person, auth()->user());
-        } catch (RuntimeException $exception) {
-            $this->error('No se pudo dar acceso', e($exception->getMessage()));
-
-            return;
-        }
-
-        $this->success('Acceso dado', e("{$person->username} entra con la contraseña por defecto y debe cambiarla al entrar."));
     }
 
     /**

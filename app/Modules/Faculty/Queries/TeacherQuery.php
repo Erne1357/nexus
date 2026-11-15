@@ -40,7 +40,7 @@ final class TeacherQuery
      * tipo vigente el primer día del periodo activo (S1, supuesto por confirmar; sin periodo, hoy); `$active`, por
      * estado; `$withInstitutionalEmail`, por si tiene correo institucional (AC-06). `null` no filtra. Cada docente
      * trae su usuario con lo que pide el estado de su acceso (AC-04): si tiene contraseña (`has_password`), si se le
-     * invitó y si debe cambiarla.
+     * invitó, si debe cambiarla y si el admin dio de baja su cuenta en el panel (`deactivated_at`, CF-09).
      *
      * @return LengthAwarePaginator<int, Teacher>
      */
@@ -58,7 +58,7 @@ final class TeacherQuery
                 'adscriptions' => fn (HasMany $adscriptions) => $this->orderedAdscriptions($adscriptions),
                 // Para el estado del acceso (AC-04, UserAccess::resolve()), sin leer la contraseña.
                 'user' => fn (BelongsTo $user) => $user
-                    ->select(['id', 'must_change_password', 'access_invited_at'])
+                    ->select(['id', 'must_change_password', 'access_invited_at', 'deactivated_at'])
                     ->selectRaw('password is not null as has_password'),
             ])
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))

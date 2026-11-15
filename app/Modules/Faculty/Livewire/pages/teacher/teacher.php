@@ -3,10 +3,11 @@
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\EndRoleAssignment;
-use App\Modules\Core\Actions\ResetUserPassword;
+use App\Modules\Core\Actions\SendUserPasswordReset;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Enums\AssignmentEnding;
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\RoleAssignment;
@@ -14,6 +15,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\AssignmentLabels;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\PeopleQuery;
+use App\Modules\Core\Support\PasswordResetTokens;
 use App\Modules\Faculty\Actions\AddExternalLoad;
 use App\Modules\Faculty\Actions\AddPosition;
 use App\Modules\Faculty\Actions\DischargeTeacherFromDepartment;
@@ -58,10 +60,13 @@ use Mary\Traits\Toast;
  * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y sus «Horas fuera del ITCJ» del periodo
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
  * Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
- * (faculty::pages.teacher-availability). «Acciones» trae darlo de baja o reactivarlo y «Restablecer contraseña», que es
- * solo del administrador y se llama «Dar acceso» cuando su usuario no tiene contraseña (AC-03), y «Reenviar
- * invitación» (AC-07), del jefe de su departamento y del admin; Datos muestra el correo institucional (AC-06) y el
- * estado del acceso (AC-04).
+ * (faculty::pages.teacher-availability). «Acciones» trae darlo de baja o reactivarlo y, según su acceso, «Enviar
+ * invitación» o «Reenviar invitación» si su usuario no tiene contraseña o «Restablecer contraseña» por enlace si la
+ * tiene (CF-08, solo del admin). La invitación del admin (`core.user.invite`, CF-07) sale aunque tenga otro puesto o
+ * su departamento no haya validado; la del jefe de su departamento sigue AC-07. Ninguna usa la contraseña por defecto.
+ * Si el admin dio de baja su cuenta en el panel (CF-09), no se ofrece ninguna: «Se reactiva desde el panel», con el
+ * enlace a su ficha de «Personas y puestos» para quien la ve. Datos muestra el correo institucional (AC-06) y el estado
+ * del acceso (AC-04), o «Cuenta dada de baja por el admin».
  *
  * Lo ven y cambian el admin, la subdirección y los jefes, cada quien los docentes de su alcance (TeacherPolicy). El
  * componente lee con TeacherQuery y TeacherRecordQuery, autoriza en mount(), en with() y en cada método (una
@@ -220,7 +225,7 @@ new #[Title('Ficha del docente')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids, TeacherAccessQuery $access): array
+    public function with(TeacherQuery $teachers, TeacherRecordQuery $records, Actor $context, PeopleQuery $people, AvailabilityGridQuery $grids, TeacherAccessQuery $access, PasswordResetTokens $tokens): array
     {
         $teacher = $teachers->findOrFail($this->teacherId);
         $this->authorize('view', $teacher);
@@ -280,10 +285,9 @@ new #[Title('Ficha del docente')] class extends Component
             'removingWarning' => $removing === null ? '' : $this->removalWarning($record, $removing),
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
-            'canReset' => Gate::allows('resetPassword', $teacher),
-            'grantsAccess' => $record->access?->hasPassword() === false,
-            'inviteReason' => $record->access?->hasPassword() === false ? $this->inviteReason($teacher, $access, $record->access === UserAccess::Invited) : null,
-            'invited' => $record->access === UserAccess::Invited,
+            ...$this->accessActions($teacher, $record, $access),
+            'canOpenPerson' => $canAppoint,
+            'resetMinutes' => $tokens->minutes(),
             'institutionalDomain' => config('nexus.institutional_email_domain'),
             'institutionalEmailReason' => $this->showDataModal ? $this->institutionalEmailReason($teacher) : null,
             'departures' => $this->tab === 'datos' && $context->allows(FacultyPermission::TeacherDeactivate) ? $records->departures($teacher) : collect(),
@@ -370,52 +374,58 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
-     * Devuelve el usuario del docente a la contraseña por defecto y lo obliga a cambiarla. Si no tenía contraseña es
-     * «Dar acceso», la habilitación manual (AC-03), que a un usuario inactivo no se le da: no podría entrar. Solo el
-     * administrador.
+     * «Restablecer contraseña» (CF-08): el enlace de AC-16 al correo de su usuario, como en «Personas y puestos»; solo
+     * el admin (`core.user.reset_password`). El resultado, o por qué no se pudo, en un toast.
      */
-    public function resetPassword(TeacherQuery $teachers, ResetUserPassword $resetUserPassword, Actor $context): void
+    public function resetPassword(TeacherQuery $teachers, SendUserPasswordReset $sendUserPasswordReset, PasswordResetTokens $tokens, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
-        $this->authorize('resetPassword', $teacher);
         $user = $teacher->user;
-        $failure = $user !== null && $user->password === null ? 'No se pudo dar acceso' : 'No se pudo restablecer la contraseña';
 
         if ($user === null) {
-            $this->error($failure, 'El docente no tiene usuario.');
+            abort_unless($context->allows(CorePermission::UserResetPassword), 403);
+            $this->error('No se mandó el enlace', 'El docente no tiene usuario.');
 
             return;
         }
 
-        if ($user->password === null && ! $user->is_active) {
-            $this->error($failure, 'Su usuario está inactivo: reactiva al docente antes.');
-
-            return;
-        }
+        $this->authorize('resetPassword', $user);
 
         try {
-            $granted = $resetUserPassword->handle($user, $context->user());
-        } catch (RuntimeException $exception) {
-            $this->error($failure, e($exception->getMessage()));
+            $email = $sendUserPasswordReset->handle($user, $context->user());
+        } catch (ValidationException $exception) {
+            $this->error('No se mandó el enlace', e((string) collect($exception->errors())->flatten()->first()));
+
+            return;
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('No se mandó el enlace', 'El correo no salió. Inténtalo otra vez en unos minutos.');
 
             return;
         }
 
-        $this->success($granted ? 'Acceso dado' : 'Contraseña restablecida', e("{$user->username} entra con la contraseña por defecto y debe cambiarla al entrar."));
+        $this->success('Enlace enviado', e("Enlace enviado a {$email}. Vale {$tokens->minutes()} minutos."));
     }
 
     /**
-     * «Reenviar invitación» (AC-07): un enlace nuevo a su correo institucional; el anterior deja de servir. A quien nunca
-     * se invitó es «Enviar invitación», que se puede en cuanto un departamento suyo validó su catálogo de docentes;
-     * antes, la primera sale con esa validación. Un rechazo, en un toast.
+     * «Enviar invitación» o «Reenviar invitación» a su correo institucional; el enlace anterior deja de servir. El admin
+     * manda la suya (InviteTeacherAccess::byAdmin(), CF-07), aunque tenga otro puesto o su departamento no haya validado.
+     * El jefe de su departamento reenvía la de AC-07, y a quien nunca se invitó se la manda en cuanto un departamento suyo
+     * validó su catálogo de docentes; antes, la primera sale con esa validación. Un rechazo, en un toast.
      */
     public function resendInvitation(TeacherQuery $teachers, InviteTeacherAccess $inviteTeacherAccess, Actor $context): void
     {
         $teacher = $teachers->findOrFail($this->teacherId);
-        $this->authorize('inviteAccess', $teacher);
-        $invited = $teacher->user?->access_invited_at !== null;
+        $user = $teacher->user;
+        $invited = $user?->access_invited_at !== null;
+        $failure = $invited ? 'No se pudo reenviar la invitación' : 'No se pudo enviar la invitación';
 
-        $sent = $this->attempt(fn () => $inviteTeacherAccess->resend($teacher, $context->user()), $invited ? 'No se pudo reenviar la invitación' : 'No se pudo enviar la invitación');
+        if ($user !== null && Gate::allows('invite', $user)) {
+            $sent = $this->attempt(fn () => $inviteTeacherAccess->byAdmin($teacher, $context->user()), $failure);
+        } else {
+            $this->authorize('inviteAccess', $teacher);
+            $sent = $this->attempt(fn () => $inviteTeacherAccess->resend($teacher, $context->user()), $failure);
+        }
 
         if ($sent) {
             $this->success(
@@ -925,19 +935,49 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
+     * Lo que «Acciones» ofrece sobre el acceso de su usuario: `resetReason` (CF-08) si tiene contraseña e `inviteReason`
+     * (CF-07, AC-07) si no, cada uno '' si se puede, el motivo si no y null si no se ofrece; `invited`, si ya tiene una
+     * invitación, y `panelDeactivated`, si el admin dio de baja su cuenta en el panel (CF-09), y entonces no se ofrece
+     * ninguno.
+     *
+     * @return array{resetReason: ?string, inviteReason: ?string, invited: bool, panelDeactivated: bool}
+     */
+    private function accessActions(Teacher $teacher, TeacherRecord $record, TeacherAccessQuery $access): array
+    {
+        $user = $record->user;
+        $panelDeactivated = $user?->deactivated_at !== null;
+        $invited = $record->access === UserAccess::Invited;
+        $hasPassword = $record->access?->hasPassword() === true;
+
+        return [
+            'resetReason' => $panelDeactivated || ! $hasPassword ? null : (Gate::allows('resetPassword', $user)
+                ? $access->resetBlocker($teacher) ?? ''
+                : 'Solo el administrador restablece contraseñas.'),
+            'inviteReason' => $panelDeactivated || $hasPassword ? null : $this->inviteReason($teacher, $access, $invited),
+            'invited' => $invited,
+            'panelDeactivated' => $panelDeactivated,
+        ];
+    }
+
+    /**
      * Por qué «Reenviar invitación» (o «Enviar invitación») está deshabilitado para un usuario sin contraseña, o '' si se
-     * puede (AC-07): primero quién la manda y luego lo que dice TeacherAccessQuery::invitationBlocker().
+     * puede: para el admin, TeacherAccessQuery::adminInvitationBlocker() (CF-07); para los demás, primero quién la manda
+     * y luego TeacherAccessQuery::invitationBlocker() (AC-07).
      */
     private function inviteReason(Teacher $teacher, TeacherAccessQuery $access, bool $invited): string
     {
+        if ($teacher->user_id !== null && Gate::allows('invite', $teacher->user)) {
+            return $access->adminInvitationBlocker($teacher) ?? '';
+        }
+
         return Gate::allows('inviteAccess', $teacher)
             ? $access->invitationBlocker($teacher) ?? ''
             : 'Solo su jefe de departamento o el administrador la '.($invited ? 'reenvían.' : 'mandan.');
     }
 
     /**
-     * Corre una acción de confirmación; si una regla la rechaza o falta la contraseña por defecto, lo dice en un toast
-     * de error con el motivo y da false.
+     * Corre una acción de confirmación; si una regla la rechaza o la acción falla con un RuntimeException, lo dice en un
+     * toast de error con el motivo y da false.
      */
     private function attempt(Closure $action, string $title): bool
     {

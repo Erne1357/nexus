@@ -70,7 +70,6 @@ it('al admin le permite todo, también sobre un docente sin departamento', funct
         ->and($admin->can('create', Teacher::class))->toBeTrue()
         ->and($admin->can('create', [Teacher::class, $this->cb]))->toBeTrue()
         ->and($admin->can('provisionUsers', Teacher::class))->toBeTrue()
-        ->and($admin->can('resetPassword', $this->loose))->toBeTrue()
         ->and($admin->can('manageQualification', [$this->onlyIi, $subject]))->toBeTrue()
         ->and($admin->can('removeAdscription', [Teacher::class, $this->onlyIi->adscriptions()->sole()]))->toBeTrue();
 
@@ -210,11 +209,14 @@ it('adscribir a un docente que ya existe es solo del admin y la Subdirección (S
         ->and($coordinador->can('adscribe', Teacher::class))->toBeFalse();
 });
 
-it('provisionUsers y resetPassword son solo del admin', function (Role $role, array $scope) {
+it('provisionUsers es solo del admin; invitar como admin y restablecer la contraseña son de UserPolicy (CF-07, CF-08)', function (Role $role, array $scope) {
     $user = User::factory()->withRole($role, $scope)->create();
+    $teacherUser = User::factory()->create();
 
     expect($user->can('provisionUsers', Teacher::class))->toBeFalse()
-        ->and($user->can('resetPassword', $this->inSc))->toBeFalse();
+        ->and(method_exists(TeacherPolicy::class, 'resetPassword'))->toBeFalse()
+        ->and($user->can('invite', $teacherUser))->toBeFalse()
+        ->and($user->can('resetPassword', $teacherUser))->toBeFalse();
 })->with([
     'Subdirección' => [Role::Subdireccion, []],
     'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
