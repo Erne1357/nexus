@@ -11,7 +11,7 @@
         </x-slot:subtitle>
     </x-header>
 
-    <div class="grid gap-6 xl:grid-cols-2" data-testid="settings-modules">
+    <div class="grid items-start gap-6 xl:grid-cols-2" data-testid="settings-modules">
         @foreach ($modules as $module)
             <section wire:key="module-{{ $module['module'] }}" class="rounded-box border border-base-300 bg-base-100" aria-labelledby="module-{{ $module['module'] }}-title" data-testid="settings-{{ $module['module'] }}">
                 <header class="border-b border-base-300 px-5 py-3">

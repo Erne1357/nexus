@@ -145,7 +145,7 @@
                     <x-select label="Puesto" wire:model.live="whoRole" :options="$whoRoles" />
 
                     @if ($whoColumns !== [])
-                        <div class="grid gap-3 sm:grid-cols-2 min-[1200px]:grid-cols-1 min-[1400px]:grid-cols-2">
+                        <div class="grid gap-3 sm:grid-cols-2 min-[75rem]:grid-cols-1">
                             @if (in_array('modality_id', $whoColumns, true))
                                 <x-select label="Modalidad" wire:model.live="whoModality" :options="$whoOptions['modalities']" placeholder="Elige" />
                             @endif
