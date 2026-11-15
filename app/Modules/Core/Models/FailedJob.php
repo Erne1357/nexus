@@ -26,6 +26,9 @@ class FailedJob extends Model
     /** Renglones de la excepción que se muestran en la lista. */
     public const int HEAD_LINES = 3;
 
+    /** Renglones de la excepción que se muestran en el drawer. */
+    public const int SHOWN_LINES = 40;
+
     /**
      * @return array<string, string>
      */
@@ -51,7 +54,30 @@ class FailedJob extends Model
      */
     protected function exceptionHead(): Attribute
     {
-        return Attribute::get(fn (): string => implode("\n", array_slice(preg_split('/\R/', $this->exception) ?: [], 0, self::HEAD_LINES)));
+        return Attribute::get(fn (): string => self::redact(implode("\n", array_slice(preg_split('/\R/', $this->exception) ?: [], 0, self::HEAD_LINES))));
+    }
+
+    /**
+     * La excepción para el drawer: las primeras `SHOWN_LINES` líneas y sin lo que parezca un token.
+     *
+     * @return Attribute<string, never>
+     */
+    protected function exceptionShown(): Attribute
+    {
+        return Attribute::get(function (): string {
+            $lines = preg_split('/\R/', $this->exception) ?: [];
+            $shown = implode("\n", array_slice($lines, 0, self::SHOWN_LINES));
+
+            return self::redact($shown).(count($lines) > self::SHOWN_LINES ? "\n… (".(count($lines) - self::SHOWN_LINES).' líneas más)' : '');
+        });
+    }
+
+    /**
+     * Oculta el valor de `token=` y `signature=` (enlaces con firma de las invitaciones y de restablecer contraseña).
+     */
+    public static function redact(string $text): string
+    {
+        return (string) preg_replace('/\b((?:token|signature)=)[^&\s"\')\]]+/i', '$1[oculto]', $text);
     }
 
     /**

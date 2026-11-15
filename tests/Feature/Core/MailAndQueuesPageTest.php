@@ -144,3 +144,49 @@ it('CF-03: el menú muestra «Correos y colas» solo al admin', function () {
     $docente = User::factory()->withRole(Role::Docente)->create();
     $this->actingAs($docente)->get(route('home'))->assertDontSee('Correos y colas');
 });
+
+it('CF-03: con la página que abrió el admin, otro usuario no puede reenviar, reintentar, descartar ni abrir un error', function () {
+    $uuid = pageFailedJob();
+    $invited = User::factory()->create(['password' => null, 'email' => 'pend@itcj.test', 'access_invited_at' => now()->subDay()->startOfSecond()]);
+    $docente = User::factory()->withRole(Role::Docente)->create();
+
+    $open = fn () => Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')->call('showTab', 'queues');
+    $calls = [['retry', $uuid], ['forget', $uuid], ['openError', $uuid], ['resend', $invited->id]];
+    $pages = array_map(fn () => $open(), $calls);
+    $this->actingAs($docente);
+
+    foreach ($calls as $index => [$method, $argument]) {
+        $pages[$index]->call($method, $argument)->assertForbidden();
+    }
+
+    expect(DB::table('failed_jobs')->where('uuid', $uuid)->exists())->toBeTrue()
+        ->and(DB::table('jobs')->count())->toBe(0)
+        ->and(MailLog::query()->count())->toBe(0)
+        ->and(Activity::query()->whereIn('event', ['failed-job-retried', 'failed-job-forgotten'])->count())->toBe(0);
+});
+
+it('un rango de fechas manipulado no rompe la página: se descarta', function () {
+    MailLog::factory()->create(['to' => 'ana@itcj.test']);
+
+    Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')
+        ->set('from', '2026-13-45')
+        ->set('to', 'x')
+        ->assertOk()
+        ->assertSee('ana@itcj.test');
+});
+
+it('el drawer del error corta la excepción a 40 líneas y oculta tokens y firmas', function () {
+    $uuid = pageFailedJob();
+    $exception = "RuntimeException: https://nexus.test/access/1/h?expires=1&signature=SECRETOFIRMA\n".implode("\n", array_map(fn (int $n): string => "#{$n} pila token=SECRETOTOKEN", range(1, 60)));
+    DB::table('failed_jobs')->where('uuid', $uuid)->update(['exception' => $exception]);
+
+    Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')
+        ->call('showTab', 'queues')
+        ->call('openError', $uuid)
+        ->assertSee('#38 pila')
+        ->assertDontSee('#45 pila')
+        ->assertSee('líneas más')
+        ->assertDontSee('SECRETOFIRMA')
+        ->assertDontSee('SECRETOTOKEN')
+        ->assertSee('signature=[oculto]', false);
+});

@@ -102,6 +102,7 @@ new #[Title('Correos y colas')] class extends Component
 
     public function resend(string $id, SendAccessInvitation $invite): void
     {
+        $this->authorize('viewAny', MailLog::class);
         $this->authorize('resendInvitation', MailLog::class);
 
         $user = KeyLookup::findOrFail(User::query(), $id);
@@ -118,6 +119,7 @@ new #[Title('Correos y colas')] class extends Component
 
     public function retry(string $uuid, FailedJobsQuery $failed, RetryFailedJob $retry): void
     {
+        $this->authorize('viewAny', FailedJob::class);
         $job = $failed->findOrFail($uuid);
         $this->authorize('retry', $job);
 
@@ -127,6 +129,7 @@ new #[Title('Correos y colas')] class extends Component
 
     public function forget(string $uuid, FailedJobsQuery $failed, ForgetFailedJob $forget): void
     {
+        $this->authorize('viewAny', FailedJob::class);
         $job = $failed->findOrFail($uuid);
         $this->authorize('forget', $job);
 
@@ -172,6 +175,10 @@ new #[Title('Correos y colas')] class extends Component
 
     private function date(string $value): ?CarbonImmutable
     {
-        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? CarbonImmutable::parse($value) : null;
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $parts) !== 1 || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
+            return null;
+        }
+
+        return CarbonImmutable::createFromFormat('!Y-m-d', $value) ?: null;
     }
 };

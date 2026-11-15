@@ -171,7 +171,7 @@
                     <h2 id="error-title" class="text-lg font-semibold">Error del trabajo</h2>
                     <p class="font-mono text-sm break-all">{{ $errorJob->job_name }}</p>
                     <p class="text-sm text-neutral">Cola <span class="font-mono">{{ $errorJob->queue }}</span> · {{ $errorJob->failed_at->format('d/m/Y H:i') }}</p>
-                    <pre class="max-h-[60vh] overflow-auto rounded-box bg-base-200 p-3 text-xs whitespace-pre-wrap break-words">{{ $errorJob->exception }}</pre>
+                    <pre class="max-h-[60vh] overflow-auto rounded-box bg-base-200 p-3 text-xs whitespace-pre-wrap break-words">{{ $errorJob->exception_shown }}</pre>
                 </div>
             @endif
         </x-drawer>
