@@ -143,5 +143,6 @@ it('CF-S5: la migración crea los índices de fecha y de quien causó el cambio'
     $indexes = DB::table('pg_indexes')->where('tablename', 'activity_log')->pluck('indexdef', 'indexname');
 
     expect($indexes['activity_log_created_at_index'])->toContain('(created_at)')
-        ->and($indexes['activity_log_causer_id_id_index'])->toContain('(causer_id, id)');
+        ->and($indexes['activity_log_causer_id_id_index'])->toContain('(causer_id, id)')
+        ->and($indexes['activity_log_event_index'])->toContain('(event)');
 });

@@ -14,10 +14,13 @@ return new class extends Migration
     {
         DB::statement('create index activity_log_created_at_index on activity_log (created_at)');
         DB::statement('create index activity_log_causer_id_id_index on activity_log (causer_id, id)');
+        // Para la lista de eventos del filtro (select distinct); el tipo de registro ya lo cubre el índice `subject`.
+        DB::statement('create index activity_log_event_index on activity_log (event)');
     }
 
     public function down(): void
     {
+        DB::statement('drop index if exists activity_log_event_index');
         DB::statement('drop index if exists activity_log_causer_id_id_index');
         DB::statement('drop index if exists activity_log_created_at_index');
     }

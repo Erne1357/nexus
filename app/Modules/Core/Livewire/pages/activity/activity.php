@@ -87,6 +87,10 @@ new #[Title('Bitácora')] class extends Component
 
     private function date(string $value): ?CarbonImmutable
     {
-        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 ? CarbonImmutable::parse($value) : null;
+        if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $parts) !== 1 || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
+            return null;
+        }
+
+        return CarbonImmutable::createFromFormat('!Y-m-d', $value) ?: null;
     }
 };

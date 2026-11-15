@@ -80,6 +80,14 @@ it('muestra el puesto con que actuó la persona', function () {
         ->assertSee('Administración');
 });
 
+it('un rango de fechas manipulado no rompe la página: se descarta', function () {
+    Livewire::actingAs($this->admin)->test('core::pages.activity')
+        ->set('from', '2026-13-45')
+        ->set('to', 'x')
+        ->assertOk()
+        ->assertSee('Editó el campus C7');
+});
+
 it('HC-18: la pantalla no escribe nada en la bitácora, ni al filtrar ni al abrir el detalle', function () {
     $before = Activity::query()->count();
 
