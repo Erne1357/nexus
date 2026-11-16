@@ -1,0 +1,55 @@
+<?php
+
+namespace App\Modules\Demand\Queries;
+
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
+use App\Modules\Demand\Models\DemandForecast;
+use Illuminate\Support\Collection;
+
+/**
+ * La proyección guardada de un periodo en una modalidad (tarea 5.1), para quien está a la derecha de Demand: la
+ * propuesta del coordinador, por carrera (5.5 y 5.6), y el tablero del departamento, por sus materias en todas las
+ * carreras y campus (5.7). Solo lee `demand_forecasts`; quien la autoriza es la pantalla que la usa.
+ */
+final class DemandForecastsQuery
+{
+    /**
+     * @return Collection<string, Collection<string, DemandForecast>> id de materia => (id de campus, o '' sin campus) => fila
+     */
+    public function forCareer(Term $term, Modality $modality, Career $career): Collection
+    {
+        return DemandForecast::query()
+            ->where('term_id', $term->id)
+            ->where('modality_id', $modality->id)
+            ->where('career_id', $career->id)
+            ->orderBy('subject_id')
+            ->orderBy('campus_id')
+            ->get()
+            ->groupBy('subject_id')
+            ->map(fn (Collection $rows): Collection => $rows->keyBy(fn (DemandForecast $forecast): string => $forecast->campus_id ?? ''));
+    }
+
+    /**
+     * Las filas de las materias del departamento, de todas las carreras y campus, con la carrera y el campus cargados.
+     *
+     * @return Collection<string, Collection<int, DemandForecast>> id de materia => filas
+     */
+    public function forDepartment(Term $term, Modality $modality, Department $department): Collection
+    {
+        return DemandForecast::query()
+            ->with(['career', 'campus'])
+            ->join('subjects', 'subjects.id', '=', 'demand_forecasts.subject_id')
+            ->where('demand_forecasts.term_id', $term->id)
+            ->where('demand_forecasts.modality_id', $modality->id)
+            ->where('subjects.department_id', $department->id)
+            ->orderBy('subjects.code')
+            ->orderBy('demand_forecasts.career_id')
+            ->orderBy('demand_forecasts.campus_id')
+            ->select('demand_forecasts.*')
+            ->get()
+            ->groupBy('subject_id');
+    }
+}

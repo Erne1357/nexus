@@ -6,7 +6,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
-use App\Modules\AcademicLoad\Rules\SuggestedGroups;
+use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Scheduling\Enums\GroupStatus;

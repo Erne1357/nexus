@@ -5,7 +5,7 @@ namespace App\Modules\Staffing\Database\Seeders;
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
-use App\Modules\AcademicLoad\Rules\SuggestedGroups;
+use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
