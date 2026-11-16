@@ -83,6 +83,7 @@ function dimensionTables(): array
         'academic_load.proposal' => 'career_proposals',
         'academic_load.proposal_review' => 'proposal_reviews',
         'academic_load.agreement' => 'interdepartmental_agreements',
+        'academic_load.forecast_evaluation' => 'forecast_evaluations',
         'scheduling.schedule' => 'groups',
         'scheduling.group' => 'groups',
         'scheduling.session' => 'group_sessions',
@@ -113,6 +114,8 @@ function dimensionExceptions(): array
         'imports.batch.view' => $admin,
         'imports.batch.create' => $admin,
         'imports.batch.apply' => $admin,
+        'academic_load.forecast_evaluation.view' => $tec,
+        'academic_load.forecast_evaluation.run' => $tec,
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
         'catalog_validation.review.open' => $admin,
@@ -189,6 +192,8 @@ function modalityDimensionExceptions(): array
         'core.assignment.appoint' => $admin,
         'core.assignment.end' => $admin,
         'core.term.manage_calendar' => $tec,
+        'academic_load.forecast_evaluation.view' => $tec,
+        'academic_load.forecast_evaluation.run' => $tec,
     ];
 }
 

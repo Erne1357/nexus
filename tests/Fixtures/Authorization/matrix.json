@@ -86,6 +86,8 @@
         ],
         "subdireccion": [
             "academic_load.agreement.view",
+            "academic_load.forecast_evaluation.run",
+            "academic_load.forecast_evaluation.view",
             "academic_load.load.approve",
             "academic_load.load.close",
             "academic_load.load.export",
@@ -173,6 +175,8 @@
             "academic_load.agreement.decide",
             "academic_load.agreement.request",
             "academic_load.agreement.view",
+            "academic_load.forecast_evaluation.run",
+            "academic_load.forecast_evaluation.view",
             "academic_load.load.approve",
             "academic_load.load.close",
             "academic_load.load.propose",

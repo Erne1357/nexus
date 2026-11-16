@@ -196,6 +196,13 @@ Los archivos que salen de una carga publicada (tareas 4.5 y 4.6) se arman solo d
 - Solo cuentan como elegibles los alumnos con estatus `activo`: no cuentan los de baja temporal o definitiva, los egresados, los que quedaron sin estatus porque el SII trajo uno que Nexus no conoce, ni un alumno desactivado (confirmado el 29 de octubre de 2026).
 - R1: `eligible_students` por materia, carrera y campus se cuenta al leerlo desde `student_progress` (`EligibleStudentsQuery`), que se recalcula al importar alumnos o kardex y, si cambia la retícula de un plan, solo para los alumnos de ese plan (un job único por plan; el cambio de una materia, que puede estar en cualquier plan, los recalcula a todos) (supuesto por confirmar). El estatus del alumno cuenta desde que se importa; un cambio de plan, desde el recálculo.
 - R2: `expected_students = eligible_students x (1 - tasa_de_no_inscripción) + repetidores_esperados`, con tasas históricas por materia y campus (`demand.history_terms`, por defecto 4). `suggested_groups = ceil(expected_students / tamaño_objetivo)`, con tamaño objetivo configurable por tipo de materia (`demand.target_group_size`, por defecto 35; laboratorios 25).
+- **Evaluación de la proyección** (tarea 5.9). Se corre «como si» sobre un periodo ya cursado y se compara lo proyectado con lo que de verdad se cursó:
+  - DM-20: el «error medio por materia» es el **error ponderado por alumnos**, Σ|proyectado − real| / Σ real; si Σ real = 0, el veredicto es «sin medir», sin dividir entre cero. La línea base es la regla de R1 (los elegibles) y se mide igual (supuesto por confirmar sobre la forma de promediar).
+  - DM-21: una materia con real 0 y proyectado 0 no cuenta; con real 0 y proyectado mayor que 0 suma su proyectado al error. El error absoluto medio y el sesgo se promedian entre las materias que cuentan (supuesto por confirmar).
+  - DM-22: con error ponderado ≤ 15 % la proyección de la carrera es **sugerencia fuerte**; arriba, **referencia**; sin error medible, **sin medir** (confirmado el 16 de noviembre de 2026). El rótulo sale de las filas de la carrera en la última evaluación lista de la modalidad; con campus, la última de ese campus o de todos (supuesto por confirmar).
+  - DM-23: además se reporta la fracción de materias con real > 0 cuyo error es de 15 % o menos de su real.
+  - DM-24: ver el reporte de precisión y lanzar una evaluación son permisos globales (`academic_load.forecast_evaluation.view` y `.run`) de Subdirección y del admin (confirmado el 16 de noviembre de 2026).
+  - DM-25: una evaluación pasa por `queued`, `running`, `done` o `failed`; una fallida nunca cuenta para el rótulo.
 
 ## Retícula del alumno
 
