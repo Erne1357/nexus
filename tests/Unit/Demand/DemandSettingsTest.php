@@ -22,10 +22,10 @@ it('sin parámetros guardados usa los valores de omisión', function () {
 
 it('lee cada parámetro guardado', function () {
     $settings = DemandSettings::fromValues([
-        DemandSettings::HISTORY_TERMS => 6,
-        DemandSettings::TARGET_GROUP_SIZE => ['default' => 40, 'lab' => 20],
-        DemandSettings::MIN_GROUP_SIZE => 12,
-        DemandSettings::HIGHLIGHT_THRESHOLD => 30,
+        DemandSettings::HISTORY_TERMS_SETTING => 6,
+        DemandSettings::TARGET_GROUP_SIZE_SETTING => ['default' => 40, 'lab' => 20],
+        DemandSettings::MIN_GROUP_SIZE_SETTING => 12,
+        DemandSettings::HIGHLIGHT_THRESHOLD_SETTING => 30,
     ]);
 
     expect($settings->historyTerms)->toBe(6)
@@ -37,12 +37,12 @@ it('lee cada parámetro guardado', function () {
 it('un valor que no es un entero válido usa el de omisión', function (string $key, mixed $value) {
     expect(DemandSettings::fromValues([$key => $value]))->toEqual(new DemandSettings);
 })->with([
-    'semestres en cero' => [DemandSettings::HISTORY_TERMS, 0],
-    'semestres en texto' => [DemandSettings::HISTORY_TERMS, 'cuatro'],
-    'mínimo negativo' => [DemandSettings::MIN_GROUP_SIZE, -3],
-    'umbral en cero' => [DemandSettings::HIGHLIGHT_THRESHOLD, 0],
-    'umbral decimal' => [DemandSettings::HIGHLIGHT_THRESHOLD, 12.5],
-    'tamaños que no son tabla' => [DemandSettings::TARGET_GROUP_SIZE, 35],
+    'semestres en cero' => [DemandSettings::HISTORY_TERMS_SETTING, 0],
+    'semestres en texto' => [DemandSettings::HISTORY_TERMS_SETTING, 'cuatro'],
+    'mínimo negativo' => [DemandSettings::MIN_GROUP_SIZE_SETTING, -3],
+    'umbral en cero' => [DemandSettings::HIGHLIGHT_THRESHOLD_SETTING, 0],
+    'umbral decimal' => [DemandSettings::HIGHLIGHT_THRESHOLD_SETTING, 12.5],
+    'tamaños que no son tabla' => [DemandSettings::TARGET_GROUP_SIZE_SETTING, 35],
 ]);
 
 it('una diferencia es grande si el capturado se aleja del sugerido el umbral o más', function (int $suggested, int $captured, bool $large) {
@@ -66,6 +66,6 @@ it('declara la definición de cada parámetro con el valor de omisión que usa a
     }
 
     expect(array_keys($defaults))->toEqualCanonicalizing([
-        DemandSettings::HISTORY_TERMS, DemandSettings::TARGET_GROUP_SIZE, DemandSettings::MIN_GROUP_SIZE, DemandSettings::HIGHLIGHT_THRESHOLD,
+        DemandSettings::HISTORY_TERMS_SETTING, DemandSettings::TARGET_GROUP_SIZE_SETTING, DemandSettings::MIN_GROUP_SIZE_SETTING, DemandSettings::HIGHLIGHT_THRESHOLD_SETTING,
     ])->and(DemandSettings::fromValues($defaults))->toEqual(new DemandSettings);
 });

@@ -16,7 +16,7 @@ use App\Modules\Demand\Rules\DemandSettings;
  */
 final readonly class ProposalAnomalies
 {
-    public const string SETTING = DemandSettings::MIN_GROUP_SIZE;
+    public const string SETTING = 'demand.min_group_size';
 
     public const int DEFAULT_MINIMUM = DemandSettings::DEFAULT_MIN_GROUP_SIZE;
 
