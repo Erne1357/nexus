@@ -22,6 +22,8 @@ beforeEach(function () {
     DB::unprepared('drop table if exists sii_archivo.grupos');
     DB::unprepared('drop table if exists sii_archivo.horarios');
     DB::unprepared('create table sii_archivo.grupos (_linea serial primary key, periodo text not null, materia text not null, grupo text not null, estatus_grupo text not null default \'\', capacidad_grupo text not null default \'\', alumnos_inscritos text not null default \'\', paralelo_de text not null default \'\', exclusivo_carrera text not null default \'\', exclusivo_reticula text not null default \'\')');
+    DB::unprepared('drop table if exists sii_archivo.materias_claves_tecnm');
+    DB::unprepared('create table sii_archivo.materias_claves_tecnm (_linea serial primary key, carrera text not null default \'\', reticula text not null default \'\', materia text not null, clave_tecnm text not null default \'\')');
     DB::unprepared('create table sii_archivo.horarios (_linea serial primary key, periodo text not null, tipo_horario text not null default \'D\', materia text not null, grupo text not null, aula text not null default \'\')');
 
     $plans = tempnam(sys_get_temp_dir(), 'planes');
@@ -58,6 +60,37 @@ it('importa la materia del SII como subjects.code, con su cupo e inscritos', fun
         ->and($row->source)->toBe(HistoricalGroupSource::Sii)
         ->and($row->modality_id)->toBe(Modality::query()->where('code', 'PRES')->value('id'))
         ->and($row->load_snapshot_id)->toBeNull();
+});
+
+it('liga la clave del SII a la materia de Nexus por su clave TecNM, y dos claves del SII de la misma materia no chocan en el grupo A', function () {
+    $tecnm = Subject::factory()->create(['code' => 'ACF-2301']);
+    DB::table('sii_archivo.materias_claves_tecnm')->insert([
+        ['carrera' => 'II2', 'reticula' => '27', 'materia' => '3FA', 'clave_tecnm' => 'ACF-2301'],
+        ['carrera' => 'IM2', 'reticula' => '28', 'materia' => '2GA', 'clave_tecnm' => 'ACF-2301'],
+    ]);
+    historicalGroupsSiiGroup('20261', '3FA', 'A');
+    historicalGroupsSiiGroup('20261', '2GA', 'A');
+
+    $this->artisan('academic-load:import-sii-groups')->assertSuccessful();
+
+    expect(HistoricalGroup::query()->where('subject_id', $tecnm->id)->orderBy('sii_subject_code')->pluck('sii_subject_code')->all())->toBe(['2GA', '3FA']);
+});
+
+it('ignora la clave TecNM que es la propia clave del SII y la menor gana entre varias', function () {
+    $low = Subject::factory()->create(['code' => 'AAA-1000']);
+    Subject::factory()->create(['code' => 'BBB-2000']);
+    DB::table('sii_archivo.materias_claves_tecnm')->insert([
+        ['materia' => 'HGMAT1', 'clave_tecnm' => 'HGMAT1'],
+        ['materia' => 'X1', 'clave_tecnm' => 'BBB-2000'],
+        ['materia' => 'X1', 'clave_tecnm' => 'AAA-1000'],
+    ]);
+    historicalGroupsSiiGroup('20261', 'HGMAT1', 'A');
+    historicalGroupsSiiGroup('20261', 'X1', 'A');
+
+    $this->artisan('academic-load:import-sii-groups')->assertSuccessful();
+
+    expect(HistoricalGroup::query()->where('sii_subject_code', 'HGMAT1')->value('subject_id'))->toBe($this->subject->id)
+        ->and(HistoricalGroup::query()->where('sii_subject_code', 'X1')->value('subject_id'))->toBe($low->id);
 });
 
 it('toma el campus del aula del horario del grupo, sin importar espacios ni mayúsculas', function () {

@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Un grupo que se abrió en un periodo pasado, de lo migrado del SII o de lo que Nexus publicó (tarea 5.6). Registro
  * histórico: sin borrado lógico; se reemplaza al reimportar o al publicar otra versión.
  */
-#[Fillable(['term_code', 'modality_id', 'campus_id', 'subject_id', 'group_code', 'capacity', 'enrolled', 'career_id', 'parallel_of', 'source', 'load_snapshot_id', 'recorded_at'])]
+#[Fillable(['term_code', 'modality_id', 'campus_id', 'subject_id', 'group_code', 'sii_subject_code', 'capacity', 'enrolled', 'career_id', 'parallel_of', 'source', 'load_snapshot_id', 'recorded_at'])]
 #[UseFactory(HistoricalGroupFactory::class)]
 class HistoricalGroup extends Model
 {

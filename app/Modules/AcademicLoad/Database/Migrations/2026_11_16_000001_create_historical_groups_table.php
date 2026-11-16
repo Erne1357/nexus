@@ -26,6 +26,7 @@ return new class extends Migration
             $table->foreignUuid('campus_id')->nullable()->constrained();
             $table->foreignUuid('subject_id')->constrained();
             $table->string('group_code');
+            $table->string('sii_subject_code')->nullable();
             $table->integer('capacity');
             $table->integer('enrolled')->nullable();
             $table->foreignUuid('career_id')->nullable()->constrained();
@@ -35,10 +36,10 @@ return new class extends Migration
             $table->timestampTz('recorded_at');
             $table->timestamps();
 
-            $table->unique(['term_code', 'subject_id', 'group_code', 'source']);
             $table->index(['subject_id', 'term_code']);
         });
 
+        DB::statement('create unique index historical_groups_key_unique on historical_groups (term_code, modality_id, subject_id, sii_subject_code, group_code, source) nulls not distinct');
         DB::statement('alter table historical_groups add constraint historical_groups_capacity_check check (capacity >= 0)');
         DB::statement('alter table historical_groups add constraint historical_groups_enrolled_check check (enrolled is null or enrolled >= 0)');
         DB::statement("alter table historical_groups add constraint historical_groups_source_check check (source in ('sii', 'nexus'))");

@@ -31,6 +31,7 @@ class HistoricalGroupFactory extends Factory
             'campus_id' => null,
             'subject_id' => Subject::factory(),
             'group_code' => fake()->unique()->bothify('?#'),
+            'sii_subject_code' => null,
             'capacity' => 35,
             'enrolled' => 30,
             'career_id' => null,

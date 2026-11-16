@@ -17,8 +17,8 @@ use Illuminate\Support\Str;
  * De cada grupo del snapshot (leído normalizado, MS13): materia, código, campus del grupo (nulo si no lo tiene), cupo
  * (`capacity`) y, como carrera exclusiva, la única carrera de sus lugares (nula si comparte entre varias). Un grupo
  * compartido entre carreras es un solo grupo en Nexus, así que no hay `parallel_of`. `enrolled` queda nulo: en R1 la
- * inscripción sigue en el SII. La modalidad es la de la carga. Si dos cargas dieran el mismo (periodo, materia, grupo) la
- * última escritura gana (la llave única; supuesto por confirmar).
+ * inscripción sigue en el SII. La modalidad es la de la carga. La llave única incluye la modalidad: dos cargas de distinta modalidad con la misma
+ * materia y grupo en un periodo no se pisan.
  */
 final class SyncPublishedGroupHistory
 {
@@ -44,6 +44,7 @@ final class SyncPublishedGroupHistory
             'campus_id' => $group['campus']['id'] ?? null,
             'subject_id' => $group['subject']['id'],
             'group_code' => $group['code'],
+            'sii_subject_code' => null,
             'capacity' => $group['capacity'],
             'enrolled' => null,
             'career_id' => $this->careerOf($group),
@@ -59,8 +60,8 @@ final class SyncPublishedGroupHistory
             DB::table('historical_groups')->whereIn('load_snapshot_id', $snapshots->modelKeys())->delete();
 
             foreach (array_chunk($rows, 500) as $chunk) {
-                DB::table('historical_groups')->upsert($chunk, ['term_code', 'subject_id', 'group_code', 'source'],
-                    ['modality_id', 'campus_id', 'capacity', 'enrolled', 'career_id', 'parallel_of', 'load_snapshot_id', 'recorded_at', 'updated_at']);
+                DB::table('historical_groups')->upsert($chunk, ['term_code', 'modality_id', 'subject_id', 'sii_subject_code', 'group_code', 'source'],
+                    ['campus_id', 'capacity', 'enrolled', 'career_id', 'parallel_of', 'load_snapshot_id', 'recorded_at', 'updated_at']);
             }
         });
 

@@ -73,3 +73,12 @@ it('hace pocas consultas sin importar cuántas materias se pidan', function () {
 
     expect(DB::getQueryLog())->toHaveCount(2);
 });
+
+it('groups cuenta grupos físicos (sin paralelos) y capacity y enrolled suman todos los renglones', function () {
+    HistoricalGroup::factory()->fromSii()->create(['subject_id' => $this->subject->id, 'term_code' => '20261', 'group_code' => 'A', 'capacity' => 35, 'enrolled' => 30]);
+    HistoricalGroup::factory()->fromSii()->create(['subject_id' => $this->subject->id, 'term_code' => '20261', 'group_code' => 'B', 'capacity' => 35, 'enrolled' => 20, 'parallel_of' => 'X A']);
+
+    $row = (new SubjectGroupHistoryQuery)->history('20271', $this->modality, [$this->subject->id], 4)[$this->subject->id]['20261'][SubjectGroupHistoryQuery::NO_CAMPUS];
+
+    expect($row)->toMatchArray(['groups' => 1, 'capacity' => 70, 'enrolled' => 50]);
+});

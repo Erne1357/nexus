@@ -11,6 +11,9 @@ use App\Modules\Core\Models\Modality;
  * compara con los Ene-Jun anteriores y Ago-Dic (`AAAA3`) con los Ago-Dic; el verano (`AAAA2`) no entra. Dos consultas
  * en total, sin importar cuántas materias se pidan.
  *
+ * `groups` cuenta grupos físicos: los renglones sin `parallel_of`; `capacity` y `enrolled` suman todos los renglones, padre y
+ * paralelos (supuesto por confirmar: el paralelo comparte salón y docente pero tiene sus propios inscritos y cupo).
+ *
  * Si un periodo tiene filas `nexus` (lo que Nexus publicó), esas ganan a las `sii` en todo ese periodo.
  *
  * `sameTypeTermsBefore` es el mismo cálculo que tendrá Demand; unificarlos después (anotado en la tarea 5.6).
@@ -44,7 +47,7 @@ final class SubjectGroupHistoryQuery
             ->where('modality_id', $modality->getKey())
             ->whereIn('term_code', $codes)
             ->whereIn('subject_id', $subjectIds)
-            ->selectRaw('subject_id, term_code, campus_id, source, count(*) as groups, sum(capacity) as capacity, sum(enrolled) as enrolled')
+            ->selectRaw('subject_id, term_code, campus_id, source, count(*) filter (where parallel_of is null) as groups, sum(capacity) as capacity, sum(enrolled) as enrolled')
             ->groupBy('subject_id', 'term_code', 'campus_id', 'source')
             ->get();
 

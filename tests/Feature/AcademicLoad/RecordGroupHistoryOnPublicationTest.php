@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 
 /*
@@ -94,4 +95,14 @@ it('el grupo compartido entre varias carreras queda sin carrera exclusiva y el d
 
     expect($rows['A']->career_id)->toBe($career->id)->and($rows['B']->career_id)->toBeNull()
         ->and($rows['A']->parallel_of)->toBeNull();
+});
+
+it('dos cargas de distinta modalidad con la misma materia y grupo en el periodo no se pisan', function () {
+    $otherLoad = AcademicLoad::factory()->inStatus(LoadStatus::Published)->create(['term_id' => $this->load->term_id, 'department_id' => $this->load->department_id, 'modality_id' => Modality::query()->where('code', 'EAD')->value('id')]);
+
+    historicalGroupsPublish($this->load, 1, [historicalGroupsGroup($this->subject, 'A', $this->campus, 40)]);
+    historicalGroupsPublish($otherLoad, 1, [historicalGroupsGroup($this->subject, 'A', $this->campus, 25)]);
+
+    expect($otherLoad->modality_id)->not->toBe($this->load->modality_id)
+        ->and(HistoricalGroup::query()->orderBy('capacity')->pluck('capacity')->all())->toBe([25, 40]);
 });

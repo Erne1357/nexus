@@ -14,7 +14,11 @@ use RuntimeException;
  * Todas las columnas del SII son texto y se convierten aquí.
  *
  * Decisiones, todas supuestos por confirmar (el usuario solo decidió la fuente por periodo, 16 de noviembre de 2026):
- * - **Materia:** la clave del SII es `subjects.code`. Una materia que Nexus no tiene se cuenta y se reporta; no se crea.
+ * - **Materia:** en Nexus `subjects.code` es la clave TecNM cuando el SII la trae, y cada retícula tiene su propia clave del SII
+ *   para la misma materia (3FA y 2GA son ambas ACF-2301). Como la migración (SubjectsStep::tecnmKeys, solo leída): clave del SII →
+ *   clave TecNM de `sii_archivo.materias_claves_tecnm`, sin contar la que trae su propia clave del SII como TecNM y, si hay
+ *   varias, la menor; se busca `subjects.code` con esa clave y, si no hay, con la clave del SII. Una materia que Nexus no tiene se
+ *   cuenta y se reporta; no se crea. `sii_subject_code` guarda la clave del SII, que distingue los grupos «A» de claves distintas.
  * - **Campus:** el de las aulas del horario del grupo (`tipo_horario = 'D'`, clases): el aula, sin espacios y en
  *   mayúsculas, es `rooms.code` (así no choca entre campus: RoomRules). Si el grupo usa aulas de varios campus gana el
  *   que más aulas tiene (empate: el de menor clave). Sin horario o con aulas que Nexus no migró (el curado de aulas solo
@@ -57,6 +61,7 @@ final class ImportSiiGroupHistory
         $ignored = $terms === null ? [] : array_values(array_diff($wanted, $importable));
 
         $subjects = DB::table('subjects')->pluck('id', 'code')->all();
+        $tecnm = $this->tecnmKeys();
         $modalities = DB::table('modalities')->whereIn('code', [self::DEFAULT_MODALITY, self::DISTANCE_MODALITY])->pluck('id', 'code')->all();
         $default = $modalities[self::DEFAULT_MODALITY] ?? throw new RuntimeException('Falta la modalidad '.self::DEFAULT_MODALITY.': corre las migraciones.');
         $careers = DB::table('careers')->pluck('id', 'code')->all();
@@ -79,7 +84,7 @@ final class ImportSiiGroupHistory
                 }
 
                 $code = trim((string) $group->materia);
-                $subjectId = $subjects[$code] ?? null;
+                $subjectId = (isset($tecnm[$code]) ? ($subjects[$tecnm[$code]] ?? null) : null) ?? $subjects[$code] ?? null;
 
                 if ($subjectId === null) {
                     $report['unknown_subjects'][$code] = ($report['unknown_subjects'][$code] ?? 0) + 1;
@@ -105,6 +110,7 @@ final class ImportSiiGroupHistory
                     'campus_id' => $campusId,
                     'subject_id' => $subjectId,
                     'group_code' => trim((string) $group->grupo),
+                    'sii_subject_code' => $code,
                     'capacity' => $capacity ?? 0,
                     'enrolled' => $this->integer($group->alumnos_inscritos),
                     'career_id' => $careerId,
@@ -141,14 +147,40 @@ final class ImportSiiGroupHistory
     }
 
     /**
+     * Clave del SII → clave TecNM, de cualquier retícula: la menor si hay varias; sin las que traen como TecNM su propia
+     * clave del SII (como SubjectsStep::tecnmKeys).
+     *
+     * @return array<string, string>
+     */
+    private function tecnmKeys(): array
+    {
+        $keys = [];
+
+        foreach (DB::table('sii_archivo.materias_claves_tecnm')->get(['materia', 'clave_tecnm']) as $row) {
+            $materia = trim((string) $row->materia);
+            $code = mb_strtoupper(trim((string) $row->clave_tecnm));
+
+            if ($code === '' || $code === mb_strtoupper($materia)) {
+                continue;
+            }
+
+            if (! isset($keys[$materia]) || strcmp($code, $keys[$materia]) < 0) {
+                $keys[$materia] = $code;
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
      * @throws RuntimeException
      */
     private function assertArchive(): void
     {
-        $tables = DB::table('information_schema.tables')->where('table_schema', 'sii_archivo')->whereIn('table_name', ['grupos', 'horarios'])->count();
+        $tables = DB::table('information_schema.tables')->where('table_schema', 'sii_archivo')->whereIn('table_name', ['grupos', 'horarios', 'materias_claves_tecnm'])->count();
 
-        if ($tables < 2) {
-            throw new RuntimeException('No hay archivo del SII en esta base (sii_archivo.grupos y sii_archivo.horarios): corre antes imports:migrate-sii.');
+        if ($tables < 3) {
+            throw new RuntimeException('No hay archivo del SII en esta base (sii_archivo.grupos, horarios y materias_claves_tecnm): corre antes imports:migrate-sii.');
         }
     }
 
