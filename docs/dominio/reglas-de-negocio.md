@@ -196,6 +196,16 @@ Los archivos que salen de una carga publicada (tareas 4.5 y 4.6) se arman solo d
 - Solo cuentan como elegibles los alumnos con estatus `activo`: no cuentan los de baja temporal o definitiva, los egresados, los que quedaron sin estatus porque el SII trajo uno que Nexus no conoce, ni un alumno desactivado (confirmado el 29 de octubre de 2026).
 - R1: `eligible_students` por materia, carrera y campus se cuenta al leerlo desde `student_progress` (`EligibleStudentsQuery`), que se recalcula al importar alumnos o kardex y, si cambia la retícula de un plan, solo para los alumnos de ese plan (un job único por plan; el cambio de una materia, que puede estar en cualquier plan, los recalcula a todos) (supuesto por confirmar). El estatus del alumno cuenta desde que se importa; un cambio de plan, desde el recálculo.
 - R2: `expected_students = eligible_students x (1 - tasa_de_no_inscripción) + repetidores_esperados`, con tasas históricas por materia y campus (`demand.history_terms`, por defecto 4). `suggested_groups = ceil(expected_students / tamaño_objetivo)`, con tamaño objetivo configurable por tipo de materia (`demand.target_group_size`, por defecto 35; laboratorios 25).
+- R2, detalle de la proyección (fase 5; `DemandForecaster`, versión `v1`):
+  - Los elegibles proyectados de una materia son los que serían elegibles al inicio del periodo que se planea. Quien cursa hoy la seriación cuenta como si la aprobara («el escenario ideal», confirmado el 16 de noviembre de 2026). Cuántos dependen de eso se guarda aparte, para verlo y para, más adelante, un escenario que descuente a quienes no aprueban. Quien cursa hoy la materia misma no cuenta como elegible: vuelve como repetidor esperado (`cursando × tasa de reprobación`).
+  - La ocupación de una materia en un periodo sale del kárdex: la tomó quien la tiene ese periodo aprobada, reprobada o cursando; la baja no cuenta (confirmado el 10 de noviembre de 2026).
+  - Las tasas se comparan con periodos del mismo tipo: Ene-Jun con los Ene-Jun anteriores y Ago-Dic con los Ago-Dic (confirmado el 10 de noviembre de 2026). La proyección no calcula cursos de verano (supuesto por confirmar).
+  - Una materia sin historia propia usa la tasa promedio de su departamento; sin ninguna, se espera a todos los elegibles, como en R1.
+  - En primer semestre, además de los rezagados que da la fórmula, Nexus precarga el nuevo ingreso histórico: el promedio de alumnos que ingresaron a la carrera en ese campus en los últimos periodos del mismo tipo. El coordinador lo corrige (confirmado el 16 de noviembre de 2026).
+  - Los alumnos esperados y los repetidores se redondean al entero más cercano, cada uno por su lado.
+  - Bastan dos tamaños objetivo, normal y con laboratorio (confirmado el 16 de noviembre de 2026).
+  - Una diferencia entre lo sugerido y lo capturado se resalta cuando es el 20 % del sugerido o más, o cuando no se sugería nada y se capturó algo (`demand.highlight_threshold`; supuesto por confirmar).
+  - Paquetes de primer semestre: en la propuesta, el coordinador captura cuántos paquetes abre por campus; cada paquete abre un grupo de cada materia del paquete. Los horarios sin choque entre las materias de un paquete son de la fase 6 y asignar alumnos a cada paquete, de la 9 (confirmado el 16 de noviembre de 2026).
 
 ## Retícula del alumno
 
