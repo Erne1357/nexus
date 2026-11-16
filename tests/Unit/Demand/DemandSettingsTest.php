@@ -45,7 +45,7 @@ it('un valor que no es un entero válido usa el de omisión', function (string $
     'tamaños que no son tabla' => [DemandSettings::TARGET_GROUP_SIZE, 35],
 ]);
 
-it('una diferencia es grande si el capturado se aleja del sugerido el umbral o más', function (int $suggested, int $captured, bool $large) {
+it('DM-08: una diferencia es grande si el capturado se aleja del sugerido el umbral o más', function (int $suggested, int $captured, bool $large) {
     expect((new DemandSettings(highlightThreshold: 20))->isLargeDifference($suggested, $captured))->toBe($large);
 })->with([
     'igual' => [50, 50, false],
