@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Rules\DemandForecaster;
+use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Database\Eloquent\Factories\Attributes\UseModel;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -82,6 +83,7 @@ class DemandForecastFactory extends Factory
         return $this->state(fn (array $attributes): array => [
             'new_students' => $newStudents,
             'expected_students' => $attributes['expected_students'] + $newStudents,
+            'suggested_groups' => (new SuggestedGroups)->for($attributes['expected_students'] + $newStudents, needsLab: false),
             'method' => ForecastMethod::FirstSemester,
         ]);
     }
