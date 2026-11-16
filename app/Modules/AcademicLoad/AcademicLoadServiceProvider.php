@@ -37,10 +37,8 @@ use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
-use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
-use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Events\LoadStatusesRequested;
 use App\Modules\Core\Authorization\Actor;
@@ -58,8 +56,6 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
-use App\Modules\Core\Settings\SettingDefinition;
-use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Students\Models\KardexRecord;
@@ -138,27 +134,6 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
      * coordinador arma, corrige, envía y ve la propuesta de su carrera.
      */
-    /**
-     * Los parámetros de `settings` que lee la propuesta de carrera (CF-S7): el tamaño objetivo de un grupo, que decide cuántos
-     * grupos se sugieren (SuggestedGroups), y el mínimo de alumnos por grupo, que marca las filas raras (ProposalAnomalies).
-     *
-     * @return list<SettingDefinition>
-     */
-    public function settings(): array
-    {
-        $module = ['academic_load', 'Carga académica'];
-
-        return [
-            new SettingDefinition(SuggestedGroups::SETTING, ...$module, label: 'Alumnos por grupo que se buscan',
-                help: 'El tamaño de grupo con el que la propuesta de carrera sugiere cuántos grupos abrir: el general y el de las materias con laboratorio. Cada tamaño es un entero de uno en adelante.',
-                type: SettingType::IntegerTable, default: ['default' => SuggestedGroups::DEFAULT_SIZE, 'lab' => SuggestedGroups::LAB_SIZE], rules: ['min:1', 'max:100'],
-                fields: ['default' => 'Materias sin laboratorio', 'lab' => 'Materias con laboratorio'], unit: 'alumnos'),
-            new SettingDefinition(ProposalAnomalies::SETTING, ...$module, label: 'Mínimo de alumnos por grupo',
-                help: 'Si la propuesta de una materia deja menos alumnos esperados por grupo que este número, la fila se marca como rara. No bloquea el envío.',
-                type: SettingType::Integer, default: ProposalAnomalies::DEFAULT_MINIMUM, rules: ['min:1', 'max:100'], unit: 'alumnos'),
-        ];
-    }
-
     public function grants(): array
     {
         return [

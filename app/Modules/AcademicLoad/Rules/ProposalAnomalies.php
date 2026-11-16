@@ -4,12 +4,13 @@ namespace App\Modules\AcademicLoad\Rules;
 
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
+use App\Modules\Demand\Rules\DemandSettings;
 
 /**
  * Lo raro de una fila de la propuesta, para marcarlo sin bloquear el envío (confirmado el 2 de noviembre de 2026;
  * reglas-de-negocio.md, «Propuesta de carrera»): más alumnos esperados que elegibles («105 esperados con 98
  * elegibles») y grupos con menos alumnos esperados por grupo que el mínimo («1 grupo para 2 alumnos»). El mínimo
- * sale del parámetro global `demand.min_group_size`, 10 si no existe o no es un entero mayor que cero (supuesto
+ * sale del parámetro global `demand.min_group_size` (DemandSettings, que lo declara), 10 si no existe o no es un entero mayor que cero (supuesto
  * por confirmar). Lo marcan la propuesta del coordinador y la bandeja del jefe. Puro: solo fromSettings() lee la
  * base.
  */
@@ -17,7 +18,7 @@ final readonly class ProposalAnomalies
 {
     public const string SETTING = 'demand.min_group_size';
 
-    public const int DEFAULT_MINIMUM = 10;
+    public const int DEFAULT_MINIMUM = DemandSettings::DEFAULT_MIN_GROUP_SIZE;
 
     public function __construct(public int $minimum = self::DEFAULT_MINIMUM) {}
 

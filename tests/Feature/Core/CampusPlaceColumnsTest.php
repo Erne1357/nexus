@@ -27,6 +27,7 @@ function campusPlaceTables(): array
         'group_sessions' => 'copia del campus del grupo, para que el salón de la sesión sea de ese campus (llave compuesta)',
         'schedule_conflicts' => 'copia del campus del grupo, para el filtro de campus del tablero de choques',
         'proposal_items' => 'la columna de campus de la propuesta: dónde se piden los grupos (M6, M7)',
+        'demand_forecasts' => 'la columna de campus de la proyección, la misma de la propuesta (nulo en una modalidad sin salones, MS5)',
         'interdepartmental_agreements' => 'solo en el préstamo de salón: el campus del salón (nulo en el grupo compartido)',
         'teacher_subject_history' => 'dónde se dio el grupo que impartió el docente',
         'historical_groups' => 'dónde se dio el grupo del historial por materia (aula del SII o campus del grupo publicado; nulo si no se sabe)',

@@ -1,6 +1,6 @@
 # Fase 5 — Proyección de demanda
 
-**Entrega:** R2 · **Ventana:** feb 2027 · **Modo:** paralelo · **Estado:** ⬜ · **Milestone:** `Fase 5 — Proyección de demanda`
+**Entrega:** R2 · **Ventana:** feb 2027 · **Modo:** paralelo · **Estado:** 🟨 (abierta el 16 de noviembre de 2026) · **Milestone:** `Fase 5 — Proyección de demanda`
 
 ## Objetivo
 
@@ -81,6 +81,46 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
 ### Reparto cuando se abra la fase
 
 Como en la tabla «Reparto»: A el núcleo de Demand (5.1–5.4), B la precarga y las pantallas (5.5–5.7) y C los parámetros, la evaluación y los datos (5.8–5.10). Acordado por los tres rieles el 10 de noviembre de 2026.
+
+## Arranque (16 de noviembre de 2026)
+
+El usuario abrió la fase con tres rieles en sesiones paralelas, con el reparto de abajo. Cada riel trabaja en su rama padre, que sale de `develop`, y en su propio puerto y base, para no chocar al ver pantallas o correr pruebas:
+
+| Riel | Tareas | Rama padre | Puertos | Bases |
+|---|---|---|---|---|
+| A | 5.1 → 5.4, núcleo de Demand | `riel/demanda-a` | 8091, 8092 | `nexus_demo_a`, `nexus_massive_a`, `nexus_test_a*` |
+| B | 5.5 → 5.7, precarga y pantallas | `riel/demanda-b` | 8093, 8094 | `nexus_demo_b`, `nexus_massive_b`, `nexus_test_b*` |
+| C | 5.8 → 5.10, parámetros, evaluación y datos | `riel/demanda-c` | 8097, 8098 | `nexus_demo_c`, `nexus_massive_c`, `nexus_test_c*` |
+
+Los puertos 8095 y 8096 son de la tarea 1.16, que sigue en otra sesión.
+
+### Ronda 0: contratos entre rieles
+
+Antes que todo, A mezcla a `develop` un PR chico con lo que los tres necesitan (5.1). Así B y C salen de `develop` con las mismas firmas:
+
+- **Módulo `Demand`** con su provider, entre CatalogValidation y AcademicLoad en `bootstrap/providers.php`.
+- **`demand_forecasts`**, con sus columnas en el [modelo de datos](../dominio/modelo-de-datos.md#demand-r2). La llave es periodo, modalidad, campus, carrera y materia; desde #464 la propuesta es por carrera y modalidad, con filas por campus.
+- **`Demand\Rules\DemandSettings`**:
+  - lee los cuatro parámetros `demand.*`: `history_terms` 4, `target_group_size` 35 y 25, `min_group_size` 10 y `highlight_threshold` 20 %;
+  - declara sus definiciones para la pantalla «Parámetros» (CF-S7). Antes las declaraba AcademicLoad;
+  - con `isLargeDifference()` decide qué diferencia se resalta en la 5.6 y la 5.7.
+- **`SuggestedGroups`** se mueve de AcademicLoad a `Demand\Rules`, como pedía la 5.3. AcademicLoad, Scheduling y Staffing lo importan desde ahí. `ProposalAnomalies` se queda en AcademicLoad y lee su clave de `DemandSettings`.
+- **`DemandForecaster`**, la fórmula pura (versión `v1`). Recibe un `ForecastInput` con las tasas de `SubjectRates` y da un `ForecastResult`.
+- **Lecturas para B y C**:
+  - `DemandForecastsQuery::forCareer(Term, Modality, Career)`: por materia y, dentro, por campus;
+  - `DemandForecastsQuery::forDepartment(Term, Modality, Department)`: las materias del departamento con las filas de todas las carreras y campus;
+  - `TermOccupancyQuery::forTerm(string $termCode, Modality, ?Campus)`: la ocupación real de un periodo por carrera, campus y materia;
+  - `TermOccupancyQuery::history(string $targetTermCode, Modality, array $subjectIds, int $terms)`: los periodos del mismo tipo anteriores a uno, por materia, periodo y campus.
+- **Evento `DemandForecastsComputed`** (periodo, modalidad, campus o todos, carreras), después del commit. Lo despacha el job de la 5.4. AcademicLoad lo escucha para poner al día las propuestas en borrador (5.5).
+
+### Respuestas del usuario (16 de noviembre de 2026)
+
+1. **Seriación en curso:** al proyectar, quien cursa hoy la seriación de una materia cuenta como si la aprobara («el escenario ideal»). Más adelante se quiere ver cómo mitigar y prevenir considerando a los que no la pasan. Por eso cuántos dependen de eso se guarda aparte (`pending_prerequisite_students`).
+2. **Nuevo ingreso:** para la parte de nuevo ingreso de primer semestre, Nexus precarga el ingreso histórico: el promedio de alumnos que ingresaron a la carrera en ese campus en los últimos periodos del mismo tipo, más los rezagados que da la fórmula. El coordinador lo corrige.
+3. **Paquetes de primer semestre:** en la propuesta, el coordinador captura cuántos paquetes abre por campus, y cada paquete abre un grupo de cada materia del paquete. Los horarios sin choque entre las materias de un paquete son de la fase 6 y asignar alumnos a cada paquete, de la 9.
+4. **Tamaños objetivo:** bastan los dos, normal y con laboratorio.
+
+Queda como supuesto por confirmar que la proyección no calcula cursos de verano. «Coordinador de campus» ya no es pregunta: lo resolvió M5 (#464), con coordinador = carreras + modalidad, campus opcional y varias carreras por persona.
 
 ## Alcance
 
