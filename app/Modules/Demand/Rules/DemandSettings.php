@@ -24,13 +24,13 @@ use App\Modules\Core\Settings\SettingType;
  */
 final readonly class DemandSettings
 {
-    public const string HISTORY_TERMS = 'demand.history_terms';
+    public const string HISTORY_TERMS_SETTING = 'demand.history_terms';
 
-    public const string TARGET_GROUP_SIZE = SuggestedGroups::SETTING;
+    public const string TARGET_GROUP_SIZE_SETTING = 'demand.target_group_size';
 
-    public const string MIN_GROUP_SIZE = 'demand.min_group_size';
+    public const string MIN_GROUP_SIZE_SETTING = 'demand.min_group_size';
 
-    public const string HIGHLIGHT_THRESHOLD = 'demand.highlight_threshold';
+    public const string HIGHLIGHT_THRESHOLD_SETTING = 'demand.highlight_threshold';
 
     public const int DEFAULT_HISTORY_TERMS = 4;
 
@@ -50,7 +50,7 @@ final readonly class DemandSettings
         return self::fromValues(Setting::query()
             ->where('scope', SettingScope::Global)
             ->whereNull('scope_id')
-            ->whereIn('key', [self::HISTORY_TERMS, self::TARGET_GROUP_SIZE, self::MIN_GROUP_SIZE, self::HIGHLIGHT_THRESHOLD])
+            ->whereIn('key', [self::HISTORY_TERMS_SETTING, self::TARGET_GROUP_SIZE_SETTING, self::MIN_GROUP_SIZE_SETTING, self::HIGHLIGHT_THRESHOLD_SETTING])
             ->pluck('value', 'key')
             ->all());
     }
@@ -61,10 +61,10 @@ final readonly class DemandSettings
     public static function fromValues(array $values): self
     {
         return new self(
-            historyTerms: self::positiveOr($values[self::HISTORY_TERMS] ?? null, self::DEFAULT_HISTORY_TERMS),
-            groupSizes: SuggestedGroups::fromValue($values[self::TARGET_GROUP_SIZE] ?? null),
-            minGroupSize: self::positiveOr($values[self::MIN_GROUP_SIZE] ?? null, self::DEFAULT_MIN_GROUP_SIZE),
-            highlightThreshold: self::positiveOr($values[self::HIGHLIGHT_THRESHOLD] ?? null, self::DEFAULT_HIGHLIGHT_THRESHOLD),
+            historyTerms: self::positiveOr($values[self::HISTORY_TERMS_SETTING] ?? null, self::DEFAULT_HISTORY_TERMS),
+            groupSizes: SuggestedGroups::fromValue($values[self::TARGET_GROUP_SIZE_SETTING] ?? null),
+            minGroupSize: self::positiveOr($values[self::MIN_GROUP_SIZE_SETTING] ?? null, self::DEFAULT_MIN_GROUP_SIZE),
+            highlightThreshold: self::positiveOr($values[self::HIGHLIGHT_THRESHOLD_SETTING] ?? null, self::DEFAULT_HIGHLIGHT_THRESHOLD),
         );
     }
 
@@ -92,17 +92,17 @@ final readonly class DemandSettings
         $module = ['demand', 'Proyección de demanda'];
 
         return [
-            new SettingDefinition(self::HISTORY_TERMS, ...$module, label: 'Semestres de historia',
+            new SettingDefinition(self::HISTORY_TERMS_SETTING, ...$module, label: 'Semestres de historia',
                 help: 'Cuántos semestres anteriores del mismo tipo (Ene-Jun con Ene-Jun, Ago-Dic con Ago-Dic) miran las tasas de no inscripción y de reprobación de cada materia.',
                 type: SettingType::Integer, default: self::DEFAULT_HISTORY_TERMS, rules: ['min:1', 'max:12'], unit: 'semestres'),
-            new SettingDefinition(self::TARGET_GROUP_SIZE, ...$module, label: 'Alumnos por grupo que se buscan',
+            new SettingDefinition(self::TARGET_GROUP_SIZE_SETTING, ...$module, label: 'Alumnos por grupo que se buscan',
                 help: 'El tamaño de grupo con el que la proyección y la propuesta de carrera sugieren cuántos grupos abrir: el general y el de las materias con laboratorio. Cada tamaño es un entero de uno en adelante.',
                 type: SettingType::IntegerTable, default: ['default' => SuggestedGroups::DEFAULT_SIZE, 'lab' => SuggestedGroups::LAB_SIZE], rules: ['min:1', 'max:100'],
                 fields: ['default' => 'Materias sin laboratorio', 'lab' => 'Materias con laboratorio'], unit: 'alumnos'),
-            new SettingDefinition(self::MIN_GROUP_SIZE, ...$module, label: 'Mínimo de alumnos por grupo',
+            new SettingDefinition(self::MIN_GROUP_SIZE_SETTING, ...$module, label: 'Mínimo de alumnos por grupo',
                 help: 'Si la propuesta de una materia deja menos alumnos esperados por grupo que este número, la fila se marca como rara. No bloquea el envío.',
                 type: SettingType::Integer, default: self::DEFAULT_MIN_GROUP_SIZE, rules: ['min:1', 'max:100'], unit: 'alumnos'),
-            new SettingDefinition(self::HIGHLIGHT_THRESHOLD, ...$module, label: 'Diferencia que se resalta',
+            new SettingDefinition(self::HIGHLIGHT_THRESHOLD_SETTING, ...$module, label: 'Diferencia que se resalta',
                 help: 'Si lo que captura el coordinador se aleja de lo que sugiere Nexus en este porcentaje o más, la diferencia se resalta en la propuesta y en el tablero del departamento.',
                 type: SettingType::Integer, default: self::DEFAULT_HIGHLIGHT_THRESHOLD, rules: ['min:1', 'max:100'], unit: '%'),
         ];
