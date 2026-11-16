@@ -62,6 +62,7 @@ use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Core\Settings\SettingType;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
+use App\Modules\Students\Models\KardexRecord;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -236,7 +237,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
         return [
-            new DemoCheck(DemoCheckpoint::staged(), 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() ? true : 'No hay historial de grupos.'),
+            new DemoCheck([DemoCheckpoint::Catalogs], 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() || ! KardexRecord::query()->exists() ? true : 'Hay kárdex, pero no hay historial de grupos.'),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Draft)

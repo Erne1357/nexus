@@ -144,7 +144,7 @@ it('reimportar no duplica y reemplaza lo que cambió el archivo', function () {
 
     expect(HistoricalGroup::query()->count())->toBe(2)
         ->and(HistoricalGroup::query()->where('group_code', 'A')->value('capacity'))->toBe(40)
-        ->and(DB::table('activity_log')->where('event', 'imported')->count())->toBe(2);
+        ->and(DB::table('activity_log')->where('event', 'group_history_imported')->count())->toBe(2);
 });
 
 it('con --dry-run reporta sin escribir', function () {
@@ -152,7 +152,7 @@ it('con --dry-run reporta sin escribir', function () {
 
     $this->artisan('academic-load:import-sii-groups --dry-run')->expectsOutputToContain('Grupos: 1')->assertSuccessful();
 
-    expect(HistoricalGroup::query()->count())->toBe(0)->and(DB::table('activity_log')->where('event', 'imported')->count())->toBe(0);
+    expect(HistoricalGroup::query()->count())->toBe(0)->and(DB::table('activity_log')->where('event', 'group_history_imported')->count())->toBe(0);
 });
 
 it('ignora el verano y reporta los periodos que no importa', function () {

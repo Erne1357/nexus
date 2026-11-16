@@ -138,7 +138,7 @@ final class ImportSiiGroupHistory
             }
 
             activity()
-                ->event('imported')
+                ->event('group_history_imported')
                 ->withProperties(['terms' => count($importable), 'groups' => $report['groups'], 'unknown_subjects' => count($report['unknown_subjects']), 'cancelled' => $report['cancelled'], 'without_campus' => $report['without_campus']])
                 ->log("Importó el historial de grupos del SII: {$report['groups']} grupos de ".count($importable).' periodos');
         });

@@ -32,7 +32,9 @@ return new class extends Migration
             $table->foreignUuid('career_id')->nullable()->constrained();
             $table->string('parallel_of')->nullable();
             $table->string('source');
-            $table->foreignUuid('load_snapshot_id')->nullable()->constrained('load_snapshots');
+            // Sin FK a propósito: load_snapshots no se borra ni se trunca (HC-18) y su disparador rechaza el TRUNCATE; con una
+            // FK, PostgreSQL rechazaría el TRUNCATE antes del disparador y la guarda de HC-18 no se vería.
+            $table->uuid('load_snapshot_id')->nullable()->index();
             $table->timestampTz('recorded_at');
             $table->timestamps();
 
