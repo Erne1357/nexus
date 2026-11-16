@@ -91,7 +91,7 @@ it('CF-01: un puesto tiene la unión de sus roles activos y sus permisos sueltos
         ->and($table->grants(Role::Coordinador, CorePermission::SettingView))->toBeTrue()
         ->and($table->grants(Role::Coordinador, AcademicLoadPermission::ProposalView))->toBeTrue()
         ->and($table->grants(Role::JefeProyectoDocente, CorePermission::SettingView))->toBeFalse()
-        ->and($table->rolesGranting(CorePermission::SettingView))->toBe([Role::Coordinador])
+        ->and($table->rolesGranting(CorePermission::SettingView))->toBe([Role::Subdireccion, Role::Coordinador])
         ->and($table->rolesGranting(CorePermission::TermManageCalendar))->toBe([Role::Subdireccion, Role::Coordinador]);
 });
 

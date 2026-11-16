@@ -103,6 +103,7 @@
             "core.campus.view",
             "core.modality.update_profile",
             "core.modality.view",
+            "core.setting.view",
             "core.term.create",
             "core.term.make_current",
             "core.term.manage_calendar",

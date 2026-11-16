@@ -90,11 +90,11 @@ it('agrupa los permisos por módulo en el orden de la pantalla, con Core partido
 });
 
 it('el catálogo reusa los puestos que ya se leyeron y trae el origen como dato', function () {
-    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingView->value]);
+    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingUpdate->value]);
     $positions = app(PositionsQuery::class)->all();
     DB::table('position_permissions')->delete();
 
-    $setting = collect(app(PermissionCatalogQuery::class)->all($positions))->firstWhere('key', 'core.setting.view');
+    $setting = collect(app(PermissionCatalogQuery::class)->all($positions))->firstWhere('key', 'core.setting.update');
 
     expect($setting['positions'][1]['role'])->toBe(Role::Coordinador)
         ->and($setting['positions'][1]['sources'])->toBe([['kind' => 'loose', 'name' => null]]);

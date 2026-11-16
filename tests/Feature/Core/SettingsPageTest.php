@@ -4,13 +4,19 @@ use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\SettingScope;
+use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Core\Settings\SettingRegistry;
+use App\Modules\Core\Settings\SettingType;
 use App\Modules\Staffing\Rules\RankingWeights;
+use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
+use Tests\Fixtures\Authorization\FakePermission;
 
 /*
 | «Parámetros» (`/configuracion/parametros`, core::pages.settings): CF-S7. Una tarjeta por módulo, «Guardar» por tarjeta y
@@ -40,6 +46,46 @@ if (! function_exists('grantSettingsOnPage')) {
         app()->instance(PermissionRegistry::class, PermissionRegistry::fromModules([...app()->getProviders(ModuleServiceProvider::class), $extra]));
         app()->forgetScopedInstances();
     }
+}
+
+if (! function_exists('declareOwnedSetting')) {
+    /**
+     * Suma al catálogo real un módulo de prueba («fakemod») con un parámetro que declara un permiso propio, dado de fábrica
+     * a la Subdirección, y otro que no declara ninguno.
+     */
+    function declareOwnedSetting(): void
+    {
+        $fake = new class(app()) extends ModuleServiceProvider
+        {
+            public function permissions(): array
+            {
+                return [FakePermission::class];
+            }
+
+            public function grants(): array
+            {
+                return [Role::Subdireccion->value => [FakePermission::ViewAny]];
+            }
+
+            public function settings(): array
+            {
+                return [
+                    new SettingDefinition('fakemod.owned', 'fakemod', 'Módulo de prueba', 'Tamaño propio', 'Ayuda', SettingType::Integer, 5, ['min:1'], permission: FakePermission::ViewAny, savedNotice: 'Se recalcula en segundo plano.'),
+                ];
+            }
+        };
+
+        $modules = [...app()->getProviders(ModuleServiceProvider::class), $fake];
+
+        app()->instance(PermissionRegistry::class, PermissionRegistry::fromModules($modules));
+        app()->instance(SettingRegistry::class, SettingRegistry::fromModules($modules));
+        app()->forgetScopedInstances();
+    }
+}
+
+function subdireccionUser(): User
+{
+    return User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
 }
 
 function storedSetting(string $key): mixed
@@ -127,19 +173,26 @@ it('CF-S7: un puesto sin permiso no entra a la página', function (Role $role, a
 
     $this->actingAs($user)->get('/configuracion/parametros')->assertForbidden();
 })->with([
-    'subdirección' => [Role::Subdireccion, []],
     'coordinador' => [Role::Coordinador, fn () => ['career_id' => careerKey(20)]],
+    'jefe de departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(10)]],
     'docente' => [Role::Docente, []],
 ]);
 
-it('CF-03: con solo «ver», los campos y «Guardar» están deshabilitados y las acciones se niegan', function () {
-    grantSettingsOnPage(Role::Subdireccion, [CorePermission::SettingView]);
-    $user = User::factory()->withRole(Role::Subdireccion, ['campus_id' => Campus::factory()->create()->id])->create();
+it('Subdirección ve la pantalla de fábrica y no tiene core.setting.update', function () {
+    $user = subdireccionUser();
+
+    $this->actingAs($user)->get('/configuracion/parametros')->assertOk();
+    expect($user->can('update', Setting::class))->toBeFalse();
+});
+
+it('CF-03: con solo «ver», las tarjetas se pintan en solo lectura y las acciones se niegan', function () {
+    $user = subdireccionUser();
     Setting::query()->create(['scope' => SettingScope::Global, 'key' => 'demand.min_group_size', 'value' => 15]);
 
     $dom = domOf($this->actingAs($user)->get('/configuracion/parametros')->assertOk());
 
-    expect($dom->querySelector('[data-testid="setting-demand.min_group_size"] input')->hasAttribute('disabled'))->toBeTrue()
+    expect($dom->querySelector('[data-testid="setting-demand.min_group_size"] input'))->toBeNull()
+        ->and(textOf($dom->querySelector('[data-testid="value-demand.min_group_size"]')))->toContain('15')
         ->and($dom->querySelector('[data-testid="save-staffing"]'))->toBeNull();
 
     Livewire::actingAs($user)->test('core::pages.settings')
@@ -149,6 +202,74 @@ it('CF-03: con solo «ver», los campos y «Guardar» están deshabilitados y la
         ->call('resetToDefault', 'demand.min_group_size')->assertForbidden();
 
     expect(storedSetting('demand.min_group_size'))->toBe(15);
+});
+
+it('pinta en solo lectura las tarjetas que el puesto no puede cambiar', function () {
+    declareOwnedSetting();
+
+    $dom = domOf($this->actingAs(subdireccionUser())->get('/configuracion/parametros')->assertOk());
+
+    expect($dom->querySelector('[data-testid="setting-fakemod.owned"] input'))->not->toBeNull()
+        ->and($dom->querySelector('[data-testid="save-fakemod"]'))->not->toBeNull()
+        ->and($dom->querySelector('[data-testid="readonly-fakemod"]'))->toBeNull()
+        ->and($dom->querySelector('[data-testid="setting-staffing.weights"] input'))->toBeNull()
+        ->and($dom->querySelector('[data-testid="save-staffing"]'))->toBeNull()
+        ->and(textOf($dom->querySelector('[data-testid="readonly-staffing"]')))->toBe('Solo lectura: estos parámetros los cambia el admin.');
+});
+
+it('deja a Subdirección cambiar un parámetro que declara un permiso suyo y no los demás', function () {
+    declareOwnedSetting();
+    $user = subdireccionUser();
+
+    $page = Livewire::actingAs($user)->test('core::pages.settings')
+        ->set('values.fakemod__owned', '9')
+        ->call('save', 'fakemod')
+        ->assertHasNoErrors();
+
+    expect(json_encode($page->effects['xjs'], JSON_UNESCAPED_UNICODE))->toContain('Se recalcula en segundo plano.');
+
+    expect(storedSetting('fakemod.owned'))->toBe(9)
+        ->and($user->can('update', [Setting::class, app(SettingRegistry::class)->get('staffing.weights')]))->toBeFalse();
+});
+
+it('responde 403 si Subdirección guarda o restablece una tarjeta ajena llamando la acción a mano', function () {
+    declareOwnedSetting();
+    Setting::query()->create(['scope' => SettingScope::Global, 'key' => 'staffing.history_terms', 'value' => 8]);
+    $user = subdireccionUser();
+
+    Livewire::actingAs($user)->test('core::pages.settings')
+        ->set('values.staffing__history_terms', '3')
+        ->call('save', 'staffing')->assertForbidden();
+    Livewire::actingAs($user)->test('core::pages.settings')
+        ->call('resetToDefault', 'staffing.history_terms')->assertForbidden();
+
+    expect(storedSetting('staffing.history_terms'))->toBe(8);
+});
+
+it('despacha SettingsUpdated solo con las llaves que cambiaron', function () {
+    Event::fake([SettingsUpdated::class]);
+
+    Livewire::actingAs($this->admin)->test('core::pages.settings')
+        ->set('values.staffing__min_campus_travel_minutes', '90')
+        ->call('save', 'staffing');
+
+    Event::assertDispatchedTimes(SettingsUpdated::class, 1);
+    Event::assertDispatched(SettingsUpdated::class, fn (SettingsUpdated $event): bool => $event->keys === ['staffing.min_campus_travel_minutes']);
+
+    Livewire::actingAs($this->admin)->test('core::pages.settings')
+        ->call('resetToDefault', 'staffing.min_campus_travel_minutes');
+
+    Event::assertDispatchedTimes(SettingsUpdated::class, 2);
+});
+
+it('no despacha nada si nada cambió', function () {
+    Event::fake([SettingsUpdated::class]);
+
+    Livewire::actingAs($this->admin)->test('core::pages.settings')
+        ->call('save', 'staffing')
+        ->call('resetToDefault', 'staffing.min_campus_travel_minutes');
+
+    Event::assertNotDispatched(SettingsUpdated::class);
 });
 
 it('la entrada «Parámetros» está en el menú del admin, en Configuración', function () {
