@@ -14,6 +14,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Models\DemandForecast;
+use App\Modules\Demand\Queries\DemandForecastsQuery;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Students\Queries\EligibleStudentsQuery;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,8 +35,11 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * campus donde se ofrece la carrera, o una sin campus en una modalidad sin salones, MS5), una fila por cada materia
  * activa y sin borrar de la retícula de los planes activos y sin borrar de la carrera (HC-13), una sola vez por materia,
  * con el plan y el semestre del primer plan por clave. Cada fila lleva los alumnos posibles del momento en su campus:
- * los activos de la carrera, la modalidad y ese campus (EligibleStudentsQuery), esperados = posibles y los grupos
- * sugeridos (SuggestedGroups; confirmado el 2 de noviembre de 2026). La propuesta guarda sus alumnos posibles: por
+ * los activos de la carrera, la modalidad y ese campus (EligibleStudentsQuery). Los esperados y los grupos nacen de la
+ * proyección de Demand de esa materia y ese campus (DemandForecastsQuery::forCareer, leída una vez; tarea 5.5), que se
+ * guarda también aparte como `suggested_*` con su método; sin proyección, esperados = posibles y los grupos sugeridos
+ * (SuggestedGroups; confirmado el 2 de noviembre de 2026), sin `suggested_*`. El total congelado sigue siendo el de
+ * EligibleStudentsQuery (solo materia aprobada, confirmado el 4 de noviembre de 2026). La propuesta guarda sus alumnos posibles: por
  * columna, los distintos que son elegibles para alguna de sus materias (`eligible_students_by_campus`, `none` para la
  * columna sin campus), y su suma (`eligible_students`; confirmado el 4 de noviembre de 2026; un alumno es de un solo
  * campus). Deja bitácora de la propuesta, con sus alumnos posibles y sus columnas, y, después
@@ -53,7 +58,11 @@ final class StartCareerProposal
      */
     private const array OUTSIDE_PROPOSAL = [SubjectKind::Residencia->value, SubjectKind::ServicioSocial->value, SubjectKind::Complementaria->value];
 
-    public function __construct(private readonly EligibleStudentsQuery $eligibleStudents, private readonly ProposalAvailability $availability) {}
+    public function __construct(
+        private readonly EligibleStudentsQuery $eligibleStudents,
+        private readonly ProposalAvailability $availability,
+        private readonly DemandForecastsQuery $forecasts,
+    ) {}
 
     /**
      * @throws ValidationException si la modalidad está inactiva, el periodo no está abierto en ella o la carrera no se
@@ -88,11 +97,12 @@ final class StartCareerProposal
 
             $placements = $this->placements($career);
             $columns = $this->availability->columns($modality, $career);
+            $forecasts = $this->forecasts->forCareer($term, $modality, $career);
             $rows = [];
             $eligible = [];
 
             foreach ($columns as $campus) {
-                $rows = [...$rows, ...$this->rows($proposal, $career, $modality, $campus, $placements)];
+                $rows = [...$rows, ...$this->rows($proposal, $career, $modality, $campus, $placements, $forecasts)];
                 $eligible[$campus?->getKey() ?? CareerProposal::WITHOUT_CAMPUS] = $this->eligibleStudents->distinctFor($career, $modality, $campus, $placements->pluck('subject_id')->all());
             }
 
@@ -140,17 +150,19 @@ final class StartCareerProposal
      * alumnos posibles de su campus.
      *
      * @param  Collection<int, object{subject_id: string, study_plan_id: string, semester: int, needs_lab: bool}>  $placements
+     * @param  Collection<string, Collection<string, DemandForecast>>  $forecasts  la proyección de la carrera (DemandForecastsQuery::forCareer)
      * @return list<array<string, mixed>>
      */
-    private function rows(CareerProposal $proposal, Career $career, Modality $modality, ?Campus $campus, Collection $placements): array
+    private function rows(CareerProposal $proposal, Career $career, Modality $modality, ?Campus $campus, Collection $placements, Collection $forecasts): array
     {
         $eligible = $this->eligibleStudents->countsFor($career, $modality, $campus);
         $suggested = SuggestedGroups::fromSettings();
         $now = now();
 
         return $placements
-            ->map(function (object $placement) use ($proposal, $campus, $eligible, $suggested, $now): array {
+            ->map(function (object $placement) use ($proposal, $campus, $eligible, $suggested, $forecasts, $now): array {
                 $students = $eligible[$placement->subject_id] ?? 0;
+                $forecast = $forecasts->get($placement->subject_id)?->get($campus?->getKey() ?? '');
 
                 return [
                     'career_proposal_id' => $proposal->getKey(),
@@ -159,8 +171,11 @@ final class StartCareerProposal
                     'study_plan_id' => $placement->study_plan_id,
                     'semester' => (int) $placement->semester,
                     'eligible_students' => $students,
-                    'expected_students' => $students,
-                    'requested_groups' => $suggested->for($students, (bool) $placement->needs_lab),
+                    'expected_students' => $forecast?->expected_students ?? $students,
+                    'requested_groups' => $forecast?->suggested_groups ?? $suggested->for($students, (bool) $placement->needs_lab),
+                    'suggested_expected_students' => $forecast?->expected_students,
+                    'suggested_groups' => $forecast?->suggested_groups,
+                    'forecast_method' => $forecast?->method->value,
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];

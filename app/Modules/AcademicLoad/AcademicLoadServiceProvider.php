@@ -26,6 +26,7 @@ use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
 use App\Modules\AcademicLoad\Listeners\PreviewLoadsOnTermOpening;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
+use App\Modules\AcademicLoad\Listeners\SyncProposalsOnForecastsComputed;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
@@ -52,6 +53,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Demand\Events\DemandForecastsComputed;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -89,6 +91,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
         Event::listen(LoadTransitioned::class, NotifyOnLoadClosingTransition::class);
+        Event::listen(DemandForecastsComputed::class, SyncProposalsOnForecastsComputed::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 
