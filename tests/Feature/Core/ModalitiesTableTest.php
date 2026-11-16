@@ -19,7 +19,9 @@ use Illuminate\Support\Str;
 beforeEach(function () {
     // Las tablas de la carga, la apertura y el calendario del periodo, los nombramientos y la modalidad del alumno
     // apuntan al catálogo: sus migraciones, posteriores, se deshacen primero, de la última a la primera (la primera, la
-    // contracción, que devuelve a los campus su modalidad y su perfil).
+    // contracción, que devuelve a los campus su modalidad y su perfil). La proyección de demanda (fase 5) también apunta a
+    // la modalidad, así que va antes que todas.
+    (require base_path('app/Modules/Demand/Database/Migrations/2026_11_16_000001_create_demand_forecasts_table.php'))->down();
     (require base_path('app/Modules/Core/Database/Migrations/2026_11_12_211102_contract_campuses_to_places.php'))->down();
     DB::table('campuses')->delete();
     (require base_path('app/Modules/AcademicLoad/Database/Migrations/2026_11_12_210601_make_career_proposals_per_modality.php'))->down();
