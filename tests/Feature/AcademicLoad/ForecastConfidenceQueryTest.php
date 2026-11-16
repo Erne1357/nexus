@@ -75,3 +75,19 @@ it('DM-22: con campus mide solo las filas de ese campus', function () {
         ->and($query->forCareer($this->career, $this->modality, $other))->toBe(ForecastConfidence::Reference)
         ->and($query->forCareer($this->career, $this->modality))->toBe(ForecastConfidence::Reference);
 });
+
+it('DM-22: sin campus prefiere la última evaluación de todos los campus sobre una más nueva de un campus', function () {
+    $all = ForecastEvaluation::factory()->create(['modality_id' => $this->modality->id, 'campus_id' => null, 'finished_at' => CarbonImmutable::now()->subDay()]);
+    $single = ForecastEvaluation::factory()->create(['modality_id' => $this->modality->id, 'campus_id' => $this->campus->id, 'finished_at' => CarbonImmutable::now()]);
+    confidenceRow($all, $this->career, $this->campus, 100, 100);
+    confidenceRow($single, $this->career, $this->campus, 10, 100);
+
+    expect(app(ForecastConfidenceQuery::class)->forCareer($this->career, $this->modality))->toBe(ForecastConfidence::Strong);
+});
+
+it('DM-22: sin campus y sin evaluación de todos los campus, toma la última de cualquier campus', function () {
+    $single = ForecastEvaluation::factory()->create(['modality_id' => $this->modality->id, 'campus_id' => $this->campus->id]);
+    confidenceRow($single, $this->career, $this->campus, 10, 100);
+
+    expect(app(ForecastConfidenceQuery::class)->forCareer($this->career, $this->modality))->toBe(ForecastConfidence::Reference);
+});

@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Lo proyectado y lo real de una materia, carrera y campus en una evaluación. `baseline` son los elegibles (la regla
- * de R1) para comparar contra la proyección.
+ * de R1) para comparar contra la proyección. El campus es nulo en una modalidad sin salones.
  */
 #[Fillable(['evaluation_id', 'career_id', 'campus_id', 'subject_id', 'eligible', 'projected', 'suggested_groups', 'actual_students', 'actual_groups', 'baseline', 'forecast_method'])]
 #[UseFactory(ForecastEvaluationRowFactory::class)]

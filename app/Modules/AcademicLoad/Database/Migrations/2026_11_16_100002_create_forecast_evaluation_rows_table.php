@@ -18,7 +18,7 @@ return new class extends Migration
             $table->uuid('id')->primary()->default(DB::raw('uuidv7()'));
             $table->foreignUuid('evaluation_id')->constrained('forecast_evaluations')->cascadeOnDelete();
             $table->foreignUuid('career_id')->constrained();
-            $table->foreignUuid('campus_id')->constrained();
+            $table->foreignUuid('campus_id')->nullable()->constrained();
             $table->foreignUuid('subject_id')->constrained();
             $table->integer('eligible');
             $table->integer('projected');
@@ -29,9 +29,11 @@ return new class extends Migration
             $table->string('forecast_method');
             $table->timestampsTz();
 
-            $table->unique(['evaluation_id', 'career_id', 'campus_id', 'subject_id']);
             $table->index(['career_id', 'campus_id']);
         });
+
+        DB::statement('alter table forecast_evaluation_rows add constraint forecast_evaluation_rows_unique unique nulls not distinct (evaluation_id, career_id, campus_id, subject_id)');
+        DB::statement('alter table forecast_evaluation_rows add constraint forecast_evaluation_rows_counts_check check (eligible >= 0 and projected >= 0 and suggested_groups >= 0 and actual_students >= 0 and (actual_groups is null or actual_groups >= 0) and baseline >= 0)');
     }
 
     public function down(): void
