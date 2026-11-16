@@ -4,8 +4,10 @@ namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Console\ImportSiiGroups;
 use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
@@ -24,10 +26,12 @@ use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
 use App\Modules\AcademicLoad\Listeners\PreviewLoadsOnTermOpening;
+use App\Modules\AcademicLoad\Listeners\RecordGroupHistoryOnPublication;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
@@ -93,11 +97,12 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
         Event::listen(LoadTransitioned::class, NotifyOnLoadClosingTransition::class);
+        Event::listen(LoadTransitioned::class, RecordGroupHistoryOnPublication::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 
         if ($this->app->runningInConsole()) {
-            $this->commands([PruneExports::class]);
+            $this->commands([PruneExports::class, ImportSiiGroups::class]);
         }
     }
 
@@ -206,6 +211,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
+            // Después del kárdex de Students (que lleva a «catálogos»): el historial se arma con sus alumnos por materia y campus.
+            new DemoStep(DemoCheckpoint::Catalogs, 'Historial de grupos por materia, coherente con el kárdex', fn (DemoContext $demo) => $demo->runSeeder(HistoricalGroupsDemoSeeder::class, ['seed' => $demo->seed])),
             new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -229,6 +236,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
         return [
+            new DemoCheck(DemoCheckpoint::staged(), 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() ? true : 'No hay historial de grupos.'),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Draft)
