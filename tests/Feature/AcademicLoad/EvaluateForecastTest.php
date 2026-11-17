@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 
 /*
-| Evaluar la proyección «como si» (tarea 5.9b; DM-26 y DM-27): Demand calcula lo que habría proyectado para 20261 con
+| Evaluar la proyección «como si» (tarea 5.9b; DM-27 y DM-28): Demand calcula lo que habría proyectado para 20261 con
 | lo que se sabía durante 20253, y se compara, por carrera, campus y materia, con lo que de verdad se cursó en 20261
 | (la ocupación del kárdex) y con la regla de R1 (los elegibles).
 |
@@ -125,7 +125,7 @@ function evaluationRows(ForecastEvaluation $evaluation): array
         ->all();
 }
 
-it('DM-26: guarda una fila por carrera, campus y materia con proyectado, real y base de R1', function () {
+it('DM-27: guarda una fila por carrera, campus y materia con proyectado, real y base de R1', function () {
     evaluationScenario();
     $evaluation = runningEvaluation();
     $projected = collect(app(RefreshDemandForecasts::class)->compute($this->term, modalityOf('PRES'), asIf: true))
@@ -198,7 +198,7 @@ it('calcula el error ponderado y la confianza de cada carrera en totals', functi
         ->and(array_keys($totals['overall']))->toEqualCanonicalizing(['weighted_error', 'baseline_error', 'mean_absolute_error', 'bias', 'within_share', 'confidence', 'rows']);
 });
 
-it('DM-26: en una modalidad sin salones compara una sola columna sin campus con lo cursado en todos los campus', function () {
+it('DM-27: en una modalidad sin salones compara una sola columna sin campus con lo cursado en todos los campus', function () {
     $online = Modality::factory()->create(['code' => 'M902', 'settings' => ['uses_rooms' => false]]);
     evaluationScenario($online);
     evaluationStudent(Campus::factory()->create(), [[$this->a, '20261', KardexResult::Cursando]], modality: $online);
@@ -212,7 +212,7 @@ it('DM-26: en una modalidad sin salones compara una sola columna sin campus con 
         ->and($evaluation->fresh()->totals['by_campus'][0]['campus_id'])->toBeNull();
 });
 
-it('DM-27: no crea la evaluación si el periodo no tiene kárdex', function () {
+it('DM-28: no crea la evaluación si el periodo no tiene kárdex', function () {
     Queue::fake();
     $empty = Term::factory()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
     evaluationScenario();
@@ -226,7 +226,7 @@ it('DM-27: no crea la evaluación si el periodo no tiene kárdex', function () {
     Queue::assertNothingPushed();
 });
 
-it('DM-27: no evalúa un verano ni un campus de una modalidad sin salones', function () {
+it('DM-28: no evalúa un verano ni un campus de una modalidad sin salones', function () {
     Queue::fake();
     $summer = Term::factory()->create(['code' => '20262', 'name' => 'Verano 2026']);
     $online = Modality::factory()->create(['name' => 'En línea de prueba', 'settings' => ['uses_rooms' => false]]);

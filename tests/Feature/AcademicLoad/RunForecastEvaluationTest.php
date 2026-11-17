@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Queue;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| Pedir una evaluación de la proyección y correrla en la cola (tarea 5.9b; DM-25 y DM-28): la evaluación nace en cola,
+| Pedir una evaluación de la proyección y correrla en la cola (tarea 5.9b; DM-25 y DM-29): la evaluación nace en cola,
 | el job la pasa a corriendo y la deja lista o fallida, y avisa en la campana a quien la pidió. Un periodo, modalidad y
 | campus tiene a lo más una evaluación en curso; evaluarlo otra vez después crea otra y conserva la anterior.
 */
@@ -62,7 +62,7 @@ it('nace en cola con la ventana y la versión de la fórmula, deja bitácora y e
     Queue::assertPushed(RunForecastEvaluation::class, fn (RunForecastEvaluation $job): bool => $job->evaluationId === $evaluation->id);
 });
 
-it('DM-28: el job no se duplica para el mismo periodo, modalidad y campus', function () {
+it('DM-29: el job no se duplica para el mismo periodo, modalidad y campus', function () {
     Queue::fake();
 
     $first = requestRunEvaluation();
@@ -81,7 +81,7 @@ it('DM-28: el job no se duplica para el mismo periodo, modalidad y campus', func
     Queue::assertPushedTimes(RunForecastEvaluation::class, 2);
 });
 
-it('DM-28: evaluar otra vez el mismo periodo crea otra evaluación y conserva la anterior', function () {
+it('DM-29: evaluar otra vez el mismo periodo crea otra evaluación y conserva la anterior', function () {
     $first = requestRunEvaluation();
     $second = requestRunEvaluation();
 

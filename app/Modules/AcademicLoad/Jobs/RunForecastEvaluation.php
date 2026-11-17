@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Corre en la cola una evaluación de la proyección que pidió RequestForecastEvaluation (tarea 5.9b; DM-25 y DM-28): la
+ * Corre en la cola una evaluación de la proyección que pidió RequestForecastEvaluation (tarea 5.9b; DM-25 y DM-29): la
  * pasa de cola a corriendo, la evalúa (EvaluateForecast) y la deja lista; si algo lanza, failed() la deja fallida con
  * el mensaje, sin la traza. En los dos casos avisa en la campana a quien la pidió (ForecastEvaluationFinished).
  *

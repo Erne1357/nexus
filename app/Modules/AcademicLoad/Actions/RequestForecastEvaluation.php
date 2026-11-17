@@ -20,14 +20,14 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Pide evaluar la proyección de demanda de un periodo ya cursado en una modalidad, y en un campus o en todos (tarea
- * 5.9b; DM-25 a DM-28). Quién puede pedirla lo decide ForecastEvaluationPolicy::create (DM-24) en el componente que la
+ * 5.9b; DM-25 a DM-29). Quién puede pedirla lo decide ForecastEvaluationPolicy::create (DM-24) en el componente que la
  * llama; el comando de consola no pasa por la policy y la pide sin usuario.
  *
- * - DM-27: antes de crear nada valida que se pueda comparar: el periodo no es de verano (la proyección no calcula
+ * - DM-28: antes de crear nada valida que se pueda comparar: el periodo no es de verano (la proyección no calcula
  *   verano), el campus no se da en una modalidad sin salones y el periodo tiene kárdex contable (DM-02) en la modalidad
  *   (y el campus). Si no, una ValidationException y no se guarda una evaluación vacía (supuestos por confirmar, salvo el
  *   kárdex).
- * - DM-28: si ya hay una del mismo periodo, modalidad y campus en cola o corriendo, la devuelve sin crear otra ni encolar
+ * - DM-29: si ya hay una del mismo periodo, modalidad y campus en cola o corriendo, la devuelve sin crear otra ni encolar
  *   nada. Una que no se movió en `RunForecastEvaluation::STALE_AFTER` segundos se da por perdida: queda fallida y se
  *   crea otra. Fuera de eso, evaluar otra vez crea otra evaluación y conserva las anteriores (supuesto por confirmar).
  *
@@ -109,7 +109,7 @@ final class RequestForecastEvaluation
     }
 
     /**
-     * DM-27: lo que impide evaluar, en el orden en que se revisa.
+     * DM-28: lo que impide evaluar, en el orden en que se revisa.
      *
      * @throws ValidationException
      */

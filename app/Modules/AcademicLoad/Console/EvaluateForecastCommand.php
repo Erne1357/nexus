@@ -18,7 +18,7 @@ use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
- * Evalúa la proyección de demanda de un periodo ya cursado (tarea 5.9b; RequestForecastEvaluation, DM-26 a DM-28): por
+ * Evalúa la proyección de demanda de un periodo ya cursado (tarea 5.9b; RequestForecastEvaluation, DM-27 a DM-29): por
  * omisión la corre en este proceso e imprime, por carrera y campus, el error ponderado, el de R1 y la confianza (DM-22),
  * y la línea global; con `--queue` solo la encola, como la pantalla. La pide sin usuario: nadie recibe el aviso.
  *

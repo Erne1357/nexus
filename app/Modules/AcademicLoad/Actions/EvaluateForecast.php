@@ -18,12 +18,12 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Evalúa la proyección de demanda «como si» se hubiera corrido antes del periodo de la evaluación (tarea 5.9b; DM-20 a
- * DM-23 y DM-26). La corre RunForecastEvaluation; la evaluación ya está corriendo.
+ * DM-23 y DM-27). La corre RunForecastEvaluation; la evaluación ya está corriendo.
  *
  * 1. «Calculando la proyección» (0 → 40 %): RefreshDemandForecasts::compute(asIf: true), que no guarda nada y
  *    reconstruye a los elegibles con el kárdex hasta el periodo ordinario anterior (DM-10).
  * 2. «Comparando con el kárdex» (40 → 60 %): la ocupación real del periodo (TermOccupancyQuery, DM-02).
- * 3. «Guardando resultados» (60 → 100 %): por carrera, campus y materia, la unión de lo proyectado y lo real (DM-26):
+ * 3. «Guardando resultados» (60 → 100 %): por carrera, campus y materia, la unión de lo proyectado y lo real (DM-27):
  *    - `projected` son los esperados de Demand (con repetidores y, en primer semestre, el nuevo ingreso);
  *    - `baseline` y `eligible`, los elegibles (la regla de R1);
  *    - `suggested_groups` y `forecast_method`, los de Demand;
@@ -143,7 +143,7 @@ final class EvaluateForecast
     }
 
     /**
-     * La unión de lo proyectado y lo real, por carrera, campus y materia (DM-26).
+     * La unión de lo proyectado y lo real, por carrera, campus y materia (DM-27).
      *
      * @param  list<array<string, mixed>>  $projected  filas de RefreshDemandForecasts::compute()
      * @param  list<array{career_id: string, campus_id: ?string, subject_id: string, occupancy: Occupancy}>  $actual
