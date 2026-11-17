@@ -35,7 +35,9 @@ use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Policies\DemandBoardPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
+use App\Modules\AcademicLoad\Queries\DemandBoard;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
@@ -79,7 +81,7 @@ use Illuminate\Support\Facades\RateLimiter;
 final class AcademicLoadServiceProvider extends ModuleServiceProvider
 {
     /** @var array<class-string, class-string> */
-    protected array $policies = [PublishedExport::class => PublishedExportPolicy::class];
+    protected array $policies = [PublishedExport::class => PublishedExportPolicy::class, DemandBoard::class => DemandBoardPolicy::class];
 
     public function boot(): void
     {
@@ -116,6 +118,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView)),
             new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalReviewView)),
+            new NavigationItem('Demanda por materia', 'academic-load.demand', 'o-chart-bar', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::DemandViewDepartment) || $context->allowsAny(AcademicLoadPermission::DemandViewCareer)),
             new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
@@ -132,7 +136,9 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      * obligatorio, confirmado el 10 de noviembre de 2026); el jefe de departamento, además, propone la carga, la pasa a
      * asignación docente, la cierra, la publica si la modalidad no exige visto bueno, decide la parte de su departamento y
      * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
-     * coordinador arma, corrige, envía y ve la propuesta de su carrera.
+     * coordinador arma, corrige, envía y ve la propuesta de su carrera. «Demanda por materia» (tarea 5.7, confirmado el 16
+     * de noviembre de 2026) la ven el jefe y el jefe de proyecto docente de las materias que imparte su departamento,
+     * Subdirección de cualquier departamento, y el coordinador de las materias de su carrera, en todos los departamentos.
      */
     public function grants(): array
     {
@@ -149,6 +155,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::ProposalView,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
+                AcademicLoadPermission::DemandViewDepartment,
             ],
             Role::JefeDepartamento->value => [
                 AcademicLoadPermission::LoadView,
@@ -163,18 +170,21 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::AgreementView,
                 AcademicLoadPermission::AgreementRequest,
                 AcademicLoadPermission::AgreementDecide,
+                AcademicLoadPermission::DemandViewDepartment,
             ],
             Role::JefeProyectoDocente->value => [
                 AcademicLoadPermission::LoadView,
                 AcademicLoadPermission::LoadExport,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
+                AcademicLoadPermission::DemandViewDepartment,
             ],
             Role::Coordinador->value => [
                 AcademicLoadPermission::ProposalCreate,
                 AcademicLoadPermission::ProposalUpdate,
                 AcademicLoadPermission::ProposalSubmit,
                 AcademicLoadPermission::ProposalView,
+                AcademicLoadPermission::DemandViewCareer,
             ],
         ];
     }
