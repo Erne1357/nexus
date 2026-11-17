@@ -28,9 +28,11 @@ use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ForecastEvaluation;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Policies\ForecastEvaluationPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
@@ -78,7 +80,10 @@ use Illuminate\Support\Facades\RateLimiter;
 final class AcademicLoadServiceProvider extends ModuleServiceProvider
 {
     /** @var array<class-string, class-string> */
-    protected array $policies = [PublishedExport::class => PublishedExportPolicy::class];
+    protected array $policies = [
+        PublishedExport::class => PublishedExportPolicy::class,
+        ForecastEvaluation::class => ForecastEvaluationPolicy::class,
+    ];
 
     public function boot(): void
     {
@@ -168,6 +173,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::ProposalView,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
+                AcademicLoadPermission::ForecastEvaluationView,
+                AcademicLoadPermission::ForecastEvaluationRun,
             ],
             Role::JefeDepartamento->value => [
                 AcademicLoadPermission::LoadView,
