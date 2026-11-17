@@ -103,20 +103,25 @@
                             <th scope="col" class="text-end">Esperados</th>
                             <th scope="col" class="text-end">Sugeridos</th>
                             <th scope="col" class="text-end">Pedidos</th>
-                            <th scope="col">Proyección</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($drawer->rows as $line)
                             @php($mine = $line->career->getKey() === $lensId)
                             <tr @class(['bg-info/8' => $mine]) data-testid="demand-drawer-row-{{ $line->career->code }}-{{ $line->campus?->code ?? 'sin-campus' }}">
-                                <th scope="row" class="whitespace-nowrap">
-                                    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <th scope="row" class="font-normal">
+                                    <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                         <span class="font-mono font-bold" title="{{ $line->career->name }}">{{ $line->career->code }}</span>
+                                        @include('academic-load::demand.state', ['state' => $line->state])
                                         @if ($mine)
-                                            <span class="font-normal text-neutral">(tu carrera)</span>
+                                            <span class="text-xs text-neutral">(tu carrera)</span>
                                         @endif
-                                        <x-core::status-badge :tone="$line->state->tone()" :icon="$line->state->icon()" :label="$line->state->label()" class="font-normal" />
+                                    </span>
+                                    <span class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-neutral">
+                                        <span>{{ $line->method?->label() ?? 'Sin proyección' }}</span>
+                                        @if ($line->needsReview)
+                                            <span class="inline-flex items-center gap-1 font-medium text-warning" title="Materia de especialidad: depende de qué especialidad elige cada alumno."><x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5" aria-hidden="true" />Revisar</span>
+                                        @endif
                                     </span>
                                 </th>
                                 @if (count($board->campuses) > 0)
@@ -132,14 +137,6 @@
                                     @else
                                         <span class="text-neutral" title="Sin propuesta enviada: cuenta lo sugerido">{{ $line->suggested }}*</span>
                                     @endif
-                                </td>
-                                <td class="whitespace-nowrap text-sm">
-                                    <span class="inline-flex flex-wrap items-center gap-1.5">
-                                        <span>{{ $line->method?->label() ?? 'Sin proyección' }}</span>
-                                        @if ($line->needsReview)
-                                            <x-core::status-badge tone="warning" icon="o-exclamation-triangle" label="Revisar" title="Materia de especialidad: depende de qué especialidad elige cada alumno." />
-                                        @endif
-                                    </span>
                                 </td>
                             </tr>
                         @endforeach

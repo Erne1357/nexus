@@ -18,17 +18,12 @@
                     @php($mine = $column['career']->getKey() === $lensId)
                     <th scope="col" title="{{ $column['career']->name }} · {{ $column['state']->label() }}"
                         @class([
-                            'min-w-20 bg-base-200 px-2.5 py-2 text-end align-bottom font-normal',
+                            'min-w-20 px-2.5 py-2 text-end align-bottom font-normal',
+                            'bg-base-200' => ! $mine,
                             'bg-[color-mix(in_oklab,var(--color-info)_10%,var(--color-base-200))] shadow-[inset_0_-3px_0_0_var(--color-primary)]' => $mine,
                         ]) data-testid="demand-column-{{ $column['career']->code }}">
                         <span class="block font-mono text-[13.5px] font-bold text-base-content">{{ $column['career']->code }}</span>
-                        <span @class([
-                            'inline-flex items-center gap-1 whitespace-nowrap text-[11.5px] font-medium',
-                            'text-info' => $column['state']->tone()->value === 'info',
-                            'text-success' => $column['state']->tone()->value === 'success',
-                            'text-error' => $column['state']->tone()->value === 'error',
-                            'text-neutral' => $column['state']->tone()->value === 'draft',
-                        ])><x-icon :name="$column['state']->icon()" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span aria-hidden="true">{{ $column['state']->shortLabel() }}</span><span class="sr-only">{{ $column['state']->label() }}</span></span>
+                        @include('academic-load::demand.state', ['state' => $column['state'], 'short' => true])
                     </th>
                 @endforeach
                 <th scope="col" class="sticky right-0 z-10 min-w-32 border-s border-base-300 bg-base-200 px-3 py-2.5 text-end align-bottom font-semibold">Todo el Tec</th>

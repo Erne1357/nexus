@@ -46,13 +46,13 @@
 
     <div class="min-w-0 border-s border-t border-base-300 px-4 py-3.5 lg:border-t-0" data-testid="figure-difference">
         <p class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Diferencia</p>
-        <p @class(['flex items-baseline gap-2 leading-tight', 'text-warning' => $figures['large']])>
+        <p @class(['flex flex-wrap items-baseline gap-x-2 leading-tight', 'text-warning' => $figures['large']])>
             @if ($figures['large'])
                 <x-icon :name="$figures['difference'] > 0 ? 'o-arrow-trending-up' : 'o-arrow-trending-down'" class="h-5 w-5 self-center" aria-hidden="true" />
             @endif
             <span class="font-mono text-[26px] font-semibold tabular-nums">{{ $signed($figures['difference']) }}</span>
             @if ($figures['percent'] !== null)
-                <span class="text-sm"><span class="font-mono tabular-nums">{{ $signed($figures['percent']) }}</span> %</span>
+                <span class="whitespace-nowrap text-sm"><span class="font-mono tabular-nums">{{ $signed($figures['percent']) }}</span> %</span>
             @endif
             @if ($figures['large'])
                 <span class="sr-only">Se aparta {{ $board->settings->highlightThreshold }} % o más de lo sugerido</span>

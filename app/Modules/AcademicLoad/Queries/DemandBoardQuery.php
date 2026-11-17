@@ -306,7 +306,8 @@ final class DemandBoardQuery
         $boardSubjects = [];
 
         foreach ($rows as $subjectId => $subjectRows) {
-            usort($subjectRows, fn (DemandBoardRow $a, DemandBoardRow $b): int => [$a->career->code, $a->campus->code ?? ''] <=> [$b->career->code, $b->campus->code ?? '']);
+            $first = fn (DemandBoardRow $row): int => $career !== null && $row->career->getKey() === $career->getKey() ? 0 : 1;
+            usort($subjectRows, fn (DemandBoardRow $a, DemandBoardRow $b): int => [$first($a), $a->career->code, $a->campus->code ?? ''] <=> [$first($b), $b->career->code, $b->campus->code ?? '']);
             $lensRow = $career === null ? null : collect($subjectRows)->first(fn (DemandBoardRow $row): bool => $row->career->getKey() === $career->getKey());
             $boardSubjects[] = new DemandBoardSubject($subjects[$subjectId], $lensRow?->semester, $subjectRows, $settings);
         }

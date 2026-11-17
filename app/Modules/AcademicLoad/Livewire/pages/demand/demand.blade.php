@@ -39,7 +39,7 @@
                         <span>Todavía no hay proyección</span>
                     @endif
                     <span aria-hidden="true">·</span>
-                    <span>Propuestas enviadas: <b class="font-mono font-semibold text-base-content">{{ $board->sentCareers() }} de {{ count($board->careers) }}</b> {{ count($board->careers) === 1 ? 'carrera' : 'carreras' }}</span>
+                    <span>Propuestas enviadas: <b class="font-semibold text-base-content"><span class="font-mono">{{ $board->sentCareers() }}</span> de <span class="font-mono">{{ count($board->careers) }}</span></b> {{ count($board->careers) === 1 ? 'carrera' : 'carreras' }}</span>
                     <span aria-hidden="true">·</span>
                     <span>Resalta lo que se aparta {{ $board->settings->highlightThreshold }} % o más</span>
                 </p>
@@ -49,10 +49,10 @@
         <div class="flex flex-wrap items-end gap-3 max-md:w-full">
             <x-core::modality-scope :options="$modalityOptions" :selected="$shownModality->code" class="max-md:w-full md:w-56" />
             @if (count($departments) > 1)
-                <x-select label="Departamento" wire:model.live="departmentCode" :options="$departments" option-value="code" option-label="name" class="max-md:h-11" data-testid="demand-department" />
+                <x-select label="Departamento" wire:model.live="departmentCode" :options="$departments" option-value="code" option-label="name" class="max-md:h-11 md:w-80" data-testid="demand-department" />
             @endif
             @if (count($careers) > 1)
-                <x-select label="Carrera" wire:model.live="careerCode" :options="$careers" option-value="code" option-label="name" class="max-md:h-11" data-testid="demand-career" />
+                <x-select label="Carrera" wire:model.live="careerCode" :options="$careers" option-value="code" option-label="name" class="max-md:h-11 md:w-80" data-testid="demand-career" />
             @endif
         </div>
     </div>

@@ -22,7 +22,7 @@ use App\Modules\Demand\Rules\DemandSettings;
 final readonly class DemandBoardSubject
 {
     /**
-     * @param  list<DemandBoardRow>  $rows  por clave de carrera y de campus
+     * @param  list<DemandBoardRow>  $rows  por clave de carrera y de campus (en la lente de carrera, la suya primero)
      */
     public function __construct(
         public Subject $subject,
