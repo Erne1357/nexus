@@ -30,7 +30,7 @@ Una interfaz en `app/Modules/Solver/Engines/` con tres responsabilidades: resolv
 | Implementación | Dónde corre | Cuándo usarla |
 |---|---|---|
 | `PhpHeuristicEngine` | Contenedor `queue`, en PHP | Rápida, sin dependencias externas; buena para corridas por carrera, re-análisis y alternativas de solicitudes de cambio |
-| `CpSatEngine` | Cliente en PHP que llama al servicio `solver` (Python) | Instancias grandes o muy restringidas, campus completo, mejor puntaje blando |
+| `CpSatEngine` | Cliente en PHP que llama al servicio `solver` (Python) | Cargas grandes o muy restringidas (departamentos con muchos grupos en varios campus), mejor puntaje blando |
 
 La pantalla de corridas (fase 6) no distingue entre ambas: elige motor, lanza, compara, acepta.
 
