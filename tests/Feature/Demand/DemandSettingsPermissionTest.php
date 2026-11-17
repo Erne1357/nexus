@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
 
 /*
-| Parámetros de demanda (tarea 5.8b; DM-08b): Subdirección los cambia con `demand.setting.update` y guardar uno recalcula
+| Parámetros de demanda (tarea 5.8b; DM-26): Subdirección los cambia con `demand.setting.update` y guardar uno recalcula
 | en segundo plano los periodos abiertos.
 */
 
