@@ -4,12 +4,14 @@ namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Console\EvaluateForecastCommand;
 use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
+use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -98,7 +100,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 
         if ($this->app->runningInConsole()) {
-            $this->commands([PruneExports::class]);
+            $this->commands([PruneExports::class, EvaluateForecastCommand::class]);
         }
     }
 
@@ -272,6 +274,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             AcademicLoad::class => ['status' => ['Estado de la carga', LoadStatus::class], 'current_version' => 'Versión vigente', 'closed_at' => 'Cerrada', 'closed_by' => 'Cerrada por', 'approved_at' => 'Aprobada', 'approved_by' => 'Aprobada por', 'published_at' => 'Publicada', 'published_by' => 'Publicada por'],
             CareerProposal::class => ['status' => ['Estado de la propuesta', ProposalReviewStatus::class], 'submitted_at' => 'Enviada', 'submitted_by' => 'Enviada por'],
+            ForecastEvaluation::class => ['status' => ['Estado de la evaluación', ForecastEvaluationStatus::class], 'method' => 'Versión de la fórmula', 'history_terms' => 'Semestres de historia'],
             InterdepartmentalAgreement::class => ['status' => ['Estado', AgreementStatus::class], 'kind' => ['Tipo de acuerdo', AgreementKind::class], 'max_seats' => 'Cupo máximo', 'from_department_id' => 'Departamento que da', 'to_department_id' => 'Departamento que recibe', 'cancelled_at' => 'Cancelado', 'cancelled_by' => 'Cancelado por'],
         ];
     }

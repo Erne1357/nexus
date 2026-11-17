@@ -18,9 +18,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Una evaluación «como si» de la proyección de demanda de un periodo, modalidad y campus (campus nulo: todos los de la
- * modalidad). `method` es la versión de la fórmula que dio Demand; `totals` trae las métricas globales (forma libre).
+ * modalidad). `method` es la versión de la fórmula que dio Demand; `totals` trae las métricas (su forma está en
+ * EvaluateForecast). Mientras corre, `progress` (0 a 100) y `stage` dicen en qué va.
  */
-#[Fillable(['term_id', 'modality_id', 'campus_id', 'status', 'method', 'history_terms', 'totals', 'requested_by', 'started_at', 'finished_at', 'error'])]
+#[Fillable(['term_id', 'modality_id', 'campus_id', 'status', 'method', 'history_terms', 'totals', 'requested_by', 'started_at', 'finished_at', 'error', 'progress', 'stage'])]
 #[UseFactory(ForecastEvaluationFactory::class)]
 class ForecastEvaluation extends Model
 {
@@ -35,6 +36,7 @@ class ForecastEvaluation extends Model
         return [
             'status' => ForecastEvaluationStatus::class,
             'history_terms' => 'integer',
+            'progress' => 'integer',
             'totals' => 'array',
             'started_at' => 'immutable_datetime',
             'finished_at' => 'immutable_datetime',
