@@ -21,7 +21,9 @@ use Illuminate\Support\Collection;
  * - campusesFor(): las columnas de una carrera en una modalidad: los campus activos donde se ofrece, por clave, si la
  *   modalidad usa salones; si no, una sola columna sin campus (`null`).
  * - subjectsFor(): las materias activas de la retícula de los planes activos de la carrera, una vez cada una (la del
- *   primer plan por clave), sin residencia, servicio social ni complementarias y sin materias sin horas de clase.
+ *   primer plan por clave), sin residencia, servicio social ni complementarias y sin materias sin horas de clase. De
+ *   cada una dice también en qué semestre la pone el plan vigente de la carrera (`is_current`), o null si no la tiene:
+ *   el nuevo ingreso entra solo en el primer semestre del plan vigente (DM-05, confirmado el 17 de noviembre de 2026).
  */
 final class ForecastScopeQuery
 {
@@ -66,11 +68,11 @@ final class ForecastScopeQuery
     }
 
     /**
-     * @return Collection<int, object{subject_id: string, study_plan_id: string, semester: int, needs_lab: bool, department_id: ?string, is_specialty: bool}>
+     * @return Collection<int, object{subject_id: string, study_plan_id: string, semester: int, needs_lab: bool, department_id: ?string, is_specialty: bool, current_plan_semester: ?int}>
      */
     public function subjectsFor(Career $career): Collection
     {
-        return StudyPlanSubject::query()
+        $placements = StudyPlanSubject::query()
             ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
             ->join('subjects', 'subjects.id', '=', 'study_plan_subjects.subject_id')
             ->where('study_plans.career_id', $career->getKey())
@@ -91,7 +93,14 @@ final class ForecastScopeQuery
                 'subjects.needs_lab',
                 'subjects.department_id',
                 'study_plan_subjects.specialty_id',
-            ])
+                'study_plans.is_current',
+            ]);
+
+        $currentPlanSemester = $placements->filter(fn (object $row): bool => (bool) $row->is_current)
+            ->mapWithKeys(fn (object $row): array => [$row->subject_id => (int) $row->semester])
+            ->all();
+
+        return $placements
             ->unique('subject_id')
             ->map(fn (object $row): object => (object) [
                 'subject_id' => $row->subject_id,
@@ -100,6 +109,7 @@ final class ForecastScopeQuery
                 'needs_lab' => (bool) $row->needs_lab,
                 'department_id' => $row->department_id,
                 'is_specialty' => $row->specialty_id !== null,
+                'current_plan_semester' => $currentPlanSemester[$row->subject_id] ?? null,
             ])
             ->values();
     }

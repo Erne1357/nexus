@@ -144,3 +144,25 @@ it('trae el departamento de la materia y si la retícula la pone en una especial
     expect($rows->pluck('is_specialty')->all())->toBe([false, true])
         ->and($rows->pluck('department_id')->unique()->all())->toBe([$department->id]);
 });
+
+it('DM-05: dice en qué semestre pone la materia el plan vigente de la carrera, sin cambiar qué fila se elige', function () {
+    $career = Career::factory()->create();
+    $old = StudyPlan::factory()->create(['career_id' => $career->id, 'code' => 'A-OLD']);
+    $current = StudyPlan::factory()->create(['career_id' => $career->id, 'code' => 'B-NEW', 'is_current' => true]);
+    $shared = Subject::factory()->create(['code' => 'SHARED']);
+    $oldOnly = Subject::factory()->create(['code' => 'OLD-ONLY']);
+    $currentOnly = Subject::factory()->create(['code' => 'NEW-ONLY']);
+    placeInPlan($old, $shared, 2);
+    placeInPlan($current, $shared, 1);
+    placeInPlan($old, $oldOnly, 1);
+    placeInPlan($current, $currentOnly, 1);
+
+    $rows = (new ForecastScopeQuery)->subjectsFor($career)->keyBy(fn (object $row): string => Subject::findOrFail($row->subject_id)->code);
+
+    expect($rows['SHARED'])
+        ->study_plan_id->toBe($old->id)
+        ->semester->toBe(2)
+        ->current_plan_semester->toBe(1)
+        ->and($rows['OLD-ONLY']->current_plan_semester)->toBeNull()
+        ->and($rows['NEW-ONLY']->current_plan_semester)->toBe(1);
+});
