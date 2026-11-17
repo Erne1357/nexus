@@ -7,6 +7,8 @@ use App\Modules\AcademicLoad\Actions\Proposals\CreateProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\DeleteProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\RenameProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\SetPackageCount;
+use App\Modules\AcademicLoad\Actions\Proposals\SyncProposalSuggestions;
+use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalIntake;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalPackageSubjects;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -20,6 +22,8 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Enums\ForecastMethod;
+use App\Modules\Demand\Models\DemandForecast;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -50,6 +54,7 @@ beforeEach(function () {
                 'campus_id' => $campus->id,
                 'subject_id' => $subject->id,
                 'requested_groups' => 1,
+                'captured_at' => now(),
             ]);
         }
     }
@@ -224,19 +229,16 @@ it('la suma de varios paquetes con la misma materia es su package_groups', funct
         ->and(packageItem($this->subjectB, $this->c1)->package_groups)->toBe(3);
 });
 
-it('marca la fila como corregida y deja bitácora de lo que cambió, sin tocar otra', function () {
+it('deja la bitácora de lo que cambió en la fila y en la cuenta, sin tocar otra', function () {
     $package = newPackage([$this->subjectA]);
 
     packageCount($package, $this->c1, 2);
 
     $item = packageItem($this->subjectA, $this->c1);
-    expect($item->captured_at)->not->toBeNull()
-        ->and($item->captured_by)->toBe($this->actor->id)
-        ->and(packageItem($this->subjectB, $this->c1)->captured_at)->toBeNull();
-
     $activity = Activity::query()->where('subject_id', $item->id)->sole();
     expect($activity->attribute_changes['attributes'])->toBe(['requested_groups' => 3, 'package_groups' => 2])
-        ->and($activity->attribute_changes['old'])->toBe(['requested_groups' => 1, 'package_groups' => 0]);
+        ->and($activity->attribute_changes['old'])->toBe(['requested_groups' => 1, 'package_groups' => 0])
+        ->and(Activity::query()->where('subject_id', packageItem($this->subjectB, $this->c1)->id)->count())->toBe(0);
 
     $column = Activity::query()->where('subject_id', $package->campuses()->where('campus_id', $this->c1->id)->value('id'))->sole();
     expect($column->attribute_changes['attributes'])->toBe(['count' => 2]);
@@ -314,4 +316,89 @@ it('UpdateProposalItem no deja bajar los grupos de los que salen de paquetes, pe
     app(UpdateProposalItem::class)->handle($item, 30, 2, null, $this->actor);
 
     expect($item->fresh()->only(['requested_groups', 'package_groups']))->toBe(['requested_groups' => 2, 'package_groups' => 2]);
+});
+
+/**
+ * Una materia de primer semestre sin tocar, con la proyección de `$expected` esperados y `$suggested` grupos, en C1 con `$newStudents` de nuevo ingreso.
+ */
+function untouchedFirstSemesterRow(int $expected, int $suggested, int $newStudents, bool $lab = false): ProposalItem
+{
+    $subject = Subject::factory()->create(['department_id' => test()->dept->id, 'needs_lab' => $lab]);
+    ProposalIntake::query()->where('campus_id', test()->c1->id)->update(['new_students' => $newStudents, 'suggested_new_students' => $newStudents]);
+
+    return ProposalItem::factory()->create([
+        'career_proposal_id' => test()->proposal->id,
+        'campus_id' => test()->c1->id,
+        'subject_id' => $subject->id,
+        'expected_students' => $expected,
+        'requested_groups' => $suggested,
+        'suggested_expected_students' => $expected,
+        'suggested_groups' => $suggested,
+        'captured_at' => null,
+    ]);
+}
+
+it('los paquetes cubren al nuevo ingreso: 140 de nuevo ingreso y 160 esperados son 4 paquetes y 1 suelto, sin doble conteo', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    $package = app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+
+    expect($package->campuses()->where('campus_id', $this->c1->id)->sole()->count)->toBe(4)
+        ->and($item->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 4, 'requested_groups' => 5])
+        ->and($item->fresh()->captured_at)->toBeNull();
+});
+
+it('la fila sin tocar sigue sin tocar y los sueltos sugeridos usan 25 con laboratorio', function () {
+    $item = untouchedFirstSemesterRow(60, 3, 30, lab: true);
+    $package = app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+
+    expect($package->campuses()->where('campus_id', $this->c1->id)->sole()->count)->toBe(1)
+        ->and($item->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 1, 'requested_groups' => 3])
+        ->and($item->fresh()->captured_at)->toBeNull();
+});
+
+it('una fila corregida conserva sus sueltos al cambiar los paquetes', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    $item->update(['captured_at' => now(), 'requested_groups' => 3]);
+    $package = app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+
+    expect($item->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 4, 'requested_groups' => 7]);
+});
+
+it('quitar el último paquete devuelve la fila sin tocar a los grupos sugeridos de la proyección', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    $package = app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+
+    app(DeleteProposalPackage::class)->handle($package, $this->actor);
+
+    expect($item->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 0, 'requested_groups' => 5]);
+});
+
+it('cambiar el nuevo ingreso recalcula las filas sin tocar con paquetes', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 70, $this->actor);
+
+    expect($item->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 2, 'requested_groups' => 5]);
+});
+
+it('la sincronización con la proyección mantiene la regla en las filas sin tocar con paquetes', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+    DemandForecast::factory()->create([
+        'term_id' => $this->proposal->term_id,
+        'modality_id' => $this->proposal->modality_id,
+        'career_id' => $this->career->id,
+        'subject_id' => $item->subject_id,
+        'campus_id' => $this->c1->id,
+        'expected_students' => 200,
+        'suggested_groups' => 6,
+        'new_students' => 140,
+        'method' => ForecastMethod::FirstSemester,
+    ]);
+
+    app(SyncProposalSuggestions::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+
+    expect($item->fresh()->only(['expected_students', 'package_groups', 'requested_groups', 'suggested_groups']))->toBe(['expected_students' => 200, 'package_groups' => 4, 'requested_groups' => 6, 'suggested_groups' => 6])
+        ->and($item->fresh()->captured_at)->toBeNull();
 });

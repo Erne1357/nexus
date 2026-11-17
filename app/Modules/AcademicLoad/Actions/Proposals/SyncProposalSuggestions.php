@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\ProposalSuggestionsSynced;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
@@ -14,7 +15,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Pone al día las propuestas con la proyección recalculada de Demand (tarea 5.5; DemandForecastsComputed). Para el
  * periodo y la modalidad, las carreras dadas y, si viene, un solo campus, toma las propuestas en borrador o regresadas
  * (una enviada o aceptada no se toca). En cada una, las filas que el coordinador no ha tocado (`captured_at` nulo) y cuyo
- * departamento no aceptó su parte siguen a la proyección: esperados, grupos, `suggested_*` y `forecast_method`. Las que
+ * departamento no aceptó su parte siguen a la proyección: esperados, grupos, `suggested_*` y `forecast_method`. Con paquetes en la fila (`package_groups > 0`), los grupos son los de paquetes más los sueltos sugeridos, `ceil(max(0, esperados - nuevo ingreso del campus) / tamaño)` (tarea 5.6b), en el mismo UPDATE. Las que
  * corrigió no se tocan: el aviso «la proyección cambió» se calcula al leer (ProposalSuggestionState). Una fila sin
  * tocar que se queda sin proyección no cambia, y una que ya coincide no se escribe.
  *
@@ -79,10 +80,20 @@ final class SyncProposalSuggestions
                 array_push($bindings, ...$accepted);
             }
 
+            $sizes = SuggestedGroups::fromSettings();
+            $groups = <<<SQL
+                case when proposal_items.package_groups > 0
+                    then proposal_items.package_groups + ceil(greatest(0, f.expected_students - coalesce((
+                        select i.new_students from proposal_intakes i
+                        where i.career_proposal_id = proposal_items.career_proposal_id and i.campus_id is not distinct from proposal_items.campus_id
+                    ), 0))::numeric / case when subjects.needs_lab then {$sizes->labSize} else {$sizes->defaultSize} end)::int
+                    else f.suggested_groups end
+                SQL;
+
             $count = DB::update(<<<SQL
                 update proposal_items
                 set expected_students = f.expected_students,
-                    requested_groups = f.suggested_groups,
+                    requested_groups = {$groups},
                     suggested_expected_students = f.expected_students,
                     suggested_groups = f.suggested_groups,
                     forecast_method = f.method,
@@ -98,7 +109,7 @@ final class SyncProposalSuggestions
                     and proposal_items.captured_at is null
                     and (
                         proposal_items.expected_students is distinct from f.expected_students
-                        or proposal_items.requested_groups is distinct from f.suggested_groups
+                        or proposal_items.requested_groups is distinct from {$groups}
                         or proposal_items.suggested_expected_students is distinct from f.expected_students
                         or proposal_items.suggested_groups is distinct from f.suggested_groups
                         or proposal_items.forecast_method is distinct from f.method

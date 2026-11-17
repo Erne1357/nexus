@@ -47,6 +47,7 @@ beforeEach(function () {
                 'subject_id' => $subject->id,
                 'study_plan_id' => $this->plan->id,
                 'requested_groups' => 0,
+                'captured_at' => now(),
             ]);
         }
     }

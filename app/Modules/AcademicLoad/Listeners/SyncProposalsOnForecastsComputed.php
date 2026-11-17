@@ -17,7 +17,7 @@ final class SyncProposalsOnForecastsComputed implements ShouldQueue
 
     public function handle(DemandForecastsComputed $event): void
     {
-        $this->sync->handle($event->termId, $event->modalityId, $event->campusId, $event->careerIds);
         $this->intakes->handle($event->termId, $event->modalityId, $event->campusId, $event->careerIds);
+        $this->sync->handle($event->termId, $event->modalityId, $event->campusId, $event->careerIds);
     }
 }

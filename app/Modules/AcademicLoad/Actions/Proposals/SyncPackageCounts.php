@@ -17,8 +17,8 @@ use App\Modules\Demand\Rules\DemandSettings;
  * (DemandSettings) en el primer paquete (el de menor posición) y 0 en los demás, con el nuevo ingreso vigente de
  * `proposal_intakes` de esa columna (supuesto por confirmar); sin nuevo ingreso en la columna no hay sugerido. Una cuenta con
  * `captured_at` se conserva. Un paquete con alguna materia de un departamento que ya aceptó su parte no se mueve solo
- * (esas materias ya no cambian), pero sí guarda su sugerido. Después recalcula `package_groups` de las materias de los
- * paquetes cuya cuenta cambió (RecalculatePackageGroups).
+ * (esas materias ya no cambian), pero sí guarda su sugerido. Después recalcula las filas de las materias de todos los
+ * paquetes (RecalculatePackageGroups), porque los grupos sueltos sugeridos de una fila sin tocar dependen del nuevo ingreso.
  *
  * No abre transacción ni bloquea la propuesta: lo hace quien la llama, con la propuesta ya bloqueada. Devuelve cuántas
  * cuentas se movieron.
@@ -53,7 +53,7 @@ final class SyncPackageCounts
         $size = DemandSettings::fromSettings()->groupSizes->defaultSize;
         $first = $packages->first();
         $moved = 0;
-        $affected = [];
+        $affected = $packages->flatMap(fn (ProposalPackage $package) => $package->subjects->pluck('subject_id'))->unique()->values()->all();
 
         foreach ($packages as $package) {
             $subjectIds = $package->subjects->pluck('subject_id')->all();
@@ -71,7 +71,6 @@ final class SyncPackageCounts
                 if ($column->captured_at === null && $suggested !== null && ! $blocked && $column->count !== $suggested) {
                     $column->count = $suggested;
                     $moved++;
-                    $affected = [...$affected, ...$subjectIds];
                 }
 
                 if ($column->isDirty()) {
@@ -80,7 +79,7 @@ final class SyncPackageCounts
             }
         }
 
-        $this->recalculate->handle($proposal, array_values(array_unique($affected)), $actor);
+        $this->recalculate->handle($proposal, $affected, $actor);
 
         return $moved;
     }
