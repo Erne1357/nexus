@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\Schema;
  * y `captured_by` marcan la última vez que el coordinador cambió esperados o grupos: nulo es «sin tocar», y esas filas siguen
  * solas a la proyección cuando se recalcula (confirmado el 16 de noviembre de 2026).
  *
- * Relleno: una fila cuyo `updated_at` es posterior a su `created_at` ya fue corregida, así que `captured_at = updated_at`.
+ * Relleno: una fila cuyo `updated_at` es posterior a su `created_at` y cuyos esperados o grupos ya no son los de origen
+ * (esperados = posibles; grupos = techo de posibles entre 35, o 25 con laboratorio) ya fue corregida, así que
+ * `captured_at = updated_at`. Una tocada solo por una nota sigue a la proyección (supuesto por confirmar).
  */
 return new class extends Migration
 {
@@ -28,7 +30,17 @@ return new class extends Migration
 
         DB::statement('alter table proposal_items add constraint proposal_items_suggested_expected_students_check check (suggested_expected_students >= 0)');
         DB::statement('alter table proposal_items add constraint proposal_items_suggested_groups_check check (suggested_groups >= 0)');
-        DB::statement('update proposal_items set captured_at = updated_at where updated_at > created_at');
+        DB::statement(<<<'SQL'
+            update proposal_items
+            set captured_at = proposal_items.updated_at
+            from subjects
+            where subjects.id = proposal_items.subject_id
+                and proposal_items.updated_at > proposal_items.created_at
+                and (
+                    proposal_items.expected_students <> proposal_items.eligible_students
+                    or proposal_items.requested_groups <> ceil(proposal_items.eligible_students::numeric / case when subjects.needs_lab then 25 else 35 end)
+                )
+            SQL);
     }
 
     public function down(): void
