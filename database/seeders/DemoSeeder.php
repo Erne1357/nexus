@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -59,6 +60,7 @@ class DemoSeeder extends Seeder
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
+        $this->callWith(ForecastEvaluationDemoSeeder::class, ['campuses' => ['C2']]);
         // Aceptar una parte crea grupos (3.3) y GroupsCreated recalcularía los choques del campus en cada aceptación;
         // SchedulingDemoSeeder los recalcula una vez al final.
         Event::fakeFor(fn () => $this->callWith(AcademicLoadDemoSeeder::class, ['campuses' => ['C2']]), [GroupsCreated::class]);

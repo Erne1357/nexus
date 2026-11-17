@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -76,6 +77,7 @@ class MassiveSeeder extends Seeder
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES'], '20263' => ['PRES']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'massive']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'massive']);
+        $this->callWith(ForecastEvaluationDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
 
         $this->command?->info(sprintf('Periodos, calendarios y aperturas: %.1f s.', (hrtime(true) - $started) / 1e9));
 

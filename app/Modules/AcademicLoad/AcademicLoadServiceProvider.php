@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\AcademicLoad\Console\EvaluateForecastCommand;
 use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
@@ -190,6 +191,11 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
+            // Después de abrir el periodo (Core), que calcula la proyección de Demand; el kárdex ya está sembrado (tarea 5.10a).
+            new DemoStep(DemoCheckpoint::Proposal, 'Evaluaciones de la precisión de la proyección', fn (DemoContext $demo) => $demo->runSeederPerModality(ForecastEvaluationDemoSeeder::class, [
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+            ])),
             new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -213,6 +219,14 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
         return [
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => ForecastEvaluation::query()
+                ->where('status', ForecastEvaluationStatus::Done)->whereIn('modality_id', $modalityIds($demo))->exists()
+                ? true
+                : 'No hay evaluaciones de la proyección listas.'),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay una evaluación fallida para ver el estado de error', fn (DemoContext $demo): true|string => ForecastEvaluation::query()
+                ->where('status', ForecastEvaluationStatus::Failed)->whereIn('modality_id', $modalityIds($demo))->exists()
+                ? true
+                : 'No hay una evaluación fallida.'),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Draft)
