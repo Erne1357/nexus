@@ -80,6 +80,9 @@ it('reparte aprobadas y reprobadas de forma repetible con la semilla', function 
     (new DemandRecalculationDemoSeeder)->run(term: '20271', subjects: 2, failureShare: 0.5, seed: 7);
     $first = KardexRecord::query()->where('term_code', '20263')->orderBy('id')->pluck('result')->all();
 
-    expect($first)->toContain(KardexResult::Aprobada)->toContain(KardexResult::Reprobada)
+    $counts = array_count_values(array_map(fn (KardexResult $result): string => $result->value, $first));
+    ksort($counts);
+
+    expect($counts)->toBe(['aprobada' => 4, 'reprobada' => 4])
         ->and(KardexRecord::query()->where('result', KardexResult::Cursando)->count())->toBe(0);
 });
