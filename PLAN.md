@@ -58,7 +58,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188; acuerdos entre departamentos, préstamos de salón y grupos compartidos, #286 y #292) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | 🟨 (3.1 a 3.7 hechas: modelos y exclusiones #287; validador HC-01 a HC-13 y SC-09 #288 a #290, #312 y #320; grupos desde propuestas #291; tablero de choques y avance #294, #319 y #325; editor de horarios #300, #301, #311 y #327; cupos por carrera y grupos compartidos #298, #315 y #326; salones y préstamos #286, #292 y #316; datos demo y masivos #310 y #317. Falta la integración 3.13; la heurística es de la fase 6) |
 | Staffing | 3 | 🟨 (3.8 a 3.12 hechas: ranking docente #293, #295, #297 y #299; asignación #296, #302, #306, #318 y #321; oferta y Mi carga #309 y #314; solicitudes de cambio #304 y #314; carga por docente #308; datos demo y masivos #324. Falta la integración 3.13) |
-| Demand | 5 | 🟨 (abierta el 16 de noviembre de 2026; ronda 0 de contratos, 5.1, en `riel/demanda-a`) |
+| Demand | 5 | 🟨 (abierta el 16 de noviembre de 2026; núcleo 5.1 a 5.4 hecho: contratos #511, tasas históricas #521, cálculo #524 y job por eventos #526; faltan 5.5 a 5.10 de los rieles B y C) |
 | Solver | 6 (contrato y cliente), 7 (servicio Python) | ⬜ |
 | Enrollment | 9 | 🟦 |
 
