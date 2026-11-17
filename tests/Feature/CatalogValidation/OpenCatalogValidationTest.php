@@ -140,7 +140,7 @@ it('CV9: la bitácora lista solo los catálogos que de verdad crearon revisiones
     openValidation([Catalog::Teachers]);
     openValidation([Catalog::Teachers, Catalog::Careers]);
 
-    $logs = Activity::query()->where('event', 'validation_opened')->orderBy('created_at')->get();
+    $logs = Activity::query()->where('event', 'validation_opened')->orderBy('created_at')->orderBy('id')->get();
 
     expect($logs)->toHaveCount(2)
         ->and($logs->last()->properties['catalogs'])->toBe(['careers'])
