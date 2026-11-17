@@ -45,8 +45,8 @@ Se escribió al cerrar el núcleo de la fase 5 (Riel A) para que la fase 6 arran
   - Entra `travel_minutes` (`staffing.min_campus_travel_minutes`), y SC-09 se suma al puntaje blando: un docente con sesiones seguidas en campus distintos sin ese tiempo se penaliza.
   - El «alumno tipo» se generaliza a **cohortes**: cada grupo lleva `cohorts[]`, claves de conjuntos de grupos que un mismo alumno toma juntos y cuyas sesiones no se empalman. Hoy hay dos fuentes:
     - HC-03 (plan, semestre y campus, cuando la materia tiene un solo grupo para la carrera);
-    - los paquetes de primer semestre (`package:<id>`, DM-09).
-    El evaluador y CP-SAT ya no necesitan saber de dónde sale cada cohorte. La forma de los paquetes la define el Riel B en la 5.6.
+    - los paquetes de primer semestre (DM-09). Los paquetes son iguales para toda la carrera: una composición por propuesta (`proposal_packages` con sus materias), y cada campus captura cuántos abre (elección del usuario, 16 de noviembre; tarea 5.6 del Riel B). Cada instancia *n* de un paquete abre un grupo de cada una de sus materias, con `groups.package_id` y `groups.package_number`, y su cohorte es `package:<package_id>:<package_number>`.
+    El evaluador y CP-SAT ya no necesitan saber de dónde sale cada cohorte.
   - `scope.kind` queda `department` (la carga, con su modalidad) o `career` (exploración del coordinador). El campus deja de ser alcance.
   - `docs/arquitectura/solver.md` se actualiza en el mismo PR que los DTO.
 - **6.2, `solver_runs`:** periodo, **modalidad**, departamento o carrera, motor, estado, entrada y salida, métricas, autor y aplicación. Sin campus.
