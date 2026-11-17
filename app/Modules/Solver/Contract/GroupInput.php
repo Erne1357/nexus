@@ -9,6 +9,7 @@ final readonly class GroupInput
      * @param  list<string>  $cohorts  Claves de cohorte (HC-03).
      * @param  list<SessionSlot>  $fixedSessions
      * @param  list<string>  $candidateRoomIds  Vacía: sin acotar el dominio.
+     * @param  list<SessionSlot>  $currentSessions  Opcional: lo que un grupo movible ya tiene, para que el motor marque `changed`.
      */
     public function __construct(
         public string $id,
@@ -27,6 +28,7 @@ final readonly class GroupInput
         public array $fixedSessions,
         public array $candidateRoomIds,
         public bool $movable,
+        public array $currentSessions = [],
     ) {}
 
     /**
@@ -51,6 +53,7 @@ final readonly class GroupInput
             ContractFields::objects($data, 'fixed_sessions', $path, SessionSlot::class, false),
             ContractFields::strings($data, 'candidate_room_ids', $path, false),
             ContractFields::bool($data, 'movable', $path, true),
+            ContractFields::objects($data, 'current_sessions', $path, SessionSlot::class, false),
         );
     }
 
@@ -76,6 +79,7 @@ final readonly class GroupInput
             'fixed_sessions' => array_map(fn (SessionSlot $s): array => $s->toArray(), $this->fixedSessions),
             'candidate_room_ids' => $this->candidateRoomIds,
             'movable' => $this->movable,
+            'current_sessions' => array_map(fn (SessionSlot $s): array => $s->toArray(), $this->currentSessions),
         ], fn (mixed $v): bool => $v !== null);
     }
 }

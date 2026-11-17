@@ -62,7 +62,8 @@
             ],
             "fixed_sessions": [],
             "candidate_room_ids": [],
-            "movable": true
+            "movable": true,
+            "current_sessions": []
         },
         {
             "id": "0190a000-0000-7000-8000-000000000102",
@@ -83,7 +84,8 @@
             ],
             "fixed_sessions": [],
             "candidate_room_ids": [],
-            "movable": true
+            "movable": true,
+            "current_sessions": []
         },
         {
             "id": "0190a000-0000-7000-8000-000000000103",
@@ -103,7 +105,8 @@
             ],
             "fixed_sessions": [],
             "candidate_room_ids": [],
-            "movable": true
+            "movable": true,
+            "current_sessions": []
         }
     ],
     "teachers": [
