@@ -34,6 +34,7 @@ final class ActivityRecordTypes
         'AcademicLoad' => 'Carga académica',
         'CareerProposal' => 'Propuesta de carrera',
         'InterdepartmentalAgreement' => 'Acuerdo interdepartamental',
+        'ForecastEvaluation' => 'Evaluación de la proyección',
         'CatalogReview' => 'Validación de catálogo',
         'Building' => 'Edificio',
         'Room' => 'Salón',
