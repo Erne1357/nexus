@@ -138,6 +138,13 @@ Antes que todo, A mezcla a `develop` un PR chico con lo que los tres necesitan (
 3. **Paquetes de primer semestre:** en la propuesta, el coordinador captura cuántos paquetes abre por campus, y cada paquete abre un grupo de cada materia del paquete. Los horarios sin choque entre las materias de un paquete son de la fase 6 y asignar alumnos a cada paquete, de la 9.
 4. **Tamaños objetivo:** bastan los dos, normal y con laboratorio.
 
+#### Respuestas del usuario al Riel B (16 de noviembre de 2026)
+
+1. **Recálculo:** las filas de la propuesta que el coordinador no ha tocado siguen solas a la nueva proyección; las que corrigió conservan lo capturado y se avisa «la proyección cambió: ahora sugiere N» para que él decida (implementado en 5.5).
+2. **Historial previo a Nexus:** se toma de `sii_archivo.grupos`.
+3. **Quién ve el tablero:** lo ven el jefe, el JPD, Subdirección y el admin, y los coordinadores (sus materias, solo consulta).
+4. **Diferencia grande:** solo se resalta; no pide motivo ni bloquea el envío.
+
 Queda como supuesto por confirmar que la proyección no calcula cursos de verano. «Coordinador de campus» ya no es pregunta: lo resolvió M5 (#464), con coordinador = carreras + modalidad, campus opcional y varias carreras por persona.
 
 ## Alcance
