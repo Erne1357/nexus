@@ -9,6 +9,9 @@
     corregida que se aparta del sugerido (DemandSettings::isLargeDifference, por separado en esperados y en grupos) lleva el
     borde de advertencia, `o-arrows-up-down` (el triángulo es de las anomalías), `data-large` y, para lectores de pantalla y en `title`, lo que sugiere Nexus. Solo
     resalta: no bloquea nada.
+
+    Con paquetes de primer semestre (tarea 5.6b): los grupos son el total de la fila (`requested_groups`) y, si alguno sale de
+    paquetes en ese campus, debajo dice cuántos («5 de paq.», `data-package-groups`); los demás son sueltos.
 --}}
 @php
     $cell = "{$item->id}.{$field}";
@@ -66,5 +69,8 @@
         @if ($cellError)
             <span id="{{ $prefix }}-error-{{ $item->id }}-{{ $field }}" class="text-xs text-error" data-testid="cell-error-{{ $subjectCode }}{{ $suffix }}-{{ $field }}">{{ $cellError }}</span>
         @endif
+    @endif
+    @if ($field === 'requested_groups' && $item->package_groups > 0)
+        <span class="text-right font-mono text-[11.5px] leading-tight text-neutral" title="{{ $item->package_groups }} de estos grupos salen de los paquetes; los demás son sueltos." data-package-groups>{{ $item->package_groups }} de <abbr title="paquetes" class="no-underline">paq.</abbr></span>
     @endif
 </div>

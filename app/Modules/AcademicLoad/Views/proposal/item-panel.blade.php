@@ -10,6 +10,9 @@
     sin impedir guardar ni enviar. «Usar sugerido» dice el número, que mientras se teclea recalcula Alpine con
     `$suggestedSize`.
 
+    Con paquetes de primer semestre (tarea 5.6b), bajo los grupos de un campus que abre grupos por paquetes: «5 de paquetes + 3
+    sueltos» (los grupos son el total de la fila; los sueltos, para rezagados y repetidores).
+
     Con la proyección (tarea 5.6, opción C), cada campus lleva al final «Proyección de Nexus» con el estado de su fila
     (Sugerido, Corregido o La proyección cambió), lo que sugiere y, si se aparta, cuánto; si cambió y el usuario corrige
     esa fila, «Usar N · M» y «Mantener» (ResolveForecastChange); y la misma evidencia de la tarjeta de «Revisar proyección»
@@ -109,6 +112,16 @@
                                 <dd class="min-w-0 text-right text-sm whitespace-pre-line" data-readonly-value="notes">{{ $item->notes ?: 'Sin nota' }}</dd>
                             </div>
                         </dl>
+                    @endif
+
+                    @if ($item->package_groups > 0)
+                        @php
+                            $looseGroups = max(0, $item->requested_groups - $item->package_groups);
+                        @endphp
+                        <p class="flex items-start gap-1.5 text-sm" data-testid="panel-packages-{{ $column['campus']?->code ?? 'unica' }}">
+                            <x-icon name="o-rectangle-group" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" />
+                            <span><span class="font-mono font-semibold">{{ $item->package_groups }}</span> de paquetes + <span class="font-mono font-semibold">{{ $looseGroups }}</span> {{ $looseGroups === 1 ? 'suelto' : 'sueltos' }}</span>
+                        </p>
                     @endif
 
                     @php
