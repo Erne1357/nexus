@@ -86,6 +86,10 @@
                         <span class="font-mono text-2xl font-semibold tabular-nums">{{ $item->eligible_students }}</span>
                     </div>
 
+                    @php
+                        $looseGroups = max(0, $item->requested_groups - $item->package_groups);
+                        $looseLabel = $looseGroups === 1 ? 'suelto' : 'sueltos';
+                    @endphp
                     @if ($editing)
                         <x-input label="Alumnos esperados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxExpected) }}" oninput="this.value = this.value.replace(/\D/g, '')"
                             wire:model="form.{{ $item->id }}.expected_students" class="text-right font-mono" data-testid="field-expected" />
@@ -96,6 +100,9 @@
                             </div>
                             <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested('{{ $item->id }}')" spinner="useSuggested('{{ $item->id }}')" data-testid="use-suggested"><span x-text="'Usar sugerido: ' + Math.ceil(Math.max(0, parseInt($wire.form[{{ \Illuminate\Support\Js::from($item->id) }}]?.expected_students) || 0) / {{ $suggestedSize }}) + ' ({{ $suggestedSize }} por grupo)'">Usar sugerido: {{ $suggested[$item->id] ?? 0 }} ({{ $suggestedSize }} por grupo)</span></x-button>
                         </div>
+                        @if ($item->package_groups > 0)
+                            <p class="-mt-1 flex items-start gap-1.5 text-sm" data-testid="panel-packages-{{ $column['campus']?->code ?? 'unica' }}"><x-icon name="o-rectangle-group" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><span><span class="font-mono font-semibold">{{ $item->package_groups }}</span> de paquetes + <span class="font-mono font-semibold">{{ $looseGroups }}</span> {{ $looseLabel }}</span></p>
+                        @endif
                         <x-textarea label="Nota" wire:model="form.{{ $item->id }}.notes" rows="2" maxlength="{{ \App\Modules\AcademicLoad\Rules\ProposalItemRules::MAX_NOTES_LENGTH }}" data-testid="field-notes" />
                     @else
                         <dl class="space-y-2" data-testid="panel-readonly">
@@ -107,21 +114,17 @@
                                 <dt class="{{ $label }}">Grupos solicitados</dt>
                                 <dd class="font-mono text-lg font-semibold tabular-nums" data-readonly-value="requested_groups">{{ $item->requested_groups }}</dd>
                             </div>
+                            @if ($item->package_groups > 0)
+                                <div class="flex items-baseline justify-between gap-3">
+                                    <dt class="{{ $label }}">Grupos de paquetes</dt>
+                                    <dd class="text-right text-sm" data-testid="panel-packages-{{ $column['campus']?->code ?? 'unica' }}"><span class="font-mono font-semibold">{{ $item->package_groups }}</span> de paquetes + <span class="font-mono font-semibold">{{ $looseGroups }}</span> {{ $looseLabel }}</dd>
+                                </div>
+                            @endif
                             <div class="flex items-baseline justify-between gap-3">
                                 <dt class="{{ $label }}">Nota</dt>
                                 <dd class="min-w-0 text-right text-sm whitespace-pre-line" data-readonly-value="notes">{{ $item->notes ?: 'Sin nota' }}</dd>
                             </div>
                         </dl>
-                    @endif
-
-                    @if ($item->package_groups > 0)
-                        @php
-                            $looseGroups = max(0, $item->requested_groups - $item->package_groups);
-                        @endphp
-                        <p class="flex items-start gap-1.5 text-sm" data-testid="panel-packages-{{ $column['campus']?->code ?? 'unica' }}">
-                            <x-icon name="o-rectangle-group" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" />
-                            <span><span class="font-mono font-semibold">{{ $item->package_groups }}</span> de paquetes + <span class="font-mono font-semibold">{{ $looseGroups }}</span> {{ $looseGroups === 1 ? 'suelto' : 'sueltos' }}</span>
-                        </p>
                     @endif
 
                     @php

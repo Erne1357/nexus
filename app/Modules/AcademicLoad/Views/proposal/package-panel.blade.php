@@ -56,7 +56,7 @@
             </div>
             <dl class="space-y-2">
                 @foreach ($columns as $key => $column)
-                    <div class="flex items-baseline justify-between gap-3">
+                    <div class="flex items-center justify-between gap-3">
                         <dt class="flex items-center gap-2 text-sm"><x-academic-load::campus-tag :campus="$column['campus']" /> Cuántos abre {{ $column['campus']?->code ?? 'la modalidad' }}</dt>
                         <dd class="font-mono text-lg font-semibold tabular-nums">{{ ($openPackage['counts'][$key] ?? null)?->count ?? '—' }}</dd>
                     </div>
@@ -109,9 +109,10 @@
                         x-confirm="Sus materias dejan de abrir grupos por este paquete en todos los campus; los grupos sueltos se quedan." :data-confirm-title="'¿Quitar '.$title.'?'" data-confirm-button="Quitar paquete" data-confirm-tone="error"
                         data-testid="package-delete" />
                 @endunless
-                <span class="flex-1"></span>
-                <x-button label="Cancelar" class="btn-ghost max-md:min-h-11" @click="close()" />
-                <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary max-md:min-h-11" spinner="savePackage" data-testid="package-save" />
+                <div class="ms-auto flex gap-2">
+                    <x-button label="Cancelar" class="btn-ghost max-md:min-h-11" @click="close()" />
+                    <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary max-md:min-h-11" spinner="savePackage" data-testid="package-save" />
+                </div>
             </div>
         </x-form>
     @endif

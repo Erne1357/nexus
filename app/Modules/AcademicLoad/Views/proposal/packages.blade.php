@@ -21,7 +21,7 @@
     $open = $proposal->status->isEditable();
     $count = count($columns);
     $label = 'text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral';
-    $figure = 'font-mono text-[22px] font-semibold leading-tight tabular-nums';
+    $figure = 'font-mono text-2xl font-semibold leading-tight tabular-nums';
     $rowTemplate = '10rem minmax(0,1fr) repeat('.$count.', 5.5rem) 2.5rem';
     $statusTone = ['warning' => ['o-exclamation-triangle', 'text-warning'], 'success' => ['o-check-circle', 'text-success'], 'neutral' => [null, 'text-neutral']];
     $termType = $projection->termType();
@@ -64,7 +64,7 @@
                     @endif
                 </h3>
 
-                <div class="grid grid-cols-2 gap-x-5 gap-y-3 @min-[30rem]/column:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.2fr)]">
+                <div class="grid grid-cols-2 gap-x-5 gap-y-3 @min-[30rem]/column:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1.5fr)]">
                     <div class="col-span-2 flex min-w-0 flex-col gap-1 @min-[30rem]/column:col-span-1">
                         <span class="{{ $label }}">Nuevo ingreso</span>
                         @if ($intake === null)
@@ -133,11 +133,11 @@
         </div>
     @else
         <div class="border-t border-base-300" data-testid="packages-list">
-            <div class="hidden min-h-9 items-center gap-x-3.5 bg-base-200 px-5 @min-[48rem]:grid" style="grid-template-columns: {{ $rowTemplate }}" aria-hidden="true">
-                <span class="{{ $label }}">Paquete</span>
-                <span class="{{ $label }}">Materias</span>
+            <div class="hidden min-h-9 items-stretch gap-x-3.5 bg-base-200 px-5 @min-[48rem]:grid" style="grid-template-columns: {{ $rowTemplate }}" aria-hidden="true">
+                <span class="{{ $label }} flex items-center">Paquete</span>
+                <span class="{{ $label }} flex items-center">Materias</span>
                 @foreach ($columns as $column)
-                    <span @class([$label, '-my-2 self-stretch py-2.5 text-right', 'bg-secondary/40 px-2.5' => ! $column['editable']])>{{ $column['campus']?->code ?? 'Alumnos' }}</span>
+                    <span @class([$label, 'flex items-center justify-end', 'bg-secondary/40 px-2.5' => ! $column['editable']])>{{ $column['campus']?->code ?? 'Alumnos' }}</span>
                 @endforeach
                 <span></span>
             </div>

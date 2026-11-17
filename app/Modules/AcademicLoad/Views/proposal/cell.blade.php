@@ -71,6 +71,6 @@
         @endif
     @endif
     @if ($field === 'requested_groups' && $item->package_groups > 0)
-        <span class="text-right font-mono text-[11.5px] leading-tight text-neutral" title="{{ $item->package_groups }} de estos grupos salen de los paquetes; los demás son sueltos." data-package-groups>{{ $item->package_groups }} de <abbr title="paquetes" class="no-underline">paq.</abbr></span>
+        <span class="self-end whitespace-nowrap text-right font-mono text-[11.5px] leading-tight text-neutral" title="{{ $item->package_groups }} de estos grupos salen de los paquetes; los demás son sueltos." data-package-groups>{{ $item->package_groups }} de <abbr title="paquetes" class="no-underline">paq.</abbr></span>
     @endif
 </div>
