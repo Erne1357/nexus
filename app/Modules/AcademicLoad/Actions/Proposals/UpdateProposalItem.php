@@ -32,7 +32,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * fila el valor anterior y el nuevo de lo que cambió y, después del commit, avisa con ProposalItemUpdated. Quién
  * puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla: un coordinador con campus solo corrige las
  * de su campus (M7); quien corrige se recibe como parámetro. En la fila de un campus inactivo solo se dejan en cero los
- * grupos pedidos (zeroRequestedGroups(), M14). Si cambian los esperados o los grupos, la fila queda marcada como corregida
+ * grupos pedidos, también los que salen de paquetes (zeroRequestedGroups(), M14). Los grupos pedidos nunca bajan de los que salen
+ * de paquetes (`package_groups`, tarea 5.6b): una ValidationException sobre `requested_groups` que manda a cambiar los paquetes. Si cambian los esperados o los grupos, la fila queda marcada como corregida
  * (`captured_at` y `captured_by`, tarea 5.5): desde ahí la proyección ya no la mueve sola; la nota sola no cuenta. Ese
  * cambio también borra la marca de revisada (`reviewed_at` y `reviewed_by`, tarea 5.6): lo revisado ya no es lo que hay
  * (supuesto por confirmar). «Usar sugerido» de «Revisar proyección» es useSuggested().
@@ -69,7 +70,7 @@ final class UpdateProposalItem
                 throw ValidationException::withMessages(['item' => ($locked->campus?->code ?? 'La fila').' está activo: corrige la fila como siempre.']);
             }
 
-            return $this->withCapture($locked, ['requested_groups' => 0], $actor);
+            return $this->withCapture($locked, ['requested_groups' => 0, 'package_groups' => 0], $actor);
         });
     }
 
@@ -160,6 +161,11 @@ final class UpdateProposalItem
             $item->setRawAttributes($item->newQuery()->lockForUpdate()->findOrFail($item->getKey())->getAttributes(), sync: true);
 
             $values = $data($item);
+
+            if (isset($values['requested_groups']) && ! array_key_exists('package_groups', $values) && $values['requested_groups'] < $item->package_groups) {
+                throw ValidationException::withMessages(['requested_groups' => "{$item->package_groups} grupos salen de paquetes; cambia los paquetes para bajarlos."]);
+            }
+
             $old = $item->only(array_keys($values));
             $item->fill($values);
             $dirty = array_keys($item->getDirty());

@@ -5,6 +5,7 @@ namespace App\Modules\Scheduling\Actions;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\SuggestedGroups;
@@ -26,7 +27,12 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * la fila. Una fila sin campus (la columna única de una modalidad sin salones, MS5) todavía no da grupos: el grupo sin
  * campus llega con las modalidades sin salones (MS4; supuesto por confirmar).
  *
- * Es idempotente porque lo aceptado ya no cambia: por fila cuenta los grupos que ya nacieron de ella, en cualquier
+ * Los grupos de paquetes (tarea 5.6b; reglas-de-negocio.md, «Propuesta de carrera»): por cada paquete que lleva la materia y cada
+ * uno de los que abre el campus de la fila (n de 1 a la cuenta), un grupo con `package_id` y `package_number = n`, y los
+ * sueltos (`requested_groups` menos `package_groups`) sin paquete. La cohorte del motor es `package:<package_id>:<package_number>`
+ * (fase 6); aquí solo se guarda.
+ *
+ * Es idempotente porque lo aceptado ya no cambia: por fila mira los grupos que ya nacieron de ella, en cualquier
  * estado (un jefe pudo cancelar uno a propósito), y crea solo los que faltan. En una transacción bloquea las filas que
  * lee, así que dos llamadas a la vez no duplican, y toma un bloqueo de aviso por periodo y materia para que las claves
  * provisionales de dos propuestas de carreras distintas no choquen.
@@ -61,10 +67,10 @@ final class CreateGroupsFromProposal
             $created = new Collection;
 
             foreach ($items as $item) {
-                $missing = $item->requested_groups - Group::query()->where('proposal_item_id', $item->getKey())->count();
+                $slots = $this->missingSlots($item);
 
-                if ($missing > 0) {
-                    $created = $created->concat($this->createFor($item, $proposal, $missing, $sizes, $user));
+                if ($slots !== []) {
+                    $created = $created->concat($this->createFor($item, $proposal, $slots, $sizes, $user));
                 }
             }
 
@@ -77,9 +83,56 @@ final class CreateGroupsFromProposal
     }
 
     /**
+     * Los grupos que le faltan a la fila (tarea 5.6b): uno por cada paquete que lleva la materia y cada uno de los que abre
+     * el campus (`package_number` de 1 a la cuenta), más los sueltos (`requested_groups` menos `package_groups`), sin paquete.
+     * Lo que ya nació de la fila, en cualquier estado, no se repite.
+     *
+     * @return list<array{package_id: ?string, package_number: ?int}>
+     */
+    private function missingSlots(ProposalItem $item): array
+    {
+        $existing = Group::query()->where('proposal_item_id', $item->getKey())->get(['package_id', 'package_number']);
+        $taken = $existing->whereNotNull('package_id')->map(fn (Group $group): string => $group->package_id.'|'.$group->package_number)->all();
+        $slots = [];
+
+        $packages = ProposalPackage::query()
+            ->join('proposal_package_subjects as ps', 'ps.proposal_package_id', '=', 'proposal_packages.id')
+            ->join('proposal_package_campuses as pc', 'pc.proposal_package_id', '=', 'proposal_packages.id')
+            ->where('proposal_packages.career_proposal_id', $item->career_proposal_id)
+            ->where('ps.subject_id', $item->subject_id)
+            ->where('pc.campus_id', $item->campus_id)
+            ->where('pc.count', '>', 0)
+            ->orderBy('proposal_packages.position')
+            ->orderBy('proposal_packages.code')
+            ->toBase()
+            ->get(['proposal_packages.id', 'pc.count']);
+
+        $desired = 0;
+
+        foreach ($packages as $package) {
+            for ($number = 1; $number <= $package->count && $desired < $item->package_groups; $number++) {
+                $desired++;
+
+                if (! in_array($package->id.'|'.$number, $taken, true)) {
+                    $slots[] = ['package_id' => $package->id, 'package_number' => $number];
+                }
+            }
+        }
+
+        $loose = max(0, $item->requested_groups - $desired) - $existing->whereNull('package_id')->count();
+
+        for ($i = 0; $i < $loose; $i++) {
+            $slots[] = ['package_id' => null, 'package_number' => null];
+        }
+
+        return $slots;
+    }
+
+    /**
+     * @param  list<array{package_id: ?string, package_number: ?int}>  $slots
      * @return list<Group>
      */
-    private function createFor(ProposalItem $item, CareerProposal $proposal, int $count, SuggestedGroups $sizes, ?User $user): array
+    private function createFor(ProposalItem $item, CareerProposal $proposal, array $slots, SuggestedGroups $sizes, ?User $user): array
     {
         $subject = $item->subject;
 
@@ -92,7 +145,7 @@ final class CreateGroupsFromProposal
         $capacity = $this->capacityFor($subject, $item->campus_id, $sizes);
         $groups = [];
 
-        for ($i = 0; $i < $count; $i++) {
+        foreach ($slots as $slot) {
             $code = GroupCode::provisional($taken);
             $taken[] = $code;
 
@@ -109,6 +162,8 @@ final class CreateGroupsFromProposal
                 'capacity' => $capacity,
                 'status' => GroupStatus::Planned,
                 'proposal_item_id' => $item->getKey(),
+                'package_id' => $slot['package_id'],
+                'package_number' => $slot['package_number'],
             ]);
 
             GroupQuota::query()->create([
@@ -133,6 +188,8 @@ final class CreateGroupsFromProposal
                     'semester' => $group->semester,
                     'capacity' => $group->capacity,
                     'proposal_item_id' => $group->proposal_item_id,
+                    'package_id' => $group->package_id,
+                    'package_number' => $group->package_number,
                 ]])
                 ->log("Creó el grupo {$group->code} de {$subject->name}");
 

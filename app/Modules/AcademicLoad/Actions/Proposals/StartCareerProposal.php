@@ -8,8 +8,10 @@ use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\CareerProposalStarted;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalAvailability;
+use App\Modules\AcademicLoad\Rules\ProposalPackageRules;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -43,7 +45,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * columna, los distintos que son elegibles para alguna de sus materias (`eligible_students_by_campus`, `none` para la
  * columna sin campus), y su suma (`eligible_students`; confirmado el 4 de noviembre de 2026; un alumno es de un solo
  * campus). Deja bitácora de la propuesta, con sus alumnos posibles y sus columnas, y, después
- * del commit, avisa con CareerProposalStarted.
+ * del commit, avisa con CareerProposalStarted. Por cada columna crea también su nuevo ingreso esperado (`proposal_intakes`,
+ * tarea 5.6b; DM-09): el `new_students` de la proyección en las filas de primer semestre de ese campus (el máximo si varían) o 0,
+ * guardado también como sugerido. No crea paquetes: la propuesta nace sin ellos.
  *
  * La propuesta se inserta ignorando la que ya exista (la unicidad por periodo, modalidad y carrera): si otra sesión
  * la armó entre la revisión y la escritura, devuelve esa sin agregarle filas. Quién puede armarla lo decide
@@ -62,6 +66,7 @@ final class StartCareerProposal
         private readonly EligibleStudentsQuery $eligibleStudents,
         private readonly ProposalAvailability $availability,
         private readonly DemandForecastsQuery $forecasts,
+        private readonly ProposalPackageRules $packageRules,
     ) {}
 
     /**
@@ -109,6 +114,19 @@ final class StartCareerProposal
             if ($rows !== []) {
                 ProposalItem::query()->insert($rows);
             }
+
+            ProposalIntake::query()->insert(array_map(function (?Campus $campus) use ($proposal, $forecasts, $now): array {
+                $suggested = $this->packageRules->suggestedNewStudents($forecasts, $campus?->getKey());
+
+                return [
+                    'career_proposal_id' => $proposal->getKey(),
+                    'campus_id' => $campus?->getKey(),
+                    'suggested_new_students' => $suggested,
+                    'new_students' => $suggested ?? 0,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }, $columns));
 
             $proposal->forceFill(['eligible_students' => array_sum($eligible), 'eligible_students_by_campus' => $eligible])->saveQuietly();
 
