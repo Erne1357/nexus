@@ -51,14 +51,6 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
 7. **Coordinadores:** en Campus I hay un coordinador por carrera; **en Campus II uno solo para todas las carreras**. Para el piloto de la fase 4 basta con darle a esa persona un nombramiento de coordinador por cada carrera de Campus II. Si conviene un puesto «coordinador de campus» que cubra todas sus carreras se decide al planear.
    - **Pendiente antes del piloto de Campus II: «apertura por campus»** (M17, decisión del usuario del 13 de noviembre de 2026; todavía no se construye ni está en las reglas). Al abrir el periodo para una modalidad, el admin marca en qué campus se captura; los campus no marcados no tienen columna en la propuesta, grupos, catálogos por validar ni choques, y se pueden agregar campus después. Hoy abrir Presencial cubre todos los campus activos, así que sin esto cada propuesta presencial nace con una columna de C1 llena con los grupos sugeridos que el coordinador de C2 no puede cambiar.
 
-### Respuestas del usuario (16 de noviembre de 2026) · Riel C
-
-- **C1, parámetros de demanda:** Subdirección cambia únicamente los parámetros de demanda y ve los demás en solo lectura. El admin sigue cambiándolos todos. Cada parámetro declara, si le corresponde, el permiso de su módulo que deja cambiarlo (5.8).
-- **C2, qué tan confiable es la proyección:** con un error medio de 15 % o menos, la proyección se presenta como sugerencia fuerte; por encima de ese error, como simple referencia (5.9).
-- **C3, quién ve el reporte de precisión:** lo ven Subdirección y el admin.
-- **C4, datos de la 5.10:** la prueba con datos reales se hace con una copia local de esos datos, que no sale de la máquina ni entra al repositorio.
-- **C5, recalcular al guardar:** guardar un parámetro de demanda recalcula en segundo plano la proyección de los periodos abiertos, sin que el usuario espere.
-
 ### Ajustes a las tareas
 
 - **Regla del mapa para toda la fase: Demand calcula; lo que compara con las propuestas o con lo publicado vive en AcademicLoad.** Demand está a la izquierda de AcademicLoad (`Students --> Demand --> AcademicLoad`), así que no lee `proposal_items`, `load_snapshots`, `LoadSnapshot` ni `SiiLoadExport`. Es lo mismo que pasa con `SuggestedGroups` en la 5.3.
@@ -147,6 +139,14 @@ Antes que todo, A mezcla a `develop` un PR chico con lo que los tres necesitan (
 4. **Tamaños objetivo:** bastan los dos, normal y con laboratorio.
 
 Queda como supuesto por confirmar que la proyección no calcula cursos de verano. «Coordinador de campus» ya no es pregunta: lo resolvió M5 (#464), con coordinador = carreras + modalidad, campus opcional y varias carreras por persona.
+
+### Respuestas del usuario (16 de noviembre de 2026) · Riel C
+
+- **C1, parámetros de demanda:** Subdirección cambia únicamente los parámetros de demanda y ve los demás en solo lectura. El admin sigue cambiándolos todos. Cada parámetro declara, si le corresponde, el permiso de su módulo que deja cambiarlo (5.8).
+- **C2, qué tan confiable es la proyección:** con un error medio de 15 % o menos, la proyección se presenta como sugerencia fuerte; por encima de ese error, como simple referencia (5.9).
+- **C3, quién ve el reporte de precisión:** lo ven Subdirección y el admin.
+- **C4, datos de la 5.10:** la prueba con datos reales se hace con una copia local de esos datos, que no sale de la máquina ni entra al repositorio.
+- **C5, recalcular al guardar:** guardar un parámetro de demanda recalcula en segundo plano la proyección de los periodos abiertos, sin que el usuario espere.
 
 ## Alcance
 
