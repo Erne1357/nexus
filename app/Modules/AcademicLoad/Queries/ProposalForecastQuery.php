@@ -4,7 +4,6 @@ namespace App\Modules\AcademicLoad\Queries;
 
 use App\Modules\AcademicLoad\Enums\ForecastReason;
 use App\Modules\AcademicLoad\Enums\SuggestionState;
-use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
 use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Models\DemandForecast;

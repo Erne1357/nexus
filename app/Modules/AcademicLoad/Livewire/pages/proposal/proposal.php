@@ -2,10 +2,13 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Actions\Proposals\MarkProposalItemReviewed;
+use App\Modules\AcademicLoad\Actions\Proposals\ResolveForecastChange;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\ForecastReason;
 use App\Modules\AcademicLoad\Enums\ProposalLock;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -14,15 +17,20 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
+use App\Modules\AcademicLoad\Queries\ProposalForecastReview;
+use App\Modules\AcademicLoad\Queries\ProposalForecastRow;
 use App\Modules\AcademicLoad\Queries\ProposalHeader;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\AcademicLoad\Queries\ProposalSubject;
+use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Support\SemesterGrid;
+use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -55,21 +63,45 @@ use Mary\Traits\Toast;
  * carrera (M6). Todo lo que muestra sale de
  * CareerProposalQuery::overview; las escrituras pasan por UpdateProposalItem y SubmitCareerProposal, con la policy de
  * la propuesta o de la fila antes de cada una.
+ *
+ * Con la proyección de Demand (tarea 5.6, opción C «Revisión de la proyección», elegida por el usuario el 17 de noviembre de
+ * 2026; ProposalForecastQuery): el encabezado dice de cuándo es; la tabla y la retícula marcan cada materia (Sugerido,
+ * Corregido, Cambió y la diferencia grande); un aviso dice si la proyección cambió en filas que el coordinador corrigió; y
+ * dos pestañas separan «Propuesta» (la retícula o la tabla) de «Revisar proyección (N)» (`?vista=revisar`, filtro
+ * `?motivo=cambio|aparta|especialidad|sin-historia`): una tarjeta por fila pendiente de las columnas que el usuario corrige
+ * (o de todas, de solo lectura, si no corrige ninguna), con su evidencia y sus acciones (ResolveForecastChange,
+ * UpdateProposalItem::useSuggested y MarkProposalItemReviewed, cada una con CareerProposalPolicy::update sobre la fila,
+ * M7), 20 a la vez. Sin proyección para la propuesta, el encabezado lo dice y nada más cambia.
  */
 new #[Title('Propuesta de carrera')] class extends Component
 {
     use Toast;
     use WithModalityScope;
 
-    private const array VIEWS = ['reticula', 'tabla'];
+    private const array VIEWS = ['reticula', 'tabla', 'revisar'];
+
+    /** Cuántas tarjetas de «Revisar proyección» se pintan de una vez. */
+    private const int REVIEW_PAGE = 20;
 
     private const array GROUP_FILTERS = ['', 'con', 'sin'];
 
     private const array CELL_FIELDS = ['expected_students', 'requested_groups'];
 
-    /** 'reticula' o 'tabla'; otro valor muestra la retícula. */
+    /** 'reticula', 'tabla' o 'revisar' (la pestaña «Revisar proyección»); otro valor muestra la retícula. */
     #[Url(as: 'vista')]
     public string $view = 'reticula';
+
+    /** El motivo que filtra «Revisar proyección» (ForecastReason::filter()); '' todos. */
+    #[Url(as: 'motivo')]
+    public string $reason = '';
+
+    /** La vista de la pestaña «Propuesta» a la que se vuelve desde «Revisar proyección». */
+    #[Locked]
+    public string $lastView = 'reticula';
+
+    /** Cuántas tarjetas de «Revisar proyección» se pintan; «Mostrar más» suma otras 20. */
+    #[Locked]
+    public int $reviewLimit = self::REVIEW_PAGE;
 
     /** Código del departamento resaltado; '' ninguno. */
     #[Url(as: 'depto')]
@@ -162,6 +194,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         abort_unless($context->allowsAny(AcademicLoadPermission::ProposalView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'reticula';
+        $this->lastView = $this->view === 'revisar' ? 'reticula' : $this->view;
+        $this->reason = ForecastReason::fromFilter($this->reason)?->filter() ?? '';
         $this->groupsFilter = in_array($this->groupsFilter, self::GROUP_FILTERS, true) ? $this->groupsFilter : '';
         $this->resolve($context, $proposals);
     }
@@ -179,7 +213,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
+        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors', 'reason', 'reviewLimit');
         $this->resolve($context, $proposals);
     }
 
@@ -190,6 +224,118 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->editedRows = [];
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'reticula';
         $this->cellErrors = [];
+        $this->reviewLimit = self::REVIEW_PAGE;
+
+        if ($this->view !== 'revisar') {
+            $this->lastView = $this->view;
+        }
+    }
+
+    /**
+     * La pestaña «Propuesta»: la retícula o la tabla en que estaba.
+     */
+    public function showProposal(): void
+    {
+        $this->setView($this->lastView);
+    }
+
+    /**
+     * El filtro de «Revisar proyección» («Todas · La proyección cambió · Se aparta del sugerido · Especialidad · Sin
+     * historia»); un valor que no es un motivo es «Todas».
+     */
+    public function filterReason(string $filter): void
+    {
+        $this->reason = ForecastReason::fromFilter($filter)?->filter() ?? '';
+        $this->reviewLimit = self::REVIEW_PAGE;
+    }
+
+    public function showMoreReviews(): void
+    {
+        $this->reviewLimit += self::REVIEW_PAGE;
+    }
+
+    /**
+     * «Revisar: …» de una materia en la tabla o la retícula: abre «Revisar proyección» sin filtro, con las tarjetas
+     * necesarias para que se vea la de esa fila, y la lleva a la vista (`proposal-focus`).
+     */
+    public function reviewItem(string $id, CareerProposalQuery $proposals, ProposalForecastQuery $forecasts): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $overview = $proposals->overview($proposal, withPendingCatalogs: false);
+        $review = $forecasts->review($overview, DemandSettings::fromSettings());
+
+        $this->setView('revisar');
+        $this->reason = '';
+        $position = array_search($item->id, array_map(fn (ProposalForecastRow $row): string => $row->item->id, $review->pending($this->reviewKeys($overview))), true);
+
+        if ($position !== false) {
+            $this->reviewLimit = max(self::REVIEW_PAGE, (intdiv($position, self::REVIEW_PAGE) + 1) * self::REVIEW_PAGE);
+        }
+
+        $this->dispatch('proposal-focus', id: "review-{$item->id}");
+    }
+
+    /**
+     * «Usar N» o «Mantener» en una fila cuya proyección cambió (ResolveForecastChange); solo en una fila que el usuario
+     * corrige (M7).
+     */
+    public function resolveChange(string $id, string $choice, CareerProposalQuery $proposals, ResolveForecastChange $resolve): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
+
+        try {
+            $resolved = $resolve->handle($item, $choice, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e);
+
+            return;
+        }
+
+        $this->success($choice === ResolveForecastChange::USE ? 'Usaste lo que sugiere Nexus' : 'Mantuviste lo que capturaste', e($this->rowText($resolved)));
+    }
+
+    /**
+     * «Usar sugerido» en una fila corregida que se aparta del sugerido (UpdateProposalItem::useSuggested; M7).
+     */
+    public function applySuggestion(string $id, CareerProposalQuery $proposals, UpdateProposalItem $update): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
+
+        try {
+            $applied = $update->useSuggested($item, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e);
+
+            return;
+        }
+
+        $this->keepRow($applied->subject_id);
+        $this->success('Usaste lo que sugiere Nexus', e($this->rowText($applied)));
+    }
+
+    /**
+     * «Está bien» o «Dejar»: la fila queda revisada sin cambiar sus cifras (MarkProposalItemReviewed; M7).
+     */
+    public function markReviewed(string $id, CareerProposalQuery $proposals, MarkProposalItemReviewed $mark): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
+
+        try {
+            $reviewed = $mark->handle($item, auth()->user());
+        } catch (ValidationException $e) {
+            $this->report($e);
+
+            return;
+        }
+
+        $this->success('Materia revisada', e($this->rowText($reviewed)));
     }
 
     /**
@@ -480,23 +626,30 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(CareerProposalQuery $proposals): array
+    public function with(CareerProposalQuery $proposals, ProposalForecastQuery $forecasts): array
     {
         if ($this->proposalId === null) {
             return ['proposal' => null, 'overview' => null, ...$this->modalityViewData()];
         }
 
         $proposal = $this->authorizedProposal('view', $proposals);
-        $overview = ($this->showSubmit ? null : $this->fresh) ?? $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
+        $settings = DemandSettings::fromSettings();
+        $overview = ($this->showSubmit ? null : $this->fresh)
+            ?? $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit, anomalies: new ProposalAnomalies($settings->minGroupSize));
         $this->fresh = null;
         $walk = $this->walk($overview);
         $departments = $overview->departments();
         $gridSemesters = $overview->gridSemesters();
         $selected = $this->subjectId === null ? null : $overview->subject($this->subjectId);
-        $rule = SuggestedGroups::fromSettings();
+        $rule = $settings->groupSizes;
         $header = $overview->header((string) config('app.timezone'));
         $viewerId = auth()->id() === null ? null : (string) auth()->id();
         $columns = $this->columns($overview, $header);
+        $projection = $forecasts->review($overview, $settings);
+
+        if (! $projection->hasForecast() && $this->view === 'revisar') {
+            $this->setView($this->lastView);
+        }
 
         $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
 
@@ -558,7 +711,78 @@ new #[Title('Propuesta de carrera')] class extends Component
             'selected' => $selected,
             'maxExpected' => ProposalItemRules::MAX_EXPECTED_STUDENTS,
             'maxGroups' => ProposalItemRules::MAX_REQUESTED_GROUPS,
+            ...$this->forecastViewData($overview, $projection, $header, $columns, $selected, $forecasts),
         ];
+    }
+
+    /**
+     * Lo de la proyección para la vista (tarea 5.6): la revisión (`projection`), las columnas cuyas filas cuenta y marca
+     * (`reviewKeys`: las que el usuario corrige, o todas si no corrige ninguna), lo pendiente por motivo, cuántas filas
+     * suyas cambiaron (el aviso de recálculo, solo mientras la propuesta se edita) y, en «Revisar proyección», las tarjetas
+     * a la vista, las revisadas y lo de las otras columnas. El historial (`forecastHistory`) se lee una vez para las
+     * tarjetas a la vista y las filas del panel abierto.
+     *
+     * @param  array<string, array{campus: ?Campus, editable: bool, zeroable: bool, zeroAlert: bool, readonly: ?string}>  $columns
+     * @return array<string, mixed>
+     */
+    private function forecastViewData(ProposalOverview $overview, ProposalForecastReview $projection, ProposalHeader $header, array $columns, ?ProposalSubject $selected, ProposalForecastQuery $forecasts): array
+    {
+        $own = array_map('strval', array_keys(array_filter($columns, fn (array $column): bool => $column['editable'])));
+        $keys = $own !== [] ? $own : array_map('strval', array_keys($columns));
+        $reason = ForecastReason::fromFilter($this->reason);
+        $pending = $this->view === 'revisar' ? $projection->pending($keys, $reason) : [];
+        $cards = array_slice($pending, 0, $this->reviewLimit);
+        $panelRows = $this->showDrawer && $selected !== null
+            ? array_values(array_filter(array_map(fn (ProposalItem $item): ?ProposalForecastRow => $projection->row($item), $selected->items())))
+            : [];
+        $evidence = [...$cards, ...$panelRows];
+
+        return [
+            'projection' => $projection,
+            'forecastLine' => $projection->headerLine((string) config('app.timezone')),
+            'reviewKeys' => $keys,
+            'reviewCounts' => $projection->counts($keys),
+            'recalculated' => $overview->proposal->status->isEditable() && $own !== [] ? $projection->changed($own) : 0,
+            'canReview' => $overview->proposal->status->isEditable() && $own !== [],
+            'reviewCards' => $cards,
+            'reviewMore' => min(self::REVIEW_PAGE, count($pending) - count($cards)),
+            'reviewedRows' => $this->view === 'revisar' ? $projection->reviewed($keys, $reason) : [],
+            'reviewOthers' => $own === [] || $this->view !== 'revisar' ? [] : array_values(array_map(
+                fn (string $key): string => $header->pendingReviewLine($key, count($projection->pending([$key]))),
+                array_diff(array_keys($columns), $own),
+            )),
+            'reasons' => ForecastReason::cases(),
+            'forecastHistory' => $evidence === [] ? [] : $forecasts->history($projection, $evidence),
+        ];
+    }
+
+    /**
+     * Las columnas que cuenta y revisa el usuario (ProposalOverview::columnKey): las que corrige (M7) o, si no corrige
+     * ninguna, todas, de solo lectura.
+     *
+     * @return list<string>
+     */
+    private function reviewKeys(ProposalOverview $overview): array
+    {
+        $samples = [];
+
+        foreach ($overview->subjects() as $subject) {
+            $samples += $subject->cells;
+        }
+
+        $own = array_keys(array_filter($samples, fn (ProposalItem $item): bool => Gate::allows('update', [$overview->proposal, $item])));
+
+        return $own !== [] ? array_map('strval', $own) : array_map(fn (?Campus $campus): string => ProposalOverview::columnKey($campus), $overview->columns);
+    }
+
+    /**
+     * «ACF-0901 en C1: 70 · 3», lo que dice el aviso de una acción de «Revisar proyección».
+     */
+    private function rowText(ProposalItem $item): string
+    {
+        $item->loadMissing(['subject' => fn ($query) => $query->withTrashed(), 'campus' => fn ($query) => $query->withTrashed()]);
+
+        return "{$item->subject->code}".($item->campus === null ? '' : " en {$item->campus->code}").": {$item->expected_students} · {$item->requested_groups}";
     }
 
     /**
