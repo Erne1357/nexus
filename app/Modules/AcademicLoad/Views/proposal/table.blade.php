@@ -139,7 +139,7 @@
                         @class(['space-y-2 px-4 py-3 outline-none [&:not(:nth-child(2))]:border-t border-base-300 data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-error', $rowTone])>
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0 flex-1 space-y-0.5">
-                                @include('academic-load::proposal.subject-cell', ['row' => $row, 'code' => $code, 'part' => $part])
+                                @include('academic-load::proposal.subject-cell', ['row' => $row, 'code' => $code, 'part' => $part, 'inCard' => true])
                             </div>
                             @include('academic-load::proposal.open-button', ['row' => $row])
                         </div>

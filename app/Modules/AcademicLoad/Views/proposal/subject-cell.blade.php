@@ -7,7 +7,8 @@
     Con la proyección (tarea 5.6, opción C), la marca de sus filas en las columnas del usuario (ProposalForecastReview::mark),
     con icono, texto para lectores de pantalla y `title`: «Sugerido» (sigue a la proyección), «Corregido» o «Cambió» antes de
     la clave; o, si tiene algo por revisar y el usuario lo puede revisar, «Revisar: <motivo> y N más» bajo el nombre, que
-    lleva a su tarjeta (`reviewItem`). Lleva `data-forecast-mark` para las pruebas.
+    lleva a su tarjeta (`reviewItem`). Lleva `data-forecast-mark` para las pruebas; en la ficha angosta (`$inCard`) sin
+    repetir el `data-testid`.
 --}}
 @php
     $anomalies = $overview->subjectAnomalies($row);
@@ -47,7 +48,7 @@
                 default => 'border-base-300 bg-base-200 text-neutral',
             };
         @endphp
-        <button type="button" wire:click="reviewItem('{{ $reviewChip['item'] }}')" data-forecast-mark="review" data-testid="review-chip-{{ $row->subject->code }}"
+        <button type="button" wire:click="reviewItem('{{ $reviewChip['item'] }}')" data-forecast-mark="review" @if (! ($inCard ?? false)) data-testid="review-chip-{{ $row->subject->code }}" @endif
             class="mt-1 inline-flex min-h-6 max-w-full items-center gap-1.5 rounded-selector border px-2 py-0.5 text-left text-[12.5px] font-medium hover:underline hover:underline-offset-2 max-md:min-h-11 {{ $chipTone }}">
             <x-icon :name="$chipReason->icon()" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>Revisar: {{ mb_strtolower($chipReason->label()) }}{{ $reviewChip['more'] > 0 ? ' y '.$reviewChip['more'].' más' : '' }}</span>
