@@ -12,6 +12,7 @@ use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\DB;
@@ -92,6 +93,8 @@ function dimensionTables(): array
         'staffing.teacher' => 'group_teacher_assignments',
         'staffing.teacher_load' => 'teacher_term_loads',
         'staffing.change_request' => 'change_requests',
+        'solver.department_run' => 'solver_runs',
+        'solver.career_run' => 'solver_runs',
     ];
 }
 
@@ -233,6 +236,7 @@ $enums = [
     CatalogValidationPermission::class,
     AcademicLoadPermission::class,
     SchedulingPermission::class,
+    SolverPermission::class,
     StaffingPermission::class,
 ];
 
