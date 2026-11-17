@@ -15,6 +15,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Jobs\ComputeDemandForecasts;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
@@ -49,8 +50,9 @@ it('CV9: abrir el periodo ya no crea revisiones ni avisa a los jefes', function 
     app(OpenTerm::class)->handle($term, modalityOf('PRES'));
 
     expect(CatalogReview::query()->where('term_id', $term->id)->count())->toBe(0)
-        ->and(CatalogReview::query()->where('term_id', $this->term->id)->count())->toBe(0);
-    Queue::assertNothingPushed();
+        ->and(CatalogReview::query()->where('term_id', $this->term->id)->count())->toBe(0)
+        // Lo único que encola la apertura es la proyección de demanda (tarea 5.4): ningún aviso a los jefes.
+        ->and(array_keys(Queue::pushedJobs()))->toBe([ComputeDemandForecasts::class]);
 });
 
 it('CV9: abrir crea las revisiones solo de los catálogos elegidos en cada departamento activo', function () {

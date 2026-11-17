@@ -102,7 +102,7 @@ it('el admin ve una tarjeta por módulo con sus parámetros, su valor por omisi�
 
     expect(textOf($dom->querySelector('[data-testid="settings-staffing"] h2')))->toBe('Asignación docente')
         ->and(textOf($dom->querySelector('[data-testid="settings-scheduling"] h2')))->toBe('Horarios')
-        ->and(textOf($dom->querySelector('[data-testid="settings-academic_load"] h2')))->toBe('Carga académica')
+        ->and(textOf($dom->querySelector('[data-testid="settings-demand"] h2')))->toBe('Proyección de demanda')
         ->and(textOf($dom->querySelector('[data-testid="setting-staffing.min_campus_travel_minutes"]')))
         ->toContain('Minutos mínimos para cambiar de campus')->toContain('Por omisión: 60 minutos')
         ->and($dom->querySelector('[data-testid="setting-staffing.weights"] input[type="number"]'))->not->toBeNull()
@@ -197,7 +197,7 @@ it('CF-03: con solo «ver», las tarjetas se pintan en solo lectura y las accion
 
     Livewire::actingAs($user)->test('core::pages.settings')
         ->set('values.demand__min_group_size', '20')
-        ->call('save', 'academic_load')->assertForbidden();
+        ->call('save', 'demand')->assertForbidden();
     Livewire::actingAs($user)->test('core::pages.settings')
         ->call('resetToDefault', 'demand.min_group_size')->assertForbidden();
 

@@ -1,6 +1,6 @@
 # Fase 5 — Proyección de demanda
 
-**Entrega:** R2 · **Ventana:** feb 2027 · **Modo:** paralelo · **Estado:** ⬜ · **Milestone:** `Fase 5 — Proyección de demanda`
+**Entrega:** R2 · **Ventana:** feb 2027 · **Modo:** paralelo · **Estado:** 🟨 (abierta el 16 de noviembre de 2026) · **Milestone:** `Fase 5 — Proyección de demanda`
 
 ## Objetivo
 
@@ -90,6 +90,64 @@ Se escribió durante la fase 4, para que la fase 5 arranque con lo que hoy exist
 
 Como en la tabla «Reparto»: A el núcleo de Demand (5.1–5.4), B la precarga y las pantallas (5.5–5.7) y C los parámetros, la evaluación y los datos (5.8–5.10). Acordado por los tres rieles el 10 de noviembre de 2026.
 
+## Arranque (16 de noviembre de 2026)
+
+El usuario abrió la fase con tres rieles en sesiones paralelas, con el reparto de abajo. Cada riel trabaja en su rama padre, que sale de `develop`, y en su propio puerto y base, para no chocar al ver pantallas o correr pruebas:
+
+| Riel | Tareas | Rama padre | Puertos | Bases |
+|---|---|---|---|---|
+| A | 5.1 → 5.4, núcleo de Demand | `riel/demanda-a` | 8091, 8092 | `nexus_demo_a`, `nexus_massive_a`, `nexus_test_a*` |
+| B | 5.5 → 5.7, precarga y pantallas | `riel/demanda-b` | 8093, 8094 | `nexus_demo_b`, `nexus_massive_b`, `nexus_test_b*` |
+| C | 5.8 → 5.10, parámetros, evaluación y datos | `riel/demanda-c` | 8097, 8098 | `nexus_demo_c`, `nexus_massive_c`, `nexus_test_c*` |
+
+Los puertos 8095 y 8096 son de la tarea 1.16, que sigue en otra sesión.
+
+### Ronda 0: contratos entre rieles
+
+Antes que todo, A mezcla a `develop` un PR chico con lo que los tres necesitan (5.1). Así B y C salen de `develop` con las mismas firmas:
+
+- **Módulo `Demand`** con su provider, entre CatalogValidation y AcademicLoad en `bootstrap/providers.php`.
+- **`demand_forecasts`**, con sus columnas en el [modelo de datos](../dominio/modelo-de-datos.md#demand-r2). La llave es periodo, modalidad, campus, carrera y materia; desde #464 la propuesta es por carrera y modalidad, con filas por campus.
+- **`Demand\Rules\DemandSettings`**:
+  - lee los cuatro parámetros `demand.*`: `history_terms` 4, `target_group_size` 35 y 25, `min_group_size` 10 y `highlight_threshold` 20 %;
+  - declara sus definiciones para la pantalla «Parámetros» (CF-S7). Antes las declaraba AcademicLoad;
+  - con `isLargeDifference()` decide qué diferencia se resalta en la 5.6 y la 5.7.
+- **`SuggestedGroups`** se mueve de AcademicLoad a `Demand\Rules`, como pedía la 5.3. AcademicLoad, Scheduling y Staffing lo importan desde ahí. `ProposalAnomalies` se queda en AcademicLoad y lee su clave de `DemandSettings`.
+- **`DemandForecaster`**, la fórmula pura (versión `v1`). Recibe un `ForecastInput` con las tasas de `SubjectRates` y da un `ForecastResult`.
+- **Lecturas para B y C**:
+  - `DemandForecastsQuery::forCareer(Term, Modality, Career)`: por materia y, dentro, por campus;
+  - `DemandForecastsQuery::forDepartment(Term, Modality, Department)`: las materias del departamento con las filas de todas las carreras y campus;
+  - `TermOccupancyQuery::forTerm(string $termCode, Modality, ?Campus)`: la ocupación real de un periodo por carrera, campus y materia;
+  - `TermOccupancyQuery::history(string $targetTermCode, Modality, array $subjectIds, int $terms)`: los periodos del mismo tipo anteriores a uno, por materia, periodo y campus.
+- **Evento `DemandForecastsComputed`** (periodo, modalidad, campus o todos, carreras), después del commit. Lo despacha el job de la 5.4. AcademicLoad lo escucha para poner al día las propuestas en borrador (5.5).
+
+### Cómo quedó el núcleo de Demand (A, 5.1 a 5.4)
+
+- **Reconstrucción de elegibles** (`Demand\Rules\StandingCalculator`, pura): lo que un alumno podía cursar al inicio de un periodo, desde su kárdex y la retícula de su plan (`PlanGrid::progressFor`, la misma regla de R1).
+  - Lo que cursa cuenta como aprobado (DM-01).
+  - Su semestre es uno más los semestres ordinarios con kárdex (DM-10).
+  - Tiene un modo «como si» para la 5.9.
+- **Tasas** (`HistoricalRatesQuery`): por materia y campus, sumando la ventana del mismo tipo (DM-03). Sin historia, la del departamento (DM-04); además, el nuevo ingreso histórico (DM-05).
+- **Cálculo** (`Demand\Actions\RefreshDemandForecasts`):
+  - `compute()` no escribe y tiene el modo `asIf`;
+  - `handle()` reemplaza las filas del periodo y la modalidad y avisa con `DemandForecastsComputed`;
+  - el alcance (`ForecastScopeQuery`) es la misma selección que la propuesta de carrera.
+- **Cuándo se recalcula:** `Demand\Jobs\ComputeDemandForecasts` es único por periodo, modalidad y campus.
+  - Lo encola la apertura del periodo (`TermOpened`, después del commit).
+  - También lo encola el recálculo del avance de los alumnos, con el evento nuevo de Students `StudentProgressRefreshed`. Demand no puede escuchar a Imports, porque está a su derecha en el mapa, así que esta es la señal de que llegó kárdex nuevo.
+  - Recalcula los periodos abiertos del actual en adelante (`ForecastTargetsQuery`).
+- **Demo:** `demo:seed` corre con la cola síncrona, así que la proyección nace al abrir el periodo. Desde el punto `propuesta`, una revisión exige proyección en cada modalidad abierta.
+  - Con el masivo (12 006 alumnos y 354 918 filas de kárdex), abrir Ene-Jun 2027 con la proyección tarda 12.5 s, y llegar a `propuesta`, 78 s.
+
+### Respuestas del usuario (16 de noviembre de 2026)
+
+1. **Seriación en curso:** al proyectar, quien cursa hoy la seriación de una materia cuenta como si la aprobara («el escenario ideal»). Más adelante se quiere ver cómo mitigar y prevenir considerando a los que no la pasan. Por eso cuántos dependen de eso se guarda aparte (`pending_prerequisite_students`).
+2. **Nuevo ingreso:** para la parte de nuevo ingreso de primer semestre, Nexus precarga el ingreso histórico: el promedio de alumnos que ingresaron a la carrera en ese campus en los últimos periodos del mismo tipo, más los rezagados que da la fórmula. El coordinador lo corrige.
+3. **Paquetes de primer semestre:** en la propuesta, el coordinador captura cuántos paquetes abre por campus, y cada paquete abre un grupo de cada materia del paquete. Los horarios sin choque entre las materias de un paquete son de la fase 6 y asignar alumnos a cada paquete, de la 9.
+4. **Tamaños objetivo:** bastan los dos, normal y con laboratorio.
+
+Queda como supuesto por confirmar que la proyección no calcula cursos de verano. «Coordinador de campus» ya no es pregunta: lo resolvió M5 (#464), con coordinador = carreras + modalidad, campus opcional y varias carreras por persona.
+
 ## Alcance
 
 ### Incluye
@@ -109,10 +167,10 @@ Como en la tabla «Reparto»: A el núcleo de Demand (5.1–5.4), B la precarga 
 
 | Id | Tarea | Módulo | Dónde y por qué | Pruebas | Persona |
 |---|---|---|---|---|---|
-| 5.1 | Modelo y migración de `demand_forecasts` (periodo, campus, carrera, materia, elegibles, tasa histórica, esperados, grupos sugeridos, método, fecha de cálculo) con unicidad por periodo, campus, carrera y materia | Demand | Modelo de datos. Una fila por combinación para que la precarga y la comparación sean consultas directas; `method` registra con qué versión de la fórmula se calculó. | Unit: relaciones y unicidad | A |
-| 5.2 | Tasas históricas por materia y campus: cálculo de tasa de no inscripción (elegibles que no cursaron) y tasa de reprobación (cursaron y no aprobaron) sobre los últimos `demand.history_terms` periodos a partir de `kardex_records` y `student_progress` históricos | Demand | `Demand/Queries/HistoricalRatesQuery`. Separar la consulta del cálculo permite probar las tasas con fixtures de kardex sin tocar la fórmula. Materias sin historial usan la tasa promedio de su departamento, y se marca `method` = `fallback`. | Unit con kardex sintético de 4 periodos: tasas conocidas, materia nueva sin historial, materia con un solo periodo | A |
-| 5.3 | Fórmula de proyección: `expected_students` = elegibles × (1 − tasa de no inscripción) + repetidores esperados (alumnos cursando ahora × tasa de reprobación); `suggested_groups` = techo de esperados entre `demand.target_group_size` según `subjects.kind` y `needs_lab` | Demand | `Demand/Rules/DemandForecaster` como clase pura, sin acceso a base de datos. Es la regla de `reglas-de-negocio.md`; vive aislada para poder cambiarla y versionarla sin tocar jobs ni pantallas. | Unit: casos con tamaño objetivo por tipo, redondeos, cero elegibles, materias de especialidad | A |
-| 5.4 | Job `ComputeDemandForecasts` por periodo y campus, encolado al abrir periodo (evento `TermOpened`) y al aplicar una importación de kardex (evento `BatchApplied` de plantilla `kardex`); recalcula solo las carreras del campus afectado | Demand | `Demand/Jobs/`. Respeta la dirección de dependencias: `Demand` escucha eventos de `Core` e `Imports`, nunca al revés. Idempotente: reemplaza las filas del periodo y campus. | Feature: ambos eventos encolan el job; segunda corrida no duplica filas | A |
+| 5.1 ✅ [#511](https://github.com/Erne1357/nexus/pull/511) | Modelo y migración de `demand_forecasts` (periodo, campus, carrera, materia, elegibles, tasa histórica, esperados, grupos sugeridos, método, fecha de cálculo) con unicidad por periodo, campus, carrera y materia | Demand | Modelo de datos. Una fila por combinación para que la precarga y la comparación sean consultas directas; `method` registra con qué versión de la fórmula se calculó. | Unit: relaciones y unicidad | A |
+| 5.2 ✅ [#521](https://github.com/Erne1357/nexus/pull/521) | Tasas históricas por materia y campus: cálculo de tasa de no inscripción (elegibles que no cursaron) y tasa de reprobación (cursaron y no aprobaron) sobre los últimos `demand.history_terms` periodos a partir de `kardex_records` y `student_progress` históricos | Demand | `Demand/Queries/HistoricalRatesQuery`. Separar la consulta del cálculo permite probar las tasas con fixtures de kardex sin tocar la fórmula. Materias sin historial usan la tasa promedio de su departamento, y se marca `method` = `fallback`. | Unit con kardex sintético de 4 periodos: tasas conocidas, materia nueva sin historial, materia con un solo periodo | A |
+| 5.3 ✅ [#524](https://github.com/Erne1357/nexus/pull/524) | Fórmula de proyección: `expected_students` = elegibles × (1 − tasa de no inscripción) + repetidores esperados (alumnos cursando ahora × tasa de reprobación); `suggested_groups` = techo de esperados entre `demand.target_group_size` según `subjects.kind` y `needs_lab` | Demand | `Demand/Rules/DemandForecaster` como clase pura, sin acceso a base de datos. Es la regla de `reglas-de-negocio.md`; vive aislada para poder cambiarla y versionarla sin tocar jobs ni pantallas. | Unit: casos con tamaño objetivo por tipo, redondeos, cero elegibles, materias de especialidad | A |
+| 5.4 ✅ [#526](https://github.com/Erne1357/nexus/pull/526) | Job `ComputeDemandForecasts` por periodo y campus, encolado al abrir periodo (evento `TermOpened`) y al aplicar una importación de kardex (evento `BatchApplied` de plantilla `kardex`); recalcula solo las carreras del campus afectado | Demand | `Demand/Jobs/`. Respeta la dirección de dependencias: `Demand` escucha eventos de `Core` e `Imports`, nunca al revés. Idempotente: reemplaza las filas del periodo y campus. | Feature: ambos eventos encolan el job; segunda corrida no duplica filas | A |
 | 5.5 | Precarga de `proposal_items`: al crear o abrir una `career_proposal` en `draft`, `AcademicLoad` lee `demand_forecasts` y rellena elegibles, esperados y grupos solicitados; los valores precargados se marcan como sugeridos hasta que el coordinador los confirma o edita | AcademicLoad, Demand | Action `PrefillProposalFromDemand` en `AcademicLoad` (que sí puede depender de `Demand`). Guarda el valor sugerido junto al capturado para medir después cuánto corrige la gente. | Feature: propuesta nueva nace precargada; una propuesta ya `submitted` no se toca | B |
 | 5.6 | Pantalla del coordinador: en la propuesta de carrera, por materia, columnas de elegibles, esperados por Nexus, esperados capturados, grupos sugeridos y grupos pedidos, más el histórico de los últimos periodos (grupos abiertos, cupo y ocupación real desde los snapshots); resaltar diferencias grandes entre sugerido y capturado | AcademicLoad | Extiende `career-proposal` de la fase 2. El coordinador necesita ver la evidencia para confiar o corregir, no solo un número. La ocupación histórica sale de `load_snapshots` de R1 (y de la importación de grupos del SII si se decide cargarla). | Feature: columnas correctas por alcance; browser: corregir un esperado y pedir un grupo más | B |
 | 5.7 | Tablero de demanda del departamento: por materia que imparte el departamento, demanda agregada de todas las carreras y campus (elegibles, esperados, grupos sugeridos vs. pedidos), para dimensionar docentes y laboratorios antes de que lleguen las propuestas | Demand | `Demand/Livewire/pages/department-demand`. Hoy el jefe se entera materia por materia cuando cada coordinador manda su Excel; aquí ve el total de una vez. | Feature: agregación por materia respeta alcance de departamento y campus | B |

@@ -1,10 +1,10 @@
 <?php
 
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
-use App\Modules\AcademicLoad\Rules\SuggestedGroups;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Settings\SettingType;
+use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Staffing\Rules\RankingWeights;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Validation\ValidationException;
@@ -115,11 +115,11 @@ it('CF-S7: el catálogo real de los módulos se arma y cada valor por omisión e
         ->and(ProposalAnomalies::fromValue($registry->get(ProposalAnomalies::SETTING)->default))->toEqual(new ProposalAnomalies);
 });
 
-it('CF-S7: Asignación docente, Horarios y Carga académica declaran sus parámetros', function () {
+it('CF-S7: Asignación docente, Horarios y Proyección de demanda declaran sus parámetros', function () {
     expect(array_map(fn (SettingDefinition $d): string => $d->key, app(SettingRegistry::class)->all()))->toEqualCanonicalizing([
         'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
-        'demand.target_group_size', 'demand.min_group_size',
+        'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold',
     ]);
 });
 

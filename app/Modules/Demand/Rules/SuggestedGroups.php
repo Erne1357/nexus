@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Modules\AcademicLoad\Rules;
+namespace App\Modules\Demand\Rules;
 
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
@@ -12,8 +12,9 @@ use App\Modules\Core\Models\Setting;
  * (`{"default": 35, "lab": 25}`, "Elegibilidad y demanda"); sin él, o con un valor que no es un entero mayor
  * que cero, 35 y 25 (supuesto por confirmar).
  *
- * El cálculo es puro; solo fromSettings() lee la base, una vez por propuesta. En R2, Demand sugiere los grupos
- * con su propio análisis.
+ * El cálculo es puro; solo fromSettings() lee la base, una vez por propuesta. Vive en Demand desde la tarea 5.3 para que
+ * la proyección (DemandForecaster) y la propuesta de carrera sugieran con el mismo tamaño; AcademicLoad, Scheduling y
+ * Staffing lo leen desde aquí. El parámetro lo declara DemandSettings.
  */
 final readonly class SuggestedGroups
 {

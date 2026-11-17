@@ -1,6 +1,6 @@
 <?php
 
-use App\Modules\AcademicLoad\Rules\SuggestedGroups;
+use App\Modules\Demand\Rules\SuggestedGroups;
 
 /*
 | Grupos sugeridos de una fila de la propuesta de carrera (reglas-de-negocio.md, "Propuesta de carrera",
