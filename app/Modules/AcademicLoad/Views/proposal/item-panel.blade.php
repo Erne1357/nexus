@@ -131,16 +131,18 @@
                             </div>
                             @if ($forecastState === \App\Modules\AcademicLoad\Enums\SuggestionState::Changed)
                                 <x-alert icon="o-arrow-path" class="alert-info alert-soft items-start text-sm" data-testid="panel-forecast-change">
-                                    <span>Ahora sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newGroups }}</span> grupos; cuando corregiste sugería <span class="font-mono">{{ $item->suggested_expected_students }}</span> y <span class="font-mono">{{ $item->suggested_groups }}</span>.</span>
-                                    @if ($editing)
-                                        <x-slot:actions>
-                                            <x-button :label="'Usar '.$forecastRow->suggestion->newExpected.' · '.$forecastRow->suggestion->newGroups" class="btn-xs btn-outline" wire:click="resolveChange('{{ $item->id }}', 'use')" spinner="resolveChange('{{ $item->id }}', 'use')" data-testid="panel-use-{{ $item->id }}" />
-                                            <x-button label="Mantener" class="btn-xs btn-ghost" wire:click="resolveChange('{{ $item->id }}', 'keep')" spinner="resolveChange('{{ $item->id }}', 'keep')" data-testid="panel-keep-{{ $item->id }}" />
-                                        </x-slot:actions>
-                                    @endif
+                                    <div class="space-y-2">
+                                        <p>Ahora sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newGroups }}</span> grupos; cuando corregiste sugería <span class="font-mono">{{ $item->suggested_expected_students }}</span> y <span class="font-mono">{{ $item->suggested_groups }}</span>.</p>
+                                        @if ($editing)
+                                            <div class="flex flex-wrap gap-2">
+                                                <x-button :label="'Usar '.$forecastRow->suggestion->newExpected.' · '.$forecastRow->suggestion->newGroups" class="btn-sm btn-outline max-md:min-h-11" wire:click="resolveChange('{{ $item->id }}', 'use')" spinner="resolveChange('{{ $item->id }}', 'use')" data-testid="panel-use-{{ $item->id }}" />
+                                                <x-button :label="'Mantener '.$item->expected_students.' · '.$item->requested_groups" class="btn-sm btn-ghost max-md:min-h-11" wire:click="resolveChange('{{ $item->id }}', 'keep')" spinner="resolveChange('{{ $item->id }}', 'keep')" data-testid="panel-keep-{{ $item->id }}" />
+                                            </div>
+                                        @endif
+                                    </div>
                                 </x-alert>
                             @else
-                                <p class="text-sm">Nexus sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestedGroups() }}</span> {{ $forecastRow->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.@if ($forecastDifference) <span class="inline-flex items-center gap-1 font-medium text-warning"><x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5" aria-hidden="true" />Lo capturado se aparta: {{ $forecastDifference['field'] === 'groups' ? 'grupos' : 'esperados' }} {{ $forecastDifference['percent'] }}.</span>@endif</p>
+                                <p class="text-sm">Nexus sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestedGroups() }}</span> {{ $forecastRow->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.@if ($forecastDifference) <span class="inline-flex items-center gap-1 font-medium text-warning"><x-icon name="o-arrows-up-down" class="h-3.5 w-3.5" aria-hidden="true" />Lo capturado se aparta: {{ $forecastDifference['field'] === 'groups' ? 'grupos' : 'esperados' }} {{ $forecastDifference['percent'] }}.</span>@endif</p>
                             @endif
                             @include('academic-load::proposal.forecast-evidence', ['forecastRow' => $forecastRow, 'history' => $forecastHistory[$item->id] ?? null])
                         </div>

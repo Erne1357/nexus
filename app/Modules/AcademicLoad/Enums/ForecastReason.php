@@ -38,7 +38,7 @@ enum ForecastReason: string
     {
         return match ($this) {
             self::Changed => 'o-arrow-path',
-            self::LargeDifference => 'o-exclamation-triangle',
+            self::LargeDifference => 'o-arrows-up-down',
             self::Specialty => 'o-academic-cap',
             self::NoHistory => 'o-information-circle',
         };

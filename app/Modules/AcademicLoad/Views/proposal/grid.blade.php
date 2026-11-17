@@ -22,7 +22,7 @@
 
     Con la proyección (tarea 5.6, opción C): la leyenda suma las marcas de la proyección y cada mosaico lleva al pie, junto
     al departamento, la de sus filas en las columnas del usuario (ProposalForecastReview::mark): «La proyección cambió»
-    (`o-arrow-path`, info), si no «Se aparta del sugerido» (triángulo, advertencia), si no «Corregido» (lápiz); todo
+    (`o-arrow-path`, info), si no «Se aparta del sugerido» (`o-arrows-up-down`, advertencia; el triángulo es de las anomalías), si no «Corregido» (lápiz); todo
     sugerido no lleva marca. Al pie y no junto a la clave, porque ahí va el estado de la parte del departamento.
 --}}
 @if ($layout->columns === [])
@@ -47,7 +47,7 @@
             @if ($projection->hasForecast())
                 <span class="hidden h-4 border-s border-base-300 sm:inline" aria-hidden="true"></span>
                 <span class="inline-flex items-center gap-1" data-testid="forecast-legend">Proyección: sin marca, sugerido</span>
-                @foreach ([['o-pencil', 'Corregido', ''], ['o-exclamation-triangle', 'Se aparta del sugerido', 'text-warning'], ['o-arrow-path', 'La proyección cambió', 'text-info']] as [$legendIcon, $legendLabel, $legendTone])
+                @foreach ([['o-pencil', 'Corregido', ''], ['o-arrows-up-down', 'Se aparta del sugerido', 'text-warning'], ['o-arrow-path', 'La proyección cambió', 'text-info']] as [$legendIcon, $legendLabel, $legendTone])
                     <span class="inline-flex items-center gap-1">
                         <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-base-300 bg-base-100 {{ $legendTone }}" aria-hidden="true"><x-icon :name="$legendIcon" class="h-4 w-4" /></span>
                         {{ $legendLabel }}
@@ -88,7 +88,7 @@
                             $forecastMark = $projection->hasForecast() ? $projection->mark($row, $reviewKeys) : ['state' => null, 'large' => false, 'review' => null];
                             $tileMark = match (true) {
                                 $forecastMark['state'] === 'changed' => ['changed', 'o-arrow-path', 'text-info', 'La proyección cambió'],
-                                $forecastMark['large'] => ['large', 'o-exclamation-triangle', 'text-warning', 'Se aparta del sugerido'],
+                                $forecastMark['large'] => ['large', 'o-arrows-up-down', 'text-warning', 'Se aparta del sugerido'],
                                 $forecastMark['state'] === 'captured' => ['captured', 'o-pencil', '', 'Corregido'],
                                 default => null,
                             };

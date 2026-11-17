@@ -181,47 +181,47 @@
         @endif
 
         <div id="proposal-panel" @if ($projection->hasForecast()) role="tabpanel" aria-labelledby="{{ $view === 'revisar' ? 'tab-review' : 'tab-proposal' }}" @endif class="space-y-4">
-        @if ($view === 'revisar')
-            @include('academic-load::proposal.review')
-        @else
-        <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-                <div role="group" aria-label="Vista" class="join">
-                    <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
-                        @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
-                    <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
-                        @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
+            @if ($view === 'revisar')
+                @include('academic-load::proposal.review')
+            @else
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div role="group" aria-label="Vista" class="join">
+                            <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
+                                @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
+                            <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
+                                @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
+                        </div>
+                        <div role="group" aria-label="Materias" class="join" data-testid="groups-filter">
+                            @foreach (['' => 'Todas', 'con' => 'Con grupos', 'sin' => 'Sin grupos'] as $filter => $filterLabel)
+                                <button type="button" wire:click="filterGroups('{{ $filter }}')" aria-pressed="{{ $groupsFilter === $filter ? 'true' : 'false' }}" data-testid="filter-{{ $filter === '' ? 'todas' : $filter }}"
+                                    @class(['btn btn-sm join-item', 'btn-primary' => $groupsFilter === $filter])>{{ $filterLabel }}</button>
+                            @endforeach
+                        </div>
+                    </div>
+                    @if ($view !== 'tabla')
+                        @include('academic-load::proposal.totals')
+                    @endif
+                    @if ($view === 'tabla' && $department !== '')
+                        <label class="flex cursor-pointer items-center gap-2 text-sm">
+                            <input type="checkbox" class="checkbox checkbox-sm" wire:model.live="onlyDepartment" data-testid="only-department" />
+                            Mostrar solo {{ $department }}
+                        </label>
+                    @endif
                 </div>
-                <div role="group" aria-label="Materias" class="join" data-testid="groups-filter">
-                    @foreach (['' => 'Todas', 'con' => 'Con grupos', 'sin' => 'Sin grupos'] as $filter => $filterLabel)
-                        <button type="button" wire:click="filterGroups('{{ $filter }}')" aria-pressed="{{ $groupsFilter === $filter ? 'true' : 'false' }}" data-testid="filter-{{ $filter === '' ? 'todas' : $filter }}"
-                            @class(['btn btn-sm join-item', 'btn-primary' => $groupsFilter === $filter])>{{ $filterLabel }}</button>
-                    @endforeach
+
+                <div class="min-[1700px]:grid min-[1700px]:grid-cols-[15rem_minmax(0,1fr)] min-[1700px]:items-start min-[1700px]:gap-5 max-[1699px]:space-y-4">
+                    @include('academic-load::proposal.departments')
+
+                    <div class="min-w-0">
+                        @if ($view === 'tabla')
+                            @include('academic-load::proposal.table')
+                        @else
+                            @include('academic-load::proposal.grid')
+                        @endif
+                    </div>
                 </div>
-            </div>
-            @if ($view !== 'tabla')
-                @include('academic-load::proposal.totals')
             @endif
-            @if ($view === 'tabla' && $department !== '')
-                <label class="flex cursor-pointer items-center gap-2 text-sm">
-                    <input type="checkbox" class="checkbox checkbox-sm" wire:model.live="onlyDepartment" data-testid="only-department" />
-                    Mostrar solo {{ $department }}
-                </label>
-            @endif
-        </div>
-
-        <div class="min-[1700px]:grid min-[1700px]:grid-cols-[15rem_minmax(0,1fr)] min-[1700px]:items-start min-[1700px]:gap-5 max-[1699px]:space-y-4">
-            @include('academic-load::proposal.departments')
-
-            <div class="min-w-0">
-                @if ($view === 'tabla')
-                    @include('academic-load::proposal.table')
-                @else
-                    @include('academic-load::proposal.grid')
-                @endif
-            </div>
-        </div>
-        @endif
         </div>
 
         {{-- Los modales y el panel van en la página y no dentro de otra caja: el panel se desliza con transform. --}}

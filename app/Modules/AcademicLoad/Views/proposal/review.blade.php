@@ -12,7 +12,7 @@
     las acciones según el estado de la fila: «Usar N · M» y «Mantener» si la proyección cambió, «Usar sugerido» y
     «Dejar» si se aparta del sugerido, «Está bien» si es de especialidad o sin historia sin tocar, y siempre «Abrir en
     el panel». Una fila que el usuario no corrige (otro campus, M7, o una propuesta enviada) va sin botones; una cuyo
-    departamento aceptó su parte dice por qué. Desde 56 rem de caja la tarjeta va en tres columnas; más angosta se
+    departamento aceptó su parte dice por qué. Desde 56 rem de caja la tarjeta va en tres columnas (17 rem, el resto y 13 rem); más angosta se
     apila (como `shots/propuesta-c-revisar-390.png`). Al final, plegadas, «Revisadas (N)» con lo que quedó.
 --}}
 @php
@@ -62,12 +62,12 @@
                 $specialtyId = $overview->specialtyFor($card->subject);
             @endphp
             <article id="review-{{ $cardItem->id }}" data-item="review-{{ $cardItem->id }}" tabindex="-1" wire:key="review-{{ $cardItem->id }}" data-testid="review-card-{{ $cardItem->id }}"
-                class="grid gap-x-6 gap-y-3 border-base-300 px-4 py-4 outline-none not-first:border-t data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-primary @min-[56rem]:grid-cols-[15rem_minmax(0,1fr)_13rem] @min-[56rem]:px-5">
+                class="grid gap-x-6 gap-y-3 border-base-300 px-4 py-4 outline-none not-first:border-t data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-primary @min-[56rem]:grid-cols-[17rem_minmax(0,1fr)_13rem] @min-[56rem]:px-5">
                 <div class="min-w-0 space-y-1">
                     <div class="flex flex-wrap gap-1.5">
                         @foreach ($card->reasons as $cardReason)
-                            <x-core::status-badge :tone="$cardReason->tone()" :icon="$cardReason->icon()"
-                                :label="$cardReason === \App\Modules\AcademicLoad\Enums\ForecastReason::LargeDifference && $difference ? $cardReason->label().' · '.($difference['field'] === 'groups' ? 'grupos' : 'esperados').' '.$difference['percent'] : $cardReason->label()" />
+                            <x-core::status-badge :tone="$cardReason->tone()" :icon="$cardReason->icon()" class="h-auto! min-h-6.5 py-0.5 text-left whitespace-normal!"
+                                :label="$cardReason === \App\Modules\AcademicLoad\Enums\ForecastReason::LargeDifference && $difference ? $cardReason->label().' · '.str_replace(' ', mb_chr(0xA0), ($difference['field'] === 'groups' ? 'grupos' : 'esperados').' '.$difference['percent']) : $cardReason->label()" />
                         @endforeach
                     </div>
                     <p class="flex items-center gap-1.5 pt-1">
@@ -97,20 +97,20 @@
                     @if ($canAct)
                         <div class="contents" data-testid="review-actions-{{ $cardItem->id }}">
                             @if ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Changed)
-                                <x-button :label="'Usar '.$card->suggestion->newExpected.' · '.$card->suggestion->newGroups" class="btn-sm btn-outline @max-[56rem]:flex-1 max-md:min-h-11"
+                                <x-button :label="'Usar '.$card->suggestion->newExpected.' · '.$card->suggestion->newGroups" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="resolveChange('{{ $cardItem->id }}', 'use')" spinner="resolveChange('{{ $cardItem->id }}', 'use')" data-testid="review-use-{{ $cardItem->id }}" />
-                                <x-button :label="'Mantener '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-1 max-md:min-h-11"
+                                <x-button :label="'Mantener '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="resolveChange('{{ $cardItem->id }}', 'keep')" spinner="resolveChange('{{ $cardItem->id }}', 'keep')" data-testid="review-keep-{{ $cardItem->id }}" />
                             @elseif ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Captured)
-                                <x-button :label="'Usar sugerido '.$card->suggestedExpected().' · '.$card->suggestedGroups()" class="btn-sm btn-outline @max-[56rem]:flex-1 max-md:min-h-11"
+                                <x-button :label="'Usar sugerido '.$card->suggestedExpected().' · '.$card->suggestedGroups()" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="applySuggestion('{{ $cardItem->id }}')" spinner="applySuggestion('{{ $cardItem->id }}')" data-testid="review-suggested-{{ $cardItem->id }}" />
-                                <x-button :label="'Dejar '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-1 max-md:min-h-11"
+                                <x-button :label="'Dejar '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="markReviewed('{{ $cardItem->id }}')" spinner="markReviewed('{{ $cardItem->id }}')" data-testid="review-leave-{{ $cardItem->id }}" />
                             @else
-                                <x-button label="Está bien" class="btn-sm btn-outline @max-[56rem]:flex-1 max-md:min-h-11"
+                                <x-button label="Está bien" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="markReviewed('{{ $cardItem->id }}')" spinner="markReviewed('{{ $cardItem->id }}')" data-testid="review-ok-{{ $cardItem->id }}" />
                             @endif
-                            <x-button label="Abrir en el panel" icon="o-arrow-top-right-on-square" class="btn-sm btn-ghost @max-[56rem]:flex-1 max-md:min-h-11"
+                            <x-button label="Abrir en el panel" icon="o-arrow-top-right-on-square" class="btn-sm btn-ghost @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                 wire:click="edit('{{ $cardItem->subject_id }}')" data-opener data-testid="review-open-{{ $cardItem->id }}" />
                         </div>
                     @else

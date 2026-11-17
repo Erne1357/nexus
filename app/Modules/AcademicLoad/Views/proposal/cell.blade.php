@@ -7,7 +7,7 @@
 
     Con la proyección (tarea 5.6, opción C): un campo que sigue lo sugerido sin tocar lleva el borde punteado; una cifra
     corregida que se aparta del sugerido (DemandSettings::isLargeDifference, por separado en esperados y en grupos) lleva el
-    borde de advertencia, un triángulo, `data-large` y, para lectores de pantalla y en `title`, lo que sugiere Nexus. Solo
+    borde de advertencia, `o-arrows-up-down` (el triángulo es de las anomalías), `data-large` y, para lectores de pantalla y en `title`, lo que sugiere Nexus. Solo
     resalta: no bloquea nada.
 --}}
 @php
@@ -36,7 +36,7 @@
     @elseif ($readonly)
         <span class="flex items-center justify-end gap-1 text-right font-mono text-sm tabular-nums" data-readonly-cell="{{ $field }}" @if ($largeText) title="{{ $largeText }}" @endif>
             @if ($largeText)
-                <x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
+                <x-icon name="o-arrows-up-down" class="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden="true" />
             @endif
             <span><span class="sr-only">{{ $fieldLabel }}{{ $where ? ' en '.$where : '' }}: </span>{{ $value }}@if ($largeText)<span class="sr-only"> {{ $largeText }}</span>@endif</span>
         </span>
@@ -54,7 +54,7 @@
                     'border-dashed font-normal' => ! $cellError && ! $largeText && $followsForecast,
                 ]) data-field="{{ $field }}" />
             @if ($largeText)
-                <span class="pointer-events-none absolute start-1.5 top-1/2 -translate-y-1/2 text-warning group-data-[saved]/cell:hidden" aria-hidden="true"><x-icon name="o-exclamation-triangle" class="block h-3.5 w-3.5" /></span>
+                <span class="pointer-events-none absolute start-1.5 top-1/2 -translate-y-1/2 text-warning group-data-[saved]/cell:hidden" aria-hidden="true"><x-icon name="o-arrows-up-down" class="block h-3.5 w-3.5" /></span>
             @endif
             {{-- En un span: el icono de MaryUI trae `inline`, que le gana a `hidden`. --}}
             <span class="pointer-events-none absolute start-1.5 top-1/2 hidden -translate-y-1/2 text-success group-data-[saved]/cell:block" aria-hidden="true"><x-icon name="o-check" class="block h-4 w-4" /></span>

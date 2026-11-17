@@ -215,7 +215,7 @@ describe('pestaña Revisar proyección', function () {
     });
 
     it('la tarjeta dice lo capturado y lo sugerido, los elegibles, las tasas, los repetidores y la cuenta', function () {
-        $card = textOf(domOf(forecastPageAs($this->ofC1, ['vista' => 'revisar', 'motivo' => 'aparta'])->html())->querySelector('[data-testid=review-card-'.$this->large->id.']'));
+        $card = str_replace(mb_chr(0xA0), ' ', textOf(domOf(forecastPageAs($this->ofC1, ['vista' => 'revisar', 'motivo' => 'aparta'])->html())->querySelector('[data-testid=review-card-'.$this->large->id.']')));
 
         expect($card)->toContain('Se aparta del sugerido · grupos +50 %')
             ->toContain('Capturaste 50 esperados y 3 grupos; Nexus sugiere 50 y 2.')
