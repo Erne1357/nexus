@@ -34,9 +34,9 @@
                 @php($subject = $row->subject)
                 @php($open = $drawer !== null && $drawer->subject->getKey() === $subject->getKey())
                 @php($total = $row->total($campusId))
-                <tr wire:key="demand-row-{{ $subject->id }}" wire:click="open('{{ $subject->code }}')" class="group cursor-pointer" data-testid="demand-row-{{ $subject->code }}">
+                <tr wire:key="demand-row-{{ $subject->id }}" wire:click="open(@js($subject->code))" class="group cursor-pointer" data-testid="demand-row-{{ $subject->code }}">
                     <th scope="row" @class(['sticky left-0 z-10 min-w-56 max-w-72 border-e border-t border-base-300 px-4 py-2 text-start align-middle font-normal', $stickyBody => ! $open, $stickyOpen => $open])>
-                        <button type="button" wire:click.stop="open('{{ $subject->code }}')" class="group/name block text-start" aria-label="Abrir el detalle de {{ $subject->code }} {{ $subject->name }}">
+                        <button type="button" wire:click.stop="open(@js($subject->code))" class="group/name block text-start" aria-label="Abrir el detalle de {{ $subject->code }} {{ $subject->name }}">
                             <span class="block font-mono text-[15px] font-semibold">{{ $subject->code }}</span>
                             <span class="leading-snug underline decoration-transparent underline-offset-4 group-hover/name:decoration-current group-focus-visible/name:decoration-current">{{ $subject->name }}</span>
                             @if ($subject->needs_lab)

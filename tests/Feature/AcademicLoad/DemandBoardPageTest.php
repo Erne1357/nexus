@@ -231,6 +231,20 @@ describe('coordinador', function () {
             ->assertViewHas('figures', fn (array $figures): bool => $figures['subjects'] === 1);
     });
 
+    it('un departamento que no tiene materias en su lente no filtra y se suelta', function () {
+        demandPageAs($this->coordinator, ['departamento' => 'MM'])
+            ->assertSet('departmentCode', '')
+            ->assertSee('ACF-0901')
+            ->assertSee('SCD-1027');
+    });
+
+    it('filtrar por departamento no cierra el drawer de la materia', function () {
+        demandPageAs($this->coordinator, ['materia' => 'SCD-1027'])
+            ->set('departmentCode', 'CB')
+            ->assertSet('showDrawer', true)
+            ->assertSet('subjectCode', 'SCD-1027');
+    });
+
     it('el drawer lleva a la propuesta de su carrera y no a la bandeja', function () {
         demandPageAs($this->coordinator)
             ->call('open', 'ACF-0901')

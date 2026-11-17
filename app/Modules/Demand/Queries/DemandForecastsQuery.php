@@ -7,6 +7,8 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Models\DemandForecast;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
@@ -40,18 +42,7 @@ final class DemandForecastsQuery
      */
     public function forDepartment(Term $term, Modality $modality, Department $department): Collection
     {
-        return DemandForecast::query()
-            ->with(['career', 'campus'])
-            ->join('subjects', 'subjects.id', '=', 'demand_forecasts.subject_id')
-            ->where('demand_forecasts.term_id', $term->id)
-            ->where('demand_forecasts.modality_id', $modality->id)
-            ->where('subjects.department_id', $department->id)
-            ->orderBy('subjects.code')
-            ->orderBy('demand_forecasts.career_id')
-            ->orderBy('demand_forecasts.campus_id')
-            ->select('demand_forecasts.*')
-            ->get()
-            ->groupBy('subject_id');
+        return $this->bySubject($term, $modality, fn (Builder $query) => $query->where('subjects.department_id', $department->id));
     }
 
     /**
@@ -67,12 +58,24 @@ final class DemandForecastsQuery
             return new Collection;
         }
 
+        return $this->bySubject($term, $modality, fn (Builder $query) => $query->whereIn('demand_forecasts.subject_id', $subjectIds));
+    }
+
+    /**
+     * Las filas del periodo y la modalidad de las materias que deja `$subjects`, por clave de materia, carrera y campus,
+     * agrupadas por materia.
+     *
+     * @param  Closure(Builder<DemandForecast>): mixed  $subjects
+     * @return Collection<string, Collection<int, DemandForecast>>
+     */
+    private function bySubject(Term $term, Modality $modality, Closure $subjects): Collection
+    {
         return DemandForecast::query()
             ->with(['career', 'campus'])
             ->join('subjects', 'subjects.id', '=', 'demand_forecasts.subject_id')
             ->where('demand_forecasts.term_id', $term->id)
             ->where('demand_forecasts.modality_id', $modality->id)
-            ->whereIn('demand_forecasts.subject_id', $subjectIds)
+            ->tap($subjects)
             ->orderBy('subjects.code')
             ->orderBy('demand_forecasts.career_id')
             ->orderBy('demand_forecasts.campus_id')

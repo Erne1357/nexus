@@ -9,7 +9,7 @@
         @php($subject = $row->subject)
         @php($total = $row->total($campusId))
         <li wire:key="demand-card-{{ $subject->id }}">
-            <button type="button" wire:click="open('{{ $subject->code }}')" class="flex w-full flex-col gap-1.5 px-4 py-3 text-start hover:bg-base-200/50" data-testid="demand-card-{{ $subject->code }}">
+            <button type="button" wire:click="open(@js($subject->code))" class="flex w-full flex-col gap-1.5 px-4 py-3 text-start hover:bg-base-200/50" data-testid="demand-card-{{ $subject->code }}">
                 <span class="flex items-start justify-between gap-3">
                     <span class="pt-0.5 font-mono text-[15px] font-semibold">{{ $subject->code }}</span>
                     <span @class(['flex flex-col items-end text-[13.5px]', 'text-warning' => $total->large])>
@@ -37,7 +37,7 @@
                                 'border-dashed border-base-content/35 text-neutral' => $cell->pending,
                                 'border-base-300' => ! $cell->large && ! $cell->pending,
                                 'bg-info/8' => $column['career']->getKey() === $lensId && ! $cell->large,
-                            ])><span class="font-mono text-xs font-bold text-base-content" aria-hidden="true">{{ $column['career']->code }}</span>@if ($cell->pending)<span class="inline-flex items-center gap-1 font-mono tabular-nums" aria-hidden="true"><x-icon name="o-clock" class="h-3.5 w-3.5" />{{ $cell->suggested }}</span><span class="sr-only">{{ $column['career']->code }}: sin propuesta; cuenta {{ $cell->suggested }} sugeridos.</span>@else @include('academic-load::demand.cell', ['cell' => $cell, 'label' => $column['career']->code])@endif</span>
+                            ])><span class="font-mono text-xs font-bold text-base-content" aria-hidden="true">{{ $column['career']->code }}</span>@include('academic-load::demand.cell', ['cell' => $cell, 'label' => $column['career']->code, 'bare' => true])</span>
                         @endif
                     @endforeach
                 </span>

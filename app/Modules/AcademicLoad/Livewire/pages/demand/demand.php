@@ -122,9 +122,8 @@ new #[Title('Demanda por materia')] class extends Component
      */
     public function updatedDepartmentCode(Actor $context, DemandBoardQuery $query, CareerProposalQuery $proposals): void
     {
-        $this->closeDrawer();
-
         if ($this->careerId === null) {
+            $this->closeDrawer();
             $this->resolve($context, $query, $proposals);
         }
     }
@@ -190,6 +189,12 @@ new #[Title('Demanda por materia')] class extends Component
 
         $board = $this->board($query);
         $filterDepartment = $board->isCareerLens() ? collect($board->departments())->first(fn (Department $department): bool => $department->code === $this->departmentCode) : null;
+
+        if ($board->isCareerLens() && $filterDepartment === null) {
+            // Un departamento que no tiene materias en la lente (de otra modalidad, o que ya no está) no filtra: se suelta.
+            $this->departmentCode = '';
+        }
+
         $shown = $board->withinDepartment($filterDepartment);
         $campusId = $scope['shownCampus']?->getKey();
         $visible = $shown->visible($this->search, self::FILTERS[$this->filter] ?? '', $campusId);
@@ -246,7 +251,7 @@ new #[Title('Demanda por materia')] class extends Component
             || ! $context->allowsAny(AcademicLoadPermission::DemandViewDepartment);
 
         if ($careerLens) {
-            $careers = $query->careersFor($context, $modality);
+            $careers = $proposals->careersFor($context, $modality, AcademicLoadPermission::DemandViewCareer);
             $career = $this->careerCode === '' ? $careers->first() : $careers->first(fn (Career $career): bool => $career->code === $this->careerCode);
 
             abort_if($this->careerCode !== '' && $career === null, 403);

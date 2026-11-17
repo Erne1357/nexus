@@ -64,11 +64,12 @@ final class CareerProposalQuery
      * activo y no están borradas (las columnas de su propuesta, MS5). No se mira `careers.is_active` a propósito: una
      * carrera inactiva puede tener todavía alumnos, y lo que decide es su oferta. De ellas, las de las que el usuario
      * puede ver la propuesta en la modalidad: el coordinador, las de sus alcances (con o sin campus, porque ve toda la
-     * propuesta, M7); la subdirección y el admin, todas (CareerProposalPolicy).
+     * propuesta, M7); la subdirección y el admin, todas (CareerProposalPolicy). Con otro permiso de carrera (la lente de
+     * carrera de «Demanda por materia», `academic_load.demand.view_career`), las de ese permiso.
      *
      * @return Collection<int, Career>
      */
-    public function careersFor(Actor $context, Modality $modality): Collection
+    public function careersFor(Actor $context, Modality $modality, AcademicLoadPermission $permission = AcademicLoadPermission::ProposalView): Collection
     {
         $offered = CareerCampus::query()
             ->select('career_id')
@@ -79,7 +80,7 @@ final class CareerProposalQuery
             ->whereIn('id', $offered)
             ->orderBy('code')
             ->get()
-            ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $modality->getKey(), career: $career->getKey())))
+            ->filter(fn (Career $career): bool => $context->allows($permission, Target::of(modality: $modality->getKey(), career: $career->getKey())))
             ->values();
     }
 

@@ -130,18 +130,29 @@ final readonly class DemandBoardSubject
         return array_values(array_unique(array_map(fn (DemandBoardRow $row): string => $row->career->getKey(), $this->rowsIn($campusId))));
     }
 
+    /**
+     * Si alguna celda de carrera o su total, en el campus del filtro, se resaltan. Una pasada por sus filas.
+     */
     public function hasDifference(?string $campusId = null): bool
     {
-        if ($this->rowsIn($campusId) === []) {
+        $rows = $this->rowsIn($campusId);
+
+        if ($rows === []) {
             return false;
         }
 
-        if ($this->total($campusId)->large) {
+        if (self::sum($rows, $this->settings)->large) {
             return true;
         }
 
-        foreach ($this->careerIds($campusId) as $careerId) {
-            if ($this->cell($careerId, $campusId)?->large) {
+        $byCareer = [];
+
+        foreach ($rows as $row) {
+            $byCareer[$row->career->getKey()][] = $row;
+        }
+
+        foreach ($byCareer as $careerRows) {
+            if ($careerRows[0]->state->counts() && self::sum($careerRows, $this->settings)->large) {
                 return true;
             }
         }

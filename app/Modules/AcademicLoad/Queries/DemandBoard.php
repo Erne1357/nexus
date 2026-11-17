@@ -167,16 +167,6 @@ final readonly class DemandBoard
     }
 
     /**
-     * Los grupos que cuentan como pedidos en cada campus, por clave de campus: las cifras del filtro de campus.
-     *
-     * @return array<string, int>
-     */
-    public function countedByCampus(): array
-    {
-        return $this->figures()['countedByCampus'];
-    }
-
-    /**
      * Cuántas materias hay en cada opción del filtro «Todas · Con diferencia · Sin propuesta», en el campus del filtro.
      *
      * @return array{all: int, difference: int, pending: int}

@@ -3,7 +3,6 @@
 namespace App\Modules\AcademicLoad\Queries;
 
 use App\Modules\Academic\Models\Career;
-use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
@@ -41,8 +40,8 @@ use Illuminate\Support\Facades\DB;
  *   llevar en el periodo (supuesto por confirmar, como la maqueta C);
  * - una materia que alguien pidió sin fila de proyección aparece con lo proyectado en cero.
  *
- * Quién lo ve lo deciden DemandBoardPolicy y la pantalla: aquí no se autoriza, salvo para listar los departamentos y
- * las carreras que el usuario puede elegir.
+ * Quién lo ve lo deciden DemandBoardPolicy y la pantalla: aquí no se autoriza, salvo para listar los departamentos que
+ * el usuario puede elegir (las carreras, CareerProposalQuery::careersFor con `academic_load.demand.view_career`).
  */
 final class DemandBoardQuery
 {
@@ -67,27 +66,6 @@ final class DemandBoardQuery
             ->orderBy('code')
             ->get()
             ->filter(fn (Department $department): bool => $context->allows(AcademicLoadPermission::DemandViewDepartment, Target::of(modality: $modality->getKey(), unit: $department->getKey())))
-            ->values();
-    }
-
-    /**
-     * Las carreras ofrecidas en algún campus activo (como CareerProposalQuery::careersFor) cuya lente puede ver en la
-     * modalidad (`academic_load.demand.view_career`), por clave.
-     *
-     * @return Collection<int, Career>
-     */
-    public function careersFor(Actor $context, Modality $modality): Collection
-    {
-        $offered = CareerCampus::query()
-            ->select('career_id')
-            ->where('is_active', true)
-            ->whereIn('campus_id', Campus::query()->select('id')->where('is_active', true));
-
-        return Career::query()
-            ->whereIn('id', $offered)
-            ->orderBy('code')
-            ->get()
-            ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::DemandViewCareer, Target::of(modality: $modality->getKey(), career: $career->getKey())))
             ->values();
     }
 
@@ -253,7 +231,9 @@ final class DemandBoardQuery
         $careers = $forecastRows->mapWithKeys(fn (DemandForecast $forecast): array => [$forecast->career_id => $forecast->career])->filter();
         $campuses = $forecastRows->mapWithKeys(fn (DemandForecast $forecast): array => $forecast->campus === null ? [] : [$forecast->campus_id => $forecast->campus]);
         $missingCareers = array_values(array_diff($careerIds, $careers->keys()->all()));
-        $missingCampuses = array_values(array_diff(array_filter($requestedRows->pluck('campus_id')->all()), $campuses->keys()->all()));
+        // Un campus borrado después de calcular la proyección no viene en `with('campus')`: se vuelve a leer con los borrados.
+        $campusIds = array_unique(array_filter([...$forecastRows->pluck('campus_id')->all(), ...$requestedRows->pluck('campus_id')->all()]));
+        $missingCampuses = array_values(array_diff($campusIds, $campuses->keys()->all()));
 
         if ($missingCareers !== []) {
             $careers = $careers->merge(Career::query()->withTrashed()->whereIn('id', $missingCareers)->get()->keyBy('id'));
@@ -309,7 +289,8 @@ final class DemandBoardQuery
             $first = fn (DemandBoardRow $row): int => $career !== null && $row->career->getKey() === $career->getKey() ? 0 : 1;
             usort($subjectRows, fn (DemandBoardRow $a, DemandBoardRow $b): int => [$first($a), $a->career->code, $a->campus->code ?? ''] <=> [$first($b), $b->career->code, $b->campus->code ?? '']);
             $lensRow = $career === null ? null : collect($subjectRows)->first(fn (DemandBoardRow $row): bool => $row->career->getKey() === $career->getKey());
-            $boardSubjects[] = new DemandBoardSubject($subjects[$subjectId], $lensRow?->semester, $subjectRows, $settings);
+            $semester = $career === null ? null : ($lensRow?->semester ?? $semesters["{$career->getKey()}|{$subjectId}"] ?? null);
+            $boardSubjects[] = new DemandBoardSubject($subjects[$subjectId], $semester, $subjectRows, $settings);
         }
 
         usort($boardSubjects, fn (DemandBoardSubject $a, DemandBoardSubject $b): int => $career === null

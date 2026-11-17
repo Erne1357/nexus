@@ -2,10 +2,12 @@
     El valor de una celda de «Demanda por materia»: `pedidos/sugeridos` en Mono, con el icono de tendencia si se aparta
     del umbral (el color nunca va solo); si la carrera no ha enviado, lo sugerido con el reloj en una caja punteada. Lo que
     leen los lectores de pantalla va aparte, con el nombre de la carrera (`$label`, «ISIC» o «Todo el Tec»).
-    `$cell` es un DemandBoardCell; quien lo incluye pone el tono de la celda.
+    `$cell` es un DemandBoardCell; quien lo incluye pone el tono de la celda. `$bare`: la celda pendiente sin su caja
+    punteada, cuando quien la incluye ya es la caja (las etiquetas de los renglones apilados).
 --}}
+@php($bare ??= false)
 @if ($cell->pending)
-    <span class="inline-flex items-center gap-1 rounded border border-dashed border-base-content/35 px-1.5 py-px font-mono tabular-nums text-neutral" aria-hidden="true"><x-icon name="o-clock" class="h-3.5 w-3.5 shrink-0" />{{ $cell->suggested }}</span>
+    <span @class(['inline-flex items-center gap-1 font-mono tabular-nums text-neutral', 'rounded border border-dashed border-base-content/35 px-1.5 py-px' => ! $bare]) aria-hidden="true"><x-icon name="o-clock" class="h-3.5 w-3.5 shrink-0" />{{ $cell->suggested }}</span>
     <span class="sr-only">{{ $label }}: sin propuesta; cuenta {{ $cell->suggested }} {{ $cell->suggested === 1 ? 'grupo sugerido' : 'grupos sugeridos' }}.</span>
 @else
     <span class="inline-flex items-center gap-1 whitespace-nowrap" aria-hidden="true">

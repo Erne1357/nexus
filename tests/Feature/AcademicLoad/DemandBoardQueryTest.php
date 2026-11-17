@@ -181,7 +181,7 @@ it('el filtro de campus deja las celdas, los renglones y las cifras de ese campu
         ->and($board->subject('SCD-1027')->cell($this->isic->id, $this->c1->id)->large)->toBeFalse()
         ->and($board->filterCounts($this->c2->id))->toBe(['all' => 1, 'difference' => 1, 'pending' => 0])
         ->and($board->filterCounts($this->c1->id))->toBe(['all' => 2, 'difference' => 0, 'pending' => 0])
-        ->and($board->countedByCampus())->toBe(['C1' => 5, 'C2' => 4]);
+        ->and($board->figures()['countedByCampus'])->toBe(['C1' => 5, 'C2' => 4]);
 });
 
 it('busca por clave o nombre sin distinguir acentos y filtra con diferencia o sin propuesta', function () {
@@ -243,6 +243,29 @@ it('la lente de la carrera también trae lo que la carrera pidió sin proyecció
     expect($web->semester)->toBe(6)
         ->and($web->cell($this->isic->id))->toMatchArray(['suggested' => 0, 'counted' => 2, 'large' => true])
         ->and($web->rows[0]->method)->toBeNull();
+});
+
+it('un campus borrado después de la proyección sigue siendo el campus de sus filas', function () {
+    demandBoardForecast($this->isic, $this->topics, $this->c1, 2);
+    demandBoardForecast($this->isic, $this->topics, $this->c2, 1);
+    $this->c2->delete();
+
+    $topics = demandBoardOf($this->sc)->subject('SCD-1027');
+
+    expect(array_map(fn ($row): ?string => $row->campus?->code, $topics->rows))->toBe(['C1', 'C2'])
+        ->and(array_map(fn (array $line): ?string => $line['campus']?->code, $topics->breakdown()['campuses']))->toBe(['C1', 'C2']);
+});
+
+it('en la lente de carrera, el semestre sale de su retícula aunque su fila no tenga demanda', function () {
+    $plan = StudyPlan::factory()->create(['career_id' => $this->isic->id]);
+    placeInPlan($plan, $this->web, 5);
+    demandBoardForecast($this->isic, $this->web, $this->c1, 0, ['eligible_students' => 0, 'expected_students' => 0]);
+    demandBoardForecast($this->ige, $this->web, $this->c1, 2);
+
+    $web = app(DemandBoardQuery::class)->forCareer($this->term, $this->modality, $this->isic, $this->settings)->subject('AEB-1055');
+
+    expect($web->semester)->toBe(5)
+        ->and($web->cell($this->isic->id))->toBeNull();
 });
 
 it('deja fuera las filas sin elegibles, sin esperados, sin sugeridos y sin nada pedido', function () {
