@@ -41,6 +41,23 @@ final class TermKardexQuery
     }
 
     /**
+     * Las claves de los periodos con kárdex contable en la modalidad, de la más reciente a la más antigua: los que se
+     * pueden evaluar en «Precisión de la proyección» (tarea 5.9c), antes de quitar los de verano y los que no son periodo
+     * de Nexus.
+     *
+     * @return list<string>
+     */
+    public function termCodes(Modality $modality): array
+    {
+        return $this->counted(null, $modality)
+            ->toBase()
+            ->distinct()
+            ->orderByDesc('kardex_records.term_code')
+            ->pluck('kardex_records.term_code')
+            ->all();
+    }
+
+    /**
      * Cuántos alumnos distintos tienen kárdex contable del periodo, por su carrera y su campus de hoy.
      *
      * @return list<array{career_id: string, campus_id: string, students: int}>
@@ -59,12 +76,12 @@ final class TermKardexQuery
     /**
      * @return Builder<KardexRecord>
      */
-    private function counted(string $termCode, ?Modality $modality = null, ?Campus $campus = null): Builder
+    private function counted(?string $termCode, ?Modality $modality = null, ?Campus $campus = null): Builder
     {
         return KardexRecord::query()
             ->join('students', 'students.id', '=', 'kardex_records.student_id')
             ->whereNull('students.deleted_at')
-            ->where('kardex_records.term_code', $termCode)
+            ->when($termCode !== null, fn (Builder $query) => $query->where('kardex_records.term_code', $termCode))
             ->whereIn('kardex_records.result', self::COUNTED)
             ->when($modality !== null, fn (Builder $query) => $query->where('students.modality_id', $modality->getKey()))
             ->when($campus !== null, fn (Builder $query) => $query->where('students.campus_id', $campus->getKey()));
