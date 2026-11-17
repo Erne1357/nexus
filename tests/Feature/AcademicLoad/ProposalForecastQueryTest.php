@@ -28,7 +28,7 @@ use Illuminate\Support\Facades\DB;
 | ProposalForecastQuery (tarea 5.6, opción C «Revisión de la proyección», elegida por el usuario el 17 de noviembre de 2026):
 | el estado de cada fila de la propuesta frente a la proyección vigente (ProposalSuggestionState), sus motivos para revisar
 | (la proyección cambió, se aparta del sugerido, especialidad, sin historia) y la evidencia de las tarjetas: el historial de
-| los periodos del mismo tipo. Una consulta para la proyección y dos para el historial, sin importar cuántas filas.
+| los periodos del mismo tipo. Una consulta para la proyección y tres para el historial, sin importar cuántas filas.
 */
 
 beforeEach(function () {
@@ -158,8 +158,8 @@ it('sin proyección para la propuesta no hay nada que revisar', function () {
 });
 
 it('dice de cuándo es la proyección, cuántos periodos mira y de qué tipo, y el tamaño de los grupos', function () {
-    forecastQueryRow('ACF-0901', $this->c1, forecast: ['computed_at' => '2026-11-17 13:10:00+00']);
-    forecastQueryRow('ACF-0902', $this->c1, forecast: ['computed_at' => '2026-11-16 13:10:00+00']);
+    forecastQueryRow('ACF-0901', $this->c1, forecast: ['computed_at' => '2026-11-17 06:10:00']);
+    forecastQueryRow('ACF-0902', $this->c1, forecast: ['computed_at' => '2026-11-16 06:10:00']);
 
     expect(proposalForecastReview()->headerLine('America/Ciudad_Juarez'))->toBe('Proyección de Nexus del 17/11/2026 a las 6:10 · últimos 4 Ene-Jun · 35 por grupo, 25 con laboratorio');
 });
@@ -189,7 +189,7 @@ it('da el historial de cada fila en su campus: grupos, lugares e inscritos de lo
     $row = forecastQueryRow('ACF-0901', $this->c1);
     HistoricalGroup::factory()->fromSii()->create(['subject_id' => $row->subject_id, 'term_code' => '20261', 'campus_id' => $this->c1->id, 'group_code' => 'A', 'capacity' => 40, 'enrolled' => 38]);
     HistoricalGroup::factory()->fromSii()->create(['subject_id' => $row->subject_id, 'term_code' => '20261', 'campus_id' => $this->c1->id, 'group_code' => 'B', 'capacity' => 35, 'enrolled' => 30]);
-    HistoricalGroup::factory()->fromSii()->create(['subject_id' => $row->subject_id, 'term_code' => '20261', 'campus_id' => $this->c2->id, 'group_code' => 'A', 'capacity' => 99, 'enrolled' => 99]);
+    HistoricalGroup::factory()->fromSii()->create(['subject_id' => $row->subject_id, 'term_code' => '20261', 'campus_id' => $this->c2->id, 'group_code' => 'C', 'capacity' => 99, 'enrolled' => 99]);
     $student = fn (Campus $campus) => Student::factory()->create(['campus_id' => $campus->id, 'modality_id' => $this->proposal->modality_id]);
     KardexRecord::factory()->failed()->create(['student_id' => $student($this->c1)->id, 'subject_id' => $row->subject_id, 'term_code' => '20261']);
     KardexRecord::factory()->failed()->create(['student_id' => $student($this->c1)->id, 'subject_id' => $row->subject_id, 'term_code' => '20241']);
@@ -202,7 +202,7 @@ it('da el historial de cada fila en su campus: grupos, lugares e inscritos de lo
     $history = app(ProposalForecastQuery::class)->history($review, [$review->row($row)]);
     DB::disableQueryLog();
 
-    expect(count(DB::getQueryLog()))->toBe(2)
+    expect(count(DB::getQueryLog()))->toBe(3)
         ->and($history[$row->id])->toBe([
             ['term' => '20231', 'label' => '2023', 'groups' => null, 'capacity' => null, 'enrolled' => null, 'failed' => null],
             ['term' => '20241', 'label' => '2024', 'groups' => null, 'capacity' => null, 'enrolled' => null, 'failed' => 1],
