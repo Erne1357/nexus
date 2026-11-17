@@ -11,6 +11,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Rules\TermCode;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 
@@ -79,7 +80,7 @@ final class ForecastEvaluationDemoSeeder extends Seeder
      */
     private function evaluableTerms(Modality $modality, string $demoTerm): Collection
     {
-        $codes = collect(app(TermKardexQuery::class)->termCodes($modality))->filter(fn (string $code): bool => $code < $demoTerm);
+        $codes = collect(app(TermKardexQuery::class)->termCodes($modality))->filter(fn (string $code): bool => $code < $demoTerm && TermCode::isRegular($code));
         $withHistory = $codes->filter(fn (string $code): bool => $codes->contains(fn (string $other): bool => $other < $code && substr($other, -1) === substr($code, -1)))
             ->take(self::LATEST)
             ->values();

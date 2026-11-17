@@ -41,8 +41,9 @@ final class TermKardexQuery
     }
 
     /**
-     * Los códigos de los periodos ordinarios (no verano) con kárdex contable en la modalidad, del más reciente al más
-     * antiguo.
+     * Las claves de los periodos con kárdex contable en la modalidad, de la más reciente a la más antigua: los que se
+     * pueden evaluar en «Precisión de la proyección» (tarea 5.9c), antes de quitar los de verano y los que no son periodo
+     * de Nexus.
      *
      * @return list<string>
      */
@@ -51,10 +52,8 @@ final class TermKardexQuery
         return $this->counted(null, $modality)
             ->toBase()
             ->distinct()
+            ->orderByDesc('kardex_records.term_code')
             ->pluck('kardex_records.term_code')
-            ->filter(fn (string $code): bool => preg_match('/^\d{4}[13]$/', $code) === 1)
-            ->sortDesc()
-            ->values()
             ->all();
     }
 
