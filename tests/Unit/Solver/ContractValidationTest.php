@@ -1,0 +1,93 @@
+<?php
+
+use App\Modules\Solver\Contract\ContractException;
+use App\Modules\Solver\Contract\SolverInput;
+use App\Modules\Solver\Contract\SolverOutput;
+
+/**
+ * @return array<string, mixed>
+ */
+function contractBaseInput(): array
+{
+    return json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/input.json'), true, flags: JSON_THROW_ON_ERROR);
+}
+
+dataset('contractBrokenInputs', [
+    'versión distinta de 1' => [fn (array $d) => array_replace($d, ['version' => 2]), 'version', 'versión no soportada'],
+    'campus desconocido en un grupo' => [function (array $d) {
+        $d['groups'][1]['campus_code'] = 'C9';
+
+        return $d;
+    }, 'groups[1].campus_code', 'no está en campuses'],
+    'id de grupo repetido' => [function (array $d) {
+        $d['groups'][2]['id'] = $d['groups'][0]['id'];
+
+        return $d;
+    }, 'groups[2].id', 'repetido'],
+    'docente que no está en teachers' => [function (array $d) {
+        $d['groups'][0]['teacher_id'] = '0190a000-0000-7000-8000-999999999999';
+
+        return $d;
+    }, 'groups[0].teacher_id', 'teachers'],
+    'alcance campus' => [function (array $d) {
+        $d['scope']['kind'] = 'campus';
+
+        return $d;
+    }, 'scope.kind', 'department, career'],
+    'día 7' => [function (array $d) {
+        $d['teachers'][0]['preferred'][0]['day'] = 7;
+
+        return $d;
+    }, 'teachers[0].preferred[0].day', 'entre 1 y 6'],
+    'fin antes del inicio' => [function (array $d) {
+        $d['rooms'][1]['blocks'][0]['ends_at'] = '12:00';
+
+        return $d;
+    }, 'rooms[1].blocks[0].ends_at', 'posterior'],
+    'peso blando negativo' => [function (array $d) {
+        $d['soft_weights']['SC-03'] = -1;
+
+        return $d;
+    }, 'soft_weights.SC-03', 'entero de 0 en adelante'],
+    'peso blando desconocido' => [function (array $d) {
+        $d['soft_weights']['SC-10'] = 1;
+
+        return $d;
+    }, 'soft_weights.SC-10', 'desconocida'],
+    'regla dura mal escrita' => [function (array $d) {
+        $d['hard_rules'][2] = 'HC-3';
+
+        return $d;
+    }, 'hard_rules[2]', 'HC-'],
+    'salón candidato inexistente' => [function (array $d) {
+        $d['groups'][0]['candidate_room_ids'] = ['0190a000-0000-7000-8000-999999999999'];
+
+        return $d;
+    }, 'groups[0].candidate_room_ids[0]', 'rooms'],
+    'horas semanales en cero' => [function (array $d) {
+        $d['groups'][2]['weekly_hours'] = 0;
+
+        return $d;
+    }, 'groups[2].weekly_hours', 'debe ser un entero de 1 en adelante'],
+]);
+
+test('una entrada rota se rechaza con la ruta del campo', function (Closure $break, string $path, string $fragment) {
+    try {
+        SolverInput::fromArray($break(contractBaseInput()));
+    } catch (ContractException $e) {
+        expect($e->path)->toBe($path)
+            ->and($e->getMessage())->toStartWith($path.': ')
+            ->and($e->getMessage())->toContain($fragment);
+
+        return;
+    }
+
+    $this->fail('Se esperaba ContractException.');
+})->with('contractBrokenInputs');
+
+test('una salida feasible con violaciones duras se rechaza', function () {
+    $data = json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/output.json'), true, flags: JSON_THROW_ON_ERROR);
+    $data['hard_violations'] = [['rule' => 'HC-01', 'group_ids' => [$data['sessions'][0]['group_id']], 'message' => 'Docente empalmado.']];
+
+    expect(fn () => SolverOutput::fromArray($data))->toThrow(ContractException::class, 'hard_violations');
+});
