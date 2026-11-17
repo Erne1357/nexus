@@ -1,0 +1,15 @@
+{
+    "feasible": false,
+    "must_schedule": [
+        "g004",
+        "g005"
+    ],
+    "may_leave_unscheduled": [
+        "g001",
+        "g002",
+        "g003"
+    ],
+    "min_unscheduled": 2,
+    "max_soft_score": null,
+    "notes": "HC-09: t001 da tres grupos de 4 horas (12) pero solo le quedan 6 bloques libres (día 4 de 9 a 11 y todo el día 5, con la rejilla de 4 bloques por día), así que cabe a lo más uno de sus grupos completo: al menos dos de g001, g002 y g003 deben quedar en unscheduled con HC-09 (o el estado ser infeasible). g004 y g005 (docente t002) sí se programan."
+}
