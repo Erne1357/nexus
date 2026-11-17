@@ -11,7 +11,7 @@ use Illuminate\Database\Seeder;
 /**
  * Calificaciones tardías para la demo (tarea 5.10, pedido de la 5.5 y la 5.6): en las `$subjects` materias con más
  * alumnos cursándolas en el semestre ordinario anterior al de la demo, lo que se cursa pasa a aprobada o reprobada
- * (`$failureShare` de reprobadas, repartidas de forma repetible con `$seed`). Después recalcula el avance de los
+ * (exactamente `$failureShare` de reprobadas, redondeado, elegidas de forma repetible con `$seed`). Después recalcula el avance de los
  * alumnos, que avisa con StudentProgressRefreshed y vuelve a proyectar los periodos abiertos (tarea 5.4; `demo:seed`
  * corre con la cola síncrona). Así cambia la proyección de esas materias y de las que las piden de seriación, y la
  * propuesta ya armada tiene filas donde «la proyección cambió».
@@ -42,8 +42,9 @@ final class DemandRecalculationDemoSeeder extends Seeder
             ->pluck('id')
             ->all();
 
-        $failed = array_values(array_filter($rows, fn (string $id): bool => crc32($id.$seed) % 100 < (int) round($failureShare * 100)));
-        $passed = array_values(array_diff($rows, $failed));
+        usort($rows, fn (string $a, string $b): int => [crc32($a.$seed), $a] <=> [crc32($b.$seed), $b]);
+        $failed = array_slice($rows, 0, (int) round(count($rows) * $failureShare));
+        $passed = array_slice($rows, count($failed));
 
         KardexRecord::query()->whereIn('id', $failed)->update(['result' => KardexResult::Reprobada, 'grade' => 55]);
         KardexRecord::query()->whereIn('id', $passed)->update(['result' => KardexResult::Aprobada, 'grade' => 82]);
