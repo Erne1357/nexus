@@ -16,7 +16,9 @@ use Illuminate\Support\Collection;
 /**
  * Los elegibles proyectados al inicio del periodo que se planea, por carrera, campus y materia (tarea 5.3; DM-01): de
  * cada alumno, lo que podrá cursar contando como aprobado lo que cursa hoy (StandingCalculator), cuántos de esos lo son
- * solo por eso y cuántos cursan hoy la materia, que vuelven como repetidores.
+ * solo por eso y cuántos cursan hoy la materia, que vuelven como repetidores. Los elegibles también van por tramo de
+ * distancia entre el semestre de la materia y el del alumno (`gaps`, GapBucket; DM-03, confirmado el 17 de noviembre
+ * de 2026).
  *
  * - Hoy: los alumnos activos de la modalidad (estatus `activo`, `is_active`, sin borrar), los mismos que cuenta R1
  *   (EligibleStudentsQuery), con todo su kárdex anterior al periodo.
@@ -35,7 +37,7 @@ final class EligibilityProjectionQuery
     ) {}
 
     /**
-     * @return array<string, array<string, array<string, array{eligible: int, pending: int, current: int}>>> carrera → campus → materia → conteos
+     * @return array<string, array<string, array<string, array{eligible: int, pending: int, current: int, gaps: array<string, int>}>>> carrera → campus → materia → conteos; `gaps`, valor de GapBucket → elegibles
      */
     public function forTerm(string $termCode, Modality $modality, ?string $asOfTerm = null): array
     {
@@ -65,8 +67,10 @@ final class EligibilityProjectionQuery
                     $bySubject = &$counts[$student->career_id][$student->campus_id];
 
                     foreach ($standing->eligible as $subject) {
-                        $bySubject[$subject] ??= ['eligible' => 0, 'pending' => 0, 'current' => 0];
+                        $bucket = $standing->gapOf[$subject]->value;
+                        $bySubject[$subject] ??= ['eligible' => 0, 'pending' => 0, 'current' => 0, 'gaps' => []];
                         $bySubject[$subject]['eligible']++;
+                        $bySubject[$subject]['gaps'][$bucket] = ($bySubject[$subject]['gaps'][$bucket] ?? 0) + 1;
                     }
 
                     foreach ($standing->pendingPrerequisite as $subject) {
@@ -74,7 +78,7 @@ final class EligibilityProjectionQuery
                     }
 
                     foreach ($standing->taking as $subject) {
-                        $bySubject[$subject] ??= ['eligible' => 0, 'pending' => 0, 'current' => 0];
+                        $bySubject[$subject] ??= ['eligible' => 0, 'pending' => 0, 'current' => 0, 'gaps' => []];
                         $bySubject[$subject]['current']++;
                     }
 

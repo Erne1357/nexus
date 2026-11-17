@@ -118,6 +118,14 @@ it('dice el porcentaje de créditos que pide una materia que todavía no puede c
     expect(cellOf(recordOf($this->student), 'R'))->standing->toBe(SubjectStanding::NoPermitida)->creditShare->toBe(80);
 });
 
+it('dice que una materia de especialidad pide el 60 % de los créditos mientras no llega a él (supuesto por confirmar)', function () {
+    $specialty = Specialty::factory()->for($this->plan)->create();
+    $networks = Subject::factory()->create(['code' => 'R-2']);
+    placeInPlan($this->plan, $networks, 2, $specialty);
+
+    expect(cellOf(recordOf($this->student), 'R'))->standing->toBe(SubjectStanding::NoPermitida)->creditShare->toBe(60);
+});
+
 it('una vez elegida la especialidad, ya no muestra las materias de las otras', function () {
     $networks = Specialty::factory()->for($this->plan)->create();
     $software = Specialty::factory()->for($this->plan)->create(['name' => 'Software']);

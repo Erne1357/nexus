@@ -24,8 +24,11 @@ use Illuminate\Support\Collection;
  * En cada periodo de la ventana:
  * - La población son los alumnos de la modalidad, sin borrar, con alguna fila del kárdex en ese periodo, con cualquier
  *   resultado (DM-10, supuesto por confirmar). Su campus y su plan son los de hoy.
- * - Los elegibles de cada uno salen de su kárdex anterior al periodo y de la retícula de su plan (StandingCalculator).
- * - La tomó quien la tiene ese periodo aprobada, reprobada o cursando; la baja no (DM-02).
+ * - Los elegibles de cada uno salen de su kárdex anterior al periodo y de la retícula de su plan (StandingCalculator),
+ *   cada uno en su tramo de distancia entre el semestre de la materia y el del alumno (GapBucket; DM-03, confirmado el
+ *   17 de noviembre de 2026).
+ * - La tomó quien la tiene ese periodo aprobada, reprobada o cursando; la baja no (DM-02). Se cuenta aparte a todos los
+ *   que la tomaron, elegibles o no, para saber si alguien la tomó en algún campus (DM-04).
  * - La reprobación cuenta a todos los que la terminaron con calificación ese periodo, elegibles o no.
  * - Entró en ese periodo quien no tiene kárdex de antes.
  *
@@ -93,6 +96,12 @@ final class HistoricalRatesQuery
                             }
                         }
 
+                        foreach (array_keys($took) as $subject) {
+                            $counts = &self::counts($bySubject, $subject, $campus);
+                            $counts['takers']++;
+                            unset($counts);
+                        }
+
                         if (! $earlier) {
                             $intake[$student->career_id][$campus][$term] = ($intake[$student->career_id][$campus][$term] ?? 0) + 1;
                         }
@@ -103,10 +112,17 @@ final class HistoricalRatesQuery
                             continue;
                         }
 
-                        foreach ($this->standings->at($grid, $records, $term)->eligible as $subject) {
+                        $standing = $this->standings->at($grid, $records, $term);
+
+                        foreach ($standing->eligible as $subject) {
+                            $tookIt = isset($took[$subject]) ? 1 : 0;
+                            $bucket = $standing->gapOf[$subject]->value;
                             $counts = &self::counts($bySubject, $subject, $campus);
                             $counts['eligible']++;
-                            $counts['took'] += isset($took[$subject]) ? 1 : 0;
+                            $counts['took'] += $tookIt;
+                            $counts['gaps'][$bucket] ??= ['eligible' => 0, 'took' => 0];
+                            $counts['gaps'][$bucket]['eligible']++;
+                            $counts['gaps'][$bucket]['took'] += $tookIt;
                             $counts['terms'][$term] = true;
                             unset($counts);
                         }
@@ -125,12 +141,12 @@ final class HistoricalRatesQuery
     /**
      * Los conteos de una materia en un campus, nacidos en cero.
      *
-     * @param  array<string, array<string, array{eligible: int, took: int, graded: int, failed: int, terms: array<string, true>}>>  $bySubject
-     * @return array{eligible: int, took: int, graded: int, failed: int, terms: array<string, true>}
+     * @param  array<string, array<string, array{eligible: int, took: int, takers: int, graded: int, failed: int, terms: array<string, true>, gaps: array<string, array{eligible: int, took: int}>}>>  $bySubject
+     * @return array{eligible: int, took: int, takers: int, graded: int, failed: int, terms: array<string, true>, gaps: array<string, array{eligible: int, took: int}>}
      */
     private static function &counts(array &$bySubject, string $subject, string $campus): array
     {
-        $bySubject[$subject][$campus] ??= ['eligible' => 0, 'took' => 0, 'graded' => 0, 'failed' => 0, 'terms' => []];
+        $bySubject[$subject][$campus] ??= ['eligible' => 0, 'took' => 0, 'takers' => 0, 'graded' => 0, 'failed' => 0, 'terms' => [], 'gaps' => []];
 
         return $bySubject[$subject][$campus];
     }

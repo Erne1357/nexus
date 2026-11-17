@@ -66,12 +66,13 @@ it('una seriación con una materia que ya no está en la retícula no bloquea', 
 
 describe('especialidades', function () {
     /**
-     * Tronco común (A) y dos especialidades: Redes (R1, R2) y Software (S1).
+     * Tronco común (A) y dos especialidades: Redes (R1, R2) y Software (S1). Con A aprobada ya lleva el 60 % de
+     * los créditos que piden las materias de especialidad (20 de 28).
      */
     function specialtyGrid(): PlanGrid
     {
         return new PlanGrid(
-            credits: ['A' => 5, 'R1' => 4, 'R2' => 4, 'S1' => 4],
+            credits: ['A' => 20, 'R1' => 4, 'R2' => 4, 'S1' => 4],
             specialtyOf: ['R1' => 'redes', 'R2' => 'redes', 'S1' => 'software'],
         );
     }
@@ -90,7 +91,45 @@ describe('especialidades', function () {
 
     it('los créditos de lo aprobado cuentan aunque sea de otra especialidad', function () {
         expect(specialtyGrid()->progressFor(['A', 'R1', 'S1']))
-            ->toMatchArray(['credits_approved' => 13, 'subjects_pending' => ['R2']]);
+            ->toMatchArray(['credits_approved' => 28, 'subjects_pending' => ['R2']]);
+    });
+
+    it('una materia de especialidad pide el 60 % de los créditos del plan (supuesto por confirmar)', function () {
+        $grid = new PlanGrid(
+            credits: ['A' => 40, 'B' => 20, 'C' => 20, 'E1' => 20],
+            specialtyOf: ['E1' => 'redes'],
+            totalCredits: 100,
+        );
+
+        expect(PlanGrid::SPECIALTY_CREDIT_SHARE)->toBe(60)
+            ->and($grid->progressFor(['A'])['subjects_available'])->toBe(['B', 'C'])
+            ->and($grid->progressFor(['A', 'B'])['subjects_available'])->toBe(['C', 'E1'])
+            ->and($grid->creditShareOf('E1'))->toBe(60)
+            ->and($grid->creditShareOf('A'))->toBeNull();
+    });
+
+    it('una materia de especialidad que ya pide un porcentaje mayor conserva el suyo', function () {
+        $grid = new PlanGrid(
+            credits: ['A' => 70, 'B' => 10, 'E1' => 20],
+            specialtyOf: ['E1' => 'redes'],
+            creditShare: ['E1' => 80],
+            totalCredits: 100,
+        );
+
+        expect($grid->progressFor(['A'])['subjects_available'])->toBe(['B'])
+            ->and($grid->progressFor(['A', 'B'])['subjects_available'])->toBe(['E1'])
+            ->and($grid->creditShareOf('E1'))->toBe(80);
+    });
+
+    it('sin total capturado, el 60 % se mide contra la retícula con la especialidad de más créditos', function () {
+        // Tronco común A (35) y B (10); Redes (R1, 30) y Software (W1, 10): sin elegir, 75 créditos.
+        $grid = new PlanGrid(
+            credits: ['A' => 35, 'B' => 10, 'R1' => 30, 'W1' => 10],
+            specialtyOf: ['R1' => 'redes', 'W1' => 'software'],
+        );
+
+        expect($grid->progressFor(['A'])['subjects_available'])->toBe(['B'])
+            ->and($grid->progressFor(['A', 'B'])['subjects_available'])->toBe(['R1', 'W1']);
     });
 });
 
