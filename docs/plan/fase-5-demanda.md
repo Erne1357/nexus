@@ -130,6 +130,7 @@ Antes que todo, A mezcla a `develop` un PR chico con lo que los tres necesitan (
   - Recalcula los periodos abiertos del actual en adelante (`ForecastTargetsQuery`).
 - **Demo:** `demo:seed` corre con la cola síncrona, así que la proyección nace al abrir el periodo. Desde el punto `propuesta`, una revisión exige proyección en cada modalidad abierta.
   - Con el masivo (12 006 alumnos y 354 918 filas de kárdex), abrir Ene-Jun 2027 con la proyección tarda 12.5 s, y llegar a `propuesta`, 78 s.
+  - Con la copia real del SII (16 700 alumnos activos y 2 043 435 filas de kárdex; base local del Riel C, que se borra al terminar), la proyección de 20271 en Presencial tarda 20.1 s y usa 85 MB como máximo (2 176 filas). En modo «como si», 13.2 s.
 
 ### Respuestas del usuario (16 de noviembre de 2026)
 
