@@ -30,6 +30,7 @@ function campusPlaceTables(): array
         'demand_forecasts' => 'la columna de campus de la proyección, la misma de la propuesta (nulo en una modalidad sin salones, MS5)',
         'interdepartmental_agreements' => 'solo en el préstamo de salón: el campus del salón (nulo en el grupo compartido)',
         'teacher_subject_history' => 'dónde se dio el grupo que impartió el docente',
+        'historical_groups' => 'dónde se dio el grupo del historial por materia (aula del SII o campus del grupo publicado; nulo si no se sabe)',
         'import_batches' => 'el campus del archivo importado, si lo tiene',
         'role_assignments' => 'el límite de un nombramiento con campus (M5, M9): su lugar de trabajo, no el de la carga',
         'catalog_reviews' => 'siempre nulo (CHECK `catalog_reviews_campus_check`): las revisiones son del departamento',
