@@ -2,8 +2,9 @@
     La regla del error de «Precisión de la proyección» (variante B «Contra la meta»): de 0 a 60 %, con la zona y la línea
     de la meta del 15 % (DM-22, ForecastAccuracy::STRONG_THRESHOLD), el aro de la regla de R1 (la base) y el punto de
     Nexus, unidos por una línea que dice cuánto mejora. Lo que pasa del 60 % se queda en la orilla con una flecha. El
-    punto va en `success` dentro de la meta y en `warning` fuera; el veredicto lo dicen además el grupo y la tabla, porque
-    el color nunca va solo. `big`, la de todo el Tec, con sus rótulos «Nexus 13.5 %» y «R1 37.9 %» arriba. Es
+    punto va en `success` si la confianza es «Sugerencia fuerte» y en `warning` si no: sale de la confianza, calculada sin
+    redondear, y no del error redondeado a cuatro decimales, para que punto e insignia digan lo mismo. El veredicto lo
+    dicen además el grupo y la tabla, porque el color nunca va solo. `big`, la de todo el Tec, con sus rótulos «Nexus 13.5 %» y «R1 37.9 %» arriba. Es
     decorativa: su contenido va en el nombre accesible del renglón y en la vista «Tabla».
 
     <x-academic-load::forecast-rule :metrics="$metrics" />
@@ -37,9 +38,9 @@
             'absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-base-100',
             'h-5 w-5' => $big,
             'h-[15px] w-[15px]' => ! $big,
-            'bg-success' => $error <= $meta,
-            'bg-warning' => $error > $meta,
-        ]) style="left: {{ $at($error) }}%"></span>
+            'bg-success' => $metrics->confidence === \App\Modules\AcademicLoad\Enums\ForecastConfidence::Strong,
+            'bg-warning' => $metrics->confidence !== \App\Modules\AcademicLoad\Enums\ForecastConfidence::Strong,
+        ]) style="left: {{ $at($error) }}%" data-nexus-dot></span>
         @if ($big)
             <span class="absolute bottom-[calc(100%+2px)] {{ $edge($at($error)) }} whitespace-nowrap text-[13px] font-semibold" style="left: {{ $at($error) }}%">Nexus <x-academic-load::percent :value="$error" />@if ($together)<span class="font-normal text-neutral"> · R1 <x-academic-load::percent :value="$baseline" /></span>@endif</span>
             @unless ($together)

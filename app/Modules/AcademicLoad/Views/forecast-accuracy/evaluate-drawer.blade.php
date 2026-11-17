@@ -52,12 +52,12 @@
             @else
                 <div class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300" data-testid="new-terms">
                     @foreach ($form['terms'] as $term)
-                        <label wire:key="new-term-{{ $term->id }}" class="flex cursor-pointer items-start gap-3 px-3 py-2.5 has-[:checked]:bg-base-200 hover:bg-base-200/60">
-                            <input type="radio" class="radio radio-sm mt-0.5" name="new-term" value="{{ $term->id }}" wire:model.live="newTerm" @if ($errors->has('newTerm')) aria-describedby="new-term-error" @endif />
+                        <label wire:key="new-term-{{ $term['id'] }}" class="flex cursor-pointer items-start gap-3 px-3 py-2.5 has-[:checked]:bg-base-200 hover:bg-base-200/60">
+                            <input type="radio" class="radio radio-sm mt-0.5" name="new-term" value="{{ $term['id'] }}" wire:model.live="newTerm" @if ($errors->has('newTerm')) aria-describedby="new-term-error" @endif />
                             <span class="min-w-0 grow">
-                                <span class="font-semibold">{{ $term->name }}</span> <span class="font-mono text-[12.5px] text-neutral">{{ $term->code }}</span>
-                                @isset($evaluated[$term->id])
-                                    <span class="block text-[12.5px] text-neutral">Evaluado el {{ $evaluated[$term->id] }}</span>
+                                <span class="font-semibold">{{ $term['name'] }}</span> <span class="font-mono text-[12.5px] text-neutral">{{ $term['code'] }}</span>
+                                @isset($evaluated[$term['id']])
+                                    <span class="block text-[12.5px] text-neutral">Evaluado el {{ $evaluated[$term['id']] }}</span>
                                 @endisset
                             </span>
                         </label>

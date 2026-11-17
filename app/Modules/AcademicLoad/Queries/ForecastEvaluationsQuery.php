@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\EvaluateForecast;
 use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
+use App\Modules\AcademicLoad\Jobs\RunForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluationRow;
 use App\Modules\AcademicLoad\Rules\ForecastAccuracy;
@@ -28,8 +29,8 @@ use Illuminate\Support\Collection;
  * para lo que `totals` no trae (un campus y un departamento a la vez, los conteos del bloque de arriba y las materias de
  * una carrera).
  *
- * El filtro de departamento es el de la materia, el que abre sus grupos, como `totals.by_department` (supuesto por
- * confirmar): con él, cada carrera cuenta solo sus materias de ese departamento.
+ * El filtro de departamento es el de la materia, el que abre sus grupos, como `totals.by_department` (confirmado por el
+ * usuario el 17 de noviembre de 2026): con él, cada carrera cuenta solo sus materias de ese departamento.
  */
 final class ForecastEvaluationsQuery
 {
@@ -60,17 +61,57 @@ final class ForecastEvaluationsQuery
      */
     public function chosen(Collection $list, ?string $id): ?ForecastEvaluation
     {
-        if (filled($id)) {
-            $requested = KeyLookup::find($this->withRelations(ForecastEvaluation::query()), $id);
+        $requested = filled($id) ? $this->evaluation($id) : null;
 
-            if ($requested !== null) {
-                return $requested;
-            }
-        }
-
-        return $list->first(fn (ForecastEvaluation $evaluation): bool => $evaluation->status->isPending())
+        return $requested
+            ?? $list->first(fn (ForecastEvaluation $evaluation): bool => $evaluation->status->isPending())
             ?? $list->first(fn (ForecastEvaluation $evaluation): bool => $evaluation->status === ForecastEvaluationStatus::Done)
             ?? $list->first();
+    }
+
+    /**
+     * Una evaluación por su id (KeyLookup), con su periodo, modalidad, campus y quien la pidió; null si no existe.
+     */
+    public function evaluation(string $id): ?ForecastEvaluation
+    {
+        return KeyLookup::find($this->withRelations(ForecastEvaluation::query()), $id);
+    }
+
+    /**
+     * El periodo que se eligió en «Evaluar un periodo», por su id (KeyLookup); null si no existe.
+     */
+    public function term(string $id): ?Term
+    {
+        return KeyLookup::find(Term::query(), $id);
+    }
+
+    /**
+     * Si la carrera tiene resultados en la evaluación (una entrada de `totals.by_career`): solo esas abren sus materias.
+     */
+    public function hasCareer(ForecastEvaluation $evaluation, string $careerId): bool
+    {
+        return $this->entry($evaluation->totals['by_career'] ?? [], 'career_id', $careerId) !== null;
+    }
+
+    /**
+     * Cada cuánto vuelve a leer la pantalla mientras algo corre: cada 2 s si la evaluación elegida sigue en cola o
+     * corriendo; cada 10 s si la elegida no, pero otra de la lista sí (para el punto de «Evaluaciones»); nunca si nada
+     * corre. Una en cola o corriendo que no se movió en `RunForecastEvaluation::STALE_AFTER` segundos se da por perdida
+     * (RequestForecastEvaluation) y no hace consultar a la pantalla.
+     *
+     * @param  Collection<int, ForecastEvaluation>  $list
+     * @return '2s'|'10s'|null
+     */
+    public function pollEvery(Collection $list, ?ForecastEvaluation $chosen): ?string
+    {
+        $moving = fn (ForecastEvaluation $evaluation): bool => $evaluation->status->isPending()
+            && $evaluation->updated_at->gte(now()->subSeconds(RunForecastEvaluation::STALE_AFTER));
+
+        return match (true) {
+            $chosen !== null && $moving($chosen) => '2s',
+            $list->contains(fn (ForecastEvaluation $evaluation): bool => $evaluation->getKey() !== $chosen?->getKey() && $moving($evaluation)) => '10s',
+            default => null,
+        };
     }
 
     public function item(ForecastEvaluation $evaluation): ForecastEvaluationItem

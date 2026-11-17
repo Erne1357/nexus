@@ -8,11 +8,11 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
-use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ModalityQuery;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -74,6 +74,15 @@ new #[Title('Precisión de la proyección')] class extends Component
 
     public string $newCampus = '';
 
+    /**
+     * Los periodos con kárdex de la modalidad elegida en «Evaluar un periodo» (id, clave y nombre): se leen al abrir el
+     * drawer y al cambiar de modalidad, no en cada vuelta, porque buscarlos en el kárdex pesa.
+     *
+     * @var list<array{id: string, code: string, name: string}>
+     */
+    #[Locked]
+    public array $evaluableTerms = [];
+
     public function mount(ForecastEvaluationsQuery $query): void
     {
         Gate::authorize('viewAny', ForecastEvaluation::class);
@@ -84,11 +93,11 @@ new #[Title('Precisión de la proyección')] class extends Component
     /**
      * Elige otra evaluación del drawer «Evaluaciones».
      */
-    public function select(string $evaluationId): void
+    public function select(string $evaluationId, ForecastEvaluationsQuery $query): void
     {
         Gate::authorize('viewAny', ForecastEvaluation::class);
 
-        $evaluation = KeyLookup::findOrFail(ForecastEvaluation::query(), $evaluationId);
+        $evaluation = $query->evaluation($evaluationId) ?? abort(404);
         $this->evaluation = $evaluation->getKey();
         $this->showEvaluations = false;
         $this->closeSubjects();
@@ -102,15 +111,20 @@ new #[Title('Precisión de la proyección')] class extends Component
     }
 
     /**
-     * Abre el drawer de las materias de una carrera de la evaluación lista, en el campus de la página.
+     * Abre el drawer de las materias de una carrera de la evaluación elegida, ya lista, en el campus de la página. Una
+     * carrera que no está en la evaluación no abre nada.
      */
-    public function openCareer(string $careerId): void
+    public function openCareer(string $careerId, ForecastEvaluationsQuery $query): void
     {
         Gate::authorize('viewAny', ForecastEvaluation::class);
 
-        $query = app(ForecastEvaluationsQuery::class);
         $evaluation = $query->chosen($query->list(), $this->evaluation);
-        abort_unless($evaluation?->status === ForecastEvaluationStatus::Done, 404);
+
+        if ($evaluation?->status !== ForecastEvaluationStatus::Done || ! $query->hasCareer($evaluation, $careerId)) {
+            $this->closeSubjects();
+
+            return;
+        }
 
         $this->openedCareer = $careerId;
         $this->subjectCampus = $this->campus;
@@ -119,6 +133,8 @@ new #[Title('Precisión de la proyección')] class extends Component
 
     public function closeSubjects(): void
     {
+        Gate::authorize('viewAny', ForecastEvaluation::class);
+
         $this->showSubjects = false;
         $this->openedCareer = null;
         $this->subjectCampus = '';
@@ -129,6 +145,8 @@ new #[Title('Precisión de la proyección')] class extends Component
      */
     public function updatedShowSubjects(bool $open): void
     {
+        Gate::authorize('viewAny', ForecastEvaluation::class);
+
         if (! $open) {
             $this->closeSubjects();
         }
@@ -139,6 +157,8 @@ new #[Title('Precisión de la proyección')] class extends Component
      */
     public function updated(string $property): void
     {
+        Gate::authorize('viewAny', ForecastEvaluation::class);
+
         if (in_array($property, ['campus', 'department'], true)) {
             $this->closeSubjects();
         }
@@ -154,9 +174,9 @@ new #[Title('Precisión de la proyección')] class extends Component
         $this->resetErrorBag();
         $options = app(ModalityQuery::class)->active();
         $modality = $options->firstWhere('code', $modalityCode) ?? $options->first();
-        $terms = $modality === null ? collect() : app(ForecastEvaluationsQuery::class)->evaluableTerms($modality);
         $this->newModality = $modality->code ?? '';
-        $this->newTerm = ($terms->firstWhere('id', $termId) ?? $terms->first())?->getKey() ?? '';
+        $this->loadEvaluableTerms($modality);
+        $this->newTerm = (collect($this->evaluableTerms)->firstWhere('id', $termId) ?? $this->evaluableTerms[0] ?? null)['id'] ?? '';
         $this->newCampus = $campusCode;
         $this->showEvaluations = false;
         $this->showEvaluate = true;
@@ -167,8 +187,10 @@ new #[Title('Precisión de la proyección')] class extends Component
      */
     public function updatedNewModality(): void
     {
-        $modality = app(ModalityQuery::class)->active()->firstWhere('code', $this->newModality);
-        $this->newTerm = $modality === null ? '' : (app(ForecastEvaluationsQuery::class)->evaluableTerms($modality)->first()?->getKey() ?? '');
+        Gate::authorize('create', ForecastEvaluation::class);
+
+        $this->loadEvaluableTerms(app(ModalityQuery::class)->active()->firstWhere('code', $this->newModality));
+        $this->newTerm = $this->evaluableTerms[0]['id'] ?? '';
         $this->newCampus = '';
         $this->resetErrorBag();
     }
@@ -177,12 +199,12 @@ new #[Title('Precisión de la proyección')] class extends Component
      * Pide la evaluación (RequestForecastEvaluation; DM-28 y DM-29) y la deja elegida. Si ya había una del mismo periodo,
      * modalidad y campus en curso, elige esa. Lo que rechaza la Action sale en su campo y el drawer sigue abierto.
      */
-    public function evaluate(RequestForecastEvaluation $request, ModalityQuery $modalities, CampusQuery $campuses): void
+    public function evaluate(RequestForecastEvaluation $request, ForecastEvaluationsQuery $query, ModalityQuery $modalities, CampusQuery $campuses): void
     {
         $this->authorize('create', ForecastEvaluation::class);
 
         $modality = $modalities->active()->firstWhere('code', $this->newModality);
-        $term = filled($this->newTerm) ? KeyLookup::find(Term::query(), $this->newTerm) : null;
+        $term = filled($this->newTerm) ? $query->term($this->newTerm) : null;
 
         if ($modality === null || $term === null) {
             $this->resetErrorBag();
@@ -238,25 +260,34 @@ new #[Title('Precisión de la proyección')] class extends Component
         $list = $query->list();
         $chosen = $query->chosen($list, $this->evaluation);
         $done = $chosen?->status === ForecastEvaluationStatus::Done;
+        $subjects = $done && $this->showSubjects && $this->openedCareer !== null
+            ? $query->subjects($chosen, $this->openedCareer, $this->subjectCampus, $this->department)
+            : null;
+
+        // Sin materias que mostrar (la evaluación cambió o el filtro las dejó fuera), el drawer se cierra: nunca vacío.
+        if ($subjects === null && $this->showSubjects) {
+            $this->showSubjects = false;
+            $this->openedCareer = null;
+            $this->subjectCampus = '';
+        }
 
         return [
             'items' => $list->map(fn (ForecastEvaluation $evaluation) => $query->item($evaluation)),
             'current' => $chosen === null ? null : $query->item($chosen),
             'report' => $chosen === null ? null : $query->report($chosen, $this->campus, $this->department),
-            'subjects' => $done && $this->showSubjects && $this->openedCareer !== null
-                ? $query->subjects($chosen, $this->openedCareer, $this->subjectCampus, $this->department)
-                : null,
-            'polling' => $list->contains(fn (ForecastEvaluation $evaluation): bool => $evaluation->status->isPending()) || ($chosen?->status->isPending() ?? false),
+            'subjects' => $subjects,
+            'pollEvery' => $query->pollEvery($list, $chosen),
             'canRun' => Gate::allows('create', ForecastEvaluation::class),
             'form' => $this->showEvaluate ? $this->form($query, $modalities, $campuses) : null,
         ];
     }
 
     /**
-     * Lo que pinta «Evaluar un periodo»: las modalidades activas, los periodos con kárdex de la elegida, sus campus (si
-     * usa salones, MS4) y cuándo se evaluó por última vez cada periodo en la modalidad y el campus elegidos.
+     * Lo que pinta «Evaluar un periodo»: las modalidades activas, los periodos con kárdex de la elegida (los que se
+     * leyeron al abrir o al cambiar de modalidad, `$evaluableTerms`), sus campus (si usa salones, MS4) y cuándo se evaluó
+     * por última vez cada periodo en la modalidad y el campus elegidos.
      *
-     * @return array{modalities: Collection<int, Modality>, modality: ?Modality, terms: Collection<int, Term>, campuses: Collection<int, Campus>, evaluated: array<string, string>}
+     * @return array{modalities: Collection<int, Modality>, modality: ?Modality, terms: Collection<int, array{id: string, code: string, name: string}>, campuses: Collection<int, Campus>, evaluated: array<string, string>}
      */
     private function form(ForecastEvaluationsQuery $query, ModalityQuery $modalities, CampusQuery $campuses): array
     {
@@ -268,10 +299,21 @@ new #[Title('Precisión de la proyección')] class extends Component
         return [
             'modalities' => $options,
             'modality' => $modality,
-            'terms' => $modality === null ? collect() : $query->evaluableTerms($modality),
+            'terms' => $modality === null ? collect() : collect($this->evaluableTerms),
             'campuses' => $usesRooms ? $campuses->of($modality) : collect(),
             'evaluated' => $modality === null ? [] : $query->evaluatedOn($modality, $campus),
         ];
+    }
+
+    /**
+     * Lee una vez los periodos con kárdex de la modalidad (ForecastEvaluationsQuery::evaluableTerms).
+     */
+    private function loadEvaluableTerms(?Modality $modality): void
+    {
+        $this->evaluableTerms = $modality === null ? [] : app(ForecastEvaluationsQuery::class)->evaluableTerms($modality)
+            ->map(fn (Term $term): array => ['id' => $term->getKey(), 'code' => $term->code, 'name' => $term->name])
+            ->values()
+            ->all();
     }
 
     private function campusOf(Modality $modality, CampusQuery $campuses): ?Campus

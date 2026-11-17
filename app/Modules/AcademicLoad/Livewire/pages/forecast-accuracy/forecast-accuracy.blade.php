@@ -3,10 +3,11 @@
     por el usuario el 17 de noviembre de 2026; maqueta en .impeccable/mocks/precision/b.html). La evaluación elegida en
     una franja con «Evaluaciones» y «Evaluar un periodo» (los dos en drawer); lista, el bloque de todo el Tec con su regla,
     los filtros (departamento de la materia, campus y la vista) y las carreras contra la meta agrupadas por veredicto, o la
-    tabla; corriendo, el avance y las carreras que ya terminaron (la página consulta cada 2 s); fallida, su error; sin
+    tabla; corriendo, el avance y las carreras que ya terminaron (la página consulta cada 2 s; cada 10 s si la que corre
+    es otra, y nunca por una que se dio por perdida: ForecastEvaluationsQuery::pollEvery); fallida, su error; sin
     ninguna, el estado vacío. Tocar una carrera abre sus materias en un drawer.
 --}}
-<div @if ($polling) wire:poll.2s @endif class="space-y-4">
+<div @if ($pollEvery === '2s') wire:poll.2s @elseif ($pollEvery === '10s') wire:poll.10s @endif class="space-y-4">
     <x-header title="Precisión de la proyección" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-[80ch] text-sm text-neutral!">
             Compara lo que Nexus habría proyectado antes de un periodo con los alumnos que de verdad llevaron cada materia, y con la regla de R1.

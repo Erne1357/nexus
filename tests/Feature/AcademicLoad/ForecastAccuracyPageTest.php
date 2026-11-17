@@ -176,7 +176,24 @@ describe('alcance (DM-24)', function () {
             ->and($button->getAttribute('title'))->toBe('No tienes permiso para evaluar la proyección.');
 
         $page->call('evaluate')->assertForbidden();
+        Livewire::actingAs($coordinator)->test('academic-load::pages.forecast-accuracy')->call('openEvaluate')->assertForbidden();
     });
+
+    it('sin el permiso de ver, cada acción llamada directo da 403', function (string $method, Closure $arguments) {
+        $evaluation = precisionTwoCareers();
+        $page = Livewire::actingAs($this->subdireccion)->test('academic-load::pages.forecast-accuracy');
+
+        $this->actingAs(User::factory()->withRole(Role::Docente)->create());
+        app()->forgetScopedInstances();
+
+        $page->call($method, ...$arguments($this, $evaluation))->assertForbidden();
+    })->with([
+        'elegir una evaluación' => ['select', fn ($test, ForecastEvaluation $evaluation): array => [$evaluation->id]],
+        'abrir las materias' => ['openCareer', fn ($test): array => [$test->isx->id]],
+        'abrir «Evaluaciones»' => ['openEvaluations', fn (): array => []],
+        'abrir «Evaluar un periodo»' => ['openEvaluate', fn (): array => []],
+        'cerrar las materias' => ['closeSubjects', fn (): array => []],
+    ]);
 });
 
 describe('la evaluación elegida', function () {
@@ -201,6 +218,19 @@ describe('la evaluación elegida', function () {
             ->and(textOf($page->querySelector('[data-testid="group-strong"]')))->toContain('Sugerencia fuerte')->toContain('ISX')->not->toContain('LAX')
             ->and(textOf($page->querySelector('[data-testid="group-reference"]')))->toContain('Referencia')->toContain('LAX')
             ->and(textOf($page->querySelector('[data-testid="career-ISX"]')))->toContain('13.2')->toContain('R1')->toContain('57.9');
+    });
+
+    it('DM-22: el punto de Nexus sale de la confianza, no del error redondeado', function () {
+        precisionEvaluation([[$this->isx, $this->c1, $this->calculus, 11497, 9997, 11497]]);
+
+        $page = domOf($this->actingAs($this->subdireccion)->get(route('academic-load.forecast-accuracy')));
+        $dot = $page->querySelector('[data-testid="career-ISX"] [data-nexus-dot]');
+
+        expect(ForecastEvaluation::query()->sole()->totals['by_career'][0])
+            ->weighted_error->toBe(0.15)
+            ->confidence->toBe('reference')
+            ->and($dot->getAttribute('class'))->toContain('bg-warning')->not->toContain('bg-success')
+            ->and(textOf($page->querySelector('[data-testid="group-reference"]')))->toContain('ISX');
     });
 
     it('el filtro de campus muestra el error de cada carrera en ese campus', function () {
@@ -279,6 +309,26 @@ describe('mientras corre', function () {
 
         expect($this->actingAs($this->subdireccion)->get(route('academic-load.forecast-accuracy'))->getContent())->not->toContain('wire:poll');
     });
+
+    it('con la elegida lista y otra corriendo, consulta cada 10 s', function () {
+        $done = precisionTwoCareers();
+        ForecastEvaluation::factory()->running()->create(['term_id' => Term::factory()->create(['code' => '20253'])->id]);
+
+        $html = $this->actingAs($this->subdireccion)->get(route('academic-load.forecast-accuracy', ['evaluacion' => $done->id]))->getContent();
+
+        expect($html)->toContain('wire:poll.10s')->not->toContain('wire:poll.2s');
+    });
+
+    it('una evaluación que no se movió en una hora se da por perdida: no hace consultar a la pantalla', function () {
+        $stuck = ForecastEvaluation::factory()->running()->create(['term_id' => $this->term->id]);
+        $stuck->forceFill(['updated_at' => now()->subSeconds(RunForecastEvaluation::STALE_AFTER + 60)])->saveQuietly();
+        precisionTwoCareers();
+
+        $this->actingAs($this->subdireccion);
+
+        expect($this->get(route('academic-load.forecast-accuracy', ['evaluacion' => $stuck->id]))->getContent())->not->toContain('wire:poll')
+            ->and($this->get(route('academic-load.forecast-accuracy'))->getContent())->not->toContain('wire:poll');
+    });
 });
 
 describe('materias de una carrera', function () {
@@ -294,6 +344,59 @@ describe('materias de una carrera', function () {
             ->and(textOf($rows[2]))->toContain('grupos 4 → 3')
             ->and(domOf($page)->querySelector('[data-testid="subjects-scatter"]'))->not->toBeNull()
             ->and($evaluation->id)->toBe($page->get('evaluation'));
+    });
+
+    it('DM-21: arriba lo que se proyectó sin alumnos, al final lo que no cuenta (proyectado y real en cero)', function () {
+        precisionEvaluation([
+            [$this->lax, $this->c1, $this->calculus, 65, 50],
+            [$this->lax, $this->c1, $this->ethics, 0, 0],
+            [$this->lax, $this->c1, $this->programming, 12, 0],
+        ]);
+
+        $page = Livewire::actingAs($this->subdireccion)->test('academic-load::pages.forecast-accuracy')->call('openCareer', $this->lax->id);
+        $rows = domOf($page)->querySelectorAll('[data-testid="subject-row"]');
+
+        expect(array_map(fn ($row): string => $row->getAttribute('data-subject'), iterator_to_array($rows)))->toBe(['PB-2', 'PA-1', 'PC-3'])
+            ->and(textOf($rows[0]))->toContain('sin alumnos')->toContain('+12')
+            ->and($rows[0]->getAttribute('data-out'))->toBe('1')
+            ->and(textOf($rows[2]))->toContain('0 de 0')->toContain('—')
+            ->and($rows[2]->getAttribute('data-out'))->toBe('0')
+            ->and(textOf(domOf($page)->querySelector('[data-testid="subjects-scatter"]')->parentNode))->toContain('2 materias');
+    });
+
+    it('con el filtro de departamento solo trae las materias de ese departamento', function () {
+        precisionTwoCareers();
+
+        $page = Livewire::actingAs($this->subdireccion)->test('academic-load::pages.forecast-accuracy')
+            ->set('department', 'DB')
+            ->call('openCareer', $this->isx->id);
+
+        expect(array_map(fn ($row): string => $row->getAttribute('data-subject'), iterator_to_array(domOf($page)->querySelectorAll('[data-testid="subject-row"]'))))->toBe(['PA-1', 'PA-1'])
+            ->and(textOf(domOf($page)->querySelector('[data-testid="subjects-panel"] header')))->toContain('Materias de DB');
+    });
+
+    it('el campus del drawer deja las materias y las cifras de ese campus', function () {
+        precisionTwoCareers();
+
+        $page = Livewire::actingAs($this->subdireccion)->test('academic-load::pages.forecast-accuracy')->call('openCareer', $this->isx->id);
+
+        expect(domOf($page)->querySelector('[data-testid="subjects-campus"]'))->not->toBeNull();
+
+        $page->set('subjectCampus', 'K2');
+
+        expect(array_map(fn ($row): string => $row->getAttribute('data-subject'), iterator_to_array(domOf($page)->querySelectorAll('[data-testid="subject-row"]'))))->toBe(['PA-1'])
+            ->and(textOf(domOf($page)->querySelector('[data-testid="subjects-facts"]')))->toContain('12.5');
+    });
+
+    it('una carrera que no está en la evaluación no abre el drawer', function () {
+        precisionTwoCareers();
+        $other = Career::factory()->create(['code' => 'OTX']);
+
+        $page = Livewire::actingAs($this->subdireccion)->test('academic-load::pages.forecast-accuracy')->call('openCareer', $other->id);
+
+        expect($page->get('showSubjects'))->toBeFalse()
+            ->and($page->get('openedCareer'))->toBeNull()
+            ->and(domOf($page)->querySelector('[data-testid="subjects-panel"]'))->toBeNull();
     });
 });
 
