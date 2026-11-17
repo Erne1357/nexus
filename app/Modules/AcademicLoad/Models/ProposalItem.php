@@ -22,9 +22,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * notas). Su departamento es el de la materia. Los grupos que nacen de ella son de su campus (M8). `campus_id` es nulo
  * solo en una modalidad sin salones, que lleva una sola columna (MS5). Guarda aparte lo que sugirió la proyección de
  * Demand (`suggested_*`, `forecast_method`) y cuándo corrigió el coordinador esperados o grupos (`captured_at`; nulo es
- * «sin tocar», 5.5).
+ * «sin tocar», 5.5), y cuándo revisó lo que la pantalla le pidió revisar de la proyección (`reviewed_at`; nulo es «por
+ * revisar», 5.6).
  */
-#[Fillable(['career_proposal_id', 'campus_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes', 'suggested_expected_students', 'suggested_groups', 'forecast_method', 'captured_at', 'captured_by'])]
+#[Fillable(['career_proposal_id', 'campus_id', 'subject_id', 'study_plan_id', 'semester', 'eligible_students', 'expected_students', 'requested_groups', 'notes', 'suggested_expected_students', 'suggested_groups', 'forecast_method', 'captured_at', 'captured_by', 'reviewed_at', 'reviewed_by'])]
 #[UseFactory(ProposalItemFactory::class)]
 class ProposalItem extends Model
 {
@@ -45,6 +46,7 @@ class ProposalItem extends Model
             'suggested_groups' => 'integer',
             'forecast_method' => ForecastMethod::class,
             'captured_at' => 'immutable_datetime',
+            'reviewed_at' => 'immutable_datetime',
         ];
     }
 

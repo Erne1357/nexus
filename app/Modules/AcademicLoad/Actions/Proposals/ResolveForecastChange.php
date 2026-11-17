@@ -14,7 +14,8 @@ use Illuminate\Validation\ValidationException;
  * El coordinador decide qué hacer con el aviso «la proyección cambió: ahora sugiere N» de una fila que corrigió (tarea 5.5,
  * confirmado el 16 de noviembre de 2026). `$choice` es `use` (esperados y grupos pasan a lo que sugiere ahora Nexus, y la
  * fila sigue marcada como corregida porque fue una decisión) o `keep` (conserva lo capturado y solo se acepta lo sugerido
- * nuevo para que el aviso desaparezca). En los dos casos `suggested_*` queda con lo nuevo.
+ * nuevo para que el aviso desaparezca). En los dos casos `suggested_*` queda con lo nuevo y la fila queda revisada
+ * (`reviewed_at`, `reviewed_by`; «Revisar proyección», tarea 5.6, supuesto por confirmar).
  *
  * Usa las guardas, la transacción, la bitácora y el aviso de UpdateProposalItem::change (propuesta en borrador o regresada y
  * parte del departamento sin aceptar), y relee la proyección vigente dentro de la transacción. Si ya no hay cambio
@@ -40,7 +41,7 @@ final class ResolveForecastChange
             throw ValidationException::withMessages(['choice' => 'Elige usar la proyección nueva o conservar lo capturado.']);
         }
 
-        return $this->update->change($item, $actor, function (ProposalItem $locked) use ($choice): array {
+        return $this->update->change($item, $actor, function (ProposalItem $locked) use ($choice, $actor): array {
             $proposal = $locked->proposal;
 
             $forecast = DemandForecast::query()
@@ -70,6 +71,8 @@ final class ResolveForecastChange
                 'suggested_expected_students' => $forecast->expected_students,
                 'suggested_groups' => $forecast->suggested_groups,
                 'forecast_method' => $forecast->method,
+                'reviewed_at' => now(),
+                'reviewed_by' => $actor->getKey(),
             ];
 
             if ($choice === self::USE) {

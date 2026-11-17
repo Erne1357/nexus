@@ -33,10 +33,15 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla: un coordinador con campus solo corrige las
  * de su campus (M7); quien corrige se recibe como parámetro. En la fila de un campus inactivo solo se dejan en cero los
  * grupos pedidos (zeroRequestedGroups(), M14). Si cambian los esperados o los grupos, la fila queda marcada como corregida
- * (`captured_at` y `captured_by`, tarea 5.5): desde ahí la proyección ya no la mueve sola; la nota sola no cuenta.
+ * (`captured_at` y `captured_by`, tarea 5.5): desde ahí la proyección ya no la mueve sola; la nota sola no cuenta. Ese
+ * cambio también borra la marca de revisada (`reviewed_at` y `reviewed_by`, tarea 5.6): lo revisado ya no es lo que hay
+ * (supuesto por confirmar). «Usar sugerido» de «Revisar proyección» es useSuggested().
  */
 final class UpdateProposalItem
 {
+    /** Las marcas de quién tocó la fila: se guardan, pero no van a la bitácora ni al aviso de lo que cambió. */
+    private const array MARKS = ['captured_at', 'captured_by', 'reviewed_at', 'reviewed_by'];
+
     public function __construct(private readonly ProposalItemRules $rules) {}
 
     /**
@@ -69,8 +74,34 @@ final class UpdateProposalItem
     }
 
     /**
+     * «Usar sugerido» en «Revisar proyección» (tarea 5.6, opción C elegida por el usuario el 17 de noviembre de 2026): pone
+     * los esperados y los grupos en lo que la fila guarda como sugerido (`suggested_*`) y la deja corregida y revisada, con
+     * las mismas guardas y la misma bitácora que una corrección. Sin nada sugerido es una ValidationException sobre `item`.
+     * Quién puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla (M7).
+     *
+     * @throws ValidationException
+     */
+    public function useSuggested(ProposalItem $item, User $actor): ProposalItem
+    {
+        return $this->change($item, $actor, function (ProposalItem $locked) use ($actor): array {
+            if ($locked->suggested_expected_students === null || $locked->suggested_groups === null) {
+                throw ValidationException::withMessages(['item' => 'Nexus no sugiere nada para esta materia.']);
+            }
+
+            return [
+                'expected_students' => $locked->suggested_expected_students,
+                'requested_groups' => $locked->suggested_groups,
+                'captured_at' => now(),
+                'captured_by' => $actor->getKey(),
+                'reviewed_at' => now(),
+                'reviewed_by' => $actor->getKey(),
+            ];
+        });
+    }
+
+    /**
      * Si `$values` cambia esperados o grupos de la fila, agrega la marca de que el coordinador la corrigió
-     * (`captured_at` y `captured_by`; tarea 5.5); la nota sola no cuenta.
+     * (`captured_at` y `captured_by`; tarea 5.5) y borra la de revisada (tarea 5.6); la nota sola no cuenta.
      *
      * @param  array<string, mixed>  $values
      * @return array<string, mixed>
@@ -79,7 +110,7 @@ final class UpdateProposalItem
     {
         foreach (['expected_students', 'requested_groups'] as $column) {
             if (array_key_exists($column, $values) && $values[$column] !== $locked->{$column}) {
-                return [...$values, 'captured_at' => now(), 'captured_by' => $actor->getKey()];
+                return [...$values, 'captured_at' => now(), 'captured_by' => $actor->getKey(), 'reviewed_at' => null, 'reviewed_by' => null];
             }
         }
 
@@ -89,8 +120,8 @@ final class UpdateProposalItem
     /**
      * La corrección en una transacción: bloquea la propuesta y la parte, relee la fila con bloqueo y escribe lo que
      * devuelve `$data` con la fila ya leída (con su materia y su campus), con la bitácora y el aviso si algo cambió.
-     * Es la misma guarda de ResolveForecastChange. La marca de captura se guarda pero no entra a la bitácora ni al
-     * aviso: la bitácora lleva lo que cambió en la fila, no quién la tocó.
+     * Es la misma guarda de ResolveForecastChange y de MarkProposalItemReviewed. Las marcas de captura y de revisión se
+     * guardan pero no entran a la bitácora ni al aviso: la bitácora lleva lo que cambió en la fila, no quién la tocó.
      *
      * @param  Closure(ProposalItem): array<string, mixed>  $data
      *
@@ -132,7 +163,7 @@ final class UpdateProposalItem
             $old = $item->only(array_keys($values));
             $item->fill($values);
             $dirty = array_keys($item->getDirty());
-            $changed = array_values(array_diff($dirty, ['captured_at', 'captured_by']));
+            $changed = array_values(array_diff($dirty, self::MARKS));
 
             if ($dirty === []) {
                 return $item;
