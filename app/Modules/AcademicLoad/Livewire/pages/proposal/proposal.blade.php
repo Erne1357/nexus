@@ -219,7 +219,7 @@
                     @include('academic-load::proposal.departments')
 
                     <div class="min-w-0 space-y-4">
-                        @if ($packages->shown())
+                        @if ($packages?->shown())
                             @include('academic-load::proposal.packages')
                         @endif
                         @if ($view === 'tabla')

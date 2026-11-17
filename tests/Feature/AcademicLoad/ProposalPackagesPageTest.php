@@ -180,6 +180,18 @@ describe('el bloque y sus cifras', function () {
             ->and(domOf($page)->querySelector('[data-testid="row-ACF-0902"] [data-package-groups]'))->toBeNull();
     });
 
+    it('«Usar sugerido» del panel, con paquetes, pide los de paquetes más los sueltos sugeridos', function () {
+        packagesPagePackage([$this->calculus]);
+        $item = packagesPageItem($this->calculus, $this->c1);
+
+        $page = packagesPageAs($this->ofC1)
+            ->call('edit', $this->calculus->id)
+            ->assertSee('Usar sugerido: 6 (35 por grupo)')
+            ->call('useSuggested', $item->id);
+
+        expect($page->get("form.{$item->id}.requested_groups"))->toBe(6);
+    });
+
     it('el panel de la materia dice cuántos grupos salen de paquetes y cuántos son sueltos', function () {
         packagesPagePackage([$this->calculus]);
 
@@ -205,6 +217,26 @@ describe('recién abierta', function () {
             ->assertSet('packageId', null);
 
         expect($page->get('packageSubjects'))->toEqualCanonicalizing([$this->calculus->id, $this->programming->id]);
+    });
+});
+
+describe('partes aceptadas', function () {
+    it('«Armar paquete con las materias de 1.º» deja fuera las de un departamento que ya aceptó su parte; el panel las muestra sin casilla activa y con el motivo', function () {
+        ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->sc->id, 'status' => ProposalReviewStatus::Accepted]);
+
+        $page = packagesPageAs($this->ofC1)->call('newPackage', true);
+
+        expect($page->get('packageSubjects'))->toBe([$this->calculus->id]);
+
+        $checkbox = domOf($page)->querySelector('[data-testid="package-subject-SCD-1008"]');
+
+        expect($checkbox->hasAttribute('disabled'))->toBeTrue()
+            ->and(packagesPageText($page, 'package-subject-lock-SCD-1008'))->toBe('SC ya aceptó su parte')
+            ->and(domOf($page)->querySelector('[data-testid="package-subject-ACF-0901"]')->hasAttribute('disabled'))->toBeFalse();
+
+        $page->call('savePackage')->assertHasNoErrors();
+
+        expect(ProposalPackage::query()->sole()->subjects()->pluck('subject_id')->all())->toBe([$this->calculus->id]);
     });
 });
 

@@ -8,7 +8,7 @@
     `$row` es la ProposalSubject; `close()` es del x-drawer. Si el departamento de la materia aceptó su parte o la
     regresó, lo dice arriba con su comentario; si alguna fila es rara (ProposalAnomalies), la advierte con icono y texto,
     sin impedir guardar ni enviar. «Usar sugerido» dice el número, que mientras se teclea recalcula Alpine con
-    `$suggestedSize`.
+    `$suggestedSize` (con paquetes, los de paquetes más los sueltos sugeridos, como SuggestedRowGroups).
 
     Con paquetes de primer semestre (tarea 5.6b), bajo los grupos de un campus que abre grupos por paquetes: «5 de paquetes + 3
     sueltos» (los grupos son el total de la fila; los sueltos, para rezagados y repetidores).
@@ -98,7 +98,9 @@
                                 <x-input label="Grupos solicitados" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="{{ strlen((string) $maxGroups) }}" oninput="this.value = this.value.replace(/\D/g, '')"
                                     wire:model="form.{{ $item->id }}.requested_groups" class="text-right font-mono" data-testid="field-groups" />
                             </div>
-                            <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested('{{ $item->id }}')" spinner="useSuggested('{{ $item->id }}')" data-testid="use-suggested"><span x-text="'Usar sugerido: ' + Math.ceil(Math.max(0, parseInt($wire.form[{{ \Illuminate\Support\Js::from($item->id) }}]?.expected_students) || 0) / {{ $suggestedSize }}) + ' ({{ $suggestedSize }} por grupo)'">Usar sugerido: {{ $suggested[$item->id] ?? 0 }} ({{ $suggestedSize }} por grupo)</span></x-button>
+                            <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested('{{ $item->id }}')" spinner="useSuggested('{{ $item->id }}')" data-testid="use-suggested">@php
+                                $rowNewStudents = $item->forecast_method === \App\Modules\Demand\Enums\ForecastMethod::FirstSemester ? ($panelNewStudents[$item->campus_id ?? ''] ?? 0) : 0;
+                            @endphp<span x-text="'Usar sugerido: ' + ((expected) => {{ $item->package_groups }} > 0 ? {{ $item->package_groups }} + Math.ceil(Math.max(0, expected - {{ $rowNewStudents }}) / {{ $suggestedSize }}) : Math.ceil(expected / {{ $suggestedSize }}))(Math.max(0, parseInt($wire.form[{{ \Illuminate\Support\Js::from($item->id) }}]?.expected_students) || 0)) + ' ({{ $suggestedSize }} por grupo)'">Usar sugerido: {{ $suggested[$item->id] ?? 0 }} ({{ $suggestedSize }} por grupo)</span></x-button>
                         </div>
                         @if ($item->package_groups > 0)
                             <p class="-mt-1 flex items-start gap-1.5 text-sm" data-testid="panel-packages-{{ $column['campus']?->code ?? 'unica' }}"><x-icon name="o-rectangle-group" class="mt-0.5 h-4 w-4 shrink-0 text-neutral" aria-hidden="true" /><span><span class="font-mono font-semibold">{{ $item->package_groups }}</span> de paquetes + <span class="font-mono font-semibold">{{ $looseGroups }}</span> {{ $looseLabel }}</span></p>

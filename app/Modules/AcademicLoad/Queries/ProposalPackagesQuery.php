@@ -2,11 +2,13 @@
 
 namespace App\Modules\AcademicLoad\Queries;
 
+use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\AcademicLoad\Models\ProposalPackageCampus;
+use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalPackageRules;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\KeyLookup;
@@ -25,7 +27,8 @@ final class ProposalPackagesQuery
      * Lo que pinta el bloque «Paquetes de primer semestre» (ProposalPackages), con las materias y las columnas que ya leyó
      * el resumen de la propuesta (CareerProposalQuery::overview). Dos consultas: los paquetes con sus materias y sus
      * columnas, y el nuevo ingreso de cada columna. Los lugares de un campus son los paquetes que abre por el tamaño
-     * objetivo normal (`$groupSize`, DemandSettings): alcanzan si cubren su nuevo ingreso (supuesto por confirmar).
+     * objetivo normal (`$groupSize`, DemandSettings), como los paquetes sugeridos, aunque el paquete lleve una materia con
+     * laboratorio: alcanzan si cubren su nuevo ingreso (supuesto por confirmar).
      */
     public function forOverview(ProposalOverview $overview, int $groupSize): ProposalPackages
     {
@@ -47,7 +50,7 @@ final class ProposalPackagesQuery
 
             return [
                 'package' => $package,
-                'label' => $this->label($package),
+                'label' => $package->label,
                 'subjects' => array_values(array_filter($subjects, fn (ProposalSubject $subject): bool => isset($ids[$subject->id()]))),
                 'counts' => $package->campuses->keyBy(fn (ProposalPackageCampus $column): string => $column->campus_id ?? '')->all(),
             ];
@@ -89,7 +92,48 @@ final class ProposalPackagesQuery
      */
     public function packageOrFail(CareerProposal $proposal, string $id): ProposalPackage
     {
-        return KeyLookup::findOrFail(ProposalPackage::query()->where('career_proposal_id', $proposal->getKey())->with('subjects'), $id);
+        return KeyLookup::findOrFail(ProposalPackage::query()->where('career_proposal_id', $proposal->getKey()), $id);
+    }
+
+    /**
+     * El nuevo ingreso vigente de cada columna de la propuesta, por llave de columna (ProposalOverview::columnKey): lo que
+     * resta de los esperados el «Usar sugerido» de una fila de primer semestre con paquetes (SuggestedRowGroups).
+     *
+     * @return array<string, int>
+     */
+    public function newStudentsByColumn(CareerProposal $proposal): array
+    {
+        return ProposalIntake::query()
+            ->where('career_proposal_id', $proposal->getKey())
+            ->get(['campus_id', 'new_students'])
+            ->mapWithKeys(fn (ProposalIntake $intake): array => [$intake->campus_id ?? '' => $intake->new_students])
+            ->all();
+    }
+
+    /**
+     * Las materias de 1.º de la propuesta que se pueden poner en un paquete, por id: las de los departamentos que no han
+     * aceptado su parte (las aceptadas ya no cambian, y CreateProposalPackage las rechazaría). Es lo que marca «Armar
+     * paquete con las materias de 1.º».
+     *
+     * @return list<string>
+     */
+    public function openFirstSemesterSubjectIds(CareerProposal $proposal): array
+    {
+        $accepted = ProposalReview::query()
+            ->select('department_id')
+            ->where('career_proposal_id', $proposal->getKey())
+            ->where('status', ProposalReviewStatus::Accepted);
+
+        return ProposalItem::query()
+            ->where('proposal_items.career_proposal_id', $proposal->getKey())
+            ->where('proposal_items.semester', 1)
+            ->join('subjects', 'subjects.id', '=', 'proposal_items.subject_id')
+            ->whereNotIn('subjects.department_id', $accepted)
+            ->orderBy('subjects.code')
+            ->distinct()
+            ->pluck('subjects.code', 'proposal_items.subject_id')
+            ->keys()
+            ->all();
     }
 
     /**
@@ -112,14 +156,6 @@ final class ProposalPackagesQuery
         }
 
         return $campus;
-    }
-
-    /**
-     * «Paquete 1» si no tiene nombre.
-     */
-    private function label(ProposalPackage $package): string
-    {
-        return $package->name ?? 'Paquete '.preg_replace('/\D/', '', $package->code);
     }
 
     /**

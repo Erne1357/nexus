@@ -3,14 +3,15 @@
     su nombre (opcional: sin él se llama «Paquete 3»), las materias de 1.º con casillas y, «si hace falta», las de 2.º, y el
     aviso de que la composición es de la carrera. Al pie, «Quitar paquete» (con el diálogo de Nexus, `x-confirm`; nunca uno
     del navegador, ADR-0023), «Cancelar» y «Guardar». Quien no arma la composición, o con la propuesta enviada o aceptada, lo
-    ve de solo lectura: el nombre, las materias y cuántos abre cada campus como texto, y «Cerrar».
+    ve de solo lectura: el nombre, las materias y cuántos abre cada campus como texto, y «Cerrar». La casilla de una materia
+    cuyo departamento ya aceptó su parte va deshabilitada, con candado y el motivo: esas materias ya no cambian.
 
     `$openPackage` es el paquete de ProposalPackages (null si es nuevo o si ya no está); `close()` es del x-drawer.
 --}}
 @php
     $isNew = $packageId === null;
     $label = 'text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral';
-    $defaultName = $isNew ? $packages->nextLabel : ($openPackage === null ? '' : 'Paquete '.preg_replace('/\D/', '', $openPackage['package']->code));
+    $defaultName = $isNew ? $packages->nextLabel : ($openPackage['package']->default_name ?? '');
     $title = $isNew ? 'Nuevo paquete' : ($openPackage['label'] ?? 'Paquete');
     $codes = array_values(array_filter(array_map(fn ($column) => $column['campus']?->code, $columns)));
     $last = array_pop($codes);
@@ -78,10 +79,19 @@
                             <legend class="{{ $label }} mb-1.5">{{ $legend }}</legend>
                             <div class="flex flex-col">
                                 @foreach ($options as $subject)
-                                    <label class="flex min-h-11 cursor-pointer items-center gap-3 rounded-field px-2 py-1.5 hover:bg-base-200 md:min-h-10" wire:key="package-option-{{ $subject->id() }}">
-                                        <input type="checkbox" class="checkbox checkbox-sm" wire:model="packageSubjects" value="{{ $subject->id() }}" data-testid="package-subject-{{ $subject->subject->code }}" />
+                                    @php
+                                        $acceptedPart = ($parts[$subject->subject->department_id] ?? null) === 'accepted';
+                                    @endphp
+                                    <label @class(['flex min-h-11 items-center gap-3 rounded-field px-2 py-1.5 md:min-h-10', 'cursor-pointer hover:bg-base-200' => ! $acceptedPart, 'text-neutral' => $acceptedPart]) wire:key="package-option-{{ $subject->id() }}">
+                                        <input type="checkbox" class="checkbox checkbox-sm" wire:model="packageSubjects" value="{{ $subject->id() }}" @disabled($acceptedPart)
+                                            @if ($acceptedPart) aria-describedby="package-subject-lock-{{ $subject->id() }}" @endif data-testid="package-subject-{{ $subject->subject->code }}" />
                                         <span class="w-[5.6rem] shrink-0 font-mono text-[13px] font-semibold">{{ $subject->subject->code }}</span>
-                                        <span class="min-w-0 flex-1">{{ $subject->subject->name }}</span>
+                                        <span class="flex min-w-0 flex-1 flex-col">
+                                            <span>{{ $subject->subject->name }}</span>
+                                            @if ($acceptedPart)
+                                                <span id="package-subject-lock-{{ $subject->id() }}" class="inline-flex items-center gap-1 text-xs" data-testid="package-subject-lock-{{ $subject->subject->code }}"><x-icon name="o-lock-closed" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ \App\Modules\AcademicLoad\Enums\ProposalLock::Department->short($subject->subject->department->code) }}</span>
+                                            @endif
+                                        </span>
                                         @if ($subject->subject->needs_lab)
                                             <span class="shrink-0 text-neutral" title="Requiere laboratorio"><x-icon name="o-beaker" class="h-4 w-4" aria-hidden="true" /><span class="sr-only">Requiere laboratorio</span></span>
                                         @endif

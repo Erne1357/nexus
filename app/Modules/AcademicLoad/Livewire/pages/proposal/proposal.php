@@ -5,14 +5,13 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Proposals\CreateProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\DeleteProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\MarkProposalItemReviewed;
-use App\Modules\AcademicLoad\Actions\Proposals\RenameProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\ResolveForecastChange;
 use App\Modules\AcademicLoad\Actions\Proposals\SetPackageCount;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalIntake;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
-use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalPackageSubjects;
+use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalPackage;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\ForecastReason;
 use App\Modules\AcademicLoad\Enums\ProposalLock;
@@ -32,7 +31,7 @@ use App\Modules\AcademicLoad\Queries\ProposalPackagesQuery;
 use App\Modules\AcademicLoad\Queries\ProposalSubject;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
-use App\Modules\AcademicLoad\Rules\ProposalPackageRules;
+use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Models\Campus;
@@ -85,7 +84,7 @@ use Mary\Traits\Toast;
  * Con los paquetes de primer semestre (tarea 5.6b; ProposalPackagesQuery): arriba de las materias, en la tabla y en la
  * retícula, el nuevo ingreso de cada columna, los paquetes que sugiere Nexus, cuántos abre y si alcanzan, y la lista de
  * paquetes. La composición es de toda la carrera: armar, cambiar las materias o el nombre y quitar un paquete (panel del
- * paquete; CreateProposalPackage, UpdateProposalPackageSubjects, RenameProposalPackage y DeleteProposalPackage) lo hace
+ * paquete; CreateProposalPackage, UpdateProposalPackage y DeleteProposalPackage) lo hace
  * cualquier coordinador de la carrera (CareerProposalPolicy::managePackages). Cuántos abre una columna de cada paquete y su
  * nuevo ingreso (SetPackageCount y UpdateProposalIntake) se capturan como una fila: el coordinador de un campus, solo los
  * suyos (CareerProposalPolicy::updateColumn, M7). Los motivos de las Actions (el tope, una parte aceptada, la propuesta
@@ -497,9 +496,10 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * «Usar sugerido» de una fila del panel: los grupos que da la regla de la propuesta para los esperados escritos en
-     * esa fila. Solo en una fila que el usuario puede corregir (M7).
+     * esa fila; con paquetes, los de paquetes más los sueltos sugeridos (SuggestedRowGroups, tarea 5.6b). Solo en una fila
+     * que el usuario puede corregir (M7).
      */
-    public function useSuggested(string $id, CareerProposalQuery $proposals): void
+    public function useSuggested(string $id, CareerProposalQuery $proposals, ProposalPackagesQuery $packages): void
     {
         $proposal = $this->authorizedProposal('view', $proposals);
         $item = $proposals->itemOrFail($proposal, $id)->load(['subject' => fn ($query) => $query->withTrashed()]);
@@ -508,7 +508,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $expected = max(0, (int) ($this->form[$item->id]['expected_students'] ?? $item->expected_students));
         $this->form[$item->id] = [
             'expected_students' => $this->form[$item->id]['expected_students'] ?? $item->expected_students,
-            'requested_groups' => SuggestedGroups::fromSettings()->for($expected, (bool) $item->subject->needs_lab),
+            'requested_groups' => $this->suggestedRowGroups($item, $expected, (bool) $item->subject->needs_lab, SuggestedGroups::fromSettings(), $packages->newStudentsByColumn($proposal)),
             'notes' => (string) ($this->form[$item->id]['notes'] ?? $item->notes),
         ];
     }
@@ -644,10 +644,11 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * «Agregar paquete», o «Armar paquete con las materias de 1.º» (`$firstSemester`): el panel de un paquete nuevo, sin
-     * materias o con todas las de 1.º de la propuesta. Solo quien arma la composición (CareerProposalPolicy::managePackages)
-     * y mientras la propuesta se edita; si ya se envió o se aceptó, lo dice.
+     * materias o con las de 1.º de la propuesta, salvo las de un departamento que ya aceptó su parte (esas ya no cambian).
+     * Solo quien arma la composición (CareerProposalPolicy::managePackages) y mientras la propuesta se edita; si ya se envió
+     * o se aceptó, lo dice.
      */
-    public function newPackage(CareerProposalQuery $proposals, bool $firstSemester = false): void
+    public function newPackage(CareerProposalQuery $proposals, ProposalPackagesQuery $packages, bool $firstSemester = false): void
     {
         $proposal = $this->authorizedProposal('managePackages', $proposals);
         $lock = $this->statusLock($proposal);
@@ -658,10 +659,9 @@ new #[Title('Propuesta de carrera')] class extends Component
             return;
         }
 
-        $this->fresh = $firstSemester ? $proposals->overview($proposal, withPendingCatalogs: false) : null;
         $this->packageId = null;
         $this->packageName = '';
-        $this->packageSubjects = $this->fresh === null ? [] : array_map(fn (ProposalSubject $subject): string => $subject->id(), $this->fresh->semesters[1] ?? []);
+        $this->packageSubjects = $firstSemester ? $packages->openFirstSemesterSubjectIds($proposal) : [];
         $this->resetErrorBag();
         $this->showPackage = true;
     }
@@ -682,29 +682,21 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
-     * «Guardar» del panel del paquete: lo arma (CreateProposalPackage) o le cambia las materias y luego el nombre
-     * (UpdateProposalPackageSubjects y RenameProposalPackage). El nombre se revisa antes de escribir nada, para que un
-     * nombre largo no deje las materias cambiadas y el nombre sin cambiar. Si una Action lo rechaza, el panel se queda
-     * abierto con el motivo.
+     * «Guardar» del panel del paquete: lo arma (CreateProposalPackage) o le cambia las materias y el nombre a la vez, en una
+     * transacción (UpdateProposalPackage). Si una Action lo rechaza, el panel se queda abierto con el motivo y no cambia
+     * nada.
      */
-    public function savePackage(
-        CareerProposalQuery $proposals,
-        ProposalPackagesQuery $packages,
-        ProposalPackageRules $rules,
-        CreateProposalPackage $create,
-        UpdateProposalPackageSubjects $update,
-        RenameProposalPackage $rename,
-    ): void {
+    public function savePackage(CareerProposalQuery $proposals, ProposalPackagesQuery $packages, CreateProposalPackage $create, UpdateProposalPackage $update): void
+    {
         $proposal = $this->authorizedProposal('managePackages', $proposals);
         $package = $this->packageId === null ? null : $packages->packageOrFail($proposal, $this->packageId);
         $subjects = array_values(array_unique(array_filter($this->packageSubjects, fn (mixed $id): bool => is_string($id) && Str::isUuid($id))));
         $this->resetErrorBag();
 
         try {
-            $name = $rules->normalizeName($this->packageName);
             $saved = $package === null
-                ? $create->handle($proposal, $subjects, $name, auth()->user())
-                : $rename->handle($update->handle($package, $subjects, auth()->user()), $name, auth()->user());
+                ? $create->handle($proposal, $subjects, $this->packageName, auth()->user())
+                : $update->handle($package, $subjects, $this->packageName, auth()->user());
         } catch (ValidationException $e) {
             $this->reportPackage($e);
 
@@ -712,7 +704,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         $this->showPackage = false;
-        $this->success($package === null ? 'Paquete armado' : 'Paquete guardado', e($saved->name ?? 'Paquete '.preg_replace('/\D/', '', $saved->code)));
+        $this->success($package === null ? 'Paquete armado' : 'Paquete guardado', e($saved->label));
     }
 
     /**
@@ -728,7 +720,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         $package = $packages->packageOrFail($proposal, $this->packageId);
-        $label = $package->name ?? 'Paquete '.preg_replace('/\D/', '', $package->code);
+        $label = $package->label;
 
         try {
             $delete->handle($package, auth()->user());
@@ -847,7 +839,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         $highlight = $this->highlight($gridSemesters, $chains, $departments);
-        $packageBlock = $packages->forOverview($overview, $settings->groupSizes->defaultSize);
+        $packageBlock = $this->view !== 'revisar' || $this->showPackage ? $packages->forOverview($overview, $settings->groupSizes->defaultSize) : null;
+        $panelNewStudents = $selected === null ? [] : $packages->newStudentsByColumn($proposal);
 
         return [
             ...$this->modalityViewData(),
@@ -868,7 +861,8 @@ new #[Title('Propuesta de carrera')] class extends Component
             'majority' => $walk['majority'],
             'submitReason' => $this->submitReason($overview),
             'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
-            'suggested' => $this->suggested($selected, $rule),
+            'suggested' => $this->suggested($selected, $rule, $panelNewStudents),
+            'panelNewStudents' => $panelNewStudents,
             'canSubmit' => Gate::allows('submit', $proposal),
             'submitNotice' => $this->showSubmit ? $header->submitNotice($viewerId) : null,
             'gridSemesters' => $gridSemesters,
@@ -888,7 +882,7 @@ new #[Title('Propuesta de carrera')] class extends Component
             ...$this->forecastViewData($overview, $projection, $header, $columns, $selected, $forecasts),
             'packages' => $packageBlock,
             'packagesManageable' => $proposal->status->isEditable() && Gate::allows('managePackages', $proposal),
-            'openPackage' => $this->showPackage ? $packageBlock->find($this->packageId) : null,
+            'openPackage' => $this->showPackage ? $packageBlock?->find($this->packageId) : null,
         ];
     }
 
@@ -1317,20 +1311,37 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * Los grupos que sugiere la regla para los esperados de cada fila del panel que se captura, por id de fila, al
      * abrirlo y al guardar: el número de «Usar sugerido: N». Mientras se teclea lo recalcula el navegador con
-     * `$suggestedSize`, el tamaño objetivo de la materia.
+     * `$suggestedSize`, el tamaño objetivo de la materia; con paquetes, también los de paquetes y el nuevo ingreso.
      *
+     * @param  array<string, int>  $newStudents
      * @return array<string, int>
      */
-    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule): array
+    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule, array $newStudents): array
     {
         if ($selected === null) {
             return [];
         }
 
-        return array_map(
-            fn (array $row): int => $rule->for(max(0, (int) ($row['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab),
-            $this->form,
-        );
+        $suggested = [];
+
+        foreach ($selected->items() as $item) {
+            if (isset($this->form[$item->id])) {
+                $suggested[$item->id] = $this->suggestedRowGroups($item, max(0, (int) ($this->form[$item->id]['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab, $rule, $newStudents);
+            }
+        }
+
+        return $suggested;
+    }
+
+    /**
+     * Los grupos sugeridos de una fila para unos esperados: sin paquetes, los de la regla; con paquetes, los de paquetes
+     * más los sueltos sugeridos, restando el nuevo ingreso de su campus si la fila es de primer semestre (SuggestedRowGroups).
+     *
+     * @param  array<string, int>  $newStudents  el nuevo ingreso por llave de columna (ProposalPackagesQuery::newStudentsByColumn)
+     */
+    private function suggestedRowGroups(ProposalItem $item, int $expected, bool $needsLab, SuggestedGroups $rule, array $newStudents): int
+    {
+        return SuggestedRowGroups::for($rule->for($expected, $needsLab), $expected, $item->package_groups, $item->forecast_method, $newStudents[$item->campus_id ?? ''] ?? 0, $needsLab, $rule);
     }
 
     /**

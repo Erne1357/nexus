@@ -57,14 +57,4 @@ final readonly class ProposalPackages
 
         return null;
     }
-
-    /**
-     * Las ids de las materias de 1.º, las que lleva «Armar paquete con las materias de 1.º».
-     *
-     * @return list<string>
-     */
-    public function firstSemesterIds(): array
-    {
-        return array_map(fn (ProposalSubject $subject): string => $subject->id(), $this->firstSemester);
-    }
 }
