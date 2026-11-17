@@ -9,6 +9,7 @@ use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Models\SolverRun;
 use Illuminate\Database\QueryException;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -63,4 +64,15 @@ it('guarda la entrada en un archivo cuando es grande y la fila conserva la ruta'
 
     expect($run->fresh()->input)->toBeNull()
         ->and($run->fresh()->input_path)->toBe('solver/runs/abc/input.json');
+});
+
+it('una carga tiene a lo más una corrida en cola o corriendo; terminadas, las que sean', function () {
+    $run = SolverRun::factory()->create();
+    $key = $run->only(['term_id', 'modality_id', 'department_id']);
+
+    SolverRun::factory()->done()->create($key);
+    SolverRun::factory()->forCareer()->create($run->only(['term_id', 'modality_id']));
+
+    expect(fn () => SolverRun::factory()->create([...$key, 'status' => SolverRunStatus::Running]))
+        ->toThrow(UniqueConstraintViolationException::class);
 });
