@@ -2,16 +2,16 @@
     La pestaña «Revisar proyección» de la propuesta (tarea 5.6, opción C «Revisión de la proyección», elegida por el
     usuario el 17 de noviembre de 2026; maqueta `.impeccable/mocks/decision/demanda-2026-11/propuesta-c.html`,
     `#vista=revisar`). Arriba, el filtro por motivo («Todas · La proyección cambió · Se aparta del sugerido · Especialidad
-    · Sin historia», con sus cifras de lo pendiente; un motivo sin filas no se muestra) y que nada de esto impide enviar;
+    · Sin tomas recientes · Sin historia», con sus cifras de lo pendiente; un motivo sin filas no se muestra) y que nada de esto impide enviar;
     si el usuario corrige unas columnas y no otras (M7), una línea por cada otra columna con lo que tiene por revisar y
     quién lo revisa.
 
     Luego una tarjeta por fila pendiente (materia × campus), 20 a la vez con «Mostrar N más»: a la izquierda los motivos
     como insignias (la diferencia con su porcentaje), la etiqueta del campus, la clave, el nombre y el departamento; al
     centro qué se capturó y qué sugiere Nexus, y la evidencia (academic-load::proposal.forecast-evidence); a la derecha
-    las acciones según el estado de la fila: «Usar N · M» y «Mantener» si la proyección cambió, «Usar sugerido» y
-    «Dejar» si se aparta del sugerido, «Está bien» si es de especialidad o sin historia sin tocar, y siempre «Abrir en
-    el panel». Una fila que el usuario no corrige (otro campus, M7, o una propuesta enviada) va sin botones; una cuyo
+    las acciones según el estado de la fila: «Usar N · M» y «Mantener» si la proyección cambió, «Usar sugerido» (con paquetes,
+    los de paquetes más los sueltos sugeridos) y «Dejar» si se aparta del sugerido, «Está bien» si es de especialidad, sin
+    tomas recientes o sin historia sin tocar, y siempre «Abrir en el panel»; el error de una acción queda en su tarjeta. Una fila que el usuario no corrige (otro campus, M7, o una propuesta enviada) va sin botones; una cuyo
     departamento aceptó su parte dice por qué. Desde 56 rem de caja la tarjeta va en tres columnas (17 rem, el resto y 13 rem); más angosta se
     apila (como `shots/propuesta-c-revisar-390.png`). Al final, plegadas, «Revisadas (N)» con lo que quedó.
 --}}
@@ -60,6 +60,7 @@
                 $ownLock = $locks[$cardItem->id] ?? null;
                 $difference = $card->difference();
                 $specialtyId = $overview->specialtyFor($card->subject);
+                $suggestedGroups = $card->groupsIfSuggested($projection->settings->groupSizes, $intakes[(string) $cardItem->campus_id] ?? 0);
             @endphp
             <article id="review-{{ $cardItem->id }}" data-item="review-{{ $cardItem->id }}" tabindex="-1" wire:key="review-{{ $cardItem->id }}" data-testid="review-card-{{ $cardItem->id }}"
                 class="grid gap-x-6 gap-y-3 border-base-300 px-4 py-4 outline-none not-first:border-t data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-primary @min-[56rem]:grid-cols-[17rem_minmax(0,1fr)_13rem] @min-[56rem]:px-5">
@@ -84,6 +85,8 @@
                             Ahora sugiere <span class="font-mono font-semibold">{{ $card->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestion->newGroups }}</span> grupos; cuando corregiste sugería <span class="font-mono">{{ $cardItem->suggested_expected_students }}</span> y <span class="font-mono">{{ $cardItem->suggested_groups }}</span>. Capturaste <span class="font-mono font-semibold">{{ $cardItem->expected_students }}</span> y <span class="font-mono font-semibold">{{ $cardItem->requested_groups }}</span>.
                         @elseif ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Captured)
                             Capturaste <span class="font-mono font-semibold">{{ $cardItem->expected_students }}</span> esperados y <span class="font-mono font-semibold">{{ $cardItem->requested_groups }}</span> grupos; Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span>.
+                        @elseif ($card->has(\App\Modules\AcademicLoad\Enums\ForecastReason::NoUptake))
+                            Tiene elegibles, pero nadie la ha tomado en los últimos {{ $projection->settings->historyTerms }} {{ $projection->termType() }}. Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span> {{ $card->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.
                         @elseif ($specialtyId !== null && $card->has(\App\Modules\AcademicLoad\Enums\ForecastReason::Specialty))
                             {{ $specialtyNames[$specialtyId] ?? 'Especialidad' }}: los elegibles son quienes la eligieron. Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span> {{ $card->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.
                         @else
@@ -102,7 +105,7 @@
                                 <x-button :label="'Mantener '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="resolveChange('{{ $cardItem->id }}', 'keep')" spinner="resolveChange('{{ $cardItem->id }}', 'keep')" data-testid="review-keep-{{ $cardItem->id }}" />
                             @elseif ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Captured)
-                                <x-button :label="'Usar sugerido '.$card->suggestedExpected().' · '.$card->suggestedGroups()" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                                <x-button :label="'Usar sugerido '.$card->suggestedExpected().' · '.$suggestedGroups" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="applySuggestion('{{ $cardItem->id }}')" spinner="applySuggestion('{{ $cardItem->id }}')" data-testid="review-suggested-{{ $cardItem->id }}" />
                                 <x-button :label="'Dejar '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="markReviewed('{{ $cardItem->id }}')" spinner="markReviewed('{{ $cardItem->id }}')" data-testid="review-leave-{{ $cardItem->id }}" />
@@ -119,6 +122,11 @@
                         @endif
                         <x-button label="Ver en el panel" icon="o-eye" class="btn-sm btn-ghost max-md:min-h-11"
                             wire:click="edit('{{ $cardItem->subject_id }}')" data-opener data-testid="review-view-{{ $cardItem->id }}" />
+                    @endif
+                    @if (isset($reviewErrors[$cardItem->id]))
+                        <p class="flex items-start gap-1.5 text-[12.5px] text-error" role="alert" data-testid="review-error-{{ $cardItem->id }}">
+                            <x-icon name="o-x-circle" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span>{{ $reviewErrors[$cardItem->id] }}</span>
+                        </p>
                     @endif
                 </div>
             </article>

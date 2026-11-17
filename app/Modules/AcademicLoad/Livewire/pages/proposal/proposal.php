@@ -121,6 +121,14 @@ new #[Title('Propuesta de carrera')] class extends Component
     #[Locked]
     public int $reviewLimit = self::REVIEW_PAGE;
 
+    /**
+     * El error de la última acción de cada tarjeta de «Revisar proyección», por id de fila: la tarjeta lo muestra.
+     *
+     * @var array<string, string>
+     */
+    #[Locked]
+    public array $reviewErrors = [];
+
     /** Código del departamento resaltado; '' ninguno. */
     #[Url(as: 'depto')]
     public string $department = '';
@@ -247,7 +255,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors', 'reason', 'reviewLimit', 'showPackage', 'packageId', 'packageName', 'packageSubjects');
+        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors', 'reason', 'reviewLimit', 'reviewErrors', 'showPackage', 'packageId', 'packageName', 'packageSubjects');
         $this->resolve($context, $proposals);
     }
 
@@ -323,11 +331,12 @@ new #[Title('Propuesta de carrera')] class extends Component
         try {
             $resolved = $resolve->handle($item, $choice, auth()->user());
         } catch (ValidationException $e) {
-            $this->report($e);
+            $this->reportReview($e, $item->id);
 
             return;
         }
 
+        unset($this->reviewErrors[$item->id]);
         $this->success($choice === ResolveForecastChange::USE ? 'Usaste lo que sugiere Nexus' : 'Mantuviste lo que capturaste', e($this->rowText($resolved)));
     }
 
@@ -343,11 +352,12 @@ new #[Title('Propuesta de carrera')] class extends Component
         try {
             $applied = $update->useSuggested($item, auth()->user());
         } catch (ValidationException $e) {
-            $this->report($e);
+            $this->reportReview($e, $item->id);
 
             return;
         }
 
+        unset($this->reviewErrors[$item->id]);
         $this->keepRow($applied->subject_id);
         $this->success('Usaste lo que sugiere Nexus', e($this->rowText($applied)));
     }
@@ -364,11 +374,12 @@ new #[Title('Propuesta de carrera')] class extends Component
         try {
             $reviewed = $mark->handle($item, auth()->user());
         } catch (ValidationException $e) {
-            $this->report($e);
+            $this->reportReview($e, $item->id);
 
             return;
         }
 
+        unset($this->reviewErrors[$item->id]);
         $this->success('Materia revisada', e($this->rowText($reviewed)));
     }
 
@@ -918,6 +929,7 @@ new #[Title('Propuesta de carrera')] class extends Component
                 array_diff(array_keys($columns), $own),
             )),
             'reasons' => ForecastReason::cases(),
+            'intakes' => $this->view === 'revisar' && $cards !== [] ? $forecasts->intakes($overview->proposal) : [],
             'forecastHistory' => $evidence === [] ? [] : $forecasts->history($projection, $evidence),
         ];
     }
@@ -1049,6 +1061,16 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         return true;
+    }
+
+    /**
+     * El error de una acción de «Revisar proyección»: en su tarjeta (`reviewErrors`) y en un toast.
+     */
+    private function reportReview(ValidationException $e, string $itemId): void
+    {
+        $message = (string) collect($e->errors())->flatten()->first();
+        $this->reviewErrors[$itemId] = $message;
+        $this->error('No se guardó', e($message));
     }
 
     /**

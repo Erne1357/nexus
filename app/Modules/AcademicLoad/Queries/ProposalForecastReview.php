@@ -133,7 +133,8 @@ final readonly class ProposalForecastReview
     /**
      * La marca de una materia en la tabla y en la retícula, de sus filas en esas columnas: `state` es `changed` si alguna
      * cambió, `captured` si alguna se corrigió, `suggested` si todas siguen lo sugerido y null sin proyección; `large` si
-     * alguna se aparta del sugerido; `review`, lo pendiente: el primer motivo, cuántos más hay y la primera fila.
+     * alguna se aparta del sugerido; `review`, lo pendiente: la primera fila pendiente con su motivo principal y cuántos
+     * motivos más hay entre las filas pendientes de la materia.
      *
      * @param  list<string>  $keys
      * @return array{state: ?string, large: bool, review: array{reason: ForecastReason, more: int, item: string}|null}
@@ -154,7 +155,7 @@ final readonly class ProposalForecastReview
                 default => null,
             },
             'large' => array_any($rows, fn (ProposalForecastRow $row): bool => $row->isLargeDifference()),
-            'review' => $pending === [] ? null : ['reason' => $reasons[0], 'more' => count($reasons) - 1, 'item' => $pending[0]->item->getKey()],
+            'review' => $pending === [] ? null : ['reason' => $pending[0]->primary(), 'more' => count($reasons) - 1, 'item' => $pending[0]->item->getKey()],
         ];
     }
 

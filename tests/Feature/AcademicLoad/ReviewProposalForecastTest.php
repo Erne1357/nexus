@@ -2,6 +2,8 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Specialty;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Proposals\MarkProposalItemReviewed;
 use App\Modules\AcademicLoad\Actions\Proposals\ResolveForecastChange;
@@ -10,6 +12,7 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\ProposalItemReviewed;
 use App\Modules\AcademicLoad\Events\ProposalItemUpdated;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\Campus;
@@ -100,14 +103,34 @@ describe('MarkProposalItemReviewed', function () {
         Event::assertNotDispatched(ProposalItemUpdated::class);
     });
 
-    it('una fila ya revisada no se escribe ni se registra otra vez', function () {
+    it('solo marca una fila pendiente: una ya revisada o sin motivo es una ValidationException sobre item, sin escribir', function () {
         $this->item->forceFill(['reviewed_at' => now()->subHour(), 'reviewed_by' => $this->actor->id])->save();
         Event::fake([ProposalItemReviewed::class]);
 
+        expect(reviewForecastErrors(fn () => app(MarkProposalItemReviewed::class)->handle($this->item, $this->actor)))->toHaveKey('item');
+
+        $this->item->forceFill(['reviewed_at' => null, 'requested_groups' => 2])->save();
+
+        expect(reviewForecastErrors(fn () => app(MarkProposalItemReviewed::class)->handle($this->item, $this->actor)))->toHaveKey('item')
+            ->and(Activity::query()->where('subject_id', $this->item->id)->count())->toBe(0);
+        Event::assertNotDispatched(ProposalItemReviewed::class);
+    });
+
+    it('una fila cuya proyección cambió no se deja: manda a «Usar N» o «Mantener»', function () {
+        reviewForecastFor($this->item, 90, 3);
+
+        expect(reviewForecastErrors(fn () => app(MarkProposalItemReviewed::class)->handle($this->item, $this->actor))['item'][0] ?? null)->toContain('Usar');
+    });
+
+    it('marca una fila sin tocar de especialidad', function () {
+        $specialty = Specialty::factory()->create(['study_plan_id' => $this->item->study_plan_id]);
+        StudyPlanSubject::factory()->create(['study_plan_id' => $this->item->study_plan_id, 'subject_id' => $this->subject->id, 'specialty_id' => $specialty->id]);
+        $this->item->forceFill(['captured_at' => null, 'requested_groups' => 2])->save();
+        reviewForecastFor($this->item, 68, 2);
+
         app(MarkProposalItemReviewed::class)->handle($this->item, $this->actor);
 
-        expect(Activity::query()->where('subject_id', $this->item->id)->count())->toBe(0);
-        Event::assertNotDispatched(ProposalItemReviewed::class);
+        expect($this->item->fresh()->reviewed_by)->toBe($this->actor->id);
     });
 
     it('no marca en una propuesta enviada ni aceptada', function (ProposalStatus $status) {
@@ -126,6 +149,10 @@ describe('MarkProposalItemReviewed', function () {
 });
 
 describe('Usar sugerido', function () {
+    beforeEach(function () {
+        $this->forecast = reviewForecastFor($this->item, 68, 2);
+    });
+
     it('pone esperados y grupos en lo sugerido, la deja corregida y revisada, y registra el cambio', function () {
         app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor);
 
@@ -140,17 +167,71 @@ describe('Usar sugerido', function () {
             ->and($activity->attribute_changes->toArray())->toBe(['attributes' => ['requested_groups' => 2], 'old' => ['requested_groups' => 3]]);
     });
 
-    it('sin nada sugerido es una ValidationException sobre item', function () {
-        $this->item->forceFill(['suggested_expected_students' => null, 'suggested_groups' => null])->save();
+    it('sin proyección vigente o sin nada sugerido es una ValidationException sobre item', function () {
+        $this->forecast->delete();
 
         expect(reviewForecastErrors(fn () => app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor)))->toHaveKey('item')
             ->and($this->item->fresh()->requested_groups)->toBe(3);
     });
 
-    it('con la propuesta enviada no cambia', function () {
+    it('si la proyección cambió no usa lo sugerido viejo: manda a «Usar N»', function () {
+        $this->forecast->update(['expected_students' => 90, 'suggested_groups' => 3]);
+
+        expect(reviewForecastErrors(fn () => app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor))['item'][0] ?? null)->toContain('Usar')
+            ->and($this->item->fresh()->only(['requested_groups', 'reviewed_at']))->toBe(['requested_groups' => 3, 'reviewed_at' => null]);
+    });
+
+    it('una fila sin tocar ya sigue lo sugerido: es una ValidationException sobre item', function () {
+        $this->item->forceFill(['captured_at' => null])->save();
+
+        expect(reviewForecastErrors(fn () => app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor)))->toHaveKey('item');
+    });
+
+    it('con la propuesta enviada no cambia, y el error va sobre item', function () {
         $this->proposal->forceFill(['status' => ProposalStatus::Submitted])->save();
 
-        expect(reviewForecastErrors(fn () => app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor)))->toHaveKey('status');
+        expect(reviewForecastErrors(fn () => app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor)))->toHaveKey('item');
+    });
+
+    it('con paquetes pide los de paquetes más los sueltos sugeridos (5.6b)', function () {
+        $this->item->forceFill(['package_groups' => 2, 'requested_groups' => 5])->save();
+
+        app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor);
+
+        expect($this->item->fresh()->only(['expected_students', 'requested_groups', 'package_groups']))->toBe(['expected_students' => 68, 'requested_groups' => 4, 'package_groups' => 2]);
+    });
+
+    it('en primer semestre con paquetes, los sueltos restan el nuevo ingreso del campus', function () {
+        $this->forecast->update(['method' => ForecastMethod::FirstSemester]);
+        $this->item->forceFill(['package_groups' => 2, 'requested_groups' => 5, 'forecast_method' => ForecastMethod::FirstSemester])->save();
+        ProposalIntake::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => $this->campus->id, 'new_students' => 40]);
+
+        app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor);
+
+        expect($this->item->fresh()->requested_groups)->toBe(3);
+    });
+
+    it('si con los paquetes pasaría del tope de grupos, es una ValidationException sobre item', function () {
+        $this->item->forceFill(['package_groups' => 29, 'requested_groups' => 29])->save();
+
+        expect(reviewForecastErrors(fn () => app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor)))->toHaveKey('item')
+            ->and($this->item->fresh()->requested_groups)->toBe(29);
+    });
+
+    it('si solo cambian las marcas, también deja bitácora', function () {
+        $this->item->forceFill(['requested_groups' => 2, 'expected_students' => 68])->save();
+        Event::fake([ProposalItemReviewed::class, ProposalItemUpdated::class]);
+
+        app(UpdateProposalItem::class)->useSuggested($this->item, $this->actor);
+
+        $activity = Activity::query()->where('subject_id', $this->item->id)->sole();
+
+        expect($activity->causer_id)->toBe($this->actor->id)
+            ->and($activity->description)->toBe('Usó lo sugerido en ACF-0901 de C1 en la propuesta de ISC en Presencial')
+            ->and(array_keys($activity->attribute_changes['attributes']))->toBe(['captured_at', 'captured_by', 'reviewed_at', 'reviewed_by']);
+
+        Event::assertDispatched(ProposalItemReviewed::class);
+        Event::assertNotDispatched(ProposalItemUpdated::class);
     });
 });
 

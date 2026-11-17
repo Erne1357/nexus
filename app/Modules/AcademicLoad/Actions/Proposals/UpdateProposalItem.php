@@ -4,12 +4,18 @@ namespace App\Modules\AcademicLoad\Actions\Proposals;
 
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Enums\SuggestionState;
+use App\Modules\AcademicLoad\Events\ProposalItemReviewed;
 use App\Modules\AcademicLoad\Events\ProposalItemUpdated;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
+use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
+use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Rules\DemandSettings;
 use Closure;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -43,7 +49,10 @@ final class UpdateProposalItem
     /** Las marcas de quién tocó la fila: se guardan, pero no van a la bitácora ni al aviso de lo que cambió. */
     private const array MARKS = ['captured_at', 'captured_by', 'reviewed_at', 'reviewed_by'];
 
-    public function __construct(private readonly ProposalItemRules $rules) {}
+    public function __construct(
+        private readonly ProposalItemRules $rules,
+        private readonly ProposalForecastQuery $forecasts,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -76,28 +85,87 @@ final class UpdateProposalItem
 
     /**
      * «Usar sugerido» en «Revisar proyección» (tarea 5.6, opción C elegida por el usuario el 17 de noviembre de 2026): pone
-     * los esperados y los grupos en lo que la fila guarda como sugerido (`suggested_*`) y la deja corregida y revisada, con
-     * las mismas guardas y la misma bitácora que una corrección. Sin nada sugerido es una ValidationException sobre `item`.
-     * Quién puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla (M7).
+     * los esperados y los grupos en lo que sugiere la proyección vigente y deja la fila corregida y revisada, con las guardas
+     * de change(). Bajo el bloqueo revisa el estado de la fila (ProposalSuggestionState con la proyección que hay en ese
+     * momento): solo se usa en una fila corregida cuyo `suggested_*` es el de la proyección vigente; si la proyección cambió
+     * manda a «Usar N» (ResolveForecastChange), y sin proyección o sin tocar no hay nada que usar. Con paquetes, los grupos
+     * son los de paquetes más los sueltos sugeridos (SuggestedRowGroups, regla de la 5.6b), sin pasar del tope de una fila.
+     *
+     * Deja bitácora también si solo cambian las marcas (corregida y revisada), y avisa con ProposalItemReviewed después del
+     * commit. Todo error es una ValidationException sobre `item`, que la tarjeta muestra. Quién puede lo decide
+     * CareerProposalPolicy::update sobre la fila antes de llamarla (M7).
      *
      * @throws ValidationException
      */
     public function useSuggested(ProposalItem $item, User $actor): ProposalItem
     {
-        return $this->change($item, $actor, function (ProposalItem $locked) use ($actor): array {
-            if ($locked->suggested_expected_students === null || $locked->suggested_groups === null) {
-                throw ValidationException::withMessages(['item' => 'Nexus no sugiere nada para esta materia.']);
+        $valuesChanged = false;
+        $oldMarks = [];
+
+        try {
+            return DB::transaction(function () use ($item, $actor, &$valuesChanged, &$oldMarks): ProposalItem {
+                $this->change($item, $actor, function (ProposalItem $locked) use ($actor, &$valuesChanged, &$oldMarks): array {
+                    $proposal = $locked->proposal;
+                    $settings = DemandSettings::fromSettings();
+                    $forecast = $this->forecasts->currentFor($proposal, $locked);
+                    $state = ProposalSuggestionState::of($locked->expected_students, $locked->requested_groups, $locked->suggested_expected_students,
+                        $locked->suggested_groups, $locked->captured_at, $forecast?->expected_students, $forecast?->suggested_groups, $settings);
+
+                    if ($state->state === SuggestionState::Changed) {
+                        throw ValidationException::withMessages(['item' => 'La proyección cambió después de corregirla: usa «Usar N» para tomar lo que sugiere ahora.']);
+                    }
+
+                    if ($forecast === null || $state->state === SuggestionState::None) {
+                        throw ValidationException::withMessages(['item' => 'Ya no hay proyección de esta materia: corrígela en el panel.']);
+                    }
+
+                    if ($state->state === SuggestionState::Suggested) {
+                        throw ValidationException::withMessages(['item' => 'Esta materia ya sigue lo que sugiere Nexus.']);
+                    }
+
+                    $groups = SuggestedRowGroups::for($forecast->suggested_groups, $forecast->expected_students, $locked->package_groups, $forecast->method,
+                        $this->forecasts->intakes($proposal)[(string) $locked->campus_id] ?? 0, (bool) $locked->subject->needs_lab, $settings->groupSizes);
+
+                    if ($groups > ProposalItemRules::MAX_REQUESTED_GROUPS) {
+                        throw ValidationException::withMessages(['item' => 'Con los grupos de paquetes pasaría de '.ProposalItemRules::MAX_REQUESTED_GROUPS.' grupos: cambia los paquetes.']);
+                    }
+
+                    $valuesChanged = $locked->expected_students !== $forecast->expected_students || $locked->requested_groups !== $groups;
+                    $oldMarks = $locked->only(self::MARKS);
+
+                    return [
+                        'expected_students' => $forecast->expected_students,
+                        'requested_groups' => $groups,
+                        'captured_at' => now(),
+                        'captured_by' => $actor->getKey(),
+                        'reviewed_at' => now(),
+                        'reviewed_by' => $actor->getKey(),
+                    ];
+                });
+
+                if (! $valuesChanged) {
+                    $proposal = $item->proposal()->with(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()])->firstOrFail();
+
+                    activity()
+                        ->performedOn($item)
+                        ->causedBy($actor)
+                        ->event(ActivityEvent::Updated)
+                        ->withChanges(['attributes' => $item->only(self::MARKS), 'old' => $oldMarks])
+                        ->withProperties(['career_proposal_id' => $proposal->getKey(), 'subject_id' => $item->subject_id, 'campus_id' => $item->campus_id])
+                        ->log("Usó lo sugerido en {$item->subject->code}".($item->campus === null ? '' : " de {$item->campus->code}")." en la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
+                }
+
+                ProposalItemReviewed::dispatch($item);
+
+                return $item;
+            });
+        } catch (ValidationException $e) {
+            if (array_keys($e->errors()) === ['item']) {
+                throw $e;
             }
 
-            return [
-                'expected_students' => $locked->suggested_expected_students,
-                'requested_groups' => $locked->suggested_groups,
-                'captured_at' => now(),
-                'captured_by' => $actor->getKey(),
-                'reviewed_at' => now(),
-                'reviewed_by' => $actor->getKey(),
-            ];
-        });
+            throw ValidationException::withMessages(['item' => (string) collect($e->errors())->flatten()->first()]);
+        }
     }
 
     /**

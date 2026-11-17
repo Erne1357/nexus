@@ -6,8 +6,10 @@ use App\Modules\AcademicLoad\Enums\ForecastReason;
 use App\Modules\AcademicLoad\Enums\SuggestionState;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
+use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Demand\Models\DemandForecast;
+use App\Modules\Demand\Rules\SuggestedGroups;
 
 /**
  * Una fila de la propuesta (materia × campus) frente a la proyección vigente de Demand (tarea 5.6; ProposalForecastQuery):
@@ -66,6 +68,20 @@ final readonly class ProposalForecastRow
     public function suggestedGroups(): ?int
     {
         return $this->forecast?->suggested_groups ?? $this->item->suggested_groups;
+    }
+
+    /**
+     * Los grupos que pediría la fila con «Usar sugerido» (SuggestedRowGroups): los sugeridos o, con paquetes, los de paquetes
+     * más los sueltos sugeridos, con el nuevo ingreso de su campus. Lo mismo que escribe UpdateProposalItem::useSuggested.
+     */
+    public function groupsIfSuggested(SuggestedGroups $sizes, int $newStudents): ?int
+    {
+        if ($this->suggestedGroups() === null || $this->suggestedExpected() === null) {
+            return null;
+        }
+
+        return SuggestedRowGroups::for($this->suggestedGroups(), $this->suggestedExpected(), $this->item->package_groups, $this->forecast?->method ?? $this->item->forecast_method,
+            $newStudents, (bool) $this->subject->subject->needs_lab, $sizes);
     }
 
     /**

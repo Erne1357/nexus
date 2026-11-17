@@ -229,7 +229,45 @@ describe('pestaña Revisar proyección', function () {
             ->toContain('= 8')
             ->toContain('48 × (1 − 0.125) + 8')
             ->toContain('= 50')
-            ->toContain('50 ÷ 35');
+            ->toContain('50 ÷ 35 hacia arriba = 2')
+            ->not->toContain('1.4');
+    });
+
+    it('si el tamaño de grupo de hoy no da los grupos sugeridos, solo dice cuántos', function () {
+        $card = textOf(domOf(forecastPageAs($this->ofC1, ['vista' => 'revisar', 'motivo' => 'sin-historia'])->html())->querySelector('[data-testid=review-card-'.$this->fallback->id.']'));
+
+        expect($card)->toContain('50 ÷ 35 hacia arriba = 2');
+
+        DemandForecast::query()->where('subject_id', $this->fallback->subject_id)->update(['suggested_groups' => 4]);
+        $card = textOf(domOf(forecastPageAs($this->ofC1, ['vista' => 'revisar', 'motivo' => 'sin-historia'])->html())->querySelector('[data-testid=review-card-'.$this->fallback->id.']'));
+
+        expect($card)->toContain('→ 4 grupos')->not->toContain('50 ÷ 35');
+    });
+
+    it('«Sin tomas recientes» tiene su filtro y su tarjeta', function () {
+        $quiet = forecastPageRow('ACF-0904', $this->c1, forecast: ['needs_review' => true]);
+
+        $page = forecastPageAs($this->ofC1, ['vista' => 'revisar', 'motivo' => 'sin-tomas'])
+            ->assertSeeHtml('data-testid="reason-count-sin-tomas">1<')
+            ->assertSeeHtml('data-testid="review-card-'.$quiet->id.'"')
+            ->assertDontSeeHtml('data-testid="review-card-'.$this->changed->id.'"');
+
+        expect(textOf(domOf($page->html())->querySelector('[data-testid=review-card-'.$quiet->id.']')))->toContain('Sin tomas recientes')->toContain('nadie la ha tomado');
+    });
+
+    it('con paquetes, «Usar sugerido» dice los de paquetes más los sueltos', function () {
+        $this->large->forceFill(['package_groups' => 2, 'requested_groups' => 5])->save();
+
+        expect(textOf(domOf(forecastPageAs($this->ofC1, ['vista' => 'revisar', 'motivo' => 'aparta'])->html())->querySelector('[data-testid=review-actions-'.$this->large->id.']')))->toContain('Usar sugerido 50 · 4');
+    });
+
+    it('el error de una acción se ve en su tarjeta', function () {
+        DemandForecast::query()->where('subject_id', $this->large->subject_id)->where('campus_id', $this->c1->id)->update(['expected_students' => 80]);
+
+        $page = forecastPageAs($this->ofC1, ['vista' => 'revisar'])->call('applySuggestion', $this->large->id);
+
+        expect(textOf(domOf($page->html())->querySelector('[data-testid=review-error-'.$this->large->id.']')))->toContain('Usar N')
+            ->and(lastToastOf($page)['title'])->toBe('No se guardó');
     });
 
     it('«Usar N» toma la proyección nueva, deja bitácora y la marca revisada', function () {

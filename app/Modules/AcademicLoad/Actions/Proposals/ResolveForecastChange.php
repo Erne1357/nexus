@@ -4,9 +4,9 @@ namespace App\Modules\AcademicLoad\Actions\Proposals;
 
 use App\Modules\AcademicLoad\Enums\SuggestionState;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
 use App\Modules\Core\Models\User;
-use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Rules\DemandSettings;
 use Illuminate\Validation\ValidationException;
 
@@ -28,7 +28,10 @@ final class ResolveForecastChange
 
     public const string KEEP = 'keep';
 
-    public function __construct(private readonly UpdateProposalItem $update) {}
+    public function __construct(
+        private readonly UpdateProposalItem $update,
+        private readonly ProposalForecastQuery $forecasts,
+    ) {}
 
     /**
      * @param  'use'|'keep'  $choice
@@ -44,13 +47,7 @@ final class ResolveForecastChange
         return $this->update->change($item, $actor, function (ProposalItem $locked) use ($choice, $actor): array {
             $proposal = $locked->proposal;
 
-            $forecast = DemandForecast::query()
-                ->where('term_id', $proposal->term_id)
-                ->where('modality_id', $proposal->modality_id)
-                ->where('career_id', $proposal->career_id)
-                ->where('subject_id', $locked->subject_id)
-                ->where(fn ($query) => $locked->campus_id === null ? $query->whereNull('campus_id') : $query->where('campus_id', $locked->campus_id))
-                ->first();
+            $forecast = $this->forecasts->currentFor($proposal, $locked);
 
             $state = ProposalSuggestionState::of(
                 $locked->expected_students,
