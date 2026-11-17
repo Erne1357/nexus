@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Database\Seeders;
 
 use App\Modules\AcademicLoad\Actions\RequestForecastEvaluation;
+use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
 use App\Modules\AcademicLoad\Jobs\RunForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
 use App\Modules\AcademicLoad\Queries\TermKardexQuery;
@@ -12,6 +13,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\TermCode;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 
@@ -49,12 +51,12 @@ final class ForecastEvaluationDemoSeeder extends Seeder
         $terms = $this->evaluableTerms($modalityModel, $term);
 
         foreach ($terms as $index => $model) {
-            $request->handle($model, $modalityModel, null, $by, sync: true);
+            $this->evaluate($request, $model, $modalityModel, null, $by);
 
             if ($index === 0 && $modalityModel->valid_profile?->usesRooms === true) {
                 foreach (Campus::query()->whereIn('code', $campuses)->orderBy('code')->get() as $campus) {
                     if (app(TermKardexQuery::class)->exists($model->code, $modalityModel, $campus)) {
-                        $request->handle($model, $modalityModel, $campus, $by, sync: true);
+                        $this->evaluate($request, $model, $modalityModel, $campus, $by);
                     }
                 }
             }
@@ -70,6 +72,22 @@ final class ForecastEvaluationDemoSeeder extends Seeder
         $this->staleQueued($oldest, $modalityModel, $by);
 
         $this->command?->info("Evaluaciones de la proyección: {$terms->count()} periodos de {$modalityModel->name}.");
+    }
+
+    /**
+     * Evalúa el alcance solo si todavía no tiene una lista: resembrar no repite evaluaciones ni avisos.
+     */
+    private function evaluate(RequestForecastEvaluation $request, Term $term, Modality $modality, ?Campus $campus, ?User $by): void
+    {
+        $done = ForecastEvaluation::query()
+            ->where('term_id', $term->getKey())->where('modality_id', $modality->getKey())
+            ->where('campus_id', $campus?->getKey())
+            ->where('status', ForecastEvaluationStatus::Done)
+            ->exists();
+
+        if (! $done) {
+            $request->handle($term, $modality, $campus, $by, sync: true);
+        }
     }
 
     /**
@@ -95,7 +113,13 @@ final class ForecastEvaluationDemoSeeder extends Seeder
      */
     private function failed(Term $term, Modality $modality, ?User $by): void
     {
-        ForecastEvaluation::factory()->failed('No terminó: se perdió la conexión con la base de datos.')->create([
+        $error = 'No terminó: se perdió la conexión con la base de datos.';
+
+        if ($this->demoScope($term, $modality)->where('status', ForecastEvaluationStatus::Failed)->where('error', $error)->exists()) {
+            return;
+        }
+
+        ForecastEvaluation::factory()->failed($error)->create([
             'term_id' => $term->getKey(),
             'modality_id' => $modality->getKey(),
             'requested_by' => $by?->getKey(),
@@ -109,6 +133,10 @@ final class ForecastEvaluationDemoSeeder extends Seeder
 
     private function staleQueued(Term $term, Modality $modality, ?User $by): void
     {
+        if ($this->demoScope($term, $modality)->where('status', ForecastEvaluationStatus::Queued)->exists()) {
+            return;
+        }
+
         ForecastEvaluation::factory()->queued()->create([
             'term_id' => $term->getKey(),
             'modality_id' => $modality->getKey(),
@@ -116,5 +144,13 @@ final class ForecastEvaluationDemoSeeder extends Seeder
             'created_at' => now()->subSeconds(RunForecastEvaluation::STALE_AFTER * 2),
             'updated_at' => now()->subSeconds(RunForecastEvaluation::STALE_AFTER * 2),
         ]);
+    }
+
+    /**
+     * @return Builder<ForecastEvaluation>
+     */
+    private function demoScope(Term $term, Modality $modality): Builder
+    {
+        return ForecastEvaluation::query()->where('term_id', $term->getKey())->where('modality_id', $modality->getKey())->whereNull('campus_id');
     }
 }

@@ -38,6 +38,7 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\ForecastEvaluationPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
@@ -55,8 +56,10 @@ use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -221,15 +224,30 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())
             ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
+        $evaluations = fn (DemoContext $demo, ForecastEvaluationStatus $status = ForecastEvaluationStatus::Done): Builder => ForecastEvaluation::query()
+            ->where('status', $status)->whereIn('modality_id', $modalityIds($demo))
+            ->whereIn('term_id', Term::query()->where('code', '<', $demo->termCode)->select('id'))
+            ->where(fn (Builder $scope) => $scope->whereNull('campus_id')->orWhereIn('campus_id', $campusIds($demo)));
+        // Sin kárdex con historia (un periodo ordinario anterior con uno previo del mismo tipo) no hay qué evaluar.
+        $evaluable = function (DemoContext $demo) use ($modalityIds): bool {
+            foreach (Modality::query()->whereIn('id', $modalityIds($demo))->get() as $modality) {
+                $codes = collect(app(TermKardexQuery::class)->termCodes($modality))->filter(fn (string $code): bool => $code < $demo->termCode && TermCode::isRegular($code));
+
+                if ($codes->contains(fn (string $code): bool => $codes->contains(fn (string $other): bool => $other < $code && substr($other, -1) === substr($code, -1)))) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
         return [
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => ForecastEvaluation::query()
-                ->where('status', ForecastEvaluationStatus::Done)->whereIn('modality_id', $modalityIds($demo))->exists()
-                ? true
-                : 'No hay evaluaciones de la proyección listas.'),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay una evaluación fallida para ver el estado de error', fn (DemoContext $demo): true|string => ForecastEvaluation::query()
-                ->where('status', ForecastEvaluationStatus::Failed)->whereIn('modality_id', $modalityIds($demo))->exists()
-                ? true
-                : 'No hay una evaluación fallida.'),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => $evaluations($demo)->exists() === false && $evaluable($demo)
+                ? 'No hay evaluaciones de la proyección listas.'
+                : true),
+            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay una evaluación fallida para ver el estado de error', fn (DemoContext $demo): true|string => $evaluations($demo, ForecastEvaluationStatus::Failed)->exists() === false && $evaluable($demo)
+                ? 'No hay una evaluación fallida.'
+                : true),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Draft)

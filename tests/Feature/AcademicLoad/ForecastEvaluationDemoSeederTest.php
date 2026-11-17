@@ -70,3 +70,17 @@ it('sin cuenta de Subdirección las evaluaciones quedan sin quien las pidió', f
 
     expect(ForecastEvaluation::query()->whereNotNull('requested_by')->count())->toBe(0);
 });
+
+it('resembrar no duplica evaluaciones ni avisos', function () {
+    $subdir = User::factory()->create(['username' => 'subdir']);
+
+    (new ForecastEvaluationDemoSeeder)->run('PRES', ['K1'], '20271');
+    $evaluations = ForecastEvaluation::query()->count();
+    $notifications = $subdir->notifications()->count();
+
+    (new ForecastEvaluationDemoSeeder)->run('PRES', ['K1'], '20271');
+
+    expect($evaluations)->toBe(4)
+        ->and(ForecastEvaluation::query()->count())->toBe($evaluations)
+        ->and($subdir->notifications()->count())->toBe($notifications);
+});

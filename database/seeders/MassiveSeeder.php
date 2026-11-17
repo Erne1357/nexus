@@ -77,7 +77,10 @@ class MassiveSeeder extends Seeder
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES'], '20263' => ['PRES']]]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'massive']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'massive']);
-        $this->callWith(ForecastEvaluationDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+        // Solo con `demo:seed --hasta=todo` (demo.showcase): las pruebas que siembran la demo no lo necesitan.
+        if (config('demo.showcase', false)) {
+            $this->callWith(ForecastEvaluationDemoSeeder::class, ['campuses' => ['C1', 'C2']]);
+        }
 
         $this->command?->info(sprintf('Periodos, calendarios y aperturas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
