@@ -47,6 +47,8 @@ Se escribió al cerrar el núcleo de la fase 5 (Riel A) para que la fase 6 arran
     - HC-03 (plan, semestre y campus, cuando la materia tiene un solo grupo para la carrera);
     - los paquetes de primer semestre (DM-09). Los paquetes son iguales para toda la carrera: una composición por propuesta (`proposal_packages` con sus materias), y cada campus captura cuántos abre (elección del usuario, 16 de noviembre; tarea 5.6 del Riel B). Cada instancia *n* de un paquete abre un grupo de cada una de sus materias, con `groups.package_id` y `groups.package_number`, y su cohorte es `package:<package_id>:<package_number>`.
     El evaluador y CP-SAT ya no necesitan saber de dónde sale cada cohorte.
+  - **Una sola definición de cohorte:** una pieza de Scheduling (`Rules/Cohorts`) calcula las cohortes de un conjunto de grupos: las de HC-03 y las de los paquetes. La usan `TypicalStudentSchedule` (el validador y el tablero de choques), `BuildSolverInput` (6.4) y el evaluador en memoria (6.5). La escribe el Riel B en la 6.5. Así un paquete también se valida en el editor manual.
+  - **HC-03 incluye cada paquete:** dos materias de la misma instancia de un paquete que se empalman son un choque duro, también en el editor manual (supuesto por confirmar; revisión del Riel B en #532).
   - `scope.kind` queda `department` (la carga, con su modalidad) o `career` (exploración del coordinador). El campus deja de ser alcance.
   - `docs/arquitectura/solver.md` se actualiza en el mismo PR que los DTO.
 - **6.2, `solver_runs`:** periodo, **modalidad**, departamento o carrera, motor, estado, entrada y salida, métricas, autor y aplicación. Sin campus.
