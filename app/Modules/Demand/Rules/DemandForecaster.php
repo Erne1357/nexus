@@ -5,7 +5,8 @@ namespace App\Modules\Demand\Rules;
 use App\Modules\Demand\Enums\ForecastMethod;
 
 /**
- * La fórmula de la proyección de demanda (reglas-de-negocio.md, «Elegibilidad y demanda», R2; tarea 5.3):
+ * La fórmula de la proyección de demanda (reglas-de-negocio.md, «Elegibilidad y demanda», R2, DM-01 y DM-04 a DM-07;
+ * tarea 5.3):
  *
  *     esperados = elegibles × (1 − tasa de no inscripción) + repetidores esperados + nuevo ingreso
  *     repetidores esperados = cursando hoy × tasa de reprobación

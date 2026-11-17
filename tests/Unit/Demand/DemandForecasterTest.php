@@ -40,7 +40,7 @@ it('resta a los elegibles la tasa de no inscripción y suma los repetidores espe
         ->and($result->formulaVersion)->toBe(DemandForecaster::VERSION);
 });
 
-it('redondea al entero más cercano los inscritos y los repetidores por separado', function (int $eligible, int $current, float $nonEnrollment, float $failure, int $repeaters, int $expected) {
+it('DM-06: redondea al entero más cercano los inscritos y los repetidores por separado', function (int $eligible, int $current, float $nonEnrollment, float $failure, int $repeaters, int $expected) {
     $result = (new DemandForecaster)->forecast(forecastInput(
         eligible: $eligible,
         current: $current,
@@ -57,7 +57,7 @@ it('redondea al entero más cercano los inscritos y los repetidores por separado
     'nadie se inscribe' => [33, 12, 1.0, 0.0, 0, 0],
 ]);
 
-it('sugiere grupos con el tamaño de laboratorio si la materia lo lleva', function () {
+it('DM-07: sugiere grupos con el tamaño de laboratorio si la materia lo lleva', function () {
     $forecaster = new DemandForecaster(new SuggestedGroups(defaultSize: 35, labSize: 25));
     $rates = new SubjectRates(nonEnrollment: 0.0, failure: 0.0, termsUsed: 4);
 
@@ -81,7 +81,7 @@ it('con cero elegibles, nadie cursando y sin nuevo ingreso no espera alumnos ni 
         ->and($result->suggestedGroups)->toBe(0);
 });
 
-it('sin historia ni tasa del departamento espera a todos los elegibles y lo marca', function () {
+it('DM-04: sin historia ni tasa del departamento espera a todos los elegibles y lo marca', function () {
     $result = (new DemandForecaster)->forecast(forecastInput(eligible: 37, current: 10));
 
     expect($result->expectedStudents)->toBe(37)
@@ -100,7 +100,7 @@ it('marca la tasa del departamento cuando la materia no tiene historia propia', 
         ->and($result->method)->toBe(ForecastMethod::DepartmentFallback);
 });
 
-it('en primer semestre suma el nuevo ingreso a los rezagados y lo marca', function () {
+it('DM-05: en primer semestre suma el nuevo ingreso a los rezagados y lo marca', function () {
     $result = (new DemandForecaster)->forecast(forecastInput(
         eligible: 12,
         current: 20,
@@ -114,7 +114,7 @@ it('en primer semestre suma el nuevo ingreso a los rezagados y lo marca', functi
         ->and($result->method)->toBe(ForecastMethod::FirstSemester);
 });
 
-it('quienes cursan la seriación ya vienen en los elegibles y no se suman otra vez', function () {
+it('DM-01: quienes cursan la seriación ya vienen en los elegibles y no se suman otra vez', function () {
     $result = (new DemandForecaster)->forecast(forecastInput(
         eligible: 40,
         pendingPrerequisite: 25,

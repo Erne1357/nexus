@@ -55,7 +55,7 @@ function occupancyRecord(Student $student, Subject $subject, ?string $term, Kard
     ]);
 }
 
-it('cuenta aprobados, reprobados y cursando de la materia en el periodo', function () {
+it('DM-02: cuenta aprobados, reprobados y cursando de la materia en el periodo', function () {
     occupancyRecord(occupancyStudent(), $this->subject, '20271', KardexResult::Aprobada);
     occupancyRecord(occupancyStudent(), $this->subject, '20271', KardexResult::Aprobada);
     occupancyRecord(occupancyStudent(), $this->subject, '20271', KardexResult::Reprobada);
@@ -69,7 +69,7 @@ it('cuenta aprobados, reprobados y cursando de la materia en el periodo', functi
         ->and($rows[0]['occupancy'])->toEqual(new Occupancy(students: 4, passed: 2, failed: 1, inProgress: 1));
 });
 
-it('no cuenta las bajas como ocupación', function () {
+it('DM-02: no cuenta las bajas como ocupación', function () {
     occupancyRecord(occupancyStudent(), $this->subject, '20271', KardexResult::Baja);
     occupancyRecord(occupancyStudent(), $this->subject, '20271', KardexResult::Cursando);
 
@@ -153,7 +153,7 @@ it('ignora filas borradas, alumnos borrados y filas sin periodo', function () {
         ->and($this->query->history('20273', $this->pres, [$this->subject->id], 4))->toBe([]);
 });
 
-it('da el histórico de los periodos del mismo tipo dentro de la ventana, por materia, periodo y campus', function () {
+it('DM-03: da el histórico de los periodos del mismo tipo dentro de la ventana, por materia, periodo y campus', function () {
     $other = Campus::factory()->create();
     $a = occupancyStudent();
     $b = occupancyStudent($other);
