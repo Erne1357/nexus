@@ -12,6 +12,61 @@ Que Nexus proponga horarios completos en lugar de solo validarlos. Esta fase fij
 - Fase 5: propuestas precargadas (los grupos a programar salen de ellas).
 - `docs/arquitectura/solver.md` como especificación del contrato.
 
+## Punto de partida (17 de noviembre de 2026)
+
+Se escribió al cerrar el núcleo de la fase 5 (Riel A) para que la fase 6 arranque con lo que hoy existe y con las decisiones del usuario. El plan de abajo se escribió cuando la carga era por campus. Desde la ronda 2 «carga por modalidad» (#418, #464; ADR-0025) la carga es del **departamento en una modalidad**, con grupos en varios campus. Donde choquen, mandan estos ajustes.
+
+### Qué ya existe y se reutiliza
+
+- **Reglas duras como clases aisladas:** `Scheduling/Rules/Constraints/`, con `TeacherOverlap`, `RoomOverlap`, `TypicalStudentSchedule`, `ModalityWindow`, `RoomCapacity`, `LabRoom`, `QuotasWithinCapacity`, `TeacherHours`, `TeacherAvailability`, `RoomLoan`, `RoomBlocked`, `WeeklyHours`, `OfferableGroup` y `CampusTravel`.
+  - Las alimenta `ScheduleStateQuery`, la foto de un periodo que usan el validador y el tablero de choques.
+  - El evaluador en memoria (6.5) les da otra fuente de datos; no las reescribe.
+- **Salones:** `RoomSuggestionQuery`, que ordena por SC-03; los préstamos de salón (`interdepartmental_agreements`) y los bloqueos.
+- **Lo que el motor recibe:**
+  - los grupos de la carga, que nacen de las propuestas aceptadas (`CreateGroupsFromProposal`), cada uno con su campus (M8) y sus cupos por carrera;
+  - las horas asignadas de cada docente (`TeacherAssignedHoursQuery`, en Scheduling).
+  - La fase 5 deja `demand_forecasts`, que en R2 precarga las propuestas.
+- **Traslado entre campus:** ya es una regla, SC-09 (`staffing.min_campus_travel_minutes`, 60), que el validador avisa como blanda.
+- **Mapa de módulos:** `Scheduling --> Solver`. Solver ve AcademicLoad, Facilities, Faculty y Core, pero **no Staffing**, que está a la derecha de Scheduling: el ranking y las asignaciones de Staffing no entran al motor. El docente del grupo sí (`groups.teacher_id`).
+- **Parámetros:** el catálogo de Core (CF-S7). Las llaves `solver.*` se declaran en el provider de Solver.
+- **Datos para medir:** la demo por puntos (`demo:seed --hasta=horarios`) deja grupos sin sesiones listos para programar, y el punto `asignacion`, un horario limpio para comparar.
+
+### Respuestas del usuario (17 de noviembre de 2026)
+
+1. **Una corrida abarca la carga completa: el departamento en una modalidad, en todos sus campus a la vez.** No se corre un campus a la vez.
+2. **El jefe de departamento lanza y acepta.** El coordinador puede lanzar corridas de su carrera para explorar y comparar, pero no las acepta. Subdirección ve todo.
+3. **El tronco común primero no se exige.** Cada departamento corre cuando quiera, con lo ya aceptado como fijo. La pantalla avisa si los grupos con los que comparte alumno tipo (por ejemplo, los de Ciencias Básicas) todavía no tienen horario aceptado.
+4. (De la fase 5, DM-09, 16 de noviembre.) Las materias de un **paquete de primer semestre** no se empalman: el motor lo trata como un alumno tipo más.
+
+### Ajustes a las tareas
+
+- **6.1, contrato v1:**
+  - `campus` pasa a `campuses[]`, uno por campus de la corrida, con su rejilla (`block_minutes`, `day_start`, `day_end`, `days`) y `uses_rooms`. Cada grupo y cada salón llevan su `campus_code`.
+  - Entra `travel_minutes` (`staffing.min_campus_travel_minutes`), y SC-09 se suma al puntaje blando: un docente con sesiones seguidas en campus distintos sin ese tiempo se penaliza.
+  - El «alumno tipo» se generaliza a **cohortes**: cada grupo lleva `cohorts[]`, claves de conjuntos de grupos que un mismo alumno toma juntos y cuyas sesiones no se empalman. Hoy hay dos fuentes:
+    - HC-03 (plan, semestre y campus, cuando la materia tiene un solo grupo para la carrera);
+    - los paquetes de primer semestre (`package:<id>`, DM-09).
+    El evaluador y CP-SAT ya no necesitan saber de dónde sale cada cohorte. La forma de los paquetes la define el Riel B en la 5.6.
+  - `scope.kind` queda `department` (la carga, con su modalidad) o `career` (exploración del coordinador). El campus deja de ser alcance.
+  - `docs/arquitectura/solver.md` se actualiza en el mismo PR que los DTO.
+- **6.2, `solver_runs`:** periodo, **modalidad**, departamento o carrera, motor, estado, entrada y salida, métricas, autor y aplicación. Sin campus.
+  - Permisos del módulo Solver (ADR-0018), por ejemplo `solver.run.launch`, `solver.run.apply` y `solver.run.view`.
+  - Lanzar: el jefe sobre su departamento y el coordinador sobre su carrera. Aceptar: solo el jefe, sobre su departamento. Ver: Subdirección todo, el jefe lo de su departamento y el coordinador lo de su carrera.
+- **6.4, armado de la entrada:**
+  - Los grupos movibles son los de la carga (departamento × modalidad) en todos sus campus. Una corrida de carrera toma solo los grupos de esa carrera dentro de las cargas que toca.
+  - Lo demás entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, y las sesiones ya aceptadas.
+  - El aviso del tronco común se calcula de las cohortes: grupos de otra carga con los que comparte cohorte y sin sesiones. No se usa ninguna lista fija de departamentos.
+- **6.9, `PlanRun`:** deja de imponer «tronco común, luego departamentos». Da un orden sugerido (primero las cargas cuyos grupos más cohortes comparten) y el aviso de la respuesta 3.
+- **6.11, fixtures:** `campus-ii` se cambia por `department-multicampus`: un departamento con grupos en C1 y C2, docentes en los dos campus y un préstamo de salón.
+- **Fases siguientes** (para su propio punto de partida):
+  - 7.11 elige el motor predeterminado por modalidad, no por campus.
+  - 8.1 no puede escuchar `BatchApplied` de Imports, que está a la derecha de AcademicLoad. Usa `StudentProgressRefreshed`, como la 5.4.
+  - 8.2 y 8.8 leen la demanda con la llave de `demand_forecasts` (periodo, modalidad, campus, carrera y materia).
+
+### Reparto propuesto
+
+El del plan (A contrato, B evaluador y heurística, C corrida y pantalla). A arranca con 6.1 a 6.3 en cuanto entre este punto de partida, porque son la dependencia de todos. B y C se suman al cerrar sus tareas de la fase 5. El contrato se publica la primera semana con un motor de prueba, como dice el plan.
+
 ## Alcance
 
 ### Incluye
