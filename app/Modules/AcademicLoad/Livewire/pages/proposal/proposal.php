@@ -499,7 +499,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      * esa fila; con paquetes, los de paquetes más los sueltos sugeridos (SuggestedRowGroups, tarea 5.6b). Solo en una fila
      * que el usuario puede corregir (M7).
      */
-    public function useSuggested(string $id, CareerProposalQuery $proposals, ProposalPackagesQuery $packages): void
+    public function useSuggested(string $id, CareerProposalQuery $proposals, ProposalForecastQuery $forecasts): void
     {
         $proposal = $this->authorizedProposal('view', $proposals);
         $item = $proposals->itemOrFail($proposal, $id)->load(['subject' => fn ($query) => $query->withTrashed()]);
@@ -508,7 +508,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $expected = max(0, (int) ($this->form[$item->id]['expected_students'] ?? $item->expected_students));
         $this->form[$item->id] = [
             'expected_students' => $this->form[$item->id]['expected_students'] ?? $item->expected_students,
-            'requested_groups' => $this->suggestedRowGroups($item, $expected, (bool) $item->subject->needs_lab, SuggestedGroups::fromSettings(), $packages->newStudentsByColumn($proposal)),
+            'requested_groups' => $this->suggestedRowGroups($item, $expected, (bool) $item->subject->needs_lab, SuggestedGroups::fromSettings(), $forecasts->intakes($proposal)),
             'notes' => (string) ($this->form[$item->id]['notes'] ?? $item->notes),
         ];
     }
@@ -840,7 +840,7 @@ new #[Title('Propuesta de carrera')] class extends Component
 
         $highlight = $this->highlight($gridSemesters, $chains, $departments);
         $packageBlock = $this->view !== 'revisar' || $this->showPackage ? $packages->forOverview($overview, $settings->groupSizes->defaultSize) : null;
-        $panelNewStudents = $selected === null ? [] : $packages->newStudentsByColumn($proposal);
+        $panelNewStudents = $selected === null ? [] : $forecasts->intakes($proposal);
 
         return [
             ...$this->modalityViewData(),
@@ -923,7 +923,6 @@ new #[Title('Propuesta de carrera')] class extends Component
                 array_diff(array_keys($columns), $own),
             )),
             'reasons' => ForecastReason::cases(),
-            'intakes' => $this->view === 'revisar' && $cards !== [] ? $forecasts->intakes($overview->proposal) : [],
             'forecastHistory' => $evidence === [] ? [] : $forecasts->history($projection, $evidence),
         ];
     }
@@ -1337,7 +1336,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      * Los grupos sugeridos de una fila para unos esperados: sin paquetes, los de la regla; con paquetes, los de paquetes
      * más los sueltos sugeridos, restando el nuevo ingreso de su campus si la fila es de primer semestre (SuggestedRowGroups).
      *
-     * @param  array<string, int>  $newStudents  el nuevo ingreso por llave de columna (ProposalPackagesQuery::newStudentsByColumn)
+     * @param  array<string, int>  $newStudents  el nuevo ingreso por llave de columna (ProposalForecastQuery::intakes)
      */
     private function suggestedRowGroups(ProposalItem $item, int $expected, bool $needsLab, SuggestedGroups $rule, array $newStudents): int
     {

@@ -160,7 +160,7 @@
                                     </div>
                                 </x-alert>
                             @else
-                                <p class="text-sm">Nexus sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestedGroups() }}</span> {{ $forecastRow->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.@if ($forecastDifference) <span class="inline-flex items-center gap-1 font-medium text-warning"><x-icon name="o-arrows-up-down" class="h-3.5 w-3.5" aria-hidden="true" />Lo capturado se aparta: {{ $forecastDifference['field'] === 'groups' ? 'grupos' : 'esperados' }} {{ $forecastDifference['percent'] }}.</span>@endif</p>
+                                <p class="text-sm">Nexus sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestedExpected() }}</span> esperados y @include('academic-load::proposal.suggested-groups', ['forecastRow' => $forecastRow, 'noun' => true]).@if ($forecastDifference) <span class="inline-flex items-center gap-1 font-medium text-warning"><x-icon name="o-arrows-up-down" class="h-3.5 w-3.5" aria-hidden="true" />Lo capturado se aparta: {{ $forecastDifference['field'] === 'groups' ? 'grupos' : 'esperados' }} {{ $forecastDifference['percent'] }}.</span>@endif</p>
                             @endif
                             @include('academic-load::proposal.forecast-evidence', ['forecastRow' => $forecastRow, 'history' => $forecastHistory[$item->id] ?? null])
                         </div>

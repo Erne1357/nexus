@@ -5,7 +5,6 @@ namespace App\Modules\AcademicLoad\Actions\Proposals;
 use App\Modules\AcademicLoad\Enums\SuggestionState;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
-use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\DemandSettings;
 use Illuminate\Validation\ValidationException;
@@ -49,16 +48,7 @@ final class ResolveForecastChange
 
             $forecast = $this->forecasts->currentFor($proposal, $locked);
 
-            $state = ProposalSuggestionState::of(
-                $locked->expected_students,
-                $locked->requested_groups,
-                $locked->suggested_expected_students,
-                $locked->suggested_groups,
-                $locked->captured_at,
-                $forecast?->expected_students,
-                $forecast?->suggested_groups,
-                DemandSettings::fromSettings(),
-            );
+            $state = $this->forecasts->stateFor($locked, $forecast, DemandSettings::fromSettings());
 
             if ($state->state !== SuggestionState::Changed) {
                 throw ValidationException::withMessages(['item' => 'La proyección de esta materia no tiene cambios pendientes.']);

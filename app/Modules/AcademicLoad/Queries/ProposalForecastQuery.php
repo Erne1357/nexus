@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
+use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Queries\DemandForecastsQuery;
 use App\Modules\Demand\Queries\TermOccupancyQuery;
@@ -49,6 +50,9 @@ final class ProposalForecastQuery
             return new ProposalForecastReview(null, $settings, $proposal->term->code, $proposal->modality, []);
         }
 
+        $withPackages = collect($overview->subjects())->contains(fn (ProposalSubject $subject): bool => collect($subject->items())->contains(fn (ProposalItem $item): bool => $item->package_groups > 0));
+        $intakes = $withPackages ? $this->intakes($proposal) : [];
+
         foreach ($overview->subjects() as $subject) {
             $specialty = $overview->specialtyFor($subject) !== null;
 
@@ -61,16 +65,7 @@ final class ProposalForecastQuery
 
                 /** @var DemandForecast|null $forecast */
                 $forecast = $forecasts->get($item->subject_id)?->get(ProposalOverview::columnKey($campus));
-                $suggestion = ProposalSuggestionState::of(
-                    $item->expected_students,
-                    $item->requested_groups,
-                    $item->suggested_expected_students,
-                    $item->suggested_groups,
-                    $item->captured_at,
-                    $forecast?->expected_students,
-                    $forecast?->suggested_groups,
-                    $settings,
-                );
+                $suggestion = $this->stateFor($item, $forecast, $settings, $intakes, (bool) $subject->subject->needs_lab);
 
                 $rows[$item->getKey()] = new ProposalForecastRow($item, $subject, $campus, $suggestion, $forecast, ForecastReason::for($suggestion, $forecast, $specialty));
             }
@@ -79,6 +74,41 @@ final class ProposalForecastQuery
         $computedAt = $forecasts->flatten(1)->max(fn (DemandForecast $forecast) => $forecast->computed_at);
 
         return new ProposalForecastReview($computedAt, $settings, $proposal->term->code, $proposal->modality, $rows);
+    }
+
+    /**
+     * El estado de una fila frente a una fila de la proyección (ProposalSuggestionState), el mismo en la pantalla y en las
+     * Actions de «Revisar proyección». Con paquetes (tarea 5.6b), la diferencia grande de grupos se mide contra lo sugerido
+     * efectivo de la fila: los grupos de paquetes más los sueltos sugeridos (SuggestedRowGroups), con lo sugerido vigente (la
+     * proyección o, si ya no hay, lo guardado) y el nuevo ingreso de su campus. `$intakes` (intakes()) y `$needsLab` evitan
+     * leerlos otra vez; sin ellos, se leen solo si la fila tiene paquetes.
+     *
+     * @param  array<string, int>|null  $intakes
+     */
+    public function stateFor(ProposalItem $item, ?DemandForecast $forecast, DemandSettings $settings, ?array $intakes = null, ?bool $needsLab = null): ProposalSuggestionState
+    {
+        $groups = $forecast?->suggested_groups ?? $item->suggested_groups;
+        $expected = $forecast?->expected_students ?? $item->suggested_expected_students;
+        $effective = null;
+
+        if ($item->package_groups > 0 && $groups !== null && $expected !== null) {
+            $intakes ??= $this->intakes($item->proposal);
+            $needsLab ??= (bool) $item->subject()->withTrashed()->value('needs_lab');
+            $effective = SuggestedRowGroups::for($groups, $expected, $item->package_groups, $forecast?->method ?? $item->forecast_method,
+                $intakes[(string) $item->campus_id] ?? 0, $needsLab, $settings->groupSizes);
+        }
+
+        return ProposalSuggestionState::of(
+            $item->expected_students,
+            $item->requested_groups,
+            $item->suggested_expected_students,
+            $item->suggested_groups,
+            $item->captured_at,
+            $forecast?->expected_students,
+            $forecast?->suggested_groups,
+            $settings,
+            $effective,
+        );
     }
 
     /**

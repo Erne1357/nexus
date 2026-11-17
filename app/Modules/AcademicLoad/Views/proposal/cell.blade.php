@@ -22,7 +22,7 @@
     $forecastRow = $projection->row($item);
     $followsForecast = $forecastRow?->suggestion->state === \App\Modules\AcademicLoad\Enums\SuggestionState::Suggested;
     $largeDifference = $forecastRow !== null && ($field === 'expected_students' ? $forecastRow->suggestion->largeDifferenceExpected : $forecastRow->suggestion->largeDifferenceGroups);
-    $forecastValue = $forecastRow === null ? null : ($field === 'expected_students' ? $forecastRow->suggestedExpected() : $forecastRow->suggestedGroups());
+    $forecastValue = $forecastRow === null ? null : ($field === 'expected_students' ? $forecastRow->suggestedExpected() : $forecastRow->effectiveGroups());
     $largeText = $largeDifference ? "Se aparta del sugerido: Nexus sugiere {$forecastValue}." : null;
 @endphp
 <div class="group/cell flex min-w-0 flex-col gap-0.5" data-cell="{{ $cell }}" @if ($largeDifference) data-large @endif>

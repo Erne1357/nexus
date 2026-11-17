@@ -96,21 +96,6 @@ final class ProposalPackagesQuery
     }
 
     /**
-     * El nuevo ingreso vigente de cada columna de la propuesta, por llave de columna (ProposalOverview::columnKey): lo que
-     * resta de los esperados el «Usar sugerido» de una fila de primer semestre con paquetes (SuggestedRowGroups).
-     *
-     * @return array<string, int>
-     */
-    public function newStudentsByColumn(CareerProposal $proposal): array
-    {
-        return ProposalIntake::query()
-            ->where('career_proposal_id', $proposal->getKey())
-            ->get(['campus_id', 'new_students'])
-            ->mapWithKeys(fn (ProposalIntake $intake): array => [$intake->campus_id ?? '' => $intake->new_students])
-            ->all();
-    }
-
-    /**
      * Las materias de 1.º de la propuesta que se pueden poner en un paquete, por id: las de los departamentos que no han
      * aceptado su parte (las aceptadas ya no cambian, y CreateProposalPackage las rechazaría). Es lo que marca «Armar
      * paquete con las materias de 1.º».
