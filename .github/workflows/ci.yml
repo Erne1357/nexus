@@ -37,6 +37,24 @@ jobs:
 
   # Cada shard corre un tercio de las clases de prueba, repartidas por tiempo con tests/.pest/shards.json
   # (Pest, `--shard`; las clases nuevas que el archivo no trae se reparten por turno, con aviso).
+  solver:
+    # Servicio del motor en Python (fase 7, tarea 7.12): ruff y pytest dentro de su imagen `dev`, con los fixtures
+    # compartidos de tests/Fixtures/solver montados de solo lectura. No es un check requerido de develop todavía.
+    name: solver
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Construir la imagen dev del servicio
+        run: docker build --target dev -t nexus-solver-dev services/solver
+
+      - name: Ruff (lint y formato)
+        run: docker run --rm nexus-solver-dev sh -c "ruff check . && ruff format --check ."
+
+      - name: Pytest
+        run: docker run --rm -e SOLVER_TOKEN=ci -v "$PWD/tests/Fixtures/solver:/fixtures:ro" nexus-solver-dev pytest -q
+
   tests-shard:
     name: tests ${{ matrix.shard }}/3
     runs-on: ubuntu-24.04
