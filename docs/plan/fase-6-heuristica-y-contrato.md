@@ -52,16 +52,23 @@ Se escribió al cerrar el núcleo de la fase 5 (Riel A) para que la fase 6 arran
   - `scope.kind` queda `department` (la carga, con su modalidad) o `career` (exploración del coordinador). El campus deja de ser alcance.
   - `docs/arquitectura/solver.md` se actualiza en el mismo PR que los DTO.
 - **6.2, `solver_runs`:** periodo, **modalidad**, departamento o carrera, motor, estado, entrada y salida, métricas, autor y aplicación. Sin campus.
-  - Permisos del módulo Solver (ADR-0018), por ejemplo `solver.run.launch`, `solver.run.apply` y `solver.run.view`.
-  - Lanzar: el jefe sobre su departamento y el coordinador sobre su carrera. Aceptar: solo el jefe, sobre su departamento. Ver: Subdirección todo, el jefe lo de su departamento y el coordinador lo de su carrera.
+  - Permisos del módulo Solver (ADR-0018; #538):
+    - `solver.department_run.view`, `solver.department_run.launch` y `solver.department_run.apply`, con modalidad y unidad;
+    - `solver.career_run.view` y `solver.career_run.launch`, con modalidad y carrera.
+    - **La corrida de carrera no tiene `apply`:** solo sirve para explorar.
+  - Lanzar: el jefe sobre su departamento y el coordinador sobre su carrera. Aceptar: solo el jefe, sobre su departamento, y solo una corrida terminada. Ver: Subdirección todo, el jefe lo de su departamento y el coordinador lo de su carrera.
+  - **Una corrida de departamento a la vez** por periodo, modalidad y departamento, mientras esté en cola o corriendo (índice único parcial).
+  - **Al aceptar, la entrada tiene que seguir vigente.** Se compara un hash de la entrada con el estado de hoy; si cambió, la pantalla ofrece «Volver a correr» (6.8, Riel C).
 - **6.4, armado de la entrada:**
   - Los grupos movibles son los de la carga (departamento × modalidad) en todos sus campus. Una corrida de carrera toma solo los grupos de esa carrera dentro de las cargas que toca.
   - Lo demás entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, y las sesiones ya aceptadas.
   - El aviso del tronco común se calcula de las cohortes: grupos de otra carga con los que comparte cohorte y sin sesiones. No se usa ninguna lista fija de departamentos.
+- **6.10, pantalla de corridas:** la comparación con la carga actual usa el filtro de campus segmentado de las pantallas de la carga (todos o un campus), porque la corrida abarca todos los campus.
 - **6.9, `PlanRun`:** deja de imponer «tronco común, luego departamentos». Da un orden sugerido (primero las cargas cuyos grupos más cohortes comparten) y el aviso de la respuesta 3.
 - **6.11, fixtures:** `campus-ii` se cambia por `department-multicampus`: un departamento con grupos en C1 y C2, docentes en los dos campus y un préstamo de salón.
 - **Fases siguientes** (para su propio punto de partida):
   - 7.11 elige el motor predeterminado por modalidad, no por campus.
+  - 7.8 (descomposición en el servicio y en PHP) sigue el `PlanRun` de la 6.9: un orden sugerido con aviso, no «tronco común y luego departamentos» obligatorio.
   - 8.1 no puede escuchar `BatchApplied` de Imports, que está a la derecha de AcademicLoad. Usa `StudentProgressRefreshed`, como la 5.4.
   - 8.2 y 8.8 leen la demanda con la llave de `demand_forecasts` (periodo, modalidad, campus, carrera y materia).
 
