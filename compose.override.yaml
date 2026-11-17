@@ -40,6 +40,22 @@ services:
       # Solo dev: crea nexus_test con el volumen vacío. Producción no necesita base de pruebas.
       - ./docker/postgres:/docker-entrypoint-initdb.d:ro
 
+  # Motor de horarios en desarrollo: código montado y recarga automática. Las pruebas corren aquí con los fixtures
+  # compartidos del repositorio:  docker compose run --rm --no-deps solver pytest
+  solver:
+    image: nexus-solver:dev
+    build:
+      target: dev
+    user: "${UID:-1000}:${GID:-1000}"
+    command: ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    environment:
+      # Solo dev: un token por defecto para que el servicio arranque sin tocar .env. Pon el mismo en SOLVER_TOKEN de .env
+      # para que `queue` pueda llamarlo.
+      SOLVER_TOKEN: ${SOLVER_TOKEN:-dev-solver-token}
+    volumes:
+      - ./services/solver:/srv/solver
+      - ./tests/Fixtures/solver:/fixtures:ro
+
   # Atrapa el correo de desarrollo y de la demo (ADR-0024): recibe por SMTP en mailpit:1025 dentro de la red y no
   # reenvía nada. La bandeja web, solo en la máquina.
   mailpit:
