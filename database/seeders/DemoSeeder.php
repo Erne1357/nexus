@@ -13,6 +13,7 @@ use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\LoginScreenDemoSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
+use App\Modules\Demand\Database\Seeders\DemandRareCasesDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
@@ -57,6 +58,7 @@ class DemoSeeder extends Seeder
         $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 120]]);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 35]]);
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES']]]);
+        $this->callWith(DemandRareCasesDemoSeeder::class, ['term' => '20271', 'campuses' => ['C2']]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
         // Aceptar una parte crea grupos (3.3) y GroupsCreated recalcularía los choques del campus en cada aceptación;
