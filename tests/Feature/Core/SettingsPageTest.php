@@ -187,21 +187,21 @@ it('Subdirección ve la pantalla de fábrica y no tiene core.setting.update', fu
 
 it('CF-03: con solo «ver», las tarjetas se pintan en solo lectura y las acciones se niegan', function () {
     $user = subdireccionUser();
-    Setting::query()->create(['scope' => SettingScope::Global, 'key' => 'demand.min_group_size', 'value' => 15]);
+    Setting::query()->create(['scope' => SettingScope::Global, 'key' => 'staffing.min_campus_travel_minutes', 'value' => 75]);
 
     $dom = domOf($this->actingAs($user)->get('/configuracion/parametros')->assertOk());
 
-    expect($dom->querySelector('[data-testid="setting-demand.min_group_size"] input'))->toBeNull()
-        ->and(textOf($dom->querySelector('[data-testid="value-demand.min_group_size"]')))->toContain('15')
-        ->and($dom->querySelector('[data-testid="save-staffing"]'))->toBeNull();
+    expect($dom->querySelector('[data-testid="setting-staffing.min_campus_travel_minutes"] input'))->toBeNull()
+        ->and(textOf($dom->querySelector('[data-testid="value-staffing.min_campus_travel_minutes"]')))->toContain('75')
+        ->and($dom->querySelector('[data-testid="save-scheduling"]'))->toBeNull();
 
     Livewire::actingAs($user)->test('core::pages.settings')
-        ->set('values.demand__min_group_size', '20')
-        ->call('save', 'demand')->assertForbidden();
+        ->set('values.staffing__min_campus_travel_minutes', '20')
+        ->call('save', 'staffing')->assertForbidden();
     Livewire::actingAs($user)->test('core::pages.settings')
-        ->call('resetToDefault', 'demand.min_group_size')->assertForbidden();
+        ->call('resetToDefault', 'staffing.min_campus_travel_minutes')->assertForbidden();
 
-    expect(storedSetting('demand.min_group_size'))->toBe(15);
+    expect(storedSetting('staffing.min_campus_travel_minutes'))->toBe(75);
 });
 
 it('pinta en solo lectura las tarjetas que el puesto no puede cambiar', function () {

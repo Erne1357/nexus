@@ -112,6 +112,7 @@
             "core.term.open",
             "core.term.update",
             "core.term.view",
+            "demand.setting.update",
             "facilities.building.create",
             "facilities.building.update",
             "facilities.building.view",
