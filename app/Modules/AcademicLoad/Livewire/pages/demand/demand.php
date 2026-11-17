@@ -91,6 +91,13 @@ new #[Title('Demanda por materia')] class extends Component
     #[Locked]
     public array $careers = [];
 
+    /**
+     * Si puede ver la lente del departamento: con las dos lentes (el admin, o quien no ha elegido puesto y tiene los
+     * dos), el select «Carrera» lleva «Ver por departamento» para volver a ella.
+     */
+    #[Locked]
+    public bool $canDepartmentLens = false;
+
     /** Por qué no hay tablero que mostrar. */
     #[Locked]
     public ?string $message = null;
@@ -101,7 +108,8 @@ new #[Title('Demanda por materia')] class extends Component
 
         $this->updatedFilter();
         $this->resolve($context, $query, $proposals);
-        $this->showDrawer = $this->subjectCode !== '' && $this->termId !== null;
+        $this->settleSelection($query);
+        $this->showDrawer = $this->subjectCode !== '';
     }
 
     /**
@@ -118,16 +126,24 @@ new #[Title('Demanda por materia')] class extends Component
     }
 
     /**
-     * Otro departamento: en la lente del departamento cambia la lente (y suelta el drawer); en la de carrera solo filtra.
+     * Otro departamento: en la lente del departamento cambia la lente (y suelta el drawer); en la de carrera solo filtra, y
+     * uno que no tiene materias en la lente se suelta.
      */
     public function updatedDepartmentCode(Actor $context, DemandBoardQuery $query, CareerProposalQuery $proposals): void
     {
         if ($this->careerId === null) {
             $this->closeDrawer();
             $this->resolve($context, $query, $proposals);
+
+            return;
         }
+
+        $this->settleSelection($query);
     }
 
+    /**
+     * Otra carrera: abre su lente; '' («Ver por departamento», para quien tiene las dos lentes) vuelve a la del departamento.
+     */
     public function updatedCareerCode(Actor $context, DemandBoardQuery $query, CareerProposalQuery $proposals): void
     {
         $this->closeDrawer();
@@ -141,11 +157,11 @@ new #[Title('Demanda por materia')] class extends Component
     }
 
     /**
-     * Abre el drawer de una materia del tablero, con la policy de verlo. Si la clave no es del tablero, no se abre.
+     * Abre el drawer de una materia del tablero, con la policy de verlo. Una clave que no es del tablero es 404.
      */
     public function open(string $code, DemandBoardQuery $query): void
     {
-        $this->authorizeBoard($query);
+        abort_if($this->board($query)->subject($code) === null, 404);
 
         $this->subjectCode = $code;
         $this->showDrawer = true;
@@ -177,9 +193,12 @@ new #[Title('Demanda por materia')] class extends Component
     }
 
     /**
+     * Solo lee: la materia del drawer y el departamento del filtro ya los validaron open(), mount() y settleSelection().
+     * Si entre peticiones la materia sale del tablero, el drawer lo dice en lugar de mostrarla.
+     *
      * @return array<string, mixed>
      */
-    public function with(DemandBoardQuery $query, Actor $context): array
+    public function with(DemandBoardQuery $query, CareerProposalQuery $proposals, Actor $context): array
     {
         $scope = $this->scopeViewData();
 
@@ -188,27 +207,18 @@ new #[Title('Demanda por materia')] class extends Component
         }
 
         $board = $this->board($query);
-        $filterDepartment = $board->isCareerLens() ? collect($board->departments())->first(fn (Department $department): bool => $department->code === $this->departmentCode) : null;
-
-        if ($board->isCareerLens() && $filterDepartment === null) {
-            // Un departamento que no tiene materias en la lente (de otra modalidad, o que ya no está) no filtra: se suelta.
-            $this->departmentCode = '';
-        }
-
+        $filterDepartment = $this->filterDepartmentOf($board);
         $shown = $board->withinDepartment($filterDepartment);
         $campusId = $scope['shownCampus']?->getKey();
         $visible = $shown->visible($this->search, self::FILTERS[$this->filter] ?? '', $campusId);
-        $figures = $shown->figures();
         $drawer = $this->showDrawer ? $board->subject($this->subjectCode) : null;
-
-        if ($this->showDrawer && $drawer === null) {
-            $this->closeDrawer();
-        }
 
         return [
             ...$scope,
             'board' => $shown,
-            'figures' => $figures,
+            'lensSubjects' => count($board->subjects),
+            'lensDepartments' => count($board->departments()),
+            'figures' => $shown->figures(),
             'visible' => $visible,
             'footer' => $shown->footer($visible, $campusId),
             'filterCounts' => $shown->filterCounts($campusId),
@@ -217,8 +227,47 @@ new #[Title('Demanda por materia')] class extends Component
             'filterDepartment' => $filterDepartment,
             'drawer' => $drawer,
             'history' => $drawer === null ? null : $query->history($board, $drawer),
-            'links' => $drawer === null ? [] : $this->links($board, $drawer, $context),
+            'links' => $drawer === null ? [] : $this->links($board, $drawer, $proposals, $context),
         ];
+    }
+
+    /**
+     * Deja la materia del drawer y el departamento del filtro (en la lente de carrera) solo si son del tablero: una clave
+     * de la URL que no está se suelta. Arma el tablero solo si hay algo que revisar.
+     */
+    private function settleSelection(DemandBoardQuery $query): void
+    {
+        $filtersDepartment = $this->careerId !== null && $this->departmentCode !== '';
+
+        if ($this->termId === null || ($this->subjectCode === '' && ! $filtersDepartment)) {
+            if ($this->termId === null) {
+                $this->closeDrawer();
+            }
+
+            return;
+        }
+
+        $board = $this->board($query);
+
+        if ($filtersDepartment && $this->filterDepartmentOf($board) === null) {
+            $this->departmentCode = '';
+        }
+
+        if ($this->subjectCode !== '' && $board->subject($this->subjectCode) === null) {
+            $this->closeDrawer();
+        }
+    }
+
+    /**
+     * En la lente de carrera, el departamento del filtro entre los de sus materias; null sin filtro o en la otra lente.
+     */
+    private function filterDepartmentOf(DemandBoard $board): ?Department
+    {
+        if (! $board->isCareerLens() || $this->departmentCode === '') {
+            return null;
+        }
+
+        return collect($board->departments())->first(fn (Department $department): bool => $department->code === $this->departmentCode);
     }
 
     /**
@@ -230,6 +279,7 @@ new #[Title('Demanda por materia')] class extends Component
     {
         $this->termId = $this->modalityId = $this->departmentId = $this->careerId = null;
         $this->departments = $this->careers = [];
+        $this->canDepartmentLens = $context->allowsAny(AcademicLoadPermission::DemandViewDepartment);
 
         $modality = $this->requiredModality();
         $this->modalidad = $modality->code;
@@ -247,16 +297,15 @@ new #[Title('Demanda por materia')] class extends Component
             return;
         }
 
-        $careerLens = ($this->careerCode !== '' && $context->allowsAny(AcademicLoadPermission::DemandViewCareer))
-            || ! $context->allowsAny(AcademicLoadPermission::DemandViewDepartment);
+        $canCareerLens = $context->allowsAny(AcademicLoadPermission::DemandViewCareer);
+        $careerLens = ($this->careerCode !== '' && $canCareerLens) || ! $this->canDepartmentLens;
+        $careers = $canCareerLens ? $proposals->careersFor($context, $modality, AcademicLoadPermission::DemandViewCareer) : collect();
+        $this->careers = $careers->map(fn (Career $career): array => ['code' => $career->code, 'name' => "{$career->code} · {$career->name}"])->values()->all();
 
         if ($careerLens) {
-            $careers = $proposals->careersFor($context, $modality, AcademicLoadPermission::DemandViewCareer);
             $career = $this->careerCode === '' ? $careers->first() : $careers->first(fn (Career $career): bool => $career->code === $this->careerCode);
 
             abort_if($this->careerCode !== '' && $career === null, 403);
-
-            $this->careers = $careers->map(fn (Career $career): array => ['code' => $career->code, 'name' => "{$career->code} · {$career->name}"])->all();
 
             if ($career === null) {
                 $this->message = "No tienes una carrera de {$modality->name} cuya demanda puedas ver.";
@@ -322,11 +371,11 @@ new #[Title('Demanda por materia')] class extends Component
 
     /**
      * Los enlaces del pie del drawer: la bandeja del departamento de la materia, si el usuario la ve, y en la lente de
-     * carrera la propuesta de la carrera, si la ve.
+     * carrera la propuesta de la carrera, si la ve y ya existe (sin ella, el pie solo dice su estado).
      *
      * @return array{inbox: ?string, proposal: ?string}
      */
-    private function links(DemandBoard $board, DemandBoardSubject $subject, Actor $context): array
+    private function links(DemandBoard $board, DemandBoardSubject $subject, CareerProposalQuery $proposals, Actor $context): array
     {
         $department = $subject->subject->department;
         $modality = $board->modality;
@@ -335,7 +384,11 @@ new #[Title('Demanda por materia')] class extends Component
             'inbox' => $department !== null && Gate::allows('viewAny', [ProposalReview::class, $modality, $department])
                 ? route('academic-load.inbox', ['modalidad' => $modality->code, 'depto' => $department->code])
                 : null,
-            'proposal' => $board->career !== null && $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $modality->getKey(), career: $board->career->getKey()))
+            // Solo si la propuesta existe: abrir la de una carrera sin propuesta la armaría (StartCareerProposal), y el tablero
+            // es de solo consulta.
+            'proposal' => $board->career !== null
+                && $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $modality->getKey(), career: $board->career->getKey()))
+                && $proposals->findFor($board->term, $modality, $board->career) !== null
                 ? route('academic-load.proposal', ['modalidad' => $modality->code, 'carrera' => $board->career->getKey()])
                 : null,
         ];

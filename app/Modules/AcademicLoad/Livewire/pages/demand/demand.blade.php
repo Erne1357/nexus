@@ -28,8 +28,8 @@
                         <span>{{ $board->modality->name }}</span>
                     @endif
                     <span>{{ $board->term->name }}</span>
-                    @php($departmentCount = count($board->departments()))
-                    <span data-testid="demand-scope">{{ $figures['subjects'] }} {{ $figures['subjects'] === 1 ? 'materia' : 'materias' }} {{ $board->isCareerLens() ? 'de '.$departmentCount.' '.($departmentCount === 1 ? 'departamento' : 'departamentos') : 'en '.count($board->careers).' '.(count($board->careers) === 1 ? 'carrera' : 'carreras') }}</span>
+                    {{-- De toda la lente, sin el filtro de departamento: lo que filtra se dice en las cifras. --}}
+                    <span data-testid="demand-scope">{{ $lensSubjects }} {{ $lensSubjects === 1 ? 'materia' : 'materias' }} {{ $board->isCareerLens() ? 'de '.$lensDepartments.' '.($lensDepartments === 1 ? 'departamento' : 'departamentos') : 'en '.count($board->careers).' '.(count($board->careers) === 1 ? 'carrera' : 'carreras') }}</span>
                 </p>
                 <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="demand-run">
                     <x-icon name="o-sparkles" class="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -51,8 +51,9 @@
             @if (count($departments) > 1)
                 <x-select label="Departamento" wire:model.live="departmentCode" :options="$departments" option-value="code" option-label="name" class="max-md:h-11 md:w-80" data-testid="demand-department" />
             @endif
-            @if (count($careers) > 1)
-                <x-select label="Carrera" wire:model.live="careerCode" :options="$careers" option-value="code" option-label="name" class="max-md:h-11 md:w-80" data-testid="demand-career" />
+            {{-- Con las dos lentes, «Ver por departamento» (vacío) vuelve a la del departamento y una carrera abre la suya. --}}
+            @if (count($careers) > 1 || ($careers !== [] && $canDepartmentLens))
+                <x-select label="Carrera" wire:model.live="careerCode" :options="$careers" option-value="code" option-label="name" :placeholder="$canDepartmentLens ? 'Ver por departamento' : null" placeholder-value="" class="max-md:h-11 md:w-80" data-testid="demand-career" />
             @endif
         </div>
     </div>
@@ -112,6 +113,15 @@
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-3xl p-0!" role="dialog" aria-modal="true" aria-labelledby="demand-drawer-title" data-testid="demand-drawer">
         @if ($board !== null && $drawer !== null)
             @include('academic-load::demand.drawer')
+        @elseif ($showDrawer)
+            {{-- La materia salió del tablero entre una petición y otra (se recalculó la proyección): se dice, sin cerrar solo. --}}
+            <div class="flex h-dvh flex-col" data-testid="demand-panel-gone">
+                <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
+                    <h2 id="demand-drawer-title" class="min-w-0 flex-1 text-xl font-bold leading-tight">Materia sin demanda</h2>
+                    <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle max-md:h-11 max-md:w-11" @click="close()" aria-label="Cerrar el panel" />
+                </header>
+                <p class="px-5 py-6 text-neutral">{{ $subjectCode }} ya no está en el tablero: la proyección o las propuestas cambiaron.</p>
+            </div>
         @endif
     </x-drawer>
 </div>

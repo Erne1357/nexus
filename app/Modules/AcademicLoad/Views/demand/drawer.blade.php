@@ -206,6 +206,9 @@
         <div class="flex flex-wrap gap-2 max-md:w-full">
             @if ($links['proposal'])
                 <a href="{{ $links['proposal'] }}" wire:navigate class="btn btn-ghost max-md:h-11 max-md:w-full" data-testid="demand-open-proposal"><x-icon name="o-arrow-top-right-on-square" class="h-5 w-5" aria-hidden="true" />Abrir en la propuesta de {{ $board->career->code }}</a>
+            @elseif ($board->career !== null)
+                @php($lensState = collect($board->careers)->first(fn ($column) => $column['career']->getKey() === $board->career->getKey())['state'] ?? \App\Modules\AcademicLoad\Enums\DemandProposalState::Missing)
+                <p class="flex items-center gap-2 text-sm text-neutral" data-testid="demand-proposal-state">Propuesta de <span class="font-mono font-semibold text-base-content">{{ $board->career->code }}</span>@include('academic-load::demand.state', ['state' => $lensState])</p>
             @endif
             @if ($links['inbox'])
                 <a href="{{ $links['inbox'] }}" wire:navigate class="btn btn-ghost max-md:h-11 max-md:w-full" data-testid="demand-open-inbox"><x-icon name="o-arrow-top-right-on-square" class="h-5 w-5" aria-hidden="true" />Ver en la bandeja</a>

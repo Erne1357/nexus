@@ -163,9 +163,21 @@ describe('jefe de departamento', function () {
             ->assertSet('subjectCode', '');
     });
 
-    it('la materia del drawer viaja en la URL, y una que no es del tablero no lo abre', function () {
+    it('la materia del drawer viaja en la URL; una que no es del tablero no lo abre por la URL y es 404 por el método', function () {
         demandPageAs($this->jefe, ['materia' => 'SCD-1027'])->assertSet('showDrawer', true)->assertSeeHtml('data-testid="demand-panel"');
-        demandPageAs($this->jefe)->call('open', 'ACF-0901')->assertSet('showDrawer', false)->assertDontSeeHtml('data-testid="demand-panel"');
+        demandPageAs($this->jefe, ['materia' => 'ACF-0901'])->assertSet('showDrawer', false)->assertSet('subjectCode', '')->assertDontSeeHtml('data-testid="demand-panel"');
+        demandPageAs($this->jefe)->call('open', 'ACF-0901')->assertNotFound();
+    });
+
+    it('pintar no cambia el estado: si la materia sale del tablero con el drawer abierto, el drawer lo dice', function () {
+        $page = demandPageAs($this->jefe)->call('open', 'SCD-1027');
+        DemandForecast::query()->where('subject_id', $this->topics->id)->delete();
+        ProposalItem::query()->where('subject_id', $this->topics->id)->delete();
+
+        $page->call('$refresh')
+            ->assertSet('showDrawer', true)
+            ->assertSet('subjectCode', 'SCD-1027')
+            ->assertSeeHtml('data-testid="demand-panel-gone"');
     });
 
     it('un jefe de otro departamento no abre el drawer de este llamando el método directo', function () {
@@ -201,6 +213,37 @@ describe('Subdirección y admin', function () {
         demandPageAs($subdireccion, ['departamento' => 'SC'])->assertSee('SCD-1027');
     });
 
+    it('quien tiene las dos lentes (el admin) elige una carrera y vuelve a la del departamento con «Ver por departamento»', function () {
+        demandPageAs(User::factory()->admin()->create())
+            ->assertSet('departmentCode', 'CB')
+            ->assertSet('careerCode', '')
+            ->assertSeeHtml('data-testid="demand-career"')
+            ->assertSee('Ver por departamento')
+            ->set('careerCode', 'ISIC')
+            ->assertSet('careerCode', 'ISIC')
+            ->assertSeeHtml('data-testid="demand-read-only"')
+            ->assertSee('SCD-1027')
+            ->set('careerCode', '')
+            ->assertSet('careerCode', '')
+            ->assertSet('departmentCode', 'CB')
+            ->assertDontSeeHtml('data-testid="demand-read-only"')
+            ->assertDontSee('SCD-1027')
+            ->assertSee('ACF-0901');
+    });
+
+    it('con dos puestos, cada perfil ve su lente y el de jefe no ofrece la de carrera', function () {
+        $both = User::factory()
+            ->withRole(Role::JefeDepartamento, ['department_id' => $this->cb->id])
+            ->withRole(Role::Coordinador, ['campus_id' => $this->c1->id, 'career_id' => $this->isic->id])
+            ->create();
+
+        actingAsRole($both, Role::JefeDepartamento);
+        Livewire::test('academic-load::pages.demand')->assertSet('departmentCode', 'CB')->assertDontSeeHtml('data-testid="demand-career"');
+
+        actingAsRole($both, Role::Coordinador);
+        Livewire::test('academic-load::pages.demand')->assertSet('careerCode', 'ISIC')->assertSeeHtml('data-testid="demand-read-only"');
+    });
+
     it('el admin ve la lente del departamento y, si pide una carrera, la de la carrera', function () {
         $admin = User::factory()->admin()->create();
 
@@ -224,11 +267,16 @@ describe('coordinador', function () {
             ->assertDontSeeHtml('data-testid="demand-career"');
     });
 
-    it('filtra por el departamento de la materia', function () {
+    it('filtra por el departamento de la materia, y las cifras dicen de qué departamento son', function () {
         demandPageAs($this->coordinator, ['departamento' => 'CB'])
             ->assertSee('ACF-0901')
             ->assertDontSee('SCD-1027')
-            ->assertViewHas('figures', fn (array $figures): bool => $figures['subjects'] === 1);
+            ->assertViewHas('figures', fn (array $figures): bool => $figures['subjects'] === 1)
+            ->assertSeeHtml('data-testid="figures-scope"')
+            ->assertSee('el departamento del filtro.')
+            ->assertSee('2 materias de 2 departamentos');
+
+        demandPageAs($this->coordinator)->assertDontSeeHtml('data-testid="figures-scope"');
     });
 
     it('un departamento que no tiene materias en su lente no filtra y se suelta', function () {
@@ -251,6 +299,21 @@ describe('coordinador', function () {
             ->assertSee('(tu carrera)')
             ->assertSeeHtml('data-testid="demand-open-proposal"')
             ->assertDontSeeHtml('data-testid="demand-open-inbox"');
+    });
+
+    it('sin propuesta de su carrera, el drawer dice su estado sin enlace a la propuesta, y nada arma un borrador', function () {
+        $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => $this->ige->id])->create();
+        $proposals = CareerProposal::query()->count();
+
+        demandPageAs($coordinator)
+            ->assertSet('careerCode', 'IGE')
+            ->call('open', 'ACF-0901')
+            ->assertDontSeeHtml('data-testid="demand-open-proposal"')
+            ->assertSeeHtml('data-testid="demand-proposal-state"')
+            ->assertSee('Sin propuesta');
+
+        expect(CareerProposal::query()->count())->toBe($proposals)
+            ->and(CareerProposal::query()->where('career_id', $this->ige->id)->exists())->toBeFalse();
     });
 
     it('no ve otra carrera ni la pide por la URL', function () {

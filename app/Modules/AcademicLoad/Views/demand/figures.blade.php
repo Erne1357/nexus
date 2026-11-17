@@ -1,12 +1,18 @@
 {{--
-    Las cuatro cifras de todo el Tec de «Demanda por materia» (maqueta C), dos por renglón debajo de 1024 px: materias
+    Las cuatro cifras de «Demanda por materia» (maqueta C), de todo el Tec o, en la lente de carrera con «Departamento»,
+    de ese departamento, que se dice arriba de ellas; dos por renglón debajo de 1024 px: materias
     (con diferencia y sin propuesta), grupos sugeridos y grupos pedidos (por campus y los de materias con laboratorio; de
     los pedidos, cuántos son lo sugerido de carreras sin propuesta) y la diferencia, con su porcentaje y las horas a la
     semana de docentes. La diferencia que llega al umbral va en `warning` con su icono. `$figures` es DemandBoard::figures().
 --}}
 @php($signed = fn (int $n): string => $n > 0 ? "+{$n}" : ($n < 0 ? '−'.abs($n) : '0'))
 @php($campusSplit = fn (array $byCampus): array => collect($board->campuses)->map(fn ($campus) => ['campus' => $campus, 'n' => $byCampus[$campus->code] ?? 0])->all())
-<section class="grid grid-cols-2 overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-4" aria-label="Cifras de todo el Tec" data-testid="demand-figures">
+@php($figuresOf = $filterDepartment ? "{$filterDepartment->code} · {$filterDepartment->name}" : null)
+@if ($figuresOf)
+    {{-- En la lente de carrera con «Departamento», las cifras son de las materias de ese departamento (como en la maqueta). --}}
+    <p class="-mb-1 flex items-start gap-1.5 text-sm text-neutral" data-testid="figures-scope"><x-icon name="o-funnel" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span>Cifras de <span class="font-medium text-base-content"><span class="font-mono">{{ $filterDepartment->code }}</span> · {{ $filterDepartment->name }}</span>, el departamento del filtro.</span></p>
+@endif
+<section class="grid grid-cols-2 overflow-hidden rounded-box border border-base-300 bg-base-100 lg:grid-cols-4" aria-label="{{ $figuresOf ? "Cifras de {$figuresOf}" : 'Cifras de todo el Tec' }}" data-testid="demand-figures">
     <div class="min-w-0 border-base-300 px-4 py-3.5" data-testid="figure-subjects">
         <p class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Materias</p>
         <p class="font-mono text-[26px] font-semibold leading-tight tabular-nums">{{ $figures['subjects'] }}</p>
