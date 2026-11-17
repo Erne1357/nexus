@@ -2,10 +2,12 @@
 
 namespace App\Modules\AcademicLoad\Queries;
 
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\AcademicLoad\Enums\ForecastReason;
-use App\Modules\AcademicLoad\Enums\SuggestionState;
+use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalIntake;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
-use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Queries\DemandForecastsQuery;
 use App\Modules\Demand\Queries\TermOccupancyQuery;
@@ -31,10 +33,10 @@ final class ProposalForecastQuery
     ) {}
 
     /**
-     * Cada fila de la propuesta con su estado (ProposalSuggestionState) y sus motivos (ForecastReason): `changed` si la
+     * Cada fila de la propuesta con su estado (ProposalSuggestionState) y sus motivos (ForecastReason::for): `changed` si la
      * proyección cambió; `large_difference` si está corregida y se aparta del sugerido; y, sin tocar, `specialty` si es de
-     * una especialidad del plan y `no_history` si la proyección no tiene historia de la materia (la tasa del departamento o
-     * ninguna). `computedAt` es el cálculo más reciente de la proyección de la carrera. Sin proyección para la propuesta no
+     * una especialidad del plan, `no_uptake` si la proyección la marca sin tomas recientes y `no_history` si no tiene
+     * historia de la materia (la tasa del departamento o ninguna). `computedAt` es el cálculo más reciente de la proyección de la carrera. Sin proyección para la propuesta no
      * hay filas: la página se ve como antes de la 5.6.
      */
     public function review(ProposalOverview $overview, DemandSettings $settings): ProposalForecastReview
@@ -70,13 +72,55 @@ final class ProposalForecastQuery
                     $settings,
                 );
 
-                $rows[$item->getKey()] = new ProposalForecastRow($item, $subject, $campus, $suggestion, $forecast, $this->reasons($suggestion, $forecast, $specialty));
+                $rows[$item->getKey()] = new ProposalForecastRow($item, $subject, $campus, $suggestion, $forecast, ForecastReason::for($suggestion, $forecast, $specialty));
             }
         }
 
         $computedAt = $forecasts->flatten(1)->max(fn (DemandForecast $forecast) => $forecast->computed_at);
 
         return new ProposalForecastReview($computedAt, $settings, $proposal->term->code, $proposal->modality, $rows);
+    }
+
+    /**
+     * La fila vigente de la proyección para una fila de la propuesta (su periodo, modalidad, carrera, materia y campus), o null.
+     * La usan las Actions de «Revisar proyección» para revisar el estado bajo bloqueo.
+     */
+    public function currentFor(CareerProposal $proposal, ProposalItem $item): ?DemandForecast
+    {
+        return DemandForecast::query()
+            ->where('term_id', $proposal->term_id)
+            ->where('modality_id', $proposal->modality_id)
+            ->where('career_id', $proposal->career_id)
+            ->where('subject_id', $item->subject_id)
+            ->where(fn ($query) => $item->campus_id === null ? $query->whereNull('campus_id') : $query->where('campus_id', $item->campus_id))
+            ->first();
+    }
+
+    /**
+     * Si la materia de la fila es de una especialidad en el plan de la fila, como en CareerProposalQuery::overview.
+     */
+    public function isSpecialty(ProposalItem $item): bool
+    {
+        return StudyPlanSubject::withTrashed()
+            ->where('study_plan_id', $item->study_plan_id)
+            ->where('subject_id', $item->subject_id)
+            ->whereNotNull('specialty_id')
+            ->exists();
+    }
+
+    /**
+     * El nuevo ingreso vigente de cada columna de la propuesta (`proposal_intakes`, 5.6b), por ProposalOverview::columnKey:
+     * con él se calculan los grupos sueltos de una fila con paquetes al usar lo sugerido.
+     *
+     * @return array<string, int>
+     */
+    public function intakes(CareerProposal $proposal): array
+    {
+        return ProposalIntake::query()
+            ->where('career_proposal_id', $proposal->getKey())
+            ->get(['campus_id', 'new_students'])
+            ->mapWithKeys(fn (ProposalIntake $intake): array => [(string) $intake->campus_id => (int) $intake->new_students])
+            ->all();
     }
 
     /**
@@ -120,31 +164,5 @@ final class ProposalForecastQuery
         }
 
         return $history;
-    }
-
-    /**
-     * @return list<ForecastReason>
-     */
-    private function reasons(ProposalSuggestionState $suggestion, ?DemandForecast $forecast, bool $specialty): array
-    {
-        $reasons = [];
-
-        if ($suggestion->state === SuggestionState::Changed) {
-            $reasons[] = ForecastReason::Changed;
-        }
-
-        if (in_array($suggestion->state, [SuggestionState::Captured, SuggestionState::Changed], true) && ($suggestion->largeDifferenceExpected || $suggestion->largeDifferenceGroups)) {
-            $reasons[] = ForecastReason::LargeDifference;
-        }
-
-        if ($suggestion->state === SuggestionState::Suggested && $specialty) {
-            $reasons[] = ForecastReason::Specialty;
-        }
-
-        if ($suggestion->state === SuggestionState::Suggested && in_array($forecast?->method, [ForecastMethod::DepartmentFallback, ForecastMethod::NoHistory], true)) {
-            $reasons[] = ForecastReason::NoHistory;
-        }
-
-        return $reasons;
     }
 }

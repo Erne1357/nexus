@@ -15,6 +15,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
 use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
 use App\Modules\AcademicLoad\Queries\ProposalForecastReview;
+use App\Modules\AcademicLoad\Queries\ProposalOverview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Enums\ForecastMethod;
@@ -82,11 +83,14 @@ function forecastQueryRow(string $code, Campus $campus, array $item = [], ?array
     ]);
 }
 
+function proposalForecastOverview(): ProposalOverview
+{
+    return app(CareerProposalQuery::class)->overview(CareerProposal::query()->findOrFail(test()->proposal->id), withPendingCatalogs: false);
+}
+
 function proposalForecastReview(): ProposalForecastReview
 {
-    $overview = app(CareerProposalQuery::class)->overview(CareerProposal::query()->findOrFail(test()->proposal->id), withPendingCatalogs: false);
-
-    return app(ProposalForecastQuery::class)->review($overview, DemandSettings::fromValues([]));
+    return app(ProposalForecastQuery::class)->review(proposalForecastOverview(), DemandSettings::fromValues([]));
 }
 
 it('da el estado de cada fila y sus motivos para revisar', function () {
@@ -121,6 +125,30 @@ it('una materia de especialidad sin tocar pide revisión; ya corregida, no', fun
         ->and($review->row($c2)->reasons)->toBe([]);
 });
 
+it('una materia sin tomas recientes (needs_review sin especialidad) sin tocar pide revisión; con la tasa del departamento, también sin historia', function () {
+    $quiet = forecastQueryRow('ACF-0901', $this->c1, forecast: ['needs_review' => true]);
+    $fallback = forecastQueryRow('ACF-0902', $this->c1, forecast: ['needs_review' => true, 'method' => ForecastMethod::DepartmentFallback]);
+    $captured = forecastQueryRow('ACF-0903', $this->c1, ['expected_students' => 52, 'captured_at' => now()], ['needs_review' => true]);
+
+    $review = proposalForecastReview();
+
+    expect($review->row($quiet)->reasons)->toBe([ForecastReason::NoUptake])
+        ->and($review->row($fallback)->reasons)->toBe([ForecastReason::NoUptake, ForecastReason::NoHistory])
+        ->and($review->row($captured)->reasons)->toBe([])
+        ->and($review->counts([$this->c1->id])['sin-tomas'])->toBe(2);
+});
+
+it('la marca de la materia toma el motivo de su primera fila pendiente', function () {
+    forecastQueryRow('ACF-0901', $this->c1, forecast: ['method' => ForecastMethod::NoHistory]);
+    forecastQueryRow('ACF-0901', $this->c2, ['captured_at' => now()], ['expected_students' => 90, 'suggested_groups' => 3]);
+
+    $review = proposalForecastReview();
+    $mark = $review->mark(proposalForecastOverview()->subjects()[0], [$this->c1->id, $this->c2->id]);
+
+    expect($mark['review']['reason'])->toBe(ForecastReason::NoHistory)
+        ->and($mark['review']['more'])->toBe(2);
+});
+
 it('una fila con motivo está pendiente hasta revisarla, salvo un cambio de la proyección, que siempre lo está', function () {
     $reviewed = ['reviewed_at' => now()];
     $large = forecastQueryRow('ACF-0901', $this->c1, ['requested_groups' => 3, 'captured_at' => now(), ...$reviewed]);
@@ -142,7 +170,7 @@ it('cuenta lo pendiente de las columnas pedidas, por motivo', function () {
 
     $review = proposalForecastReview();
 
-    expect($review->counts([$this->c1->id]))->toBe(['' => 3, 'cambio' => 1, 'aparta' => 2, 'especialidad' => 0, 'sin-historia' => 1])
+    expect($review->counts([$this->c1->id]))->toBe(['' => 3, 'cambio' => 1, 'aparta' => 2, 'especialidad' => 0, 'sin-tomas' => 0, 'sin-historia' => 1])
         ->and($review->counts([$this->c2->id])[''])->toBe(1)
         ->and($review->changed([$this->c1->id]))->toBe(1);
 });

@@ -2,7 +2,10 @@
 
 namespace App\Modules\AcademicLoad\Enums;
 
+use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
 use App\Modules\Core\Enums\StatusTone;
+use App\Modules\Demand\Enums\ForecastMethod;
+use App\Modules\Demand\Models\DemandForecast;
 
 /**
  * Por qué una fila de la propuesta pide revisar la proyección de Nexus en «Revisar proyección» (tarea 5.6, opción C
@@ -12,17 +15,40 @@ use App\Modules\Core\Enums\StatusTone;
  * - `large_difference`: corregida y lo capturado se aparta del sugerido vigente (DemandSettings::isLargeDifference, en
  *   esperados o en grupos): «Usar sugerido» o «Dejar».
  * - `specialty`: sin tocar y es de una especialidad del plan: los elegibles dependen de quién la eligió. «Está bien».
+ * - `no_uptake`: sin tocar, la proyección la marca para revisar (`needs_review`) y no es de especialidad: tiene elegibles
+ *   pero nadie la tomó en los periodos recientes, así que se proyecta casi en cero (confirmado con el Riel A el 17 de
+ *   noviembre de 2026). «Está bien».
  * - `no_history`: sin tocar y la proyección no tiene historia de la materia (tasa del departamento o ninguna). «Está bien».
  *
- * Especialidad y sin historia solo cuentan sin tocar: corregirla ya es revisarla (supuesto por confirmar). `filter()` es
- * el valor de `?motivo=` en la página.
+ * Especialidad, sin tomas y sin historia solo cuentan sin tocar: corregirla ya es revisarla (supuesto por confirmar).
+ * `filter()` es el valor de `?motivo=` en la página.
  */
 enum ForecastReason: string
 {
     case Changed = 'changed';
     case LargeDifference = 'large_difference';
     case Specialty = 'specialty';
+    case NoUptake = 'no_uptake';
     case NoHistory = 'no_history';
+
+    /**
+     * Los motivos de una fila, en este orden, con su estado frente a la proyección vigente (null si ya no hay) y si su materia
+     * es de una especialidad del plan.
+     *
+     * @return list<self>
+     */
+    public static function for(ProposalSuggestionState $suggestion, ?DemandForecast $forecast, bool $specialty): array
+    {
+        $untouched = $suggestion->state === SuggestionState::Suggested;
+
+        return array_values(array_filter([
+            $suggestion->state === SuggestionState::Changed ? self::Changed : null,
+            in_array($suggestion->state, [SuggestionState::Captured, SuggestionState::Changed], true) && ($suggestion->largeDifferenceExpected || $suggestion->largeDifferenceGroups) ? self::LargeDifference : null,
+            $untouched && $specialty ? self::Specialty : null,
+            $untouched && ! $specialty && $forecast?->needs_review === true ? self::NoUptake : null,
+            $untouched && in_array($forecast?->method, [ForecastMethod::DepartmentFallback, ForecastMethod::NoHistory], true) ? self::NoHistory : null,
+        ]));
+    }
 
     public function label(): string
     {
@@ -30,6 +56,7 @@ enum ForecastReason: string
             self::Changed => 'La proyección cambió',
             self::LargeDifference => 'Se aparta del sugerido',
             self::Specialty => 'Especialidad',
+            self::NoUptake => 'Sin tomas recientes',
             self::NoHistory => 'Sin historia',
         };
     }
@@ -40,6 +67,7 @@ enum ForecastReason: string
             self::Changed => 'o-arrow-path',
             self::LargeDifference => 'o-arrows-up-down',
             self::Specialty => 'o-academic-cap',
+            self::NoUptake => 'o-user-minus',
             self::NoHistory => 'o-information-circle',
         };
     }
@@ -49,7 +77,7 @@ enum ForecastReason: string
         return match ($this) {
             self::Changed => StatusTone::Info,
             self::LargeDifference => StatusTone::Warning,
-            self::Specialty, self::NoHistory => StatusTone::Neutral,
+            self::Specialty, self::NoUptake, self::NoHistory => StatusTone::Neutral,
         };
     }
 
@@ -62,6 +90,7 @@ enum ForecastReason: string
             self::Changed => 'cambio',
             self::LargeDifference => 'aparta',
             self::Specialty => 'especialidad',
+            self::NoUptake => 'sin-tomas',
             self::NoHistory => 'sin-historia',
         };
     }

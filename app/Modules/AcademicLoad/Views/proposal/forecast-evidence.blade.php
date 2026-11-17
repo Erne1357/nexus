@@ -4,7 +4,9 @@
     cuántos dependen de aprobar lo que cursan hoy), las tasas y cuántos periodos las dieron, los repetidores, la cuenta de
     los esperados y de los grupos en Mono, y el historial corto de los periodos del mismo tipo (grupos, lugares, inscritos
     y reprobados). Las cifras son las de la fila de la proyección tal como vienen, sin recalcular la fórmula: el resultado
-    de cada cuenta es el que guardó Demand (fórmula v2: repetidores = cursando × reprobación × (1 − no inscripción)).
+    de cada cuenta es el que guardó Demand (fórmula v2: repetidores = cursando × reprobación × (1 − no inscripción)). Los
+    grupos se cuentan «esperados ÷ tamaño hacia arriba» con el tamaño de la materia (25 con laboratorio, 35 sin él); si con
+    el tamaño de hoy no dan los grupos guardados, solo se dice cuántos.
 
     `$forecastRow` es la ProposalForecastRow; `$history`, los renglones de ProposalForecastQuery::history o null.
 --}}
@@ -66,7 +68,13 @@
             </div>
             <div class="{{ $evidenceRow }}">
                 <dt class="{{ $evidenceLabel }}">Grupos</dt>
-                <dd class="font-medium"><span class="font-mono">{{ $forecastData->expected_students }} ÷ {{ $size }} = {{ number_format($forecastData->expected_students / $size, 1) }}</span> → <span class="font-mono font-semibold">{{ $forecastData->suggested_groups }}</span> <span class="font-normal text-neutral">· {{ $forecastRow->subject->subject->needs_lab ? "con laboratorio, {$size} por grupo" : "{$size} por grupo" }}</span></dd>
+                <dd class="font-medium">
+                    @if ((int) ceil($forecastData->expected_students / $size) === $forecastData->suggested_groups)
+                        <span class="font-mono">{{ $forecastData->expected_students }} ÷ {{ $size }}</span> hacia arriba = <span class="font-mono font-semibold">{{ $forecastData->suggested_groups }}</span> <span class="font-normal text-neutral">· {{ $forecastRow->subject->subject->needs_lab ? "con laboratorio, {$size} por grupo" : "{$size} por grupo" }}</span>
+                    @else
+                        → <span class="font-mono font-semibold">{{ $forecastData->suggested_groups }}</span> {{ $forecastData->suggested_groups === 1 ? 'grupo' : 'grupos' }}
+                    @endif
+                </dd>
             </div>
         </dl>
     @endif

@@ -2,9 +2,14 @@
 
 namespace App\Modules\AcademicLoad\Actions\Proposals;
 
+use App\Modules\AcademicLoad\Enums\ForecastReason;
+use App\Modules\AcademicLoad\Enums\SuggestionState;
 use App\Modules\AcademicLoad\Events\ProposalItemReviewed;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
+use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Rules\DemandSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
@@ -15,13 +20,18 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * revisión hasta que cambie lo revisado (supuesto por confirmar). No pide motivo: la diferencia solo se resalta.
  *
  * Tiene las guardas, la transacción y el bloqueo de UpdateProposalItem::change (propuesta en borrador o regresada y parte
- * del departamento sin aceptar). Una fila ya revisada no se escribe otra vez. Con la marca nueva deja una entrada de
+ * del departamento sin aceptar). Bajo el bloqueo revisa que la fila esté pendiente con la proyección vigente
+ * (ForecastReason::for): una que ya se revisó o no tiene motivo es una ValidationException sobre `item`, y una cuya
+ * proyección cambió manda a «Usar N» o «Mantener» (ResolveForecastChange). Con la marca nueva deja una entrada de
  * bitácora en la fila y, después del commit, avisa con ProposalItemReviewed. Quién puede lo decide CareerProposalPolicy::update
  * sobre la fila antes de llamarla (M7).
  */
 final class MarkProposalItemReviewed
 {
-    public function __construct(private readonly UpdateProposalItem $update) {}
+    public function __construct(
+        private readonly UpdateProposalItem $update,
+        private readonly ProposalForecastQuery $forecasts,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -29,17 +39,22 @@ final class MarkProposalItemReviewed
     public function handle(ProposalItem $item, User $actor): ProposalItem
     {
         return DB::transaction(function () use ($item, $actor): ProposalItem {
-            $marked = false;
+            $this->update->change($item, $actor, function (ProposalItem $locked) use ($actor): array {
+                $proposal = $locked->proposal;
+                $forecast = $this->forecasts->currentFor($proposal, $locked);
+                $state = ProposalSuggestionState::of($locked->expected_students, $locked->requested_groups, $locked->suggested_expected_students,
+                    $locked->suggested_groups, $locked->captured_at, $forecast?->expected_students, $forecast?->suggested_groups, DemandSettings::fromSettings());
 
-            $this->update->change($item, $actor, function (ProposalItem $locked) use ($actor, &$marked): array {
-                $marked = $locked->reviewed_at === null;
+                if ($state->state === SuggestionState::Changed) {
+                    throw ValidationException::withMessages(['item' => 'La proyección cambió después de corregirla: usa «Usar N» o «Mantener».']);
+                }
 
-                return $marked ? ['reviewed_at' => now(), 'reviewed_by' => $actor->getKey()] : [];
+                if ($locked->reviewed_at !== null || ForecastReason::for($state, $forecast, $this->forecasts->isSpecialty($locked)) === []) {
+                    throw ValidationException::withMessages(['item' => 'Esta materia no tiene nada pendiente de revisar.']);
+                }
+
+                return ['reviewed_at' => now(), 'reviewed_by' => $actor->getKey()];
             });
-
-            if (! $marked) {
-                return $item;
-            }
 
             $proposal = $item->proposal()->with(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()])->firstOrFail();
 
