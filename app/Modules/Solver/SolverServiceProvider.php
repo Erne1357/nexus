@@ -4,7 +4,11 @@ namespace App\Modules\Solver;
 
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Solver\Engines\EngineRegistry;
+use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Enums\SolverPermission;
+use App\Modules\Solver\Rules\SolverSettings;
 
 /**
  * Módulo Solver (fases 6 y 7, R2): el motor que sugiere horarios y salones para la carga de un departamento en una
@@ -14,6 +18,28 @@ use App\Modules\Solver\Enums\SolverPermission;
  */
 final class SolverServiceProvider extends ModuleServiceProvider
 {
+    /**
+     * Los motores disponibles, con la etiqueta `solver.engines`: hoy el de prueba; la heurística (6.6) y CP-SAT (fase 7)
+     * se agregan aquí. Los motores no guardan estado, así que el registro puede ser único por proceso.
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->tag([FixedEngine::class], 'solver.engines');
+        $this->app->singleton(EngineRegistry::class, fn ($app): EngineRegistry => new EngineRegistry($app->tagged('solver.engines')));
+    }
+
+    /**
+     * Los parámetros del motor (CF-S7).
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
+    {
+        return SolverSettings::definitions();
+    }
+
     public function permissions(): array
     {
         return [SolverPermission::class];
