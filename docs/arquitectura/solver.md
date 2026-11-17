@@ -151,9 +151,17 @@ Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte que
 
 ### Línea base (se llena al cerrar cada fase)
 
-| Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando |
-|---|---|---|---|---|
-| pendiente | | | | |
+`php artisan solver:benchmark [--engine=*] [--fixture=*] [--markdown]` corre cada motor registrado (o los de `--engine`) sobre cada fixture (o los de `--fixture`) y mide el tiempo con `hrtime`. La tabla de consola trae motor, fixture, grupos movibles, sesiones propuestas, sin programar, violaciones duras, puntaje blando, estado, segundos y «Cumple» (✓/✗ contra `expected.json` en los motores que declaran `checksHardRules()`; «—» en los demás). Con `--markdown` imprime la tabla con las columnas de abajo para pegarla aquí. Un motor o fixture desconocido termina con error.
+
+Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reglas duras ni calcula puntaje, así que sus ceros no miden nada y solo muestran que el comando corre. Las filas de la heurística llegan con la 6.7.
+
+| Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando | Sin programar |
+|---|---|---|---|---|---|
+| tiny | fixed | 0.00 s | 0 | 0 | 0 |
+| small | fixed | 0.00 s | 0 | 0 | 0 |
+| medium | fixed | 0.00 s | 0 | 0 | 0 |
+| infeasible | fixed | 0.00 s | 0 | 0 | 0 |
+| department-multicampus | fixed | 0.01 s | 0 | 0 | 0 |
 
 ## Despliegue del servicio Python
 
