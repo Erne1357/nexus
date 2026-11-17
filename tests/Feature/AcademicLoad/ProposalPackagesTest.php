@@ -7,11 +7,13 @@ use App\Modules\AcademicLoad\Actions\Proposals\CreateProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\DeleteProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\RenameProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\SetPackageCount;
+use App\Modules\AcademicLoad\Actions\Proposals\SyncProposalIntakes;
 use App\Modules\AcademicLoad\Actions\Proposals\SyncProposalSuggestions;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalIntake;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalPackageSubjects;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Events\ProposalItemUpdated;
 use App\Modules\AcademicLoad\Events\ProposalPackagesChanged;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalIntake;
@@ -321,7 +323,7 @@ it('UpdateProposalItem no deja bajar los grupos de los que salen de paquetes, pe
 /**
  * Una materia de primer semestre sin tocar, con la proyección de `$expected` esperados y `$suggested` grupos, en C1 con `$newStudents` de nuevo ingreso.
  */
-function untouchedFirstSemesterRow(int $expected, int $suggested, int $newStudents, bool $lab = false): ProposalItem
+function untouchedFirstSemesterRow(int $expected, int $suggested, int $newStudents, bool $lab = false, ?ForecastMethod $method = ForecastMethod::FirstSemester): ProposalItem
 {
     $subject = Subject::factory()->create(['department_id' => test()->dept->id, 'needs_lab' => $lab]);
     ProposalIntake::query()->where('campus_id', test()->c1->id)->update(['new_students' => $newStudents, 'suggested_new_students' => $newStudents]);
@@ -334,6 +336,7 @@ function untouchedFirstSemesterRow(int $expected, int $suggested, int $newStuden
         'requested_groups' => $suggested,
         'suggested_expected_students' => $expected,
         'suggested_groups' => $suggested,
+        'forecast_method' => $method,
         'captured_at' => null,
     ]);
 }
@@ -401,4 +404,67 @@ it('la sincronización con la proyección mantiene la regla en las filas sin toc
 
     expect($item->fresh()->only(['expected_students', 'package_groups', 'requested_groups', 'suggested_groups']))->toBe(['expected_students' => 200, 'package_groups' => 4, 'requested_groups' => 6, 'suggested_groups' => 6])
         ->and($item->fresh()->captured_at)->toBeNull();
+});
+
+it('solo resta el nuevo ingreso en primer semestre: una materia de 2.º del paquete no lo resta', function () {
+    $second = untouchedFirstSemesterRow(70, 2, 70, method: ForecastMethod::Formula);
+    $package = app(CreateProposalPackage::class)->handle($this->proposal, [$second->subject_id], null, $this->actor);
+
+    expect($package->campuses()->where('campus_id', $this->c1->id)->sole()->count)->toBe(2)
+        ->and($second->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 2, 'requested_groups' => 4]);
+
+    DemandForecast::factory()->create([
+        'term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id, 'career_id' => $this->career->id,
+        'subject_id' => $second->subject_id, 'campus_id' => $this->c1->id, 'expected_students' => 105, 'suggested_groups' => 3,
+        'new_students' => null, 'method' => ForecastMethod::Formula,
+    ]);
+    app(SyncProposalSuggestions::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+
+    expect($second->fresh()->only(['package_groups', 'requested_groups']))->toBe(['package_groups' => 2, 'requested_groups' => 5]);
+});
+
+it('una fila sin tocar con proyección se escribe una sola vez al recalcular, sin bitácora intermedia', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    $forecast = DemandForecast::factory()->create([
+        'term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id, 'career_id' => $this->career->id,
+        'subject_id' => $item->subject_id, 'campus_id' => $this->c1->id, 'expected_students' => 160, 'suggested_groups' => 5,
+        'new_students' => 140, 'method' => ForecastMethod::FirstSemester,
+    ]);
+    app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+    $before = Activity::query()->where('subject_id', $item->id)->count();
+
+    $forecast->update(['new_students' => 70, 'expected_students' => 100, 'suggested_groups' => 3]);
+    Event::fake([ProposalItemUpdated::class]);
+    app(SyncProposalIntakes::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+    app(SyncProposalSuggestions::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+
+    expect($item->fresh()->only(['expected_students', 'package_groups', 'requested_groups']))->toBe(['expected_students' => 100, 'package_groups' => 2, 'requested_groups' => 3])
+        ->and(Activity::query()->where('subject_id', $item->id)->count())->toBe($before);
+    Event::assertNotDispatched(ProposalItemUpdated::class);
+});
+
+it('el tope de grupos no tumba la sincronización: recorta, deja bitácora y las demás propuestas siguen', function () {
+    $big = untouchedFirstSemesterRow(1100, 4, 70, method: null);
+    $package = app(CreateProposalPackage::class)->handle($this->proposal, [$big->subject_id], null, $this->actor);
+
+    expect($big->fresh()->requested_groups)->toBe(30)
+        ->and(Activity::query()->where('subject_id', $big->id)->latest('id')->first()->properties['capped_from'])->toBeGreaterThan(30);
+
+    $otherProposal = CareerProposal::factory()->create(['career_id' => $this->career->id, 'term_id' => $this->proposal->term_id, 'modality_id' => modalityOf('EAD')->id]);
+    ProposalIntake::factory()->create(['career_proposal_id' => $otherProposal->id, 'campus_id' => $this->c1->id]);
+    ProposalIntake::query()->where('career_proposal_id', $this->proposal->id)->where('campus_id', $this->c1->id)->update(['new_students' => 1000, 'suggested_new_students' => 1000]);
+
+    expect(fn () => app(SyncProposalIntakes::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]))->not->toThrow(ValidationException::class)
+        ->and($big->fresh()->requested_groups)->toBeGreaterThanOrEqual($big->fresh()->package_groups);
+});
+
+it('registra el conteo viejo y el nuevo de cada columna que se mueve', function () {
+    $item = untouchedFirstSemesterRow(160, 5, 140);
+    app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 70, $this->actor);
+
+    $entry = Activity::query()->where('subject_id', $this->proposal->id)->where('description', 'like', 'Se movieron%')->latest('id')->first();
+
+    expect($entry->properties['moves'])->toBe([['package' => 'P1', 'campus_id' => $this->c1->id, 'old' => 4, 'new' => 2]])
+        ->and($entry->attribute_changes['old'])->toBe(['package_counts' => [4]]);
 });

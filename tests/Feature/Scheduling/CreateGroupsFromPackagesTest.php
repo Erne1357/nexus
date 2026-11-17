@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalPackage;
+use App\Modules\AcademicLoad\Models\ProposalPackageCampus;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -149,4 +150,19 @@ it('package_id y package_number van juntos y el número empieza en 1', function 
     expect(fn () => DB::transaction(fn () => DB::table('groups')->where('id', $group->id)->update(['package_number' => null])))->toThrow(QueryException::class)
         ->and(fn () => DB::transaction(fn () => DB::table('groups')->where('id', $group->id)->update(['package_number' => 0])))->toThrow(QueryException::class)
         ->and(fn () => DB::transaction(fn () => DB::table('groups')->where('id', $group->id)->update(['package_id' => null])))->toThrow(QueryException::class);
+});
+
+it('el total que nace de la fila es siempre requested_groups: package_groups de la fila manda sobre las cuentas', function () {
+    $package = packagesOpen([$this->math], ['C1' => 2]);
+    $second = packagesOpen([$this->physics], ['C2' => 2]);
+    ProposalPackageCampus::query()->where('proposal_package_id', $package->id)->where('campus_id', $this->c1->id)->update(['count' => 5]);
+    ProposalPackageCampus::query()->where('proposal_package_id', $second->id)->where('campus_id', $this->c2->id)->update(['count' => 1]);
+    $part = packagesPart($this->cb);
+
+    app(CreateGroupsFromProposal::class)->handle($part, $this->user);
+
+    expect(packagesGroupsOf($this->math, $this->c1))->toBe(['P1:1', 'P1:2'])
+        ->and(Group::query()->where('subject_id', $this->math->id)->where('campus_id', $this->c1->id)->count())->toBe(ProposalItem::query()->where('subject_id', $this->math->id)->where('campus_id', $this->c1->id)->value('requested_groups'));
+
+    expect(packagesGroupsOf($this->physics, $this->c2))->toBe(['P2:1', 'suelto']);
 });

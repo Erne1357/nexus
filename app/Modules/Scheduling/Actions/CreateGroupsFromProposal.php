@@ -107,15 +107,19 @@ final class CreateGroupsFromProposal
             ->toBase()
             ->get(['proposal_packages.id', 'pc.count']);
 
+        $desired = 0;
+
         foreach ($packages as $package) {
-            for ($number = 1; $number <= $package->count; $number++) {
+            for ($number = 1; $number <= $package->count && $desired < $item->package_groups; $number++) {
+                $desired++;
+
                 if (! in_array($package->id.'|'.$number, $taken, true)) {
                     $slots[] = ['package_id' => $package->id, 'package_number' => $number];
                 }
             }
         }
 
-        $loose = max(0, $item->requested_groups - $item->package_groups) - $existing->whereNull('package_id')->count();
+        $loose = max(0, $item->requested_groups - $desired) - $existing->whereNull('package_id')->count();
 
         for ($i = 0; $i < $loose; $i++) {
             $slots[] = ['package_id' => null, 'package_number' => null];

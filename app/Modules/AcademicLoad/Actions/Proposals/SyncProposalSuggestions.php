@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Events\ProposalSuggestionsSynced;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Enums\ActivityEvent;
@@ -15,7 +16,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * Pone al día las propuestas con la proyección recalculada de Demand (tarea 5.5; DemandForecastsComputed). Para el
  * periodo y la modalidad, las carreras dadas y, si viene, un solo campus, toma las propuestas en borrador o regresadas
  * (una enviada o aceptada no se toca). En cada una, las filas que el coordinador no ha tocado (`captured_at` nulo) y cuyo
- * departamento no aceptó su parte siguen a la proyección: esperados, grupos, `suggested_*` y `forecast_method`. Con paquetes en la fila (`package_groups > 0`), los grupos son los de paquetes más los sueltos sugeridos, `ceil(max(0, esperados - nuevo ingreso del campus) / tamaño)` (tarea 5.6b), en el mismo UPDATE. Las que
+ * departamento no aceptó su parte siguen a la proyección: esperados, grupos, `suggested_*` y `forecast_method`. Con paquetes en la fila (`package_groups > 0`), los grupos son los de paquetes más los sueltos sugeridos, `ceil(max(0, esperados - nuevo ingreso del campus) / tamaño)` (tarea 5.6b), en el mismo UPDATE: solo resta el nuevo ingreso si el método es `first_semester` (solo ahí los esperados lo incluyen), `package_groups` lo recalcula el mismo UPDATE desde las cuentas, y el total se recorta al tope de grupos de una fila (sin bajar de `package_groups`), dejando en la bitácora cuántas filas se recortaron. Esta Action es la dueña de las filas sin tocar con proyección. Las que
  * corrigió no se tocan: el aviso «la proyección cambió» se calcula al leer (ProposalSuggestionState). Una fila sin
  * tocar que se queda sin proyección no cambia, y una que ya coincide no se escribe.
  *
@@ -81,18 +82,33 @@ final class SyncProposalSuggestions
             }
 
             $sizes = SuggestedGroups::fromSettings();
-            $groups = <<<SQL
-                case when proposal_items.package_groups > 0
-                    then proposal_items.package_groups + ceil(greatest(0, f.expected_students - coalesce((
+            $max = ProposalItemRules::MAX_REQUESTED_GROUPS;
+            $packageGroups = <<<'SQL'
+                case when proposal_items.campus_id is null or exists (
+                    select 1 from campuses c where c.id = proposal_items.campus_id and c.is_active and c.deleted_at is null
+                ) then coalesce((
+                    select sum(pc.count) from proposal_package_campuses pc
+                    join proposal_packages p on p.id = pc.proposal_package_id
+                    join proposal_package_subjects ps on ps.proposal_package_id = p.id
+                    where p.career_proposal_id = proposal_items.career_proposal_id
+                        and ps.subject_id = proposal_items.subject_id
+                        and pc.campus_id is not distinct from proposal_items.campus_id
+                ), 0)::int else proposal_items.package_groups end
+                SQL;
+            $wanted = <<<SQL
+                case when ({$packageGroups}) > 0
+                    then ({$packageGroups}) + ceil(greatest(0, f.expected_students - case when f.method = 'first_semester' then coalesce((
                         select i.new_students from proposal_intakes i
                         where i.career_proposal_id = proposal_items.career_proposal_id and i.campus_id is not distinct from proposal_items.campus_id
-                    ), 0))::numeric / case when subjects.needs_lab then {$sizes->labSize} else {$sizes->defaultSize} end)::int
+                    ), 0) else 0 end)::numeric / case when subjects.needs_lab then {$sizes->labSize} else {$sizes->defaultSize} end)::int
                     else f.suggested_groups end
                 SQL;
+            $groups = "greatest(({$packageGroups}), least({$max}, {$wanted}))";
 
-            $count = DB::update(<<<SQL
+            $rows = DB::select(<<<SQL
                 update proposal_items
                 set expected_students = f.expected_students,
+                    package_groups = {$packageGroups},
                     requested_groups = {$groups},
                     suggested_expected_students = f.expected_students,
                     suggested_groups = f.suggested_groups,
@@ -110,11 +126,16 @@ final class SyncProposalSuggestions
                     and (
                         proposal_items.expected_students is distinct from f.expected_students
                         or proposal_items.requested_groups is distinct from {$groups}
+                        or proposal_items.package_groups is distinct from {$packageGroups}
                         or proposal_items.suggested_expected_students is distinct from f.expected_students
                         or proposal_items.suggested_groups is distinct from f.suggested_groups
                         or proposal_items.forecast_method is distinct from f.method
                     ){$campusFilter}{$acceptedFilter}
+                returning ({$wanted}) as wanted
                 SQL, $bindings);
+
+            $count = count($rows);
+            $capped = count(array_filter($rows, fn (object $row): bool => (int) $row->wanted > $max));
 
             if ($count === 0) {
                 return 0;
@@ -123,7 +144,7 @@ final class SyncProposalSuggestions
             activity()
                 ->performedOn($proposal)
                 ->event(ActivityEvent::Updated)
-                ->withProperties(['items' => $count, 'campus_id' => $campusId])
+                ->withProperties(['items' => $count, 'campus_id' => $campusId, 'capped_at_max' => $capped])
                 ->log("Nexus actualizó {$count} materias con la proyección en la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
 
             ProposalSuggestionsSynced::dispatch($proposal, $count);

@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\AcademicLoad\Rules\ProposalPackageGuard;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -27,9 +28,14 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   paquete deja de cubrir la materia vuelve a los grupos sugeridos de la proyección, o a los de SuggestedGroups sin ella.
  * No toca la fila de un campus inactivo ni borrado (M14) ni las materias de un departamento que ya aceptó su parte.
  *
+ * Con actor, el total que pasa del tope de una fila corregida es una ValidationException; sin actor (lo llama el listener de la
+ * proyección) o en una fila sin tocar se recorta al tope, sin bajar de `package_groups`, y la bitácora lleva `capped_from`: un
+ * tope no debe tumbar la sincronización de las demás propuestas. Sin actor, las filas sin tocar que tienen proyección no se
+ * escriben aquí: su dueña es SyncProposalSuggestions, que corre después y las escribe una sola vez. Resta el nuevo ingreso solo
+ * si el método de la fila es `first_semester`: solo ahí los esperados ya lo incluyen.
+ *
  * No abre transacción ni bloquea la propuesta ni las partes: lo hace quien la llama, con las guardas de
- * ProposalPackageGuard. Deja la bitácora de cada fila cambiada y avisa con ProposalItemUpdated después del commit. Si el
- * total pasa del tope de grupos de una fila (ProposalItemRules), una ValidationException sobre `count`. Devuelve cuántas
+ * ProposalPackageGuard. Deja la bitácora de cada fila cambiada y avisa con ProposalItemUpdated después del commit. Devuelve cuántas
  * filas cambió.
  */
 final class RecalculatePackageGroups
@@ -82,10 +88,14 @@ final class RecalculatePackageGroups
             $packageGroups = $sums->get($item->subject_id.'|'.($item->campus_id ?? ''), 0);
             $untouched = $item->captured_at === null;
 
+            if ($untouched && $actor === null && $item->forecast_method !== null) {
+                continue;
+            }
+
             if ($untouched && ($packageGroups > 0 || $item->package_groups > 0)) {
                 $needsLab = (bool) $item->subject->needs_lab;
                 $requested = $packageGroups > 0
-                    ? $packageGroups + $sizes->for(max(0, $item->expected_students - (int) $newStudents->get($item->campus_id ?? '', 0)), $needsLab)
+                    ? $packageGroups + $sizes->for(max(0, $item->expected_students - ($item->forecast_method === ForecastMethod::FirstSemester ? (int) $newStudents->get($item->campus_id ?? '', 0) : 0)), $needsLab)
                     : ($item->suggested_groups ?? $sizes->for($item->expected_students, $needsLab));
             } elseif ($packageGroups !== $item->package_groups) {
                 $requested = max(0, $item->requested_groups - $item->package_groups) + $packageGroups;
@@ -97,8 +107,15 @@ final class RecalculatePackageGroups
                 continue;
             }
 
-            if ($requested > ProposalItemRules::MAX_REQUESTED_GROUPS) {
-                throw ValidationException::withMessages(['count' => "{$item->subject->code} pasaría de ".ProposalItemRules::MAX_REQUESTED_GROUPS.' grupos'.($item->campus === null ? '' : " en {$item->campus->code}").'.']);
+            $wanted = $requested;
+            $capped = $requested > ProposalItemRules::MAX_REQUESTED_GROUPS;
+
+            if ($capped) {
+                if ($actor !== null && ! $untouched) {
+                    throw ValidationException::withMessages(['count' => "{$item->subject->code} pasaría de ".ProposalItemRules::MAX_REQUESTED_GROUPS.' grupos'.($item->campus === null ? '' : " en {$item->campus->code}").'.']);
+                }
+
+                $requested = max($packageGroups, ProposalItemRules::MAX_REQUESTED_GROUPS);
             }
 
             $old = $item->only(['requested_groups', 'package_groups']);
@@ -112,7 +129,7 @@ final class RecalculatePackageGroups
                 ->causedBy($actor)
                 ->event(ActivityEvent::Updated)
                 ->withChanges(['attributes' => $item->only($changed), 'old' => Arr::only($old, $changed)])
-                ->withProperties(['career_proposal_id' => $proposal->getKey(), 'subject_id' => $item->subject_id, 'campus_id' => $item->campus_id])
+                ->withProperties(['career_proposal_id' => $proposal->getKey(), 'subject_id' => $item->subject_id, 'campus_id' => $item->campus_id, ...($capped ? ['capped_from' => $wanted] : [])])
                 ->log("Cambió {$item->subject->code}".($item->campus === null ? '' : " de {$item->campus->code}")." por los paquetes de la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
 
             ProposalItemUpdated::dispatch($item, $changed);

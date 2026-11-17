@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Rules\ProposalPackageGuard;
 use App\Modules\AcademicLoad\Rules\ProposalPackageRules;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\DemandSettings;
+use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Calcula los paquetes sugeridos de cada columna y hace que sigan a ellos los que el coordinador no ha tocado (tarea 5.6b;
@@ -20,7 +21,8 @@ use App\Modules\Demand\Rules\DemandSettings;
  * (esas materias ya no cambian), pero sí guarda su sugerido. Después recalcula las filas de las materias de todos los
  * paquetes (RecalculatePackageGroups), porque los grupos sueltos sugeridos de una fila sin tocar dependen del nuevo ingreso.
  *
- * No abre transacción ni bloquea la propuesta: lo hace quien la llama, con la propuesta ya bloqueada. Devuelve cuántas
+ * No abre transacción ni bloquea la propuesta: lo hace quien la llama, con la propuesta ya bloqueada. Deja una entrada de bitácora de la propuesta con el conteo viejo y el
+ * nuevo de cada columna que se movió (paquete, campus, antes y después), con quien llama como causante o sin él. Devuelve cuántas
  * cuentas se movieron.
  */
 final class SyncPackageCounts
@@ -53,6 +55,7 @@ final class SyncPackageCounts
         $size = DemandSettings::fromSettings()->groupSizes->defaultSize;
         $first = $packages->first();
         $moved = 0;
+        $moves = [];
         $affected = $packages->flatMap(fn (ProposalPackage $package) => $package->subjects->pluck('subject_id'))->unique()->values()->all();
 
         foreach ($packages as $package) {
@@ -69,6 +72,7 @@ final class SyncPackageCounts
                 }
 
                 if ($column->captured_at === null && $suggested !== null && ! $blocked && $column->count !== $suggested) {
+                    $moves[] = ['package' => $package->code, 'campus_id' => $column->campus_id, 'old' => $column->count, 'new' => $suggested];
                     $column->count = $suggested;
                     $moved++;
                 }
@@ -77,6 +81,16 @@ final class SyncPackageCounts
                     $column->save();
                 }
             }
+        }
+
+        if ($moves !== []) {
+            activity()
+                ->performedOn($proposal)
+                ->causedBy($actor)
+                ->event(ActivityEvent::Updated)
+                ->withChanges(['attributes' => ['package_counts' => array_column($moves, 'new')], 'old' => ['package_counts' => array_column($moves, 'old')]])
+                ->withProperties(['career_proposal_id' => $proposal->getKey(), 'moves' => $moves])
+                ->log(($actor === null ? 'Nexus movió' : 'Se movieron')." {$moved} cuentas de paquetes sin tocar al sugerido en la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
         }
 
         $this->recalculate->handle($proposal, $affected, $actor);

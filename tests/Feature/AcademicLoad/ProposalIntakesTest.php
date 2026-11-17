@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Actions\Proposals\CreateProposalPackage;
 use App\Modules\AcademicLoad\Actions\Proposals\SetPackageCount;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SyncProposalIntakes;
+use App\Modules\AcademicLoad\Actions\Proposals\SyncProposalSuggestions;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalIntake;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -179,6 +180,7 @@ it('los paquetes sugeridos son ceil(nuevo ingreso / tamaño normal) en el primer
 
     $forecast->update(['new_students' => 36]);
     syncIntakes($proposal);
+    app(SyncProposalSuggestions::class)->handle($proposal->term_id, $proposal->modality_id, null, [$proposal->career_id]);
 
     expect($column($package)->only(['suggested_count', 'count']))->toBe(['suggested_count' => 2, 'count' => 2])
         ->and(ProposalItem::query()->where('career_proposal_id', $proposal->id)->where('subject_id', $this->first->id)->where('campus_id', $this->c1->id)->value('package_groups'))->toBe(2);
