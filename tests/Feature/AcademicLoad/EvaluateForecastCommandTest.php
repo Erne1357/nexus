@@ -20,32 +20,37 @@ use Illuminate\Support\Facades\Queue;
 | encola. Sin `--modality`, la única modalidad activa con kárdex del periodo.
 |
 | Fixture: ISX en K1, B (2.º semestre) pide A. Diez alumnos aprobaron A en 20253 y los diez llevan B en 20261: sin
-| historia, la proyección «como si» espera a los diez elegibles, igual que R1.
+| historia, la proyección «como si» espera a los diez elegibles, igual que R1. Un alumno de otro campus, sin oferta de la
+| carrera, queda fuera del alcance (DM-27).
 */
 
 beforeEach(function () {
     $this->term = Term::factory()->create(['code' => '20261', 'name' => 'Ene-Jun 2026']);
     $campus = Campus::factory()->create(['code' => 'K1']);
-    $plan = StudyPlan::factory()->create();
-    $plan->career->update(['code' => 'ISX']);
+    $this->plan = StudyPlan::factory()->create();
+    $this->plan->career->update(['code' => 'ISX']);
     $a = Subject::factory()->create();
-    $b = Subject::factory()->create();
-    placeInPlan($plan, $a);
-    placeInPlan($plan, $b, 2);
-    seriate($plan, $b, $a);
-    CareerCampus::factory()->create(['career_id' => $plan->career_id, 'campus_id' => $campus->id]);
+    $this->b = Subject::factory()->create();
+    placeInPlan($this->plan, $a);
+    placeInPlan($this->plan, $this->b, 2);
+    seriate($this->plan, $this->b, $a);
+    CareerCampus::factory()->create(['career_id' => $this->plan->career_id, 'campus_id' => $campus->id]);
 
     foreach (range(1, 10) as $i) {
-        $student = Student::factory()->create(['study_plan_id' => $plan->id, 'campus_id' => $campus->id]);
+        $student = Student::factory()->create(['study_plan_id' => $this->plan->id, 'campus_id' => $campus->id]);
         KardexRecord::factory()->for($student)->for($a)->create(['term_code' => '20253']);
-        KardexRecord::factory()->for($student)->for($b)->create(['term_code' => '20261', 'result' => KardexResult::Cursando, 'grade' => null]);
+        KardexRecord::factory()->for($student)->for($this->b)->create(['term_code' => '20261', 'result' => KardexResult::Cursando, 'grade' => null]);
     }
 });
 
 it('el comando imprime la confianza por carrera', function () {
+    $outside = Student::factory()->create(['study_plan_id' => $this->plan->id]);
+    KardexRecord::factory()->for($outside)->for($this->b)->create(['term_code' => '20261', 'result' => KardexResult::Cursando, 'grade' => null]);
+
     $this->artisan('academic-load:evaluate-forecast', ['term' => '20261'])
         ->expectsTable(['Carrera', 'Campus', 'Error ponderado', 'Error R1', 'Confianza'], [['ISX', 'K1', '0.0 %', '0.0 %', 'Sugerencia fuerte']])
         ->expectsOutputToContain('Global: error ponderado 0.0 %, error R1 0.0 %, Sugerencia fuerte.')
+        ->expectsOutputToContain('1 alumno de carreras o campus sin oferta no se evalúan.')
         ->assertSuccessful();
 
     expect(ForecastEvaluation::query()->sole())

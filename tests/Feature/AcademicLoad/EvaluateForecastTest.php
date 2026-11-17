@@ -20,19 +20,21 @@ use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 
 /*
 | Evaluar la proyección «como si» (tarea 5.9b; DM-27 y DM-28): Demand calcula lo que habría proyectado para 20261 con
-| lo que se sabía durante 20253, y se compara, por carrera, campus y materia, con lo que de verdad se cursó en 20261
-| (la ocupación del kárdex) y con la regla de R1 (los elegibles).
+| lo que se sabía durante 20253, y se compara, por carrera, campus y materia del alcance de la proyección (el de la
+| propuesta), con lo que de verdad se cursó en 20261 (la ocupación del kárdex) y con la regla de R1 (los elegibles).
 |
 | Fixture, una carrera ofrecida en K1, plan con A (1.º), B (2.º, pide A) y C (3.º, pide B, de otro departamento):
 | - Historia (egresados), 20251: 4 aprobaron A en 20243; B la aprueban dos, uno la reprueba y uno se da de baja.
 | - Durante 20253: 6 cursan A (la aprueban), 3 cursan B (la aprueban) y 2 cursan A (la reprueban).
 | - En 20261: 4 de los 6 llevan B, los 3 llevan C, los 2 repiten A y 5 de nuevo ingreso llevan A. Uno de los 3 lleva
-|   además X, que no está en la retícula, y uno de los 6 lleva Residencia, que la propuesta no lleva.
+|   además X, que no está en la retícula, y uno de los 6 lleva Residencia, que la propuesta no lleva: las dos quedan
+|   fuera del alcance.
 */
 
 beforeEach(function () {
@@ -136,9 +138,9 @@ it('DM-27: guarda una fila por carrera, campus y materia con proyectado, real y 
     app(EvaluateForecast::class)->run($evaluation);
     $rows = evaluationRows($evaluation);
 
-    expect(array_keys($rows))->toEqualCanonicalizing(['EA-1@K1', 'EB-2@K1', 'EC-3@K1', 'EX-9@K1'])
+    expect(array_keys($rows))->toEqualCanonicalizing(['EA-1@K1', 'EB-2@K1', 'EC-3@K1'])
         ->and(array_map(fn (ForecastEvaluationRow $row): int => $row->actual_students, $rows))
-        ->toEqual(['EA-1@K1' => 7, 'EB-2@K1' => 4, 'EC-3@K1' => 3, 'EX-9@K1' => 1]);
+        ->toEqual(['EA-1@K1' => 7, 'EB-2@K1' => 4, 'EC-3@K1' => 3]);
 
     foreach ([$this->a, $this->b, $this->c] as $subject) {
         $forecast = $projected[$subject->id];
@@ -154,20 +156,59 @@ it('DM-27: guarda una fila por carrera, campus y materia con proyectado, real y 
             ->actual_groups->toBeNull();
     }
 
-    expect($rows['EX-9@K1'])
-        ->eligible->toBe(0)
-        ->projected->toBe(0)
-        ->baseline->toBe(0)
-        ->suggested_groups->toBe(0)
-        ->forecast_method->toBe(EvaluateForecast::NOT_PROJECTED)
-        ->and($evaluation->fresh())
+    expect($evaluation->fresh())
         ->progress->toBe(100)
-        ->stage->toBe(EvaluateForecast::STAGE_SAVING);
+        ->stage->toBe(EvaluateForecast::STAGE_SAVING)
+        ->totals->out_of_scope->toEqual(['students' => 0, 'subjects' => 2]);
+});
+
+it('DM-27: lo cursado en un campus sin oferta o en una carrera que no se proyecta no genera filas: queda en out_of_scope', function () {
+    evaluationScenario();
+    $k2 = Campus::factory()->create(['code' => 'K2']);
+    CareerCampus::factory()->inactive()->create(['career_id' => $this->plan->career_id, 'campus_id' => $k2->id]);
+    $taking = KardexResult::Cursando;
+
+    foreach (range(1, 3) as $i) {
+        evaluationStudent($k2, [[$this->a, '20253', KardexResult::Aprobada], [$this->b, '20261', $taking], [$this->c, '20261', $taking]]);
+    }
+
+    $unoffered = StudyPlan::factory()->create();
+    placeInPlan($unoffered, $this->a);
+
+    foreach (range(1, 2) as $i) {
+        $student = Student::factory()->create(['study_plan_id' => $unoffered->id, 'campus_id' => $this->k1->id]);
+        KardexRecord::factory()->for($student)->for($this->a)->create(['term_code' => '20261', 'result' => $taking, 'grade' => null]);
+    }
+
+    $evaluation = runningEvaluation();
+
+    app(EvaluateForecast::class)->run($evaluation);
+    $totals = $evaluation->fresh()->totals;
+
+    expect(array_keys(evaluationRows($evaluation)))->toEqualCanonicalizing(['EA-1@K1', 'EB-2@K1', 'EC-3@K1'])
+        ->and($evaluation->rows()->where('career_id', $unoffered->career_id)->exists())->toBeFalse()
+        ->and($totals['overall']['rows'])->toBe(3)
+        ->and(array_column($totals['by_campus'], 'campus_id'))->toBe([$this->k1->id])
+        ->and($totals['out_of_scope'])->toEqual(['students' => 5, 'subjects' => 5]);
 });
 
 it('calcula el error ponderado y la confianza de cada carrera en totals', function () {
     evaluationScenario();
+    $other = StudyPlan::factory()->create();
+    $other->career->update(['code' => 'ISY']);
+    placeInPlan($other, $this->a);
+    CareerCampus::factory()->create(['career_id' => $other->career_id, 'campus_id' => $this->k1->id]);
+
+    foreach (range(1, 2) as $i) {
+        $student = Student::factory()->create(['study_plan_id' => $other->id, 'campus_id' => $this->k1->id]);
+        KardexRecord::factory()->for($student)->for($this->a)->create(['term_code' => '20261', 'result' => KardexResult::Cursando, 'grade' => null]);
+    }
+
     $evaluation = runningEvaluation();
+    $saved = [];
+    Event::listen('eloquent.saved: '.ForecastEvaluation::class, function (ForecastEvaluation $saving) use (&$saved): void {
+        $saved[] = $saving->totals;
+    });
 
     app(EvaluateForecast::class)->run($evaluation);
     $totals = $evaluation->fresh()->totals;
@@ -181,21 +222,26 @@ it('calcula el error ponderado y la confianza de cada carrera en totals', functi
         ];
     };
     $rows = $evaluation->rows()->with('subject')->get();
+    $isx = $rows->where('career_id', $this->plan->career_id);
     $career = $totals['by_career'][0];
+    $firstCareer = collect($saved)->first(fn (?array $partial): bool => ($partial['careers']['done'] ?? 0) === 1);
 
     expect($totals['overall'])->toMatchArray($metrics($rows))
         ->and($totals['overall']['rows'])->toBe(4)
-        ->and($totals['by_career'])->toHaveCount(1)
-        ->and($career)->toMatchArray(['career_id' => $this->plan->career_id, ...$metrics($rows)])
+        ->and(array_column($totals['by_career'], 'career_id'))->toBe([$this->plan->career_id, $other->career_id])
+        ->and($career)->toMatchArray(['career_id' => $this->plan->career_id, ...$metrics($isx)])
         ->and($career['by_campus'])->toHaveCount(1)
-        ->and($career['by_campus'][0])->toMatchArray(['campus_id' => $this->k1->id, ...$metrics($rows)])
+        ->and($career['by_campus'][0])->toMatchArray(['campus_id' => $this->k1->id, ...$metrics($isx)])
         ->and($totals['by_campus'])->toHaveCount(1)
         ->and($totals['by_campus'][0])->toMatchArray(['campus_id' => $this->k1->id, ...$metrics($rows)])
         ->and(array_column($totals['by_department'], 'department_id'))->toBe([$this->basics->id, $this->systems->id])
         ->and($totals['by_department'][0])->toMatchArray($metrics($rows->filter(fn (ForecastEvaluationRow $row): bool => $row->subject->department_id === $this->basics->id)))
         ->and($totals['by_department'][1])->toMatchArray($metrics($rows->filter(fn (ForecastEvaluationRow $row): bool => $row->subject->department_id === $this->systems->id)))
-        ->and($totals['careers'])->toBe(['done' => 1, 'total' => 1])
-        ->and(array_keys($totals['overall']))->toEqualCanonicalizing(['weighted_error', 'baseline_error', 'mean_absolute_error', 'bias', 'within_share', 'confidence', 'rows']);
+        ->and($totals['careers'])->toBe(['done' => 2, 'total' => 2])
+        ->and(array_keys($totals))->toEqualCanonicalizing(['overall', 'by_career', 'by_campus', 'by_department', 'careers', 'out_of_scope'])
+        ->and(array_keys($totals['overall']))->toEqualCanonicalizing(['weighted_error', 'baseline_error', 'mean_absolute_error', 'bias', 'within_share', 'confidence', 'rows'])
+        ->and($firstCareer)->toMatchArray(['overall' => null, 'by_campus' => null, 'by_department' => null, 'careers' => ['done' => 1, 'total' => 2]])
+        ->and($firstCareer['by_career'])->toEqual([$career]);
 });
 
 it('DM-27: en una modalidad sin salones compara una sola columna sin campus con lo cursado en todos los campus', function () {
@@ -207,7 +253,7 @@ it('DM-27: en una modalidad sin salones compara una sola columna sin campus con 
     app(EvaluateForecast::class)->run($evaluation);
     $rows = evaluationRows($evaluation);
 
-    expect(array_keys($rows))->toEqualCanonicalizing(['EA-1@-', 'EB-2@-', 'EC-3@-', 'EX-9@-'])
+    expect(array_keys($rows))->toEqualCanonicalizing(['EA-1@-', 'EB-2@-', 'EC-3@-'])
         ->and($rows['EA-1@-']->actual_students)->toBe(8)
         ->and($evaluation->fresh()->totals['by_campus'][0]['campus_id'])->toBeNull();
 });

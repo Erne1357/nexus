@@ -7,11 +7,10 @@ use App\Modules\AcademicLoad\Actions\RequestForecastEvaluation;
 use App\Modules\AcademicLoad\Enums\ForecastConfidence;
 use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
+use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
-use App\Modules\Students\Enums\KardexResult;
-use App\Modules\Students\Models\KardexRecord;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -20,7 +19,8 @@ use Throwable;
 /**
  * Evalúa la proyección de demanda de un periodo ya cursado (tarea 5.9b; RequestForecastEvaluation, DM-27 a DM-29): por
  * omisión la corre en este proceso e imprime, por carrera y campus, el error ponderado, el de R1 y la confianza (DM-22),
- * y la línea global; con `--queue` solo la encola, como la pantalla. La pide sin usuario: nadie recibe el aviso.
+ * la línea global y cuántos alumnos quedaron fuera del alcance (DM-27); con `--queue` solo la encola, como la
+ * pantalla. La pide sin usuario: nadie recibe el aviso.
  *
  * Sin `--modality` toma la única modalidad activa con kárdex del periodo, sin mirar su clave (CLAUDE.md, arquitectura
  * 8); si hay varias, pide que se elija una.
@@ -35,7 +35,7 @@ final class EvaluateForecastCommand extends Command
 
     protected $description = 'Evalúa la proyección de demanda de un periodo ya cursado contra lo que se cursó';
 
-    public function handle(RequestForecastEvaluation $request): int
+    public function handle(RequestForecastEvaluation $request, TermKardexQuery $kardex): int
     {
         $term = Term::query()->where('code', $this->argument('term'))->first();
 
@@ -43,7 +43,7 @@ final class EvaluateForecastCommand extends Command
             return $this->refuse("No existe el periodo {$this->argument('term')}.");
         }
 
-        $modality = $this->modality($term);
+        $modality = $this->modality($term, $kardex);
 
         if (is_string($modality)) {
             return $this->refuse($modality);
@@ -79,7 +79,7 @@ final class EvaluateForecastCommand extends Command
     /**
      * La modalidad de `--modality`, o la única activa con kárdex contable del periodo; si no se puede, el motivo.
      */
-    private function modality(Term $term): Modality|string
+    private function modality(Term $term, TermKardexQuery $kardex): Modality|string
     {
         $code = $this->option('modality');
 
@@ -87,15 +87,7 @@ final class EvaluateForecastCommand extends Command
             return Modality::query()->where('code', $code)->first() ?? "No existe la modalidad {$code}.";
         }
 
-        $withKardex = Modality::query()
-            ->where('is_active', true)
-            ->whereIn('id', KardexRecord::query()
-                ->join('students', 'students.id', '=', 'kardex_records.student_id')
-                ->whereNull('students.deleted_at')
-                ->where('kardex_records.term_code', $term->code)
-                ->whereIn('kardex_records.result', [KardexResult::Aprobada, KardexResult::Reprobada, KardexResult::Cursando])
-                ->select('students.modality_id'))
-            ->get();
+        $withKardex = $kardex->activeModalities($term->code);
 
         return match ($withKardex->count()) {
             0 => "No hay kárdex de {$term->name}: no hay con qué comparar.",
@@ -125,6 +117,12 @@ final class EvaluateForecastCommand extends Command
 
         $overall = $totals['overall'];
         $this->components->info("Global: error ponderado {$this->percent($overall['weighted_error'])}, error R1 {$this->percent($overall['baseline_error'])}, {$this->confidence($overall['confidence'])}.");
+
+        $outside = $totals['out_of_scope']['students'] ?? 0;
+
+        if ($outside > 0) {
+            $this->components->warn(($outside === 1 ? '1 alumno' : "{$outside} alumnos").' de carreras o campus sin oferta no se evalúan.');
+        }
     }
 
     /**

@@ -2,18 +2,19 @@
 
 namespace App\Modules\AcademicLoad\Actions;
 
-use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluationRow;
+use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\AcademicLoad\Rules\ForecastAccuracy;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Demand\Actions\RefreshDemandForecasts;
+use App\Modules\Demand\Queries\ForecastScopeQuery;
 use App\Modules\Demand\Queries\Occupancy;
 use App\Modules\Demand\Queries\TermOccupancyQuery;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -23,34 +24,42 @@ use Illuminate\Support\Facades\DB;
  * 1. «Calculando la proyección» (0 → 40 %): RefreshDemandForecasts::compute(asIf: true), que no guarda nada y
  *    reconstruye a los elegibles con el kárdex hasta el periodo ordinario anterior (DM-10).
  * 2. «Comparando con el kárdex» (40 → 60 %): la ocupación real del periodo (TermOccupancyQuery, DM-02).
- * 3. «Guardando resultados» (60 → 100 %): por carrera, campus y materia, la unión de lo proyectado y lo real (DM-27):
+ * 3. «Guardando resultados» (60 → 100 %): por carrera, campus y materia, solo dentro del alcance de la proyección, el
+ *    mismo de la propuesta (ForecastScopeQuery, HC-13; DM-27): carreras con oferta activa, los campus de su oferta (la
+ *    columna sin campus en una modalidad sin salones) y las materias de la propuesta.
  *    - `projected` son los esperados de Demand (con repetidores y, en primer semestre, el nuevo ingreso);
  *    - `baseline` y `eligible`, los elegibles (la regla de R1);
  *    - `suggested_groups` y `forecast_method`, los de Demand;
  *    - `actual_students`, la ocupación. En una modalidad sin salones, lo de todos los campus va a la columna sin campus;
- *    - una materia cursada sin fila proyectada cuenta con proyectado, elegibles y grupos en 0 y el método
- *      NOT_PROJECTED, salvo las que la propuesta nunca lleva (residencia, servicio social, complementarias y sin horas
- *      de clase; supuesto por confirmar);
+ *    - dentro del alcance, una materia cursada sin fila proyectada cuenta con proyectado, elegibles y grupos en 0 y el
+ *      método NOT_PROJECTED (compute() cubre todo el alcance, así que es solo una defensa);
+ *    - lo cursado fuera del alcance (otra carrera, un campus sin oferta, una materia fuera de la propuesta) no se guarda
+ *      ni cuenta como error: va a `totals.out_of_scope`;
  *    - `actual_groups` queda nulo: los grupos reales salen de `historical_groups` del Riel B
  *      (SubjectGroupHistoryQuery), que todavía no está en develop. Pendiente de un PR corto.
  *
- * Las filas se guardan carrera por carrera (por clave), cada una en su transacción con el avance y `totals` de lo ya
- * guardado, así la pantalla ve las carreras conforme terminan. Volver a correrla reemplaza las filas de cada carrera.
+ * Las filas se guardan carrera por carrera (por clave), cada una en su transacción con el avance, su entrada de
+ * `by_career` y `careers.done`, así la pantalla ve las carreras conforme terminan. `overall`, `by_campus` y
+ * `by_department` se calculan una vez, al final; mientras corre van nulos. Volver a correrla reemplaza las filas de cada
+ * carrera.
  *
  * `totals` (jsonb), con las métricas de ForecastAccuracy de cada grupo de filas:
  *
  *     {
- *       "overall": Métricas,
+ *       "overall": Métricas|null,
  *       "by_career": [{"career_id": uuid, ...Métricas, "by_campus": [{"campus_id": ?uuid, ...Métricas}]}],
- *       "by_campus": [{"campus_id": ?uuid, ...Métricas}],
- *       "by_department": [{"department_id": ?uuid, ...Métricas}],
- *       "careers": {"done": int, "total": int}
+ *       "by_campus": [{"campus_id": ?uuid, ...Métricas}]|null,
+ *       "by_department": [{"department_id": ?uuid, ...Métricas}]|null,
+ *       "careers": {"done": int, "total": int},
+ *       "out_of_scope": {"students": int, "subjects": int}
  *     }
  *
  * Métricas = {weighted_error: ?float, baseline_error: ?float, mean_absolute_error: float, bias: float,
  * within_share: ?float, confidence: "strong"|"reference"|"unmeasured", rows: int}, con los flotantes redondeados a
  * cuatro decimales y la confianza calculada sin redondear. Las listas van por clave de la carrera, del campus y del
- * departamento, con el nulo al final; el departamento es el de la materia.
+ * departamento, con el nulo al final; el departamento es el de la materia. `out_of_scope.students` son los alumnos
+ * distintos con kárdex del periodo cuya carrera no se proyecta o cuyo campus no tiene oferta de su carrera (de ellos no
+ * se evalúa nada); `out_of_scope.subjects`, las materias distintas cursadas fuera del alcance por cualquier motivo.
  */
 final class EvaluateForecast
 {
@@ -60,7 +69,7 @@ final class EvaluateForecast
 
     public const string STAGE_SAVING = 'Guardando resultados';
 
-    /** El método de una fila que alguien cursó sin que la proyección la tuviera. */
+    /** El método de una fila del alcance que alguien cursó sin que la proyección la tuviera. */
     public const string NOT_PROJECTED = 'not_projected';
 
     private const int COMPUTED = 40;
@@ -71,16 +80,11 @@ final class EvaluateForecast
 
     private const int INSERT_CHUNK = 1000;
 
-    /**
-     * Los tipos de materia que la propuesta no lleva (los mismos que ForecastScopeQuery y StartCareerProposal).
-     *
-     * @var list<SubjectKind>
-     */
-    private const array OUTSIDE_PROPOSAL = [SubjectKind::Residencia, SubjectKind::ServicioSocial, SubjectKind::Complementaria];
-
     public function __construct(
         private readonly RefreshDemandForecasts $forecasts,
         private readonly TermOccupancyQuery $occupancy,
+        private readonly ForecastScopeQuery $scope,
+        private readonly TermKardexQuery $kardex,
     ) {}
 
     public function run(ForecastEvaluation $evaluation): void
@@ -91,28 +95,30 @@ final class EvaluateForecast
 
         $this->advance($evaluation, self::STAGE_COMPUTING, 0);
         $projected = $this->forecasts->compute($term, $modality, $campus, asIf: true);
+        $usesRooms = $modality->profile->usesRooms;
 
         $this->advance($evaluation, self::STAGE_COMPARING, self::COMPUTED);
         $actual = $this->occupancy->forTerm($term->code, $modality, $campus);
+        $scope = $this->inScope($modality, $campus);
+        [$rows, $outOfScopeSubjects] = $this->cross($projected, $actual, $usesRooms, $scope['keys']);
+        $outOfScope = [
+            'students' => $this->studentsOutOfScope($term->code, $modality, $campus, $usesRooms, $scope['columns']),
+            'subjects' => count($outOfScopeSubjects),
+        ];
 
         $this->advance($evaluation, self::STAGE_SAVING, self::COMPARED);
-        $subjects = Subject::withTrashed()
-            ->whereIn('id', array_unique([...array_column($projected, 'subject_id'), ...array_column($actual, 'subject_id')]))
-            ->get(['id', 'department_id', 'kind', 'theory_hours', 'practice_hours'])
-            ->keyBy('id');
-        $rows = $this->cross($projected, $actual, $modality->profile->usesRooms, $subjects);
-        $departments = $subjects->map(fn (Subject $subject): ?string => $subject->department_id)->all();
+        $departments = Subject::withTrashed()->whereIn('id', array_values(array_unique(array_column($rows, 'subject_id'))))->pluck('department_id', 'id')->all();
         $codes = $this->codes($rows, $departments);
         $byCareer = $this->groupBy($rows, fn (array $row): string => $row['career_id'], $codes['career']);
         $total = count($byCareer);
-        $saved = [];
+        $careerTotals = [];
         $done = 0;
 
         foreach ($byCareer as $careerId => $careerRows) {
-            $saved = [...$saved, ...$careerRows];
+            $careerTotals[] = $this->careerTotals($careerId, $careerRows, $codes);
             $done++;
 
-            DB::transaction(function () use ($evaluation, $careerId, $careerRows, $saved, $departments, $codes, $done, $total): void {
+            DB::transaction(function () use ($evaluation, $careerId, $careerRows, $careerTotals, $outOfScope, $done, $total): void {
                 ForecastEvaluationRow::query()->where('evaluation_id', $evaluation->getKey())->where('career_id', $careerId)->delete();
                 $now = now();
 
@@ -126,15 +132,32 @@ final class EvaluateForecast
                 }
 
                 $evaluation->forceFill([
-                    'progress' => self::COMPARED + intdiv((100 - self::COMPARED) * $done, $total),
-                    'totals' => $this->totals($saved, $departments, $codes, $done, $total),
+                    'progress' => min(99, self::COMPARED + intdiv((100 - self::COMPARED) * $done, $total)),
+                    'totals' => [
+                        'overall' => null,
+                        'by_career' => $careerTotals,
+                        'by_campus' => null,
+                        'by_department' => null,
+                        'careers' => ['done' => $done, 'total' => $total],
+                        'out_of_scope' => $outOfScope,
+                    ],
                 ])->save();
             });
         }
 
-        if ($total === 0) {
-            $evaluation->forceFill(['progress' => 100, 'totals' => $this->totals([], $departments, $codes, 0, 0)])->save();
-        }
+        $campusOf = fn (array $row): ?string => $row['campus_id'];
+
+        $evaluation->forceFill([
+            'progress' => 100,
+            'totals' => [
+                'overall' => $this->metrics($rows),
+                'by_career' => $careerTotals,
+                'by_campus' => $this->listed('campus_id', $this->groupBy($rows, $campusOf, $codes['campus'])),
+                'by_department' => $this->listed('department_id', $this->groupBy($rows, fn (array $row): ?string => $departments[$row['subject_id']] ?? null, $codes['department'])),
+                'careers' => ['done' => $done, 'total' => $total],
+                'out_of_scope' => $outOfScope,
+            ],
+        ])->save();
     }
 
     private function advance(ForecastEvaluation $evaluation, string $stage, int $progress): void
@@ -143,16 +166,52 @@ final class EvaluateForecast
     }
 
     /**
-     * La unión de lo proyectado y lo real, por carrera, campus y materia (DM-27).
+     * El alcance de la proyección, como lo recorre compute() (DM-27): las llaves carrera|campus|materia y las columnas
+     * carrera|campus, con el campus vacío en la columna sin campus.
+     *
+     * @return array{keys: array<string, true>, columns: array<string, true>}
+     */
+    private function inScope(Modality $modality, ?Campus $campus): array
+    {
+        $keys = [];
+        $columns = [];
+
+        foreach ($this->scope->careers() as $career) {
+            $careerColumns = array_filter(
+                $this->scope->campusesFor($modality, $career),
+                fn (?Campus $column): bool => $campus === null || $column?->getKey() === $campus->getKey(),
+            );
+
+            if ($careerColumns === []) {
+                continue;
+            }
+
+            $subjects = $this->scope->subjectsFor($career)->pluck('subject_id')->all();
+
+            foreach ($careerColumns as $column) {
+                $columns[$career->getKey().'|'.($column?->getKey() ?? '')] = true;
+
+                foreach ($subjects as $subjectId) {
+                    $keys[$this->key($career->getKey(), $column?->getKey(), $subjectId)] = true;
+                }
+            }
+        }
+
+        return ['keys' => $keys, 'columns' => $columns];
+    }
+
+    /**
+     * Lo proyectado contra lo real, por carrera, campus y materia del alcance (DM-27), y las materias cursadas fuera.
      *
      * @param  list<array<string, mixed>>  $projected  filas de RefreshDemandForecasts::compute()
      * @param  list<array{career_id: string, campus_id: ?string, subject_id: string, occupancy: Occupancy}>  $actual
-     * @param  Collection<string, Subject>  $subjects
-     * @return list<array{career_id: string, campus_id: ?string, subject_id: string, eligible: int, projected: int, suggested_groups: int, actual_students: int, actual_groups: null, baseline: int, forecast_method: string}>
+     * @param  array<string, true>  $scope  llaves carrera|campus|materia del alcance
+     * @return array{0: list<array{career_id: string, campus_id: ?string, subject_id: string, eligible: int, projected: int, suggested_groups: int, actual_students: int, actual_groups: null, baseline: int, forecast_method: string}>, 1: array<string, true>}
      */
-    private function cross(array $projected, array $actual, bool $usesRooms, Collection $subjects): array
+    private function cross(array $projected, array $actual, bool $usesRooms, array $scope): array
     {
         $rows = [];
+        $outside = [];
 
         foreach ($projected as $forecast) {
             $rows[$this->key($forecast['career_id'], $forecast['campus_id'], $forecast['subject_id'])] = [
@@ -173,44 +232,52 @@ final class EvaluateForecast
             $campusId = $usesRooms ? $occupancy['campus_id'] : null;
             $key = $this->key($occupancy['career_id'], $campusId, $occupancy['subject_id']);
 
-            if (! isset($rows[$key])) {
-                if (! $this->inProposal($subjects->get($occupancy['subject_id']))) {
-                    continue;
-                }
+            if (! isset($scope[$key])) {
+                $outside[$occupancy['subject_id']] = true;
 
-                $rows[$key] = [
-                    'career_id' => $occupancy['career_id'],
-                    'campus_id' => $campusId,
-                    'subject_id' => $occupancy['subject_id'],
-                    'eligible' => 0,
-                    'projected' => 0,
-                    'suggested_groups' => 0,
-                    'actual_students' => 0,
-                    'actual_groups' => null,
-                    'baseline' => 0,
-                    'forecast_method' => self::NOT_PROJECTED,
-                ];
+                continue;
             }
 
+            $rows[$key] ??= [
+                'career_id' => $occupancy['career_id'],
+                'campus_id' => $campusId,
+                'subject_id' => $occupancy['subject_id'],
+                'eligible' => 0,
+                'projected' => 0,
+                'suggested_groups' => 0,
+                'actual_students' => 0,
+                'actual_groups' => null,
+                'baseline' => 0,
+                'forecast_method' => self::NOT_PROJECTED,
+            ];
             $rows[$key]['actual_students'] += $occupancy['occupancy']->students;
         }
 
-        return array_values($rows);
+        return [array_values($rows), $outside];
+    }
+
+    /**
+     * Los alumnos distintos con kárdex del periodo cuya carrera no se proyecta o cuyo campus no tiene oferta de su
+     * carrera (DM-27): de ellos no se evalúa nada.
+     *
+     * @param  array<string, true>  $columns  columnas carrera|campus del alcance
+     */
+    private function studentsOutOfScope(string $termCode, Modality $modality, ?Campus $campus, bool $usesRooms, array $columns): int
+    {
+        $students = 0;
+
+        foreach ($this->kardex->studentsByCareerAndCampus($termCode, $modality, $campus) as $group) {
+            if (! isset($columns[$group['career_id'].'|'.($usesRooms ? $group['campus_id'] : '')])) {
+                $students += $group['students'];
+            }
+        }
+
+        return $students;
     }
 
     private function key(string $careerId, ?string $campusId, string $subjectId): string
     {
         return $careerId.'|'.($campusId ?? '').'|'.$subjectId;
-    }
-
-    /**
-     * Si la materia entraría a una propuesta: tiene horas de clase y no es residencia, servicio social ni complementaria.
-     */
-    private function inProposal(?Subject $subject): bool
-    {
-        return $subject !== null
-            && $subject->theory_hours + $subject->practice_hours > 0
-            && ! in_array($subject->kind, self::OUTSIDE_PROPOSAL, true);
     }
 
     /**
@@ -232,30 +299,18 @@ final class EvaluateForecast
     }
 
     /**
+     * La entrada de `by_career` de una carrera: sus métricas y las de cada campus.
+     *
      * @param  list<array<string, mixed>>  $rows
-     * @param  array<string, ?string>  $departments  materia → departamento
      * @param  array{career: array<string, string>, campus: array<string, string>, department: array<string, string>}  $codes
      * @return array<string, mixed>
      */
-    private function totals(array $rows, array $departments, array $codes, int $done, int $total): array
+    private function careerTotals(string $careerId, array $rows, array $codes): array
     {
-        $campusOf = fn (array $row): ?string => $row['campus_id'];
-        $byCareer = [];
-
-        foreach ($this->groupBy($rows, fn (array $row): string => $row['career_id'], $codes['career']) as $careerId => $careerRows) {
-            $byCareer[] = [
-                'career_id' => $careerId,
-                ...$this->metrics($careerRows),
-                'by_campus' => $this->listed('campus_id', $this->groupBy($careerRows, $campusOf, $codes['campus'])),
-            ];
-        }
-
         return [
-            'overall' => $this->metrics($rows),
-            'by_career' => $byCareer,
-            'by_campus' => $this->listed('campus_id', $this->groupBy($rows, $campusOf, $codes['campus'])),
-            'by_department' => $this->listed('department_id', $this->groupBy($rows, fn (array $row): ?string => $departments[$row['subject_id']] ?? null, $codes['department'])),
-            'careers' => ['done' => $done, 'total' => $total],
+            'career_id' => $careerId,
+            ...$this->metrics($rows),
+            'by_campus' => $this->listed('campus_id', $this->groupBy($rows, fn (array $row): ?string => $row['campus_id'], $codes['campus'])),
         ];
     }
 

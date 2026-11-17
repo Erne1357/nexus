@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Actions;
 use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
 use App\Modules\AcademicLoad\Jobs\RunForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
+use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -12,8 +13,6 @@ use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\DemandForecaster;
 use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Demand\Rules\TermCode;
-use App\Modules\Students\Enums\KardexResult;
-use App\Modules\Students\Models\KardexRecord;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -37,6 +36,8 @@ use Illuminate\Validation\ValidationException;
  */
 final class RequestForecastEvaluation
 {
+    public function __construct(private readonly TermKardexQuery $kardex) {}
+
     /**
      * @throws ValidationException si el periodo es de verano, el campus sobra o no hay kárdex con qué comparar
      */
@@ -123,16 +124,7 @@ final class RequestForecastEvaluation
             throw ValidationException::withMessages(['campus' => "{$modality->name} no usa salones: se evalúa con todos sus campus."]);
         }
 
-        $counted = KardexRecord::query()
-            ->join('students', 'students.id', '=', 'kardex_records.student_id')
-            ->whereNull('students.deleted_at')
-            ->where('kardex_records.term_code', $term->code)
-            ->whereIn('kardex_records.result', [KardexResult::Aprobada, KardexResult::Reprobada, KardexResult::Cursando])
-            ->where('students.modality_id', $modality->getKey())
-            ->when($campus !== null, fn ($query) => $query->where('students.campus_id', $campus->getKey()))
-            ->exists();
-
-        if (! $counted) {
+        if (! $this->kardex->exists($term->code, $modality, $campus)) {
             $where = $campus === null ? '' : " en {$campus->name}";
 
             throw ValidationException::withMessages(['term' => "No hay kárdex de {$term->name}{$where}: no hay con qué comparar."]);
