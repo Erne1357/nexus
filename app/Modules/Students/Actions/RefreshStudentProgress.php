@@ -3,6 +3,7 @@
 namespace App\Modules\Students\Actions;
 
 use App\Modules\Students\Enums\KardexResult;
+use App\Modules\Students\Events\StudentProgressRefreshed;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 use App\Modules\Students\Models\StudentProgress;
@@ -24,7 +25,8 @@ use Illuminate\Support\Facades\DB;
  * aprobado en ellas cuenta; al final se borra
  * el de los alumnos borrados. Todo va en una sola transacción: quien lee el avance mientras se recalcula (los
  * elegibles) ve el anterior completo y no una mezcla de bloques, y si el recálculo falla a la mitad, el avance
- * se queda como estaba. Al final vuelve a calcular el periodo en curso de cada campus (TermInProgressQuery).
+ * se queda como estaba. Al final vuelve a calcular el periodo en curso de cada campus (TermInProgressQuery) y avisa con
+ * StudentProgressRefreshed, que Demand escucha para volver a proyectar.
  *
  * Es una tabla derivada que se recalcula completa (decisión de modelado 5), así que no deja bitácora ni avisa:
  * lo que cambió ya lo registró la importación. La corre el job RecomputeStudentProgress.
@@ -45,6 +47,8 @@ final class RefreshStudentProgress
         });
 
         $this->terms->refresh();
+
+        StudentProgressRefreshed::dispatch($studyPlanId);
     }
 
     private function refresh(?string $studyPlanId): void

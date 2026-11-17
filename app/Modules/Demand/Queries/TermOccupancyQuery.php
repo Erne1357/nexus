@@ -4,6 +4,7 @@ namespace App\Modules\Demand\Queries;
 
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Models\KardexRecord;
 use Illuminate\Database\Query\Builder;
@@ -87,19 +88,7 @@ final class TermOccupancyQuery
      */
     public static function sameTypeTermsBefore(string $targetTermCode, int $terms): array
     {
-        if (preg_match('/^\d{4}[123]$/', $targetTermCode) !== 1) {
-            throw new InvalidArgumentException("Código de periodo inválido: {$targetTermCode}");
-        }
-
-        $year = (int) substr($targetTermCode, 0, 4);
-        $type = substr($targetTermCode, 4);
-        $codes = [];
-
-        for ($back = 1; $back <= $terms; $back++) {
-            $codes[] = sprintf('%04d', $year - $back).$type;
-        }
-
-        return $codes;
+        return TermCode::sameTypeBefore($targetTermCode, $terms);
     }
 
     /**
