@@ -5,13 +5,17 @@ namespace App\Modules\Demand;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Enums\DemoCheckpoint;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Demand\Enums\DemandPermission;
 use App\Modules\Demand\Listeners\QueueForecastsOnProgressRefreshed;
 use App\Modules\Demand\Listeners\QueueForecastsOnTermOpened;
+use App\Modules\Demand\Listeners\RecalculateForecastsOnSettingsUpdated;
 use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Students\Events\StudentProgressRefreshed;
@@ -33,6 +37,23 @@ final class DemandServiceProvider extends ModuleServiceProvider
 
         Event::listen(TermOpened::class, QueueForecastsOnTermOpened::class);
         Event::listen(StudentProgressRefreshed::class, QueueForecastsOnProgressRefreshed::class);
+        Event::listen(SettingsUpdated::class, RecalculateForecastsOnSettingsUpdated::class);
+    }
+
+    public function permissions(): array
+    {
+        return [DemandPermission::class];
+    }
+
+    /**
+     * Subdirección cambia los parámetros de la proyección (confirmado el 16 de noviembre de 2026); el admin los cambia
+     * por `core.setting.update`.
+     */
+    public function grants(): array
+    {
+        return [
+            Role::Subdireccion->value => [DemandPermission::SettingUpdate],
+        ];
     }
 
     /**

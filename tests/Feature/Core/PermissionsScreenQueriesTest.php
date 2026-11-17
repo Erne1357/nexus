@@ -83,7 +83,7 @@ it('agrupa los permisos por módulo en el orden de la pantalla, con Core partido
 
     expect(array_column($groups, 'label'))->toBe([
         'Institución', 'Cuentas y configuración', 'Catálogos académicos', 'Edificios y salones', 'Docentes', 'Alumnos',
-        'Importaciones', 'Validación de catálogos', 'Carga académica', 'Horarios', 'Asignación docente',
+        'Importaciones', 'Validación de catálogos', 'Proyección de demanda', 'Carga académica', 'Horarios', 'Asignación docente',
     ])
         ->and(array_sum(array_map(fn (array $group): int => count($group['rows']), $groups)))->toBe(count(app(PermissionRegistry::class)->permissions()))
         ->and(PermissionCatalogQuery::grouped([['key' => 'otro.cosa.ver', 'group' => 'otro', 'group_label' => 'otro']]))->toBe([['id' => 'otro', 'label' => 'otro', 'rows' => [['key' => 'otro.cosa.ver', 'group' => 'otro', 'group_label' => 'otro']]]]);

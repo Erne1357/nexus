@@ -214,6 +214,7 @@ Los archivos que salen de una carga publicada (tareas 4.5 y 4.6) se arman solo d
   - DM-23: además se reporta la fracción de materias con real > 0 cuyo error es de 15 % o menos de su real.
   - DM-24: ver el reporte de precisión y lanzar una evaluación son permisos globales (`academic_load.forecast_evaluation.view` y `.run`) de Subdirección y del admin (confirmado el 16 de noviembre de 2026).
   - DM-25: una evaluación pasa por `queued`, `running`, `done` o `failed`; una fallida nunca cuenta para el rótulo.
+  - DM-26: Subdirección cambia los parámetros de la proyección (`demand.setting.update`, además del admin), y guardar uno recalcula en segundo plano la proyección de los periodos abiertos, en cada modalidad (confirmado el 16 de noviembre de 2026). Guardar sin cambios no recalcula nada.
 
 ## Retícula del alumno
 

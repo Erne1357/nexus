@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Demand\Enums\DemandPermission;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
@@ -59,6 +60,7 @@ function dimensionTables(): array
         'core.login_notice' => 'login_notices',
         'core.login_shortcut' => 'login_shortcuts',
         'core.setting' => 'settings',
+        'demand.setting' => 'settings',
         // La bitácora (1.22-D) es de toda la instalación: no lleva campus.
         'core.activity' => 'activity_log',
         'core.queue' => 'failed_jobs',
@@ -237,6 +239,7 @@ $enums = [
     ImportsPermission::class,
     CatalogValidationPermission::class,
     AcademicLoadPermission::class,
+    DemandPermission::class,
     SchedulingPermission::class,
     StaffingPermission::class,
 ];
