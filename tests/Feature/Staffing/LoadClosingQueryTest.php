@@ -183,6 +183,30 @@ it('una carga publicada o en borrador no calcula lo que falta', function (LoadSt
         ->and($closing->isReady())->toBeFalse();
 })->with([LoadStatus::Draft, LoadStatus::Published]);
 
+it('RA-01: una carga en re-análisis calcula lo que falta como en asignación', function () {
+    $this->world->load->update(['status' => LoadStatus::Reanalysis]);
+    $this->world->group();
+    $this->world->group(teacher: false);
+
+    $closing = loadClosingOf();
+
+    expect($closing->blockers)->not->toBeNull()
+        ->and(loadClosingCounts($closing)['teacher'])->toBe(1)
+        ->and($closing->missing())->toBe(1)
+        ->and($closing->isReady())->toBeFalse()
+        ->and($closing->headline()['title'])->toBe('En re-análisis · falta 1 grupo');
+});
+
+it('RA-01: una carga completa en re-análisis está lista para cerrar', function () {
+    $this->world->load->update(['status' => LoadStatus::Reanalysis]);
+    $this->world->group();
+
+    $closing = loadClosingOf();
+
+    expect($closing->isReady())->toBeTrue()
+        ->and($closing->headline()['title'])->toBe('En re-análisis');
+});
+
 it('cuenta solo los grupos activos de la carga', function () {
     $this->world->group();
     $this->world->group(['status' => 'cancelled']);
