@@ -84,12 +84,13 @@ Se escribió con la fase 5 y el contrato del motor ya en `develop` (#567, #568),
   - Aplicar una sugerencia pasa por las Actions de la fase 3 y exige la carga en `reanalysis` (ajuste de `LoadEditability`, arriba).
 - **8.4, `RepublishLoad`:** ya no es una Action nueva. Republicar es cerrar, el visto bueno si la modalidad lo exige y `PublishLoad`, que ya sube la versión, revisa HC-15 y escribe el historial docente; el plan lo decía casi así («reutiliza `PublishLoad`»). Lo que se agrega:
   - el **diff guardado contra la versión n**: una pieza pura `AcademicLoad/Rules/SnapshotDiff` que compara dos payloads normalizados (grupos nuevos, cancelados, docente, salón, horario y cupos por carrera). Se guarda en una columna `diff` (jsonb, nula en la versión 1 y en las anteriores) de `load_snapshots`, escrita al crear la fila, para no tocar la inmutabilidad; migración nueva y `modelo-de-datos.md` en el mismo PR. `LoadVersionsQuery::changes()` pasa a leerlo;
-  - el **motivo de la versión** (`initial`, `reanalysis` o `correction`), en la misma migración, para la 8.10: hoy solo hay el comentario de la transición. Sale de la ruta (si se publicó después de un ciclo de `reanalysis` o después de `adjusting`);
+  - el **motivo de la versión** (`published`, `reanalysis` o `correction`; enum `SnapshotReason`), en la misma migración, para la 8.10: hoy solo hay el comentario de la transición. Sale de la ruta (si se publicó después de un ciclo de `reanalysis` o después de `adjusting`);
   - los **avisos**, según la respuesta 4, en un listener de `LoadTransitioned` a `published` con `version > 1`, en cola, como `NotifyOnLoadClosingTransition`:
     - docentes: quien está en la versión n o en la n + 1 de un grupo que cambió (también el que salió de un grupo), cada uno con su lista de cambios; el docente se resuelve con `teachers.user_id` (Faculty, a la izquierda);
     - coordinadores: los de cada carrera con renglón en `placements[]` de un grupo que cambió, por permiso, modalidad y carrera (`RecipientsQuery`);
     - jefes de otros departamentos: los dueños de salón (`room.owner_department_id` distinto del departamento del grupo) de una sesión prestada que cambió, y los de la carrera de un grupo compartido cuyo cupo cambió. Todo sale del payload; el departamento de una carrera se lee de Academic.
   - No hay aviso a Servicios Escolares (respuesta 4).
+  - **Hecho (tarea 8.4):** sin Action nueva; `PublishLoad` guarda `diff` y `reason` en la misma transacción (migración `2026_11_17_194410_add_diff_and_reason_to_load_snapshots`), `ReanalysisCycleQuery` da el motivo (la comparte con `ReopenLoad`), `NotifyAffectedOnRepublication` (listener en cola de `LoadTransitioned`) llama a `NotifyRepublication`, que avisa con `LoadRepublished` (campana y correo, `MailKinds`), y `LoadVersionsQuery` expone `reason`, `summary` y `diff()`. Los supuestos de los avisos están en reglas-de-negocio.md, RA-06 «Cómo se avisa». El contrato del diff para la 8.5 y la 8.10 está abajo, en «Contrato del diff (v1)».
 - **8.5, versión en la consulta y los exportes:** la consulta pública ya dice «Actualizado el …»; falta la versión y el resumen de «qué cambió», que sale del `diff` guardado. Los PDF (4.5) ya dicen «Actualizado el …» en su pie; falta agregar la versión, también al Excel. Lo que ve el público es lo que ve un alumno (grupos, horarios y salones), nunca la justificación ni los préstamos internos.
 - **8.6, `AssessChangeImpact` (Staffing):** el caso simple (empalmes que deja el cambio, grupos y docentes afectados) se puede hacer ya con `ScheduleValidator::checkSession()`, que está en Scheduling y Staffing puede importar. La «cadena de movimientos» y cualquier búsqueda dependen del evaluador en memoria (6.5) y de los movimientos de la búsqueda local (6.7). `impact` ya existe en `change_requests`. El plan dice «Reutiliza el evaluador de la fase 6»: si el evaluador queda en Solver, Staffing no lo puede importar (ver 8.7).
 - **8.7, alternativas del motor:** `Staffing/Livewire/pages/change-request` (el nombre real es `change-requests`) **no puede llamar a `SolverEngine`**: Staffing y Solver son hermanos del mapa. Hay que decidir (arquitectura, no negocio; pregunta 6):
@@ -130,6 +131,40 @@ El del plan (A: 8.1, 8.2, 8.4 y 8.10; B: 8.3, 8.5, 8.8 y 8.9; C: 8.6 y 8.7), con
 - **B** puede empezar la 8.8 redefinida (paralelos en la bandeja; la 8.9 se cayó) sin esperar al motor; la 8.3 parte en dos: cerrar, ampliar y cambiar salón dependen de la 8.1 y la 8.2, y abrir grupo espera el motor (6.5, 6.6). La 8.5 espera el `diff` de A.
 - **C** hace la 8.6 simple ya; la cadena de movimientos y la 8.7 esperan 6.5 a 6.7 y la decisión de arquitectura (pregunta 6). C no depende de A ni de B.
 - **Se terminan antes de la 8.11:** 6.5 a 6.7 (otro riel) y, para el tiempo, 7.9. Si la heurística llega tarde, la 8.3 sin «abrir grupo» y la 8.6 simple entregan lo esencial.
+
+### Contrato del diff (v1) (tarea 8.4)
+
+Para la 8.5 (Riel B) y la 8.10. `load_snapshots.diff` (jsonb, nulo en la versión 1) lo escribe `PublishLoad` con `AcademicLoad\Rules\SnapshotDiff::between()` al publicar la versión n + 1, contra la n, con los dos payloads normalizados. La fuente es el docblock de `SnapshotDiff`; esto es un resumen:
+
+```json
+{
+  "version": 1,
+  "groups": {
+    "added": [Grupo],
+    "cancelled": [Grupo],
+    "changed": [{
+      "group": Grupo,
+      "changes": {
+        "schedule": {"from": [{"day": 1, "starts_at": "07:00", "ends_at": "09:00"}], "to": [{"day": 3, "starts_at": "07:00", "ends_at": "09:00"}]},
+        "teacher": {"from": {"id": "…", "name": "Ana Ruiz"}, "to": null},
+        "room": {"from": [{"day": 1, "starts_at": "07:00", "ends_at": "09:00", "room": "A-101"}], "to": [{"day": 1, "starts_at": "07:00", "ends_at": "09:00", "room": "A-102"}]},
+        "quota": {"from": 30, "to": 35},
+        "career_quotas": {"from": [{"id": "…", "code": "ISC", "seats": 30}], "to": [{"id": "…", "code": "ISC", "seats": 25}, {"id": "…", "code": "IND", "seats": 10}]}
+      }
+    }]
+  },
+  "summary": {"added": 0, "cancelled": 0, "changed": 1, "teachers_affected": 1, "careers_affected": 2, "departments_affected": 1}
+}
+```
+
+Grupo: `{"id", "code", "subject": {"id", "code", "name"}, "campus": "C2" | null, "teacher": {"id", "name"} | null, "careers": [{"id", "code", "department_id" | null, "is_owner"}], "sessions": [{"day", "starts_at", "ends_at", "room": clave | null}], "other_departments": [uuid]}`.
+
+- La identidad de un grupo entre versiones es `groups[].id` del payload (el `groups.id` de Scheduling). El Grupo de un nuevo o un cambiado es como quedó; el de un cancelado, lo que tenía. `careers` son las carreras con lugares en alguna de las dos versiones, la dueña primero.
+- En `changes` solo van las llaves que cambiaron. `schedule` compara días y horas; `room`, el salón de cada sesión con el mismo horario (si el horario cambió, el conjunto de salones), y trae las sesiones con su salón; `quota` es la capacidad del grupo; `career_quotas`, los lugares por carrera, una vez por carrera. El tipo de sesión, la justificación y los nombres no cuentan.
+- `other_departments` es interno (préstamos de salón y grupos compartidos, RA-05): la consulta pública no lo muestra, igual que los préstamos. Lo público de un cambio son grupos, horarios y salones; nunca cupos, lugares ni justificaciones (reglas «Consulta publicada»).
+- Para leerlo en español, `Rules\SnapshotDiffText` (una línea por grupo); para los afectados, `SnapshotDiff::teachers()`, `careers()` y `departments()`. `LoadVersionsQuery::versions()` trae `reason` y `summary`, y `diff()` el diff completo de una versión (o calculado al leer si la versión es de antes de la 8.4).
+- Para la vista pública (8.5), `SnapshotDiffText::publicEntries($diff)` da las mismas líneas sin lo interno: sin cupo total ni lugares por carrera (el público nunca ve cupos ni lugares, «Consulta publicada»), departamentos ni llaves; conserva grupos nuevos y cancelados, horario, salón y docente.
+- PostgreSQL no conserva el orden de las llaves de un objeto `jsonb` (sí el de las listas): no dependas de él. Una forma nueva sube `version`.
 
 ## Alcance
 
