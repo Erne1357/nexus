@@ -55,7 +55,7 @@ Copia local de la base del SII migrada (2 043 435 renglones de kárdex; 24 251 g
 - La parte que el kárdex no ve, la volatilidad de la oferta de C2 (materias que un semestre se abren y otro no), la sigue decidiendo el coordinador.
 - La copia local de los datos reales se borra al terminar la 5.10; para medir de nuevo se vuelve a copiar.
 - Pendientes que no bloquean:
-  - los grupos realmente abiertos (`actual_groups`) se llenan cuando `historical_groups` (Riel B, #525) esté en develop;
+  - los grupos realmente abiertos (`actual_groups`) se llenan con `historical_groups` (Riel B, #525, ya en develop) en un PR corto de la siguiente ronda; hoy la pantalla los muestra como «—»;
   - confirmar la oferta de Campus I en la migración del SII.
 
 ## Alternativas descartadas
