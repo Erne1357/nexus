@@ -37,6 +37,11 @@ use Closure;
  * capacidad más ajustada y el id (PS-05). Al elegir: uno del edificio de la sesión pegada del docente (SC-06), luego
  * un mismo salón todos los días o, si no, uno del mismo edificio; y el salón actual del grupo si es igual de bueno.
  *
+ * Después de construir, la búsqueda local (LocalSearch, tarea 6.7) sigue usando estos índices: libera un grupo
+ * (release), pregunta qué otras colocaciones le caben (alternatives, placementAt, roomAlternatives) y lo vuelve a
+ * colocar (assign). Cada ocupación guarda su dueño en una lista por docente, salón o cohorte y día, así que liberar
+ * reconstruye los bloques de ese día sin el grupo, exacto aunque dos ocupaciones toquen el mismo bloque.
+ *
  * Vive lo que dura una corrida (Octane): el motor crea uno por llamada.
  */
 final class Builder
@@ -75,7 +80,7 @@ final class Builder
     /** @var array<string, array<string, array<int, array<int, true>>>> docente → campus → día → bloque preferido */
     private array $teacherPreferred = [];
 
-    /** @var array<string, array<int, list<array{int, int, string, ?string}>>> docente → día → [inicio, fin, campus, edificio] */
+    /** @var array<string, array<int, list<array{int, int, string, ?string, string}>>> docente → día → [inicio, fin, campus, edificio, dueño] */
     private array $teacherSpans = [];
 
     /** @var array<string, bool> */
@@ -83,6 +88,9 @@ final class Builder
 
     /** @var array<string, array<int, array<int, string>>> salón → día → bloque → grupo */
     private array $roomAt = [];
+
+    /** @var array<string, array<int, list<array{int, int, string}>>> salón → día → [inicio, fin, dueño] */
+    private array $roomSpans = [];
 
     /** @var array<string, array<int, array<int, true>>> salón → día → bloque (HC-11) */
     private array $roomBlocked = [];
@@ -92,6 +100,9 @@ final class Builder
 
     /** @var array<string, array<string, array<int, array<int, string>>>> cohorte → campus → día → bloque → grupo */
     private array $cohortAt = [];
+
+    /** @var array<string, array<int, list<array{int, int, string}>>> cohorte → día → [inicio, fin, grupo] */
+    private array $cohortSpans = [];
 
     /** @var array<string, array<string, int>> «materia|campus» → salón → prioridad (SC-03) */
     private array $roomDefaults = [];
@@ -104,6 +115,12 @@ final class Builder
 
     /** @var list<array<string, mixed>> los grupos movibles, en el orden en que se colocan */
     private array $queue = [];
+
+    /** @var array<string, array<string, mixed>> los mismos, por id */
+    private array $entries = [];
+
+    /** @var array<string, array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}> por grupo colocado, en el orden en que se colocó */
+    private array $placements = [];
 
     /** @var list<string> */
     private array $overloaded = [];
@@ -123,6 +140,10 @@ final class Builder
         $this->indexTeachers();
         $this->indexFixedGroups();
         $this->queue = $this->prepareMovable();
+
+        foreach ($this->queue as $entry) {
+            $this->entries[$entry['id']] = $entry;
+        }
     }
 
     /**
@@ -163,7 +184,8 @@ final class Builder
                 if ($best === null) {
                     $unscheduled[$group['id']] = $this->reasons($group, $failures);
                 } else {
-                    $sessions[$group['id']] = $this->place($group, $best);
+                    $this->placements[$group['id']] = self::placement($best, $tier);
+                    $sessions[$group['id']] = $this->place($group, $this->placements[$group['id']]);
                     $placementOrder[$group['id']] = count($placementOrder);
                     $patternDays = count($group['tiers'][0][0]);
                     $otherDays += $tier > 0 && count($best['option']) === $patternDays ? 1 : 0;
@@ -180,6 +202,337 @@ final class Builder
         }
 
         return new BuildResult($sessions, $unscheduled, $placementOrder, $this->candidates, $timedOut, $otherDays, $doubleHours, $this->overloaded);
+    }
+
+    /**
+     * Los grupos colocados y su colocación, en el orden en que se colocaron.
+     *
+     * @return array<string, array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}>
+     */
+    public function placements(): array
+    {
+        return $this->placements;
+    }
+
+    /**
+     * Las sesiones de cada grupo colocado.
+     *
+     * @return array<string, list<ProposedSession>>
+     */
+    public function sessions(): array
+    {
+        $sessions = [];
+
+        foreach ($this->placements as $groupId => $placement) {
+            $sessions[$groupId] = $this->sessionsFor((string) $groupId, $placement);
+        }
+
+        return $sessions;
+    }
+
+    /**
+     * Las sesiones que daría el grupo con esa colocación, sin ocupar nada.
+     *
+     * @param  array<string, mixed>  $placement
+     * @return list<ProposedSession>
+     */
+    public function sessionsFor(string $groupId, array $placement): array
+    {
+        $group = $this->entries[$groupId];
+
+        return array_map(fn (array $slot): ProposedSession => $this->session($group, ...$slot), $this->slots($group, $placement));
+    }
+
+    /**
+     * @return array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}|null
+     */
+    public function placementOf(string $groupId): ?array
+    {
+        return $this->placements[$groupId] ?? null;
+    }
+
+    public function campusOf(string $groupId): string
+    {
+        return $this->entries[$groupId]['campus'];
+    }
+
+    public function teacherOf(string $groupId): ?string
+    {
+        return $this->entries[$groupId]['teacher'];
+    }
+
+    /**
+     * La colocación del grupo liberado en sus mismos días, `units` horas antes (negativo) o después, o null si no cabe.
+     *
+     * @param  array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}  $placement
+     * @return array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}|null
+     */
+    public function shifted(string $groupId, array $placement, int $units): ?array
+    {
+        return $this->placementAt($groupId, $placement['option'], $placement['start'] + $units * $this->entries[$groupId]['grid']->blocksPerUnit, $placement['tier']);
+    }
+
+    /**
+     * Cuántas horas (unidades) caben en la jornada del campus del grupo.
+     */
+    public function dayUnits(string $groupId): int
+    {
+        $grid = $this->entries[$groupId]['grid'];
+
+        return intdiv($grid->blocks, max(1, $grid->blocksPerUnit));
+    }
+
+    /**
+     * Cuántos grupos colocados no están en su patrón: en otros días con la misma cantidad, y con dos horas o más un mismo
+     * día (PS-04).
+     *
+     * @return array{int, int}
+     */
+    public function detours(): array
+    {
+        $otherDays = 0;
+        $doubleHours = 0;
+
+        foreach ($this->placements as $groupId => $placement) {
+            $patternDays = count($this->entries[$groupId]['tiers'][0][0]);
+            $otherDays += $placement['tier'] > 0 && count($placement['option']) === $patternDays ? 1 : 0;
+            $doubleHours += count($placement['option']) < $patternDays ? 1 : 0;
+        }
+
+        return [$otherDays, $doubleHours];
+    }
+
+    /**
+     * Quita la ocupación del grupo de los índices: sus bloques se reconstruyen con lo que queda en cada día. La
+     * colocación se recuerda para volver a ponerla con assign().
+     */
+    public function release(string $groupId): void
+    {
+        $placement = $this->placements[$groupId] ?? null;
+
+        if ($placement === null) {
+            return;
+        }
+
+        $group = $this->entries[$groupId];
+
+        foreach (array_keys($placement['option']) as $day) {
+            if ($group['teacher'] !== null) {
+                $this->teacherSpans[$group['teacher']][$day] = self::without($this->teacherSpans[$group['teacher']][$day] ?? [], 4, $groupId);
+
+                foreach ($this->grids as $code => $grid) {
+                    unset($this->teacherAt[$group['teacher']][$code][$day]);
+                }
+
+                foreach ($this->teacherSpans[$group['teacher']][$day] as [$from, $to, , , $owner]) {
+                    $this->markTeacherBlocks($group['teacher'], $day, $from, $to, $owner);
+                }
+            }
+
+            $roomId = $placement['rooms'][$day] ?? null;
+
+            if ($roomId !== null && isset($this->rooms[$roomId])) {
+                $this->roomSpans[$roomId][$day] = self::without($this->roomSpans[$roomId][$day] ?? [], 2, $groupId);
+                unset($this->roomAt[$roomId][$day]);
+
+                foreach ($this->roomSpans[$roomId][$day] as [$from, $to, $owner]) {
+                    $this->markRoomBlocks($roomId, $day, $from, $to, $owner);
+                }
+            }
+
+            foreach ($group['cohorts'] as $key) {
+                $this->cohortSpans[$key][$day] = self::without($this->cohortSpans[$key][$day] ?? [], 2, $groupId);
+
+                foreach ($this->grids as $code => $grid) {
+                    unset($this->cohortAt[$key][$code][$day]);
+                }
+
+                foreach ($this->cohortSpans[$key][$day] as [$from, $to, $owner]) {
+                    $this->markCohortBlocks($key, $day, $from, $to, $owner);
+                }
+            }
+        }
+    }
+
+    /**
+     * Coloca un grupo liberado (o lo vuelve a colocar) con esa colocación y ocupa sus bloques.
+     *
+     * @param  array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}  $placement
+     */
+    public function assign(string $groupId, array $placement): void
+    {
+        $this->placements[$groupId] = $placement;
+        $this->place($this->entries[$groupId], $placement);
+    }
+
+    /**
+     * Quita al grupo de los índices y de los colocados (lo que la validación final dejó sin programar).
+     */
+    public function remove(string $groupId): void
+    {
+        $this->release($groupId);
+        unset($this->placements[$groupId]);
+    }
+
+    /**
+     * Lo que le cabe a un grupo liberado sin choques duros en los índices: cada juego de días de su nivel o de uno mejor
+     * (un movimiento nunca lo aleja de su patrón, PS-04) en cada hora de inicio, con los salones que elige la
+     * construcción; y, por hora de inicio de su juego actual que no cabe, los grupos colocados que la ocupan (docente o
+     * cohorte), para intercambiar.
+     *
+     * @return array{list<array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}>, array<int, list<string>>}
+     */
+    public function alternatives(string $groupId): array
+    {
+        $group = $this->entries[$groupId];
+        $current = $this->placements[$groupId];
+        $grid = $group['grid'];
+        $this->roomCache = [];
+        $cells = [];
+        $failures = [];
+        $found = [];
+        $blocked = [];
+
+        foreach (array_slice($group['tiers'], 0, $current['tier'] + 1) as $tierIndex => $tier) {
+            foreach ($tier as $option) {
+                $last = $grid->blocks - max($option) * $grid->blocksPerUnit;
+
+                for ($start = 0; $start <= $last; $start++) {
+                    $candidate = $this->candidate($group, $option, $start, $cells, $failures);
+
+                    if ($candidate !== null) {
+                        $found[] = self::placement($candidate, $tierIndex);
+                    } elseif ($option === $current['option']) {
+                        $blocked[$start] = $this->blockers($group, $option, $start);
+                    }
+                }
+            }
+        }
+
+        return [$found, array_filter($blocked)];
+    }
+
+    /**
+     * La colocación del grupo liberado en esos días a esa hora, con los salones que elige la construcción, o null si no
+     * cabe (también si se sale de la jornada, HC-04).
+     *
+     * @param  array<int, int>  $option
+     * @return array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}|null
+     */
+    public function placementAt(string $groupId, array $option, int $start, int $tier): ?array
+    {
+        $grid = $this->entries[$groupId]['grid'];
+
+        if ($start < 0 || $start > $grid->blocks - max($option) * $grid->blocksPerUnit) {
+            return null;
+        }
+
+        $this->roomCache = [];
+        $cells = [];
+        $failures = [];
+        $candidate = $this->candidate($this->entries[$groupId], $option, $start, $cells, $failures);
+
+        return $candidate === null ? null : self::placement($candidate, $tier);
+    }
+
+    /**
+     * La misma colocación del grupo liberado con otro salón en un día o en todos: uno por defecto de la materia (SC-03)
+     * o uno del edificio de la sesión pegada del docente (SC-06), libre y que le sirva.
+     *
+     * @param  array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}  $placement
+     * @return list<array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}>
+     */
+    public function roomAlternatives(string $groupId, array $placement): array
+    {
+        $group = $this->entries[$groupId];
+
+        if (! $group['usesRooms']) {
+            return [];
+        }
+
+        $start = $placement['start'];
+        $kinds = [];
+        $free = [];
+
+        foreach ($placement['option'] as $day => $units) {
+            $kind = $group['labPractice'] && ($placement['practice'][$day] ?? 0) > 0 ? self::LAB : self::THEORY;
+            $kinds[$day] = $kind;
+            $end = $start + $units * $group['grid']->blocksPerUnit;
+            $cell = $this->cell($group, $day, $start, $units);
+            $rooms = isset($cell['fail']) ? [] : array_map('strval', array_keys(array_intersect_key($group['defaults'], $group['rank'][$kind])));
+
+            foreach (isset($cell['fail']) ? [] : [$cell['before'], $cell['after']] as $building) {
+                $rooms[] = $building === null ? null : $this->firstFree($group, $kind, $day, $start, $end, $building);
+            }
+
+            foreach (array_unique(array_filter($rooms)) as $roomId) {
+                if ($roomId !== $placement['rooms'][$day] && $this->roomFree($group, $roomId, $day, $start, $end)) {
+                    $free[$roomId][] = $day;
+                }
+            }
+        }
+
+        $alternatives = [];
+
+        foreach ($free as $roomId => $days) {
+            foreach ($days as $day) {
+                $alternatives[] = array_replace_recursive($placement, ['rooms' => [$day => (string) $roomId]]);
+            }
+
+            $everyDay = count($placement['option']) > 1;
+
+            foreach ($placement['option'] as $day => $units) {
+                $everyDay = $everyDay && isset($group['rank'][$kinds[$day]][$roomId])
+                    && $this->roomFree($group, (string) $roomId, $day, $start, $start + $units * $group['grid']->blocksPerUnit);
+            }
+
+            if ($everyDay && count($days) < count($placement['option'])) {
+                $alternatives[] = ['rooms' => array_fill_keys(array_keys($placement['option']), (string) $roomId)] + $placement;
+            }
+        }
+
+        return $alternatives;
+    }
+
+    /**
+     * Los grupos colocados que ocupan, para el docente (HC-01) o una cohorte (HC-03) del grupo, los bloques de esos días
+     * a esa hora.
+     *
+     * @param  array<string, mixed>  $group
+     * @param  array<int, int>  $option
+     * @return list<string>
+     */
+    private function blockers(array $group, array $option, int $start): array
+    {
+        $owners = [];
+        $campus = $group['campus'];
+
+        foreach ($option as $day => $units) {
+            for ($block = $start, $end = $start + $units * $group['grid']->blocksPerUnit; $block < $end; $block++) {
+                if ($group['teacher'] !== null && isset($this->checks['HC-01'])) {
+                    $owners[] = $this->teacherAt[$group['teacher']][$campus][$day][$block] ?? null;
+                }
+
+                foreach (isset($this->checks['HC-03']) ? $group['cohorts'] : [] as $key) {
+                    $owners[] = $this->cohortAt[$key][$campus][$day][$block] ?? null;
+                }
+            }
+        }
+
+        return array_values(array_filter(array_unique(array_filter($owners)), fn (string $owner): bool => isset($this->placements[$owner])));
+    }
+
+    /**
+     * Las ocupaciones de una lista que no son del dueño.
+     *
+     * @template T of array
+     *
+     * @param  list<T>  $spans
+     * @return list<T>
+     */
+    private static function without(array $spans, int $ownerAt, string $owner): array
+    {
+        return array_values(array_filter($spans, fn (array $span): bool => $span[$ownerAt] !== $owner));
     }
 
     private function indexRooms(): void
@@ -1140,31 +1493,70 @@ final class Builder
     }
 
     /**
-     * Coloca el candidato: las sesiones de una hora del grupo y su ocupación en los índices.
+     * Coloca el grupo: sus sesiones de una hora y su ocupación en los índices.
      *
      * @param  array<string, mixed>  $group
-     * @param  array<string, mixed>  $best
+     * @param  array<string, mixed>  $placement
      * @return list<ProposedSession>
      */
-    private function place(array $group, array $best): array
+    private function place(array $group, array $placement): array
     {
-        $grid = $group['grid'];
         $sessions = [];
 
-        foreach ($best['option'] as $day => $units) {
-            $roomId = $best['rooms'][$day];
-
-            for ($unit = 0; $unit < $units; $unit++) {
-                $from = $grid->minuteOf($best['start'] + $unit * $grid->blocksPerUnit);
-                $to = $from + $grid->unitMinutes;
-                $kind = ! $group['usesRooms'] ? SessionKind::Virtual : ($unit < ($best['practice'][$day] ?? 0) ? SessionKind::Practice : SessionKind::Theory);
-                $sessions[] = new ProposedSession($group['id'], $day, Minutes::format($from), Minutes::format($to), $roomId, $kind,
-                    ! isset($group['currentSlots'][self::slotKey($day, $from, $to, $roomId, $kind)]));
-                $this->occupy($group['group'], $day, $from, $to, $roomId);
-            }
+        foreach ($this->slots($group, $placement) as [$day, $from, $to, $roomId, $kind]) {
+            $sessions[] = $this->session($group, $day, $from, $to, $roomId, $kind);
+            $this->occupy($group['group'], $day, $from, $to, $roomId);
         }
 
         return $sessions;
+    }
+
+    /**
+     * Las sesiones de una hora de una colocación: día, minutos, salón y tipo.
+     *
+     * @param  array<string, mixed>  $group
+     * @param  array<string, mixed>  $placement
+     * @return list<array{int, int, int, ?string, SessionKind}>
+     */
+    private function slots(array $group, array $placement): array
+    {
+        $grid = $group['grid'];
+        $slots = [];
+
+        foreach ($placement['option'] as $day => $units) {
+            $roomId = $placement['rooms'][$day] ?? null;
+
+            for ($unit = 0; $unit < $units; $unit++) {
+                $from = $grid->minuteOf($placement['start'] + $unit * $grid->blocksPerUnit);
+                $kind = ! $group['usesRooms'] ? SessionKind::Virtual : ($unit < ($placement['practice'][$day] ?? 0) ? SessionKind::Practice : SessionKind::Theory);
+                $slots[] = [$day, $from, $from + $grid->unitMinutes, $roomId, $kind];
+            }
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Una sesión propuesta, con `changed` si no estaba igual en `current_sessions`.
+     *
+     * @param  array<string, mixed>  $group
+     */
+    private function session(array $group, int $day, int $from, int $to, ?string $roomId, SessionKind $kind): ProposedSession
+    {
+        return new ProposedSession($group['id'], $day, Minutes::format($from), Minutes::format($to), $roomId, $kind,
+            ! isset($group['currentSlots'][self::slotKey($day, $from, $to, $roomId, $kind)]));
+    }
+
+    /**
+     * Lo que queda de un candidato al colocarlo: los días, la hora de inicio, el salón y la práctica de cada día y el
+     * nivel de días.
+     *
+     * @param  array<string, mixed>  $candidate
+     * @return array{option: array<int, int>, start: int, rooms: array<int, string|null>, practice: array<int, int>, tier: int}
+     */
+    private static function placement(array $candidate, int $tier): array
+    {
+        return ['option' => $candidate['option'], 'start' => $candidate['start'], 'rooms' => $candidate['rooms'], 'practice' => $candidate['practice'], 'tier' => $tier];
     }
 
     /**
@@ -1181,29 +1573,45 @@ final class Builder
         }
 
         foreach ($this->cohortsOf($group) as $key) {
-            foreach ($this->grids as $code => $grid) {
-                foreach ($grid->touched($from, $to) as $block) {
-                    $this->cohortAt[$key][$code][$day][$block] ??= $group->id;
-                }
-            }
+            $this->cohortSpans[$key][$day][] = [$from, $to, $group->id];
+            $this->markCohortBlocks($key, $day, $from, $to, $group->id);
         }
     }
 
     private function markTeacher(string $teacherId, int $day, int $from, int $to, string $owner, string $campus, ?string $building): void
+    {
+        $this->teacherSpans[$teacherId][$day][] = [$from, $to, $campus, $building, $owner];
+        $this->markTeacherBlocks($teacherId, $day, $from, $to, $owner);
+    }
+
+    private function markTeacherBlocks(string $teacherId, int $day, int $from, int $to, string $owner): void
     {
         foreach ($this->grids as $code => $grid) {
             foreach ($grid->touched($from, $to) as $block) {
                 $this->teacherAt[$teacherId][$code][$day][$block] ??= $owner;
             }
         }
-
-        $this->teacherSpans[$teacherId][$day][] = [$from, $to, $campus, $building];
     }
 
     private function markRoom(string $roomId, int $day, int $from, int $to, string $owner): void
     {
+        $this->roomSpans[$roomId][$day][] = [$from, $to, $owner];
+        $this->markRoomBlocks($roomId, $day, $from, $to, $owner);
+    }
+
+    private function markRoomBlocks(string $roomId, int $day, int $from, int $to, string $owner): void
+    {
         foreach ($this->grids[$this->rooms[$roomId]['campus']]->touched($from, $to) as $block) {
             $this->roomAt[$roomId][$day][$block] ??= $owner;
+        }
+    }
+
+    private function markCohortBlocks(string $key, int $day, int $from, int $to, string $owner): void
+    {
+        foreach ($this->grids as $code => $grid) {
+            foreach ($grid->touched($from, $to) as $block) {
+                $this->cohortAt[$key][$code][$day][$block] ??= $owner;
+            }
         }
     }
 

@@ -435,14 +435,14 @@ it('coloca al docente que se pasa de horas y reporta HC-08 como violación de la
         ->and(implode(' ', $output->log))->toContain('HC-08: 1 docente(s)');
 });
 
-it('reporta su avance hasta 100 con el puntaje blando', function () {
+it('reporta su avance hasta 100 con el puntaje blando, sin bajar nunca', function () {
     $calls = [];
     $output = (new PhpHeuristicEngine)->solve(heuristicFixture('medium'), function (int $percent, ?int $score) use (&$calls): void {
         $calls[] = [$percent, $score];
     });
 
     expect($calls)->not->toBe([])
-        ->and(array_column($calls, 0))->toBe(array_values(array_unique(array_column($calls, 0))))
+        ->and(array_column($calls, 0))->toBe(collect($calls)->pluck(0)->sort()->values()->all())
         ->and($calls)->toContain([91, $output->softScore->total])
         ->and(end($calls))->toBe([100, $output->softScore->total]);
 });

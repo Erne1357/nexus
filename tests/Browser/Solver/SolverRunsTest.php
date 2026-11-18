@@ -23,6 +23,8 @@ use App\Modules\Solver\Models\SolverRun;
 | Corridas del motor en el navegador (tarea 6.10, variante C): el jefe entra por el menú, lanza la carga de su
 | departamento con el motor de prueba (la cola es síncrona: vuelve lista), revisa la semana con los cambios y la acepta
 | desde el modal con el resumen; el horario queda escrito. A 1280 y a 390 px, sin desplazar la página de lado ni errores.
+| El motor de prueba se elige en el drawer: el predeterminado es la heurística, y con este escenario (la docente no tiene
+| horas que le queden) reporta HC-08 en los tres grupos, así que al aceptar se quedarían como están (ApplyPlan).
 */
 
 beforeEach(function () {
@@ -68,6 +70,7 @@ it('a 1280 px el jefe lanza con el motor de prueba, revisa la semana y acepta la
         ->click('@launch-open')
         ->assertSeeIn('@launch-drawer', 'Lanzar una corrida')
         ->assertSeeIn('@launch-weights', 'SC-01')
+        ->click('Motor de prueba')
         ->click('@launch-submit')
         ->waitForText('Corrida lanzada')
         ->assertVisible('@run-week')
@@ -84,13 +87,14 @@ it('a 1280 px el jefe lanza con el motor de prueba, revisa la semana y acepta la
         ->assertSee('Aplicada')
         ->assertNoJavaScriptErrors();
 
-    expect(SolverRun::query()->sole()->status)->toBe(SolverRunStatus::Applied)
+    expect(SolverRun::query()->sole())->status->toBe(SolverRunStatus::Applied)->engine->toBe('fixed')
         ->and($this->groups['SCD-1016']->sessions()->count())->toBeGreaterThan(0);
 });
 
 it('a 390 px la semana es la lista de un día y el jefe acepta sin desplazar la página de lado', function () {
     openRunsAsHead(390)
         ->click('@launch-open')
+        ->click('Motor de prueba')
         ->click('@launch-submit')
         ->waitForText('Corrida lanzada')
         ->assertVisible('@run-day-list')
@@ -102,5 +106,5 @@ it('a 390 px la semana es la lista de un día y el jefe acepta sin desplazar la 
         ->assertScript('document.documentElement.scrollWidth <= window.innerWidth')
         ->assertNoJavaScriptErrors();
 
-    expect(SolverRun::query()->sole()->status)->toBe(SolverRunStatus::Applied);
+    expect(SolverRun::query()->sole())->status->toBe(SolverRunStatus::Applied)->engine->toBe('fixed');
 });
