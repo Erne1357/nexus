@@ -4,7 +4,6 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\Core\Models\User;
-use Database\Seeders\DemoSeeder;
 
 /*
 | Historia completa de la edición de una retícula (tarea 1.8): el admin entra a Planes, abre la retícula de
@@ -14,7 +13,7 @@ use Database\Seeders\DemoSeeder;
 */
 
 it('el admin edita una retícula de punta a punta: pone, seria, intenta un ciclo y quita', function () {
-    $this->seed(DemoSeeder::class);
+    seedDemoForBrowser();
     $plan = StudyPlan::where('code', 'ISIC-2010-224')->sole();
     User::factory()->admin()->create(['username' => 'ana.admin', 'name' => 'Ana Admin']);
 
