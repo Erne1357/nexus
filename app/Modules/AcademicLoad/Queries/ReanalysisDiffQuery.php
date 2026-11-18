@@ -46,7 +46,7 @@ final class ReanalysisDiffQuery
             ->where('academic_load_id', $load->getKey())
             ->orderByDesc('version')
             ->first(['version', 'payload']);
-        $offer = $snapshot === null ? [] : $this->offer(SnapshotPayload::normalize($snapshot->payload), $careerIds);
+        [$offer, $blockGroups] = $snapshot === null ? [[], []] : $this->offer(SnapshotPayload::normalize($snapshot->payload), $careerIds);
 
         $subjectIds = array_values(array_unique([
             ...$forecasts->pluck('subject_id')->all(),
@@ -74,6 +74,7 @@ final class ReanalysisDiffQuery
             totals: $this->totals($rows),
             snapshotVersion: $snapshot?->version,
             forecastComputedAt: ($computedAt = $this->lastComputedAt($load)) === null ? null : new CarbonImmutable($computedAt),
+            blockGroups: $blockGroups,
         );
     }
 
@@ -122,14 +123,16 @@ final class ReanalysisDiffQuery
      *
      * @param  array<string, mixed>  $payload
      * @param  list<string>|null  $careerIds
-     * @return array<string, array{campus: ?array<string, mixed>, career: array<string, mixed>, subject: array<string, mixed>, semester: ?int, seats: int, groups: int}>
+     * @return array{0: array<string, array{campus: ?array<string, mixed>, career: array<string, mixed>, subject: array<string, mixed>, semester: ?int, seats: int, groups: int, subjectId: string}>, 1: array<string, list<list<string>>>}
      */
     private function offer(array $payload, ?array $careerIds): array
     {
         $offer = [];
+        $blockGroups = [];
 
         foreach ($payload['groups'] as $group) {
             $groupCareers = [];
+            $blockCareers = [];
 
             foreach ($group['placements'] as $placement) {
                 $career = $placement['career'];
@@ -138,6 +141,7 @@ final class ReanalysisDiffQuery
                     continue;
                 }
 
+                $blockCareers[$career['id']] = true;
                 $key = $this->key($group['campus']['id'] ?? null, $career['id'], $group['subject']['id']);
                 $offer[$key] ??= ['campus' => $group['campus'], 'career' => $career, 'subject' => $group['subject'], 'semester' => null, 'seats' => 0, 'groups' => 0];
                 $offer[$key]['semester'] ??= $placement['semester'];
@@ -148,9 +152,13 @@ final class ReanalysisDiffQuery
                     $offer[$key]['groups']++;
                 }
             }
+
+            if ($blockCareers !== []) {
+                $blockGroups[$group['subject']['id'].'|'.($group['campus']['id'] ?? '')][] = array_keys($blockCareers);
+            }
         }
 
-        return array_map(fn (array $cell): array => $cell + ['subjectId' => $cell['subject']['id']], $offer);
+        return [array_map(fn (array $cell): array => $cell + ['subjectId' => $cell['subject']['id']], $offer), $blockGroups];
     }
 
     /**

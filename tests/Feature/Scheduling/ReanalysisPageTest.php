@@ -11,6 +11,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Scheduling\Models\GroupQuota;
+use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\Support\Scheduling\ReanalysisWorld;
@@ -63,6 +64,16 @@ function reanalysisMenuOf(User $user): array
     app()->forgetScopedInstances();
 
     return array_map(fn (NavigationItem $item): string => $item->label, app(Navigation::class)->visibleTo(app(Actor::class)));
+}
+
+/**
+ * Quien ve completa la carga de Ciencias Básicas (`load.view` de su unidad) y, con `proposal.view`, las carreras en la de
+ * otro departamento: Subdirección nombrada en la unidad de ese departamento (su puesto concede las dos cosas de fábrica;
+ * el jefe de departamento no puede tener `proposal.view`, CF-04).
+ */
+function reanalysisMixedUser(Department $department): User
+{
+    return User::factory()->withRole(Role::Subdireccion, ['department_id' => $department->id])->create(['name' => 'Subdirección de CB']);
 }
 
 function reanalysisChip(Testable $page, string $key): string
@@ -372,6 +383,105 @@ describe('alcance', function () {
 
         reanalysisPage($other)->assertSee('No hay cargas publicadas en Presencial en Ago-Dic 2027');
         reanalysisPage($other, ['departamento' => $department->id])->assertSee('Metal-Mecánica no tiene una carga publicada en Presencial');
+    });
+});
+
+describe('alcance por carga (RA-07, #620)', function () {
+    beforeEach(function () {
+        $this->world->published()->gradesArrived()->inReanalysis($this->jefe);
+        $this->other = $this->world->otherDepartmentInReanalysis('MM', $this->world->isc);
+        $this->mixed = reanalysisMixedUser($this->world->department);
+    });
+
+    it('quien ve completa la carga de su unidad y la propuesta de carreras ve la suya completa y, en la ajena, solo lo de sus carreras', function () {
+        $page = reanalysisPage($this->mixed, ['departamento' => $this->world->department->id])
+            ->assertDontSee('Solo consulta')
+            ->assertSeeHtml('data-testid="block-suggestions"');
+
+        expect(reanalysisRowsOf($page))->toBe([
+            'ACF-0902 C2' => ['ISIC', 'IIND'],
+            'ACF-0902 C1' => ['ISIC'],
+            'ACF-0901 C2' => ['ISIC'],
+        ])->and(collect($page->get('loads'))->pluck('id')->all())->toBe([$this->world->department->id, $this->other['department']->id]);
+
+        $page = reanalysisPage($this->mixed, ['departamento' => $this->other['department']->id])
+            ->assertOk()
+            ->assertSee('Solo ISIC')
+            ->assertSee('Solo consulta: los ajustes los hace la jefatura de Departamento MM.')
+            ->assertSee('Materia de MM')
+            ->assertDontSee('Cálculo Integral')
+            ->assertDontSeeHtml('data-testid="cancel-reanalysis"')
+            ->assertDontSeeHtml('data-testid="close-reanalysis"')
+            ->assertDontSeeHtml('data-testid="block-suggestions"')
+            ->assertDontSeeHtml('data-testid="open-changes"');
+
+        expect(reanalysisRowsOf($page))->toBe(['MM-0101 C2' => ['ISIC']]);
+    });
+
+    it('en la carga ajena no abre lo que cambió ni las sugerencias aunque llame directo', function () {
+        reanalysisPage($this->mixed, ['departamento' => $this->other['department']->id])->call('openChanges')->assertForbidden();
+
+        Livewire::actingAs($this->mixed)
+            ->test('scheduling::components.reanalysis-suggestions', ['loadId' => $this->other['load']->id])
+            ->dispatch('open-reanalysis-suggestions', subjectId: $this->other['subject']->id, campusId: $this->world->c2->id)
+            ->assertForbidden();
+
+        expect($this->other['load']->fresh()->status)->toBe(LoadStatus::Reanalysis);
+    });
+
+    it('el select «Carga» del coordinador lista las cargas que imparten materias de su carrera, no las que no', function () {
+        $coordinator = $this->world->coordinator($this->world->isc);
+
+        reanalysisPage($coordinator)->assertSet('loads', fn (array $loads): bool => collect($loads)->pluck('id')->all() === [$this->world->department->id, $this->other['department']->id]);
+    });
+
+    it('el coordinador de una carrera que no se imparte en la carga recibe 403, al abrirla y en cada método', function () {
+        $igem = Career::factory()->create(['code' => 'IGEM']);
+        $coordinator = $this->world->coordinator($this->world->isc);
+        $outsider = $this->world->coordinator($igem);
+
+        reanalysisPage($outsider, ['departamento' => $this->other['department']->id])->assertForbidden();
+
+        // La página que abrió el coordinador de ISIC no sirve con otro usuario a la mitad.
+        $page = reanalysisPage($coordinator, ['departamento' => $this->other['department']->id])->assertSee('Materia de MM');
+        $this->actingAs($outsider);
+        $page->call('openChanges')->assertForbidden();
+
+        $page = reanalysisPage($coordinator, ['departamento' => $this->other['department']->id]);
+        $this->actingAs($outsider);
+        $page->call('cancelReanalysis')->assertForbidden();
+    });
+
+    it('el jefe de un departamento, que no ve la propuesta de carreras, sigue sin ver la carga ajena', function () {
+        $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => Department::factory()->create()->id])->create();
+
+        reanalysisPage($jefe, ['departamento' => $this->other['department']->id])->assertForbidden();
+    });
+});
+
+describe('consultas', function () {
+    it('#620: el tablero lee un número fijo de consultas, sin importar cuántas materias, campus y carreras tiene el diff', function () {
+        $this->world->published()->gradesArrived()->inReanalysis($this->jefe);
+        $queries = function (): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            reanalysisPage($this->jefe)->call('toggleClass', 'shortfall')->set('search', 'acf');
+            DB::disableQueryLog();
+
+            return count(DB::getQueryLog());
+        };
+
+        $queries(); // la primera vuelta llena las cachés de permisos y catálogos
+        $few = $queries();
+        $rowsBefore = count(domOf(reanalysisPage($this->jefe))->querySelectorAll('[data-testid="reanalysis-block"]'));
+        // Después de publicar: más renglones de demanda y grupos nuevos que aparecen también en «Lo que ya cambiaste».
+        $this->world->addSubjects(6);
+        $many = $queries();
+        $rowsAfter = count(domOf(reanalysisPage($this->jefe))->querySelectorAll('[data-testid="reanalysis-block"]'));
+
+        expect($rowsAfter)->toBeGreaterThan($rowsBefore)
+            ->and($many)->toBe($few)
+            ->and($many)->toBeLessThanOrEqual(110);
     });
 });
 

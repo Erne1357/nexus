@@ -3,12 +3,10 @@
 namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Queries\ReanalysisChangesQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisDiffQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisRow;
 use App\Modules\AcademicLoad\Rules\SnapshotDiffText;
-use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Demand\Enums\DemandBalance;
 use App\Modules\Demand\Rules\DemandSettings;
@@ -38,19 +36,32 @@ final class ReanalysisBoardQuery
     ) {}
 
     /**
-     * El tablero de la carga para quien ve `$careerIds` (null, todas; RA-07), con los filtros de la pantalla: `class`
-     * (CLASSES o ''), `review` (solo las marcadas para revisar o sin historia), `career` (id o ''), `campus` (id o null) y
-     * `search` (clave o nombre de la materia, sin importar acentos). Con `$withChanges`, también lo que ya cambió.
+     * Lo que se lee de la base para el tablero de quien ve `$careerIds` (null, todas; RA-07): el diff, el umbral y, con
+     * `$withChanges`, lo que ya cambió. Una vez por petición; los filtros no lo vuelven a pedir (#620).
      *
      * @param  list<string>|null  $careerIds
+     */
+    public function data(AcademicLoad $load, ?array $careerIds, bool $withChanges): ReanalysisBoardData
+    {
+        return new ReanalysisBoardData(
+            diff: $this->diff->forLoad($load, $careerIds),
+            threshold: DemandSettings::fromSettings()->highlightThreshold,
+            changes: $withChanges ? $this->changesOf($load) : null,
+        );
+    }
+
+    /**
+     * El tablero de lo leído con los filtros de la pantalla: `class` (CLASSES o ''), `review` (solo las marcadas para
+     * revisar o sin historia), `career` (id o ''), `campus` (id o null) y `search` (clave o nombre de la materia, sin
+     * importar acentos). Con los cambios, también lo que ya cambió. No lee la base más que los campus de los bloques.
+     *
      * @param  array{class: string, review: bool, career: string, campus: ?string, search: string}  $filters
      */
-    public function of(AcademicLoad $load, ?array $careerIds, array $filters, bool $withChanges): ReanalysisBoard
+    public function of(ReanalysisBoardData $data, array $filters): ReanalysisBoard
     {
-        $diff = $this->diff->forLoad($load, $careerIds);
-        $threshold = DemandSettings::fromSettings()->highlightThreshold;
-        $changes = $withChanges ? $this->changesOf($load) : null;
-        $touched = $this->touchedByBlock($changes['diff'] ?? null);
+        $diff = $data->diff;
+        $threshold = $data->threshold;
+        $touched = $this->touchedByBlock($data->changes['diff'] ?? null);
         $search = $this->normalize($filters['search']);
 
         $base = array_values(array_filter($diff->rows, fn (ReanalysisRow $row): bool => ($filters['career'] === '' || $row->careerId === $filters['career'])
@@ -69,7 +80,7 @@ final class ReanalysisBoardQuery
         }
 
         return new ReanalysisBoard(
-            blocks: $this->blocks($load, $shown, $threshold, $touched, $filters['class'] !== '' || $filters['review']),
+            blocks: $this->blocks($diff->blockGroups, $shown, $threshold, $touched, $filters['class'] !== '' || $filters['review']),
             chips: $this->chips($inCampus),
             campusCounts: $campusCounts,
             campusTotal: count(array_filter($base, $ofClass)),
@@ -78,7 +89,7 @@ final class ReanalysisBoardQuery
             rowCount: count($diff->rows),
             snapshotVersion: $diff->snapshotVersion,
             forecastComputedAt: $diff->forecastComputedAt,
-            changes: $changes['entries'] ?? null,
+            changes: $data->changes['entries'] ?? null,
         );
     }
 
@@ -90,12 +101,13 @@ final class ReanalysisBoardQuery
      */
     public function block(AcademicLoad $load, ?array $careerIds, string $subjectId, ?string $campusId): ?ReanalysisBlock
     {
+        $diff = $this->diff->forLoad($load, $careerIds);
         $rows = array_values(array_filter(
-            $this->diff->forLoad($load, $careerIds)->rows,
+            $diff->rows,
             fn (ReanalysisRow $row): bool => $row->subjectId === $subjectId && $row->campusId === $campusId,
         ));
 
-        return $this->blocks($load, $rows, DemandSettings::fromSettings()->highlightThreshold, [], false)[0] ?? null;
+        return $this->blocks($diff->blockGroups, $rows, DemandSettings::fromSettings()->highlightThreshold, [], false)[0] ?? null;
     }
 
     /**
@@ -107,11 +119,12 @@ final class ReanalysisBoardQuery
     }
 
     /**
+     * @param  array<string, list<list<string>>>  $groups  los grupos de la versión por materia y campus, con sus carreras
      * @param  list<ReanalysisRow>  $rows
      * @param  array<string, list<string>>  $touched
      * @return list<ReanalysisBlock>
      */
-    private function blocks(AcademicLoad $load, array $rows, int $threshold, array $touched, bool $filtered): array
+    private function blocks(array $groups, array $rows, int $threshold, array $touched, bool $filtered): array
     {
         if ($rows === []) {
             return [];
@@ -124,7 +137,6 @@ final class ReanalysisBoardQuery
         }
 
         $campuses = Campus::withTrashed()->whereIn('id', array_values(array_filter(array_unique(array_map(fn (ReanalysisRow $row): ?string => $row->campusId, $rows)))))->get()->keyBy('id');
-        $groups = $this->publishedGroups($load);
         $blocks = [];
 
         foreach ($byBlock as $key => $blockRows) {
@@ -175,32 +187,6 @@ final class ReanalysisBoardQuery
             $block->onlyFirstSemester() => [3, 0],
             default => [2, 0],
         };
-    }
-
-    /**
-     * Los grupos de la versión vigente por materia y campus, cada uno con las carreras que tienen lugares en él: de ahí
-     * sale «en N grupos» de un bloque, contando solo los que ofrecen lugares a las carreras que se ven.
-     *
-     * @return array<string, list<list<string>>>
-     */
-    private function publishedGroups(AcademicLoad $load): array
-    {
-        $payload = LoadSnapshot::query()
-            ->where('academic_load_id', $load->getKey())
-            ->orderByDesc('version')
-            ->first(['payload'])?->payload;
-
-        if ($payload === null) {
-            return [];
-        }
-
-        $groups = [];
-
-        foreach (SnapshotPayload::normalize($payload)['groups'] as $group) {
-            $groups[$group['subject']['id'].'|'.($group['campus']['id'] ?? '')][] = array_values(array_unique(array_map(fn (array $placement): string => $placement['career']['id'], $group['placements'])));
-        }
-
-        return $groups;
     }
 
     /**
