@@ -666,6 +666,13 @@ Reglas, código y pruebas citan estas reglas por su id. Las decisiones M1 a M14 
 - **MS35.** El exporte de demo de alumnos escribe la modalidad como la escribe el SII (Presencial como `presencial`; EAD como `distancia`, MS7) y no exporta, con un aviso de cuántos, a los alumnos de una modalidad sin valor en el SII (En línea, TecNM Virtual) (supuesto por confirmar).
 - **MS36.** Una carga publicada de una modalidad desactivada o borrada no se reabre ni pasa a re-análisis: el admin activa la modalidad primero. Sale de M11 y M13: una modalidad inactiva nunca deja una carga sin publicar en un periodo vigente o futuro. Las demás transiciones de esa carga siguen (confirmado el 13 de noviembre de 2026).
 
+## Corridas del motor (tarea 6.9)
+
+| ID | Regla |
+|---|---|
+| SV-20 | **Aviso de tronco común.** El tronco común primero no se exige: cada departamento corre cuando quiere, con lo ya aceptado como fijo, y dos corridas seguidas no se pisan (la segunda toma como fijas las sesiones aceptadas por la primera). Antes de lanzar, la pantalla avisa, por cada otra carga cuyos grupos comparten al menos una cohorte con los de esta carga, cuántos de esos grupos compartidos no tienen sesiones; solo entran las cargas con al menos uno sin sesiones, de más a menos. Las cohortes son las de `Scheduling\Rules\Cohorts`; nunca una lista fija de departamentos (confirmado el 17 de noviembre de 2026). Prueba: `tests/Feature/Solver/RunOrderTest.php`. |
+| SV-21 | **Orden sugerido.** Las cargas de la modalidad se sugieren primero las que más cohortes comparten con otras cargas y, en empate, las de más grupos: lo que muchos comparten conviene fijarlo primero. Es solo una sugerencia, no impone nada (supuesto por confirmar: el desempate por más grupos y luego por nombre). Prueba: `tests/Feature/Solver/RunOrderTest.php`. |
+
 ## Parámetros por modalidad (perfil de flujo)
 
 | Clave | Presencial | Notas para otras modalidades |
