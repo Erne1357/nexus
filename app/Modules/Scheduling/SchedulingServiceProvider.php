@@ -42,6 +42,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\ReanalysisChangesDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -254,6 +255,11 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 'term' => $demo->termCode,
                 'seed' => $demo->seed,
                 'mode' => 'rooms',
+            ])),
+            // Los casos del re-análisis (fase 8, #614): después de que AcademicLoad inicia los re-análisis, el jefe ajusta las
+            // cargas cuyo caso cambia; Staffing cambia docentes, cierra y republica.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Ajustes del re-análisis: cupos ampliados, grupos abiertos y cerrados, sesiones movidas y salones cambiados', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisChangesDemoSeeder::class, [
+                'term' => $demo->termCode,
             ])),
         ];
     }

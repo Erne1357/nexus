@@ -16,6 +16,11 @@ use Illuminate\Database\Seeder;
  * corre con la cola síncrona). Así cambia la proyección de esas materias y de las que las piden de seriación, y la
  * propuesta ya armada tiene filas donde «la proyección cambió».
  *
+ * Con `$capturedShare` no califica un número fijo de materias sino materias completas, de la que más alumnos tiene a la
+ * que menos, hasta llevar capturada esa parte de lo que se cursa (`subjectsToCapture()`): la demo del re-análisis (fase 8,
+ * #614) deja así un avance que se ve real («N de M», entre 80 y 90 %). Con `$refresh = false` no recalcula: quien llama
+ * registra antes su lote de kárdex, para que la proyección salga después de él (RA-02).
+ *
  * Lo llama el paso de la demo que arma las propuestas, después de armarlas. Escribe directo en el kárdex, como una
  * importación: es solo para la demo.
  */
@@ -41,10 +46,45 @@ final class DemandRecalculationDemoSeeder extends Seeder
             ->all();
     }
 
-    public function run(string $term = '20271', int $subjects = 6, float $failureShare = 0.5, int $seed = 2027): void
+    /**
+     * Las materias completas que hay que calificar para llevar capturada al menos `$share` (de 0 a 1) de las filas que
+     * se cursan en el semestre ordinario anterior a `$term`, en el orden de subjectsToGrade() (la de más alumnos primero).
+     * Las que ya están calificadas cuentan como capturadas: una segunda corrida no califica más.
+     *
+     * @return list<string>
+     */
+    public static function subjectsToCapture(string $term, float $share): array
     {
         $inProgress = TermCode::previousRegular($term);
-        $subjectIds = self::subjectsToGrade($term, $subjects);
+        $graded = KardexRecord::query()->where('term_code', $inProgress)->whereIn('result', [KardexResult::Aprobada, KardexResult::Reprobada])->count();
+        $pending = KardexRecord::query()
+            ->where('term_code', $inProgress)
+            ->where('result', KardexResult::Cursando)
+            ->groupBy('subject_id')
+            ->orderByRaw('count(*) desc')
+            ->orderBy('subject_id')
+            ->selectRaw('subject_id, count(*) as total')
+            ->toBase()
+            ->get();
+        $target = (int) ceil(($graded + $pending->sum('total')) * $share);
+        $subjects = [];
+
+        foreach ($pending as $row) {
+            if ($graded >= $target) {
+                break;
+            }
+
+            $subjects[] = (string) $row->subject_id;
+            $graded += (int) $row->total;
+        }
+
+        return $subjects;
+    }
+
+    public function run(string $term = '20271', int $subjects = 6, float $failureShare = 0.5, int $seed = 2027, ?float $capturedShare = null, bool $refresh = true): void
+    {
+        $inProgress = TermCode::previousRegular($term);
+        $subjectIds = $capturedShare === null ? self::subjectsToGrade($term, $subjects) : self::subjectsToCapture($term, $capturedShare);
 
         $rows = KardexRecord::query()
             ->where('term_code', $inProgress)
@@ -60,8 +100,10 @@ final class DemandRecalculationDemoSeeder extends Seeder
         KardexRecord::query()->whereIn('id', $failed)->update(['result' => KardexResult::Reprobada, 'grade' => 55]);
         KardexRecord::query()->whereIn('id', $passed)->update(['result' => KardexResult::Aprobada, 'grade' => 82]);
 
-        app(RefreshStudentProgress::class)->handle();
+        if ($refresh) {
+            app(RefreshStudentProgress::class)->handle();
+        }
 
-        $this->command?->info(sprintf('Calificaciones tardías de %s en %d materias: %d aprobadas y %d reprobadas; la proyección se recalculó.', $inProgress, count($subjectIds), count($passed), count($failed)));
+        $this->command?->info(sprintf('Calificaciones tardías de %s en %d materias: %d aprobadas y %d reprobadas%s.', $inProgress, count($subjectIds), count($passed), count($failed), $refresh ? '; la proyección se recalculó' : ''));
     }
 }
