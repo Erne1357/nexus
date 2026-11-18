@@ -62,6 +62,7 @@ function dimensionTables(): array
         'core.login_shortcut' => 'login_shortcuts',
         'core.setting' => 'settings',
         'demand.setting' => 'settings',
+        'solver.setting' => 'settings',
         // La bitácora (1.22-D) es de toda la instalación: no lleva campus.
         'core.activity' => 'activity_log',
         'core.queue' => 'failed_jobs',
