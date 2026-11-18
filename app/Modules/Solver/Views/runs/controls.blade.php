@@ -50,6 +50,15 @@
         </fieldset>
     @endif
 
+    @if ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Applying)
+        <span class="flex flex-col gap-1 max-md:w-full md:ms-auto md:items-end">
+            <button type="button" class="btn btn-primary btn-disabled max-md:h-11" aria-disabled="true" aria-describedby="accept-why" tabindex="0" data-testid="run-accept-disabled">
+                <x-icon name="o-check" class="h-4 w-4" aria-hidden="true" />Aceptar corrida
+            </button>
+            <span id="accept-why" class="flex items-center gap-1 text-xs text-neutral"><x-icon name="o-lock-closed" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />Se está aplicando: espera a que termine.</span>
+        </span>
+    @endif
+
     @if ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Done)
         <div class="flex flex-wrap items-center gap-2 max-md:w-full md:ms-auto" data-testid="run-decide">
             @if ($can['discard'])
@@ -94,3 +103,16 @@
         <span>Cambian <span class="font-mono font-semibold text-base-content">{{ number_format($stats['changes']) }}</span> de <span class="font-mono font-semibold text-base-content">{{ number_format($stats['total']) }}</span> sesiones en <span class="font-mono font-semibold text-base-content">{{ $stats['groups'] }}</span> grupos</span>
     @endif
 </div>
+
+@if ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Done && ($run->metrics['apply_error'] ?? null))
+    <div role="alert" class="alert alert-error alert-soft items-start" data-testid="run-apply-error">
+        <x-icon name="o-x-circle" class="h-5 w-5 shrink-0" aria-hidden="true" />
+        <div class="grid grow gap-1">
+            <b>No se pudo aplicar.</b>
+            <span class="text-base-content">{{ $run->metrics['apply_error'] }}</span>
+        </div>
+        @if ($can['launch'])
+            <button type="button" class="btn btn-primary btn-sm" wire:click="openLaunch('{{ $run->id }}')"><x-icon name="o-arrow-path" class="h-4 w-4" aria-hidden="true" />Volver a correr</button>
+        @endif
+    </div>
+@endif

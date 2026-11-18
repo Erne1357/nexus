@@ -209,3 +209,23 @@ it('?corrida= abre esa corrida y no la más nueva', function () {
 
     expect(RunScope::Department)->toBe($older->scope_kind);
 });
+
+it('con la corrida aplicándose la pantalla hace poll, deshabilita Aceptar y Lanzar con su motivo', function () {
+    $run = SolverRun::factory()->done()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'output' => null, 'status' => SolverRunStatus::Applying]);
+
+    runsPage($this->jefe, ['corrida' => $run->id])
+        ->assertSeeHtml('data-testid="run-applying"')
+        ->assertSeeHtml('wire:poll')
+        ->assertSee('Aplicando')
+        ->assertSeeHtml('data-testid="run-accept-disabled"')
+        ->assertSee('Se está aplicando');
+});
+
+it('una corrida lista con error de aplicación lo muestra con «Volver a correr»', function () {
+    $run = SolverRun::factory()->done()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'output' => null, 'metrics' => ['apply_error' => 'Se acabó la memoria.']]);
+
+    runsPage($this->jefe, ['corrida' => $run->id])
+        ->assertSeeHtml('data-testid="run-apply-error"')
+        ->assertSee('Se acabó la memoria.')
+        ->assertSee('Volver a correr');
+});

@@ -28,7 +28,8 @@ use Illuminate\Validation\ValidationException;
  * carga; nunca una corrida de carrera).
  *
  * En una transacción:
- * 1. Relee la corrida con bloqueo: solo una de departamento terminada (`done`).
+ * 1. Relee la corrida con bloqueo: solo una de departamento terminada (`done`) o que ya se está aplicando
+ *    (`applying`: la pasó ahí RequestApplySolverRun y la procesa ApplySolverRunJob).
  * 2. Bloquea la carga (FOR UPDATE: las Actions del editor la toman en compartido, así que esperan) y revisa la vigencia
  *    (SV-02): arma otra vez la entrada con BuildSolverInput y, si su huella no es la de la corrida, no escribe nada.
  * 3. Escribe solo lo diferente de los grupos que se escriben según ApplyPlan (los sin acomodar, los de una violación
@@ -36,7 +37,8 @@ use Illuminate\Validation\ValidationException;
  *    ReplaceGroupSessions, la Action de Scheduling que escribe varios grupos de una vez, con su bitácora por grupo.
  * 4. Deja la corrida aplicada, con quién y cuándo, y su bitácora (`applied`) con el resumen.
  *
- * Después del commit recalcula los choques de la modalidad (SyncScheduleConflicts). Devuelve el resumen: cuántos grupos
+ * Una corrida `done` se autoriza aquí; una `applying` ya la autorizó RequestApplySolverRun al pasarla a ese estado, y el
+ * job no vuelve a autorizar (la policy `apply` pide `done`). Después del commit recalcula los choques de la modalidad (SyncScheduleConflicts). Devuelve el resumen: cuántos grupos
  * y sesiones cambió y cuáles se quedaron como estaban, con sus motivos.
  */
 final class ApplySolverRun
@@ -57,12 +59,15 @@ final class ApplySolverRun
      */
     public function handle(SolverRun $run, User $by): array
     {
-        self::ensureAppliable($run);
-        Gate::forUser($by)->authorize('apply', $run);
+        self::ensureAppliable($run, SolverRunStatus::Done, SolverRunStatus::Applying);
+
+        if ($run->status === SolverRunStatus::Done) {
+            Gate::forUser($by)->authorize('apply', $run);
+        }
 
         [$summary, $term, $modality] = DB::transaction(function () use ($run, $by): array {
             $locked = SolverRun::query()->lockForUpdate()->findOrFail($run->getKey());
-            self::ensureAppliable($locked);
+            self::ensureAppliable($locked, SolverRunStatus::Done, SolverRunStatus::Applying);
 
             $term = Term::query()->findOrFail($locked->term_id);
             $modality = Modality::query()->withTrashed()->findOrFail($locked->modality_id);
@@ -127,13 +132,13 @@ final class ApplySolverRun
     /**
      * @throws ValidationException
      */
-    private static function ensureAppliable(SolverRun $run): void
+    public static function ensureAppliable(SolverRun $run, SolverRunStatus ...$allowed): void
     {
         if ($run->scope_kind !== RunScope::Department) {
             throw ValidationException::withMessages(['run' => 'Una corrida de carrera es para explorar: no se acepta.']);
         }
 
-        if ($run->status !== SolverRunStatus::Done) {
+        if (! in_array($run->status, $allowed, true)) {
             throw ValidationException::withMessages(['run' => 'Solo se acepta una corrida terminada.']);
         }
     }

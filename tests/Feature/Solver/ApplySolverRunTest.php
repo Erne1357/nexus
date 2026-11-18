@@ -19,12 +19,16 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Actions\ApplySolverRun;
 use App\Modules\Solver\Actions\LaunchSolverRun;
+use App\Modules\Solver\Actions\RequestApplySolverRun;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverRunStatus;
+use App\Modules\Solver\Jobs\ApplySolverRunJob;
 use App\Modules\Solver\Models\SolverRun;
+use App\Modules\Solver\Notifications\SolverRunApplied;
 use App\Modules\Solver\Support\RunPayloads;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -203,4 +207,65 @@ it('solo se acepta una corrida de departamento terminada, y solo el jefe de esa 
     $career = SolverRun::factory()->forCareer()->done()->create(['term_id' => $this->term->id, 'career_id' => $this->isc->id]);
 
     expect(fn () => applySolverRun($career))->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['run' => ['Una corrida de carrera es para explorar: no se acepta.']]));
+});
+
+it('SV-05: pedir aceptar deja la corrida en applying y despacha el job sin escribir todavía', function () {
+    $run = standardRun();
+    Queue::fake();
+
+    app(RequestApplySolverRun::class)->handle($run, $this->jefe);
+
+    Queue::assertPushed(ApplySolverRunJob::class, fn (ApplySolverRunJob $job): bool => $job->runId === $run->id && $job->userId === $this->jefe->id);
+    expect($run->fresh()->status)->toBe(SolverRunStatus::Applying)
+        ->and($this->placing->sessions()->count())->toBe(0);
+});
+
+it('SV-05: el job deja la corrida aplicada, escribe y avisa a quien aceptó', function () {
+    $run = standardRun();
+    Queue::fake();
+    app(RequestApplySolverRun::class)->handle($run, $this->jefe);
+    Notification::fake();
+
+    (new ApplySolverRunJob($run->id, $this->jefe->id))->handle(app(ApplySolverRun::class));
+
+    expect($run->fresh()->status)->toBe(SolverRunStatus::Applied)
+        ->and($this->placing->sessions()->count())->toBeGreaterThan(0);
+    Notification::assertSentTo($this->jefe, SolverRunApplied::class);
+});
+
+it('SV-02: con la entrada vencida el request avisa y el job regresa la corrida a done con el error', function () {
+    $run = standardRun();
+    Queue::fake();
+    app(RequestApplySolverRun::class)->handle($run, $this->jefe);
+    GroupSession::factory()->for($this->unplaced)->inRoom($this->room)->on(5, '13:00', '14:00')->create();
+    Notification::fake();
+
+    (new ApplySolverRunJob($run->id, $this->jefe->id))->handle(app(ApplySolverRun::class));
+
+    $fresh = $run->fresh();
+    expect($fresh->status)->toBe(SolverRunStatus::Done)
+        ->and($fresh->metrics['apply_error'])->toBe(ApplySolverRun::STALE_MESSAGE)
+        ->and($this->placing->sessions()->count())->toBe(0);
+    Notification::assertSentTo($this->jefe, SolverRunApplied::class);
+
+    expect(fn () => app(RequestApplySolverRun::class)->handle($fresh, $this->jefe))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['run' => [ApplySolverRun::STALE_MESSAGE]]));
+});
+
+it('SV-01: mientras una corrida se aplica no se lanza otra del departamento', function () {
+    $run = standardRun();
+    Queue::fake();
+    app(RequestApplySolverRun::class)->handle($run, $this->jefe);
+
+    expect(fn () => app(LaunchSolverRun::class)->handle($this->term, $this->pres, RunScope::Department, $this->sistemas->id, 'fixed', 60, $this->jefe))
+        ->toThrow(ValidationException::class);
+});
+
+it('pedir aceptar exige la corrida terminada y al jefe de la carga', function () {
+    $run = standardRun();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
+    Queue::fake();
+
+    expect(fn () => app(RequestApplySolverRun::class)->handle($run, $coordinador))->toThrow(AuthorizationException::class);
+    Queue::assertNothingPushed();
 });

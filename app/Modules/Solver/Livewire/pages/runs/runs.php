@@ -15,6 +15,7 @@ use App\Modules\Solver\Actions\ApplySolverRun;
 use App\Modules\Solver\Actions\CancelSolverRun;
 use App\Modules\Solver\Actions\DiscardSolverRun;
 use App\Modules\Solver\Actions\LaunchSolverRun;
+use App\Modules\Solver\Actions\RequestApplySolverRun;
 use App\Modules\Solver\Contract\SoftWeights;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\SolverEngine;
@@ -343,13 +344,13 @@ new #[Title('Corridas del motor')] class extends Component
     /**
      * SV-05: acepta la corrida elegida.
      */
-    public function apply(ApplySolverRun $apply, Actor $context): void
+    public function apply(RequestApplySolverRun $request, Actor $context): void
     {
         $run = $this->runOrFail($this->runId);
         $this->authorize('apply', $run);
 
         try {
-            $summary = $apply->handle($run, $context->user());
+            $request->handle($run, $context->user());
         } catch (ValidationException $exception) {
             $message = (string) collect($exception->errors())->flatten()->first();
             $this->showAccept = false;
@@ -366,8 +367,14 @@ new #[Title('Corridas del motor')] class extends Component
         }
 
         $this->showAccept = false;
-        $kept = count($summary['kept']);
-        $this->success('Corrida aplicada', e("{$summary['sessions']} sesiones escritas en {$summary['groups']} grupos; choques recalculados.".($kept > 0 ? " {$kept} ".($kept === 1 ? 'grupo se quedó' : 'grupos se quedaron').' como estaban.' : '')));
+
+        if ($run->refresh()->status === SolverRunStatus::Applied) {
+            $this->success('Corrida aplicada', e('Horario escrito y choques recalculados.'));
+
+            return;
+        }
+
+        $this->success('Aplicando la corrida', e('Se escribe en segundo plano; te avisa la campana al terminar.'));
     }
 
     /**

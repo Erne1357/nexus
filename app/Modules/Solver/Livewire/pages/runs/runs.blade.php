@@ -66,7 +66,12 @@
         </div>
         @unless ($message)
             <div class="flex items-center max-md:w-full">
-                @if ($can['launch'])
+                @if ($run?->status === \App\Modules\Solver\Enums\SolverRunStatus::Applying)
+                    <span class="flex flex-col items-end gap-1 max-md:w-full max-md:items-stretch">
+                        <button type="button" class="btn btn-disabled max-md:h-11" aria-disabled="true" aria-describedby="launch-why" tabindex="0"><x-icon name="o-play" class="h-4 w-4" aria-hidden="true" />Lanzar corrida</button>
+                        <span id="launch-why" class="flex items-center gap-1 text-xs text-neutral"><x-icon name="o-lock-closed" class="h-3.5 w-3.5" aria-hidden="true" />Se está aplicando una corrida de esta carga.</span>
+                    </span>
+                @elseif ($can['launch'])
                     <button type="button" wire:click="openLaunch" @class(['btn max-md:h-11 max-md:w-full', 'btn-primary' => $run === null || ! in_array($run->status, [\App\Modules\Solver\Enums\SolverRunStatus::Done, \App\Modules\Solver\Enums\SolverRunStatus::Failed], true)]) data-testid="launch-open">
                         <x-icon name="o-play" class="h-4 w-4" aria-hidden="true" />Lanzar corrida
                     </button>
@@ -138,6 +143,11 @@
                         </dl>
                     @endif
                     <p class="text-sm text-neutral">La semana aparece cuando termina; mientras, la carga no cambia.</p>
+                </section>
+            @elseif ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Applying)
+                <section class="grid gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" wire:poll.2s="refreshRun" data-testid="run-applying">
+                    <h2 class="text-lg font-bold">Corrida <span class="font-mono">{{ $row['number'] }}</span> · {{ $scopeText($run) }}</h2>
+                    <p class="flex items-center gap-2 text-neutral" role="status"><x-icon name="o-arrow-path" class="h-5 w-5 shrink-0 animate-spin" aria-hidden="true" />Aplicando…  Se escribe el horario en segundo plano; la campana avisa al terminar.</p>
                 </section>
             @elseif ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Failed)
                 <section class="grid gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" data-testid="run-failed">
