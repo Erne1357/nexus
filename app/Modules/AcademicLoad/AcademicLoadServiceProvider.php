@@ -28,6 +28,7 @@ use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
 use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
+use App\Modules\AcademicLoad\Listeners\NotifyReanalysisAvailableOnForecastsComputed;
 use App\Modules\AcademicLoad\Listeners\PreviewLoadsOnTermOpening;
 use App\Modules\AcademicLoad\Listeners\RecordGroupHistoryOnPublication;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
@@ -108,6 +109,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
         Event::listen(LoadTransitioned::class, NotifyOnLoadClosingTransition::class);
         Event::listen(DemandForecastsComputed::class, SyncProposalsOnForecastsComputed::class);
+        Event::listen(DemandForecastsComputed::class, NotifyReanalysisAvailableOnForecastsComputed::class);
         Event::listen(LoadTransitioned::class, RecordGroupHistoryOnPublication::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
@@ -147,7 +149,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      * Subdirección y el jefe de proyecto docente ven la carga y la bandeja (Subdirección, además, la propuesta, y
      * cierra, reabre, da el visto bueno y publica las cargas, tareas 4.1 a 4.3: cierra cualquiera sin ser paso
      * obligatorio, confirmado el 10 de noviembre de 2026); el jefe de departamento, además, propone la carga, la pasa a
-     * asignación docente, la cierra, la publica si la modalidad no exige visto bueno, decide la parte de su departamento y
+     * asignación docente, la cierra, inicia el re-análisis de una carga publicada (fase 8, RA-01), la publica si la modalidad no exige visto bueno, decide la parte de su departamento y
      * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
      * coordinador arma, corrige, envía y ve la propuesta de su carrera.
      */
@@ -176,6 +178,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::LoadPropose,
                 AcademicLoadPermission::LoadStartStaffing,
                 AcademicLoadPermission::LoadClose,
+                AcademicLoadPermission::LoadStartReanalysis,
                 AcademicLoadPermission::LoadPublish,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::ProposalReviewDecide,
