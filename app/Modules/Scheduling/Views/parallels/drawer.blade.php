@@ -24,6 +24,8 @@
                 <x-core::campus-tag :campus="$row->campus" size="lg" />
                 @if ($row->arranged())
                     <x-core::status-badge tone="success" label="Armada" />
+                @elseif ($row->arrangeBlockedReason() !== null)
+                    <x-core::status-badge tone="neutral" icon="o-lock-closed" label="Pendiente" />
                 @else
                     <x-core::status-badge tone="warning" icon="o-clock" label="Por armar" />
                 @endif
