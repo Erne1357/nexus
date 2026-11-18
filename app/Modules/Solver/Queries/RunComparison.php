@@ -136,6 +136,26 @@ final readonly class RunComparison
     }
 
     /**
+     * Los problemas de entrada por corregir (ApplyPlan::$inputProblems: HC-07, HC-08, HC-13): no retienen al grupo, que
+     * se escribe, y se avisan sin bloquear. Cada uno con los títulos de sus grupos de la carga.
+     *
+     * @return list<array{rule: string, message: string, groups: list<string>}>
+     */
+    public function inputProblems(): array
+    {
+        $movable = $this->movable();
+        $rows = [];
+
+        foreach ($this->plan->inputProblems as $problem) {
+            $titles = array_values(array_map(fn (string $id): string => $movable[$id]['title'], array_filter($problem['group_ids'], fn (string $id): bool => isset($movable[$id]))));
+            sort($titles);
+            $rows[] = ['rule' => $problem['rule'], 'message' => $problem['message'], 'groups' => $titles];
+        }
+
+        return $rows;
+    }
+
+    /**
      * Las opciones de un «Ver por» con las sesiones que cambian en cada una.
      *
      * @return list<array{id: string, label: string, changes: int}>
