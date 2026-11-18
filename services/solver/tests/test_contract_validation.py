@@ -96,6 +96,23 @@ def test_las_llaves_desconocidas_se_ignoran_salvo_en_los_pesos(tiny_input: Data)
     assert "extra" not in parsed.model_dump()
 
 
+def test_la_tolerancia_de_horas_semanales_se_acepta_y_por_omision_vale_cero(tiny_input: Data):
+    tiny_input["weekly_hours_tolerance"] = 30
+    assert parse_input(tiny_input).weekly_hours_tolerance == 30
+
+    del tiny_input["weekly_hours_tolerance"]
+    assert parse_input(tiny_input).weekly_hours_tolerance == 0
+
+
+def test_una_tolerancia_de_horas_semanales_negativa_se_rechaza(tiny_input: Data):
+    tiny_input["weekly_hours_tolerance"] = -1
+
+    with pytest.raises(ContractError) as raised:
+        parse_input(tiny_input)
+
+    assert "weekly_hours_tolerance" in [path for path, _ in raised.value.problems]
+
+
 def test_los_pesos_ausentes_valen_cero(tiny_input: Data):
     del tiny_input["soft_weights"]["SC-09"]
 

@@ -280,6 +280,16 @@ it('trae el contrato: versión, corrida, periodo, modalidad, alcance, traslado, 
         ->and($input->options->suggestTeachers)->toBeFalse();
 });
 
+it('la tolerancia de HC-12 sale del perfil de la modalidad y, sin ella, de la configuración global', function () {
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(0);
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'scheduling.weekly_hours_tolerance', 'value' => 15]);
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(15);
+
+    $this->pres->update(['settings' => [...$this->pres->settings, 'weekly_hours_tolerance' => 30]]);
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(30);
+});
+
 it('el traslado y el tiempo máximo salen de los parámetros', function () {
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.min_campus_travel_minutes', 'value' => 45]);
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.time_limits', 'value' => ['department' => 120, 'career' => 20]]);

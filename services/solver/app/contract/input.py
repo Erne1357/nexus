@@ -215,6 +215,7 @@ class SolverInput(ContractModel):
     time_limit_seconds: PositiveInt
     scope: Scope
     travel_minutes: NonNegativeInt
+    weekly_hours_tolerance: NonNegativeInt = 0
     groups: list[GroupInput]
     teachers: list[TeacherInput]
     rooms: list[RoomInput] = Field(default_factory=list)
