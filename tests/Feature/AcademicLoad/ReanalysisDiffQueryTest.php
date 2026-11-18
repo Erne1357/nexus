@@ -145,6 +145,31 @@ it('RA-04: un grupo compartido suma solo los cupos de cada carrera en su fila', 
         ->and($rows['IGE']->balance)->toBe(DemandBalance::Surplus);
 });
 
+it('RA-04: una carrera con dos retículas en un grupo compartido cuenta sus lugares y el grupo una sola vez', function () {
+    $other = Career::factory()->create(['code' => 'IGE']);
+    diffForecast($this, $this->subjectA, ['expected_students' => 15], $other);
+    $group = diffGroup($this, $this->subjectA, [[$this->career, 20], [$other, 15], [$other, 15]]);
+    diffPublish($this->load, [$group]);
+
+    $rows = collect(app(ReanalysisDiffQuery::class)->forLoad($this->load)->rows)->keyBy('careerCode');
+
+    expect($rows['IGE']->offeredSeats)->toBe(15)
+        ->and($rows['IGE']->offeredGroups)->toBe(1)
+        ->and($rows['IGE']->balance)->toBe(DemandBalance::Adjusted);
+});
+
+it('RA-07: la hora del cálculo de la proyección es la misma con o sin el filtro del coordinador', function () {
+    $other = Career::factory()->create(['code' => 'IGE']);
+    diffForecast($this, $this->subjectA, ['computed_at' => now()->subHour()]);
+    diffForecast($this, $this->subjectA, ['computed_at' => now()], $other);
+    diffPublish($this->load, [diffGroup($this, $this->subjectA, [[$this->career, 20]])]);
+
+    $query = app(ReanalysisDiffQuery::class);
+
+    expect($query->forLoad($this->load, [$this->career->id])->forecastComputedAt?->toIso8601String())
+        ->toBe($query->forLoad($this->load)->forecastComputedAt?->toIso8601String());
+});
+
 it('RA-04: la demanda sin oferta es faltante y la oferta sin demanda es sobrante', function () {
     diffForecast($this, $this->subjectA, ['expected_students' => 40]);
     diffPublish($this->load, [diffGroup($this, $this->subjectB, [[$this->career, 35]])]);

@@ -73,7 +73,7 @@ final class ReanalysisDiffQuery
             rows: $rows,
             totals: $this->totals($rows),
             snapshotVersion: $snapshot?->version,
-            forecastComputedAt: ($computedAt = $forecasts->max('computed_at')) === null ? null : new CarbonImmutable($computedAt),
+            forecastComputedAt: ($computedAt = $this->lastComputedAt($load)) === null ? null : new CarbonImmutable($computedAt),
         );
     }
 
@@ -104,8 +104,21 @@ final class ReanalysisDiffQuery
     }
 
     /**
+     * Cuándo se calculó por última vez la proyección del periodo y la modalidad de la carga, sin el filtro de carreras del
+     * coordinador: la hora no cambia según quién mira.
+     */
+    private function lastComputedAt(AcademicLoad $load): ?string
+    {
+        return DemandForecast::query()
+            ->where('term_id', $load->term_id)
+            ->where('modality_id', $load->modality_id)
+            ->max('computed_at');
+    }
+
+    /**
      * La oferta de la versión por llave: asientos y grupos de cada carrera, materia y campus. Un grupo cuenta una vez por
-     * carrera aunque ocupe varios renglones de ella (dos retículas).
+     * carrera aunque ocupe varios renglones de ella (dos retículas): LoadSnapshotQuery repite el cupo de la carrera en el
+     * renglón de cada retícula, así que sus lugares también se suman una sola vez.
      *
      * @param  array<string, mixed>  $payload
      * @param  list<string>|null  $careerIds
@@ -127,11 +140,11 @@ final class ReanalysisDiffQuery
 
                 $key = $this->key($group['campus']['id'] ?? null, $career['id'], $group['subject']['id']);
                 $offer[$key] ??= ['campus' => $group['campus'], 'career' => $career, 'subject' => $group['subject'], 'semester' => null, 'seats' => 0, 'groups' => 0];
-                $offer[$key]['seats'] += $placement['seats'];
                 $offer[$key]['semester'] ??= $placement['semester'];
 
                 if (! isset($groupCareers[$key])) {
                     $groupCareers[$key] = true;
+                    $offer[$key]['seats'] += $placement['seats'];
                     $offer[$key]['groups']++;
                 }
             }
