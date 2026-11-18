@@ -239,7 +239,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
         return [
-            ...$this->proposalCaseChecks($offeredCareerIds, $modalityIds, $proposals),
+            ...$this->proposalCaseChecks($campusIds, $offeredCareerIds, $modalityIds, $proposals),
             new DemoCheck([DemoCheckpoint::Catalogs], 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() || ! KardexRecord::query()->exists() ? true : 'Hay kárdex, pero no hay historial de grupos.'),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
@@ -299,21 +299,23 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
 
     /**
      * Las revisiones de «propuesta» (#520): cada caso de las pantallas de la fase 5 tiene al menos un ejemplo en las
-     * propuestas de la demo (ProposalForecastDemoSeeder::count), y alguna carrera ofrecida se quedó sin propuesta.
+     * propuestas de la demo, en sus campus (ProposalForecastDemoSeeder::count), y alguna carrera ofrecida se quedó sin
+     * propuesta.
      *
+     * @param  Closure(DemoContext): list<string>  $campusIds
      * @param  Closure(DemoContext): list<string>  $offeredCareerIds
      * @param  Closure(DemoContext): list<string>  $modalityIds
      * @param  Closure(DemoContext): Builder<CareerProposal>  $proposals
      * @return list<DemoCheck>
      */
-    private function proposalCaseChecks(Closure $offeredCareerIds, Closure $modalityIds, Closure $proposals): array
+    private function proposalCaseChecks(Closure $campusIds, Closure $offeredCareerIds, Closure $modalityIds, Closure $proposals): array
     {
         $cases = [
-            ProposalForecastDemoSeeder::CASE_SUGGESTED_ROW => 'La propuesta trae filas sin tocar que siguen a la proyección',
+            ProposalForecastDemoSeeder::CASE_SUGGESTED_ROW => 'La propuesta trae filas sin tocar con lo sugerido de la proyección vigente',
             ProposalForecastDemoSeeder::CASE_CAPTURED_ROW => 'La propuesta trae filas corregidas',
             ProposalForecastDemoSeeder::CASE_CHANGED_ROW => 'La propuesta trae filas corregidas cuya proyección cambió',
             ProposalForecastDemoSeeder::CASE_REVIEWED_ROW => 'La propuesta trae filas revisadas',
-            ProposalForecastDemoSeeder::CASE_PACKAGE => 'La propuesta trae paquetes de primer semestre',
+            ProposalForecastDemoSeeder::CASE_PACKAGE => 'La propuesta trae paquetes de primer semestre que abren grupos',
             ProposalForecastDemoSeeder::CASE_CORRECTED_INTAKE => 'La propuesta trae un nuevo ingreso corregido',
             ProposalForecastDemoSeeder::CASE_DRAFTING => 'Hay propuestas en captura',
             ProposalForecastDemoSeeder::CASE_SUBMITTED => 'Hay propuestas enviadas',
@@ -324,7 +326,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             ...array_map(
                 fn (string $case, string $label): DemoCheck => new DemoCheck([DemoCheckpoint::Proposal], $label,
-                    fn (DemoContext $demo): true|string => ProposalForecastDemoSeeder::count($case, $proposals($demo)) > 0 ? true : 'Ninguna propuesta de la demo trae el caso.'),
+                    fn (DemoContext $demo): true|string => ProposalForecastDemoSeeder::count($case, $proposals($demo), $campusIds($demo)) > 0 ? true : 'Ninguna propuesta de la demo trae el caso.'),
                 array_keys($cases),
                 array_values($cases),
             ),

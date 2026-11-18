@@ -53,10 +53,10 @@ it('toma el mínimo del parámetro global y, si falta o es inválido, usa 10', f
 */
 
 it('con proyección, lo que explica son los posibles más los pendientes de seriación y el nuevo ingreso', function () {
-    $forecast = new DemandForecast(['pending_prerequisite_students' => 12, 'new_students' => 40]);
+    $forecast = new DemandForecast(['pending_prerequisite_students' => 12, 'new_students' => 40, 'method' => ForecastMethod::FirstSemester]);
 
     expect(ProposalAnomalies::explained(30, $forecast))->toBe(82)
-        ->and(ProposalAnomalies::explained(30, new DemandForecast(['pending_prerequisite_students' => 5, 'new_students' => null])))->toBe(35)
+        ->and(ProposalAnomalies::explained(30, new DemandForecast(['pending_prerequisite_students' => 5, 'new_students' => null, 'method' => ForecastMethod::FirstSemester])))->toBe(35)
         ->and(ProposalAnomalies::explained(30, null))->toBeNull();
 });
 
@@ -75,4 +75,12 @@ it('con proyección, no marca los esperados que explica aunque pasen de los posi
 
 it('con proyección, marca los esperados que pasan de lo que explica', function () {
     expect((new ProposalAnomalies(10))->for(eligible: 49, expected: 90, groups: 3, explained: 62))->toBe(['90 esperados con 62 que explica la proyección']);
+});
+
+it('el nuevo ingreso solo explica esperados de primer semestre: en una fila de la fórmula no suma aunque venga', function () {
+    $formula = new DemandForecast(['pending_prerequisite_students' => 3, 'new_students' => 40, 'method' => ForecastMethod::Formula]);
+
+    expect(ProposalAnomalies::explained(30, $formula))->toBe(33)
+        ->and((new ProposalAnomalies(10))->for(eligible: 30, expected: 60, groups: 2, explained: ProposalAnomalies::explained(30, $formula)))
+        ->toBe(['60 esperados con 33 que explica la proyección']);
 });

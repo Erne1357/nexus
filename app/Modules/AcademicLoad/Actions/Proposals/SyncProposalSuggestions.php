@@ -22,7 +22,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * semestre (`first_semester`) son los de la proyección menos su `new_students` más el nuevo ingreso vigente, y sus grupos
  * salen de esos esperados: los de paquetes más los sueltos o, sin paquetes, los de SuggestedGroups (supuesto por confirmar,
  * pedido el 17 de noviembre de 2026); lo sugerido (`suggested_*`) sigue siendo el de la proyección. UpdateProposalIntake la
- * llama para su propuesta al corregir el nuevo ingreso. Una fila sin
+ * llama para la columna que corrigió (syncColumn(), con alcance exacto: la columna sin campus no es «todas»). Una fila sin
  * tocar que se queda sin proyección no cambia, y una que ya coincide no se escribe. Si lo sugerido de una fila cambia, su
  * marca de revisada se borra (`reviewed_*`, «Revisar proyección», tarea 5.6): lo que se revisó ya no es lo que sugiere.
  *
@@ -53,9 +53,21 @@ final class SyncProposalSuggestions
         return $total;
     }
 
-    private function syncProposal(string $proposalId, ?string $campusId): int
+    /**
+     * Pone al día una sola columna de una propuesta: la de `$campusId` o, con null, la columna sin campus de una modalidad sin
+     * salones (MS5), no todas. La llama UpdateProposalIntake al corregir el nuevo ingreso de esa columna.
+     */
+    public function syncColumn(CareerProposal $proposal, ?string $campusId): int
     {
-        return DB::transaction(function () use ($proposalId, $campusId): int {
+        return $this->syncProposal($proposal->getKey(), $campusId, column: true);
+    }
+
+    /**
+     * Con `$column`, `$campusId` es una columna exacta (null es la columna sin campus); sin él, null son todas.
+     */
+    private function syncProposal(string $proposalId, ?string $campusId, bool $column = false): int
+    {
+        return DB::transaction(function () use ($proposalId, $campusId, $column): int {
             $proposal = CareerProposal::query()
                 ->with(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()])
                 ->lockForUpdate()
@@ -75,7 +87,10 @@ final class SyncProposalSuggestions
             $bindings = [$proposal->term_id, $proposal->modality_id, $proposal->career_id, $proposal->getKey()];
             $campusFilter = '';
 
-            if ($campusId !== null) {
+            if ($column) {
+                $campusFilter = ' and proposal_items.campus_id is not distinct from ?::uuid';
+                $bindings[] = $campusId;
+            } elseif ($campusId !== null) {
                 $campusFilter = ' and proposal_items.campus_id = ?';
                 $bindings[] = $campusId;
             }
@@ -166,7 +181,7 @@ final class SyncProposalSuggestions
             activity()
                 ->performedOn($proposal)
                 ->event(ActivityEvent::Updated)
-                ->withProperties(['items' => $count, 'campus_id' => $campusId, 'capped_at_max' => $capped])
+                ->withProperties(['items' => $count, 'campus_id' => $campusId, 'only_column' => $column, 'capped_at_max' => $capped])
                 ->log("Nexus actualizó {$count} materias con la proyección en la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
 
             ProposalSuggestionsSynced::dispatch($proposal, $count);

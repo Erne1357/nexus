@@ -45,8 +45,8 @@ final readonly class ProposalAnomalies
 
     /**
      * Lo que explica la proyección vigente para una fila de la propuesta: sus posibles (R1) más los que dependen de aprobar
-     * lo que cursan hoy (`pending_prerequisite_students`) y el nuevo ingreso (`new_students`) de su fila de la proyección;
-     * null sin proyección (confirmado el 17 de noviembre de 2026). En primer semestre (`first_semester`) de una columna con el
+     * lo que cursan hoy (`pending_prerequisite_students`) y, solo en primer semestre (`first_semester`), el nuevo ingreso
+     * (`new_students`) de su fila de la proyección; null sin proyección (confirmado el 17 de noviembre de 2026). En primer semestre (`first_semester`) de una columna con el
      * nuevo ingreso corregido (`$correctedIntake`), cuenta el corregido, porque la corrección mueve los esperados de esas filas
      * (supuesto por confirmar: sin esto, la carrera ofrecida por primera vez marcaba todas sus filas de 1.º).
      */
@@ -56,7 +56,8 @@ final readonly class ProposalAnomalies
             return null;
         }
 
-        $newStudents = $forecast->method === ForecastMethod::FirstSemester && $correctedIntake !== null ? $correctedIntake : (int) ($forecast->new_students ?? 0);
+        // El nuevo ingreso solo explica esperados de primer semestre (`first_semester`); en otra fila, aunque venga, no suma.
+        $newStudents = $forecast->method !== ForecastMethod::FirstSemester ? 0 : ($correctedIntake ?? (int) ($forecast->new_students ?? 0));
 
         return $eligible + (int) $forecast->pending_prerequisite_students + $newStudents;
     }

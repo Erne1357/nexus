@@ -22,6 +22,7 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Models\DemandForecast;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -216,6 +217,7 @@ describe('con lo que piden varias carreras', function () {
             'campus_id' => $this->campus->id,
             'pending_prerequisite_students' => 0,
             'new_students' => 20,
+            'method' => ForecastMethod::FirstSemester,
         ]);
 
         expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([[], []])

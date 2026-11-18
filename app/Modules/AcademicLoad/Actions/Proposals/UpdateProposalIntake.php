@@ -63,7 +63,7 @@ final class UpdateProposalIntake
 
             $this->sync->handle($proposal, $actor);
             // Las filas sin tocar de primer semestre de la columna siguen al nuevo ingreso corregido (SyncProposalSuggestions).
-            $this->suggestions->handle($proposal->term_id, $proposal->modality_id, $intake->campus_id, [$proposal->career_id]);
+            $this->suggestions->syncColumn($proposal, $intake->campus_id);
 
             activity()
                 ->performedOn($intake)
