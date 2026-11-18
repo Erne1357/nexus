@@ -1,0 +1,364 @@
+{
+    "version": 1,
+    "run_id": "fixture-medium",
+    "status": "feasible",
+    "sessions": [
+        {
+            "group_id": "g002",
+            "day": 1,
+            "starts_at": "11:00",
+            "ends_at": "12:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g002",
+            "day": 2,
+            "starts_at": "11:00",
+            "ends_at": "12:00",
+            "room_id": "r003",
+            "kind": "practica",
+            "changed": true
+        },
+        {
+            "group_id": "g002",
+            "day": 2,
+            "starts_at": "12:00",
+            "ends_at": "13:00",
+            "room_id": "r003",
+            "kind": "practica",
+            "changed": true
+        },
+        {
+            "group_id": "g002",
+            "day": 3,
+            "starts_at": "11:00",
+            "ends_at": "12:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g002",
+            "day": 4,
+            "starts_at": "11:00",
+            "ends_at": "12:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g007",
+            "day": 1,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g007",
+            "day": 2,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g007",
+            "day": 3,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g008",
+            "day": 1,
+            "starts_at": "07:00",
+            "ends_at": "08:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g008",
+            "day": 2,
+            "starts_at": "07:00",
+            "ends_at": "08:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g008",
+            "day": 3,
+            "starts_at": "07:00",
+            "ends_at": "08:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g009",
+            "day": 1,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r004",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g009",
+            "day": 2,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r004",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g009",
+            "day": 3,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r004",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g010",
+            "day": 2,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g010",
+            "day": 4,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g010",
+            "day": 5,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g011",
+            "day": 1,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r005",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g011",
+            "day": 2,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r005",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g011",
+            "day": 3,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r005",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g011",
+            "day": 4,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r005",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g012",
+            "day": 1,
+            "starts_at": "10:00",
+            "ends_at": "11:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g012",
+            "day": 2,
+            "starts_at": "10:00",
+            "ends_at": "11:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g012",
+            "day": 3,
+            "starts_at": "10:00",
+            "ends_at": "11:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g003",
+            "day": 1,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g003",
+            "day": 2,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g003",
+            "day": 3,
+            "starts_at": "09:00",
+            "ends_at": "10:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g004",
+            "day": 1,
+            "starts_at": "10:00",
+            "ends_at": "11:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g004",
+            "day": 2,
+            "starts_at": "10:00",
+            "ends_at": "11:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g004",
+            "day": 3,
+            "starts_at": "10:00",
+            "ends_at": "11:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g005",
+            "day": 2,
+            "starts_at": "07:00",
+            "ends_at": "08:00",
+            "room_id": "r003",
+            "kind": "practica",
+            "changed": true
+        },
+        {
+            "group_id": "g005",
+            "day": 2,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r003",
+            "kind": "practica",
+            "changed": true
+        },
+        {
+            "group_id": "g005",
+            "day": 4,
+            "starts_at": "07:00",
+            "ends_at": "08:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g005",
+            "day": 4,
+            "starts_at": "08:00",
+            "ends_at": "09:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g005",
+            "day": 5,
+            "starts_at": "07:00",
+            "ends_at": "08:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g006",
+            "day": 1,
+            "starts_at": "11:00",
+            "ends_at": "12:00",
+            "room_id": "r002",
+            "kind": "teoria",
+            "changed": true
+        },
+        {
+            "group_id": "g006",
+            "day": 2,
+            "starts_at": "11:00",
+            "ends_at": "12:00",
+            "room_id": "r001",
+            "kind": "teoria",
+            "changed": true
+        }
+    ],
+    "teacher_suggestions": [],
+    "unscheduled": [],
+    "hard_violations": [],
+    "soft_score": {
+        "total": 39,
+        "by_rule": {
+            "SC-01": 0,
+            "SC-02": 18,
+            "SC-03": 15,
+            "SC-04": 0,
+            "SC-05": 0,
+            "SC-06": 4,
+            "SC-07": 0,
+            "SC-08": 0,
+            "SC-09": 2
+        }
+    },
+    "relaxed_rules": [],
+    "metrics": {
+        "elapsed_seconds": 0.458,
+        "engine": "cpsat",
+        "engine_version": "7.6"
+    },
+    "log": []
+}

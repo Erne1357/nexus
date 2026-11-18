@@ -12,8 +12,10 @@ docs/arquitectura/solver.md, «Tamaño de la instancia real»).
 Sin objetivo blando todavía (7.6); 7.7 la registra como motor con el avance y la relajación.
 """
 
+import random
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
@@ -23,9 +25,12 @@ from app.contract.output import ProposedSession
 
 from .constraints import add_hard_constraints
 from .data import ModelData
+from .objective import add_objective
 from .pattern import minutes
 from .phases import FEASIBLE, SearchLimits, run_solver
+from .room_model import improve_rooms_scored
 from .rooms import RoomAssignmentError
+from .score import Score, SoftScorer
 from .solution import chosen_option, sessions_of
 from .variables import BuildTimeout, DomainOptions, ModelTooLarge, Occupancy, Variables, build_variables
 
@@ -56,6 +61,8 @@ class Search:
 
     sessions: dict[str, list[ProposedSession]] = field(default_factory=dict)
     chosen: dict[str, OptionKey] = field(default_factory=dict)
+    #: El nivel del patrón de la opción de cada grupo programado (PS-04).
+    tiers: dict[str, int] = field(default_factory=dict)
     unplaced: list[str] = field(default_factory=list)
     steps: list[Step] = field(default_factory=list)
     first_feasible_seconds: float | None = None
@@ -248,13 +255,16 @@ def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data:
     if replace:
         search.sessions = {}
         search.chosen = {}
+        search.tiers = {}
     for domain in variables.groups.values():
         option = chosen_option(solver, domain)
         search.sessions.pop(domain.id, None)
         search.chosen.pop(domain.id, None)
+        search.tiers.pop(domain.id, None)
         if option is not None:
             search.sessions[domain.id] = sessions[domain.id]
             search.chosen[domain.id] = (option.spread, option.block)
+            search.tiers[domain.id] = option.tier
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
 
     return True
@@ -294,3 +304,180 @@ def _sub_input(source: SolverInput, search: Search, movable: set[str]) -> Solver
             groups.append(group.model_copy(update={"movable": False, "fixed_sessions": slots, "current_sessions": []}))
 
     return source.model_copy(update={"groups": groups})
+
+
+#: Grupos por vecindario de la mejora: los de unos docentes completos, más los que comparten cohorte con ellos.
+IMPROVE_GROUPS = 24
+
+#: Segundos de CP-SAT por vecindario de la mejora.
+IMPROVE_STEP_SECONDS = 0.4
+
+#: Segundos para ajustar los salones de un vecindario (SC-03 y SC-06) antes de compararlo.
+IMPROVE_ROOM_SECONDS = 0.3
+
+
+@dataclass
+class Improvement:
+    """Lo que hizo la mejora: el puntaje al empezar y el mejor, los vecindarios revisados y los aceptados."""
+
+    initial: Score
+    best: Score
+    steps: int = 0
+    accepted: int = 0
+
+
+def improve(
+    data: ModelData,
+    search: Search,
+    deadline: float,
+    limits: SearchLimits | None = None,
+    seed: int = 0,
+    report: Callable[[Score, float], None] | None = None,
+) -> Improvement:
+    """La búsqueda por vecindarios con objetivo (7.6), sobre lo que ya programó `lns`.
+
+    Cada vecindario son los grupos programados de unos docentes y los que comparten cohorte con ellos; los demás
+    programados entran fijos con sus sesiones, pero siguen en el alcance del objetivo. Sus grupos se programan todos
+    (asignación exacta: nunca deja fuera a uno que estaba), con sus niveles por necesidad y el que ya tenían, y el
+    modelo minimiza SC-01 a SC-09 (`objective.py`) con la pista de lo que tenían. Se acepta solo si el puntaje de toda
+    la solución (`score.py`, el de PHP) baja. Así es lexicográfico: primero los grupos programados (lo que dejó `lns`,
+    que ningún vecindario quita) y después el puntaje. Para cuando se acaba el plazo o cuando una vuelta entera a los
+    vecindarios no mejora nada. `report(mejor, avance)` se llama después de cada vecindario, con el avance del plazo
+    de 0 a 1."""
+    limits = limits or SearchLimits()
+    scorer = SoftScorer(data.source)
+    scope = {group.id for group in data.movable}
+    best = scorer.score(search.all_sessions)
+    result = Improvement(initial=best, best=best)
+    started = time.perf_counter()
+    rng = random.Random(seed)
+    idle = 0
+    while time.perf_counter() < deadline:
+        batches = _improvement_batches(data, search, rng)
+        if not batches or idle >= len(batches):
+            break
+        for movable in batches:
+            if time.perf_counter() >= deadline or idle >= len(batches):
+                break
+            limits.tick()
+            result.steps += 1
+            candidate = _improve_step(data, search, movable, scope, deadline, limits, seed + result.steps)
+            idle += 1
+            if candidate is not None:
+                sessions = {**search.sessions, **candidate[0]}
+                proposed = [session for items in sessions.values() for session in items]
+                # Los salones del vecindario los repartió la fase B sin ver edificios: se ajustan antes de comparar.
+                room_deadline = min(deadline, time.perf_counter() + IMPROVE_ROOM_SECONDS)
+                proposed, score = improve_rooms_scored(
+                    data, proposed, room_deadline, limits, scope, groups=movable, scorer=scorer
+                )
+                if score.total < best.total:
+                    search.sessions = defaultdict(list)
+                    for session in proposed:
+                        search.sessions[session.group_id].append(session)
+                    search.sessions = dict(search.sessions)
+                    search.chosen.update(candidate[1])
+                    search.tiers.update(candidate[2])
+                    best = score
+                    result.accepted += 1
+                    idle = 0
+            if report is not None:
+                elapsed = time.perf_counter() - started
+                report(best, min(1.0, elapsed / max(1e-9, deadline - started)))
+    result.best = best
+
+    return result
+
+
+def _improvement_batches(data: ModelData, search: Search, rng: random.Random) -> list[set[str]]:
+    """Los vecindarios de una vuelta: los docentes en un orden al azar (con la semilla), juntados hasta
+    `IMPROVE_GROUPS` grupos, cada uno con los programados que comparten cohorte con los suyos; los grupos sin docente,
+    por cohorte."""
+    by_teacher: dict[str, list[str]] = defaultdict(list)
+    loose: list[str] = []
+    for group in data.movable:
+        if group.id not in search.sessions:
+            continue
+        if group.teacher_id is None:
+            loose.append(group.id)
+        else:
+            by_teacher[group.teacher_id].append(group.id)
+    members: dict[str, list[str]] = defaultdict(list)
+    for group in data.movable:
+        if group.id in search.sessions:
+            for key in group.cohorts:
+                members[key].append(group.id)
+    units = [by_teacher[teacher] for teacher in sorted(by_teacher)]
+    units += [loose[i : i + IMPROVE_GROUPS] for i in range(0, len(loose), IMPROVE_GROUPS)]
+    rng.shuffle(units)
+
+    batches: list[set[str]] = []
+    current: set[str] = set()
+    for unit in units:
+        current.update(unit)
+        if len(current) >= IMPROVE_GROUPS:
+            batches.append(current)
+            current = set()
+    if current:
+        batches.append(current)
+    for batch in batches:
+        for group_id in list(batch):
+            for key in data.groups[group_id].cohorts:
+                batch.update(members[key])
+
+    return batches
+
+
+def _improve_step(
+    data: ModelData,
+    search: Search,
+    movable: set[str],
+    scope: set[str],
+    deadline: float,
+    limits: SearchLimits,
+    seed: int,
+) -> tuple[dict[str, list[ProposedSession]], dict[str, OptionKey], dict[str, int]] | None:
+    """Un vecindario: sus grupos con el objetivo y lo demás fijo. Devuelve sus sesiones, opciones y niveles, o `None`
+    si no hubo solución a tiempo."""
+    step_deadline = min(deadline, time.perf_counter() + IMPROVE_STEP_SECONDS)
+    sub = ModelData.of(_sub_input(data.source, search, movable))
+    model = cp_model.CpModel()
+    options = DomainOptions(
+        keep_tiers={group: search.tiers[group] for group in movable if group in search.tiers},
+        long_window_rooms=LONG_WINDOW_ROOMS,
+    )
+    try:
+        variables = build_variables(model, sub, options, limits.budget(step_deadline))
+    except (BuildTimeout, ModelTooLarge):
+        return None
+    if variables.unplaceable():
+        return None
+    add_hard_constraints(model, variables, sub)
+    objective = add_objective(model, variables, sub, scope=scope)
+    model.minimize(objective.expression())
+    for domain in variables.groups.values():
+        hint = search.chosen.get(domain.id)
+        for option in domain.options:
+            model.add_hint(option.literal, (option.spread, option.block) == hint)
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = max(0.05, step_deadline - time.perf_counter())
+    solver.parameters.random_seed = seed
+    if run_solver(solver, model, limits) not in FEASIBLE:
+        return None
+    try:
+        proposed = sessions_of(solver, variables, sub)
+    except RoomAssignmentError:
+        return None
+    sessions: dict[str, list[ProposedSession]] = {group: [] for group in variables.groups}
+    for session in proposed:
+        sessions[session.group_id].append(session)
+    chosen: dict[str, OptionKey] = {}
+    tiers: dict[str, int] = {}
+    for domain in variables.groups.values():
+        option = chosen_option(solver, domain)
+        if option is None:
+            return None
+        chosen[domain.id] = (option.spread, option.block)
+        tiers[domain.id] = option.tier
+
+    return sessions, chosen, tiers

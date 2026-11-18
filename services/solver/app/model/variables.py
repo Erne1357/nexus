@@ -60,6 +60,9 @@ class DomainOptions:
     #: Niveles de más, por grupo, después del primero donde alguna opción cabe (la segunda vuelta de los que no
     #: quedaron; PS-04).
     extra_tiers: Mapping[str, int] = field(default_factory=dict)
+    #: Además, por grupo, todos los niveles hasta este (el de la opción que ya tiene en la búsqueda: un vecindario que
+    #: mejora el puntaje puede dejarlo donde está; 7.6).
+    keep_tiers: Mapping[str, int] = field(default_factory=dict)
     #: Además, los niveles siguientes mientras sean de una hora por día (otros juegos de días, PS-04): no crean
     #: ventanas de más de un bloque, así que entran al conjunto de salones sin `z`.
     one_hour_tiers: bool = True
@@ -400,6 +403,7 @@ def _domain(
     first_tier = 0
     first_with_options: int | None = None
     extra = variables.options.extra_tiers.get(group.id, 0)
+    keep = variables.options.keep_tiers.get(group.id, -1)
     for units in unit_counts(group, grid, data):
         practice = practice_units(group, grid, units) if lab_practice else 0
         unit_tiers = tiers(units, grid.days)
@@ -412,7 +416,7 @@ def _domain(
             if (
                 not variables.options.all_tiers
                 and first_with_options is not None
-                and tier > first_with_options + extra
+                and tier > max(first_with_options + extra, keep)
                 and not one_hour
             ):
                 domain.truncated = True

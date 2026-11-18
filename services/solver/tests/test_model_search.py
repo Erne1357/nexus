@@ -196,3 +196,41 @@ def test_el_benchmark_reproduce_la_tabla_con_un_fixture():
     rows = output.splitlines()[2:]
     assert [row.split(" | ")[0] for row in rows] == ["| lns", "| two-phase"]
     assert all("3 de 3 | 0 |" in row for row in rows)
+
+
+@pytest.mark.parametrize("name", ["small", "medium"])
+def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_duras(name):
+    """7.6: sobre lo que programó `lns`, los vecindarios con objetivo solo se aceptan si bajan el puntaje de toda la
+    solución (el de PHP): nunca suben el puntaje, nunca quitan un grupo programado y no agregan duras. El avance que
+    reporta nunca baja y el mejor puntaje nunca sube."""
+    import time
+
+    from app.model.phases import SearchLimits
+    from app.model.score import SoftScorer
+    from app.model.search import improve
+
+    data = fixture(name)
+    model_data = ModelData.of(data)
+    limits = SearchLimits(workers=1)
+    found = lns(model_data, time_limit=20, limits=limits, seed=7)
+    placed = set(found.sessions)
+    reports: list[tuple[int, float]] = []
+
+    result = improve(
+        model_data,
+        found,
+        time.perf_counter() + 5,
+        limits=limits,
+        seed=7,
+        report=lambda best, progress: reports.append((best.total, progress)),
+    )
+
+    final = SoftScorer(data).score(found.all_sessions)
+    assert final == result.best
+    assert result.best.total <= result.initial.total
+    assert result.best.total < result.initial.total or result.accepted == 0
+    assert set(found.sessions) == placed
+    assert hard_violations(data, found.all_sessions) == []
+    assert reports
+    assert [best for best, _ in reports] == sorted((best for best, _ in reports), reverse=True)
+    assert [progress for _, progress in reports] == sorted(progress for _, progress in reports)
