@@ -29,7 +29,7 @@
     <div class="rounded-box border border-base-300 bg-base-100 px-5 py-6 text-center text-neutral" data-testid="proposal-no-items">Esta propuesta no tiene materias.</div>
 @else
     <div class="space-y-4"
-        x-on:keydown.escape.window="if (($wire.chain !== null || $wire.department !== '' || $wire.groupsFilter !== '') && ! $wire.showDrawer && ! $wire.showSubmit && document.body.dataset.menu !== 'open' && ! document.querySelector('dialog[open]')) { $wire.clearHighlight() }">
+        x-on:keydown.escape.window="if (($wire.chain !== null || $wire.department !== '' || $wire.groupsFilter !== '') && ! $wire.showDrawer && ! $wire.showSubmit && ! $wire.showPackage && document.body.dataset.menu !== 'open' && ! document.querySelector('dialog[open]')) { $wire.clearHighlight() }">
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="state-legend">
             @foreach ($tileStates as $state)
                 @php

@@ -60,7 +60,7 @@
                 $ownLock = $locks[$cardItem->id] ?? null;
                 $difference = $card->difference();
                 $specialtyId = $overview->specialtyFor($card->subject);
-                $suggestedGroups = $card->groupsIfSuggested($projection->settings->groupSizes, $intakes[(string) $cardItem->campus_id] ?? 0);
+                $suggestedGroups = $card->effectiveGroups();
             @endphp
             <article id="review-{{ $cardItem->id }}" data-item="review-{{ $cardItem->id }}" tabindex="-1" wire:key="review-{{ $cardItem->id }}" data-testid="review-card-{{ $cardItem->id }}"
                 class="grid gap-x-6 gap-y-3 border-base-300 px-4 py-4 outline-none not-first:border-t data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-primary @min-[56rem]:grid-cols-[17rem_minmax(0,1fr)_13rem] @min-[56rem]:px-5">
@@ -84,13 +84,13 @@
                         @if ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Changed)
                             Ahora sugiere <span class="font-mono font-semibold">{{ $card->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestion->newGroups }}</span> grupos; cuando corregiste sugería <span class="font-mono">{{ $cardItem->suggested_expected_students }}</span> y <span class="font-mono">{{ $cardItem->suggested_groups }}</span>. Capturaste <span class="font-mono font-semibold">{{ $cardItem->expected_students }}</span> y <span class="font-mono font-semibold">{{ $cardItem->requested_groups }}</span>.
                         @elseif ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Captured)
-                            Capturaste <span class="font-mono font-semibold">{{ $cardItem->expected_students }}</span> esperados y <span class="font-mono font-semibold">{{ $cardItem->requested_groups }}</span> grupos; Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span>.
+                            Capturaste <span class="font-mono font-semibold">{{ $cardItem->expected_students }}</span> esperados y <span class="font-mono font-semibold">{{ $cardItem->requested_groups }}</span> grupos; Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> y @include('academic-load::proposal.suggested-groups', ['forecastRow' => $card]).
                         @elseif ($card->has(\App\Modules\AcademicLoad\Enums\ForecastReason::NoUptake))
-                            Tiene elegibles, pero nadie la ha tomado en los últimos {{ $projection->settings->historyTerms }} {{ $projection->termType() }}. Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span> {{ $card->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.
+                            Tiene elegibles, pero nadie la ha tomado en los últimos {{ $projection->settings->historyTerms }} {{ $projection->termType() }}. Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y @include('academic-load::proposal.suggested-groups', ['forecastRow' => $card, 'noun' => true]).
                         @elseif ($specialtyId !== null && $card->has(\App\Modules\AcademicLoad\Enums\ForecastReason::Specialty))
-                            {{ $specialtyNames[$specialtyId] ?? 'Especialidad' }}: los elegibles son quienes la eligieron. Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span> {{ $card->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.
+                            {{ $specialtyNames[$specialtyId] ?? 'Especialidad' }}: los elegibles son quienes la eligieron. Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y @include('academic-load::proposal.suggested-groups', ['forecastRow' => $card, 'noun' => true]).
                         @else
-                            Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $card->suggestedGroups() }}</span> {{ $card->suggestedGroups() === 1 ? 'grupo' : 'grupos' }} sin historia propia de la materia.
+                            Nexus sugiere <span class="font-mono font-semibold">{{ $card->suggestedExpected() }}</span> esperados y @include('academic-load::proposal.suggested-groups', ['forecastRow' => $card, 'noun' => true]) sin historia propia de la materia.
                         @endif
                     </p>
                     @include('academic-load::proposal.forecast-evidence', ['forecastRow' => $card, 'history' => $forecastHistory[$cardItem->id] ?? null])

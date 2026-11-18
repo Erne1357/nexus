@@ -6,10 +6,8 @@ use App\Modules\AcademicLoad\Enums\ForecastReason;
 use App\Modules\AcademicLoad\Enums\SuggestionState;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
-use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Demand\Models\DemandForecast;
-use App\Modules\Demand\Rules\SuggestedGroups;
 
 /**
  * Una fila de la propuesta (materia × campus) frente a la proyección vigente de Demand (tarea 5.6; ProposalForecastQuery):
@@ -71,17 +69,25 @@ final readonly class ProposalForecastRow
     }
 
     /**
-     * Los grupos que pediría la fila con «Usar sugerido» (SuggestedRowGroups): los sugeridos o, con paquetes, los de paquetes
-     * más los sueltos sugeridos, con el nuevo ingreso de su campus. Lo mismo que escribe UpdateProposalItem::useSuggested.
+     * Los grupos que sugiere Nexus para esta fila: sin paquetes, los sugeridos; con paquetes (tarea 5.6b), lo sugerido
+     * efectivo, los de paquetes más los sueltos sugeridos (SuggestedRowGroups, ProposalForecastQuery::stateFor). Es contra lo
+     * que se mide la diferencia grande de grupos y lo que escribe UpdateProposalItem::useSuggested.
      */
-    public function groupsIfSuggested(SuggestedGroups $sizes, int $newStudents): ?int
+    public function effectiveGroups(): ?int
     {
-        if ($this->suggestedGroups() === null || $this->suggestedExpected() === null) {
-            return null;
-        }
+        return $this->suggestion->effectiveGroups ?? $this->suggestedGroups();
+    }
 
-        return SuggestedRowGroups::for($this->suggestedGroups(), $this->suggestedExpected(), $this->item->package_groups, $this->forecast?->method ?? $this->item->forecast_method,
-            $newStudents, (bool) $this->subject->subject->needs_lab, $sizes);
+    /**
+     * Con paquetes, de qué se forma lo sugerido efectivo: los grupos de paquetes y los sueltos sugeridos; null sin paquetes.
+     *
+     * @return array{packages: int, loose: int}|null
+     */
+    public function packageSplit(): ?array
+    {
+        $effective = $this->suggestion->effectiveGroups;
+
+        return $effective === null ? null : ['packages' => $this->item->package_groups, 'loose' => max(0, $effective - $this->item->package_groups)];
     }
 
     /**
@@ -101,7 +107,7 @@ final readonly class ProposalForecastRow
     public function difference(): ?array
     {
         [$field, $captured, $suggested] = match (true) {
-            $this->suggestion->largeDifferenceGroups => ['groups', $this->item->requested_groups, $this->suggestedGroups()],
+            $this->suggestion->largeDifferenceGroups => ['groups', $this->item->requested_groups, $this->effectiveGroups()],
             $this->suggestion->largeDifferenceExpected => ['expected', $this->item->expected_students, $this->suggestedExpected()],
             default => [null, 0, null],
         };

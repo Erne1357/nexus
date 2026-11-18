@@ -19,7 +19,10 @@ use DateTimeInterface;
  *
  * En una fila corregida, la diferencia grande es DemandSettings::isLargeDifference del sugerido vigente contra lo
  * capturado, por separado en esperados y en grupos; solo resalta, no pide motivo ni bloquea el envío. Si la proyección
- * desapareció, el sugerido vigente es el guardado.
+ * desapareció, el sugerido vigente es el guardado. En grupos, si la fila tiene paquetes (tarea 5.6b), se compara contra lo
+ * sugerido efectivo de la fila (`$effectiveGroups`: los de paquetes más los sueltos sugeridos, SuggestedRowGroups, que
+ * calcula ProposalForecastQuery::stateFor), porque los grupos de la fila los incluyen; «Cambió» sigue mirando lo sugerido
+ * guardado contra la proyección cruda.
  */
 final readonly class ProposalSuggestionState
 {
@@ -29,6 +32,7 @@ final readonly class ProposalSuggestionState
         public ?int $newGroups = null,
         public bool $largeDifferenceExpected = false,
         public bool $largeDifferenceGroups = false,
+        public ?int $effectiveGroups = null,
     ) {}
 
     /**
@@ -38,6 +42,7 @@ final readonly class ProposalSuggestionState
      * @param  int|null  $suggestedGroups  `suggested_groups` de la fila
      * @param  int|null  $forecastExpected  esperados de la proyección vigente, o null si no hay
      * @param  int|null  $forecastGroups  grupos sugeridos de la proyección vigente, o null si no hay
+     * @param  int|null  $effectiveGroups  con paquetes, los grupos sugeridos efectivos de la fila (paquetes más sueltos); null sin paquetes
      */
     public static function of(
         int $expected,
@@ -48,6 +53,7 @@ final readonly class ProposalSuggestionState
         ?int $forecastExpected,
         ?int $forecastGroups,
         DemandSettings $settings,
+        ?int $effectiveGroups = null,
     ): self {
         $hasForecast = $forecastExpected !== null && $forecastGroups !== null;
         $currentExpected = $hasForecast ? $forecastExpected : $suggestedExpected;
@@ -58,16 +64,16 @@ final readonly class ProposalSuggestionState
         }
 
         if ($capturedAt === null) {
-            return new self(SuggestionState::Suggested);
+            return new self(SuggestionState::Suggested, effectiveGroups: $effectiveGroups);
         }
 
         $largeExpected = $settings->isLargeDifference($currentExpected, $expected);
-        $largeGroups = $settings->isLargeDifference($currentGroups, $groups);
+        $largeGroups = $settings->isLargeDifference($effectiveGroups ?? $currentGroups, $groups);
 
         if ($hasForecast && ($forecastExpected !== $suggestedExpected || $forecastGroups !== $suggestedGroups)) {
-            return new self(SuggestionState::Changed, $forecastExpected, $forecastGroups, $largeExpected, $largeGroups);
+            return new self(SuggestionState::Changed, $forecastExpected, $forecastGroups, $largeExpected, $largeGroups, $effectiveGroups);
         }
 
-        return new self(SuggestionState::Captured, null, null, $largeExpected, $largeGroups);
+        return new self(SuggestionState::Captured, null, null, $largeExpected, $largeGroups, $effectiveGroups);
     }
 }

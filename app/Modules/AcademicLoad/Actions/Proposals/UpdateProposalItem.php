@@ -108,8 +108,7 @@ final class UpdateProposalItem
                     $proposal = $locked->proposal;
                     $settings = DemandSettings::fromSettings();
                     $forecast = $this->forecasts->currentFor($proposal, $locked);
-                    $state = ProposalSuggestionState::of($locked->expected_students, $locked->requested_groups, $locked->suggested_expected_students,
-                        $locked->suggested_groups, $locked->captured_at, $forecast?->expected_students, $forecast?->suggested_groups, $settings);
+                    $state = $this->forecasts->stateFor($locked, $forecast, $settings);
 
                     if ($state->state === SuggestionState::Changed) {
                         throw ValidationException::withMessages(['item' => 'La proyección cambió después de corregirla: usa «Usar N» para tomar lo que sugiere ahora.']);
@@ -123,8 +122,7 @@ final class UpdateProposalItem
                         throw ValidationException::withMessages(['item' => 'Esta materia ya sigue lo que sugiere Nexus.']);
                     }
 
-                    $groups = SuggestedRowGroups::for($forecast->suggested_groups, $forecast->expected_students, $locked->package_groups, $forecast->method,
-                        $this->forecasts->intakes($proposal)[(string) $locked->campus_id] ?? 0, (bool) $locked->subject->needs_lab, $settings->groupSizes);
+                    $groups = $state->effectiveGroups ?? $forecast->suggested_groups;
 
                     if ($groups > ProposalItemRules::MAX_REQUESTED_GROUPS) {
                         throw ValidationException::withMessages(['item' => 'Con los grupos de paquetes pasaría de '.ProposalItemRules::MAX_REQUESTED_GROUPS.' grupos: cambia los paquetes.']);

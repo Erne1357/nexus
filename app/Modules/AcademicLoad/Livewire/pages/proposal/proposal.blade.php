@@ -22,6 +22,11 @@
     nada más cambia); el aviso de recálculo en un renglón si la proyección cambió en filas que el usuario corrigió, con
     «Revisar proyección»; y las pestañas «Propuesta» (la vista y los filtros de siempre) y «Revisar proyección (N)»
     (academic-load::proposal.review), con N lo que tiene por revisar.
+
+    Con los paquetes de primer semestre (tarea 5.6b): en la pestaña «Propuesta», arriba de la tabla o de la retícula, el
+    bloque «Paquetes de primer semestre» (academic-load::proposal.packages) y, a la derecha, el panel de un paquete
+    (academic-load::proposal.package-panel), que se abre con «Agregar paquete», «Armar paquete con las materias de 1.º» o
+    el botón de cada paquete y devuelve el foco al cerrarse.
 --}}
 <div class="relative space-y-4 overflow-x-clip"
     x-data="{
@@ -48,7 +53,7 @@
     }"
     x-on:proposal-focus.window="$nextTick(() => found($event.detail.id))"
     x-on:cell-saved.window="$nextTick(() => saved($event.detail))"
-    x-init="['showDrawer', 'showSubmit'].forEach((property) => $wire.$watch(property, (open) => { if (! open) { $nextTick(() => { if (opener?.isConnected) { opener.focus(); } }); } }))"
+    x-init="['showDrawer', 'showSubmit', 'showPackage'].forEach((property) => $wire.$watch(property, (open) => { if (! open) { $nextTick(() => { if (opener?.isConnected) { opener.focus(); } }); } }))"
     x-on:click.capture="opener = $event.target.closest('[data-opener]') ?? opener">
     @if ($overview === null)
         <div>
@@ -120,7 +125,7 @@
 
         @if ($scopeNote)
             <x-alert icon="o-lock-closed" class="alert-info alert-soft text-sm" data-testid="proposal-scope">
-                <span>Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados y los grupos de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</span>
+                <span>Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados, los grupos y los paquetes de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</span>
             </x-alert>
         @endif
 
@@ -213,7 +218,10 @@
                 <div class="min-[1700px]:grid min-[1700px]:grid-cols-[15rem_minmax(0,1fr)] min-[1700px]:items-start min-[1700px]:gap-5 max-[1699px]:space-y-4">
                     @include('academic-load::proposal.departments')
 
-                    <div class="min-w-0">
+                    <div class="min-w-0 space-y-4">
+                        @if ($packages?->shown())
+                            @include('academic-load::proposal.packages')
+                        @endif
                         @if ($view === 'tabla')
                             @include('academic-load::proposal.table')
                         @else
@@ -232,6 +240,12 @@
                 @endif
             </x-modal>
         @endif
+
+        <x-drawer wire:model.live="showPackage" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="package-drawer-title" data-testid="package-drawer">
+            @if ($showPackage)
+                @include('academic-load::proposal.package-panel')
+            @endif
+        </x-drawer>
 
         <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
             @if ($selected !== null)
