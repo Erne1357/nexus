@@ -388,7 +388,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
         'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Precisión de la proyección'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
-        'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Horarios publicados'],
+        'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados'],
     ])
         ->and(navigationGroupsFor($admin, NavigationArea::Administracion))->toBe([
             'institucion' => ['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos'],
@@ -619,7 +619,7 @@ describe('menú', function () {
             'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Precisión de la proyección',
             'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
             'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
-            'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Horarios publicados',
+            'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados',
         ])
             ->and(array_map(fn (Element $heading): string => $heading->getAttribute('data-menu-group'), iterator_to_array($page->querySelectorAll('[data-menu-area="administracion"] [data-menu-group]'))))
             ->toBe(['institucion', 'catalogos', 'datos', 'configuracion'])
