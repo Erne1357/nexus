@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Queries;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Rules\SnapshotDiff;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -24,6 +25,12 @@ use Illuminate\Support\Facades\Cache;
  * raíz, MS13) y se guarda solo lo que se puede mostrar (PublishedSchedule::withoutPrivate: sin RFC, justificación ni
  * quién publicó), en arreglos y no objetos: la caché no deserializa clases (`cache.serializable_classes`), y así un
  * cambio de forma de PublishedSchedule no deja entradas viejas. Sin estado propio, para Octane.
+ *
+ * Con los payloads va lo que cambió la última versión de cada carga contra la anterior (tarea 8.5): el diff guardado al
+ * publicarla (`load_snapshots.diff`, SnapshotDiff), leído en la misma consulta que los payloads, convertido a las marcas
+ * públicas (PublishedChange) y, si canceló grupos, esos grupos de la versión anterior, en una consulta más. Una versión
+ * publicada antes de la tarea 8.4 no guardó su diff: se calcula con las dos fotos, como el tablero de versiones. Todo
+ * entra a la misma llave de caché, así que una consulta servida de la caché no cuesta nada más.
  */
 final class PublishedScheduleQuery
 {
@@ -47,14 +54,67 @@ final class PublishedScheduleQuery
             return PublishedSchedule::fromPayloads([]);
         }
 
-        $key = 'published-schedule:v2:'.$term->getKey().':'.$modality->getKey().':'.$this->hashOf($ids);
+        $key = 'published-schedule:v3:'.$term->getKey().':'.$modality->getKey().':'.$this->hashOf($ids);
+        $published = Cache::remember($key, now()->addDays(7), fn (): array => $this->published($ids));
 
-        return PublishedSchedule::fromPayloads(Cache::remember($key, now()->addDays(7), fn (): array => LoadSnapshot::query()
-            ->whereIn('id', $ids)
-            ->orderBy('id')
-            ->pluck('payload')
-            ->map(fn (array $payload): array => PublishedSchedule::withoutPrivate(SnapshotPayload::normalize($payload)))
-            ->all()));
+        return PublishedSchedule::fromPayloads($published['payloads'], $published['changes']);
+    }
+
+    /**
+     * Lo que se guarda en caché de esas versiones: sus payloads normalizados y sin lo privado, y por carga, lo que cambió
+     * contra su versión anterior (las marcas de PublishedChange y los grupos cancelados). Dos consultas como mucho.
+     *
+     * @param  list<string>  $ids
+     * @return array{payloads: list<array<string, mixed>>, changes: array<string, array{groups: array<string, array{kinds: list<string>, line: string, detail: string|null}>, cancelled: list<array<string, mixed>>}>}
+     */
+    private function published(array $ids): array
+    {
+        $snapshots = LoadSnapshot::query()->whereIn('id', $ids)->orderBy('id')->get(['id', 'academic_load_id', 'version', 'payload', 'diff']);
+        $previous = $this->previousPayloads($snapshots->filter(fn (LoadSnapshot $snapshot): bool => $snapshot->version > 1 && ($snapshot->diff === null || $snapshot->diff['groups']['cancelled'] !== []))->all());
+        $payloads = [];
+        $changes = [];
+
+        foreach ($snapshots as $snapshot) {
+            $payload = SnapshotPayload::normalize($snapshot->payload);
+            $before = $previous[$snapshot->academic_load_id] ?? null;
+            $diff = $snapshot->diff ?? ($snapshot->version > 1 && $before !== null ? SnapshotDiff::between($before, $payload) : null);
+            $payloads[] = PublishedSchedule::withoutPrivate($payload);
+
+            if ($diff === null) {
+                continue;
+            }
+
+            $cancelled = array_column($diff['groups']['cancelled'], 'id');
+            $changes[$payload['load_id']] = [
+                'groups' => array_map(fn (PublishedChange $change): array => $change->toArray(), PublishedChange::ofDiff($diff)),
+                'cancelled' => array_values(array_map(PublishedSchedule::withoutPrivateGroup(...), array_filter($before['groups'] ?? [], fn (array $group): bool => in_array($group['id'], $cancelled, true)))),
+            ];
+        }
+
+        return ['payloads' => $payloads, 'changes' => $changes];
+    }
+
+    /**
+     * La versión anterior de cada una de esas versiones, normalizada, por id de carga, en una sola consulta.
+     *
+     * @param  array<int, LoadSnapshot>  $snapshots
+     * @return array<string, array<string, mixed>>
+     */
+    private function previousPayloads(array $snapshots): array
+    {
+        if ($snapshots === []) {
+            return [];
+        }
+
+        return LoadSnapshot::query()
+            ->where(function (Builder $query) use ($snapshots): void {
+                foreach ($snapshots as $snapshot) {
+                    $query->orWhere(fn (Builder $previous): Builder => $previous->where('academic_load_id', $snapshot->academic_load_id)->where('version', $snapshot->version - 1));
+                }
+            })
+            ->get(['academic_load_id', 'payload'])
+            ->mapWithKeys(fn (LoadSnapshot $snapshot): array => [$snapshot->academic_load_id => SnapshotPayload::normalize($snapshot->payload)])
+            ->all();
     }
 
     /**

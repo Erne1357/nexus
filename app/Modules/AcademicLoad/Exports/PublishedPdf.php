@@ -28,6 +28,12 @@ use Dompdf\Options;
  */
 abstract class PublishedPdf implements PublishedExport
 {
+    /**
+     * La forma del archivo, en su llave: sube cuando cambia lo que el PDF dice, para no servir uno armado antes con las
+     * mismas versiones. 2: la fecha arriba y las marcas de lo que cambió (tarea 8.5).
+     */
+    public const int FORMAT = 2;
+
     /** Los tokens `chain-N` del tema claro de DESIGN.md: el PDF no carga `app.css`. */
     public const array CHAINS = ['#6d4fc2', '#0f7c8c', '#b0457f', '#c2661a', '#3b56b8', '#6b7a1f', '#1f86c7', '#8a5a3c', '#4d6b7a', '#9c4fd1', '#2f8f5b', '#c24f9b'];
 
@@ -60,7 +66,7 @@ abstract class PublishedPdf implements PublishedExport
 
     public function key(): string
     {
-        return $this->kind().'-'.hash('xxh128', implode('|', [$this->termId, $this->modalityId, $this->campusCode ?? '*', ...$this->subject(), ...$this->snapshotIds]));
+        return $this->kind().'-'.hash('xxh128', implode('|', [self::FORMAT, $this->termId, $this->modalityId, $this->campusCode ?? '*', ...$this->subject(), ...$this->snapshotIds]));
     }
 
     /**
@@ -119,8 +125,8 @@ abstract class PublishedPdf implements PublishedExport
     }
 
     /**
-     * «12 de diciembre de 2026» en la zona de la aplicación, como las páginas (PublishedWeek::updatedOn()); vacío sin
-     * grupos.
+     * «12 de diciembre de 2026 a las 10:30» en la zona de la aplicación, como las páginas (PublishedWeek::updatedOn());
+     * vacío sin grupos.
      */
     protected static function updated(?CarbonImmutable $at): string
     {
@@ -151,6 +157,17 @@ abstract class PublishedPdf implements PublishedExport
             'place' => $session->kind === 'virtual' ? 'Virtual' : ($session->room['code'] ?? 'Por asignar'),
             'kind' => $session->kind === 'practica' ? $session->kindLabel : null,
         ];
+    }
+
+    /**
+     * La marca de lo que le cambió al grupo en la última publicación de su carga, para la vista: su texto y si es nuevo
+     * (el cancelado lo dice el grupo); null si no cambió.
+     *
+     * @return array{label: string, added: bool}|null
+     */
+    protected static function changeOf(PublishedGroup $group): ?array
+    {
+        return $group->change === null ? null : ['label' => $group->change->label(), 'added' => $group->change->isAdded()];
     }
 
     protected static function teacherOf(PublishedGroup $group): string
