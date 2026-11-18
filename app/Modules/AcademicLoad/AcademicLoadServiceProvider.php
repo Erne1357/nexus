@@ -242,10 +242,10 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         };
 
         return [
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => $evaluations($demo)->exists() === false && $evaluable($demo)
+            new DemoCheck([DemoCheckpoint::Proposal], 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => $evaluations($demo)->exists() === false && $evaluable($demo)
                 ? 'No hay evaluaciones de la proyección listas.'
                 : true),
-            new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Hay una evaluación fallida para ver el estado de error', fn (DemoContext $demo): true|string => $evaluations($demo, ForecastEvaluationStatus::Failed)->exists() === false && $evaluable($demo)
+            new DemoCheck([DemoCheckpoint::Proposal], 'Hay una evaluación fallida para ver el estado de error', fn (DemoContext $demo): true|string => $evaluations($demo, ForecastEvaluationStatus::Failed)->exists() === false && $evaluable($demo)
                 ? 'No hay una evaluación fallida.'
                 : true),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
