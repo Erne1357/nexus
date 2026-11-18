@@ -1,17 +1,15 @@
-"""Las dos formas medidas de llegar a una primera solución sin duras en la carga de un departamento (docs/arquitectura/
-solver.md, «Tamaño de la instancia real»).
+"""La búsqueda de una primera solución sin duras en la carga de un departamento: arranque tibio y vecindarios (LNS;
+docs/arquitectura/solver.md, «Tamaño de la instancia real»).
 
-Las dos parten de la misma primera vuelta: salones en dos fases y cada grupo hasta el primer nivel del patrón que cabe,
-con la asignación relajada (a lo más una opción por grupo) y el objetivo de programar a la mayor cantidad de grupos.
+1. **Primera vuelta**: salones en dos fases (`rooms.py`) y cada grupo con su primer nivel del patrón que cabe y los de
+   una hora por día (`DomainOptions`), con la asignación relajada (a lo más una opción por grupo) y el objetivo de
+   programar la mayor cantidad. La pista (`add_hint`) es el horario actual de cada grupo cuando es una opción del
+   patrón (`current_sessions`, PS-07).
+2. **Vecindarios**: para cada grupo que no quedó, solo él y los que comparten docente o cohorte con él se mueven
+   (`_neighbourhood`, que crece en cada intento); los demás programados entran como fijos con sus sesiones. El modelo de
+   cada vuelta es chico y la solución nunca empeora: la pista es la de antes y solo se acepta si programa más grupos.
 
-- `by_tiers`: los grupos que no quedaron ganan un nivel del patrón (PS-04) y se resuelve todo otra vez, con la
-  solución anterior como pista (`add_hint`), hasta que quedan todos. Si ninguno de ellos puede ganar más niveles, los
-  ganan los que comparten docente o cohorte con ellos; si tampoco, se detiene.
-- `lns`: búsqueda por vecindarios. Para cada grupo que no quedó, solo él y los que comparten docente o cohorte con él
-  se mueven, con todos sus niveles; los demás grupos programados entran como fijos con sus sesiones. El modelo de cada
-  vuelta es chico y la solución nunca empeora: la pista es la de antes y solo se acepta si programa más grupos.
-
-Ninguna tiene objetivo blando todavía (7.6); 7.7 decide cuál usa el motor y les agrega el avance y la relajación.
+Sin objetivo blando todavía (7.6); 7.7 la registra como motor con el avance y la relajación.
 """
 
 import time
@@ -63,35 +61,6 @@ class Search:
     @property
     def all_sessions(self) -> list[ProposedSession]:
         return [session for sessions in self.sessions.values() for session in sessions]
-
-
-def by_tiers(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, round_seconds: float = 15) -> Search:
-    started = time.perf_counter()
-    deadline = started + time_limit
-    search = Search()
-    extra: dict[str, int] = {}
-
-    while time.perf_counter() < deadline:
-        round_deadline = min(deadline, time.perf_counter() + round_seconds)
-        options = DomainOptions(extra_tiers=dict(extra))
-        variables, solved = _place_most(data, options, search, round_deadline, workers, seed)
-        if solved is None:
-            break
-        _keep(search, solved, variables, data, replace=True)
-        if not search.unplaced:
-            search.first_feasible_seconds = time.perf_counter() - started
-            break
-        grow = [group_id for group_id in search.unplaced if variables.groups[group_id].truncated]
-        if not grow:
-            grow = [
-                group_id for group_id in _with_neighbours(data, search.unplaced) if variables.groups[group_id].truncated
-            ]
-        if not grow:
-            break
-        for group_id in grow:
-            extra[group_id] = extra.get(group_id, 0) + 1
-
-    return search
 
 
 def lns(
@@ -273,14 +242,6 @@ def _neighbours(data: ModelData, group_id: str) -> list[str]:
         if other.id != group_id
         and ((group.teacher_id is not None and other.teacher_id == group.teacher_id) or cohorts & set(other.cohorts))
     ]
-
-
-def _with_neighbours(data: ModelData, group_ids: list[str]) -> list[str]:
-    found = dict.fromkeys(group_ids)
-    for group_id in group_ids:
-        found.update(dict.fromkeys(_neighbours(data, group_id)))
-
-    return list(found)
 
 
 def _sub_input(source: SolverInput, search: Search, movable: set[str]) -> SolverInput:
