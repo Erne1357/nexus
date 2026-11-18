@@ -11,6 +11,7 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 | `app/config.py` | Variables de entorno (`Settings`) |
 | `app/contract/` | Modelos pydantic de la entrada y la salida v1, espejo de `app/Modules/Solver/Contract/` |
 | `app/engine/` | Interfaz de motor (`Engine`, `RunContext`) y el motor de prueba |
+| `app/model/` | El modelo CP-SAT (7.4 en adelante): rejilla y patrón de sesiones, datos indexados de la entrada y variables con su dominio pre-filtrado. Todavía no es un motor del servicio; ver `docs/arquitectura/solver.md`, «Modelo CP-SAT: variables y restricciones duras» |
 | `app/runs.py` | Corridas en memoria, hilos de trabajo, límite de simultáneas, cancelación |
 | `app/api/` | Aplicación FastAPI (`factory.py`), autenticación y esquemas de respuesta |
 | `tests/` | pytest: API, contrato, fixtures compartidos, OR-Tools |
