@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Console\EvaluateForecastCommand;
 use App\Modules\AcademicLoad\Console\ImportSiiGroups;
 use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
@@ -42,6 +43,7 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Policies\ForecastEvaluationPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
@@ -59,9 +61,11 @@ use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Demand\Events\DemandForecastsComputed;
+use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Students\Models\KardexRecord;
@@ -204,6 +208,11 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             // Después del kárdex de Students (que lleva a «catálogos»): el historial se arma con sus alumnos por materia y campus.
             new DemoStep(DemoCheckpoint::Catalogs, 'Historial de grupos por materia, coherente con el kárdex', fn (DemoContext $demo) => $demo->runSeeder(HistoricalGroupsDemoSeeder::class, ['seed' => $demo->seed])),
+            // Después de abrir el periodo (Core), que calcula la proyección de Demand; el kárdex ya está sembrado (tarea 5.10a).
+            new DemoStep(DemoCheckpoint::Proposal, 'Evaluaciones de la precisión de la proyección', fn (DemoContext $demo) => $demo->runSeederPerModality(ForecastEvaluationDemoSeeder::class, [
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+            ])),
             new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
@@ -226,8 +235,31 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         $proposals = fn (DemoContext $demo): Builder => CareerProposal::query()->where('term_id', $demo->term()->getKey())
             ->whereIn('modality_id', $modalityIds($demo))->whereIn('career_id', $offeredCareerIds($demo));
 
+        $evaluations = fn (DemoContext $demo, ForecastEvaluationStatus $status = ForecastEvaluationStatus::Done): Builder => ForecastEvaluation::query()
+            ->where('status', $status)->whereIn('modality_id', $modalityIds($demo))
+            ->whereIn('term_id', Term::query()->where('code', '<', $demo->termCode)->select('id'))
+            ->where(fn (Builder $scope) => $scope->whereNull('campus_id')->orWhereIn('campus_id', $campusIds($demo)));
+        // Sin kárdex con historia (un periodo ordinario anterior con uno previo del mismo tipo) no hay qué evaluar.
+        $evaluable = function (DemoContext $demo) use ($modalityIds): bool {
+            foreach (Modality::query()->whereIn('id', $modalityIds($demo))->get() as $modality) {
+                $codes = collect(app(TermKardexQuery::class)->termCodes($modality))->filter(fn (string $code): bool => $code < $demo->termCode && TermCode::isRegular($code));
+
+                if ($codes->contains(fn (string $code): bool => $codes->contains(fn (string $other): bool => $other < $code && substr($other, -1) === substr($code, -1)))) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
         return [
             new DemoCheck([DemoCheckpoint::Catalogs], 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() || ! KardexRecord::query()->exists() ? true : 'Hay kárdex, pero no hay historial de grupos.'),
+            new DemoCheck([DemoCheckpoint::Proposal], 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => $evaluations($demo)->exists() === false && $evaluable($demo)
+                ? 'No hay evaluaciones de la proyección listas.'
+                : true),
+            new DemoCheck([DemoCheckpoint::Proposal], 'Hay una evaluación fallida para ver el estado de error', fn (DemoContext $demo): true|string => $evaluations($demo, ForecastEvaluationStatus::Failed)->exists() === false && $evaluable($demo)
+                ? 'No hay una evaluación fallida.'
+                : true),
             new DemoCheck([DemoCheckpoint::Reanalysis], 'Toda carga que salió de borrador está publicada con su versión 1', function (DemoContext $demo) use ($modalityIds): true|string {
                 $behind = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))
                     ->where('status', '!=', LoadStatus::Draft)
