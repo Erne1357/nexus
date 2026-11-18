@@ -27,7 +27,7 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 | `SOLVER_MAX_MODEL_VARIABLES` | `1500000` | Variables que puede tener el modelo CP-SAT de una corrida. Si las pasa, la corrida falla al armarlo con un mensaje claro, antes de agotar la memoria del servicio (las corridas comparten un proceso) |
 | `SOLVER_MAX_CONCURRENT_RUNS` | `2` | Corridas en cola o en curso antes de responder `429` |
 | `SOLVER_MAX_STORED_RUNS` | `50` | Corridas terminadas que se conservan en memoria |
-| `SOLVER_ENGINE` | `trivial` | Motor que atiende las corridas |
+| `SOLVER_ENGINE` | `trivial` | Motor que atiende las corridas: `trivial` (el de prueba) o `cpsat` (el modelo CP-SAT, 7.7) |
 
 En compose, `SOLVER_TOKEN` sale de `.env` (plantilla en `.env.example`; en producción es obligatorio). `queue` lee `SOLVER_URL` (`http://solver:8000`) y `SOLVER_TOKEN` de ese mismo `.env`.
 

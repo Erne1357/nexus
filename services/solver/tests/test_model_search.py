@@ -257,3 +257,23 @@ def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(
     output = parse_output(json.loads(target.read_text()))
     assert output.unscheduled == []
     assert f"| {output.soft_score.total:,} |" in rows[-1]
+
+
+def test_run_solver_avisa_cada_solucion_intermedia():
+    """7.7: con `on_solution`, `run_solver` llama al aviso con cada solución que encuentra CP-SAT (el avance de la
+    corrida), también con la revisión de la cancelación."""
+    from app.model.phases import SearchLimits, run_solver
+
+    model = cp_model.CpModel()
+    items = [model.new_bool_var("") for _ in range(8)]
+    model.add(sum(items) <= 5)
+    model.maximize(sum((index + 1) * item for index, item in enumerate(items)))
+    seen: list[float] = []
+
+    solver = cp_model.CpSolver()
+    limits = SearchLimits(workers=1, check_cancelled=lambda: None)
+    status = run_solver(solver, model, limits, on_solution=lambda callback: seen.append(callback.objective_value))
+
+    assert status == cp_model.OPTIMAL
+    assert seen
+    assert seen[-1] == solver.objective_value == 8 + 7 + 6 + 5 + 4

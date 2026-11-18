@@ -79,13 +79,17 @@ def lns(
     seed: int = 0,
     step_seconds: float = 3,
     first_share: float = 0.25,
+    report: Callable[[int], None] | None = None,
 ) -> Search:
     """La primera vuelta tiene a lo más `first_share` del tiempo (con pocos hilos no alcanza a probar que es lo mejor
     de su dominio y gastaría todo); el resto es para los vecindarios, de `step_seconds` cada uno.
 
     `limits` trae los hilos, el tope de variables (la primera vuelta lanza `ModelTooLarge` si lo pasa; un vecindario
     que lo pasa se descarta) y la cancelación, que se revisa al armar, mientras CP-SAT resuelve y entre vecindarios.
-    Los plazos son de reloj: con la misma semilla, una máquina más lenta puede llegar a otra solución."""
+    Los plazos son de reloj: con la misma semilla, una máquina más lenta puede llegar a otra solución.
+
+    `report(programados)` se llama con cada solución intermedia de la primera vuelta y después de cada vecindario
+    (7.7)."""
     limits = limits or SearchLimits()
     started = time.perf_counter()
     deadline = started + time_limit
@@ -95,7 +99,7 @@ def lns(
     # La primera vuelta lleva solo el primer nivel que cabe de cada grupo, así que lo que programa queda en su patrón
     # (PS-10); los otros días y los días de 2 horas llegan con los vecindarios, a los que no quedaron.
     first_round = DomainOptions(one_hour_tiers=False)
-    variables, solved = _place_most(data, first_round, search, min(deadline, first_deadline), limits, seed)
+    variables, solved = _place_most(data, first_round, search, min(deadline, first_deadline), limits, seed, report)
     if solved is None or not _keep(search, solved, variables, data, replace=True):
         search.sessions, search.chosen = {}, {}
         search.unplaced = [group.id for group in data.movable]
@@ -128,6 +132,8 @@ def lns(
             pending.extend((group, 0) for group in movable if group != target and group not in search.sessions)
         elif attempt < MAX_ATTEMPTS:
             pending.append((target, attempt + 1))
+        if report is not None:
+            report(len(search.sessions))
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
     if not search.unplaced:
         search.first_feasible_seconds = time.perf_counter() - started
@@ -201,7 +207,13 @@ def _current_options(data: ModelData) -> dict[str, OptionKey]:
 
 
 def _place_most(
-    data: ModelData, options: DomainOptions, search: Search, deadline: float, limits: SearchLimits, seed: int
+    data: ModelData,
+    options: DomainOptions,
+    search: Search,
+    deadline: float,
+    limits: SearchLimits,
+    seed: int,
+    report: Callable[[int], None] | None = None,
 ) -> tuple[Variables, cp_model.CpSolver | None]:
     """Arma y resuelve con la asignación relajada, maximizando los grupos programados y, entre soluciones con los
     mismos, el menor nivel del patrón (PS-10), con la pista de lo que lleva la búsqueda. Devuelve el solver si encontró
@@ -234,7 +246,9 @@ def _place_most(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.1, deadline - solve_at)
     solver.parameters.random_seed = seed
-    status = run_solver(solver, model, limits)
+    placed = cp_model.LinearExpr.sum(literals)
+    on_solution = None if report is None else lambda callback: report(int(callback.value(placed)))
+    status = run_solver(solver, model, limits, on_solution)
     feasible = status in FEASIBLE
     search.steps.append(
         Step(

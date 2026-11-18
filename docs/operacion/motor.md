@@ -10,6 +10,7 @@ Servicio `solver` (Python 3.12, FastAPI y OR-Tools; ADR-0027) que resuelve el co
 | `SOLVER_URL` | `.env` de `app`/`queue` | `http://solver:8000` dentro de la red `backend`. |
 | `SOLVER_DEFAULT_TIME_LIMIT` | servicio | Segundos por corrida si la entrada no los trae. |
 | `SOLVER_THREADS` | servicio | Hilos de CP-SAT por corrida. |
+| `SOLVER_ENGINE` | servicio | Motor que atiende las corridas: `trivial` (el de prueba, por omisión) o `cpsat` (el modelo CP-SAT, 7.7; `docs/arquitectura/solver.md`, «Resolución»). |
 | `SOLVER_MAX_CONCURRENT_RUNS` | servicio | Corridas en cola o en curso antes de responder 429 (2 por omisión). |
 | `SOLVER_MAX_STORED_RUNS` | servicio | Corridas terminadas que se conservan en memoria para consultarlas (50). |
 

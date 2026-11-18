@@ -363,7 +363,7 @@ Supuestos y pendientes (para 7.6 a 7.8):
 
 - Para que quepa un grupo, un vecino puede pasar del patrón a otros días o a un día de 2 horas, como en la construcción de la heurística, donde los primeros toman el patrón y los siguientes lo que queda (PS-04, supuesto por confirmar). Preferir el patrón y la hora actual es del objetivo (7.6, PS-10).
 - Con más de un hilo, CP-SAT no es reproducible: el tiempo cambia entre corridas.
-- **7.7** registra `lns` como motor, con avance, cancelación (el armado ya revisa `check_cancelled` y el plazo) y el reporte de lo que no quedó en `unscheduled` con `main_reason()`; con la asignación exacta, un grupo sin opciones volvería infactible todo el modelo (nota del Riel A).
+- **7.7** registra la búsqueda como motor del servicio, con avance, cancelación y lo que no quedó en `unscheduled` con sus reglas: ver «Resolución».
 - Una pista mejor sería la salida de la heurística, con un campo opcional como `hint_sessions` que no cambie la versión del contrato. Va en otra tarea, porque toca el contrato.
 - Partir por campus (7.8) achica todavía más cada vuelta.
 
@@ -417,6 +417,50 @@ Supuestos y pendientes:
 - Para el límite de 60 s haría falta una pista mejor que el horario actual (la salida de la heurística, con un campo opcional en el contrato; otra tarea) o programar a todos más rápido.
 - Los salones de un vecindario los reparte primero la fase B sin ver edificios; la fase B con objetivo los ajusta antes de compararlo, pero SC-06 queda en 1 170 a 1 230, más del doble que la heurística (546).
 
+## Resolución
+
+Tarea 7.7. `services/solver/app/model/solve.py` resuelve una entrada de punta a punta y `app/engine/cpsat.py` lo registra como motor del servicio: clave `cpsat`, versión `1.0.0`. Se elige con `SOLVER_ENGINE=cpsat`; el predeterminado sigue siendo `trivial` hasta la 7.10 (acuerdo con el Riel C).
+
+1. **Programar** (`search.lns`, sin objetivo blando): la primera vuelta con hasta 15 s o la cuarta parte del plazo, y después los vecindarios de los que no quedaron. Tiene el plazo menos la reserva final.
+2. **Mejorar** (`search.improve`, con el objetivo de la 7.6) hasta el plazo menos la reserva final.
+3. **Reserva final** (la décima parte del plazo, hasta 10 s):
+   - Cada grupo que no quedó se intenta solo, con todos sus niveles y lo demás fijo; si cabe, se programa en su mejor opción.
+   - Si no cabe, va a `unscheduled` con sus motivos, del que más opciones le quitó al que menos (el primero es el de `main_reason()`). Por ejemplo, «HC-09: el docente no está disponible en 139 de sus 140 opciones.» y «HC-01: el docente ya tiene clase en 1 de sus 140 opciones, con 1 grupo programado.».
+   - Después, la fase B con objetivo ajusta los salones.
+4. **La salida**:
+   - el puntaje de `score.py`, el de PHP;
+   - las duras que encuentre `verify.py`, más las de la entrada (HC-08, PS-08);
+   - `metrics`: las variables y restricciones del modelo más grande, `iterations` (vecindarios de `lns` y de la mejora) e `intermediate_solutions` (la primera solución completa más los vecindarios aceptados);
+   - un `log` con lo programado, lo que quedó fuera de su patrón, la mejora y lo que no cupo.
+
+**Límites de la corrida.** El plazo es el `time_limit_seconds` de la entrada. Los hilos, el tope de variables y la cancelación vienen de `SearchLimits.of(RunContext)`: `SOLVER_THREADS` u `options.threads`, con 0 los núcleos del contenedor. La semilla es `options.seed` (0 si no la trae).
+
+**Cancelación.** Se revisa al armar cada modelo (`BuildBudget`), cada 0.2 s mientras CP-SAT resuelve (`stop_search`) y entre vecindarios. La excepción sale del motor y la corrida queda `cancelled`.
+
+**Avance.** `context.report(avance, mejor puntaje)` nunca baja:
+- de 0 a 40 al programar: los grupos programados entre los movibles, con cada solución intermedia de la primera vuelta (callback de CP-SAT, `run_solver(on_solution=…)`) y después de cada vecindario, sin puntaje hasta que todos estén programados;
+- de 40 a 95 al mejorar: el plazo transcurrido, con el mejor puntaje;
+- 99 al terminar los salones; la corrida pone el 100 con la salida.
+
+**Estado y óptimo.** `feasible` si todo quedó sin duras, `partial` si algo quedó fuera o hay duras (también las de la entrada), `infeasible` si ningún grupo cupo. Nunca `optimal`: la búsqueda por vecindarios no da una cota, así que no prueba que la solución sea la mejor, y el `log` lo dice. Los vecindarios sí prueban su óptimo local, y la mejora para cuando todos lo prueban sin mejorar.
+
+**Relajación.** Lo que se relaja es la asignación: «a lo más una opción» por grupo en la búsqueda, así que un grupo que no cabe no vuelve infactible la corrida y queda en `unscheduled`. El motor nunca relaja una regla dura en su salida, así que `relaxed_rules` va vacía, como en la heurística.
+
+**Medición** (con el motor, 2 hilos, 2 CPU y 2 GB):
+- en `tiny`, `small` y `medium`, con el plazo de su entrada, `feasible` en menos de medio segundo, con 36, 42 y 49;
+- en `infeasible`, `partial` en 0.1 s, con g001 y g002 en `unscheduled` (HC-09 y HC-01) y los grupos de t002 programados;
+- en `department-multicampus`, los números de «Modelo CP-SAT: objetivo»: de 23 479 a 23 649 con 300 s y de 31 023 a 32 077 con 60 s, sin duras, en el plazo.
+
+**Pruebas** (`services/solver/tests/test_engine_cpsat.py`):
+- el ciclo completo por la API con `SOLVER_ENGINE=cpsat` sobre `tiny`;
+- los fixtures sin duras;
+- `infeasible` con sus grupos y reglas;
+- un grupo sin opciones (HC-05) que no tumba la corrida;
+- los motivos de un caso a mano;
+- el avance;
+- el plazo con reloj real en una carga generada de 150 grupos con 4 s;
+- la cancelación desde el aviso de avance y por la API, que libera el lugar.
+
 ## Descomposición del problema
 
 La unidad de corrida es la carga: un departamento en una modalidad, con sus grupos de todos sus campus (decisión del usuario, 17 de noviembre de 2026). Lo que no es de la carga entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, como `busy` o como grupos con `movable = false`, y las sesiones ya aceptadas, como `fixed_sessions`.
@@ -432,7 +476,7 @@ Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte que
 - Toda corrida tiene `time_limit_seconds`; por defecto 60 por carrera y 300 por departamento (parámetros en `settings`).
 - El motor devuelve siempre la mejor solución encontrada, con `status` honesto: `feasible` si no violó nada pero no probó óptimo, `partial` si dejó grupos sin colocar.
 - Las soluciones intermedias se reportan para progreso; la pantalla muestra el mejor puntaje hasta el momento y permite cancelar y quedarse con lo que hay.
-- Una instancia `infeasible` no se devuelve vacía: el motor relaja reglas en un orden fijo (SC primero, después HC-09 preferencias convertidas, nunca HC-01, HC-02 ni HC-05) y reporta en `relaxed_rules` qué relajó y qué grupos lo necesitaron, para que la persona decida.
+- Una instancia `infeasible` no se devuelve vacía: los motores programan lo que cabe y reportan los demás en `unscheduled` con las reglas que se lo impiden (la heurística, del candidato que más descartó; CP-SAT, de las opciones que le quitó cada regla). Ninguno relaja una regla dura en su salida (`relaxed_rules` vacía; ver «Resolución»).
 
 ## Límites del contrato v1
 

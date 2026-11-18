@@ -69,12 +69,30 @@ class SearchLimits:
             self.check_cancelled()
 
 
-def run_solver(solver: cp_model.CpSolver, model: cp_model.CpModel, limits: SearchLimits) -> Any:
+class _OnSolution(cp_model.CpSolverSolutionCallback):
+    """Llama a `handler` con cada solución intermedia de CP-SAT (lo usa el avance de la corrida, 7.7)."""
+
+    def __init__(self, handler: Callable[[cp_model.CpSolverSolutionCallback], None]) -> None:
+        super().__init__()
+        self._handler = handler
+
+    def on_solution_callback(self) -> None:
+        self._handler(self)
+
+
+def run_solver(
+    solver: cp_model.CpSolver,
+    model: cp_model.CpModel,
+    limits: SearchLimits,
+    on_solution: Callable[[cp_model.CpSolverSolutionCallback], None] | None = None,
+) -> Any:
     """`solver.solve(model)` con los hilos de los límites y revisando la cancelación cada `CANCEL_POLL_SECONDS`: si
-    la cancelan, detiene la búsqueda (`stop_search`) y vuelve a lanzar la excepción de la cancelación."""
+    la cancelan, detiene la búsqueda (`stop_search`) y vuelve a lanzar la excepción de la cancelación. Con
+    `on_solution`, lo llama en cada solución intermedia (no debe lanzar excepciones: corre en un hilo de CP-SAT)."""
     solver.parameters.num_workers = limits.workers
+    callback = _OnSolution(on_solution) if on_solution is not None else None
     if limits.check_cancelled is None:
-        return solver.solve(model)
+        return solver.solve(model, callback)
 
     done = threading.Event()
     raised: list[BaseException] = []
@@ -91,7 +109,7 @@ def run_solver(solver: cp_model.CpSolver, model: cp_model.CpModel, limits: Searc
     watcher = threading.Thread(target=watch, daemon=True)
     watcher.start()
     try:
-        status = solver.solve(model)
+        status = solver.solve(model, callback)
     finally:
         done.set()
         watcher.join()
