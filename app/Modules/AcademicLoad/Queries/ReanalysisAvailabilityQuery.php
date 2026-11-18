@@ -52,29 +52,41 @@ final class ReanalysisAvailabilityQuery
      */
     public function reasons(AcademicLoad $load): array
     {
+        return array_values($this->blockers($load));
+    }
+
+    /**
+     * Lo mismo que reasons(), por condición, para que la pantalla del re-análisis marque cada una (RA-02): `load` (la
+     * carga no está publicada o no tiene fecha de publicación; entonces no se revisa lo demás), `kardex` (sin lote de
+     * kárdex después de la publicación; tampoco se revisa lo demás), `grades` y `forecast`. Solo las que faltan.
+     *
+     * @return array<'load'|'kardex'|'grades'|'forecast', string>
+     */
+    public function blockers(AcademicLoad $load): array
+    {
         return $this->evaluate($load, fn (): ?string => $this->oldestForecast($load));
     }
 
     /**
      * @param  Closure(): ?string  $oldestForecast  el `computed_at` más viejo de la proyección del periodo y la modalidad
-     * @return list<string>
+     * @return array<'load'|'kardex'|'grades'|'forecast', string>
      */
     private function evaluate(AcademicLoad $load, Closure $oldestForecast): array
     {
         $load->loadMissing(['term', 'modality']);
 
         if ($load->status !== LoadStatus::Published) {
-            return ["La carga está en {$load->status->label()}: solo una carga publicada pasa a re-análisis."];
+            return ['load' => "La carga está en {$load->status->label()}: solo una carga publicada pasa a re-análisis."];
         }
 
         if ($load->published_at === null) {
-            return ['La carga no tiene fecha de publicación: no se puede saber si llegaron calificaciones nuevas.'];
+            return ['load' => 'La carga no tiene fecha de publicación: no se puede saber si llegaron calificaciones nuevas.'];
         }
 
         $batch = $this->lastKardexBatchAfter($load->published_at);
 
         if ($batch === null) {
-            return ["No se ha importado un kárdex después de la versión {$load->current_version} de la carga."];
+            return ['kardex' => "No se ha importado un kárdex después de la versión {$load->current_version} de la carga."];
         }
 
         $reasons = [];
@@ -82,7 +94,7 @@ final class ReanalysisAvailabilityQuery
         $graded = $this->kardexRows($load, $previous)->whereIn('kardex_records.result', self::GRADED);
 
         if (! (clone $graded)->where('kardex_records.updated_at', '>', $load->published_at)->exists()) {
-            $reasons[] = $graded->exists()
+            $reasons['grades'] = $graded->exists()
                 ? "No hay calificaciones nuevas de {$previous} en {$load->modality->name} después de la versión {$load->current_version} de la carga: importa las del semestre actual."
                 : "No hay calificaciones de {$previous} en {$load->modality->name}: importa las del semestre actual.";
         }
@@ -90,9 +102,9 @@ final class ReanalysisAvailabilityQuery
         $oldest = $oldestForecast();
 
         if ($oldest === null) {
-            $reasons[] = "La proyección de demanda de {$load->term->code} en {$load->modality->name} no se ha calculado.";
+            $reasons['forecast'] = "La proyección de demanda de {$load->term->code} en {$load->modality->name} no se ha calculado.";
         } elseif ((new CarbonImmutable($oldest))->lessThanOrEqualTo($batch)) {
-            $reasons[] = 'La proyección de demanda todavía no se recalcula con el kárdex importado el '.$batch->format('d/m/Y H:i').'.';
+            $reasons['forecast'] = 'La proyección de demanda todavía no se recalcula con el kárdex importado el '.$batch->format('d/m/Y H:i').'.';
         }
 
         return $reasons;

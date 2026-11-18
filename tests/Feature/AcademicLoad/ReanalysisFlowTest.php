@@ -436,7 +436,7 @@ it('RA-01 y RA-02: al recalcularse la proyección, avisa por la campana al jefe 
     app(NotifyReanalysisAvailableOnForecastsComputed::class)->handle(new DemandForecastsComputed($s['load']->term_id, $s['load']->modality_id, null, []));
 
     Notification::assertSentTo($jefe, ReanalysisAvailable::class, fn (ReanalysisAvailable $notice): bool => $notice->message($jefe)->title === 'Ya puedes re-analizar la carga de '.$s['load']->department->name
-        && $notice->message($jefe)->route === 'staffing.closing'
+        && $notice->message($jefe)->route === 'scheduling.reanalysis'
         && $notice->message($jefe)->modalityId === $s['load']->modality_id);
     Notification::assertNotSentTo([$otherHead, $subdireccion, $coordinador, $this->admin], ReanalysisAvailable::class);
     Notification::assertCount(1);

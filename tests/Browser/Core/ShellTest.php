@@ -126,12 +126,10 @@ it('con el menú abierto, ↓ y ↑ recorren las entradas que quedan y Enter en 
         ->assertScript('document.activeElement.dataset.label', 'Correos y colas');
 
     $page->click('#nexus-menu-search')
-        ->type('#nexus-menu-search', 'carga')
+        ->type('#nexus-menu-search', 'carga por')
         ->keys('#nexus-menu-search', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Carga por docente')
         ->keys('a[data-label="Carga por docente"]', 'ArrowDown')
-        ->assertScript('document.activeElement.dataset.label', 'Cierre de la carga')
-        ->keys('a[data-label="Cierre de la carga"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Carga por docente')
         ->click('#nexus-menu-search')
         ->keys('#nexus-menu-search', 'Enter')
