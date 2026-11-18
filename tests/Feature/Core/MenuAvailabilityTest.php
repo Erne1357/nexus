@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\DB;
 
 const VALIDATION_SCREENS = ['Validación de catálogos', 'Avance de validación'];
 
-const LOAD_SCREENS = ['Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre'];
+const LOAD_SCREENS = ['Propuesta de carrera', 'Bandeja del departamento', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre'];
 
 beforeEach(function () {
     $this->campus = Campus::factory()->create(['code' => 'C2']);

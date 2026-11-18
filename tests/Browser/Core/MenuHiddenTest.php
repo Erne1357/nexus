@@ -147,10 +147,11 @@ it('abierto, si el motivo no cabe debajo de su entrada, sale arriba', function (
         ->click('@hare')
         ->assertScript('Alpine.$data(document.body).busy === false');
 
-    // Se deja en la orilla de abajo del menú abierto (con más entradas debajo, enfocarla sola la centraría) y se enfoca.
-    $page->script('(() => { const entry = document.querySelector(\'a[data-label="Acuerdos"]\'); entry.scrollIntoView({ block: "end" }); entry.focus({ preventScroll: true }); })()');
+    // Se deja en la orilla de abajo del menú abierto (con más entradas debajo, enfocarla sola la centraría) y se enfoca:
+    // Corridas del motor, la última del grupo Horarios, que con 420 px de alto queda pegada a esa orilla.
+    $page->script('(() => { const entry = document.querySelector(\'a[data-label="Corridas del motor"]\'); entry.scrollIntoView({ block: "end" }); entry.focus({ preventScroll: true }); })()');
     $page->assertScript('(() => {
-        const entry = document.querySelector(\'a[data-label="Acuerdos"]\').getBoundingClientRect();
+        const entry = document.querySelector(\'a[data-label="Corridas del motor"]\').getBoundingClientRect();
         const tip = document.querySelector("[data-menu-why-tip]").getBoundingClientRect();
 
         return entry.bottom + 4 + tip.height > window.innerHeight - 8 && tip.bottom <= entry.top && tip.top >= 0;

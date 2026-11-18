@@ -12,6 +12,7 @@ use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverRunStatus;
+use App\Modules\Solver\Jobs\ApplySolverRunJob;
 use App\Modules\Solver\Jobs\RunSolver;
 use App\Modules\Solver\Models\SolverRun;
 use App\Modules\Solver\Notifications\SolverRunFinished;
@@ -200,6 +201,12 @@ final class LaunchSolverRun
         $limit = now()->subSeconds(RunSolver::STALE_AFTER);
 
         $this->inProgress($term, $modality, $department)
+            ->where('status', SolverRunStatus::Applying)
+            ->where('updated_at', '<', $limit)
+            ->pluck('id')
+            ->each(fn (string $runId) => ApplySolverRunJob::release($runId, 'No terminó de aplicarse en '.intdiv(RunSolver::STALE_AFTER, 60).' minutos: se lanzó otra corrida.', $limit));
+
+        $this->inProgress($term, $modality, $department)
             ->where('updated_at', '<', $limit)
             ->pluck('id')
             ->each(function (string $runId) use ($limit): void {
@@ -242,6 +249,6 @@ final class LaunchSolverRun
             ->where('modality_id', $modality->getKey())
             ->where('scope_kind', RunScope::Department)
             ->where('department_id', $department->getKey())
-            ->whereIn('status', [SolverRunStatus::Queued, SolverRunStatus::Running]);
+            ->whereIn('status', SolverRunStatus::occupying());
     }
 }

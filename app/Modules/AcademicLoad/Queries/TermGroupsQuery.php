@@ -29,6 +29,8 @@ final class TermGroupsQuery
             ->where('term_code', $termCode)
             ->selectRaw('subject_id, campus_id, source, count(*) filter (where parallel_of is null) as groups')
             ->groupBy('subject_id', 'campus_id', 'source')
+            ->orderBy('subject_id')
+            ->orderByRaw('campus_id nulls last')
             ->get();
 
         $source = $rows->contains(fn (HistoricalGroup $row): bool => $row->source === HistoricalGroupSource::Nexus)

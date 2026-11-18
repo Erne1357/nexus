@@ -2,8 +2,13 @@
 
 namespace App\Modules\Solver;
 
+use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Solver\Console\ExportSolverFixture;
 use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
@@ -11,6 +16,7 @@ use App\Modules\Solver\Console\SolverBenchmark;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Enums\SolverPermission;
+use App\Modules\Solver\Queries\CareerLoadsQuery;
 use App\Modules\Solver\Rules\SolverSettings;
 
 /**
@@ -23,7 +29,8 @@ final class SolverServiceProvider extends ModuleServiceProvider
 {
     /**
      * Los motores disponibles, con la etiqueta `solver.engines`: hoy el de prueba; la heurística (6.6) y CP-SAT (fase 7)
-     * se agregan aquí. Los motores no guardan estado, así que el registro puede ser único por proceso.
+     * se agregan aquí. Los motores no guardan estado, así que el registro puede ser único por proceso. CareerLoadsQuery
+     * recuerda sus respuestas en la petición: `scoped`, nunca único (Octane).
      */
     public function register(): void
     {
@@ -31,6 +38,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
 
         $this->app->tag([FixedEngine::class], 'solver.engines');
         $this->app->singleton(EngineRegistry::class, fn ($app): EngineRegistry => new EngineRegistry($app->tagged('solver.engines')));
+        $this->app->scoped(CareerLoadsQuery::class);
     }
 
     public function boot(): void
@@ -40,6 +48,22 @@ final class SolverServiceProvider extends ModuleServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([ExportSolverFixture::class, PruneSolverRunFilesCommand::class, SolverBenchmark::class]);
         }
+    }
+
+    /**
+     * «Corridas del motor» (tarea 6.10), al final del grupo Horarios (MN-01): para quien ve corridas de una carga o de
+     * una carrera, disponible mientras haya carga en curso (MN-02, MN-04: la misma condición que las pantallas de la
+     * carga).
+     *
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Corridas del motor', 'solver.runs', 'o-cpu-chip', NavigationArea::Academico, group: NavigationGroup::Horarios,
+                whyUnavailable: LoadProgressQuery::menuCondition(),
+                visible: static fn (Actor $context): bool => $context->allowsAny(SolverPermission::DepartmentRunView) || $context->allowsAny(SolverPermission::CareerRunView)),
+        ];
     }
 
     /**

@@ -27,7 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'term_id', 'modality_id', 'scope_kind', 'department_id', 'career_id', 'engine', 'status',
     'input', 'input_path', 'output', 'output_path', 'metrics', 'error',
     'created_by', 'started_at', 'finished_at', 'applied_by', 'applied_at',
-    'progress', 'best_score', 'input_hash', 'cancel_requested_at',
+    'progress', 'best_score', 'input_hash', 'cancel_requested_at', 'apply_token',
 ])]
 #[UseFactory(SolverRunFactory::class)]
 class SolverRun extends Model

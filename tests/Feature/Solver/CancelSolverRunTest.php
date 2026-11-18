@@ -48,7 +48,8 @@ it('SV-03: una corrida en cola se cancela de inmediato, deja bitácora y el job 
         ->started_at->toBeNull()
         ->and(Activity::query()->where('subject_id', $run->id)->sole())
         ->event->toBe('cancelled')
-        ->causer_id->toBe($this->by->id);
+        ->causer_id->toBe($this->by->id)
+        ->and(Activity::query()->where('subject_id', $run->id)->sole()->attribute_changes['old'])->toBe(['status' => 'queued']);
 });
 
 it('SV-03: una corrida que corre queda con la cancelación pedida, y pedirla otra vez no cambia nada', function () {
