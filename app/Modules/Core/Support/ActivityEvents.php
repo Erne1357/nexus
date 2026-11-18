@@ -59,6 +59,7 @@ final class ActivityEvents
         'failed-job-forgotten' => 'Trabajo descartado',
         'groups_confirmed' => 'Grupos confirmados',
         'quotas_updated' => 'Cupos',
+        'parallels_arranged' => 'Paralelos armados',
         'session_placed' => 'Sesión acomodada',
         'session_updated' => 'Sesión cambiada',
         'session_removed' => 'Sesión quitada',
