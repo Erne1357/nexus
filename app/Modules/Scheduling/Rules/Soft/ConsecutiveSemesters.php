@@ -3,16 +3,17 @@
 namespace App\Modules\Scheduling\Rules\Soft;
 
 use App\Modules\Scheduling\Validation\ScheduleState;
-use App\Modules\Scheduling\Validation\State\StateGroup;
 use App\Modules\Scheduling\Validation\ValidationScope;
 
 /**
  * SC-07: las materias de semestres consecutivos de una carrera no se empalman entre sí, para los alumnos irregulares.
- * La carrera es el plan de estudios del grupo, y como el alumno tipo, va por campus y modalidad.
+ * Cuentan los grupos que son la única opción de su materia, que son las cohortes de plan del alumno tipo
+ * (`plan:<plan>:<semestre>:<campus>`, Rules/Cohorts o el contrato del motor, en SoftContext): donde la materia tiene
+ * otro grupo, el alumno irregular puede elegir (supuesto por confirmar).
  *
- * Unidad (supuesto por confirmar): una hora de empalme entre dos grupos activos del mismo plan, campus y modalidad, de
- * semestres reticulares seguidos (N y N+1); una fracción cuenta como hora. Cada par se cuenta una vez si alguno de los
- * dos es del alcance. Lee el plan y el semestre de cada grupo, no los semestres del alumno tipo de la foto.
+ * Unidad (supuesto por confirmar): una hora de empalme entre dos grupos activos de cohortes del mismo plan y campus en
+ * semestres seguidos (N y N+1); una fracción cuenta como hora. Cada par se cuenta una vez si alguno de los dos es del
+ * alcance.
  */
 final class ConsecutiveSemesters implements SoftRule
 {
@@ -23,51 +24,50 @@ final class ConsecutiveSemesters implements SoftRule
 
     public function penalty(ScheduleState $state, ValidationScope $scope, SoftContext $context): int
     {
-        $bySemester = [];
-
-        foreach ($state->groups() as $group) {
-            if ($group->isActive) {
-                $bySemester[self::key($group, $group->semester)][] = $group;
-            }
-        }
-
         $seen = [];
         $hours = 0;
 
         foreach ($scope->groupIds() as $groupId) {
-            $group = $state->group($groupId);
-
-            if ($group === null || ! $group->isActive) {
+            if (! $state->group($groupId)?->isActive) {
                 continue;
             }
 
-            foreach ([$group->semester - 1, $group->semester + 1] as $semester) {
-                foreach ($bySemester[self::key($group, $semester)] ?? [] as $other) {
-                    $pair = $group->id < $other->id ? "{$group->id}|{$other->id}" : "{$other->id}|{$group->id}";
+            foreach ($context->cohorts[$groupId] ?? [] as $key) {
+                $parts = explode(':', $key);
 
-                    if (isset($seen[$pair])) {
-                        continue;
-                    }
+                if ($parts[0] !== 'plan' || count($parts) !== 4) {
+                    continue;
+                }
 
-                    $seen[$pair] = true;
-                    $minutes = 0;
+                [, $plan, $semester, $campus] = $parts;
 
-                    foreach ($state->sessionsOf($group->id) as $mine) {
-                        foreach ($state->sessionsOf($other->id) as $theirs) {
-                            $minutes += Timeline::overlap($mine, $theirs);
+                foreach ([(int) $semester - 1, (int) $semester + 1] as $next) {
+                    foreach ($context->membersOf("plan:{$plan}:{$next}:{$campus}") as $otherId) {
+                        if (! $state->group($otherId)?->isActive) {
+                            continue;
                         }
-                    }
 
-                    $hours += Timeline::hours($minutes);
+                        $pair = $groupId < $otherId ? "{$groupId}|{$otherId}" : "{$otherId}|{$groupId}";
+
+                        if (isset($seen[$pair])) {
+                            continue;
+                        }
+
+                        $seen[$pair] = true;
+                        $minutes = 0;
+
+                        foreach ($state->sessionsOf($groupId) as $mine) {
+                            foreach ($state->sessionsOf($otherId) as $theirs) {
+                                $minutes += Timeline::overlap($mine, $theirs);
+                            }
+                        }
+
+                        $hours += Timeline::hours($minutes);
+                    }
                 }
             }
         }
 
         return $hours;
-    }
-
-    private static function key(StateGroup $group, int $semester): string
-    {
-        return "{$group->modalityId}|{$group->campusId}|{$group->studyPlanId}|{$semester}";
     }
 }

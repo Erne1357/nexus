@@ -10,6 +10,9 @@ namespace App\Modules\Scheduling\Rules\Soft;
  */
 final readonly class SoftContext
 {
+    /** @var array<string, list<string>> los grupos de cada clave de cohorte */
+    private array $members;
+
     /**
      * @param  array<string, list<string>>  $cohorts  claves de cohorte, por grupo
      * @param  array<string, list<array{int, int, int}>>  $preferred  [día, inicio, fin] preferidos, por docente
@@ -21,7 +24,27 @@ final readonly class SoftContext
         public array $preferred = [],
         public array $buildings = [],
         public array $roomDefaults = [],
-    ) {}
+    ) {
+        $members = [];
+
+        foreach ($cohorts as $groupId => $keys) {
+            foreach ($keys as $key) {
+                $members[$key][] = (string) $groupId;
+            }
+        }
+
+        $this->members = $members;
+    }
+
+    /**
+     * Los grupos que llevan la clave de cohorte.
+     *
+     * @return list<string>
+     */
+    public function membersOf(string $key): array
+    {
+        return $this->members[$key] ?? [];
+    }
 
     /**
      * @return array<string, int> prioridad, por salón

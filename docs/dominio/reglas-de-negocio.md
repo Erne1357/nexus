@@ -43,6 +43,18 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 
 Los pesos son configurables por campus (`settings`, clave `solver.weights`).
 
+**Unidades del puntaje blando** (tarea 6.5, supuesto por confirmar). El puntaje de una solución es la suma, por regla, de su peso por su penalización; menor es mejor. Cada regla cuenta lo que toca a los grupos que se programan (los movibles de la corrida), y una fracción de hora cuenta como hora:
+
+- **SC-01:** cada hora de hueco entre las sesiones de los grupos de una cohorte (el alumno tipo de HC-03 o un paquete) en un día.
+- **SC-02:** cada hora de un grupo en un día por encima del reparto parejo: el techo de sus horas semanales entre los días de su modalidad. Una materia de 5 h de lunes a viernes: más de 1 h en un día cuenta, y 5 h el mismo día suman 4.
+- **SC-03:** cada hora de sesión en un salón que no está entre los por defecto o sugeridos de la materia en el campus del grupo, sin importar la prioridad. Una materia sin salón por defecto en ese campus no se penaliza.
+- **SC-04:** cada hora de sesión fuera de los bloques `preferred` del docente. Un docente sin bloques preferidos no se penaliza.
+- **SC-05:** cada hora de hueco entre dos sesiones del docente en un día, en todos sus campus y modalidades.
+- **SC-06:** cada cambio de edificio entre dos sesiones seguidas del docente sin hueco entre ellas (una termina cuando empieza la otra), las dos con salón.
+- **SC-07:** cada hora de empalme entre dos grupos que son la única opción de su materia (cohortes de plan de HC-03) en semestres seguidos del mismo plan y campus. Donde la materia tiene otro grupo, el alumno irregular puede elegir.
+- **SC-08:** cada hora de sesión de un grupo de docente de honorarios fuera de sus bloques `preferred` (su disponibilidad declarada; lo `unavailable` ya es HC-09). Sin bloques declarados no se penaliza. Se suma a SC-04.
+- **SC-09:** cada par de sesiones seguidas del docente en campus distintos con menos de los minutos de traslado.
+
 ## Ranking docente (desempate)
 
 Para cada grupo, se ordenan los docentes activos del departamento que imparte la materia (y los de otros departamentos con perfil `preferente` en esa materia) por lo que sigue. El ranking se recalcula por periodo, modalidad y departamento, con los grupos de todos sus campus juntos, como la carga (M1, confirmado el 12 de noviembre de 2026); el campus de cada grupo se lee del grupo.

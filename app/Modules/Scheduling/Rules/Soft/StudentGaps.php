@@ -22,14 +22,6 @@ final class StudentGaps implements SoftRule
 
     public function penalty(ScheduleState $state, ValidationScope $scope, SoftContext $context): int
     {
-        $members = [];
-
-        foreach ($context->cohorts as $groupId => $keys) {
-            foreach ($keys as $key) {
-                $members[$key][] = $groupId;
-            }
-        }
-
         $scored = [];
 
         foreach ($scope->groupIds() as $groupId) {
@@ -43,7 +35,7 @@ final class StudentGaps implements SoftRule
         foreach (array_keys($scored) as $key) {
             $sessions = [];
 
-            foreach ($members[$key] as $groupId) {
+            foreach ($context->membersOf($key) as $groupId) {
                 if ($state->group($groupId)?->isActive) {
                     $sessions = [...$sessions, ...$state->sessionsOf($groupId)];
                 }

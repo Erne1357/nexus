@@ -49,7 +49,8 @@ use App\Modules\Solver\Contract\TimeSlot;
  *   horas externas ni tolerancia, así que lo que le queda es lo mismo que en la base.
  * - HC-10: cada préstamo aceptado (`agreements`) es de todos los grupos del departamento al que se presta.
  * - HC-07 y HC-13 no se pueden revisar: el contrato no trae cupos ni catálogos (se verifican al armar la entrada; la foto
- *   da todos los planes activos y las carreras ofrecidas).
+ *   da todos los planes activos y las carreras ofrecidas). Tampoco el núcleo sin combinación de HC-03, que sale de
+ *   materias con varios grupos: el contrato solo trae las cohortes de las materias con un solo grupo.
  * - SC-09 usa `travel_minutes`; SC-01 las cohortes de la entrada; SC-03, SC-04, SC-06 y SC-08 lo que trae la entrada
  *   (SoftContext).
  */

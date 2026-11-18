@@ -113,20 +113,26 @@ it('SC-06: cuenta los cambios de edificio entre dos sesiones seguidas, sin hueco
         ->and((new BuildingChanges)->penalty($state, ValidationScope::groups('A'), $context))->toBe(2);
 });
 
-it('SC-07: cuenta las horas de empalme entre grupos de semestres consecutivos del mismo plan, campus y modalidad', function () {
+it('SC-07: cuenta las horas de empalme entre los grupos que son la única opción de su materia en semestres seguidos del mismo plan y campus', function () {
     $state = States::builder()
         ->group(States::group('A', semester: 1))->group(States::group('B', semester: 2))->group(States::group('C', semester: 3))
         ->group(States::group('D', semester: 2, plan: 'P2'))->group(States::group('E', semester: 2, campus: 'C1'))
-        ->group(States::group('F', semester: 2, modality: 'EAD'))->group(States::group('G', semester: 2, active: false))
+        ->group(States::group('G', semester: 2, active: false))->group(States::group('H', semester: 2))
         ->session('A', 1, '07:00', '09:00')
         ->session('B', 1, '08:00', '10:00')   // 1 h con A
         ->session('C', 1, '07:00', '09:00')   // semestre 3: no es consecutivo de A; con B, 1 h
-        ->session('D', 1, '07:00', '09:00')->session('E', 1, '07:00', '09:00')->session('F', 1, '07:00', '09:00')->session('G', 1, '07:00', '09:00')
+        ->session('D', 1, '07:00', '09:00')->session('E', 1, '07:00', '09:00')->session('G', 1, '07:00', '09:00')
+        ->session('H', 1, '07:00', '09:00')   // su materia tiene otro grupo: no es cohorte
         ->build();
+    $context = new SoftContext(cohorts: [
+        'A' => ['plan:P1:1:C2'], 'B' => ['plan:P1:2:C2'], 'C' => ['plan:P1:3:C2', 'package:K:C2:1'], 'D' => ['plan:P2:2:C2'],
+        'E' => ['plan:P1:2:C1'], 'G' => ['plan:P1:2:C2'], 'H' => [],
+    ]);
 
     expect((new ConsecutiveSemesters)->rule())->toBe('SC-07')
-        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A'), new SoftContext))->toBe(1)
-        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A', 'B'), new SoftContext))->toBe(2);
+        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A'), $context))->toBe(1)
+        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A', 'B'), $context))->toBe(2)
+        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('H'), $context))->toBe(0);
 });
 
 it('SC-08: cuenta las horas de un grupo de docente de honorarios fuera de los bloques que declaró', function () {
