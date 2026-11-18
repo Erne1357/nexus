@@ -231,6 +231,18 @@ it('da el historial con nombres, del más reciente al más antiguo', function ()
     ])->and($history[0]['comment'])->toBe('Falta el grupo vespertino');
 });
 
+it('RA-10: cancelar un re-análisis se rotula «Re-análisis cancelado» en el historial, no «Publicada», y sin tono de éxito', function () {
+    $jefe = $this->world->head();
+    $this->world->transition(LoadStatus::Closed, LoadStatus::Published, $jefe, at: now()->subDays(2));
+    $this->world->transition(LoadStatus::Published, LoadStatus::Reanalysis, $jefe, at: now()->subDay());
+    $this->world->transition(LoadStatus::Reanalysis, LoadStatus::Published, $jefe, 'Re-análisis cancelado sin cambios', now());
+
+    $history = loadClosingOf()->history;
+
+    expect(array_map(fn (array $entry): string => LoadClosing::stepTitle($entry), $history))->toBe(['Re-análisis cancelado', 'Pasó a Re-análisis', 'Publicada'])
+        ->and(array_map(fn (array $entry): string => LoadClosing::stepTone($entry), $history))->toBe(['neutral', 'neutral', 'success']);
+});
+
 it('da las cargas del departamento con grupos, una por modalidad con los grupos de todos sus campus, y deja fuera la que no tiene grupos (M1)', function () {
     $c1 = Campus::factory()->create(['code' => 'C1', 'name' => 'Campus I']);
     $ead = Campus::factory()->create(['code' => 'C3', 'name' => 'Campus III']);

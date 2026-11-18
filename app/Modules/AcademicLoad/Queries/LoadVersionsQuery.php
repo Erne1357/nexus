@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
 final class LoadVersionsQuery
 {
     /**
-     * De la primera a la última. El comentario es el de la transición a publicada de esa versión (la N-ésima). `reason` y
+     * De la primera a la última. El comentario es el de la transición a publicada de esa versión (la N-ésima; la de cancelar
+     * un re-análisis, `reanalysis` → `published`, no crea versión y no cuenta, RA-10). `reason` y
      * `summary` (el resumen del diff guardado, SnapshotDiff) son nulos en las versiones publicadas antes de la tarea 8.4,
      * y `summary` también en la versión 1.
      *
@@ -32,6 +33,7 @@ final class LoadVersionsQuery
     {
         $comments = $load->transitions()
             ->where('to_status', LoadStatus::Published->value)
+            ->where('from_status', '<>', LoadStatus::Reanalysis->value)
             ->orderBy('created_at')->orderBy('id')
             ->pluck('comment')
             ->all();
