@@ -4,9 +4,12 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Queries\ParallelDraft;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
 use App\Modules\Scheduling\Queries\ParallelSubject;
+use Illuminate\Support\Facades\DB;
+use Spatie\Activitylog\Models\Activity;
 use Tests\Support\Scheduling\ParallelsWorld;
 
 /*
@@ -29,7 +32,8 @@ beforeEach(function () {
 function parallelDraftArm(array $arrangement): void
 {
     $world = test()->world;
-    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $world->department->id])->create();
+    $jefe = User::query()->where('username', 'jefe-paralelos')->first()
+        ?? User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $world->department->id])->create(['username' => 'jefe-paralelos']);
 
     app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $world->subject, $world->campus, $arrangement, $jefe);
 }
@@ -232,4 +236,46 @@ it('una materia armada solo con completos y restos de una carrera cuenta como ar
 
     expect(parallelDraftRow()->arranged())->toBeTrue()
         ->and(ParallelDraft::current(parallelDraftRow())->full)->toBe([$this->iind->id => 2, $this->isic->id => 2]);
+});
+
+it('un armado sin cambios no deja entrada, y la materia deja de estar armada si después cambian sus grupos', function () {
+    $this->world->request($this->isic, 60, 2);
+    $this->world->request($this->iind, 40, 2);
+    $arrangement = [[$this->iind->id => 35], [$this->isic->id => 35], [$this->isic->id => 25, $this->iind->id => 5]];
+
+    parallelDraftArm($arrangement);
+    parallelDraftArm($arrangement);
+
+    expect(Activity::query()->where('event', ArmParallelGroups::LOG_EVENT)->where('subject_id', $this->world->subject->id)->count())->toBe(1)
+        ->and(parallelDraftRow()->arranged())->toBeTrue();
+
+    GroupQuota::query()->where('career_id', $this->isic->id)->where('max_seats', 25)->update(['max_seats' => 24]);
+
+    expect(parallelDraftRow()->arranged())->toBeFalse();
+});
+
+it('lee solo el último armado de cada materia y campus, en una consulta, aunque se arme varias veces', function () {
+    $this->world->request($this->isic, 60, 2);
+    $this->world->request($this->iind, 40, 2);
+    $world = $this->world;
+    $reads = function () use ($world): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        app(ParallelsQuery::class)->for($world->term, $world->modality, $world->department);
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        return $queries;
+    };
+
+    parallelDraftArm([[$this->iind->id => 35], [$this->isic->id => 35], [$this->isic->id => 25, $this->iind->id => 5]]);
+    $once = $reads();
+    parallelDraftArm([[$this->iind->id => 35], [$this->isic->id => 35], [$this->isic->id => 22, $this->iind->id => 8]]);
+
+    $last = app(ParallelsQuery::class)->lastArrangements($world->term, $world->modality, [$world->subject->id]);
+
+    expect($reads())->toBe($once)
+        ->and($last)->toHaveCount(1)
+        ->and(array_values($last[$world->subject->id.'|'.$world->campus->id]))->toContain([$this->isic->id => 22, $this->iind->id => 8])
+        ->and(parallelDraftRow()->arranged())->toBeTrue();
 });

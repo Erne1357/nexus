@@ -97,7 +97,7 @@ final class ParallelsQuery
         $sizes = SuggestedGroups::fromSettings();
         $rows = $items->groupBy(fn (ProposalItem $item): string => "{$item->subject_id}|{$item->campus_id}");
         $capacities = GroupCapacity::forMany($rows->map(fn (Collection $rowItems): array => [$rowItems->first()->subject, $rowItems->first()->campus_id])->values(), $sizes);
-        $armed = $this->armed($term, $modality, $items->pluck('subject_id')->unique()->values()->all());
+        $armed = $this->lastArrangements($term, $modality, $items->pluck('subject_id')->unique()->values()->all());
 
         $subjects = $rows->map(function (Collection $rowItems, string $key) use ($proposals, $statuses, $careers, $intakes, $groups, $sizes, $capacities, $armed): ParallelSubject {
             $entries = $rowItems
@@ -106,7 +106,7 @@ final class ParallelsQuery
                 ->values();
             $existing = $groups->get($key, collect())->pluck('group')->all();
 
-            return $this->row($rowItems->first(), $entries, $existing, $sizes, $capacities[$key], isset($armed[$key]));
+            return $this->row($rowItems->first(), $entries, $existing, $sizes, $capacities[$key], $armed[$key] ?? null);
         })
             ->sortBy(fn (ParallelSubject $row): string => $row->subject->code.'|'.$row->campus->code)
             ->values()
@@ -116,24 +116,32 @@ final class ParallelsQuery
     }
 
     /**
-     * Las materias y campus que ya se armaron con ArmParallelGroups en el periodo y la modalidad, por `materia|campus`: la
-     * Action deja en la bitácora de la materia un `parallels_arranged` con el periodo, la modalidad y el campus cada vez que
-     * arma, aunque el arreglo sea solo de completos y restos de una carrera o no cambie nada (supuesto por confirmar). Una
-     * consulta.
+     * La foto del último armado de cada materia y campus en el periodo y la modalidad, por `materia|campus`: los grupos que
+     * quedaron y sus cupos por carrera (`grupo => [carrera => lugares]`), de la entrada `parallels_arranged` que ArmParallelGroups
+     * deja en la bitácora de la materia cuando cambia algo. Solo la última de cada una (`distinct on`, por id descendente),
+     * en una consulta, aunque se haya armado muchas veces.
      *
      * @param  list<string>  $subjectIds
-     * @return array<string, true>
+     * @return array<string, array<string, array<string, int>>>
      */
-    private function armed(Term $term, Modality $modality, array $subjectIds): array
+    public function lastArrangements(Term $term, Modality $modality, array $subjectIds): array
     {
+        if ($subjectIds === []) {
+            return [];
+        }
+
         return Activity::query()
+            ->selectRaw("distinct on (subject_id, properties->>'campus_id') subject_id, properties")
             ->where('event', ArmParallelGroups::LOG_EVENT)
             ->where('subject_type', (new Subject)->getMorphClass())
             ->whereIn('subject_id', $subjectIds)
             ->where('properties->term_id', $term->getKey())
             ->where('properties->modality_id', $modality->getKey())
-            ->get(['subject_id', 'properties'])
-            ->mapWithKeys(fn (Activity $entry): array => ["{$entry->subject_id}|{$entry->properties['campus_id']}" => true])
+            ->orderBy('subject_id')
+            ->orderByRaw("properties->>'campus_id'")
+            ->orderByDesc('id')
+            ->get()
+            ->mapWithKeys(fn (Activity $entry): array => ["{$entry->subject_id}|{$entry->properties['campus_id']}" => (array) ($entry->properties['snapshot'] ?? [])])
             ->all();
     }
 
@@ -269,8 +277,9 @@ final class ParallelsQuery
     /**
      * @param  Collection<int, ParallelCareer>  $entries
      * @param  list<ParallelExisting>  $existing
+     * @param  array<string, array<string, int>>|null  $lastArrangement  la foto del último armado (lastArrangements())
      */
-    private function row(ProposalItem $item, Collection $entries, array $existing, SuggestedGroups $sizes, int $newCapacity, bool $armed): ParallelSubject
+    private function row(ProposalItem $item, Collection $entries, array $existing, SuggestedGroups $sizes, int $newCapacity, ?array $lastArrangement): ParallelSubject
     {
         [$returned, $counting] = $entries->partition(fn (ParallelCareer $career): bool => $career->status === InboxStatus::Returned);
         [$careers, $withoutStudents] = $counting->partition(fn (ParallelCareer $career): bool => $career->expected > 0);
@@ -294,7 +303,7 @@ final class ParallelsQuery
             whyNot: $this->whyNot($careers, $withoutStudents->isNotEmpty(), $parallels),
             short: $short,
             newCapacity: $newCapacity,
-            armed: $armed,
+            lastArrangement: $lastArrangement,
         );
     }
 

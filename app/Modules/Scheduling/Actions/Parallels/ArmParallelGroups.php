@@ -77,8 +77,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * En una transacción: toma la carga (FOR SHARE), el candado de aviso de claves de la materia (el de CreateGroupsFromProposal,
  * así una parte que se acepta a la vez espera) y bloquea los grupos sueltos. Deja bitácora por grupo tocado (cupos
- * `parallels_arranged`, alta `created`, baja `cancelled`) y una entrada `parallels_arranged` en la materia por arreglo (con
- * el periodo, la modalidad y el campus: la que marca la materia «Armada»), y, después del commit y solo si cambió algo, avisa con
+ * `parallels_arranged`, alta `created`, baja `cancelled`) y, si cambió algo, una entrada `parallels_arranged` en la materia
+ * con el periodo, la modalidad, el campus y la foto de lo que quedó (la que marca la materia «Armada»), y, después del commit y solo si cambió algo, avisa con
  * GroupQuotasChanged por grupo, GroupsCreated, GroupCancelled y GroupScheduleChanged (CancelGroup) y ParallelGroupsArranged,
  * con lo que cambió para cada carrera.
  */
@@ -165,7 +165,10 @@ final class ArmParallelGroups
         }
 
         $result = new ParallelArrangement($kept, $created, $cancelled);
-        $this->logArrangement($term, $modality, $subject, $campus, $result, $actor);
+
+        if ($result->changed()) {
+            $this->logArrangement($term, $modality, $subject, $campus, $result, $actor);
+        }
 
         if ($created !== []) {
             GroupsCreated::dispatch($term->getKey(), $modality->getKey(), array_map(fn (Group $group): string => $group->getKey(), $created));
@@ -179,13 +182,24 @@ final class ArmParallelGroups
     }
 
     /**
-     * Una entrada en la bitácora de la materia por cada arreglo, aunque no cambie nada: dice que el jefe ya armó los paralelos
-     * de la materia en ese campus, periodo y modalidad. ParallelsQuery la lee para marcar la materia «Armada» aunque el
-     * arreglo sea solo de completos y restos de una carrera (supuesto por confirmar).
+     * Una entrada en la bitácora de la materia por cada arreglo que cambió algo (uno sin cambios no la escribe), con el
+     * periodo, la modalidad, el campus y la foto de lo que quedó (`snapshot`: por id de grupo, sus cupos por carrera).
+     * ParallelsQuery::lastArrangements() lee la última de cada materia y campus, y la materia está «Armada» mientras sus
+     * grupos sueltos y sus cupos sigan siendo los de esa foto, aunque el arreglo sea solo de completos y restos de una
+     * carrera (supuesto por confirmar).
      */
     private function logArrangement(Term $term, Modality $modality, Subject $subject, Campus $campus, ParallelArrangement $result, User $actor): void
     {
         $groups = count($result->kept) + count($result->created);
+        $snapshot = [];
+
+        foreach ($result->kept as $row) {
+            $snapshot[$row['group']->getKey()] = $row['after'];
+        }
+
+        foreach ($result->created as $group) {
+            $snapshot[$group->getKey()] = $group->quotas->pluck('max_seats', 'career_id')->map(fn ($seats): int => (int) $seats)->all();
+        }
 
         activity()
             ->causedBy($actor)
@@ -199,6 +213,7 @@ final class ArmParallelGroups
                 'kept' => count($result->kept),
                 'created' => count($result->created),
                 'cancelled' => count($result->cancelled),
+                'snapshot' => $snapshot,
             ])
             ->log("Armó los paralelos de {$subject->name} en {$campus->code}: ".($groups === 1 ? '1 grupo' : "{$groups} grupos"));
     }
