@@ -66,6 +66,11 @@ BROKEN = {
     "hora mal escrita": (_set(["campuses", 0, "day_start"], "7:00"), "campuses[0].day_start", "HH:MM"),
     "campo obligatorio ausente": (_drop_required, "groups[0].capacity", "es obligatorio"),
     "campus sin días": (_set(["campuses", 0, "days"], []), "campuses[0].days", "al menos un día"),
+    "bloque que no divide la jornada": (
+        _set(["campuses", 0, "block_minutes"], 50),
+        "campuses[0].day_end",
+        "no se divide en bloques",
+    ),
     "campo obligatorio nulo": (_set(["run_id"], None), "run_id", "es obligatorio"),
     "lista que no es lista": (_set(["groups"], {"a": 1}), "groups", "lista"),
 }
