@@ -64,7 +64,7 @@ Se escribió al cerrar el núcleo de la fase 5 (Riel A) para que la fase 6 arran
   - Lo demás entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, y las sesiones ya aceptadas.
   - El aviso del tronco común se calcula de las cohortes: grupos de otra carga con los que comparte cohorte y sin sesiones. No se usa ninguna lista fija de departamentos.
 - **6.10, pantalla de corridas:** la comparación con la carga actual usa el filtro de campus segmentado de las pantallas de la carga (todos o un campus), porque la corrida abarca todos los campus.
-- **6.6, construcción:** sesiones de 1 hora, una por día en días distintos y a la misma hora: 4 horas de lunes a jueves, 5 de lunes a viernes, 6 con sábado (respuesta del usuario, 17 de noviembre de 2026). Si no cabe, otros días y, al final, un día de 2 horas (supuesto por confirmar). Detalle en reglas-de-negocio.md, «Patrón de sesiones», y en solver.md, «Heurística PHP: construcción».
+- **6.6, construcción:** sesiones de 1 hora, una por día en días distintos y a la misma hora: 4 horas de lunes a jueves, 5 de lunes a viernes, 6 con sábado (respuesta del usuario, 17 de noviembre de 2026). Si no cabe, otros días y, al final, un día de 2 horas (supuesto por confirmar). Detalle en reglas-de-negocio.md, «Patrón de sesiones» (PS-01 a PS-08), y en solver.md, «Heurística PHP: construcción».
 - **6.9, `PlanRun`:** deja de imponer «tronco común, luego departamentos». Da un orden sugerido (primero las cargas cuyos grupos más cohortes comparten) y el aviso de la respuesta 3.
 - **6.11, fixtures:** `campus-ii` se cambia por `department-multicampus`: un departamento con grupos en C1 y C2, docentes en los dos campus y un préstamo de salón.
 - **Fases siguientes** (para su propio punto de partida):

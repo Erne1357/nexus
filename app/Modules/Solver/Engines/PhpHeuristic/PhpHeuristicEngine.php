@@ -22,7 +22,7 @@ use Closure;
  *
  * HC-08 es la excepción, porque no depende del horario: un docente cuyos grupos movibles suman más horas de las que le
  * quedan se pasa igual con o sin sesiones. Sus grupos se colocan, la violación queda en `hard_violations` como un
- * problema de la entrada y la corrida sale `partial` (supuesto por confirmar). La búsqueda local que mejora el puntaje
+ * problema de la entrada y la corrida sale `partial` (PS-08, supuesto por confirmar). La búsqueda local que mejora el puntaje
  * llega con la 6.7.
  *
  * Sale `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Reporta el avance (hasta 90 al construir, 100
@@ -88,7 +88,8 @@ final class PhpHeuristicEngine implements SolverEngine
                 }
             });
 
-        [$sessions, $removed, $evaluation, $evaluations] = (new FinalValidation)->clean($input, $build->sessions, $build->placementOrder);
+        [$sessions, $removed, $evaluation, $evaluations] = (new FinalValidation)->clean($input, $build->sessions, $build->placementOrder,
+            $clock, $started + $input->timeLimitSeconds - $reserve / 2);
         $unscheduled = $build->unscheduled + $removed;
         $status = $unscheduled === [] && $evaluation->hardViolations === [] ? RunStatus::Feasible : RunStatus::Partial;
         $progress?->__invoke(100, $evaluation->softScore->total);

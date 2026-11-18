@@ -12,7 +12,7 @@ use App\Modules\Solver\Contract\CampusGrid;
  *
  * La «hora» de una sesión (la unidad que coloca el motor) dura 60 minutos si el bloque cabe exacto en una hora (60, 30,
  * 20, 15 min…); si no (50 o 90 min), la unidad es un bloque, y las horas semanales tienen que ser un número entero de
- * bloques (supuesto por confirmar).
+ * bloques (PS-06, supuesto por confirmar).
  */
 final readonly class Grid
 {

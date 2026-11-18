@@ -4,18 +4,19 @@ namespace App\Modules\Solver\Engines\PhpHeuristic;
 
 /**
  * Los juegos de días en que la heurística prueba un grupo (tarea 6.6; reglas-de-negocio.md, «Patrón de sesiones»):
- * sesiones de una hora, una por día en días distintos y a la misma hora todos los días.
+ * sesiones de una hora, una por día en días distintos (PS-01) y a la misma hora todos los días (PS-02).
  *
- * - **El patrón** (confirmado el 17 de noviembre de 2026): 4 horas de lunes a jueves, 5 de lunes a viernes y 6 de lunes
+ * - **El patrón** (PS-01, confirmado el 17 de noviembre de 2026): 4 horas de lunes a jueves, 5 de lunes a viernes y 6 de lunes
  *   a viernes más el sábado, si el campus trae sábado (supuesto por confirmar). Con otras horas, el mismo criterio
- *   extendido: los primeros días del campus, una hora por día (3 horas: lunes a miércoles; supuesto por confirmar).
- * - **Otros días** (supuesto por confirmar): si el patrón no cabe, los demás juegos de la misma cantidad de días,
+ *   extendido: los primeros días del campus, una hora por día (3 horas: lunes a miércoles; PS-03, supuesto por confirmar).
+ * - **Otros días** (PS-04, supuesto por confirmar): si el patrón no cabe, los demás juegos de la misma cantidad de días,
  *   primero los que más se parecen al patrón, luego los que llevan sábado.
- * - **Dos horas el mismo día** (supuesto por confirmar): si tampoco caben, menos días con el reparto más parejo (5
+ * - **Dos horas el mismo día** (PS-04, supuesto por confirmar): si tampoco caben, menos días con el reparto más parejo (5
  *   horas en 4 días: un día de 2 horas seguidas), hasta 2 horas por día, o las que hagan falta si las horas no caben de
  *   otro modo en los días del campus. Así un docente que no puede un día, o un laboratorio prestado solo el martes,
  *   todavía dejan programar al grupo, y SC-02 lo cuenta.
- * - Más horas que días (7 horas de lunes a viernes): todos los días del campus, con las horas de sobra repartidas.
+ * - Más horas que días (7 horas de lunes a viernes): todos los días del campus, con las horas de sobra repartidas
+ *   (PS-03).
  *
  * Cada opción es [día => unidades]. Los niveles van en orden: la heurística toma el mejor candidato del primer nivel
  * donde alguno cabe.

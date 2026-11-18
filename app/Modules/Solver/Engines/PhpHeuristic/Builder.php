@@ -27,14 +27,15 @@ use Closure;
  * Entre los candidatos que caben gana el de menor puntaje blando estimado con los mismos índices y los pesos de la
  * entrada: huecos del alumno tipo (SC-01) y del docente (SC-05), horas fuera de los preferidos (SC-04, y SC-08 con
  * honorarios), empalmes con el semestre de al lado (SC-07), salón por defecto (SC-03), cambio de edificio (SC-06) y
- * traslado entre campus (SC-09); SC-02 queda en cero por construcción. Empatan por la hora actual del grupo
- * (`current_sessions`), luego por el orden del patrón y la hora más temprana. La autoridad es el evaluador: el motor
- * valida al final (PhpHeuristicEngine).
+ * traslado entre campus (SC-09). SC-02 no entra: es igual en todos los candidatos de un nivel (cero con una hora por
+ * día, y las mismas horas de más en un nivel de días de 2 horas), y los niveles no se comparan por puntaje. Empatan por
+ * la hora actual del grupo (`current_sessions`, PS-07), luego por el orden del patrón y la hora más temprana. La
+ * autoridad es el evaluador: el motor valida al final (FinalValidation).
  *
  * Los salones de cada grupo se ordenan: el por defecto de la materia (`subject_room_defaults`, por prioridad), el tipo
  * (aula para la teoría, laboratorio, taller o sala de cómputo para la práctica de una materia con laboratorio), la
- * capacidad más ajustada y el id. Al elegir, primero un mismo salón todos los días; si no, uno del mismo edificio; y
- * el salón actual del grupo si es igual de bueno.
+ * capacidad más ajustada y el id (PS-05). Al elegir: uno del edificio de la sesión pegada del docente (SC-06), luego
+ * un mismo salón todos los días o, si no, uno del mismo edificio; y el salón actual del grupo si es igual de bueno.
  *
  * Vive lo que dura una corrida (Octane): el motor crea uno por llamada.
  */
@@ -98,6 +99,9 @@ final class Builder
     /** @var array<string, list<string>> */
     private array $rankings = [];
 
+    /** @var array<string, string|null> el salón elegido por «tipo:día:inicio:unidades» para el grupo que se busca */
+    private array $roomCache = [];
+
     /** @var list<array<string, mixed>> los grupos movibles, en el orden en que se colocan */
     private array $queue = [];
 
@@ -144,7 +148,7 @@ final class Builder
                 $reason = "Se acabó el tiempo límite de la corrida ({$this->input->timeLimitSeconds} s) antes de llegar a este grupo; vuelve a correr con más tiempo.";
 
                 foreach (array_slice($this->queue, $index) as $left) {
-                    $unscheduled[$left['id']] = [$reason];
+                    $unscheduled[$left['id']] = [$left['failure'] ?? $reason];
                 }
 
                 break;
@@ -305,7 +309,7 @@ final class Builder
             }
         }
 
-        foreach ($this->input->teachers as $teacher) {
+        foreach (isset($this->checks['HC-08']) ? $this->input->teachers : [] as $teacher) {
             if (($teacherHours[$teacher->id] ?? 0) > $teacher->remainingHours) {
                 $this->overloaded[] = $teacher->id;
             }
@@ -531,16 +535,31 @@ final class Builder
 
     private function teacherFree(string $teacherId, string $campus, int $day, int $from, int $to): bool
     {
+        return $this->teacherClash($teacherId, $campus, $day, $from, $to) === null;
+    }
+
+    /**
+     * Por qué el docente no puede en esos bloques: no está disponible (HC-09) o ya tiene clase (HC-01, con el grupo que
+     * los ocupa); null si puede.
+     *
+     * @return array{fail: string, detail?: string}|null
+     */
+    private function teacherClash(string $teacherId, string $campus, int $day, int $from, int $to): ?array
+    {
         $off = isset($this->checks['HC-09']) ? $this->teacherOff[$teacherId][$campus][$day] ?? null : null;
         $at = isset($this->checks['HC-01']) ? $this->teacherAt[$teacherId][$campus][$day] ?? null : null;
 
         for ($block = $from; $block < $to; $block++) {
-            if (isset($off[$block]) || isset($at[$block])) {
-                return false;
+            if (isset($off[$block])) {
+                return ['fail' => 'HC-09'];
+            }
+
+            if (isset($at[$block])) {
+                return ['fail' => 'HC-01', 'detail' => $at[$block]];
             }
         }
 
-        return true;
+        return null;
     }
 
     /**
@@ -617,6 +636,7 @@ final class Builder
     {
         $grid = $group['grid'];
         $cells = [];
+        $this->roomCache = [];
 
         foreach ($group['tiers'] as $tierIndex => $tier) {
             $best = null;
@@ -674,7 +694,7 @@ final class Builder
         }
 
         $rooms = array_fill_keys(array_keys($option), null);
-        $practice = $this->practiceDays($group, $option);
+        $practice = [];
 
         if ($group['usesRooms']) {
             $chosen = $this->chooseRooms($group, $option, $start, $dayCells);
@@ -706,19 +726,10 @@ final class Builder
         $end = $start + $units * $grid->blocksPerUnit;
         $teacherId = $group['teacher'];
 
-        if ($teacherId !== null) {
-            $off = isset($this->checks['HC-09']) ? $this->teacherOff[$teacherId][$campus][$day] ?? null : null;
-            $at = isset($this->checks['HC-01']) ? $this->teacherAt[$teacherId][$campus][$day] ?? null : null;
+        $clash = $teacherId === null ? null : $this->teacherClash($teacherId, $campus, $day, $start, $end);
 
-            for ($block = $start; $block < $end; $block++) {
-                if (isset($off[$block])) {
-                    return ['fail' => 'HC-09'];
-                }
-
-                if (isset($at[$block])) {
-                    return ['fail' => 'HC-01', 'detail' => $at[$block]];
-                }
-            }
+        if ($clash !== null) {
+            return $clash;
         }
 
         if (isset($this->checks['HC-03'])) {
@@ -839,7 +850,7 @@ final class Builder
     {
         $practice = array_fill_keys(array_keys($option), 0);
         $left = $group['practice'];
-        $days = array_reverse(array_keys($option));
+        $days = array_keys($option);
         usort($days, fn (int $a, int $b): int => [isset($group['currentPractice'][$a]) ? 0 : 1, -$a] <=> [isset($group['currentPractice'][$b]) ? 0 : 1, -$b]);
 
         foreach ($days as $day) {
@@ -935,6 +946,21 @@ final class Builder
      * @param  array<string, mixed>  $cell
      */
     private function roomFor(array $group, string $kind, int $day, int $start, int $units, array $cell): ?string
+    {
+        $key = "{$kind}:{$day}:{$start}:{$units}";
+
+        if (! array_key_exists($key, $this->roomCache)) {
+            $this->roomCache[$key] = $this->pickRoom($group, $kind, $day, $start, $units, $cell);
+        }
+
+        return $this->roomCache[$key];
+    }
+
+    /**
+     * @param  array<string, mixed>  $group
+     * @param  array<string, mixed>  $cell
+     */
+    private function pickRoom(array $group, string $kind, int $day, int $start, int $units, array $cell): ?string
     {
         $end = $start + $units * $group['grid']->blocksPerUnit;
         $first = $this->firstFree($group, $kind, $day, $start, $end, null);
@@ -1131,7 +1157,7 @@ final class Builder
             for ($unit = 0; $unit < $units; $unit++) {
                 $from = $grid->minuteOf($best['start'] + $unit * $grid->blocksPerUnit);
                 $to = $from + $grid->unitMinutes;
-                $kind = ! $group['usesRooms'] ? SessionKind::Virtual : ($unit < $best['practice'][$day] ? SessionKind::Practice : SessionKind::Theory);
+                $kind = ! $group['usesRooms'] ? SessionKind::Virtual : ($unit < ($best['practice'][$day] ?? 0) ? SessionKind::Practice : SessionKind::Theory);
                 $sessions[] = new ProposedSession($group['id'], $day, Minutes::format($from), Minutes::format($to), $roomId, $kind,
                     ! isset($group['currentSlots'][self::slotKey($day, $from, $to, $roomId, $kind)]));
                 $this->occupy($group['group'], $day, $from, $to, $roomId);

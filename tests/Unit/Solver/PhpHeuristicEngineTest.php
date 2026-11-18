@@ -160,7 +160,7 @@ it('responde una salida válida del contrato y la registra como heurística que 
         ->and($output->metrics->intermediateSolutions)->toBe(1);
 });
 
-it('pone 4 h de lunes a jueves, 5 de lunes a viernes y 6 con sábado, una hora por día y a la misma hora', function () {
+it('pone 4 h de lunes a jueves, 5 de lunes a viernes y 6 con sábado, una hora por día y a la misma hora (PS-01, PS-02)', function () {
     $input = heuristicInput(
         [heuristicGroup('g4', ['weekly_hours' => 4, 'teacher_id' => 't1']), heuristicGroup('g5', ['weekly_hours' => 5, 'teacher_id' => 't2']), heuristicGroup('g6', ['weekly_hours' => 6, 'teacher_id' => 't3'])],
         [heuristicTeacher('t1'), heuristicTeacher('t2'), heuristicTeacher('t3')],
@@ -185,7 +185,7 @@ it('pone 4 h de lunes a jueves, 5 de lunes a viernes y 6 con sábado, una hora p
     }
 });
 
-it('con bloques de 30 minutos, cada hora son dos bloques seguidos', function () {
+it('con bloques de 30 minutos, cada hora son dos bloques seguidos (PS-06)', function () {
     $input = heuristicInput([heuristicGroup('g1', ['teacher_id' => 't1'])], [heuristicTeacher('t1')], [heuristicRoom('r1')], [
         'campuses' => [['code' => 'C1', 'block_minutes' => 30, 'day_start' => '07:00', 'day_end' => '14:00', 'days' => [1, 2, 3, 4, 5], 'uses_rooms' => true]],
     ]);
@@ -218,7 +218,7 @@ it('acomoda al docente con disponibilidad estrecha en la única hora que tiene (
         ->and(heuristicPatternOf($output, 'g2')[1])->not->toBe(['10:00']);
 });
 
-it('pone las horas de práctica en el laboratorio libre y la teoría en el aula (HC-06)', function () {
+it('pone las horas de práctica en el laboratorio libre y la teoría en el aula (HC-06, PS-05)', function () {
     $labBusy = [];
 
     foreach ([1, 3, 5] as $day) {
@@ -284,7 +284,7 @@ it('usa el salón ajeno solo en las horas del préstamo aceptado (HC-10)', funct
         ->and(heuristicReasonsOf($output, 'g2'))->toContain('HC-10');
 });
 
-it('dice por qué no programa un grupo sin salón con lugar, sin laboratorio o con horas que la rejilla no da exactas', function () {
+it('dice por qué no programa un grupo sin salón con lugar, sin laboratorio o con horas que la rejilla no da exactas (HC-05, HC-06, PS-06)', function () {
     $input = heuristicInput(
         [
             heuristicGroup('big', ['capacity' => 60]),
@@ -323,7 +323,7 @@ it('reporta los grupos que no caben en la instancia infactible, con el motivo, y
     }
 });
 
-it('si el patrón no cabe, junta dos horas el mismo día antes de dejar el grupo sin programar', function () {
+it('si el patrón no cabe, junta dos horas el mismo día antes de dejar el grupo sin programar (PS-04)', function () {
     $output = (new PhpHeuristicEngine)->solve(heuristicFixture('small'));
     $byDay = heuristicSessionsByDay($output, 'g003');
 
@@ -351,7 +351,7 @@ it('respeta el tiempo límite: devuelve lo que lleva, validado, y lo demás qued
         ->and($output->log)->toContain('Se acabó el tiempo límite (4 s) antes de terminar: lo colocado se validó y lo demás queda sin programar.');
 });
 
-it('prefiere la hora y el salón actuales cuando no empeoran nada, y no los marca como cambiados', function () {
+it('prefiere la hora y el salón actuales cuando no empeoran nada, y no los marca como cambiados (PS-07)', function () {
     $current = array_map(fn (int $day): array => ['day' => $day, 'starts_at' => '10:00', 'ends_at' => '11:00', 'room_id' => 'r2', 'kind' => 'teoria'], [1, 2, 3, 4]);
     $input = heuristicInput(
         [heuristicGroup('g1', ['teacher_id' => 't1', 'current_sessions' => $current])],
@@ -381,7 +381,38 @@ it('la validación final quita al grupo colocado después de un choque duro que 
         ->and(array_map(fn ($violation): string => $violation->rule, $evaluation->hardViolations))->toBe(['HC-08', 'HC-08']);
 });
 
-it('coloca al docente que se pasa de horas y reporta HC-08 como violación de la entrada (supuesto por confirmar)', function () {
+it('la validación final quita solo al grupo que resuelve los choques, no a cada vecino', function () {
+    $input = heuristicInput(
+        [heuristicGroup('a', ['teacher_id' => 't1']), heuristicGroup('b', ['teacher_id' => 't1']), heuristicGroup('c', ['teacher_id' => 't2'])],
+        [heuristicTeacher('t1'), heuristicTeacher('t2')],
+        [heuristicRoom('r1'), heuristicRoom('r2')],
+    );
+    $week = fn (string $groupId, string $roomId): array => array_map(fn (int $day): ProposedSession => new ProposedSession($groupId, $day, '07:00', '08:00', $roomId, SessionKind::Theory, true), [1, 2, 3, 4]);
+
+    [$sessions, $removed, $evaluation] = (new FinalValidation)->clean($input, ['a' => $week('a', 'r1'), 'b' => $week('b', 'r2'), 'c' => $week('c', 'r2')], ['a' => 0, 'b' => 1, 'c' => 2]);
+
+    expect(array_keys($sessions))->toBe(['a', 'c'])
+        ->and(array_keys($removed))->toBe(['b'])
+        ->and(implode(' ', $removed['b']))->toContain('HC-01')->toContain('HC-02')
+        ->and($evaluation->hardViolations)->toBe([]);
+});
+
+it('pasado el plazo, la validación final quita de una vez a todos los grupos de los choques', function () {
+    $input = heuristicInput(
+        [heuristicGroup('a', ['teacher_id' => 't1']), heuristicGroup('b', ['teacher_id' => 't1']), heuristicGroup('c', ['teacher_id' => 't2'])],
+        [heuristicTeacher('t1'), heuristicTeacher('t2')],
+        [heuristicRoom('r1'), heuristicRoom('r2')],
+    );
+    $week = fn (string $groupId, string $roomId): array => array_map(fn (int $day): ProposedSession => new ProposedSession($groupId, $day, '07:00', '08:00', $roomId, SessionKind::Theory, true), [1, 2, 3, 4]);
+
+    [$sessions, $removed, , $evaluations] = (new FinalValidation)->clean($input, ['a' => $week('a', 'r1'), 'b' => $week('b', 'r2'), 'c' => $week('c', 'r2')], ['a' => 0, 'b' => 1, 'c' => 2], fn (): float => 10.0, 5.0);
+
+    expect($sessions)->toBe([])
+        ->and(array_keys($removed))->toEqualCanonicalizing(['a', 'b', 'c'])
+        ->and($evaluations)->toBe(2);
+});
+
+it('coloca al docente que se pasa de horas y reporta HC-08 como violación de la entrada (PS-08)', function () {
     $input = heuristicInput([heuristicGroup('g1', ['teacher_id' => 't1'])], [heuristicTeacher('t1', ['remaining_hours' => 3])], [heuristicRoom('r1')]);
     $output = (new PhpHeuristicEngine)->solve($input);
 
