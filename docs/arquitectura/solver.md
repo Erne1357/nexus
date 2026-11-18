@@ -394,24 +394,28 @@ Al minimizar, cada booleana auxiliar vale lo mínimo que permiten las sesiones q
 
 *Los programados, por fases y no con un peso grande.* Primero se maximizan los grupos programados (`lns`, que solo acepta un vecindario que programa más) y después se minimizan el nivel y el puntaje sin quitar ninguno. Se probó lo otro, un peso por grupo programado mayor que todo el puntaje en una sola resolución: con el objetivo completo la primera vuelta programó 229 de 1 139 grupos en 15 s (sin objetivo, 1 122), y con solo las constantes por opción no programó más rápido ni mejor. Por la misma razón, la primera vuelta de `lns` tiene hasta 15 s (o la cuarta parte del plazo, si es menos; `scripts/objective.py`, `first_share`): con 300 s y la cuarta parte (75 s), `lns` terminó de programar a todos a los 92 s; con 15 s, a los 32–37 s, y ese tiempo es para mejorar.
 
-**Medición** (18 de noviembre de 2026, `department-multicampus`, 2 hilos en un contenedor de 2 CPU y 2 GB como el servicio en compose, semilla 7; `scripts/objective.py`). La heurística en PHP da 24 749 al construir y 23 608 con su búsqueda local (21–26 s).
+**Medición** (18 de noviembre de 2026, `department-multicampus`, 2 hilos en un contenedor de 2 CPU y 2 GB como el servicio en compose; `scripts/objective.py`, semillas 7 y 11). La heurística en PHP da 24 749 al construir, con 68 grupos fuera de su patrón (49 en otros días y 19 con un día de 2 horas), y 23 608 con su búsqueda local (21–26 s), que no aleja a ninguno de su patrón.
 
-| | Plazo | Total | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| Heurística, construcción | 1.5 s | 24 749 | 460 | 120 | 0 | 16 784 | 5 709 | 960 | 36 | 342 | 338 |
-| Heurística con búsqueda local | 21–26 s | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
-| CP-SAT, al programar a todos (`lns`) | 35 s | 36 927 | 1 810 | 330 | 0 | 17 456 | 13 863 | 2 766 | 30 | 380 | 292 |
-| CP-SAT | 60 s | 29 137 | 460 | 330 | 0 | 17 048 | 9 402 | 1 202 | 3 | 384 | 308 |
-| CP-SAT | 300 s | 21 978 | 0 | 252 | 0 | 16 528 | 3 210 | 1 332 | 0 | 348 | 308 |
+| | Plazo | Fuera del patrón | Total | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Heurística, construcción | 1.5 s | 68 | 24 749 | 460 | 120 | 0 | 16 784 | 5 709 | 960 | 36 | 342 | 338 |
+| Heurística con búsqueda local | 21–26 s | 68 o menos | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
+| CP-SAT, al programar a todos (`lns`) | 33–36 s | 65 | 36 557 | 1 600 | 144 | 0 | 17 516 | 13 347 | 3 122 | 30 | 392 | 406 |
+| CP-SAT | 60 s | 65 | 31 997 | 1 170 | 138 | 0 | 17 304 | 11 340 | 1 224 | 45 | 380 | 396 |
+| CP-SAT | 300 s | 65 | 23 479 | 90 | 114 | 0 | 16 748 | 4 737 | 1 170 | 6 | 350 | 264 |
 
-En tres corridas de 300 s el total fue de 21 718 a 22 128 (la de la tabla es la de en medio): de 6 a 8 % menos que la heurística con búsqueda local; en cuatro de 60 s, de 27 663 a 30 515. Con el límite del servicio por omisión (60 s), CP-SAT queda peor que la heurística: tarda 35 s solo en programar a todos sin objetivo (la primera vuelta y los vecindarios de `lns`) y le quedan 20 s para mejorar, unos 30 vecindarios (una vuelta es de unos 45). Con los 300 s de una corrida de departamento (`solver.time_limits`, el `time_limit_seconds` del fixture) la supera, sobre todo en los huecos del docente y del alumno tipo. SC-04 casi no baja en ninguno de los dos motores: la cota que da la heurística es 15 272 (ver «Heurística PHP: búsqueda local»). En `tiny`, `small`, `medium` e `infeasible`, con el plazo de su entrada y 2 hilos, da 32, 42, 10 y 12 (la heurística, 44, 79, 64 y 12), en menos de un segundo; con un hilo, `medium` da 39 (es la salida guardada en `cpsat-output.json`).
+Con los 300 s de una corrida de departamento (`solver.time_limits`, el `time_limit_seconds` del fixture), CP-SAT empata con la heurística: de 23 479 a 23 649 en dos corridas, de 0.5 % menos a 0.2 % más. Deja menos huecos al docente (SC-05, de 4 737 a 4 869 contra 5 217) y al alumno tipo (SC-01, de 60 a 90 contra 360), pero más cambios de edificio (SC-06, el doble) y casi las mismas horas fuera de los preferidos (SC-04). Con el límite del servicio por omisión (60 s) queda peor, de 31 023 a 32 077 en tres corridas: tarda de 33 a 36 s solo en programar a todos sin objetivo (la primera vuelta y los vecindarios de `lns`) y le quedan unos 20 s para mejorar, unos 30 vecindarios (una vuelta es de unos 45). Ningún vecindario regresó a su patrón a alguno de los 65 que quedaron fuera. SC-04 casi no baja en ninguno de los dos motores: la cota que da la heurística es 15 272 (ver «Heurística PHP: búsqueda local»).
+
+*Con el puntaje por encima del patrón* (la primera versión de este objetivo, que dejaba ir a un grupo de su patrón a otros días si bajaba el puntaje), en 300 s daba de 21 718 a 22 128 (de 6 a 8 % menos que la heurística), pero con más de 100 grupos fuera de su patrón. Para eso basta cambiar el orden en `Objective.expression` y en la aceptación de `search.improve`; queda como pregunta para el usuario (PS-10).
+
+En `tiny`, `small`, `medium` e `infeasible`, con el plazo de su entrada y 2 hilos, da 36, 42, 49 y 12 (la heurística, 44, 79, 64 y 12), en menos de un segundo; las salidas de `small` y `medium` guardadas en `cpsat-output.json` son de un hilo.
 
 Supuestos y pendientes:
 
-- PS-10 (supuesto por confirmar): el patrón va antes que el puntaje y la hora actual después. Si se permitiera dejar el patrón para bajar el puntaje, el modelo ya lo puede hacer cambiando el orden de `Objective.expression`.
+- PS-10 (supuesto por confirmar): el patrón va antes que el puntaje y la hora actual después. Si se permitiera dejar el patrón para bajar el puntaje, basta cambiar el orden de `Objective.expression` y de la aceptación de `search.improve` (ver arriba lo que daba).
 - Con más de un hilo, y con plazos de reloj, el resultado cambia entre corridas (los rangos de arriba).
 - Para el límite de 60 s haría falta una pista mejor que el horario actual (la salida de la heurística, con un campo opcional en el contrato; otra tarea) o programar a todos más rápido.
-- Los salones de un vecindario los reparte primero la fase B sin ver edificios; la fase B con objetivo los ajusta antes de compararlo, pero SC-06 queda en 1 064 a 1 332, más del doble que la heurística (546).
+- Los salones de un vecindario los reparte primero la fase B sin ver edificios; la fase B con objetivo los ajusta antes de compararlo, pero SC-06 queda en 1 170 a 1 230, más del doble que la heurística (546).
 
 ## Descomposición del problema
 
