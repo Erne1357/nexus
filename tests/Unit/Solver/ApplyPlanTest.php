@@ -142,3 +142,20 @@ it('dos grupos que intercambian sus horas se escriben los dos', function () {
 
     expect(array_keys($plan->writes()))->toBe(['g-0001', 'g-0002'])->and($plan->kept())->toBe([]);
 });
+
+it('SV-06: la cascada alcanza a un grupo que ya se escribía cuando otro, después en el orden, se queda', function () {
+    $input = planInput([
+        planGroup('g-0001', ['current_sessions' => [planSlot(1, '07:00', '08:00')]]),
+        planGroup('g-0002', ['current_sessions' => [planSlot(2, '07:00', '08:00')]]),
+    ], [['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00']]);
+
+    $plan = ApplyPlan::of($input, planOutput([
+        'g-0001' => [planSlot(2, '07:00', '08:00')],
+        'g-0002' => [planSlot(3, '07:00', '08:00')],
+    ]));
+
+    expect($plan->kept())->toBe([
+        'g-0001' => ['HC-01: su docente ya tiene clase el martes de 7:00 a 8:00; se queda como está.'],
+        'g-0002' => ['HC-01: su docente ya tiene clase el miércoles de 7:00 a 8:00; se queda como está.'],
+    ])->and($plan->writes())->toBe([]);
+});

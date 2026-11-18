@@ -188,16 +188,34 @@ it('SV-07: descartar desde la página deja la corrida descartada y no toca ningu
         ->and(GroupSession::query()->count())->toBe($sessions);
 });
 
-it('SV-03: cancela la corrida en cola y la que corre se lee con wire:poll solo mientras corre', function () {
+it('SV-03: cancela la corrida en cola; el avance solo se lee mientras está en curso', function () {
     Queue::fake();
-    $page = launchFromRunsPage($this->jefe)->assertSeeHtml('wire:poll.2s="refreshRun"');
+    $page = launchFromRunsPage($this->jefe)->assertSeeLivewire('solver::components.run-progress');
     $run = SolverRun::query()->sole();
 
     expect($run->status)->toBe(SolverRunStatus::Queued);
 
-    $page->call('cancel')->assertDontSeeHtml('wire:poll');
+    $page->call('cancel')->assertDontSeeLivewire('solver::components.run-progress')->assertDontSeeHtml('wire:poll');
 
     expect($run->fresh()->status)->toBe(SolverRunStatus::Cancelled);
+});
+
+it('el poll ligero lee solo el avance de la corrida que corre y avisa a la página al terminar', function () {
+    $run = SolverRun::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'status' => SolverRunStatus::Running,
+        'started_at' => now()->subSeconds(30), 'progress' => 40, 'best_score' => 120, 'input' => ['version' => 1, 'time_limit_seconds' => 300]]);
+
+    $progress = Livewire::actingAs($this->jefe)->test('solver::components.run-progress', ['runId' => $run->id])
+        ->assertSeeHtml('wire:poll.2s')
+        ->assertSee('40')
+        ->assertSee('120')
+        ->assertSee('05:00')
+        ->assertNotDispatched('run-finished');
+
+    $run->update(['status' => SolverRunStatus::Done, 'progress' => 100]);
+
+    $progress->call('$refresh')->assertDispatched('run-finished')->assertDontSeeHtml('wire:poll');
+
+    Livewire::actingAs(User::factory()->withRole(Role::Docente)->create())->test('solver::components.run-progress', ['runId' => $run->id])->assertForbidden();
 });
 
 it('?corrida= abre esa corrida y no la más nueva', function () {

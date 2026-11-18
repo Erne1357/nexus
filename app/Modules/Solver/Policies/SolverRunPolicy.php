@@ -34,7 +34,8 @@ final class SolverRunPolicy
     /**
      * Ve una corrida de departamento quien ve las de esa carga y el coordinador de una carrera que la carga toca
      * (CareerLoadsQuery; tarea 6.10); una de carrera, quien ve las de esa carrera. Nunca la de carrera de otro
-     * coordinador.
+     * coordinador. Las corridas de una carrera dada de baja o inactiva las sigue viendo su coordinador mientras conserve
+     * el nombramiento: son historial (supuesto por confirmar; revisión del Riel A en #594).
      */
     public function view(User $user, SolverRun $run): bool
     {

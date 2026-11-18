@@ -35,6 +35,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -54,9 +55,10 @@ use Mary\Traits\Toast;
  * con su lente. Una corrida terminada se compara con la carga en la semana de la cuadrícula del editor
  * (`Core\Support\WeekGrid`): a la izquierda la bandeja de grupos del lente con lo que cambia en cada uno y «Lo que
  * queda»; a la derecha «Con la corrida / Como está hoy / Las dos»; en celular, la lista de un día. Una corrida en
- * curso se lee cada 2 segundos (`wire:poll`, solo entonces) con su avance y su mejor puntaje. El puntaje y lanzar van
- * en drawers; aceptar, en un `x-modal` con el resumen (y la entrada vencida en otro); cancelar y descartar, con
- * `x-confirm`. Al pie, el historial. La URL guarda `?corrida=`, `?campus=`, `?ver=`, `?lente=`, `?modo=`, `?grupo=` y
+ * curso la lee cada 2 segundos un componente aparte (solver::components.run-progress, solo entonces) con su avance
+ * y su mejor puntaje, sin volver a armar la página; al terminar, avisa y la página se pinta con su resultado. El
+ * puntaje y lanzar van en drawers; aceptar, en un `x-modal` con el resumen (y la entrada vencida en otro); cancelar y
+ * descartar, con `x-confirm`. Al pie, el historial. La URL guarda `?corrida=`, `?campus=`, `?ver=`, `?lente=`, `?modo=`, `?grupo=` y
  * `?dia=`.
  */
 new #[Title('Corridas del motor')] class extends Component
@@ -329,6 +331,13 @@ new #[Title('Corridas del motor')] class extends Component
     public function openAccept(ApplySolverRun $apply): void
     {
         $run = $this->runOrFail($this->runId);
+
+        if ($run->status !== SolverRunStatus::Done) {
+            $this->error('No se aceptó', e('Solo se acepta una corrida terminada.'));
+
+            return;
+        }
+
         $this->authorize('apply', $run);
 
         if (! $apply->isCurrent($run)) {
@@ -341,12 +350,12 @@ new #[Title('Corridas del motor')] class extends Component
     }
 
     /**
-     * SV-05: acepta la corrida elegida.
+     * SV-05: acepta la corrida elegida. La Action autoriza y revisa el estado con la corrida bloqueada: si otra persona
+     * la aceptó primero, esta aceptación falla con su motivo.
      */
     public function apply(ApplySolverRun $apply, Actor $context): void
     {
         $run = $this->runOrFail($this->runId);
-        $this->authorize('apply', $run);
 
         try {
             $summary = $apply->handle($run, $context->user());
@@ -367,13 +376,24 @@ new #[Title('Corridas del motor')] class extends Component
 
         $this->showAccept = false;
         $kept = count($summary['kept']);
-        $this->success('Corrida aplicada', e("{$summary['sessions']} sesiones escritas en {$summary['groups']} grupos; choques recalculados.".($kept > 0 ? " {$kept} ".($kept === 1 ? 'grupo se quedó' : 'grupos se quedaron').' como estaban.' : '')));
+        $text = "{$summary['sessions']} sesiones escritas en {$summary['groups']} grupos".($summary['conflicts_pending'] ? '.' : '; choques recalculados.')
+            .($kept > 0 ? " {$kept} ".($kept === 1 ? 'grupo se quedó' : 'grupos se quedaron').' como estaban.' : '');
+
+        if ($summary['conflicts_pending']) {
+            $this->warning('Corrida aplicada', e("{$text} Los choques quedan por recalcular."));
+
+            return;
+        }
+
+        $this->success('Corrida aplicada', e($text));
     }
 
     /**
-     * El poll de la corrida en curso: vuelve a pintar con lo guardado.
+     * La corrida en curso terminó (lo avisa solver::components.run-progress, que es el que lee cada 2 segundos): la
+     * página se vuelve a pintar con su resultado.
      */
-    public function refreshRun(): void {}
+    #[On('run-finished')]
+    public function runFinished(): void {}
 
     /**
      * @return array<string, mixed>
@@ -431,7 +451,7 @@ new #[Title('Corridas del motor')] class extends Component
      */
     private function runViewData(?SolverRun $run, ?array $row): array
     {
-        $data = ['comparison' => null, 'output' => null, 'weights' => [], 'live' => null, 'decision' => null];
+        $data = ['comparison' => null, 'output' => null, 'weights' => [], 'decision' => null];
 
         if ($run === null) {
             return $data;
@@ -442,11 +462,6 @@ new #[Title('Corridas del motor')] class extends Component
         $output = RunPayloads::output($run);
         $data['output'] = $output;
         $data['weights'] = $output === null ? [] : (RunPayloads::read($run, 'input')['soft_weights'] ?? []);
-
-        if ($run->status->isInProgress()) {
-            $limit = (int) (RunPayloads::read($run, 'input')['time_limit_seconds'] ?? 0);
-            $data['live'] = ['elapsed' => $run->started_at === null ? 0 : (int) $run->started_at->diffInSeconds(now()), 'limit' => $limit];
-        }
 
         $comparison = $output === null ? null : app(RunComparisonQuery::class)->of($run, $this->scopeKind === 'career' ? $this->scopeId : null);
         $data['comparison'] = $comparison;
