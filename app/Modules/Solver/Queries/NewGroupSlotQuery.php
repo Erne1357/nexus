@@ -10,6 +10,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Queries\RoomLoanWindowsQuery;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
 use App\Modules\Scheduling\Validation\Minutes;
@@ -22,6 +23,7 @@ use App\Modules\Solver\Contract\RunStatus;
 use App\Modules\Solver\Contract\SessionKind;
 use App\Modules\Solver\Contract\SessionSlot;
 use App\Modules\Solver\Contract\SolverInput;
+use App\Modules\Solver\Contract\TimeSlot;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
@@ -60,7 +62,13 @@ final class NewGroupSlotQuery
     /** Segundos para colocar el grupo nuevo (en la demo masiva, 0.1 s): es solo el tope, porque va en la petición. */
     public const int TIME_LIMIT_SECONDS = 5;
 
-    public function __construct(private readonly BuildSolverInput $inputs) {}
+    /**
+     * Lo que dice el motor cuando se le acaba el tiempo sin colocar (PhpHeuristicEngine); es la línea de su `log` que esta
+     * consulta busca para decirlo para el jefe.
+     */
+    public const string TIMEOUT_LOG = PhpHeuristicEngine::TIMEOUT_LOG;
+
+    public function __construct(private readonly BuildSolverInput $inputs, private readonly RoomLoanWindowsQuery $loans) {}
 
     /**
      * @param  (Closure(): float)|null  $clock  segundos de un reloj monótono; las pruebas dan uno propio
@@ -92,7 +100,7 @@ final class NewGroupSlotQuery
         }
 
         $virtual = $this->virtualGroup($spec, $load, $rooms);
-        $input = $this->withOnlyMovable($build->input, $virtual, $this->cohortMates($build->input, $spec, $load));
+        $input = $this->withOnlyMovable($this->withLoanedRoomsBusy($build->input, $load, $rooms), $virtual, $this->cohortMates($build->input, $spec, $load));
         $output = (new PhpHeuristicEngine(clock: $clock, search: null))->solve($input);
 
         $sessions = array_values(array_filter($output->sessions, fn (ProposedSession $session): bool => $session->groupId === $virtual->id));
@@ -104,7 +112,7 @@ final class NewGroupSlotQuery
         $placed = $reasons === [] && $output->status !== RunStatus::Error ? $sessions : [];
         $reasons = match (true) {
             $output->status === RunStatus::Error => $output->log,
-            $placed === [] && array_any($output->log, fn (string $line): bool => str_starts_with($line, 'Se acabó el tiempo límite')) => ['El motor no le encontró lugar a tiempo: vuelve a buscar en un momento.'],
+            $placed === [] && array_any($output->log, fn (string $line): bool => str_starts_with($line, self::TIMEOUT_LOG)) => ['El motor no le encontró lugar a tiempo: vuelve a buscar en un momento.'],
             $placed === [] && $reasons === [] => ['El motor no le encontró lugar.'],
             default => $reasons,
         };
@@ -213,6 +221,38 @@ final class NewGroupSlotQuery
             array_map(fn (RoomInput $room): string => $room->id, $input->rooms),
             fn (string $roomId): bool => isset($usable[$roomId]),
         ));
+    }
+
+    /**
+     * La entrada con las ventanas de los préstamos vivos de los salones candidatos como ocupadas (`rooms[].busy`): el grupo
+     * nuevo no tiene préstamos (HC-10), así que esa hora no es suya aunque el salón sea del departamento o no tenga dueño;
+     * lo mismo que AssignSessionRoom y NewGroupPlacementQuery::conflicts(). Sin esto, el motor propondría un lugar que la
+     * revisión de `place()` rechaza siempre.
+     *
+     * @param  list<string>  $candidateRoomIds
+     */
+    private function withLoanedRoomsBusy(SolverInput $input, AcademicLoad $load, array $candidateRoomIds): SolverInput
+    {
+        $loans = $this->loans->for($load->term_id, $candidateRoomIds);
+
+        if ($loans->isEmpty()) {
+            return $input;
+        }
+
+        $rooms = array_map(function (RoomInput $room) use ($loans): RoomInput {
+            $windows = $loans[$room->id] ?? collect();
+
+            return $windows->isEmpty() ? $room : new RoomInput(
+                $room->id, $room->campusCode, $room->type, $room->capacity, $room->buildingId, $room->ownerDepartmentId, $room->blocks,
+                [...$room->busy, ...$windows->map(fn (object $window): TimeSlot => new TimeSlot((int) $window->day, Minutes::clock($window->starts_at), Minutes::clock($window->ends_at)))->all()],
+            );
+        }, $input->rooms);
+
+        return new SolverInput(
+            $input->version, $input->runId, $input->termCode, $input->modalityCode, $input->campuses, $input->timeLimitSeconds,
+            $input->scope, $input->travelMinutes, $input->weeklyHoursTolerance, $input->groups, $input->teachers, $rooms,
+            $input->agreements, $input->subjectRoomDefaults, $input->hardRules, $input->softWeights, $input->options,
+        );
     }
 
     /**

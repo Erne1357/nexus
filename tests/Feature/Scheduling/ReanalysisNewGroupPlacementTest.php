@@ -12,6 +12,7 @@ use App\Modules\Scheduling\Events\NewGroupPlacementRequested;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\NewGroupPlacementQuery;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Solver\Queries\NewGroupSlotQuery;
@@ -111,6 +112,34 @@ it('HC-10: nunca sugiere un salón de otro departamento, aunque la carga tenga a
     expect($placement->isPlaced())->toBeFalse()
         ->and($placement->roomIds())->not->toContain($borrowed->id)
         ->and($placement->reasons[0])->toStartWith('HC-05');
+});
+
+it('HC-10: el salón prestado a otro grupo no se sugiere en esa ventana, tampoco al departamento dueño', function () {
+    // El préstamo de toda la semana sigue vivo aunque la sesión de A (lunes 7:00–9:00) ya sea más corta: la ventana es suya.
+    Room::query()->where('campus_id', $this->world->c2->id)->where('capacity', '<', 35)->update(['is_active' => false]);
+    $a = $this->world->groups['A'];
+    $room = Room::query()->whereKey($a->sessions()->sole()->room_id)->sole();
+    Room::query()->where('campus_id', $this->world->c2->id)->whereKeyNot($room->id)->update(['is_active' => false]);
+    $room->update(['department_id' => $this->world->department->id]);
+    $holder = Department::factory()->create(['name' => 'Sistemas']);
+
+    foreach ([1, 2, 3, 4, 5] as $day) {
+        InterdepartmentalAgreement::factory()->accepted()->create([
+            'term_id' => $this->world->term->id, 'campus_id' => $this->world->c2->id, 'modality_id' => $this->world->modality->id,
+            'from_department_id' => $this->world->department->id, 'to_department_id' => $holder->id, 'group_id' => $a->id,
+            'room_id' => $room->id, 'day' => $day, 'starts_at' => '07:00', 'ends_at' => '21:00',
+        ]);
+    }
+
+    $placement = $this->world->newGroupPlacement();
+
+    expect($placement->isPlaced())->toBeFalse()
+        ->and($placement->sessions)->toBe([]);
+
+    $stale = new NewGroupPlacement([['day' => 1, 'startsAt' => '09:00', 'endsAt' => '10:00', 'kind' => 'teoria', 'roomId' => $room->id]], rooms: [$room->id => ['code' => $room->code, 'capacity' => $room->capacity]]);
+
+    expect(app(NewGroupPlacementQuery::class)->conflicts($this->world->load, $this->world->openGroupSuggestion()->newGroup, $stale))
+        ->toBe(["{$room->code} está prestado a otro grupo (HC-10) el lunes 9:00–10:00."]);
 });
 
 it('lo que propone el motor pasa la revisión de aplicar; si no, lo da sin lugar con ese motivo', function () {

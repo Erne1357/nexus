@@ -138,8 +138,8 @@ final class NewGroupPlacementQuery
 
     /**
      * Qué ocupa un salón a la hora de una sesión del grupo nuevo, o null si está libre: las sesiones activas del periodo en
-     * el campus (HC-02) y los bloqueos del salón (HC-11), de los días del grupo nuevo. Los préstamos de un salón sin dueño
-     * o del departamento no cuentan: ahí el validador no revisa HC-10.
+     * el campus (HC-02) y los bloqueos del salón (HC-11) y las ventanas de sus préstamos vivos a otros grupos (HC-10, también en un salón
+     * sin dueño o del departamento dueño, como AssignSessionRoom; RoomLoanWindowsQuery), de los días del grupo nuevo.
      *
      * @param  list<string>  $roomIds
      * @return Closure(string, array{day: int, startsAt: string, endsAt: string}): ?string
@@ -163,14 +163,16 @@ final class NewGroupPlacementQuery
             ->toBase()
             ->get(['room_id', 'day', 'starts_at', 'ends_at'])
             ->groupBy('room_id');
+        $loans = app(RoomLoanWindowsQuery::class)->for($load->term_id, $roomIds, $days);
 
-        return function (string $roomId, array $session) use ($sessions, $blocks): ?string {
+        return function (string $roomId, array $session) use ($sessions, $blocks, $loans): ?string {
             $overlaps = fn (object $row): bool => (int) $row->day === $session['day']
                 && Minutes::overlap(Minutes::of($row->starts_at), Minutes::of($row->ends_at), Minutes::of($session['startsAt']), Minutes::of($session['endsAt']));
 
             return match (true) {
                 ($sessions[$roomId] ?? collect())->contains($overlaps) => 'ya está ocupado (HC-02)',
                 ($blocks[$roomId] ?? collect())->contains($overlaps) => 'está bloqueado (HC-11)',
+                ($loans[$roomId] ?? collect())->contains($overlaps) => 'está prestado a otro grupo (HC-10)',
                 default => null,
             };
         };
