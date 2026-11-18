@@ -2,7 +2,6 @@
 
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\User;
-use Database\Seeders\DemoSeeder;
 
 /*
 | Orden de las materias en el semestre (D21, confirmado el 5 de noviembre de 2026): el admin arrastra una materia
@@ -10,7 +9,7 @@ use Database\Seeders\DemoSeeder;
 */
 
 it('el admin arrastra una materia dentro de su semestre y el orden persiste al recargar', function () {
-    $this->seed(DemoSeeder::class);
+    seedDemoForBrowser();
     $plan = StudyPlan::where('code', 'ISIC-2010-224')->sole();
     User::factory()->admin()->create(['username' => 'ana.admin', 'name' => 'Ana Admin']);
 

@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Demand\Enums\GapBucket;
 use App\Modules\Demand\Queries\HistoricalRatesQuery;
 use App\Modules\Demand\Rules\HistoricalRates;
 use App\Modules\Students\Enums\KardexResult;
@@ -15,11 +16,13 @@ use App\Modules\Students\Models\Student;
 | sobre los últimos `demand.history_terms` periodos del mismo tipo que el objetivo, la de no inscripción es la parte
 | de los elegibles al inicio de cada periodo que no la tomaron, y la de reprobación la de quienes la cursaron con
 | calificación y la reprobaron. Elegibles reconstruidos del kárdex (StandingCalculator); población = los alumnos con
-| kárdex en ese periodo. La baja no es tomarla. Sin historia, la tasa promedio del departamento.
+| kárdex en ese periodo. La baja no es tomarla. Sin historia, la tasa promedio del departamento. La no inscripción
+| también se mide por tramo de distancia entre el semestre de la materia y el del alumno (DM-03, confirmado el 17 de
+| noviembre de 2026), y una materia con elegibles que nadie tomó en ningún campus se marca para revisar (DM-04).
 |
 | Kárdex sintético para el objetivo 20271 con 4 periodos (20261, 20251, 20241, 20231):
 | - K1, 20261: s1–s4 aprobaron A en 20253; s1 y s2 aprueban B, s3 la reprueba y s4 solo tiene una baja en B. n1 y n2
-|   entran (nada antes) y aprueban A.
+|   entran (nada antes) y aprueban A. Todos van en su semestre: B (2.º) y A (1.º) son del tramo «la suya».
 | - K1, 20251: s5 y s6 aprobaron A en 20243; s5 aprueba B y s6 solo tiene una baja en X.
 | - K2, 20261: s10 aprobó A en 20253 y aprueba B.
 | - Fuera: n1 reprueba B en 20263 (otro tipo), s9 reprueba B en 20221 (fuera de la ventana) y un alumno de EAD.
@@ -117,8 +120,51 @@ it('DM-04: una materia sin historia usa la tasa promedio de su departamento y lo
 
     expect($rates->fromDepartment)->toBeTrue()
         ->and($rates->nonEnrollment)->toEqualWithDelta(2 / 8, 0.0001)
+        ->and($rates->nonEnrollmentByGap)->toBe([GapBucket::Same->value => 0.25])
         ->and($rates->failure)->toEqualWithDelta(1 / 6, 0.0001)
         ->and($rates->termsUsed)->toBe(2);
+});
+
+it('DM-03: mide la no inscripción de cada tramo de distancia entre el semestre de la materia y el del alumno', function () {
+    $ok = KardexResult::Aprobada;
+    ratesStudent($this->k1, [[$this->a, '20233', $ok], [$this->x, '20243', KardexResult::Baja], [$this->b, '20261', $ok]]);
+    ratesStudent($this->k1, [[$this->a, '20233', $ok], [$this->x, '20243', KardexResult::Baja], [$this->x, '20261', KardexResult::Baja]]);
+
+    $rates = ratesFixture()->rateFor($this->b->id, $this->k1->id, $this->d1->id);
+
+    expect($rates->nonEnrollment)->toEqualWithDelta(3 / 8, 0.0001)
+        ->and($rates->nonEnrollmentByGap)->toHaveCount(2)
+        ->and($rates->nonEnrollmentByGap[GapBucket::Same->value])->toEqualWithDelta(2 / 6, 0.0001)
+        ->and($rates->nonEnrollmentByGap[GapBucket::Behind->value])->toEqualWithDelta(1 / 2, 0.0001)
+        ->and($rates->nonEnrollmentFor(GapBucket::OneAhead))->toEqualWithDelta(3 / 8, 0.0001);
+});
+
+it('DM-04: una materia con elegibles que nadie tomó en ningún campus conserva su historia, se marca y no cambia la del departamento', function () {
+    $untaken = Subject::factory()->create(['code' => 'RN-2', 'department_id' => $this->d1->id]);
+    placeInPlan($this->plan, $untaken, 2);
+
+    $history = ratesFixture();
+    $rates = $history->rateFor($untaken->id, $this->k1->id, $this->d1->id);
+
+    expect($history->neverTaken($untaken->id))->toBeTrue()
+        ->and($rates->fromDepartment)->toBeFalse()
+        ->and($rates->nonEnrollment)->toBe(1.0)
+        ->and($history->rateFor($this->c->id, $this->k1->id, $this->d1->id)->nonEnrollment)->toEqualWithDelta(2 / 8, 0.0001)
+        ->and($history->neverTaken($this->b->id))->toBeFalse()
+        ->and($history->neverTaken($this->c->id))->toBeFalse();
+});
+
+it('DM-04: la materia que alguien tomó en otro campus conserva su tasa propia en el campus donde nadie la tomó', function () {
+    $elsewhere = Subject::factory()->create(['code' => 'RQ-2', 'department_id' => $this->d1->id]);
+    placeInPlan($this->plan, $elsewhere, 2);
+    ratesStudent($this->k2, [[$this->a, '20253', KardexResult::Aprobada], [$elsewhere, '20261', KardexResult::Aprobada]]);
+
+    $history = ratesFixture();
+    $rates = $history->rateFor($elsewhere->id, $this->k1->id, $this->d1->id);
+
+    expect($history->neverTaken($elsewhere->id))->toBeFalse()
+        ->and($rates->fromDepartment)->toBeFalse()
+        ->and($rates->nonEnrollment)->toBe(1.0);
 });
 
 it('DM-04: sin historia propia ni de su departamento no hay tasa', function () {

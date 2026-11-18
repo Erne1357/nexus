@@ -5,9 +5,11 @@ namespace App\Modules\AcademicLoad;
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\AcademicLoad\Console\EvaluateForecastCommand;
+use App\Modules\AcademicLoad\Console\ImportSiiGroups;
 use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
@@ -27,11 +29,14 @@ use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
 use App\Modules\AcademicLoad\Listeners\PreviewLoadsOnTermOpening;
+use App\Modules\AcademicLoad\Listeners\RecordGroupHistoryOnPublication;
 use App\Modules\AcademicLoad\Listeners\ReportLoadStatuses;
 use App\Modules\AcademicLoad\Listeners\ReportUnpublishedLoadsOnModalityDeactivating;
+use App\Modules\AcademicLoad\Listeners\SyncProposalsOnForecastsComputed;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
+use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
@@ -59,9 +64,11 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Demand\Events\DemandForecastsComputed;
 use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
+use App\Modules\Students\Models\KardexRecord;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -100,11 +107,13 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(CareerProposalSubmitted::class, NotifyDepartmentsOnProposalSubmitted::class);
         Event::listen(CareerProposalReturned::class, NotifyCoordinatorsOnProposalReturned::class);
         Event::listen(LoadTransitioned::class, NotifyOnLoadClosingTransition::class);
+        Event::listen(DemandForecastsComputed::class, SyncProposalsOnForecastsComputed::class);
+        Event::listen(LoadTransitioned::class, RecordGroupHistoryOnPublication::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 
         if ($this->app->runningInConsole()) {
-            $this->commands([PruneExports::class, EvaluateForecastCommand::class]);
+            $this->commands([PruneExports::class, ImportSiiGroups::class, EvaluateForecastCommand::class]);
         }
     }
 
@@ -197,6 +206,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     public function demoSteps(): array
     {
         return [
+            // Después del kárdex de Students (que lleva a «catálogos»): el historial se arma con sus alumnos por materia y campus.
+            new DemoStep(DemoCheckpoint::Catalogs, 'Historial de grupos por materia, coherente con el kárdex', fn (DemoContext $demo) => $demo->runSeeder(HistoricalGroupsDemoSeeder::class, ['seed' => $demo->seed])),
             // Después de abrir el periodo (Core), que calcula la proyección de Demand; el kárdex ya está sembrado (tarea 5.10a).
             new DemoStep(DemoCheckpoint::Proposal, 'Evaluaciones de la precisión de la proyección', fn (DemoContext $demo) => $demo->runSeederPerModality(ForecastEvaluationDemoSeeder::class, [
                 'campuses' => $demo->campuses,
@@ -242,6 +253,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         };
 
         return [
+            new DemoCheck([DemoCheckpoint::Catalogs], 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() || ! KardexRecord::query()->exists() ? true : 'Hay kárdex, pero no hay historial de grupos.'),
             new DemoCheck([DemoCheckpoint::Proposal], 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => $evaluations($demo)->exists() === false && $evaluable($demo)
                 ? 'No hay evaluaciones de la proyección listas.'
                 : true),

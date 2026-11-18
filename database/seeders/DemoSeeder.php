@@ -6,6 +6,7 @@ use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -14,6 +15,7 @@ use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Database\Seeders\LoginScreenDemoSeeder;
 use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
+use App\Modules\Demand\Database\Seeders\DemandRareCasesDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
@@ -57,7 +59,9 @@ class DemoSeeder extends Seeder
         $this->callWith(FacilitiesDemoSeeder::class, ['campuses' => ['C2']]);
         $this->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => ['C2' => 120]]);
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C2' => 35]]);
+        $this->call(HistoricalGroupsDemoSeeder::class);
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES']]]);
+        $this->callWith(DemandRareCasesDemoSeeder::class, ['term' => '20271', 'campuses' => ['C2']]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'demo']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'demo']);
         // Solo con `demo:seed --hasta=todo` (demo.showcase): las pruebas que siembran la demo no lo necesitan.

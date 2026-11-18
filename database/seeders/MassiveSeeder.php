@@ -6,6 +6,7 @@ use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -16,6 +17,7 @@ use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Database\Seeders\TermCalendarDemoSeeder;
 use App\Modules\Core\Database\Seeders\TermHistorySeeder;
 use App\Modules\Core\Database\Seeders\TermOpeningDemoSeeder;
+use App\Modules\Demand\Database\Seeders\DemandRareCasesDemoSeeder;
 use App\Modules\Facilities\Database\Seeders\FacilitiesDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
@@ -72,9 +74,12 @@ class MassiveSeeder extends Seeder
 
         $this->command?->info(sprintf('Alumnos, kárdex y avance en total: %.1f s.', (hrtime(true) - $started) / 1e9));
 
+        $this->call(HistoricalGroupsDemoSeeder::class);
+
         $started = hrtime(true);
         $this->call([TermHistorySeeder::class, TermCalendarDemoSeeder::class]);
         $this->callWith(TermOpeningDemoSeeder::class, ['openings' => ['20271' => ['PRES'], '20263' => ['PRES']]]);
+        $this->callWith(DemandRareCasesDemoSeeder::class, ['term' => '20271', 'campuses' => ['C1', 'C2']]);
         $this->callWith(TeacherCaptureDemoSeeder::class, ['profile' => 'massive']);
         $this->callWith(CatalogValidationDemoSeeder::class, ['profile' => 'massive']);
         // Solo con `demo:seed --hasta=todo` (demo.showcase): las pruebas que siembran la demo no lo necesitan.
