@@ -3,7 +3,6 @@
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Core\Models\User;
-use Database\Seeders\DemoSeeder;
 
 /*
 | Retícula de un plan en el navegador (tarea 1.8). Cada prueba siembra el demo completo (DemoSeeder) y tarda casi un
@@ -24,7 +23,7 @@ use Database\Seeders\DemoSeeder;
 // espera hasta 20 s y lo devuelve al valor por defecto al terminar.
 beforeEach(function () {
     pest()->browser()->timeout(20_000);
-    $this->seed(DemoSeeder::class);
+    seedDemoForBrowser();
     $this->plan = StudyPlan::where('code', 'ISIC-2010-224')->sole();
     User::factory()->admin()->create(['username' => 'ana.admin', 'name' => 'Ana Admin']);
 });
