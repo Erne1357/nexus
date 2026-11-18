@@ -55,7 +55,7 @@ final class PruneSolverRunFiles
         foreach ($disk->directories(self::FOLDER) as $folder) {
             $runId = basename($folder);
 
-            if (Str::isUuid($runId) && SolverRun::query()->whereKey($runId)->exists()) {
+            if (! Str::isUuid($runId) || SolverRun::query()->whereKey($runId)->exists()) {
                 continue;
             }
 
