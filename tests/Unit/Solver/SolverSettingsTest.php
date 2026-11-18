@@ -45,3 +45,7 @@ it('declara los pesos blandos con un campo por regla, permiso de Subdirección y
         ->and($definition->permission)->toBe(SolverPermission::SettingUpdate)
         ->and(SolverSettings::fromValue(null, $definition->default))->toEqual(new SolverSettings);
 });
+
+it('un tiempo fuera de 10 a 600 segundos usa el de omisión, como lo valida el lanzamiento (SV-02)', function (int $seconds) {
+    expect(SolverSettings::fromValue(['department' => $seconds])->timeLimitFor(RunScope::Department))->toBe(300);
+})->with([5, 9, 601, 3600]);
