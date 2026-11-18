@@ -16,7 +16,8 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
  * - Abrir grupo no se aplica aquí: llega con la sugerencia del motor (tarea 8.3b).
  *
  * `blockedReason` dice por qué todavía no se puede aplicar aunque se vea (cerrar un grupo con docente: primero se le quita,
- * como pide CancelGroup).
+ * como pide CancelGroup). `raisesCapacity`, si con los lugares sugeridos sube la capacidad del grupo (pide además
+ * GroupPolicy::manage).
  *
  * Quien aplica (ApplyReanalysisSuggestion) suma esos lugares a lo que el grupo tenga en ese momento y deja que las
  * Actions de la fase 3 revisen otra vez HC-05 y HC-07.
@@ -43,6 +44,7 @@ final readonly class ReanalysisSuggestion
         public array $moves = [],
         public array $relocations = [],
         public ?string $blockedReason = null,
+        public bool $raisesCapacity = false,
     ) {}
 
     public function isApplicable(): bool

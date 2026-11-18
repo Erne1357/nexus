@@ -45,7 +45,7 @@ final class ReanalysisSuggestionsQuery
     public function for(AcademicLoad $load, ReanalysisBlock $block): ReanalysisSuggestions
     {
         $withTrashed = fn (Relation $query) => $query->withTrashed();
-        $campusId = $block->rows[0]->campusId ?? null;
+        $campusId = $block->campus?->getKey() ?? $block->rows[0]->campusId ?? null;
         $groups = Group::query()
             ->active()
             ->where('term_id', $load->term_id)
@@ -98,19 +98,11 @@ final class ReanalysisSuggestionsQuery
             teacherName: $group->teacher?->name,
         ))->all();
 
-        $seats = [];
-
-        foreach ($advisorGroups as $group) {
-            foreach ($group->quotas as $careerId => $quota) {
-                $seats[$careerId] = ($seats[$careerId] ?? 0) + $quota;
-            }
-        }
-
         return new ReanalysisSuggestions(
             suggestions: $this->advisor->advise($block->rows, $advisorGroups, $careerCodes, $settings),
             groups: $advisorGroups,
             models: $groups->keyBy('id')->all(),
-            seats: $seats,
+            seats: AdvisorGroup::seatsByCareer($advisorGroups),
             careerCodes: $careerCodes,
             threshold: $settings->highlightThreshold,
         );

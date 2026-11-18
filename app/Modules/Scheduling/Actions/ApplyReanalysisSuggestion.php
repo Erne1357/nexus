@@ -95,7 +95,8 @@ final class ApplyReanalysisSuggestion
     }
 
     /**
-     * Los grupos que toca la sugerencia, vivos y de la carga.
+     * Los grupos que toca la sugerencia, vivos y de la carga, bloqueados (FOR UPDATE, por id, después de la carga: el orden
+     * de LoadEditability) para que sus cupos y su capacidad no cambien entre que se leen y se escriben.
      *
      * @return Collection<string, Group>
      *
@@ -109,6 +110,8 @@ final class ApplyReanalysisSuggestion
             ->where('term_id', $load->term_id)
             ->where('modality_id', $load->modality_id)
             ->where('department_id', $load->department_id)
+            ->orderBy('id')
+            ->lockForUpdate()
             ->get()
             ->keyBy('id');
 

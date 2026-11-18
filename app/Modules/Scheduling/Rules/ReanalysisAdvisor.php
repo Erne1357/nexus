@@ -127,7 +127,8 @@ final class ReanalysisAdvisor
             }
         }
 
-        $close = $surplus === [] ? null : $this->close($groups, $surplus, $demand, $careerCodes, $settings);
+        $touched = array_map(fn (ReanalysisSuggestion $suggestion): ?string => $suggestion->groupId, [...$expand, ...$rooms]);
+        $close = $surplus === [] ? null : $this->close($groups, $touched, $surplus, $seats, $demand, $careerCodes, $settings);
 
         return [
             ...$expand,
@@ -184,6 +185,7 @@ final class ReanalysisAdvisor
             careerId: $context['career'],
             seats: $add,
             maxSeats: $room,
+            raisesCapacity: $newCapacity > $capacity,
         );
     }
 
@@ -259,6 +261,7 @@ final class ReanalysisAdvisor
             seats: $add,
             maxSeats: $room,
             moves: $moves,
+            raisesCapacity: $newCapacity > $capacity,
         );
     }
 
@@ -295,19 +298,24 @@ final class ReanalysisAdvisor
 
     /**
      * Cerrar el primer grupo (sin docente, luego el de menos lugares, luego por clave) que tiene lugares de una carrera
-     * sobrante y que, reubicando lo que hace falta, no deja a ninguna carrera faltante.
+     * sobrante y que, reubicando lo que hace falta, no deja a ninguna carrera faltante. Nunca uno que amplía o cambia de
+     * salón otra sugerencia (`$touched`). Lo que queda de cada carrera se cuenta con los lugares de ahora (`$seats`), no
+     * con los que otras sugerencias todavía no aplican; lo libre de los que reciben, después de ellas (lo más chico de los
+     * dos), así cerrar sirve se apliquen o no.
      *
      * @param  list<AdvisorGroup>  $groups
+     * @param  list<string|null>  $touched
      * @param  list<string>  $surplus
+     * @param  array<string, int>  $seats
      * @param  array<string, int>  $demand
      * @param  array<string, string>  $careerCodes
      */
-    private function close(array $groups, array $surplus, array $demand, array $careerCodes, DemandSettings $settings): ?ReanalysisSuggestion
+    private function close(array $groups, array $touched, array $surplus, array $seats, array $demand, array $careerCodes, DemandSettings $settings): ?ReanalysisSuggestion
     {
-        $candidates = array_values(array_filter($groups, fn (AdvisorGroup $group): bool => array_intersect(array_keys($this->quotas[$group->id]), $surplus) !== []));
-        usort($candidates, fn (AdvisorGroup $a, AdvisorGroup $b): int => [$a->teacherName !== null, array_sum($this->quotas[$a->id]), $a->code]
-            <=> [$b->teacherName !== null, array_sum($this->quotas[$b->id]), $b->code]);
-        $seats = $this->seatsByCareer($groups);
+        $candidates = array_values(array_filter($groups, fn (AdvisorGroup $group): bool => ! in_array($group->id, $touched, true)
+            && array_intersect(array_keys($group->quotas), $surplus) !== []));
+        usort($candidates, fn (AdvisorGroup $a, AdvisorGroup $b): int => [$a->teacherName !== null, $a->used(), $a->code]
+            <=> [$b->teacherName !== null, $b->used(), $b->code]);
 
         foreach ($candidates as $group) {
             $relocations = $this->relocate($group, $groups, $seats, $demand, $careerCodes, $settings);
@@ -396,6 +404,7 @@ final class ReanalysisAdvisor
                 ? 'Nadie pierde lugar: los grupos que quedan alcanzan.'
                 : 'Sus lugares pasan a: '.implode('; ', array_map(fn (string $code, array $parts): string => "grupo {$code} (".implode(', ', $parts).')', array_keys($byGroup), $byGroup)).'.',
             "El grupo {$group->code} se cancela y pierde su horario (queda en su bitácora).",
+            ...($group->held > 0 ? ["Se cancelan sus propuestas de grupo compartido, que apartan {$group->held} lugares."] : []),
             $this->touches($careers, $group->teacherName, null),
         ];
 

@@ -74,6 +74,7 @@ describe('faltante', function () {
             ->and($expand->title)->toBe('Ampliar el cupo de ISIC en el grupo A de 40 a 50')
             ->and($expand->seats)->toBe(10)
             ->and($expand->maxSeats)->toBe(10)
+            ->and($expand->raisesCapacity)->toBeFalse()
             ->and($expand->evidence)->toContain('ISIC: 50 esperados · 40 lugares · faltan 10')
             ->and($expand->effect)->not->toContain('La capacidad del grupo A sube de 50 a 50.');
     });
@@ -84,6 +85,7 @@ describe('faltante', function () {
         $expand = $suggestions['expand_quota:group-A:ISIC'];
 
         expect($expand->seats)->toBe(10)
+            ->and($expand->raisesCapacity)->toBeTrue()
             ->and($expand->evidence)->toContain('Grupo A: 40 de 40 lugares repartidos · salón R-A de 50 (HC-05)')
             ->and($expand->effect)->toContain('La capacidad del grupo A sube de 40 a 50, dentro de su salón (HC-05, HC-07).')
             ->and($expand->effect)->toContain('Toca a ISIC y a Ana Ruiz, que conserva su horario.');
@@ -190,6 +192,24 @@ describe('sobrante', function () {
             ->and($close->effect)->toContain('Nadie pierde lugar: los grupos que quedan alcanzan.')
             ->and($close->warning)->toBe('Luis Soto imparte el grupo E (2 h a la semana): al cerrarlo deja de impartirlo y se le avisa al republicar (RA-05).')
             ->and($close->blockedReason)->toBe('Primero quita a Luis Soto del grupo E en Asignación docente; luego lo puedes cerrar.');
+    });
+
+    it('no sugiere cerrar un grupo que otra sugerencia amplía, y cuenta lo que queda con los lugares de ahora', function () {
+        $suggestions = adviseBlock([advisorRow('X', 50), advisorRow('Y', 10)], [
+            advisorGroup('A', 40, ['X' => 20, 'Y' => 15]),
+            advisorGroup('B', 60, ['X' => 20, 'Y' => 5], [advisorSession('s-B', advisorRoom('R-B', 60))], teacher: 'Ana Ruiz'),
+        ]);
+
+        expect(array_keys($suggestions))->toBe(['expand_quota:group-A:X']);
+    });
+
+    it('al cerrar, dice que se cancelan las propuestas de grupo compartido que apartan lugares en él', function () {
+        $suggestions = adviseBlock([advisorRow('Y', 10)], [
+            advisorGroup('D', 30, ['Y' => 20]),
+            advisorGroup('E', 30, ['Y' => 15], held: 5),
+        ]);
+
+        expect($suggestions['close_group:group-E']->effect)->toContain('Se cancelan sus propuestas de grupo compartido, que apartan 5 lugares.');
     });
 
     it('no sugiere cerrar si dejaría a una carrera en faltante', function () {

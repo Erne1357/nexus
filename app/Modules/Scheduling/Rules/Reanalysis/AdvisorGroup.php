@@ -53,6 +53,25 @@ final readonly class AdvisorGroup
     }
 
     /**
+     * Los lugares de cada carrera en unos grupos, por id de la carrera: los «lugares de ahora» del re-análisis.
+     *
+     * @param  iterable<AdvisorGroup>  $groups
+     * @return array<string, int>
+     */
+    public static function seatsByCareer(iterable $groups): array
+    {
+        $seats = [];
+
+        foreach ($groups as $group) {
+            foreach ($group->quotas as $careerId => $quota) {
+                $seats[$careerId] = ($seats[$careerId] ?? 0) + $quota;
+            }
+        }
+
+        return $seats;
+    }
+
+    /**
      * Las horas a la semana de sus sesiones.
      */
     public function weeklyHours(): float

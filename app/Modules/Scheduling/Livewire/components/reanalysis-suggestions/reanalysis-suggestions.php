@@ -68,6 +68,9 @@ new class extends Component
     /** Los lugares que se suman al aplicar la sugerencia que se edita. */
     public ?int $editSeats = null;
 
+    /** Las sugerencias ya calculadas en esta petición (no viajan al navegador); aplicar las borra. */
+    private ?ReanalysisSuggestions $advice = null;
+
     public function mount(string $loadId): void
     {
         $this->loadId = $loadId;
@@ -104,6 +107,7 @@ new class extends Component
             return;
         }
 
+        $this->advice = null;
         $this->editing = null;
         $this->editSeats = null;
         $this->success('Sugerencia aplicada', e("{$suggestion->title}. Entra en la versión ".($load->current_version + 1).' al publicar.'));
@@ -207,11 +211,12 @@ new class extends Component
     }
 
     /**
-     * Las sugerencias de la materia en el campus (tarea 8.3a), con los grupos de ahora: siempre del servidor.
+     * Las sugerencias de la materia en el campus (tarea 8.3a), con los grupos de ahora: siempre del servidor, una vez por
+     * petición (editar o descartar no las calcula dos veces; aplicar las vuelve a calcular para pintar lo nuevo).
      */
     private function suggestions(AcademicLoad $load, ReanalysisBlock $block, ReanalysisSuggestionsQuery $query): ReanalysisSuggestions
     {
-        return $query->for($load, $block);
+        return $this->advice ??= $query->for($load, $block);
     }
 
     /**
@@ -295,9 +300,10 @@ new class extends Component
                 continue;
             }
 
+            $capacity = $suggestion->raisesCapacity ? ['manage'] : [];
             $abilities = match ($suggestion->kind) {
-                ReanalysisSuggestionKind::ExpandQuota => ['manageQuotas', 'manage'],
-                ReanalysisSuggestionKind::ChangeRoom => ['assignRoom', 'manageQuotas', 'manage'],
+                ReanalysisSuggestionKind::ExpandQuota => ['manageQuotas', ...$capacity],
+                ReanalysisSuggestionKind::ChangeRoom => ['assignRoom', 'manageQuotas', ...$capacity],
                 ReanalysisSuggestionKind::CloseGroup => ['cancel', 'manageQuotas'],
                 ReanalysisSuggestionKind::OpenGroup => [],
             };
