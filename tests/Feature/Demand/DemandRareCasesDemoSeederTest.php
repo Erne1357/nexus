@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
@@ -93,7 +94,7 @@ function rareCasesStudent(Campus $campus, array $records): Student
 
 function rareCasesSeed(): void
 {
-    app(DemandRareCasesDemoSeeder::class)->run('20271', ['K1']);
+    app(DemandRareCasesDemoSeeder::class)->run('20271', ['K2']);
 }
 
 /**
@@ -111,7 +112,7 @@ function rareCasesRows(): Collection
  */
 function rareCasesChecks(): array
 {
-    $context = new DemoContext(DemoVolume::Demo, ['K1']);
+    $context = new DemoContext(DemoVolume::Demo, ['K2']);
 
     return collect(app()->getProvider(DemandServiceProvider::class)->demoChecks())
         ->filter(fn (DemoCheck $check): bool => in_array(DemoCheckpoint::Proposal, $check->at, true))
@@ -183,10 +184,10 @@ it('no ofrece la carrera donde ya hay una oferta inactiva (respeta lo que ya exi
 
     rareCasesSeed();
 
-    $offering = CareerCampus::query()->where('campus_id', $this->k2->id)->sole();
+    $offering = CareerCampus::query()->where('campus_id', $this->k2->id)->where('career_id', $this->plan->career_id)->sole();
 
     expect($offering->is_active)->toBeFalse()
-        ->and(rareCasesRows()->where('campus_id', $this->k2->id))->toBeEmpty();
+        ->and(rareCasesRows()->where('career_id', $this->plan->career_id)->where('campus_id', $this->k2->id))->toBeEmpty();
 });
 
 it('las revisiones del punto «propuesta» fallan sin los casos y pasan después de sembrarlos', function () {
@@ -206,8 +207,30 @@ it('el paso de la demo lleva a «validación» y corre el seeder con los campus 
     /** @var DemoStep $step */
     $step = $steps->sole();
 
-    ($step->run)(new DemoContext(DemoVolume::Demo, ['K1']));
+    ($step->run)(new DemoContext(DemoVolume::Demo, ['K2']));
 
     expect($step->reaches)->toBe(DemoCheckpoint::CatalogValidation)
         ->and(rareCasesRows()->where('campus_id', $this->k2->id))->not->toBeEmpty();
+});
+
+it('con todas las carreras ya ofrecidas en el campus de la demo crea una carrera nueva ahí, sin alumnos y con cero elegibles', function () {
+    CareerCampus::factory()->create(['career_id' => $this->plan->career_id, 'campus_id' => $this->k2->id]);
+
+    app(DemandRareCasesDemoSeeder::class)->run('20271', ['K2']);
+
+    $career = Career::query()->where('code', $this->plan->career->code.'N')->sole();
+    $rows = rareCasesRows()->where('career_id', $career->id);
+
+    expect(CareerCampus::query()->where('career_id', $career->id)->sole()->campus_id)->toBe($this->k2->id)
+        ->and(CareerCampus::query()->where('career_id', $career->id)->where('campus_id', $this->k1->id)->exists())->toBeFalse()
+        ->and(StudyPlan::query()->where('career_id', $career->id)->where('is_current', true)->count())->toBe(1)
+        ->and(Student::query()->where('career_id', $career->id)->exists())->toBeFalse()
+        ->and($rows)->not->toBeEmpty()
+        ->and($rows->sum('eligible_students'))->toBe(0)
+        ->and($rows->sum('new_students'))->toBe(0);
+
+    app(DemandRareCasesDemoSeeder::class)->run('20271', ['K2']);
+
+    expect(Career::query()->where('code', $this->plan->career->code.'N')->count())->toBe(1)
+        ->and(CareerCampus::query()->where('career_id', $career->id)->count())->toBe(1);
 });

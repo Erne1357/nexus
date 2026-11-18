@@ -2,7 +2,11 @@
 
 namespace App\Modules\Demand\Database\Seeders;
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\Academic\Models\Specialty;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Actions\RefreshDemandForecasts;
@@ -26,9 +30,10 @@ use Illuminate\Database\Seeder;
  * Medido el 17 de noviembre de 2026 con `demo:seed --hasta=propuesta`, la simulación de alumnos (StudentsDemoSeeder) ya
  * trae los casos 1, 2, 3 y 5 en los dos volúmenes (el 1 son materias de octavo semestre que nadie podía cursar en la
  * ventana de historia, sin elegibles propios): no se inventan datos para ellos y las revisiones de Demand vigilan que
- * sigan ahí. Falta el 4, y es lo único que agrega este seeder: ofrece una carrera activa en un campus activo donde no
- * tiene oferta (ni inactiva ni borrada) ni alumnos, de los campus de la demo primero y luego de los demás; con la demo
- * chica, que solo siembra Campus II, es Campus I, y con la masiva, una carrera de Campus I en Campus II. Si la
+ * sigan ahí. Falta el 4, y es lo único que agrega este seeder: ofrece una carrera activa en un campus de la demo donde
+ * no tiene oferta (ni inactiva ni borrada) ni alumnos; si todas las carreras ya se ofrecen en los campus de la demo
+ * (la demo chica), crea una carrera nueva de demostración en el primer campus: copia el plan vigente y la retícula de
+ * una carrera existente (con sus especialidades) y la ofrece ahí sin alumnos. Si la
  * proyección ya trae el caso no hace nada. Al final recalcula la proyección de cada periodo abierto en cada modalidad
  * (`RefreshDemandForecasts`); es repetible.
  *
@@ -37,6 +42,8 @@ use Illuminate\Database\Seeder;
  */
 final class DemandRareCasesDemoSeeder extends Seeder
 {
+    private const string DEMO_SUFFIX = ' (nueva, demo)';
+
     public const string CASE_NEW_SUBJECT = 'new_subject';
 
     public const string CASE_SINGLE_TERM = 'single_term';
@@ -101,9 +108,7 @@ final class DemandRareCasesDemoSeeder extends Seeder
     private function offerCareerInNewCampus(array $campuses): ?string
     {
         $careers = app(ForecastScopeQuery::class)->careers();
-        $candidates = Campus::query()->where('is_active', true)->orderBy('code')->get()
-            ->sortBy(fn (Campus $campus): int => in_array($campus->code, $campuses, true) ? 0 : 1)
-            ->values();
+        $candidates = Campus::query()->where('is_active', true)->whereIn('code', $campuses)->orderBy('code')->get();
 
         foreach ($candidates as $campus) {
             foreach ($careers as $career) {
@@ -120,6 +125,74 @@ final class DemandRareCasesDemoSeeder extends Seeder
             }
         }
 
+        $first = $candidates->first();
+
+        return $first === null ? null : $this->createDemoCareer($careers->all(), $first);
+    }
+
+    /**
+     * Una carrera nueva de demostración en el campus, clonada de la primera carrera con plan vigente (código: el de la
+     * origen más «N»; se busca primero por código para no duplicarla). Las especialidades se clonan con el plan.
+     *
+     * @param  list<Career>  $careers
+     */
+    private function createDemoCareer(array $careers, Campus $campus): ?string
+    {
+        foreach ($careers as $source) {
+            if (str_ends_with($source->name, self::DEMO_SUFFIX)) {
+                continue;
+            }
+
+            $plan = StudyPlan::query()->where('career_id', $source->getKey())->where('is_current', true)->first();
+
+            if ($plan === null) {
+                continue;
+            }
+
+            $code = mb_substr($source->code, 0, 250).'N';
+            $career = Career::withTrashed()->where('code', $code)->first()
+                ?? Career::query()->create(['code' => $code, 'name' => $source->name.self::DEMO_SUFFIX, 'department_id' => $source->department_id, 'is_active' => true]);
+
+            if (! StudyPlan::withTrashed()->where('career_id', $career->getKey())->exists()) {
+                $this->clonePlan($plan, $career, $code);
+            }
+
+            CareerCampus::withTrashed()->firstOrCreate(['career_id' => $career->getKey(), 'campus_id' => $campus->getKey()], ['is_active' => true]);
+
+            return "{$career->code} en {$campus->code}";
+        }
+
         return null;
+    }
+
+    private function clonePlan(StudyPlan $plan, Career $career, string $code): void
+    {
+        $copy = StudyPlan::query()->create([
+            ...$plan->only(['version', 'semesters_count', 'total_credits', 'valid_from']),
+            'career_id' => $career->getKey(),
+            'code' => mb_substr($plan->code, 0, 250).'N',
+            'name' => $plan->name.self::DEMO_SUFFIX,
+            'is_active' => true,
+            'is_current' => true,
+            'is_historical' => false,
+        ]);
+        $specialties = [];
+
+        foreach (Specialty::query()->where('study_plan_id', $plan->getKey())->get() as $specialty) {
+            $specialties[$specialty->getKey()] = Specialty::query()->create([
+                'study_plan_id' => $copy->getKey(),
+                'code' => $specialty->code,
+                'name' => $specialty->name,
+                'is_active' => $specialty->is_active,
+            ])->getKey();
+        }
+
+        foreach (StudyPlanSubject::query()->where('study_plan_id', $plan->getKey())->get() as $placement) {
+            StudyPlanSubject::query()->create([
+                ...$placement->only(['subject_id', 'semester', 'is_required', 'position']),
+                'study_plan_id' => $copy->getKey(),
+                'specialty_id' => $specialties[$placement->specialty_id] ?? null,
+            ]);
+        }
     }
 }
