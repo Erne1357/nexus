@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Demand\Enums\DemandBalance;
 use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Demand\Rules\SuggestedGroups;
 
@@ -57,6 +58,32 @@ it('DM-08: una diferencia es grande si el capturado se aleja del sugerido el umb
     'sugerido cero y capturado algo' => [0, 1, true],
     'capturado cero con sugerido' => [5, 0, true],
 ]);
+
+it('RA-04: la oferta falta, sobra o está ajustada con el mismo umbral y la base de lo esperado', function (int $expected, int $offered, DemandBalance $balance) {
+    expect((new DemandSettings(highlightThreshold: 20))->balanceOf($expected, $offered))->toBe($balance);
+})->with([
+    'igual' => [50, 50, DemandBalance::Adjusted],
+    'falta menos del umbral' => [50, 41, DemandBalance::Adjusted],
+    'falta justo el umbral' => [50, 40, DemandBalance::Shortfall],
+    'falta más del umbral' => [50, 10, DemandBalance::Shortfall],
+    'sobra menos del umbral' => [50, 59, DemandBalance::Adjusted],
+    'sobra justo el umbral' => [50, 60, DemandBalance::Surplus],
+    'sobra más del umbral' => [50, 120, DemandBalance::Surplus],
+    'nadie esperado y con oferta sobra' => [0, 1, DemandBalance::Surplus],
+    'esperados y sin oferta falta' => [1, 0, DemandBalance::Shortfall],
+    'nada esperado y nada ofrecido está ajustada' => [0, 0, DemandBalance::Adjusted],
+]);
+
+it('RA-04: esperados sin oferta faltan aunque el umbral no los alcance', function () {
+    expect((new DemandSettings(highlightThreshold: 150))->balanceOf(10, 0))->toBe(DemandBalance::Shortfall);
+});
+
+it('RA-04: cada clase tiene su etiqueta y su tono', function () {
+    expect(DemandBalance::Shortfall->label())->toBe('Faltante')
+        ->and(DemandBalance::Surplus->label())->toBe('Sobrante')
+        ->and(DemandBalance::Adjusted->label())->toBe('Ajustada')
+        ->and(collect(DemandBalance::cases())->map(fn (DemandBalance $balance) => $balance->tone())->unique())->toHaveCount(3);
+});
 
 it('declara la definición de cada parámetro con el valor de omisión que usa al leerlo', function () {
     $defaults = [];
