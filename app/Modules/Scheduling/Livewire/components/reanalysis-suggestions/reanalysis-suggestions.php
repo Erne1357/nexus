@@ -278,8 +278,8 @@ new class extends Component
     }
 
     /**
-     * Por qué quien ajusta no puede aplicar una sugerencia en particular (GroupPolicy sobre cada grupo que toca), por
-     * llave; las que sí puede no aparecen.
+     * Por qué quien ajusta no puede aplicar una sugerencia en particular, por llave: lo que dice el asesor (cerrar un grupo
+     * con docente) o GroupPolicy sobre cada grupo que toca; las que sí puede no aparecen.
      *
      * @param  list<ReanalysisSuggestion>  $suggestions
      * @return array<string, string>
@@ -289,6 +289,12 @@ new class extends Component
         $blocked = [];
 
         foreach ($suggestions as $suggestion) {
+            if ($suggestion->blockedReason !== null) {
+                $blocked[$suggestion->key] = $suggestion->blockedReason;
+
+                continue;
+            }
+
             $abilities = match ($suggestion->kind) {
                 ReanalysisSuggestionKind::ExpandQuota => ['manageQuotas', 'manage'],
                 ReanalysisSuggestionKind::ChangeRoom => ['assignRoom', 'manageQuotas', 'manage'],

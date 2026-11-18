@@ -7,63 +7,80 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\SessionRules;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Cancela un grupo (tarea 8.3a, «Cerrar un grupo» del re-análisis; el permiso es GroupPolicy::cancel y lo revisa quien
- * llama). Un grupo cancelado no se borra (HC-15, GroupStatus): deja de contar para el validador, para los empalmes de la
- * base (el trigger de `groups` apaga sus sesiones) y para la carga de su docente, y la versión siguiente lo publica como
- * cancelado (SnapshotDiff). Su docente se queda en el grupo para el historial; el aviso le llega al republicar (RA-05).
+ * Cancela un grupo (reglas-de-negocio.md, «Grupos y horarios»: un grupo no se borra, se cancela). La fase 3 dejó el estado,
+ * el evento GroupCancelled y la ability GroupPolicy::cancel, pero no la Action; esta es la que usa armar paralelos (tarea
+ * 8.8) para los grupos que sobran. No sabe de puestos: quién cancela lo decide quien la llama.
  *
- * En una transacción toma la carga (FOR SHARE) y relee el grupo con bloqueo, como las Actions del editor, y exige la
- * carga editable y el grupo sin cancelar (LoadEditability). Cancela sus acuerdos vivos (préstamos de salón y cupos de
- * grupo compartido, propuestos o aceptados) con CancelAgreement, porque ya no hay grupo que los use (supuesto por
- * confirmar). Deja la bitácora `cancelled` en el grupo y avisa con GroupCancelled después del commit.
+ * En una transacción toma la carga (FOR SHARE), relee el grupo con bloqueo y exige la carga editable y el grupo sin
+ * cancelar (LoadEditability). Un grupo con docente no se cancela: primero se le quita (confirmado el 18 de noviembre de
+ * 2026 para los paralelos; para todo grupo, supuesto por confirmar). Al cancelarlo:
+ * - sus sesiones se borran (como RemoveGroupSession, no son catálogo): un grupo cancelado pierde su horario y lo que tenía
+ *   queda en su bitácora;
+ * - sus acuerdos vivos (préstamos de salón y grupos compartidos) se cancelan con CancelAgreement, que avisa al dueño del salón;
+ * - sus cupos se quedan como estaban, de historia: un grupo cancelado no cuenta en ningún lado (supuesto por confirmar).
+ *
+ * Deja la bitácora `cancelled` con las sesiones que perdió y, después del commit, avisa con GroupCancelled y, si tenía
+ * horario, con GroupScheduleChanged. Devuelve el grupo ya cancelado y cuántas sesiones y minutos perdió.
  */
 final class CancelGroup
 {
-    public const string EVENT = 'cancelled';
-
     public function __construct(
         private readonly LoadEditability $editability,
         private readonly CancelAgreement $cancelAgreement,
     ) {}
 
     /**
+     * @param  string  $key  la llave de los errores (`groups` cuando lo llama ArmParallelGroups)
+     * @return array{group: Group, sessions: int, minutes: int}
+     *
      * @throws ValidationException
      */
-    public function handle(Group $group, User $actor): Group
+    public function handle(Group $group, User $actor, string $key = 'group'): array
     {
-        return $this->editability->guard(fn (): Group => DB::transaction(function () use ($group, $actor): Group {
+        return $this->editability->guard(fn (): array => DB::transaction(function () use ($group, $actor, $key): array {
             $this->editability->lockLoad($group);
-            $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
+            $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
+            $this->editability->ensure($group, 'grupos', $key);
 
-            $this->editability->ensure($group, 'grupos', 'group');
-
-            $agreements = InterdepartmentalAgreement::query()->where('group_id', $group->getKey())->live()->orderBy('created_at')->get();
-
-            foreach ($agreements as $agreement) {
-                $this->cancelAgreement->handle($agreement, $actor);
+            if ($group->teacher_id !== null) {
+                throw ValidationException::withMessages([$key => "El grupo {$group->code} tiene docente: quítalo antes de cancelarlo."]);
             }
 
+            $sessions = GroupSession::query()->where('group_id', $group->getKey())->orderBy('day')->orderBy('starts_at')->lockForUpdate()->get();
+
+            InterdepartmentalAgreement::query()->where('group_id', $group->getKey())->live()->orderBy('id')->get()
+                ->each(fn (InterdepartmentalAgreement $agreement) => $this->cancelAgreement->handle($agreement, $actor));
+
+            GroupSession::query()->whereKey($sessions->modelKeys())->delete();
             $old = $group->status;
             $group->update(['status' => GroupStatus::Cancelled]);
 
             activity()
-                ->performedOn($group)
                 ->causedBy($actor)
-                ->event(self::EVENT)
-                ->withChanges(['old' => ['status' => $old->value], 'attributes' => ['status' => GroupStatus::Cancelled->value]])
-                ->withProperties(['agreements_cancelled' => $agreements->count()])
+                ->performedOn($group)
+                ->event('cancelled')
+                ->withChanges([
+                    'old' => ['status' => $old->value, 'sessions' => $sessions->map(fn (GroupSession $session): array => SessionRules::snapshot($session))->all()],
+                    'attributes' => ['status' => GroupStatus::Cancelled->value],
+                ])
                 ->log('Canceló el grupo '.SessionRules::label($group));
 
             GroupCancelled::dispatch($group);
 
-            return $group;
-        }), 'group');
+            if ($sessions->isNotEmpty()) {
+                GroupScheduleChanged::dispatch($group);
+            }
+
+            return ['group' => $group, 'sessions' => $sessions->count(), 'minutes' => (int) $sessions->sum('minutes')];
+        }), $key);
     }
 }

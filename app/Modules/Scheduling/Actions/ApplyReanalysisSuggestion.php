@@ -36,7 +36,8 @@ use Illuminate\Validation\ValidationException;
  * - **Cambiar salón:** asigna a cada sesión de `moves` su salón (AssignSessionRoom: HC-02 no se guarda; uno de otro
  *   departamento pide su préstamo, HC-10) y luego amplía como arriba.
  * - **Cerrar grupo:** suma los lugares de `relocations` a los grupos que los reciben (SetGroupQuotas) y cancela el grupo
- *   (CancelGroup).
+ *   (CancelGroup: pierde su horario y sus acuerdos vivos). Uno con docente no se cierra hasta quitárselo en Asignación
+ *   docente (`blockedReason`; CancelGroup tampoco lo deja).
  * - **Abrir grupo** no se aplica: llega con el motor (tarea 8.3b).
  *
  * Los lugares se suman a lo que el grupo tenga en ese momento, no a lo que vio la sugerencia.
@@ -62,6 +63,10 @@ final class ApplyReanalysisSuggestion
 
         if (! $suggestion->isApplicable()) {
             throw ValidationException::withMessages(['suggestion' => 'Abrir un grupo llega con la sugerencia del motor: aquí todavía no se aplica.']);
+        }
+
+        if ($suggestion->blockedReason !== null) {
+            throw ValidationException::withMessages(['suggestion' => $suggestion->blockedReason]);
         }
 
         $seats ??= $suggestion->seats;

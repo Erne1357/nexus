@@ -34,9 +34,9 @@ use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
  * 2. **Sobrante**: **cerrar un grupo** que tiene lugares de una carrera sobrante, si al cerrarlo ninguna carrera queda
  *    faltante. Los lugares que hacen falta (lo esperado menos lo que queda) pasan a los demás grupos donde la carrera ya
  *    tiene cupo, dentro de lo que tienen libre (sin subir su capacidad). Una carrera sin clasificar conserva todos sus
- *    lugares. Se prefiere un grupo sin docente y luego el de menos lugares; uno con docente sí se sugiere, con la
- *    advertencia de quién deja de impartirlo y cuántas horas. Una sola por bloque: después de cerrarlo se calcula otra
- *    vez.
+ *    lugares. Se prefiere un grupo sin docente y luego el de menos lugares. Uno con docente se sugiere con la advertencia
+ *    de quién lo imparte y cuántas horas, pero no se aplica hasta quitarle el docente en Asignación docente
+ *    (`blockedReason`), como pide CancelGroup. Una sola por bloque: después de cerrarlo se calcula otra vez.
  *
  * Las sugerencias se calculan una tras otra sobre el mismo estado (lo que una toma, la siguiente ya no lo tiene), para que
  * se puedan aplicar juntas; al aplicar, las Actions de la fase 3 vuelven a revisar todo con la base.
@@ -395,17 +395,15 @@ final class ReanalysisAdvisor
             $relocations === []
                 ? 'Nadie pierde lugar: los grupos que quedan alcanzan.'
                 : 'Sus lugares pasan a: '.implode('; ', array_map(fn (string $code, array $parts): string => "grupo {$code} (".implode(', ', $parts).')', array_keys($byGroup), $byGroup)).'.',
-            "El grupo {$group->code} se cancela: ".match (count($group->sessions)) {
-                0 => 'no tiene sesiones.',
-                1 => 'su sesión deja de contar.',
-                default => 'sus '.count($group->sessions).' sesiones dejan de contar.',
-            },
+            "El grupo {$group->code} se cancela y pierde su horario (queda en su bitácora).",
             $this->touches($careers, $group->teacherName, null),
         ];
 
-        $hours = $group->weeklyHours();
+        $hours = rtrim(rtrim(number_format($group->weeklyHours(), 1), '0'), '.');
         $warning = $group->teacherName === null ? null
-            : "{$group->teacherName} deja de impartir el grupo {$group->code} (".rtrim(rtrim(number_format($hours, 1), '0'), '.').' h a la semana). Se le avisa al republicar (RA-05).';
+            : "{$group->teacherName} imparte el grupo {$group->code} ({$hours} h a la semana): al cerrarlo deja de impartirlo y se le avisa al republicar (RA-05).";
+        $blocked = $group->teacherName === null ? null
+            : "Primero quita a {$group->teacherName} del grupo {$group->code} en Asignación docente; luego lo puedes cerrar.";
 
         return new ReanalysisSuggestion(
             key: "close_group:{$group->id}",
@@ -416,6 +414,7 @@ final class ReanalysisAdvisor
             warning: $warning,
             groupId: $group->id,
             relocations: $relocations,
+            blockedReason: $blocked,
         );
     }
 

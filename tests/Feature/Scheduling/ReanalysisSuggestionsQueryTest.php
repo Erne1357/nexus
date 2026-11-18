@@ -102,7 +102,8 @@ it('sobrante: sugiere cerrar el grupo que sobra y advierte a su docente', functi
 
     expect($close)->not->toBeNull()
         ->and($close->relocations)->toBe([])
-        ->and($close->warning)->toBe("{$e->teacher->name} deja de impartir el grupo {$e->code} (2 h a la semana). Se le avisa al republicar (RA-05).");
+        ->and($close->warning)->toBe("{$e->teacher->name} imparte el grupo {$e->code} (2 h a la semana): al cerrarlo deja de impartirlo y se le avisa al republicar (RA-05).")
+        ->and($close->blockedReason)->not->toBeNull();
 });
 
 it('RA-09: el bloque de primer semestre no da sugerencias', function () {

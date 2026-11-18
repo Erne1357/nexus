@@ -15,6 +15,9 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
  * - Cerrar grupo cancela `groupId` y suma a otros grupos los lugares de `relocations`.
  * - Abrir grupo no se aplica aquí: llega con la sugerencia del motor (tarea 8.3b).
  *
+ * `blockedReason` dice por qué todavía no se puede aplicar aunque se vea (cerrar un grupo con docente: primero se le quita,
+ * como pide CancelGroup).
+ *
  * Quien aplica (ApplyReanalysisSuggestion) suma esos lugares a lo que el grupo tenga en ese momento y deja que las
  * Actions de la fase 3 revisen otra vez HC-05 y HC-07.
  */
@@ -39,6 +42,7 @@ final readonly class ReanalysisSuggestion
         public int $maxSeats = 0,
         public array $moves = [],
         public array $relocations = [],
+        public ?string $blockedReason = null,
     ) {}
 
     public function isApplicable(): bool

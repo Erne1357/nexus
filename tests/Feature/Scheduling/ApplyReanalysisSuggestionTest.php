@@ -124,6 +124,7 @@ it('«Cerrar grupo»: reubica los lugares que hacen falta y cancela el grupo', f
     $d = $this->world->groups['D'];
     $d->update(['capacity' => 50]);
     $e = $this->world->group($this->world->integral, $this->world->isc, 40, $this->world->c1, 2, day: 2);
+    $e->update(['teacher_id' => null]);
     DemandForecast::query()->where('subject_id', $this->world->integral->id)->where('campus_id', $this->world->c1->id)->update(['expected_students' => 50]);
     $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c1, "close_group:{$e->id}");
 
@@ -132,6 +133,14 @@ it('«Cerrar grupo»: reubica los lugares que hacen falta y cancela el grupo', f
     expect($e->fresh()->status)->toBe(GroupStatus::Cancelled)
         ->and(reanalysisQuotasOf($d))->toBe([$this->isc => 50])
         ->and(Activity::query()->where('event', 'cancelled')->where('subject_id', $e->id)->exists())->toBeTrue();
+});
+
+it('«Cerrar grupo» no se aplica a un grupo con docente: primero se le quita', function () {
+    $e = $this->world->group($this->world->integral, $this->world->isc, 20, $this->world->c1, 2, day: 2);
+    $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c1, "close_group:{$e->id}");
+
+    expect(applyReanalysisErrors($this->world, $suggestion, $this->jefe))->toBe(['suggestion' => ["Primero quita a {$e->teacher->name} del grupo {$e->code} en Asignación docente; luego lo puedes cerrar."]])
+        ->and($e->fresh()->status)->toBe(GroupStatus::Planned);
 });
 
 it('no se aplica con la carga fuera de re-análisis, ni «Abrir grupo»', function () {

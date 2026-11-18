@@ -102,12 +102,20 @@ describe('jefe del departamento', function () {
         expect(GroupSession::query()->where('group_id', $this->a->id)->value('room_id'))->toBe($room->id);
 
         $e = $this->world->group($this->world->integral, $this->world->isc, 20, $this->world->c1, 2, day: 2);
+        $teacher = $e->teacher->name;
+        $drawer = suggestionsDrawer($this->jefe, $this->world, $this->world->c1)
+            ->assertSee("Primero quita a {$teacher} del grupo {$e->code} en Asignación docente; luego lo puedes cerrar.");
+
+        expect(domOf($drawer)->querySelector("[data-key=\"close_group:{$e->id}\"] [data-testid=\"suggestion-apply\"]")->hasAttribute('disabled'))->toBeTrue();
+
+        $e->update(['teacher_id' => null]);
         $drawer = suggestionsDrawer($this->jefe, $this->world, $this->world->c1);
         $apply = domOf($drawer)->querySelector("[data-key=\"close_group:{$e->id}\"] [data-testid=\"suggestion-apply\"]");
 
-        expect($apply->getAttribute('data-confirm-title'))->toBe("¿Cerrar el grupo {$e->code}?")
+        expect($apply->hasAttribute('disabled'))->toBeFalse()
+            ->and($apply->getAttribute('data-confirm-title'))->toBe("¿Cerrar el grupo {$e->code}?")
             ->and($apply->getAttribute('data-confirm-tone'))->toBe('error')
-            ->and($apply->getAttribute('x-confirm'))->toContain('deja de impartir');
+            ->and($apply->getAttribute('x-confirm'))->toContain("El grupo {$e->code} se cancela");
 
         $drawer->call('apply', "close_group:{$e->id}");
 

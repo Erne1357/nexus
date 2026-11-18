@@ -170,13 +170,14 @@ describe('sobrante', function () {
         expect(array_keys($suggestions))->toBe(['close_group:group-E'])
             ->and($close->title)->toBe('Cerrar el grupo E')
             ->and($close->warning)->toBeNull()
+            ->and($close->blockedReason)->toBeNull()
             ->and($close->relocations)->toBe([['groupId' => 'group-D', 'groupCode' => 'D', 'careerId' => 'ISIC', 'careerCode' => 'ISIC', 'seats' => 10]])
             ->and($close->evidence)->toContain('ISIC: 50 esperados · 65 lugares · sobran 15')
             ->and($close->effect)->toContain('Sus lugares pasan a: grupo D (ISIC +10).')
             ->and($close->effect)->toContain('Toca a ISIC.');
     });
 
-    it('cierra el que no deja a ninguna carrera en faltante, aunque tenga docente, y lo advierte', function () {
+    it('sugiere cerrar el que no deja a ninguna carrera en faltante; si tiene docente, lo advierte y no se aplica hasta quitárselo', function () {
         $suggestions = adviseBlock([advisorRow('ISIC', 30)], [
             advisorGroup('D', 45, ['ISIC' => 45], teacher: 'Ana Ruiz'),
             advisorGroup('E', 20, ['ISIC' => 20], teacher: 'Luis Soto'),
@@ -187,7 +188,8 @@ describe('sobrante', function () {
         expect(array_keys($suggestions))->toBe(['close_group:group-E'])
             ->and($close->relocations)->toBe([])
             ->and($close->effect)->toContain('Nadie pierde lugar: los grupos que quedan alcanzan.')
-            ->and($close->warning)->toBe('Luis Soto deja de impartir el grupo E (2 h a la semana). Se le avisa al republicar (RA-05).');
+            ->and($close->warning)->toBe('Luis Soto imparte el grupo E (2 h a la semana): al cerrarlo deja de impartirlo y se le avisa al republicar (RA-05).')
+            ->and($close->blockedReason)->toBe('Primero quita a Luis Soto del grupo E en Asignación docente; luego lo puedes cerrar.');
     });
 
     it('no sugiere cerrar si dejaría a una carrera en faltante', function () {
