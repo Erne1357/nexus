@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Gate;
 /*
 | ParallelsPolicy (tarea 8.8; reglas-de-negocio.md, «Aprobaciones y permisos», fila «Armar paralelos»): ven la pestaña
 | quienes ven la bandeja del departamento; arma el jefe del departamento que imparte (`scheduling.parallels.arrange`), de
-| cualquier departamento (confirmado el 18 de noviembre de 2026). El jefe de proyecto docente, Subdirección y el
+| cualquier departamento (confirmado el 17 de noviembre de 2026). El jefe de proyecto docente, Subdirección y el
 | coordinador no arman (supuesto por confirmar).
 */
 

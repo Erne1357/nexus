@@ -15,7 +15,7 @@ use App\Modules\Scheduling\Notifications\ParallelsArranged;
 
 /**
  * Avisa por la campana que un departamento armó los paralelos de una materia (tarea 8.8): no hay acuerdo que aceptar, así
- * que se avisa (confirmado el 18 de noviembre de 2026). Por cada carrera cuyos lugares cambiaron, un aviso con sus grupos y
+ * que se avisa (confirmado el 17 de noviembre de 2026). Por cada carrera cuyos lugares cambiaron, un aviso con sus grupos y
  * sus lugares antes y después (ParallelsArranged):
  *
  * - a sus coordinadores en la modalidad, de cualquier campus: los que pueden enviar su propuesta, como al regresarla

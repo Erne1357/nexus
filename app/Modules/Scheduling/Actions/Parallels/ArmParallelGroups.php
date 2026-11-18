@@ -46,11 +46,13 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Arma los paralelos de una materia en un campus (tarea 8.8; reglas-de-negocio.md, «Paralelos»): el jefe del departamento
- * que imparte junta lo que piden las carreras en menos grupos, sin junta ni acuerdo (confirmado el 18 de noviembre de
+ * que imparte junta lo que piden las carreras en menos grupos, sin junta ni acuerdo (confirmado el 17 de noviembre de
  * 2026). Recibe el arreglo deseado, una lista de grupos, cada uno `carrera => lugares`, y reorganiza los grupos sueltos que
  * ya existen de esa materia y campus en la carga del departamento en la modalidad; los de paquete (DM-09) no se tocan.
  * Autoriza adentro: la materia debe ser del departamento recibido y el actor debe poder `ParallelsPolicy::arrange` en él y
  * en la modalidad (si no, AuthorizationException), así que quien la llame con una materia de otro departamento no la arma.
+ * Cada grupo que sobra lo cancela CancelGroup, que autoriza además GroupPolicy::cancel sobre él; el jefe de fábrica tiene
+ * los dos permisos en todos los campus de la modalidad.
  *
  * - Qué grupo se queda en cada grupo del arreglo lo decide ParallelPlacement, igual que la sugerencia de ParallelsQuery: el
  *   de más avance (con docente; luego con más horario), que conserva su clave, su horario, su docente y su carrera dueña.
@@ -58,7 +60,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   arreglo no le deja lugar, se rechaza con el motivo.
  * - Los que sobran se cancelan con CancelGroup: pierden sus sesiones (el resultado lo dice) y sus acuerdos vivos.
  * - Los cupos de cada grupo que queda son los del arreglo, en exclusiva, escritos directo y sin acuerdo, también los de
- *   carreras de otros departamentos (confirmado el 18 de noviembre de 2026); lo que no reparte el arreglo queda libre. Las
+ *   carreras de otros departamentos (confirmado el 17 de noviembre de 2026); lo que no reparte el arreglo queda libre. Las
  *   propuestas vivas de grupo compartido del grupo se cancelan, y un acuerdo aceptado se cancela si su carrera ya no tiene
  *   cupo; el aceptado de una carrera que sigue se queda y toma los lugares nuevos (ChangeAgreementSeats, como en
  *   SetGroupQuotas). Los cupos que nacen al armar no llevan renglón de acuerdo: su único registro es la bitácora del grupo

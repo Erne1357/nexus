@@ -17,9 +17,10 @@ use App\Modules\Scheduling\Enums\SchedulingPermission;
  * - Ven la pestaña «Paralelos» quienes ven la bandeja del departamento (`academic_load.proposal_review.view`): el jefe de
  *   departamento, el jefe de proyecto docente, Subdirección y el admin.
  * - Arma (ArmParallelGroups) el jefe del departamento que imparte la materia (`scheduling.parallels.arrange`, modalidad y
- *   unidad), de cualquier departamento (confirmado el 18 de noviembre de 2026); el jefe de proyecto docente no (supuesto
+ *   unidad), de cualquier departamento (confirmado el 17 de noviembre de 2026); el jefe de proyecto docente no (supuesto
  *   por confirmar, maqueta B). Sin la dimensión campus: el jefe arma en todos los campus de su modalidad, como decide los
- *   acuerdos (M12).
+ *   acuerdos (M12). Los grupos que sobran los cancela CancelGroup, que pide además GroupPolicy::cancel
+ *   (`scheduling.group.manage`), que el jefe también tiene en todos los campus.
  *
  * Registrada en SchedulingServiceProvider para Parallels, que no es un modelo.
  */

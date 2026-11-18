@@ -11,7 +11,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
  * departamento, la fila de su propuesta (esperados, grupos pedidos y de paquete, plan y semestre) y lo que usa el reparto:
  * los esperados y grupos sueltos. Con paquetes en la fila, los esperados del reparto son los rezagados: esperados menos el
  * nuevo ingreso del campus (`newStudents`), que solo se resta en una fila de primer semestre (como SuggestedRowGroups); los
- * grupos de paquete no se juntan (confirmado el 18 de noviembre de 2026).
+ * grupos de paquete no se juntan (confirmado el 17 de noviembre de 2026).
  */
 final readonly class ParallelCareer
 {

@@ -6,7 +6,7 @@ use App\Modules\Scheduling\Rules\ParallelPlacement;
 | Armar paralelos (tarea 8.8): qué grupo suelto que ya existe se queda en cada grupo del arreglo. Se queda el de más avance
 | (con docente o una solicitud de cambio abierta, que no se pueden cancelar; luego con más horario) y conserva su carrera
 | dueña, así que solo entra en un grupo del arreglo que lleva lugares de su carrera; los que sobran se cancelan, y uno con
-| docente nunca (confirmado el 18 de noviembre de 2026).
+| docente nunca (confirmado el 17 de noviembre de 2026).
 */
 
 /**

@@ -32,7 +32,7 @@ use Tests\Support\Scheduling\ParallelsWorld;
 | ArmParallelGroups (tarea 8.8; reglas-de-negocio.md, «Paralelos»): el jefe del departamento que imparte junta lo que piden
 | las carreras en menos grupos, sin junta ni acuerdo. Reorganiza los grupos sueltos que ya existen: se queda el de más
 | avance, los que sobran se cancelan (nunca uno con docente) y los cupos de cada carrera nacen directos y en exclusiva,
-| también los de otros departamentos (confirmado el 18 de noviembre de 2026). HC-07: no pasan la capacidad.
+| también los de otros departamentos (confirmado el 17 de noviembre de 2026). HC-07: no pasan la capacidad.
 */
 
 beforeEach(function () {
