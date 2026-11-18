@@ -19,6 +19,8 @@ class RunContext:
     threads: int = 0
     #: Límite de tiempo por defecto del servicio, en segundos.
     default_time_limit: int = 60
+    #: Variables que puede tener el modelo de una corrida (`SOLVER_MAX_MODEL_VARIABLES`).
+    max_model_variables: int = 1_500_000
     #: `report(percent, best_score)`: avance de 0 a 100 y mejor puntaje blando hasta el momento.
     report: Callable[[int, int | None], None] = field(default=lambda percent, best_score: None)
     #: Devuelve `True` cuando alguien pidió cancelar la corrida.
