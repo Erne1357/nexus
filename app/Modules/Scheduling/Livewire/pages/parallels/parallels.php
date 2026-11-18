@@ -14,6 +14,7 @@ use App\Modules\Scheduling\Queries\ParallelDraft;
 use App\Modules\Scheduling\Queries\Parallels;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
 use App\Modules\Scheduling\Queries\ParallelSubject;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -234,6 +235,11 @@ new #[Title('Paralelos')] class extends Component
             $this->error('No se armaron los grupos', e(collect($e->errors())->flatten()->first()));
 
             return;
+        } catch (AuthorizationException $e) {
+            $this->addError('groups', $e->getMessage());
+            $this->error('No se armaron los grupos', e($e->getMessage()));
+
+            return;
         }
 
         $this->closeDrawer();
@@ -378,7 +384,8 @@ new #[Title('Paralelos')] class extends Component
     /**
      * El estado de cada materia, por `clave-campus` (la misma regla en la lista, la cuenta de la pestaña, el filtro y el
      * drawer): «Armada»; «Pendiente» si lo que sugiere Nexus no se puede armar todavía (una parte sin aceptar, un grupo que
-     * no se puede cancelar o HC-07), con su motivo; si no, «Por armar», con los grupos que ya existen.
+     * no se puede cancelar o HC-07), con su motivo; si no, «Por armar», con los grupos que ya existen y los alumnos que la
+     * sugerencia deja de menos (`ParallelSubject::$short`).
      *
      * @param  list<ParallelSubject>  $subjects
      * @return array<string, array{key: string, tone: string, label: string, icon: ?string, note: ?string}>
@@ -390,11 +397,16 @@ new #[Title('Paralelos')] class extends Component
         foreach ($subjects as $subject) {
             $reason = $subject->arranged() ? null : ParallelDraft::suggested($subject)->blockedReason();
             $existing = count($subject->groups);
+            $short = array_sum($subject->short);
+            $notes = array_filter([
+                $existing === 0 ? null : ($existing === 1 ? '1 grupo ya creado' : "{$existing} grupos ya creados"),
+                $short === 0 ? null : ($short === 1 ? '1 alumno queda de menos' : "{$short} alumnos quedan de menos"),
+            ]);
 
             $states[$this->keyOf($subject)] = match (true) {
                 $subject->arranged() => ['key' => 'armadas', 'tone' => 'success', 'label' => 'Armada', 'icon' => null, 'note' => null],
                 $reason !== null => ['key' => 'pendientes', 'tone' => 'neutral', 'label' => 'Pendiente', 'icon' => 'o-lock-closed', 'note' => $reason],
-                default => ['key' => 'por-armar', 'tone' => 'warning', 'label' => 'Por armar', 'icon' => 'o-clock', 'note' => $existing === 0 ? null : ($existing === 1 ? '1 grupo ya creado' : "{$existing} grupos ya creados")],
+                default => ['key' => 'por-armar', 'tone' => 'warning', 'label' => 'Por armar', 'icon' => 'o-clock', 'note' => $notes === [] ? null : implode(' · ', $notes)],
             };
         }
 

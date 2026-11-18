@@ -33,7 +33,7 @@ final readonly class ParallelDraft
      * @param  list<ParallelExisting>  $cancelled  los grupos que ya existen y se cancelarían
      * @param  list<ParallelExisting>  $blocked  los que se cancelarían sin poder cancelarse (con docente o con una solicitud de
      *                                           cambio abierta): no se arma así
-     * @param  array<string, int>  $left  por carrera, esperados sin lugar (negativo: de más)
+     * @param  array<string, int>  $left  por carrera, esperados de menos (negativo: de más)
      */
     private function __construct(
         public ParallelSubject $row,
@@ -51,6 +51,18 @@ final readonly class ParallelDraft
      */
     public static function suggested(ParallelSubject $row): self
     {
+        [$full, $mixed] = self::suggestionInputs($row);
+
+        return self::of($row, $full, $mixed);
+    }
+
+    /**
+     * Los completos por carrera y los mixtos de la sugerencia, como los editaría el jefe.
+     *
+     * @return array{0: array<string, int>, 1: list<array<string, int>>}
+     */
+    private static function suggestionInputs(ParallelSubject $row): array
+    {
         $full = [];
         $mixed = [];
 
@@ -63,7 +75,7 @@ final readonly class ParallelDraft
             }
         }
 
-        return self::of($row, $full, $mixed);
+        return [$full, $mixed];
     }
 
     /**
@@ -121,6 +133,12 @@ final readonly class ParallelDraft
             $columns[] = $shares;
         }
 
+        [$suggestedFull, $suggestedMixed] = self::suggestionInputs($row);
+
+        if (array_filter($fullCounts) == $suggestedFull && array_values(array_filter($columns)) == $suggestedMixed) {
+            return self::fromSuggestion($row, $fullCounts, $columns);
+        }
+
         $expected = [];
         $slotColumns = [];
 
@@ -153,13 +171,6 @@ final readonly class ParallelDraft
             $slots[] = new ParallelSlot($shares, $quotas[$index], $keeps?->ownerCareerId ?? (string) array_key_first($shares), $keeps?->capacity ?? $row->newCapacity, $index < $fullSlots, $keeps);
         }
 
-        $left = [];
-
-        foreach ($row->careers as $career) {
-            $id = $career->career->getKey();
-            $left[$id] = $career->expected - $fullCounts[$id] * $row->size() - array_sum(array_column($columns, $id));
-        }
-
         return new self(
             $row,
             $fullCounts,
@@ -168,8 +179,48 @@ final readonly class ParallelDraft
             $slotColumns,
             array_map(fn (string $id): ParallelExisting => $byId[$id], $placement->cancelled),
             array_map(fn (string $id): ParallelExisting => $byId[$id], $placement->blocked),
-            $left,
+            self::left($row, $slots),
         );
+    }
+
+    /**
+     * Lo que sugiere Nexus tal cual lo arma ParallelsQuery (ya armable: ver ParallelsQuery::armable()), con las columnas del
+     * jefe, que pueden traer mixtos vacíos entre medio.
+     *
+     * @param  array<string, int>  $full
+     * @param  list<array<string, int>>  $columns
+     */
+    private static function fromSuggestion(ParallelSubject $row, array $full, array $columns): self
+    {
+        $slotColumns = [];
+        $filled = array_keys(array_filter($columns));
+
+        foreach ($row->suggestion as $index => $slot) {
+            if (! $slot->full) {
+                $slotColumns[$index] = array_shift($filled);
+            }
+        }
+
+        return new self($row, $full, $columns, $row->suggestion, $slotColumns, $row->cancelled, $row->blocked(), self::left($row, $row->suggestion));
+    }
+
+    /**
+     * Por carrera, sus esperados que no quedan en ningún grupo: los de cada grupo, hasta su cupo (un completo no recibe más
+     * que su cupo aunque el tamaño objetivo sea mayor). Negativo si se le dieron de más.
+     *
+     * @param  list<ParallelSlot>  $slots
+     * @return array<string, int>
+     */
+    private static function left(ParallelSubject $row, array $slots): array
+    {
+        $left = [];
+
+        foreach ($row->careers as $career) {
+            $id = $career->career->getKey();
+            $left[$id] = $career->expected - array_sum(array_map(fn (ParallelSlot $slot): int => min($slot->expected[$id] ?? 0, $slot->quotas[$id] ?? 0), $slots));
+        }
+
+        return $left;
     }
 
     /**
@@ -306,7 +357,7 @@ final readonly class ParallelDraft
     }
 
     /**
-     * El aviso que no impide armar: los esperados que se quedan sin grupo.
+     * El aviso que no impide armar: los esperados que se quedan sin grupo («de menos», como `ParallelSubject::$short`).
      */
     public function warning(): ?string
     {
@@ -318,7 +369,7 @@ final readonly class ParallelDraft
 
         $parts = array_map(fn (int $left, string $id): string => "{$left} de {$this->code($id)}", $short, array_keys($short));
 
-        return collect($parts)->join(', ', ' y ').' sin lugar: puedes armar así, pero esos alumnos no tendrán grupo.';
+        return 'Quedan de menos '.collect($parts)->join(', ', ' y ').': no caben en ningún grupo. Puedes armar así, pero esos alumnos no tendrán grupo.';
     }
 
     /**

@@ -26,6 +26,8 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\GroupCapacity;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\ParallelPlacement;
+use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
+use Spatie\Activitylog\Models\Activity;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -95,21 +97,44 @@ final class ParallelsQuery
         $sizes = SuggestedGroups::fromSettings();
         $rows = $items->groupBy(fn (ProposalItem $item): string => "{$item->subject_id}|{$item->campus_id}");
         $capacities = GroupCapacity::forMany($rows->map(fn (Collection $rowItems): array => [$rowItems->first()->subject, $rowItems->first()->campus_id])->values(), $sizes);
+        $armed = $this->armed($term, $modality, $items->pluck('subject_id')->unique()->values()->all());
 
-        $subjects = $rows->map(function (Collection $rowItems, string $key) use ($proposals, $statuses, $careers, $intakes, $groups, $sizes, $capacities): ParallelSubject {
+        $subjects = $rows->map(function (Collection $rowItems, string $key) use ($proposals, $statuses, $careers, $intakes, $groups, $sizes, $capacities, $armed): ParallelSubject {
             $entries = $rowItems
                 ->map(fn (ProposalItem $item): ParallelCareer => $this->career($item, $careers[$proposals[$item->career_proposal_id]->career_id], $statuses[$item->career_proposal_id], $intakes))
                 ->sortBy(fn (ParallelCareer $career): string => $career->career->code)
                 ->values();
             $existing = $groups->get($key, collect())->pluck('group')->all();
 
-            return $this->row($rowItems->first(), $entries, $existing, $sizes, $capacities[$key]);
+            return $this->row($rowItems->first(), $entries, $existing, $sizes, $capacities[$key], isset($armed[$key]));
         })
             ->sortBy(fn (ParallelSubject $row): string => $row->subject->code.'|'.$row->campus->code)
             ->values()
             ->all();
 
         return new Parallels($term, $modality, $department, $blocked, $subjects, $load?->status);
+    }
+
+    /**
+     * Las materias y campus que ya se armaron con ArmParallelGroups en el periodo y la modalidad, por `materia|campus`: la
+     * Action deja en la bitácora de la materia un `parallels_arranged` con el periodo, la modalidad y el campus cada vez que
+     * arma, aunque el arreglo sea solo de completos y restos de una carrera o no cambie nada (supuesto por confirmar). Una
+     * consulta.
+     *
+     * @param  list<string>  $subjectIds
+     * @return array<string, true>
+     */
+    private function armed(Term $term, Modality $modality, array $subjectIds): array
+    {
+        return Activity::query()
+            ->where('event', ArmParallelGroups::LOG_EVENT)
+            ->where('subject_type', (new Subject)->getMorphClass())
+            ->whereIn('subject_id', $subjectIds)
+            ->where('properties->term_id', $term->getKey())
+            ->where('properties->modality_id', $modality->getKey())
+            ->get(['subject_id', 'properties'])
+            ->mapWithKeys(fn (Activity $entry): array => ["{$entry->subject_id}|{$entry->properties['campus_id']}" => true])
+            ->all();
     }
 
     /**
@@ -245,7 +270,7 @@ final class ParallelsQuery
      * @param  Collection<int, ParallelCareer>  $entries
      * @param  list<ParallelExisting>  $existing
      */
-    private function row(ProposalItem $item, Collection $entries, array $existing, SuggestedGroups $sizes, int $newCapacity): ParallelSubject
+    private function row(ProposalItem $item, Collection $entries, array $existing, SuggestedGroups $sizes, int $newCapacity, bool $armed): ParallelSubject
     {
         [$returned, $counting] = $entries->partition(fn (ParallelCareer $career): bool => $career->status === InboxStatus::Returned);
         [$careers, $withoutStudents] = $counting->partition(fn (ParallelCareer $career): bool => $career->expected > 0);
@@ -254,10 +279,8 @@ final class ParallelsQuery
         $parallels = ParallelGroups::suggest($sizes->sizeFor((bool) $item->subject->needs_lab), $careers
             ->mapWithKeys(fn (ParallelCareer $career): array => [$career->career->getKey() => ['expected' => $career->expected, 'requested' => $career->requested]])
             ->all());
-        $layout = $parallels->layout();
-        $placement = ParallelPlacement::place($layout, array_map(fn (ParallelExisting $group): array => $group->forPlacement(), $existing));
         $byId = collect($existing)->keyBy('id');
-        [$suggestion, $short] = self::slots($layout, $placement, $byId, $newCapacity, array_sum(array_column($parallels->careers, 'full')));
+        [$suggestion, $short, $placement] = self::armable($parallels->layout(), $existing, $byId, $newCapacity, array_sum(array_column($parallels->careers, 'full')));
 
         return new ParallelSubject(
             subject: $item->subject,
@@ -271,7 +294,51 @@ final class ParallelsQuery
             whyNot: $this->whyNot($careers, $withoutStudents->isNotEmpty(), $parallels),
             short: $short,
             newCapacity: $newCapacity,
+            armed: $armed,
         );
+    }
+
+    /**
+     * La sugerencia, armable tal cual: ArmParallelGroups coloca los grupos que ya existen sobre los cupos del arreglo que
+     * recibe, no sobre los esperados, y el cupo de un grupo de una sola carrera es la capacidad del que se queda en él. Así
+     * que se coloca sobre los esperados, se arman los cupos con las capacidades de los que se quedaron (slots()) y se vuelve
+     * a colocar sobre esos cupos hasta que se quedan los mismos: entonces la Action hace lo mismo y ningún cupo pasa la
+     * capacidad del grupo que lo recibe (HC-07). Si no se asienta (dos grupos de la misma carrera con capacidades distintas
+     * pueden ir y venir), los cupos se arman con la capacidad más chica de todas (la de un grupo nuevo o la de los que ya
+     * existen), que cabe en cualquier grupo, y se coloca una vez sobre ellos (supuesto por confirmar: se pierden lugares de los
+     * grupos grandes antes que sugerir un arreglo que la Action rechaza).
+     *
+     * @param  list<array<string, int>>  $layout
+     * @param  list<ParallelExisting>  $existing
+     * @param  Collection<string, ParallelExisting>  $byId
+     * @return array{0: list<ParallelSlot>, 1: array<string, int>, 2: ParallelPlacement}
+     */
+    private static function armable(array $layout, array $existing, Collection $byId, int $newCapacity, int $full): array
+    {
+        $groups = array_map(fn (ParallelExisting $group): array => $group->forPlacement(), $existing);
+        $quotas = fn (array $slots): array => array_map(fn (ParallelSlot $slot): array => $slot->quotas, $slots);
+        $placement = ParallelPlacement::place($layout, $groups);
+
+        for ($round = 0; $round < 4; $round++) {
+            [$suggestion, $short] = self::slots($layout, $placement, $byId, $newCapacity, $full);
+            $actual = ParallelPlacement::place($quotas($suggestion), $groups);
+
+            if ($actual->kept === $placement->kept) {
+                return [$suggestion, $short, $actual];
+            }
+
+            $placement = $actual;
+        }
+
+        $floor = min([$newCapacity, ...array_map(fn (ParallelExisting $group): int => $group->capacity, $existing)]);
+        [$suggestion, $short] = self::slots($layout, ParallelPlacement::place([], []), $byId, $floor, $full);
+        $placement = ParallelPlacement::place($quotas($suggestion), $groups);
+
+        return [array_map(function (ParallelSlot $slot, int $index) use ($placement, $byId, $newCapacity): ParallelSlot {
+            $keeps = isset($placement->kept[$index]) ? $byId[$placement->kept[$index]] : null;
+
+            return new ParallelSlot($slot->expected, $slot->quotas, $keeps?->ownerCareerId ?? $slot->ownerCareerId, $keeps?->capacity ?? $newCapacity, $slot->full, $keeps);
+        }, $suggestion, array_keys($suggestion)), $short, $placement];
     }
 
     /**

@@ -66,7 +66,7 @@
                         <p class="font-semibold">{{ $draft->slotName($index) }}</p>
                         <p class="text-[12.5px] text-neutral">
                             @if ($slot->keeps)
-                                Es el grupo <b class="font-mono text-base-content">{{ $slot->keeps->code }}</b> de {{ $draft->code($slot->keeps->ownerCareerId) }}{{ $slot->keeps->minutes > 0 ? ' · '.$duration($slot->keeps->minutes).' colocadas' : ' · sin horario' }}{{ $slot->keeps->hasTeacher() ? ' · con docente' : '' }}
+                                Es el grupo <b class="font-mono text-base-content">{{ $slot->keeps->code }}</b> de {{ $draft->code($slot->keeps->ownerCareerId) }}{{ $slot->keeps->minutes > 0 ? ' · '.$duration($slot->keeps->minutes).' colocadas' : ' · sin horario' }}{{ $slot->keeps->hasTeacher() ? ' · con docente' : '' }}{{ $slot->keeps->vetoed !== null ? ' · con una solicitud de cambio abierta' : '' }}
                             @else
                                 Nuevo, sin horario
                             @endif

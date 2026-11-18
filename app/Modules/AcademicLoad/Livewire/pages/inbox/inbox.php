@@ -536,9 +536,10 @@ new #[Title('Bandeja del departamento')] class extends Component
     }
 
     /**
-     * La materia que se ve en el drawer de paralelos, con su campus, su sugerencia, su resumen y el reparto por carrera.
+     * La materia que se ve en el drawer de paralelos, con su campus, su sugerencia, su resumen, el reparto por carrera y el
+     * enlace a la pestaña «Paralelos», donde se arma (tarea 8.8), en su campus y buscando su clave; null si la ruta no está.
      *
-     * @return array{subject: Subject, campus: ?Campus, parallels: ParallelGroups, summary: string, mixed: ?string}|null
+     * @return array{subject: Subject, campus: ?Campus, parallels: ParallelGroups, summary: string, mixed: ?string, armUrl: ?string}|null
      */
     private function parallelsTarget(DepartmentInbox $inbox): ?array
     {
@@ -548,7 +549,19 @@ new #[Title('Bandeja del departamento')] class extends Component
 
         foreach ($inbox->subjects as $row) {
             if ($row['subject']->getKey() === $this->parallelsSubjectId && $row['campus']?->getKey() === $this->parallelsCampusId) {
-                return ['subject' => $row['subject'], 'campus' => $row['campus'], 'parallels' => $row['parallels'], 'summary' => $this->describe($row['parallels']), 'mixed' => $this->describeMixed($row['parallels'])];
+                return [
+                    'subject' => $row['subject'],
+                    'campus' => $row['campus'],
+                    'parallels' => $row['parallels'],
+                    'summary' => $this->describe($row['parallels']),
+                    'mixed' => $this->describeMixed($row['parallels']),
+                    'armUrl' => Route::has('scheduling.parallels') ? route('scheduling.parallels', array_filter([
+                        'modalidad' => $this->requiredModality()->code,
+                        'depto' => $this->department,
+                        'campus' => $row['campus']?->code,
+                        'buscar' => $row['subject']->code,
+                    ])) : null,
+                ];
             }
         }
 

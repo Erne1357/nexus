@@ -4,7 +4,7 @@
     lo que se ahorra; si ya hay grupos sueltos, que armar los reorganiza; el error de la Action, si lo hubo. Desde 1024 px
     la matriz para mover esperados (scheduling::parallels.matrix); debajo, lo que piden en renglones, de consulta. Siguen
     los grupos que resultan (scheduling::parallels.results) y lo que pasa al armar. Al pie fijo, el motivo de lo que no se
-    puede (o el aviso de los esperados sin lugar), «Cancelar», «Usar lo de Nexus» si el armado cambió y «Armar grupos»,
+    puede (o el aviso de los esperados de menos), «Cancelar», «Usar lo de Nexus» si el armado cambió y «Armar grupos»,
     que confirma con el diálogo de Core. `close()` es del x-drawer.
 --}}
 @php
@@ -48,7 +48,7 @@
         @if ($reorganize)
             <div class="flex items-start gap-2.5 rounded-field bg-info/10 px-3.5 py-2.5 text-sm" data-testid="parallels-existing">
                 <x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
-                <span>Ya existen <b class="font-mono">{{ count($row->groups) }}</b> {{ count($row->groups) === 1 ? 'grupo suelto' : 'grupos sueltos' }} de esta materia en {{ $row->campus->name }} ({{ $withSchedule }} con horario y {{ $withTeacher }} con docente). Armar los <b>reorganiza</b>: se queda el de más avance, el que se cancela pierde sus sesiones y ninguno con docente se cancela.</span>
+                <span>Ya existen <b class="font-mono">{{ count($row->groups) }}</b> {{ count($row->groups) === 1 ? 'grupo suelto' : 'grupos sueltos' }} de esta materia en {{ $row->campus->name }} ({{ $withSchedule }} con horario y {{ $withTeacher }} con docente). Armar los <b>reorganiza</b>: se queda el de más avance, el que se cancela pierde sus sesiones y ninguno con docente o con una solicitud de cambio abierta se cancela.</span>
             </div>
         @endif
 

@@ -39,10 +39,10 @@ it('el jefe abre Paralelos desde la bandeja, mueve esperados entre mixtos y arma
         ->assertSee('Poco lleno');
 
     $page->fill('[aria-label="Esperados de ILOG en Mixto 1"]', '')
-        ->waitForText('10 de ILOG sin lugar')
+        ->waitForText('Quedan de menos 10 de ILOG')
         ->fill('[aria-label="Esperados de ILOG en Mixto 2"]', '10')
         ->waitForText('Usar lo de Nexus')
-        ->assertDontSee('10 de ILOG sin lugar')
+        ->assertDontSee('Quedan de menos 10 de ILOG')
         ->press('Armar grupos')
         ->assertSeeIn('#nexus-confirm', '¿Armar los paralelos de Cálculo Integral en Campus I?')
         ->assertSeeIn('#nexus-confirm', 'Quedan 4 grupos: nacen 4 nuevos.')

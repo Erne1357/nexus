@@ -87,7 +87,7 @@ it('el drawer muestra la matriz con la sugerencia y su vista previa recalcula al
         ->assertDontSee('Usar lo de Nexus');
 
     $page->set("mixed.0.{$this->iind->id}", 3)
-        ->assertSee('2 de IIND sin lugar')
+        ->assertSee('Quedan de menos 2 de IIND: no caben en ningún grupo.')
         ->assertSee('Usar lo de Nexus')
         ->call('step', $this->iind->id, 1)
         ->assertSet("full.{$this->iind->id}", 2)

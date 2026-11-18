@@ -20,7 +20,8 @@ use App\Modules\Core\Models\Campus;
  *   ningún grupo de la sugerencia (`carrera => alumnos`), y `cancelled`, los que sobrarían, del de más avance al de menos;
  * - `whyNot`: por qué no hay nada que juntar, o null si juntando se ahorran grupos;
  * - `newCapacity`: la capacidad de un grupo que naciera al armar (GroupCapacity), para la vista previa del drawer
- *   (ParallelDraft).
+ *   (ParallelDraft);
+ * - `armed`: si ya se armó con ArmParallelGroups (su entrada `parallels_arranged` en la bitácora de la materia).
  */
 final readonly class ParallelSubject
 {
@@ -44,6 +45,7 @@ final readonly class ParallelSubject
         public ?string $whyNot,
         public array $short = [],
         public int $newCapacity = 0,
+        public bool $armed = false,
     ) {}
 
     public function size(): int
@@ -84,11 +86,12 @@ final readonly class ParallelSubject
     }
 
     /**
-     * Si sus grupos ya se juntaron: algún grupo suelto tiene cupos de dos carreras o más (supuesto por confirmar).
+     * Si ya se armó: con ArmParallelGroups (`armed`), aunque el arreglo sea solo de completos y restos de una carrera, o algún
+     * grupo suelto ya tiene cupos de dos carreras o más (supuesto por confirmar).
      */
     public function arranged(): bool
     {
-        return array_any($this->groups, fn (ParallelExisting $group): bool => count($group->quotas) > 1);
+        return $this->armed || array_any($this->groups, fn (ParallelExisting $group): bool => count($group->quotas) > 1);
     }
 
     /**

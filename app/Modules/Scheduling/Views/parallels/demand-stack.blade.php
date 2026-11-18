@@ -1,7 +1,7 @@
 {{--
     Lo que piden, de consulta, debajo de 1024 px (maqueta B, «armar» a 390 px): por carrera que cuenta, su clave y el estado
     de su parte, sus esperados y lo que pidió, y en qué grupos quedan («1 completo · 10 lugares en Mixto 2»), con los
-    esperados sin lugar o de más; luego las que no cuentan (regresadas o sin esperados).
+    esperados de menos o de más; luego las que no cuentan (regresadas o sin esperados).
 --}}
 <ul class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300 lg:hidden" data-testid="parallels-demand-stack">
     @foreach ($row->careers as $career)
@@ -33,7 +33,7 @@
             <span class="text-sm"><b class="font-mono font-semibold">{{ $career->expected }}</b> esperados · pidió <b class="font-mono font-semibold">{{ $career->requested }}</b></span>
             <span class="text-sm text-neutral">Quedan en: {{ $places === [] ? 'ningún grupo' : implode(' · ', $places) }}</span>
             @if ($left !== 0)
-                <span class="flex items-center gap-1.5 text-sm text-warning"><x-icon name="o-exclamation-triangle" class="h-4 w-4" aria-hidden="true" /><span class="text-base-content">{{ abs($left) }} {{ $left > 0 ? 'sin lugar' : 'de más' }}</span></span>
+                <span class="flex items-center gap-1.5 text-sm text-warning"><x-icon name="o-exclamation-triangle" class="h-4 w-4" aria-hidden="true" /><span class="text-base-content">{{ abs($left) }} {{ $left > 0 ? 'de menos' : 'de más' }}</span></span>
             @endif
         </li>
     @endforeach

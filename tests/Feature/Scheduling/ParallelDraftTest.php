@@ -78,7 +78,7 @@ it('al mover esperados recalcula el arreglo y dice cuántos quedan sin lugar o d
 
     expect(parallelDraftCodes($draft))->toBe([['IIND' => 35], ['ISIC' => 35], ['ISIC' => 35]])
         ->and($draft->left)->toBe([$this->iind->id => 5, $this->isic->id => 5])
-        ->and($draft->warning())->toBe('5 de IIND y 5 de ISIC sin lugar: puedes armar así, pero esos alumnos no tendrán grupo.');
+        ->and($draft->warning())->toBe('Quedan de menos 5 de IIND y 5 de ISIC: no caben en ningún grupo. Puedes armar así, pero esos alumnos no tendrán grupo.');
 
     $more = ParallelDraft::of($row, [$this->isic->id => 2, $this->iind->id => 1], [[$this->iind->id => 5]]);
 

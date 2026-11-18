@@ -1,7 +1,8 @@
 {{--
     La matriz carrera × grupo del drawer de «Paralelos» (maqueta B), desde 1024 px. Un renglón por carrera que cuenta: su
     clave y el estado de su parte, sus esperados, sus completos (con − y + si se edita; debajo, los esperados que llevan) y
-    un campo por mixto con cuántos de sus esperados van ahí; al final, si le quedan esperados sin lugar o de más. Cada mixto
+    un campo por mixto con cuántos de sus esperados van ahí; al final, si le quedan esperados de menos (no caben en ningún
+    grupo) o de más. Cada mixto
     dice en su encabezado si es un grupo que ya existe («es 2 de ISIC») o nuevo, y se quita con su ×. Al pie, por grupo,
     los esperados contra la capacidad con su barra y los cupos repartidos; si pasan la capacidad van en `error` con HC-07,
     su icono y su texto. Sin permiso o con la carga cerrada, las cifras sin campos.
@@ -39,7 +40,7 @@
                     @if ($editable)
                         <button type="button" wire:click="addMixed" class="btn btn-sm btn-ghost border border-dashed border-base-content/30 normal-case tracking-normal" data-testid="parallels-add-mixed"><x-icon name="o-plus" class="h-3.5 w-3.5" aria-hidden="true" />Mixto</button>
                     @else
-                        <span class="sr-only">Sin lugar</span>
+                        <span class="sr-only">De menos o de más</span>
                     @endif
                 </th>
             </tr>
@@ -84,7 +85,7 @@
                     @endforeach
                     <td class="px-3 py-1.5" data-testid="parallels-left-{{ $career->career->code }}">
                         @if ($left > 0)
-                            <x-core::status-badge tone="warning" icon="o-exclamation-triangle" :label="$left.' sin lugar'" />
+                            <x-core::status-badge tone="warning" icon="o-exclamation-triangle" :label="$left.' de menos'" />
                         @elseif ($left < 0)
                             <x-core::status-badge tone="warning" icon="o-exclamation-triangle" :label="abs($left).' de más'" />
                         @else
@@ -122,7 +123,7 @@
                 @endforeach
                 <td class="px-3 pt-2.5 pb-1">
                     @if ($placedLeft > 0)
-                        <span class="font-mono text-[12.5px] font-semibold text-warning">{{ $placedLeft }} sin lugar</span>
+                        <span class="font-mono text-[12.5px] font-semibold text-warning">{{ $placedLeft }} de menos</span>
                     @endif
                 </td>
             </tr>
