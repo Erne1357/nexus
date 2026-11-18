@@ -2,6 +2,7 @@
 
 namespace App\Modules\Demand\Rules;
 
+use App\Modules\Demand\Enums\GapBucket;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Queries\PlanGrid;
 
@@ -17,6 +18,8 @@ use App\Modules\Students\Queries\PlanGrid;
  *   repetidor esperado.
  * - Su semestre es uno más los semestres ordinarios en los que tiene kárdex, con cualquier resultado. Así se estima
  *   igual hoy que en el pasado; el que trae el SII es solo el de hoy.
+ * - De cada materia elegible da su tramo de distancia (GapBucket): su semestre en la retícula menos el del alumno
+ *   (DM-03, confirmado el 17 de noviembre de 2026).
  * - «Como si» (`$asOfTerm`): para medir la proyección como si se hubiera corrido durante ese periodo, se ignora lo que
  *   vino después, y lo de ese periodo, con cualquier resultado menos baja, se toma como cursando.
  *
@@ -78,11 +81,18 @@ final class StandingCalculator
         $ideal = $grid->progressFor(array_keys($approved + $taking), $takingIds, $semester)['subjects_available'];
         $strict = $grid->progressFor(array_keys($approved), $takingIds, $semester)['subjects_available'];
 
+        $gapOf = [];
+
+        foreach ($ideal as $subject) {
+            $gapOf[$subject] = GapBucket::of($grid->semesterOf[$subject] ?? $semester, $semester);
+        }
+
         return new StudentStanding(
             eligible: $ideal,
             pendingPrerequisite: array_values(array_diff($ideal, $strict)),
             taking: $takingIds,
             semester: $semester,
+            gapOf: $gapOf,
         );
     }
 }

@@ -21,12 +21,15 @@ use Illuminate\Support\Facades\DB;
  * «Elegibilidad y demanda», DM-01 a DM-07). Por cada carrera ofrecida, cada columna de su propuesta y cada materia de
  * la propuesta (ForecastScopeQuery, la misma selección que la propuesta de carrera), junta:
  *
- * - los elegibles proyectados, los que lo son por seriación en curso y quienes cursan la materia (EligibilityProjectionQuery);
+ * - los elegibles proyectados (también por tramo de distancia, GapBucket), los que lo son por seriación en curso y
+ *   quienes cursan la materia (EligibilityProjectionQuery);
  * - las tasas de la ventana del mismo tipo y el nuevo ingreso histórico (HistoricalRatesQuery, `demand.history_terms`);
  * - y la fórmula (DemandForecaster) con los tamaños de `demand.target_group_size`.
  *
  * La columna sin campus de una modalidad sin salones suma los alumnos y las tasas de todos los campus. El nuevo ingreso
- * entra en las materias de primer semestre de la retícula; la especialidad se marca para revisarla.
+ * entra solo en las materias de primer semestre del plan vigente de la carrera (DM-05, confirmado el 17 de noviembre de
+ * 2026). Se marcan para revisar la especialidad y la materia con elegibles en la ventana que nadie tomó en ningún
+ * campus (DM-04). `non_enrollment_rate` guarda la no inscripción efectiva con los tramos (DM-03).
  *
  * compute() no escribe: sirve también «como si» se corriera durante el periodo ordinario anterior (la evaluación de la
  * 5.9). handle() reemplaza en una transacción las filas del periodo y la modalidad (o solo las de un campus) y, después
@@ -74,15 +77,20 @@ final class RefreshDemandForecasts
 
                 foreach ($subjects as $subject) {
                     $counts = ['eligible' => 0, 'pending' => 0, 'current' => 0];
+                    $gaps = [];
 
                     foreach ($students as $bySubject) {
                         foreach ($counts as $key => $count) {
                             $counts[$key] = $count + ($bySubject[$subject->subject_id][$key] ?? 0);
                         }
+
+                        foreach ($bySubject[$subject->subject_id]['gaps'] ?? [] as $bucket => $eligible) {
+                            $gaps[$bucket] = ($gaps[$bucket] ?? 0) + $eligible;
+                        }
                     }
 
                     $subjectRates = $rates->rateFor($subject->subject_id, $campusId, $subject->department_id);
-                    $newStudents = $subject->semester === 1 ? ($rates->newStudentsFor($career->getKey(), $campusId) ?? 0) : null;
+                    $newStudents = $subject->current_plan_semester === 1 ? ($rates->newStudentsFor($career->getKey(), $campusId) ?? 0) : null;
                     $result = $forecaster->forecast(new ForecastInput(
                         eligibleStudents: $counts['eligible'],
                         pendingPrerequisiteStudents: $counts['pending'],
@@ -90,6 +98,7 @@ final class RefreshDemandForecasts
                         rates: $subjectRates,
                         newStudents: $newStudents,
                         needsLab: $subject->needs_lab,
+                        eligibleByGap: $gaps,
                     ));
 
                     $rows[] = [
@@ -102,7 +111,7 @@ final class RefreshDemandForecasts
                         'pending_prerequisite_students' => $counts['pending'],
                         'current_students' => $counts['current'],
                         'new_students' => $newStudents,
-                        'non_enrollment_rate' => $subjectRates === null ? null : round($subjectRates->nonEnrollment, 4),
+                        'non_enrollment_rate' => $result->nonEnrollmentRate === null ? null : round($result->nonEnrollmentRate, 4),
                         'failure_rate' => $subjectRates === null ? null : round($subjectRates->failure, 4),
                         'history_terms_used' => $subjectRates->termsUsed ?? 0,
                         'expected_repeaters' => $result->expectedRepeaters,
@@ -110,7 +119,7 @@ final class RefreshDemandForecasts
                         'suggested_groups' => $result->suggestedGroups,
                         'method' => $result->method->value,
                         'formula_version' => $result->formulaVersion,
-                        'needs_review' => $subject->is_specialty,
+                        'needs_review' => $subject->is_specialty || $rates->neverTaken($subject->subject_id),
                         'computed_at' => $computedAt,
                     ];
                 }

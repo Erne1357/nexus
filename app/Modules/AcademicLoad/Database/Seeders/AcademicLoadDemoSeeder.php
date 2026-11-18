@@ -187,6 +187,54 @@ final class AcademicLoadDemoSeeder extends Seeder
                 $this->submit($proposal, $coordinator);
             }
         }
+
+        $this->acceptOneForEveryDepartment($term, $modality);
+    }
+
+    /**
+     * Que cada departamento con partes en las propuestas de la demo tenga al menos una aceptada, y por tanto su carga
+     * propuesta: las pantallas de Scheduling y de Staffing de la demo necesitan cargas que pasen a asignación. Las partes
+     * que se dejan pendientes o regresadas dependen del turno de cada decisión, y con la proyección de Demand (tarea 5.5)
+     * cambian las filas con grupos, o sea qué departamentos tienen partes y en qué turno, así que sin esto un departamento
+     * podía quedarse sin ninguna aceptada, o con una parte tan chica que su carga casi no tenía grupos. Acepta, con su jefe,
+     * las partes pendientes de las propuestas enviadas de cada departamento que no tiene ninguna aceptada y cuyos
+     * catálogos están validados; no toca a los demás.
+     */
+    private function acceptOneForEveryDepartment(Term $term, Modality $modality): void
+    {
+        $parts = ProposalReview::query()
+            ->join('career_proposals', 'career_proposals.id', '=', 'proposal_reviews.career_proposal_id')
+            ->join('careers', 'careers.id', '=', 'career_proposals.career_id')
+            ->join('departments', 'departments.id', '=', 'proposal_reviews.department_id')
+            ->where('career_proposals.term_id', $term->id)
+            ->where('career_proposals.modality_id', $modality->id)
+            ->orderBy('departments.code')
+            ->orderBy('careers.code')
+            ->select('proposal_reviews.*')
+            ->with('department')
+            ->get()
+            ->groupBy('department_id');
+
+        foreach ($parts as $departmentParts) {
+            if ($departmentParts->contains(fn (ProposalReview $part): bool => $part->status === ProposalReviewStatus::Accepted)) {
+                continue;
+            }
+
+            $department = $departmentParts->first()->department;
+            $head = $this->headOf($modality, $department);
+
+            if ($head === null || app(CatalogReviewQuery::class)->pendingFor($term, $modality, $department) !== []) {
+                continue;
+            }
+
+            foreach ($departmentParts->where('status', ProposalReviewStatus::Pending) as $part) {
+                try {
+                    app(AcceptProposalReview::class)->handle($part, $head);
+                } catch (ValidationException) {
+                    // Esta parte no se puede aceptar (la propuesta no está enviada): se deja pendiente.
+                }
+            }
+        }
     }
 
     /**

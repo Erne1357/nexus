@@ -32,7 +32,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * fila el valor anterior y el nuevo de lo que cambió y, después del commit, avisa con ProposalItemUpdated. Quién
  * puede lo decide CareerProposalPolicy::update sobre la fila antes de llamarla: un coordinador con campus solo corrige las
  * de su campus (M7); quien corrige se recibe como parámetro. En la fila de un campus inactivo solo se dejan en cero los
- * grupos pedidos (zeroRequestedGroups(), M14).
+ * grupos pedidos, también los que salen de paquetes (zeroRequestedGroups(), M14). Los grupos pedidos nunca bajan de los que salen
+ * de paquetes (`package_groups`, tarea 5.6b): una ValidationException sobre `requested_groups` que manda a cambiar los paquetes. Si cambian los esperados o los grupos, la fila queda marcada como corregida
+ * (`captured_at` y `captured_by`, tarea 5.5): desde ahí la proyección ya no la mueve sola; la nota sola no cuenta.
  */
 final class UpdateProposalItem
 {
@@ -45,7 +47,7 @@ final class UpdateProposalItem
     {
         $data = $this->rules->normalize($expectedStudents, $requestedGroups, $notes);
 
-        return $this->write($item, $actor, fn (): array => $data);
+        return $this->change($item, $actor, fn (ProposalItem $locked): array => $this->withCapture($locked, $data, $actor));
     }
 
     /**
@@ -58,24 +60,44 @@ final class UpdateProposalItem
      */
     public function zeroRequestedGroups(ProposalItem $item, User $actor): ProposalItem
     {
-        return $this->write($item, $actor, function (ProposalItem $locked): array {
+        return $this->change($item, $actor, function (ProposalItem $locked) use ($actor): array {
             if ($locked->campus === null || ($locked->campus->is_active && ! $locked->campus->trashed())) {
                 throw ValidationException::withMessages(['item' => ($locked->campus?->code ?? 'La fila').' está activo: corrige la fila como siempre.']);
             }
 
-            return ['requested_groups' => 0];
+            return $this->withCapture($locked, ['requested_groups' => 0, 'package_groups' => 0], $actor);
         });
+    }
+
+    /**
+     * Si `$values` cambia esperados o grupos de la fila, agrega la marca de que el coordinador la corrigió
+     * (`captured_at` y `captured_by`; tarea 5.5); la nota sola no cuenta.
+     *
+     * @param  array<string, mixed>  $values
+     * @return array<string, mixed>
+     */
+    private function withCapture(ProposalItem $locked, array $values, User $actor): array
+    {
+        foreach (['expected_students', 'requested_groups'] as $column) {
+            if (array_key_exists($column, $values) && $values[$column] !== $locked->{$column}) {
+                return [...$values, 'captured_at' => now(), 'captured_by' => $actor->getKey()];
+            }
+        }
+
+        return $values;
     }
 
     /**
      * La corrección en una transacción: bloquea la propuesta y la parte, relee la fila con bloqueo y escribe lo que
      * devuelve `$data` con la fila ya leída (con su materia y su campus), con la bitácora y el aviso si algo cambió.
+     * Es la misma guarda de ResolveForecastChange. La marca de captura se guarda pero no entra a la bitácora ni al
+     * aviso: la bitácora lleva lo que cambió en la fila, no quién la tocó.
      *
      * @param  Closure(ProposalItem): array<string, mixed>  $data
      *
      * @throws ValidationException
      */
-    private function write(ProposalItem $item, User $actor, Closure $data): ProposalItem
+    public function change(ProposalItem $item, User $actor, Closure $data): ProposalItem
     {
         return DB::transaction(function () use ($item, $data, $actor): ProposalItem {
             $proposal = CareerProposal::query()
@@ -108,15 +130,25 @@ final class UpdateProposalItem
             $item->setRawAttributes($item->newQuery()->lockForUpdate()->findOrFail($item->getKey())->getAttributes(), sync: true);
 
             $values = $data($item);
+
+            if (isset($values['requested_groups']) && ! array_key_exists('package_groups', $values) && $values['requested_groups'] < $item->package_groups) {
+                throw ValidationException::withMessages(['requested_groups' => "{$item->package_groups} grupos salen de paquetes; cambia los paquetes para bajarlos."]);
+            }
+
             $old = $item->only(array_keys($values));
             $item->fill($values);
-            $changed = array_keys($item->getDirty());
+            $dirty = array_keys($item->getDirty());
+            $changed = array_values(array_diff($dirty, ['captured_at', 'captured_by']));
 
-            if ($changed === []) {
+            if ($dirty === []) {
                 return $item;
             }
 
             $item->save();
+
+            if ($changed === []) {
+                return $item;
+            }
 
             activity()
                 ->performedOn($item)

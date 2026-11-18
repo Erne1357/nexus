@@ -73,6 +73,22 @@ class CareerProposal extends Model
     }
 
     /**
+     * @return HasMany<ProposalPackage, $this>
+     */
+    public function packages(): HasMany
+    {
+        return $this->hasMany(ProposalPackage::class)->orderBy('position');
+    }
+
+    /**
+     * @return HasMany<ProposalIntake, $this>
+     */
+    public function intakes(): HasMany
+    {
+        return $this->hasMany(ProposalIntake::class);
+    }
+
+    /**
      * Quién la envió la última vez.
      *
      * @return BelongsTo<User, $this>
