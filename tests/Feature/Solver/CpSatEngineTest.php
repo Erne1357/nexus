@@ -11,6 +11,7 @@ use App\Modules\Solver\Engines\CpSat\SolverRunNotFound;
 use App\Modules\Solver\Engines\CpSat\SolverServiceUnavailable;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Jobs\RunSolver;
 use App\Modules\Solver\Jobs\SolverRunCancelled;
@@ -328,14 +329,14 @@ it('la salud dice si el servicio responde y entiende la versión del contrato', 
         ->and($client->health())->toBeFalse();
 });
 
-it('cpsat se registra solo con URL y token del servicio, y antes del de prueba para no quedar como predeterminado', function (?string $url, ?string $token, array $engines) {
+it('cpsat se registra solo con URL y token del servicio, antes del de prueba y de la heurística, para no quedar como predeterminado', function (?string $url, ?string $token, array $engines) {
     config(['services.solver.url' => $url, 'services.solver.token' => $token]);
 
     expect(SolverServiceProvider::engineClasses())->toBe($engines);
 })->with([
-    'con URL y token' => ['http://solver:8000', 'secreto', [CpSatEngine::class, FixedEngine::class]],
-    'sin token' => ['http://solver:8000', '', [FixedEngine::class]],
-    'sin URL' => [null, 'secreto', [FixedEngine::class]],
+    'con URL y token' => ['http://solver:8000', 'secreto', [CpSatEngine::class, FixedEngine::class, PhpHeuristicEngine::class]],
+    'sin token' => ['http://solver:8000', '', [FixedEngine::class, PhpHeuristicEngine::class]],
+    'sin URL' => [null, 'secreto', [FixedEngine::class, PhpHeuristicEngine::class]],
 ]);
 
 it('en las pruebas, sin servicio configurado, el registro no trae cpsat', function () {

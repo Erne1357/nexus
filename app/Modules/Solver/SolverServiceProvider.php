@@ -17,6 +17,7 @@ use App\Modules\Solver\Engines\CpSat\CpSatClient;
 use App\Modules\Solver\Engines\CpSat\CpSatEngine;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Queries\CareerLoadsQuery;
@@ -31,9 +32,12 @@ use App\Modules\Solver\Rules\SolverSettings;
 final class SolverServiceProvider extends ModuleServiceProvider
 {
     /**
-     * Los motores disponibles, con la etiqueta `solver.engines` (engineClasses()). Los motores no guardan estado, así
-     * que el registro puede ser único por proceso; el cliente del servicio de CP-SAT se arma con `services.solver`.
-     * CareerLoadsQuery recuerda sus respuestas en la petición: `scoped`, nunca único (Octane).
+     * Los motores disponibles, con la etiqueta `solver.engines` (engineClasses()): CP-SAT si el servicio está configurado
+     * (fase 7), el de prueba y la heurística en PHP (6.6). El orden importa: mientras no llegue `solver.default_engine`
+     * (7.11), el predeterminado es el último registrado, así que la heurística va al final y es la que se propone al lanzar
+     * una corrida. Los motores no guardan estado, así que el registro puede ser único por proceso; el cliente del servicio
+     * de CP-SAT se arma con `services.solver`. CareerLoadsQuery recuerda sus respuestas en la petición: `scoped`, nunca
+     * único (Octane).
      */
     public function register(): void
     {
@@ -57,7 +61,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
      */
     public static function engineClasses(): array
     {
-        return [...(CpSatClient::configured() ? [CpSatEngine::class] : []), FixedEngine::class];
+        return [...(CpSatClient::configured() ? [CpSatEngine::class] : []), FixedEngine::class, PhpHeuristicEngine::class];
     }
 
     public function boot(): void
