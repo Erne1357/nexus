@@ -28,7 +28,7 @@
 | 5 | Proyección de demanda | R2 | feb 2027 | 3 en paralelo | ✅ | [fase-5-demanda.md](docs/plan/fase-5-demanda.md) |
 | 6 | Heurística de horarios y contrato del motor | R2 | feb – mar 2027 | 3 en paralelo | ✅ | [fase-6-heuristica-y-contrato.md](docs/plan/fase-6-heuristica-y-contrato.md) |
 | 7 | Solver CP-SAT (Python + OR-Tools) | R2 | mar – abr 2027 | 3 en paralelo | 🟨 | [fase-7-solver-cpsat.md](docs/plan/fase-7-solver-cpsat.md) |
-| 8 | Re-análisis, impacto de cambios y junta digital | R2 | abr 2027 | Paralelo | ⬜ | [fase-8-reanalisis.md](docs/plan/fase-8-reanalisis.md) |
+| 8 | Re-análisis, impacto de cambios y junta digital | R2 | abr 2027 | Paralelo | 🟨 | [fase-8-reanalisis.md](docs/plan/fase-8-reanalisis.md) |
 | 9 | Inscripción Campus II | R3 | may – jul 2027 | Paralelo | 🟦 | [fase-9-inscripcion-campus-ii.md](docs/plan/fase-9-inscripcion-campus-ii.md) |
 | 10 | Otras modalidades: EAD, EnLínea, TecNM Virtual | R4 | por definir | — | 🟦 | [fase-10-otras-modalidades.md](docs/plan/fase-10-otras-modalidades.md) |
 
@@ -55,7 +55,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Students | 1 | 🟨 (1.4 hecha: modelos, progreso y plantillas #118 a #120) |
 | Imports | 1 | 🟨 (1.1, 1.2 y 1.3 hechas: motor #94 a #98, asistente #99 a #103, desactivar faltantes #114 y #115; plantillas `students` y `kardex` en #120; migración del SII `imports:migrate-sii`, 1.16 parte 1, #257 a #271) |
 | CatalogValidation | 2 | ✅ (base y revisiones al abrir el periodo #179; validación del jefe, 2.4, #184 y #185; tablero de avance con recordatorios, 2.5, #191; captura docente desde la validación, 2.6, #190) |
-| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188; acuerdos entre departamentos, préstamos de salón y grupos compartidos, #286 y #292) |
+| AcademicLoad | 2 (base), 4 (cierre), 8 (re-análisis; re-análisis de la fase 8: flujo y cancelación #591 #601, diff de demanda #597, versiones con diff y avisos #595, tablero de versiones #610, demo de la fase 8 #626) | 🟨 (cargas al abrir el periodo #179; máquina de estados con HC-14 #180; propuesta de carrera #187; bandeja del departamento con HC-20 y paralelos #188; acuerdos entre departamentos, préstamos de salón y grupos compartidos, #286 y #292) |
 | Scheduling | 3 (manual + validador), 6 (heurística) | 🟨 (3.1 a 3.7 hechas: modelos y exclusiones #287; validador HC-01 a HC-13 y SC-09 #288 a #290, #312 y #320; grupos desde propuestas #291; tablero de choques y avance #294, #319 y #325; editor de horarios #300, #301, #311 y #327; cupos por carrera y grupos compartidos #298, #315 y #326; salones y préstamos #286, #292 y #316; datos demo y masivos #310 y #317. Falta la integración 3.13; la heurística es de la fase 6) |
 | Staffing | 3 | 🟨 (3.8 a 3.12 hechas: ranking docente #293, #295, #297 y #299; asignación #296, #302, #306, #318 y #321; oferta y Mi carga #309 y #314; solicitudes de cambio #304 y #314; carga por docente #308; datos demo y masivos #324. Falta la integración 3.13) |
 | Demand | 5 | ✅ (abierta el 16 y cerrada el 17 de noviembre de 2026, con los tres rieles: núcleo 5.1 a 5.4 #511, #521, #524, #526 y v2 #552; precarga #531; historial de grupos #525; revisar proyección #550; paquetes #540 y #562; tablero «Demanda por materia» #547; demo #581; parámetros, evaluación y datos reales 5.8 a 5.10 del Riel C, ADR-0026) |
