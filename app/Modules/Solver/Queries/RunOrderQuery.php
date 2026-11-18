@@ -15,7 +15,8 @@ use App\Modules\Solver\Rules\DepartmentCohorts;
  *
  * Primero las cargas que más cohortes comparten con otras cargas y, en empate, las de más grupos. Por qué: lo que
  * muchos comparten (por ejemplo el tronco común) conviene fijarlo primero, porque cada carga que corre después lo toma
- * como fijo y ya no lo mueve. Las cohortes son las de Scheduling\Rules\Cohorts; ninguna lista fija de departamentos.
+ * como fijo y ya no lo mueve. `shared_cohorts` cuenta las dos señales de SV-20 (la cohorte de Scheduling\Rules\Cohorts y la
+ * llave de alumno tipo amplio de DepartmentCohorts), sin repetir; ninguna lista fija de departamentos.
  */
 final class RunOrderQuery
 {
@@ -37,7 +38,7 @@ final class RunOrderQuery
             $shared = [];
 
             foreach ($cohorts->sharedWith($load->department_id, $keys) as $other) {
-                foreach ($cohorts->cohorts[$other->id] as $key) {
+                foreach ($cohorts->keys[$other->id] as $key) {
                     if (isset($keys[$key])) {
                         $shared[$key] = true;
                     }

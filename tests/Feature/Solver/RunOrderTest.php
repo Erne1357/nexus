@@ -3,11 +3,13 @@
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Queries\CommonCoreWarningQuery;
@@ -113,4 +115,52 @@ it('SV-20: dos corridas de departamento seguidas no se pisan: la segunda toma co
         ->and($groups[$this->cbCalcSc->id]->fixedSessions)->toHaveCount(1)
         ->and($groups[$this->cbCalcSc->id]->fixedSessions[0]->day)->toBe(1)
         ->and($groups[$this->cbCalcSc->id]->currentSessions)->toBe([]);
+});
+
+it('SV-20: avisa del tronco común con varios grupos de la materia, que no llevan cohorte de HC-03, por el alumno tipo amplio', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $career = Career::factory()->create(['department_id' => $this->sc->id]);
+    $plan = StudyPlan::factory()->create(['career_id' => $career->id]);
+    $calculo = Subject::factory()->create(['department_id' => $this->cb->id, 'code' => 'AEF-2001', 'theory_hours' => 3, 'practice_hours' => 2]);
+    $fundamentos = Subject::factory()->create(['department_id' => $this->sc->id, 'code' => 'SCC-2001', 'theory_hours' => 3, 'practice_hours' => 2]);
+
+    $make = fn (Subject $subject): Group => Group::factory()->create([
+        'term_id' => $this->term->id, 'campus_id' => $c2->id, 'modality_id' => $this->pres->id, 'subject_id' => $subject->id,
+        'owner_career_id' => $career->id, 'study_plan_id' => $plan->id, 'semester' => 1, 'capacity' => 30,
+    ]);
+
+    $calculoGroups = [$make($calculo), $make($calculo), $make($calculo)];
+    $make($fundamentos);
+
+    $warning = collect(orderWarnings($this, $this->sc))->firstWhere('department.id', $this->cb->id);
+
+    expect($warning['groups'])->toBe(5)
+        ->and($warning['without_sessions'])->toBe(5);
+
+    foreach ($calculoGroups as $group) {
+        GroupSession::factory()->for($group)->on(1, '07:00', '09:00')->create();
+    }
+
+    expect(orderWarnings($this, $this->sc)[0]['without_sessions'])->toBe(2);
+});
+
+it('SV-20: el cupo de otra carrera con la materia en su retícula también comparte alumno tipo amplio', function () {
+    $c2 = Campus::factory()->create(['code' => 'C2']);
+    $careerIi = Career::factory()->create(['department_id' => $this->ii->id]);
+    $planIi = StudyPlan::factory()->create(['career_id' => $careerIi->id]);
+    $other = Career::factory()->create(['department_id' => $this->cb->id]);
+    $otherPlan = StudyPlan::factory()->create(['career_id' => $other->id]);
+    $quimica = Subject::factory()->create(['department_id' => $this->cb->id, 'code' => 'AEF-3001', 'theory_hours' => 3, 'practice_hours' => 2]);
+    $taller = Subject::factory()->create(['department_id' => $this->ii->id, 'code' => 'INC-3001', 'theory_hours' => 3, 'practice_hours' => 2]);
+    StudyPlanSubject::factory()->create(['study_plan_id' => $planIi->id, 'subject_id' => $quimica->id, 'semester' => 2]);
+
+    $base = ['term_id' => $this->term->id, 'campus_id' => $c2->id, 'modality_id' => $this->pres->id, 'semester' => 2, 'capacity' => 30];
+    $cbGroup = Group::factory()->create([...$base, 'subject_id' => $quimica->id, 'owner_career_id' => $other->id, 'study_plan_id' => $otherPlan->id]);
+    GroupQuota::factory()->create(['group_id' => $cbGroup->id, 'career_id' => $careerIi->id]);
+    Group::factory()->create([...$base, 'subject_id' => $taller->id, 'owner_career_id' => $careerIi->id, 'study_plan_id' => $planIi->id]);
+
+    $warning = collect(orderWarnings($this, $this->ii))->firstWhere('department.id', $this->cb->id);
+
+    expect($warning['groups'])->toBe(2)
+        ->and($warning['without_sessions'])->toBe(2);
 });
