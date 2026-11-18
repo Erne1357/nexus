@@ -8,7 +8,9 @@ y los fixtures compartidos (7.10); la autoridad sigue siendo el evaluador en PHP
 
 Diferencias a propósito: HC-03 sigue la regla del contrato (dos grupos con una misma clave de cohorte no se empalman),
 más estricta que la combinación del alumno tipo del evaluador; HC-07 y HC-13 no se pueden revisar con el contrato, como
-en el evaluador.
+en el evaluador. Tampoco revisa la forma de la salida: una sesión sin salón, o con uno que no está en `rooms`, se salta
+las reglas de salón (como en el evaluador, donde una sesión sin salón no tiene dónde fallar); que cada sesión lleve un
+salón de su campus lo exigen las pruebas de fixtures, como `SolverFixturesTest` en PHP.
 """
 
 from collections import defaultdict

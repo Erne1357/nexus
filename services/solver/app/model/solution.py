@@ -14,7 +14,7 @@ from app.contract.output import ProposedSession
 
 from .data import ModelData
 from .pattern import clock, minutes
-from .variables import GroupDomain, Option, Variables
+from .variables import GroupDomain, Option, Variables, practice_units
 
 
 def chosen_option(solver: cp_model.CpSolver, domain: GroupDomain) -> Option | None:
@@ -74,21 +74,30 @@ def _group_sessions(
 def _practice_by_day(
     domain: GroupDomain, option: Option, rooms: dict[int, str | None], data: ModelData
 ) -> dict[int, int]:
-    """Las unidades de práctica de cada día de la opción."""
+    """Las unidades de práctica de cada día de la opción.
+
+    Con laboratorio, los días cuyo salón es un espacio de práctica, como `chooseRooms`: primero los que no tenían un
+    salón de teoría que le sirviera (todos los salones de su ventana son espacios de práctica), luego los que ya tenían
+    práctica y luego los más tempranos. Sin laboratorio, como `practiceDays`.
+    """
     group = domain.group
     grid = domain.grid
     if not grid.uses_rooms or group.practice_hours == 0:
         return {}
 
     units = {window.day: window.units for window in option.windows}
-    left = min(sum(units.values()), int(group.practice_hours * 60 / grid.unit_minutes + 0.5))
     had_practice = {slot.day for slot in group.current_sessions if slot.kind == SessionKind.PRACTICE}
     if domain.lab_practice:
+        left = option.practice
+        only_labs = {
+            window.day for window in option.windows if all(data.is_practice_space(room_id) for room_id in window.rooms)
+        }
         days = sorted(
             (day for day, room_id in rooms.items() if room_id is not None and data.is_practice_space(room_id)),
-            key=lambda day: (day not in had_practice, day),
+            key=lambda day: (day not in only_labs, day not in had_practice, day),
         )
     else:
+        left = practice_units(group, grid, sum(units.values()))
         days = sorted(units, key=lambda day: (day not in had_practice, -day))
 
     practice = {}
