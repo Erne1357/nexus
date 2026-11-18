@@ -1,0 +1,15 @@
+{
+  "status": 422,
+  "body": {
+    "detail": [
+      {
+        "path": "groups[1].weekly_hours",
+        "message": "debe ser un entero de 1 en adelante"
+      },
+      {
+        "path": "teachers[0].remaining_hours",
+        "message": "debe ser un entero de 0 en adelante"
+      }
+    ]
+  }
+}

@@ -180,7 +180,28 @@ Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reg
 | Recursos | Límite de CPU y memoria en compose; número de hilos de CP-SAT por configuración; límite de corridas simultáneas en el servicio |
 | Estado | Sin estado persistente: las corridas en curso viven en memoria; el registro duradero es `solver_runs`. Al reiniciar, lo que estaba corriendo se marca `failed` desde PHP por tiempo de espera y se relanza |
 | Salud | Endpoint de salud usado por el healthcheck de Docker; `queue` depende de que el servicio esté sano solo cuando el motor predeterminado es CP-SAT |
-| Versionado | El servicio expone su versión y las versiones de contrato que soporta; `CpSatEngine` lo comprueba antes de enviar |
+| Versionado | El servicio expone su versión y las versiones de contrato que soporta en `/health` (`CpSatClient::health()` lo revisa) y rechaza con 422 una entrada de otra versión |
+
+## Cliente PHP (`CpSatEngine`)
+
+`Engines/CpSat/` (tarea 7.9). `CpSatEngine` (clave `cpsat`, «CP-SAT (servicio)», `checksHardRules() = true`) implementa `SolverEngine` sobre `CpSatClient`, que envuelve el cliente HTTP de Laravel con `services.solver` (`SOLVER_URL`, `SOLVER_TOKEN` como `Authorization: Bearer`; 3 s para conectar, 30 s para el envío, que lleva la entrada grande, y 5 s para cada consulta o cancelación, `poll_timeout`). El resto de Nexus no sabe que hay un servicio.
+
+- **Registro.** `cpsat` entra a `solver.engines` solo si hay URL y token (`SolverServiceProvider::engineClasses()`); se decide al arrancar, así que cambiar el `.env` pide reiniciar `app` y `queue`. Va antes del de prueba para no volverse el predeterminado (el último registrado) antes de la 7.11 (supuesto por confirmar). En las pruebas no aparece: `phpunit.xml` deja `SOLVER_TOKEN` vacío y `CpSatEngineTest` simula el servicio con `Http::fake()` y respuestas grabadas de su API (`tests/Fixtures/solver/cpsat/`).
+- **Ciclo.** `solve()` manda la entrada (`POST /solve`) y consulta `GET /runs/{id}` cada `services.solver.poll_interval_ms` (1000 por omisión). En `queued` y `running` llama al aviso de avance con `progress` y `best_score`; en `done` valida `output` con `SolverOutput::fromArray` y revisa que traiga el `run_id` de la entrada; en `failed` lanza con el `error` del servicio; un `cancelled` que Nexus no pidió también es error.
+- **Cancelación.** Si el aviso de avance lanza (SV-03), manda `DELETE /runs/{id}` y deja salir la excepción; RunSolver deja la corrida cancelada.
+- **Tiempo de espera.** El límite es `time_limit_seconds` (L) más 30 s (`CpSatEngine::DEADLINE_MARGIN_SECONDS`) desde que empieza `solve()`. Ninguna consulta, ni un reintento, empieza si no termina antes del límite; cuando ya no cabe otra, o las tres consultas de un intento se vencen (el servicio está pero no contesta), cancela la corrida en el servicio y lanza «El servicio del motor no respondió a tiempo.». Peor caso con los valores por omisión: el envío (30 s) termina antes de L + 30; la última consulta, antes de L + 30; después, una pausa de 1 s y la cancelación de 5 s: L + 36 s, por debajo de L + 60 (`RunSolver::TIMEOUT_MARGIN`), así que la corrida termina con este mensaje y no la corta el worker.
+- **Envío vencido.** El envío no se reintenta (encolaría la corrida dos veces). Si se vence después de que el servicio lo aceptó, la corrida de Nexus queda fallida pero la del servicio queda huérfana: Nexus no recibió su identificador y el servicio no conoce el `run_id` de Nexus, así que nadie la cancela; ocupa un lugar hasta que termina sola en su límite y su salida no se recoge.
+- **Errores** (SV-08), con mensajes en español y sin trazas, que RunSolver guarda como `error` de la corrida fallida:
+
+| Respuesta del servicio | Excepción | Mensaje |
+|---|---|---|
+| Conexión rechazada (después de 3 intentos si es una consulta; el envío no se repite), envío vencido o 5xx | `SolverServiceUnavailable` | «El servicio del motor no está disponible.» |
+| 429 | `SolverServiceUnavailable` | «El servicio del motor está ocupado con otras corridas: vuelve a lanzarla en unos minutos.» |
+| 401 | `SolverServiceUnavailable` | «El servicio del motor no está disponible: rechazó el token de Nexus (SOLVER_TOKEN).» |
+| 422 al enviar | `SolverInputRejected` (`problems` con la ruta y el mensaje de cada campo) | «El servicio del motor rechazó la entrada: campuses[0].day_end: …» (los tres primeros problemas) |
+| 404 al consultar | `SolverRunNotFound` | «El servicio del motor ya no tiene esta corrida (pudo reiniciarse): vuelve a lanzarla.» |
+| Tres consultas vencidas seguidas, o la siguiente ya no cabe en el límite | `SolverServiceTimedOut` (el motor cancela y lanza `CpSatRunFailed`) | «El servicio del motor no respondió a tiempo.» |
+| `failed`, salida inválida, salida de otra corrida | `CpSatRunFailed` | El motivo del servicio o la ruta del campo malo |
 
 ## Observabilidad
 

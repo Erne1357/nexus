@@ -53,6 +53,9 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Sin token, el motor `cpsat` no se registra: las pruebas nunca llaman al servicio del motor real aunque
+             el .env lo tenga. CpSatEngineTest lo simula con Http::fake(). -->
+        <env name="SOLVER_TOKEN" value=""/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
