@@ -21,6 +21,11 @@ use LogicException;
  * del grupo (profile()). Las reglas son puras: leen esta foto y nunca la base, así que se prueban sin base y el editor puede
  * preguntar «¿y si…?» sin escribir (withSession(), withTeacher()). La arma ScheduleStateQuery o, en las pruebas,
  * ScheduleStateBuilder. Inmutable: los with…() devuelven otra foto.
+ *
+ * Cada grupo activo cuenta para el alumno tipo (HC-03) en su modalidad, campus, plan y semestre. La foto que se arma
+ * del contrato del motor (Solver, tarea 6.5) dice en cuáles cuenta cada grupo, porque ahí las cohortes las decide
+ * quien armó la entrada: un tronco común puede contar en el semestre de dos planes, y un grupo sin cohorte no cuenta en
+ * ninguno (la entrada no trae los otros grupos de su materia, así que parecería el único).
  */
 final class ScheduleState
 {
@@ -47,6 +52,7 @@ final class ScheduleState
      * @param  array<string, true>  $activePlans  ids de los planes activos
      * @param  array<string, mixed>  $settings  parámetros (`staffing.extra_hours_tolerance`…)
      * @param  array<string, string>  $campusCodes  clave de cada campus, por id (para los mensajes)
+     * @param  array<string, list<array{string, string, string, int}>>  $typicalStudentSemesters  por grupo, los [modalidad, campus, plan, semestre] del alumno tipo en que cuenta, si no es solo el suyo
      */
     public function __construct(
         public readonly string $termId,
@@ -63,13 +69,16 @@ final class ScheduleState
         private readonly array $activePlans = [],
         private readonly array $settings = [],
         private readonly array $campusCodes = [],
+        private readonly array $typicalStudentSemesters = [],
     ) {
         foreach ($this->groups as $group) {
             if (! $group->isActive) {
                 continue;
             }
 
-            $this->bySemester[self::semesterKey($group->modalityId, $group->campusId, $group->studyPlanId, $group->semester)][] = $group;
+            foreach ($this->typicalStudentSemesters[$group->id] ?? [[$group->modalityId, $group->campusId, $group->studyPlanId, $group->semester]] as [$modalityId, $campusId, $studyPlanId, $semester]) {
+                $this->bySemester[self::semesterKey($modalityId, $campusId, $studyPlanId, $semester)][] = $group;
+            }
 
             foreach ($this->sessions[$group->id] ?? [] as $session) {
                 if ($group->teacherId !== null) {
@@ -136,7 +145,8 @@ final class ScheduleState
 
     /**
      * Los grupos activos de un plan y semestre reticular de una modalidad en un campus (HC-03): el alumno tipo es de un
-     * campus (MS10), así que los grupos de otro campus de la misma carga no cuentan.
+     * campus (MS10), así que los grupos de otro campus de la misma carga no cuentan. Con los semestres del alumno tipo
+     * que trae la foto, los grupos que cuentan en ese semestre.
      *
      * @return list<StateGroup>
      */
