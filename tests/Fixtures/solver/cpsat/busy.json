@@ -1,0 +1,6 @@
+{
+  "status": 429,
+  "body": {
+    "detail": "El servicio ya tiene 1 corridas en curso (límite 1)."
+  }
+}
