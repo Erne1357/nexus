@@ -21,12 +21,17 @@ use Illuminate\Database\Seeder;
  */
 final class DemandRecalculationDemoSeeder extends Seeder
 {
-    public function run(string $term = '20271', int $subjects = 6, float $failureShare = 0.5, int $seed = 2027): void
+    /**
+     * Las materias que califica: las `$subjects` con más alumnos cursándolas en el semestre ordinario anterior a `$term`,
+     * por número de alumnos y luego por id. La elección no depende de la semilla (la semilla solo reparte aprobadas y
+     * reprobadas), así que la demo de la propuesta puede saber de antemano qué filas quedarán en «Cambió».
+     *
+     * @return list<string>
+     */
+    public static function subjectsToGrade(string $term, int $subjects): array
     {
-        $inProgress = TermCode::previousRegular($term);
-
-        $subjectIds = KardexRecord::query()
-            ->where('term_code', $inProgress)
+        return KardexRecord::query()
+            ->where('term_code', TermCode::previousRegular($term))
             ->where('result', KardexResult::Cursando)
             ->groupBy('subject_id')
             ->orderByRaw('count(*) desc')
@@ -34,6 +39,12 @@ final class DemandRecalculationDemoSeeder extends Seeder
             ->limit($subjects)
             ->pluck('subject_id')
             ->all();
+    }
+
+    public function run(string $term = '20271', int $subjects = 6, float $failureShare = 0.5, int $seed = 2027): void
+    {
+        $inProgress = TermCode::previousRegular($term);
+        $subjectIds = self::subjectsToGrade($term, $subjects);
 
         $rows = KardexRecord::query()
             ->where('term_code', $inProgress)
