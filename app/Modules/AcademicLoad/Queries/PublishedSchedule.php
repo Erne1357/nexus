@@ -15,6 +15,11 @@ use InvalidArgumentException;
  * semestre incompleto, y la fecha de actualización es la de la publicación más reciente de lo que se ve (decisiones del
  * usuario del 10 de noviembre de 2026). Es puro: lo arma PublishedScheduleQuery con los payloads ya normalizados
  * (SnapshotPayload::normalize, MS13) y se guarda en caché tal cual.
+ *
+ * Desde la tarea 8.5 lleva también qué cambió en la última publicación de cada carga contra la anterior (decisión del
+ * usuario del 17 de noviembre de 2026): cada grupo con su marca (PublishedGroup::$change) y, aparte, los grupos que esa
+ * publicación canceló (cancelledIn(), cancelledOfDepartment()), que ya no están publicados pero la consulta enseña tachados
+ * donde se buscan por carrera y semestre. groups() y las demás vistas solo dan lo vigente.
  */
 final readonly class PublishedSchedule
 {
@@ -25,22 +30,30 @@ final readonly class PublishedSchedule
      * @param  array<string, array{load_id: string, department: array{id: string, code: string, name: string}, version: int, published_at: CarbonImmutable}>  $loads  por departamento
      * @param  list<PublishedGroup>  $groups  por clave de materia y de grupo
      * @param  array<string, mixed>|null  $profile  el perfil de la modalidad de la publicación más reciente
+     * @param  list<PublishedGroup>  $cancelled  los que canceló la última publicación de su carga, en el mismo orden
      */
     private function __construct(
         public array $loads,
         private array $groups,
         private ?array $profile,
+        private array $cancelled = [],
     ) {}
 
     /**
+     * `$changes` es lo que cambió la última publicación de cada carga, por id de carga (PublishedScheduleQuery): la marca
+     * de cada grupo (PublishedChange::toArray(), por id de grupo) y los grupos cancelados tal como estaban en la versión
+     * anterior, ya sin lo privado.
+     *
      * @param  list<array<string, mixed>>  $payloads  la última versión de cada carga, de la misma modalidad y periodo, normalizada
+     * @param  array<string, array{groups: array<string, array{kinds: list<string>, line: string, detail: string|null}>, cancelled: list<array<string, mixed>>}>  $changes
      *
      * @throws InvalidArgumentException si mezclan modalidades o periodos, o traen una versión de esquema que no se conoce
      */
-    public static function fromPayloads(array $payloads): self
+    public static function fromPayloads(array $payloads, array $changes = []): self
     {
         $loads = [];
         $groups = [];
+        $cancelled = [];
         $latest = null;
 
         foreach ($payloads as $payload) {
@@ -60,8 +73,16 @@ final readonly class PublishedSchedule
                 'published_at' => $publishedAt,
             ];
 
+            $marks = $changes[$payload['load_id']]['groups'] ?? [];
+
             foreach ($payload['groups'] as $group) {
-                $groups[] = PublishedGroup::fromPayload($group, $payload);
+                $groups[] = PublishedGroup::fromPayload($group, $payload, isset($marks[$group['id']]) ? PublishedChange::fromArray($marks[$group['id']]) : null);
+            }
+
+            foreach ($changes[$payload['load_id']]['cancelled'] ?? [] as $group) {
+                if (isset($marks[$group['id']])) {
+                    $cancelled[] = PublishedGroup::fromPayload($group, $payload, PublishedChange::fromArray($marks[$group['id']]));
+                }
             }
 
             if ($latest === null || $publishedAt->greaterThan(CarbonImmutable::parse($latest['published_at']))) {
@@ -70,8 +91,9 @@ final readonly class PublishedSchedule
         }
 
         usort($groups, PublishedGroup::compare(...));
+        usort($cancelled, PublishedGroup::compare(...));
 
-        return new self($loads, $groups, $latest['profile'] ?? null);
+        return new self($loads, $groups, $latest['profile'] ?? null, $cancelled);
     }
 
     /**
@@ -84,16 +106,26 @@ final readonly class PublishedSchedule
     public static function withoutPrivate(array $payload): array
     {
         unset($payload['published_by']);
-
-        foreach ($payload['groups'] as $index => $group) {
-            unset($payload['groups'][$index]['justification']);
-
-            if ($group['teacher'] !== null) {
-                unset($payload['groups'][$index]['teacher']['rfc']);
-            }
-        }
+        $payload['groups'] = array_map(self::withoutPrivateGroup(...), $payload['groups']);
 
         return $payload;
+    }
+
+    /**
+     * Un grupo del payload sin la justificación de HC-15 ni el RFC del docente.
+     *
+     * @param  array<string, mixed>  $group
+     * @return array<string, mixed>
+     */
+    public static function withoutPrivateGroup(array $group): array
+    {
+        unset($group['justification']);
+
+        if ($group['teacher'] !== null) {
+            unset($group['teacher']['rfc']);
+        }
+
+        return $group;
     }
 
     public function isEmpty(): bool
@@ -111,7 +143,9 @@ final readonly class PublishedSchedule
             return $this;
         }
 
-        return new self($this->loads, array_values(array_filter($this->groups, fn (PublishedGroup $group): bool => ($group->campus['code'] ?? null) === $campusCode)), $this->profile);
+        $inCampus = fn (PublishedGroup $group): bool => ($group->campus['code'] ?? null) === $campusCode;
+
+        return new self($this->loads, array_values(array_filter($this->groups, $inCampus)), $this->profile, array_values(array_filter($this->cancelled, $inCampus)));
     }
 
     /**
@@ -208,6 +242,26 @@ final readonly class PublishedSchedule
     public function semester(string $careerId, string $planId, int $semester): array
     {
         return array_values(array_filter($this->groups, fn (PublishedGroup $group): bool => $group->isPlacedIn($careerId, $planId, $semester)));
+    }
+
+    /**
+     * Los grupos cancelados en la última publicación de su carga que contaban en esa carrera, retícula y semestre.
+     *
+     * @return list<PublishedGroup>
+     */
+    public function cancelledIn(string $careerId, string $planId, int $semester): array
+    {
+        return array_values(array_filter($this->cancelled, fn (PublishedGroup $group): bool => $group->isPlacedIn($careerId, $planId, $semester)));
+    }
+
+    /**
+     * Los grupos cancelados en la última publicación de la carga de un departamento.
+     *
+     * @return list<PublishedGroup>
+     */
+    public function cancelledOfDepartment(string $departmentId): array
+    {
+        return array_values(array_filter($this->cancelled, fn (PublishedGroup $group): bool => $group->departmentId === $departmentId));
     }
 
     /**

@@ -8,7 +8,9 @@ use Carbon\CarbonImmutable;
  * Un grupo de una carga publicada, tal como lo congeló su snapshot (payload normalizado, `groups[]`), con su campus (dónde
  * se da; nulo en una modalidad sin salones), la versión y la fecha de la publicación de su carga. El docente va sin RFC: el RFC es para el exporte al SII y la consulta pública no lo
  * muestra. La justificación de HC-15 tampoco viaja: el público ve «Por asignar» sin el motivo (decisión del usuario,
- * 10 de noviembre de 2026).
+ * 10 de noviembre de 2026). Desde la tarea 8.5 lleva lo que le cambió en la última publicación de su carga (`change`,
+ * PublishedChange; nulo si no cambió o es la versión 1); un grupo cancelado en esa publicación es el de la versión
+ * anterior, con la versión y la fecha de la vigente y `change->isCancelled()`.
  */
 final readonly class PublishedGroup
 {
@@ -32,13 +34,14 @@ final readonly class PublishedGroup
         public int $version,
         public CarbonImmutable $publishedAt,
         public ?array $campus = null,
+        public ?PublishedChange $change = null,
     ) {}
 
     /**
      * @param  array<string, mixed>  $group
      * @param  array<string, mixed>  $payload  el snapshot completo, para la carga, la versión y la fecha
      */
-    public static function fromPayload(array $group, array $payload): self
+    public static function fromPayload(array $group, array $payload, ?PublishedChange $change = null): self
     {
         return new self(
             id: $group['id'],
@@ -53,6 +56,7 @@ final readonly class PublishedGroup
             version: $payload['version'],
             publishedAt: CarbonImmutable::parse($payload['published_at']),
             campus: $group['campus'] ?? null,
+            change: $change,
         );
     }
 
@@ -80,7 +84,15 @@ final readonly class PublishedGroup
      */
     public function withSessions(array $sessions): self
     {
-        return new self($this->id, $this->code, $this->capacity, $this->subject, $this->teacher, $this->placements, $sessions, $this->departmentId, $this->loadId, $this->version, $this->publishedAt, $this->campus);
+        return new self($this->id, $this->code, $this->capacity, $this->subject, $this->teacher, $this->placements, $sessions, $this->departmentId, $this->loadId, $this->version, $this->publishedAt, $this->campus, $this->change);
+    }
+
+    /**
+     * Si se canceló en la última publicación de su carga: ya no está publicado, pero la consulta lo enseña tachado.
+     */
+    public function isCancelled(): bool
+    {
+        return $this->change?->isCancelled() ?? false;
     }
 
     /**

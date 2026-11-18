@@ -43,10 +43,11 @@ final class PublishedWeek
 
     /**
      * Una sesión por elemento, con lo que pide la semana (WeekGrid::lay()): día y horas, «CLAVE · grupo», la materia, el
-     * docente o el salón y el tipo.
+     * docente o el salón, el tipo y, si el grupo cambió en la última publicación de su carga, su marca (PublishedChange,
+     * tarea 8.5).
      *
      * @param  list<PublishedGroup>  $groups
-     * @return list<array{day: int, starts_at: string, ends_at: string, title: string, subject: string, subject_code: string, teacher: ?array{id: string, name: string}, room: ?array{id: string, code: string}, kind: string, group_id: string}>
+     * @return list<array{day: int, starts_at: string, ends_at: string, title: string, subject: string, subject_code: string, teacher: ?array{id: string, name: string}, room: ?array{id: string, code: string}, kind: string, group_id: string, change: ?PublishedChange}>
      */
     public static function sessions(array $groups): array
     {
@@ -65,6 +66,7 @@ final class PublishedWeek
                     'room' => $session->room === null ? null : ['id' => $session->room['id'], 'code' => $session->room['code']],
                     'kind' => $session->kind,
                     'group_id' => $group->id,
+                    'change' => $group->change,
                 ];
             }
         }
@@ -141,11 +143,19 @@ final class PublishedWeek
     }
 
     /**
-     * «12 de diciembre de 2026», en español y en la zona de la aplicación; vacío sin fecha.
+     * «12 de diciembre de 2026 a las 10:30» («a la 1:05» a la una), en español y en la zona de la aplicación: lo que sigue a
+     * «Actualizado el» en la consulta y en los exportes (tarea 8.5: la fecha y la hora de la versión vigente); vacío sin
+     * fecha.
      */
     public static function updatedOn(?CarbonImmutable $at): string
     {
-        return $at === null ? '' : $at->timezone(config('app.timezone'))->locale('es')->translatedFormat('j \d\e F \d\e Y');
+        if ($at === null) {
+            return '';
+        }
+
+        $local = $at->timezone(config('app.timezone'))->locale('es');
+
+        return $local->translatedFormat('j \d\e F \d\e Y').($local->hour === 1 ? ' a la ' : ' a las ').$local->format('G:i');
     }
 
     /**
