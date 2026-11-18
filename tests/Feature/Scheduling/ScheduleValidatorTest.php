@@ -255,3 +255,18 @@ it('HC-02: dos salones de campus distintos a la misma hora dentro de una carga n
 
     expect($this->validator->validateLoad($this->term, $this->modality)->forRule('HC-02'))->toBe([]);
 });
+
+it('checkGroupSessions valida la propuesta completa: las sesiones que no aparecen se quitan y los choques entre grupos se ven', function () {
+    $group = validatorGroup(['teacher_id' => $this->teacher->id]);
+    $busy = validatorGroup(['teacher_id' => $this->teacher->id]);
+    GroupSession::factory()->for($group)->on(2, '07:00', '09:00')->create();
+    GroupSession::factory()->for($group)->on(4, '07:00', '09:00')->create();
+    GroupSession::factory()->for($busy)->on(3, '09:00', '11:00')->create();
+
+    $clash = $this->validator->checkGroupSessions($group, [new SessionCandidate(3, '10:00', '12:00')]);
+    $free = $this->validator->checkGroupSessions($group, [new SessionCandidate(5, '07:00', '09:00')]);
+
+    expect($clash->forRule('HC-01'))->toHaveCount(1)
+        ->and($free->forRule('HC-01'))->toBe([])
+        ->and(GroupSession::query()->where('group_id', $group->id)->count())->toBe(2);
+});

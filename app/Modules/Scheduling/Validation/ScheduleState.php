@@ -284,6 +284,28 @@ final class ScheduleState
     }
 
     /**
+     * La foto si las sesiones del grupo fueran exactamente estas: reemplaza todas las que tiene (las que no aparecen
+     * se quitan). El id de cada sesión de la foto es su `replacesSessionId` (la sesión que sigue siendo la misma, para
+     * que las violaciones la señalen igual que antes) o, sin él, ninguno.
+     *
+     * @param  list<SessionCandidate>  $candidates
+     */
+    public function withSessions(string $groupId, array $candidates): self
+    {
+        $group = $this->groupOrFail($groupId);
+
+        return $this->patched($groupId, $group, array_map(fn (SessionCandidate $candidate): StateSession => new StateSession(
+            $candidate->replacesSessionId,
+            $groupId,
+            $candidate->day,
+            Minutes::of($candidate->startsAt),
+            Minutes::of($candidate->endsAt),
+            $candidate->roomId,
+            $candidate->kind,
+        ), array_values($candidates)));
+    }
+
+    /**
      * La foto si el grupo tuviera otro docente (o ninguno).
      */
     public function withTeacher(string $groupId, ?string $teacherId): self

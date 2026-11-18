@@ -9,6 +9,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
 use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -131,15 +132,123 @@ it('recalcular guarda el impacto y lo deja en la bitácora', function () {
         ->and(Activity::query()->where('subject_id', $request->id)->where('event', 'impact_assessed')->count())->toBe(2);
 });
 
-it('el impacto queda viejo cuando el horario de la modalidad cambia después de calcularlo', function () {
+/**
+ * El grupo con dos sesiones en el mismo salón (martes y jueves de 7 a 9) y otro grupo con una sesión que ya choca con
+ * una de ellas en ese salón (la base solo deja el choque con la restricción diferida).
+ */
+function impactRoomClashWorld(array $s, int $clashDay): void
+{
+    $room = impactRoom($s);
+    GroupSession::factory()->on(2, '07:00', '09:00')->inRoom($room)->create(['group_id' => $s['group']->id]);
+    GroupSession::factory()->on(4, '07:00', '09:00')->inRoom($room)->create(['group_id' => $s['group']->id]);
+    $clash = GroupSession::factory()->on($clashDay, '08:00', '10:00')->create(['group_id' => impactOtherGroup($s, ['code' => 'B'])->id]);
+    DB::statement('set constraints group_sessions_room_no_overlap deferred');
+    DB::table('group_sessions')->where('id', $clash->id)->update(['room_id' => $room->id]);
+}
+
+it('un choque que el grupo ya tenía y que la propuesta no toca no cuenta', function () {
     $s = changeScenario();
-    $request = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [['day' => 4, 'starts_at' => '07:00', 'ends_at' => '09:00']]]);
-    $assess = app(AssessChangeImpact::class);
+    impactRoomClashWorld($s, 2);
 
-    expect($assess->isStale($request->fresh()))->toBeFalse();
+    $impact = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+    ]])->fresh()->impact;
 
-    $this->travel(1)->minutes();
-    GroupSession::factory()->on(5, '07:00', '09:00')->create(['group_id' => impactOtherGroup($s)->id]);
+    expect(array_column($impact['hard'], 'rule'))->not->toContain('HC-02');
+});
 
-    expect($assess->isStale($request->fresh()))->toBeTrue();
+it('un choque que el cambio quita no cuenta en negativo ni deja nada', function () {
+    $s = changeScenario();
+    impactRoomClashWorld($s, 4);
+
+    $impact = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+    ]])->fresh()->impact;
+
+    expect(array_column($impact['hard'], 'rule'))->not->toContain('HC-02')->and($impact['affected_groups'])->toBe([]);
+});
+
+it('el mismo choque se cuenta una vez', function () {
+    $s = changeScenario();
+    GroupSession::factory()->on(2, '07:00', '09:00')->create(['group_id' => $s['group']->id]);
+    $other = impactOtherGroup($s, ['teacher_id' => $s['teacher']->id, 'code' => 'B']);
+    GroupSession::factory()->on(3, '09:00', '11:00')->create(['group_id' => $other->id]);
+
+    $impact = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [['day' => 3, 'starts_at' => '10:00', 'ends_at' => '12:00']]])->fresh()->impact;
+    $hc01 = collect($impact['hard'])->firstWhere('rule', 'HC-01');
+
+    expect($hc01['messages'])->toHaveCount(1);
+});
+
+it('varias sesiones propuestas con choque en cada una cuentan los grupos de todas', function () {
+    $s = changeScenario();
+    impactRoomClashWorld($s, 5);
+    $room = Room::query()->where('code', 'A-1')->sole();
+    $third = GroupSession::factory()->on(3, '08:00', '10:00')->create(['group_id' => impactOtherGroup($s, ['code' => 'D'])->id]);
+    DB::table('group_sessions')->where('id', $third->id)->update(['room_id' => $room->id]);
+
+    $impact = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+    ]])->fresh()->impact;
+
+    expect(array_column($impact['affected_groups'], 'code'))->toBe(['B', 'D']);
+});
+
+it('rechaza sesiones propuestas que se empalman entre sí', function () {
+    $s = changeScenario();
+
+    impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ['day' => 3, 'starts_at' => '08:00', 'ends_at' => '10:00'],
+    ]]);
+})->throws(ValidationException::class, 'empalmarse entre sí');
+
+it('con menos sesiones que el grupo, las de más se quitan y su choque desaparece', function () {
+    $s = changeScenario();
+    impactRoomClashWorld($s, 4);
+
+    $impact = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00']]])->fresh()->impact;
+
+    expect(array_column($impact['hard'], 'rule'))->not->toContain('HC-02');
+});
+
+it('HC-12: cambiar el total de horas semanales del grupo cuenta como choque duro', function () {
+    $s = changeScenario();
+    GroupSession::factory()->on(1, '07:00', '10:00')->create(['group_id' => $s['group']->id]);
+    GroupSession::factory()->on(3, '07:00', '09:00')->create(['group_id' => $s['group']->id]);
+
+    $impact = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 1, 'starts_at' => '07:00', 'ends_at' => '10:00'],
+        ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00'],
+    ]])->fresh()->impact;
+
+    expect(array_column($impact['hard'], 'rule'))->toContain('HC-12');
+});
+
+it('rechaza sesiones propuestas fuera de los días o los bloques de la modalidad', function (array $session) {
+    $s = changeScenario();
+
+    impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [$session]]);
+})->with([
+    'el día 7' => [['day' => 7, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+    'fuera de bloque' => [['day' => 2, 'starts_at' => '07:10', 'ends_at' => '09:00']],
+    'antes de la jornada' => [['day' => 2, 'starts_at' => '04:00', 'ends_at' => '06:00']],
+])->throws(ValidationException::class);
+
+it('empareja la propuesta con la foto de la solicitud y conserva el salón de su sesión', function () {
+    $s = changeScenario();
+    $room = impactRoom($s);
+    GroupSession::factory()->on(4, '07:00', '09:00')->inRoom($room)->create(['group_id' => $s['group']->id]);
+    GroupSession::factory()->on(2, '07:00', '09:00')->create(['group_id' => $s['group']->id]);
+    $other = impactOtherGroup($s, ['code' => 'C']);
+    GroupSession::factory()->on(5, '09:00', '11:00')->inRoom($room)->create(['group_id' => $other->id]);
+    $request = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 5, 'starts_at' => '10:00', 'ends_at' => '12:00'],
+        ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+    ]]);
+
+    expect(array_column($request->fresh()->impact['hard'], 'rule'))->toContain('HC-02');
 });

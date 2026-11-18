@@ -211,7 +211,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->vetoReasons = [];
         $this->resetErrorBag();
         $this->mobileDetail = true;
-        $this->refreshImpactIfStale($request, $assess);
+        $this->refreshImpact($request, $assess);
         $this->dispatch('request-detail-opened');
     }
 
@@ -227,11 +227,12 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
-     * Al abrir una pendiente, su impacto se rehace si el horario de la modalidad cambió después de calcularlo.
+     * Al abrir una pendiente, quien la decide la recalcula siempre (unos 0.6 s con el masivo): el impacto guardado no
+     * detecta lo que cambió en otras sesiones, salones, bloqueos o modalidades. Los demás ven el guardado, sin escribir.
      */
-    private function refreshImpactIfStale(ChangeRequest $request, AssessChangeImpact $assess): void
+    private function refreshImpact(ChangeRequest $request, AssessChangeImpact $assess): void
     {
-        if ($request->status === ChangeRequestStatus::Pending && $assess->isStale($request)) {
+        if ($request->status === ChangeRequestStatus::Pending && Gate::allows('decide', $request)) {
             $assess->handle($request);
         }
     }

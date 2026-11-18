@@ -12,16 +12,22 @@ use App\Modules\Scheduling\Validation\SessionCandidate;
 use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Models\ChangeRequest;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Calcula el impacto de una solicitud de cambio (CR-01, tarea 8.6): simula lo que se propone con el validador sobre la
  * foto de la modalidad, sin escribir sesiones, y lo guarda en `change_requests.impact` con una línea de bitácora.
  *
- * Qué se simula (supuesto por confirmar): en un cambio de horario, `proposed.sessions` reemplazan las sesiones del grupo
- * en orden (la primera propuesta toma el lugar de la primera sesión, con su salón y su tipo; las que sobran se
- * agregan sin salón); en un cambio de salón, `proposed.room_id` pasa a todas las sesiones del grupo. Una solicitud sin
- * horario o salón estructurado (solo la descripción libre) no se puede simular: el impacto lo dice con `assessable`.
+ * Qué se simula (supuesto por confirmar): la propuesta completa de una vez (ScheduleValidator::checkGroupSessions), no
+ * sesión por sesión. En un cambio de horario, `proposed.sessions` pasan a ser TODAS las sesiones del grupo: la
+ * propuesta i toma el lugar de la sesión i de `current` (la foto al pedirla; si no hay foto, la i de las sesiones del
+ * grupo por día y hora), con su salón y su tipo, y la reconoce en la sesión viva que hoy tenga ese día y esas horas;
+ * si esa ya no existe, o la propuesta no tiene pareja, queda sin salón. Las sesiones vivas sin propuesta se quitan.
+ * En un cambio de salón, `proposed.room_id` pasa a todas las sesiones del grupo. Una solicitud sin horario o salón
+ * estructurado (solo la descripción libre) no se puede simular: el impacto lo dice con `assessable`. Solo cuenta lo
+ * que el cambio agrega: se resta lo que el grupo ya tenía mal (`validateGroup` sobre el estado actual), y un mismo
+ * choque cuenta una vez.
  *
  * El impacto: `hard` y `soft`, una entrada por regla con sus mensajes y los grupos, docentes y salones de los
  * choques; `affected_groups` (los grupos con los que choca, con su materia y docente), `affected_teachers` y
@@ -39,13 +45,13 @@ final class AssessChangeImpact
     public function simulate(ChangeRequest $request): array
     {
         $group = Group::query()->with(['sessions', 'teacher'])->findOrFail($request->group_id);
-        $candidates = $this->candidates($request, $group);
+        $assessable = ($request->proposed['sessions'] ?? []) !== [] || isset($request->proposed['room_id']);
 
-        $impact = ['assessable' => $candidates !== [], 'hard' => [], 'soft' => [], 'affected_groups' => [], 'affected_teachers' => []];
+        $impact = ['assessable' => $assessable, 'hard' => [], 'soft' => [], 'affected_groups' => [], 'affected_teachers' => []];
 
-        if ($candidates !== []) {
+        if ($assessable) {
             $this->validator->forget();
-            $violations = $this->violations($group, $candidates);
+            $violations = $this->violations($group, $this->candidates($request, $group));
             $impact['hard'] = $this->byRule($violations, ConflictSeverity::Hard);
             $impact['soft'] = $this->byRule($violations, ConflictSeverity::Soft);
             [$impact['affected_groups'], $impact['affected_teachers']] = $this->affected($group, $violations);
@@ -78,51 +84,32 @@ final class AssessChangeImpact
     }
 
     /**
-     * Si el impacto guardado ya no es de fiar: no hay, o el horario de la modalidad cambió después de calcularlo.
-     */
-    public function isStale(ChangeRequest $request): bool
-    {
-        $assessedAt = $request->impact['assessed_at'] ?? null;
-
-        if ($assessedAt === null) {
-            return true;
-        }
-
-        $changedAt = DB::table('group_sessions')
-            ->join('groups', 'groups.id', '=', 'group_sessions.group_id')
-            ->where('groups.term_id', $request->term_id)
-            ->where('groups.modality_id', $request->modality_id)
-            ->max('group_sessions.updated_at');
-
-        return $changedAt !== null && now()->parse($changedAt)->greaterThan(now()->parse($assessedAt));
-    }
-
-    /**
      * @return list<SessionCandidate>
      */
     private function candidates(ChangeRequest $request, Group $group): array
     {
-        $sessions = $group->sessions->sortBy([['day', 'asc'], ['starts_at', 'asc']])->values();
+        $live = $group->sessions->sortBy([['day', 'asc'], ['starts_at', 'asc']])->values();
 
         if ($request->kind === ChangeRequestKind::Room) {
             $roomId = $request->proposed['room_id'] ?? null;
 
-            return $roomId === null ? [] : $sessions
+            return $live
                 ->map(fn (GroupSession $session): SessionCandidate => new SessionCandidate($session->day, $session->starts_at, $session->ends_at, $roomId, $session->kind, $session->id))
                 ->all();
         }
 
+        $paired = $this->pairs($request, $live);
         $candidates = [];
 
         foreach (array_values($request->proposed['sessions'] ?? []) as $index => $proposed) {
-            $current = $sessions->get($index);
+            $current = $paired[$index] ?? null;
             $candidates[] = new SessionCandidate(
                 (int) $proposed['day'],
                 $proposed['starts_at'],
                 $proposed['ends_at'],
                 $current?->room_id,
                 $current?->kind ?? SessionKind::Teoria,
-                $current?->id,
+                $current?->id ?? "proposed-{$index}",
             );
         }
 
@@ -130,7 +117,41 @@ final class AssessChangeImpact
     }
 
     /**
-     * Solo lo que el cambio provoca: lo que el grupo ya tenía mal antes de proponerlo no es impacto.
+     * La sesión viva que cada propuesta reemplaza, por su posición: la de `current` (la foto al pedirla) reconocida
+     * por su día y sus horas en las sesiones de hoy; sin foto, la misma posición de las sesiones vivas.
+     *
+     * @param  Collection<int, GroupSession>  $live
+     * @return array<int, GroupSession>
+     */
+    private function pairs(ChangeRequest $request, Collection $live): array
+    {
+        $snapshot = array_values($request->current ?? []);
+
+        if ($snapshot === []) {
+            return $live->all();
+        }
+
+        $taken = [];
+        $pairs = [];
+
+        foreach ($snapshot as $index => $photo) {
+            $match = $live->first(fn (GroupSession $session): bool => ! isset($taken[$session->id])
+                && $session->day === (int) ($photo['day'] ?? 0)
+                && substr((string) $session->starts_at, 0, 5) === ($photo['starts_at'] ?? '')
+                && substr((string) $session->ends_at, 0, 5) === ($photo['ends_at'] ?? ''));
+
+            if ($match !== null) {
+                $taken[$match->id] = true;
+                $pairs[$index] = $match;
+            }
+        }
+
+        return $pairs;
+    }
+
+    /**
+     * Solo lo que el cambio agrega: las violaciones de la propuesta completa menos las que el grupo ya tenía (la misma
+     * regla, sujeto, mensaje y sesiones). Lo que el cambio quita no cuenta, y un mismo choque cuenta una vez.
      *
      * @param  list<SessionCandidate>  $candidates
      * @return list<Violation>
@@ -143,15 +164,13 @@ final class AssessChangeImpact
             $existing[$violation->key()] = true;
         }
 
-        $unique = [];
+        $added = [];
 
-        foreach ($this->validator->checkSessions($group, $candidates) as $result) {
-            foreach ($result->violations() as $violation) {
-                isset($existing[$violation->key()]) || $unique[$violation->key()] = $violation;
-            }
+        foreach ($this->validator->checkGroupSessions($group, $candidates)->violations() as $violation) {
+            isset($existing[$violation->key()]) || $added[$violation->key()] = $violation;
         }
 
-        return array_values($unique);
+        return array_values($added);
     }
 
     /**

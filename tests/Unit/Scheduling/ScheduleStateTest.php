@@ -120,3 +120,20 @@ it('withSession y withTeacher dejan los mismos índices que una foto armada desd
         ->and($patched->teacherSessions('T2'))->toEqual($fresh->teacherSessions('T2'))
         ->and($patched->roomSessions('R1'))->toEqualCanonicalizing($fresh->roomSessions('R1'));
 });
+
+it('withSessions reemplaza todas las sesiones del grupo: las que no aparecen se quitan y la foto original no cambia', function () {
+    $state = States::builder()
+        ->group(States::group('A', teacher: 'T1'))
+        ->session('A', 1, '07:00', '09:00', 'R1', id: 's1')
+        ->session('A', 3, '07:00', '09:00', 'R1', id: 's2')
+        ->build();
+
+    $next = $state->withSessions('A', [new SessionCandidate(2, '10:00', '11:00', 'R2', replacesSessionId: 's1')]);
+
+    expect($state->sessionsOf('A'))->toHaveCount(2)
+        ->and($next->sessionsOf('A'))->toHaveCount(1)
+        ->and($next->sessionsOf('A')[0])->day->toBe(2)->id->toBe('s1')
+        ->and($next->teacherSessions('T1'))->toHaveCount(1)
+        ->and($next->roomSessions('R1'))->toBe([])
+        ->and($next->roomSessions('R2'))->toHaveCount(1);
+});

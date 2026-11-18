@@ -4,10 +4,13 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -102,6 +105,7 @@ final class RequestChange
             return $proposed;
         }
 
+        $profile = Modality::query()->find($group->modality_id)?->valid_profile ?? ModalityProfile::fromArray([]);
         $sessions = [];
 
         foreach (array_values($structured['sessions'] ?? []) as $session) {
@@ -111,6 +115,24 @@ final class RequestChange
 
             if ($day < 1 || $day > 7 || ! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $start) || ! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $end) || $end <= $start) {
                 throw ValidationException::withMessages(['proposedSessions' => 'Cada sesión propuesta lleva día y una hora de inicio anterior a la de fin.']);
+            }
+
+            if ($profile->usesTimeBlocks) {
+                $dayStart = Minutes::of($profile->dayStart);
+
+                if (! in_array($day, $profile->days, true)
+                    || Minutes::of($start) < $dayStart
+                    || Minutes::of($end) > Minutes::of($profile->dayEnd)
+                    || (Minutes::of($start) - $dayStart) % $profile->blockMinutes !== 0
+                    || (Minutes::of($end) - $dayStart) % $profile->blockMinutes !== 0) {
+                    throw ValidationException::withMessages(['proposedSessions' => "Las sesiones propuestas deben caer en los días y bloques de la modalidad ({$profile->schedule()})."]);
+                }
+            }
+
+            foreach ($sessions as $before) {
+                if ($before['day'] === $day && $before['starts_at'] < $end && $start < $before['ends_at']) {
+                    throw ValidationException::withMessages(['proposedSessions' => 'Las sesiones propuestas no pueden empalmarse entre sí.']);
+                }
             }
 
             $sessions[] = ['day' => $day, 'starts_at' => $start, 'ends_at' => $end];
