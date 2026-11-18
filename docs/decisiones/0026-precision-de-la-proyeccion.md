@@ -21,11 +21,11 @@ Decisiones del usuario del 16 de noviembre de 2026:
 
 ## Resultado con datos reales (Campus II, presencial, «como si» Ene-Jun 2026)
 
-Copia local de la base del SII migrada (2 043 435 renglones de kárdex). Solo cifras agregadas.
+Copia local de la base del SII migrada (2 043 435 renglones de kárdex; 24 251 grupos históricos de 2022 a 2026 importados con `academic-load:import-sii-groups`). Solo cifras agregadas. Las dos versiones se corrieron con el comando de la 5.9 y quedaron lado a lado, cada una con su `method`.
 
 | | R1 (elegibles) | Fórmula v1 | Fórmula v2 |
 |---|---|---|---|
-| Error ponderado global de C2 | 277 % | **84.7 %** | **66.2 %** |
+| Error ponderado global de C2 | 277 % (con los elegibles de v1); 210 % (con los de v2) | **84.7 %** | **66.2 %** |
 | Proyectado contra real (alumnos-materia) | 21 395 contra 3 711 | 4 778 contra 3 711 | 4 069 contra 3 711 |
 | Primer semestre | — | 148.5 % (678 contra 363) | 74.4 % (357 contra 363) |
 | Materias comunes | — | 75.6 % | 59.2 % |
@@ -38,7 +38,8 @@ Copia local de la base del SII migrada (2 043 435 renglones de kárdex). Solo ci
   - la no inscripción se calcula por materia y por distancia de semestre (69 % de los elegibles de su semestre la toman, 11 % de uno adelante y 6 % de dos adelante);
   - las materias de especialidad piden el 60 % de los créditos del plan (supuesto por confirmar).
   Esto encontró la medición de la 5.9: la proyección ya estaba bien en el total, pero repartía mal entre materias.
-- **Ago-Dic 2026 con v1:** 134.1 % (R1 233 %). Es el periodo en curso; lo «real» son las materias cursando.
+- **Ago-Dic 2026** (el periodo en curso; lo «real» son las materias cursando): v1 134.1 %, **v2 74.4 %** (R1 185 %).
+- **Por carrera con v2** (Ene-Jun 2026, C2): la mejor es COPU con 29.0 %, y las demás van de 60 % a 80 %. Ninguna llega a la meta del 15 %. IMEC sale con 1100 %: es una carrera casi sin alumnos en C2, con un real mínimo. IELE, IEME e ITIC salen «Sin medir» porque no tuvieron alumnos reales en las materias que se proyectan.
 - **Fuera del alcance:** en la copia, Campus I no tiene ninguna oferta activa (28 ofertas inactivas, 15 165 alumnos activos), así que no se proyecta ni se evalúa: 4 650 alumnos en Ene-Jun 2026. Puede ser un hueco de la migración del SII (1.16) o una decisión del piloto de Campus II; se reporta al usuario y no se cambia aquí.
 - **Demo masiva:** 23 a 36 % de error por carrera con v1, R1 entre 135 y 200 %. Son datos sintéticos y sirven solo para probar la pantalla.
 
