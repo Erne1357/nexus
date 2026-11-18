@@ -6,7 +6,9 @@ Traduce el contrato como lo hace PHP (`Evaluation/ContractState` y `Engines/PhpH
   de sus cohortes. Los `fixed_sessions` de un grupo movible no cuentan: el grupo se programa desde cero (PS-07).
 - `teachers[].busy` es ocupación fija del docente en cualquier campus (HC-01 no ve campus) y `rooms[].busy`, del salón.
 - Un salón con dueño de otro departamento se puede usar donde la unión de los préstamos aceptados (`agreements`) de
-  ese salón, ese departamento y ese día cubre toda la sesión (HC-10; los contiguos cubren juntos, como `RoomLoan`).
+  ese salón y ese día que le tocan al grupo cubre toda la sesión (HC-10; los contiguos cubren juntos, como `RoomLoan`).
+  Un préstamo con `group_id` es solo de ese grupo, como en el validador; uno sin él, de todo el departamento, como lo
+  traduce `ContractState` mientras la entrada no traiga el grupo.
 - Todo traslape se cuenta en minutos con intervalos medio abiertos: dos sesiones contiguas no se empalman.
 """
 
@@ -65,8 +67,10 @@ class ModelData:
     room_blocks: dict[str, dict[int, list[Span]]] = field(default_factory=dict)
     #: cohorte -> día -> rangos ocupados por grupos fijos (HC-03).
     cohort_fixed: dict[str, dict[int, list[Span]]] = field(default_factory=dict)
-    #: (salón, departamento) -> día -> rangos prestados (HC-10).
+    #: (salón, departamento) -> día -> rangos prestados a todo el departamento (HC-10).
     loans: dict[tuple[str, str], dict[int, list[Span]]] = field(default_factory=dict)
+    #: (salón, grupo) -> día -> rangos prestados a un solo grupo (`agreements[].group_id`).
+    group_loans: dict[tuple[str, str], dict[int, list[Span]]] = field(default_factory=dict)
 
     @classmethod
     def of(cls, data: SolverInput) -> "ModelData":
@@ -105,7 +109,10 @@ class ModelData:
                     _add(model.cohort_fixed, key, session.day, span)
         for agreement in data.agreements:
             span = (minutes(agreement.starts_at), minutes(agreement.ends_at))
-            _add(model.loans, (agreement.room_id, agreement.to_department_id), agreement.day, span)
+            if agreement.group_id is None:
+                _add(model.loans, (agreement.room_id, agreement.to_department_id), agreement.day, span)
+            else:
+                _add(model.group_loans, (agreement.room_id, agreement.group_id), agreement.day, span)
 
         return model
 
@@ -126,11 +133,40 @@ class ModelData:
 
         return owner is not None and owner != department_id
 
-    def has_loans(self, room_id: str, department_id: str) -> bool:
-        return (room_id, department_id) in self.loans
+    def has_loans(self, room_id: str, department_id: str, group_id: str | None = None) -> bool:
+        return (room_id, department_id) in self.loans or (room_id, group_id) in self.group_loans
 
-    def loan_covers(self, room_id: str, department_id: str, day: int, start: int, end: int) -> bool:
-        return covered(self.loans.get((room_id, department_id), {}).get(day, []), start, end)
+    def has_own_loans(self, group_id: str) -> bool:
+        """Si el grupo tiene préstamos solo suyos: su salón no se puede contar con el de su departamento."""
+        return any(key[1] == group_id for key in self.group_loans)
+
+    def loan_covers(
+        self, room_id: str, department_id: str, day: int, start: int, end: int, group_id: str | None = None
+    ) -> bool:
+        ranges = self.loans.get((room_id, department_id), {}).get(day, [])
+        if group_id is not None:
+            ranges = ranges + self.group_loans.get((room_id, group_id), {}).get(day, [])
+
+        return covered(ranges, start, end)
+
+    def room_reason(
+        self, room_id: str, department_id: str, day: int, start: int, end: int, group_id: str | None = None
+    ) -> str | None:
+        """La regla activa que impide usar el salón en [start, end) a un grupo del departamento (o al grupo, para sus
+        préstamos propios), o `None`: bloqueo (HC-11), ocupación fija (HC-02) o salón ajeno sin préstamo que lo cubra
+        (HC-10)."""
+        if self.active("HC-11") and overlaps(self.room_blocks.get(room_id, {}).get(day, []), start, end):
+            return "HC-11"
+        if self.active("HC-02") and overlaps(self.room_fixed.get(room_id, {}).get(day, []), start, end):
+            return "HC-02"
+        if (
+            self.active("HC-10")
+            and self.needs_loan(room_id, department_id)
+            and not self.loan_covers(room_id, department_id, day, start, end, group_id)
+        ):
+            return "HC-10"
+
+        return None
 
 
 def _add(index: dict, key: object, day: int, span: Span) -> None:

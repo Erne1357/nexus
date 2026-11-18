@@ -40,6 +40,7 @@ ENV SOLVER_FIXTURES_DIR=/fixtures
 
 COPY app ./app
 COPY tests ./tests
+COPY scripts ./scripts
 
 USER solver
 

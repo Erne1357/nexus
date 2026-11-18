@@ -14,11 +14,9 @@ from ortools.sat.python import cp_model
 
 from app.contract import SOFT_RULES, RunStatus, SolverInput, SolverOutput, parse_input, parse_output, to_dict
 from app.contract.output import ProposedSession, RuleScores, RunMetrics, SoftScore
-from app.model.constraints import add_hard_constraints
 from app.model.data import ModelData
 from app.model.pattern import minutes, tiers
-from app.model.solution import sessions_of
-from app.model.variables import build_variables
+from app.model.phases import solve_hard
 from app.model.verify import hard_violations
 from tests.conftest import fixtures_dir
 
@@ -31,20 +29,11 @@ def fixture(name: str) -> tuple[SolverInput, dict[str, Any]]:
     )
 
 
-def solve_hard(data: SolverInput) -> tuple[int, list[ProposedSession]]:
-    model_input = ModelData.of(data)
-    model = cp_model.CpModel()
-    variables = build_variables(model, model_input)
-    add_hard_constraints(model, variables, model_input)
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 20
-    solver.parameters.num_workers = 1
-    solver.parameters.random_seed = 7
-    status = solver.solve(model)
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return status, []
+def solve(data: SolverInput, exact: bool = False) -> tuple[int, list[ProposedSession]]:
+    """En dos fases con niveles por necesidad (por omisión) o con el modelo exacto de 7.5; un hilo, reproducible."""
+    run = solve_hard(ModelData.of(data), time_limit=20, seed=7, pool_rooms=not exact, tiers_by_need=not exact)
 
-    return status, sessions_of(solver, variables, model_input)
+    return run.status, run.sessions
 
 
 def as_output(data: SolverInput, sessions: list[ProposedSession]) -> SolverOutput:
@@ -60,10 +49,11 @@ def as_output(data: SolverInput, sessions: list[ProposedSession]) -> SolverOutpu
     )
 
 
+@pytest.mark.parametrize("exact", [False, True], ids=["dos fases", "exacto"])
 @pytest.mark.parametrize("name", ["tiny", "small", "medium"])
-def test_el_modelo_duro_resuelve_el_fixture_sin_violaciones(name):
+def test_el_modelo_duro_resuelve_el_fixture_sin_violaciones(name, exact):
     data, expected = fixture(name)
-    status, sessions = solve_hard(data)
+    status, sessions = solve(data, exact)
 
     assert status in (cp_model.OPTIMAL, cp_model.FEASIBLE)
     output = parse_output(to_dict(as_output(data, sessions)))
@@ -88,7 +78,8 @@ def test_el_modelo_duro_no_tiene_solucion_en_el_fixture_infactible():
     data, expected = fixture("infeasible")
 
     assert expected["feasible"] is False
-    assert solve_hard(data)[0] == cp_model.INFEASIBLE
+    assert solve(data)[0] == cp_model.INFEASIBLE
+    assert solve(data, exact=True)[0] == cp_model.INFEASIBLE
 
 
 @pytest.mark.parametrize("name", ["tiny", "small", "medium"])
@@ -96,7 +87,7 @@ def test_cada_grupo_va_a_la_misma_hora_en_los_dias_de_su_patron(name):
     """PS-01 a PS-04: cada grupo empieza a la misma hora todos sus días, con a lo más 2 horas seguidas en un día, y su
     reparto de días es una opción de `SessionPattern` para sus horas en los días de su campus."""
     data, _ = fixture(name)
-    _, sessions = solve_hard(data)
+    _, sessions = solve(data)
     grids = {campus.code: campus for campus in data.campuses}
     by_group: dict[str, list[ProposedSession]] = defaultdict(list)
     for session in sessions:
@@ -121,7 +112,7 @@ def test_cada_grupo_va_a_la_misma_hora_en_los_dias_de_su_patron(name):
 def test_la_practica_de_small_va_en_su_laboratorio():
     """HC-06: las 2 horas de práctica de g003 van en r003, el único laboratorio."""
     data, _ = fixture("small")
-    _, sessions = solve_hard(data)
+    _, sessions = solve(data)
     practice = [session for session in sessions if session.group_id == "g003" and session.kind == "practica"]
 
     assert len(practice) == 2

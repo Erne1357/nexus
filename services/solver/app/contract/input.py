@@ -169,13 +169,19 @@ class RoomInput(ContractModel):
 
 
 class RoomAgreement(ContractModel):
-    """Un préstamo aceptado de un salón a otro departamento en un bloque (HC-10)."""
+    """Un préstamo aceptado de un salón a otro departamento en un bloque (HC-10).
+
+    `group_id` es opcional: el grupo para el que se pidió, como lo revisa el validador (`RoomLoan`, por grupo). Sin él,
+    el préstamo cubre a todos los grupos del departamento, como lo traduce hoy `ContractState`. Agregarlo no cambia la
+    versión del contrato (campo opcional).
+    """
 
     room_id: NonEmptyStr
     to_department_id: NonEmptyStr
     day: Weekday
     starts_at: Time
     ends_at: Time
+    group_id: NonEmptyStr | None = None
 
     @field_validator("ends_at")
     @classmethod
@@ -267,6 +273,10 @@ class SolverInput(ContractModel):
             for j, session in enumerate(group.fixed_sessions):
                 if session.room_id is not None and session.room_id not in room_ids:
                     problems.append((f"{at}.fixed_sessions[{j}].room_id", "el salón no está en rooms"))
+
+        for i, agreement in enumerate(self.agreements):
+            if agreement.group_id is not None and agreement.group_id not in group_ids:
+                problems.append((f"agreements[{i}].group_id", "el grupo no está en groups"))
 
         if problems:
             raise ContractError(problems)

@@ -11,10 +11,11 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 | `app/config.py` | Variables de entorno (`Settings`) |
 | `app/contract/` | Modelos pydantic de la entrada y la salida v1, espejo de `app/Modules/Solver/Contract/` |
 | `app/engine/` | Interfaz de motor (`Engine`, `RunContext`) y el motor de prueba |
-| `app/model/` | El modelo CP-SAT (7.4 en adelante): rejilla y patrón de sesiones, datos indexados de la entrada, variables con su dominio pre-filtrado, restricciones duras HC-01 a HC-13, las sesiones de una solución y un verificador de duras sobre la salida. Todavía no es un motor del servicio; ver `docs/arquitectura/solver.md`, «Modelo CP-SAT: variables y restricciones duras» |
+| `app/model/` | El modelo CP-SAT (7.4 en adelante): rejilla y patrón de sesiones, datos indexados de la entrada, variables con su dominio pre-filtrado, restricciones duras HC-01 a HC-13, salones en dos fases (`rooms.py`), la búsqueda por vecindarios para la carga de un departamento (`search.py`), las sesiones de una solución y un verificador de duras sobre la salida que no depende del modelo. Todavía no es un motor del servicio; ver `docs/arquitectura/solver.md`, «Modelo CP-SAT: variables y restricciones duras» |
 | `app/runs.py` | Corridas en memoria, hilos de trabajo, límite de simultáneas, cancelación |
 | `app/api/` | Aplicación FastAPI (`factory.py`), autenticación y esquemas de respuesta |
 | `tests/` | pytest: API, contrato, fixtures compartidos, OR-Tools |
+| `scripts/benchmark.py` | Reproduce la tabla de «Tamaño de la instancia real» (`docs/arquitectura/solver.md`) con un fixture compartido; solo en la imagen `dev` |
 
 ## Configuración
 

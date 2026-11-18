@@ -101,3 +101,13 @@ def test_el_verificador_no_depende_del_modelo():
     assert all(
         module is not None and module.startswith(("app.contract", "collections", "dataclasses")) for module in imported
     )
+
+
+def test_un_prestamo_de_otro_grupo_no_cubre_la_sesion(tiny_input, tiny_output):
+    """HC-10 por grupo: el préstamo del laboratorio pedido para otro grupo del departamento no le sirve a G102."""
+    tiny_input["agreements"][0]["group_id"] = G101
+
+    assert violations(tiny_input, tiny_output) == [("HC-10", [G102]), ("HC-10", [G102])]
+
+    tiny_input["agreements"][0]["group_id"] = G102
+    assert violations(tiny_input, tiny_output) == []

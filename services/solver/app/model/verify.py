@@ -155,7 +155,12 @@ def _group_violations(
             loans = [
                 (_minutes(loan.starts_at), _minutes(loan.ends_at))
                 for loan in data.agreements
-                if loan.room_id == room.id and loan.to_department_id == group.department_id and loan.day == session.day
+                if loan.room_id == room.id
+                and loan.day == session.day
+                and (
+                    loan.group_id == group.id
+                    or (loan.group_id is None and loan.to_department_id == group.department_id)
+                )
             ]
             if not _covered(loans, start, end):
                 add("HC-10", f"El salón es de otro departamento y no hay préstamo para el {when}.", room_id=room.id)

@@ -61,7 +61,7 @@ Versión actual: `1`. El contrato es la frontera entre Nexus y cualquier motor; 
 | `groups[]` | lista | sí | Grupos a programar. Por grupo: `id`, `campus_code`, `subject_code`, `department_id`, `owner_career_id`, `study_plan_id`, `semester` (reticular), `weekly_hours` (teoría más práctica), `practice_hours`, `needs_lab`, `capacity`, `teacher_id` (opcional), `cohorts[]` (claves de cohorte: conjuntos de grupos que un mismo alumno toma juntos y que no se empalman; ver HC-03), `fixed_sessions[]` (sesiones que no se mueven), `candidate_room_ids[]` (opcional, para acotar el dominio), `movable` (si es `false` el grupo entra solo como ocupación), `current_sessions[]` (opcional; las sesiones que un grupo movible ya tiene, con la forma de `fixed_sessions[]`, para que el motor marque `changed` en la salida; vacía si no tenía horario). |
 | `teachers[]` | lista | sí | Docentes referidos por los grupos. Por docente: `id`, `remaining_hours`, `honorarios` (si es de honorarios, para SC-08), `unavailable[]` (día, inicio, fin), `preferred[]` (día, inicio, fin), `busy[]` (sesiones ya asignadas fuera de la corrida, con su `campus_code`, como ocupación fija). |
 | `rooms[]` | lista | sí si `campus.uses_rooms` | Por salón: `id`, `campus_code`, `type`, `capacity`, `building_id`, `owner_department_id` (opcional), `blocks[]` (día, inicio, fin bloqueados), `busy[]` (sesiones de grupos fuera del alcance). |
-| `agreements[]` | lista | no | Préstamos aceptados: `room_id`, `to_department_id`, `day`, `starts_at`, `ends_at`. Sin acuerdo, un salón con dueño solo lo usa su departamento (HC-10). |
+| `agreements[]` | lista | no | Préstamos aceptados: `room_id`, `to_department_id`, `day`, `starts_at`, `ends_at` y, opcional, `group_id`. Sin acuerdo, un salón con dueño solo lo usa su departamento (HC-10). Con `group_id` el préstamo es solo de ese grupo, como lo revisa el validador (`RoomLoan`, por grupo); sin él, de todo el departamento, como lo traduce `ContractState`. El servicio Python ya lo lee (18 de noviembre de 2026); `BuildSolverInput`, el DTO de PHP y `ContractState` todavía no lo mandan ni lo leen. |
 | `subject_room_defaults[]` | lista | no | `subject_code`, `campus_code`, `room_id`, `priority`. Alimenta SC-03. |
 | `hard_rules[]` | lista de cadenas | sí | Identificadores HC activos (por defecto HC-01 a HC-13). Permite desactivar una regla para una corrida exploratoria; la salida la reporta como desactivada. |
 | `soft_weights` | objeto | sí | Peso por SC-01 a SC-09. Cero desactiva la regla blanda. Salen del parámetro `solver.soft_weights` (campos `sc_01`…`sc_09`, que `BuildSolverInput` pasa a `SC-01`…), que la Subdirección edita en «Parámetros»; sin valor válido, los de la tabla SC. |
@@ -317,11 +317,55 @@ Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_op
 
 ### Tamaño de la instancia real
 
-El modelo exacto sirve para corridas chicas (los fixtures, una carrera chica). Para la carga de un departamento hay que achicar el salón antes de resolver; queda para 7.7 y 7.10, con estas mediciones de `department-multicampus` como punto de partida:
+**Decisión** (18 de noviembre de 2026, medida con `department-multicampus`): la primera solución sin duras de la carga de un departamento sale de **salones en dos fases con arranque tibio y búsqueda por vecindarios (LNS)** (`app/model/rooms.py` y `search.py`). El modelo exacto de 7.4 y 7.5 (un `z` por ventana y salón, todos los niveles) queda para corridas chicas y como referencia de las pruebas (`phases.solve_hard(pool_rooms=False, tiers_by_need=False)`).
 
-- **Salón en dos fases** (lo que conviene probar primero). Primero el horario (`y`, 0.48 M) con una cota agregada de salones por campus, día y bloque: los grupos que piden al menos `c` lugares no pasan de los salones libres con al menos `c` lugares, una por cada capacidad distinta de los grupos, y aparte la de los espacios de práctica. Después, con las horas fijas, un modelo solo de salones con una ventana por grupo y día (unas 5 200 por ~130 salones: ~0.7 M de `z`), donde HC-02, HC-10, HC-11 y PS-05 son exactos y SC-03 y SC-06 eligen. Si la segunda fase no tiene solución, se corta esa combinación en la primera y se repite.
-- **Juntar salones iguales** no alcanza: con su ocupación de fuera de la corrida, 400 de los 426 salones son distintos (81 clases si no se cuenta la ocupación).
-- **Recortar los salones de cada grupo** con un orden fijo (por defecto, tipo, capacidad), como sugiere «Riesgos y notas» de la fase 7: todos los grupos de 35 lugares quedarían con los mismos salones y en promedio hay unos 40 grupos por bloque en C1, así que un recorte por debajo de lo que pide la hora pico vuelve infactible la instancia y uno por encima casi no la achica.
+| Forma | Variables (vuelta mayor) | Restricciones | Armado | Memoria máx. | Los 1 139 grupos sin duras | Duras (verificador) |
+|---|---|---|---|---|---|---|
+| Exacta (7.4 y 7.5) | 9 936 215 | 158 779 | 66 s + 17 s | 5.2 GB | no se llega a resolver | — |
+| Dos fases, cada grupo solo con el primer nivel que cabe | 13 301 | 11 995 | 1.2 s | 0.19 GB | infactible (el presolve lo prueba al instante) | — |
+| Dos fases, ampliando niveles en todo el modelo a los que no quedan | hasta 131 151 | 23 728 | 2–4 s por vuelta | 2.3 GB | no llega en 60 s (1 125 a lo más) | 0 |
+| **Dos fases + LNS, 2 hilos** (2 CPU y 2 GB, como el servicio en compose) | 30 432 (vecindarios de 300 a 6 000) | 14 114 | 1.9–2.2 s | 0.47–0.54 GB | **32–35 s** | **0** |
+| Dos fases + LNS, 8 hilos | 30 432 | 14 114 | 2.1 s | 0.91 GB | 25.6 s | 0 |
+
+Límite de 60 s (el del servicio por omisión), semilla 7, Python 3.12 y OR-Tools 9.15; las duras, con el verificador de `verify.py`, que no comparte código con el modelo. La heurística en PHP tarda 1.5 s en construir con 0 duras; CP-SAT todavía no tiene objetivo (7.6), así que aquí solo se mide llegar a una solución completa. Con el tope del servicio (`SOLVER_MAX_MODEL_VARIABLES`, 1.5 M), el modelo exacto y las dos fases con todos los niveles fallan rápido con `ModelTooLarge` (a los 150 y 345 grupos de 1 139) en vez de agotar la memoria; sin el tope, el proceso muere por memoria con 2 GB.
+
+**Cómo reproducirla.** `services/solver/scripts/benchmark.py` corre cada forma en su propio proceso (para que la memoria sea solo suya) y da la tabla en Markdown. Desde la raíz del repositorio:
+
+```bash
+docker build --target dev -t nexus-solver-dev services/solver
+docker run --rm --cpus 2 --memory 2g -e PYTHONPATH=/srv/solver \
+  -v "$PWD/services/solver:/srv/solver:ro" -v "$PWD/tests/Fixtures/solver:/fixtures:ro" \
+  nexus-solver-dev python scripts/benchmark.py department-multicampus --threads 2 [--forms lns,two-phase,exact] [--time-limit 60] [--max-variables 1500000]
+```
+
+Las formas son `lns` (la elegida), `two-phase` (`solve_hard` en dos fases: niveles por necesidad y, si es infactible, todos) y `exact` (el modelo de 7.4 y 7.5). La fila de «ampliar niveles en todo el modelo» salió de una variante de la búsqueda que se descartó, así que el script ya no la tiene. Los plazos son de reloj, en la primera vuelta y en cada vecindario: aun con un hilo y la misma semilla, otra máquina puede dar otro tiempo u otra solución. Para una prueba de CI que tenga que dar siempre lo mismo, conviene `max_deterministic_time` en vez del reloj.
+
+**Salones en dos fases** (`rooms.py`). Los grupos del conjunto de salones de su campus (`RoomPool`: los del departamento con más grupos movibles en ese campus, sin `candidate_room_ids`) no llevan `z` en sus ventanas de un bloque.
+
+- *Fase A*, el horario: en cada campus, día y bloque, y para cada par de umbrales (`a`, la capacidad de teoría; `b`, la de práctica), las sesiones del conjunto que solo caben en `U(a, b)` (salones libres con al menos `a` lugares, más los espacios de práctica con al menos `b`) y los salones de `U(a, b)` que tomaron ventanas con `z` no pasan de `|U(a, b)|`. Las ventanas de un grupo con laboratorio llevan una booleana que dice si van en espacio de práctica (HC-06).
+- *Fase B*, los salones: con el horario fijo, cada bloque se reparte por emparejamiento (Kuhn), la teoría primero en aula y del salón más ajustado al más grande.
+- *Por qué la B siempre tiene solución si la A la tiene:* todos los grupos del conjunto son de un departamento, así que en un bloque a cada sesión le sirven `S(c)` (todos los salones libres con al menos `c` lugares) o `P(c)` (los de práctica). Para cualquier conjunto de sesiones, sus salones posibles son exactamente `U(a, b)` con los umbrales más chicos de cada tipo, y la fase A exige justo eso: es la condición de Hall. Los términos cruzados resuelven el contraejemplo de la revisión del Riel A (laboratorio de 40 y aula de 20 contra una práctica de 20 y una teoría de 35), que tiene su prueba.
+- *Pruebas que lo respaldan* (`test_model_rooms.py`): el contraejemplo armado como modelo es infactible en dos fases, con el modelo exacto y en la búsqueda; sin los pares cruzados, la fase A le da solución y la fase B no la puede repartir. Una familia de 60 instancias que aprieta Hall (un día de 1 o 2 bloques, de 4 a 8 grupos, 1 o 2 laboratorios y de 3 a 5 aulas) da 22 factibles y 38 infactibles, las dos formas coinciden siempre y la fase B nunca falla; sin los pares cruzados, la fase B falla en alguna.
+- *Lo que no se cuenta* lleva `z` exacto y entra a la cuenta como salones tomados: las ventanas de más de un bloque (días de 2 horas, por PS-05, y bloques de 30 min), los grupos de otro departamento (corridas de carrera), los que traen candidatos y los que tienen préstamos solo suyos (`agreements[].group_id`). En 60 instancias generadas con semilla fija (capacidades, laboratorios, bloqueos, `busy`, préstamos, otro departamento, candidatos, días de 2 horas), el modelo en dos fases es factible exactamente cuando el exacto lo es, la fase B nunca se queda sin salón y el verificador no encuentra duras (`test_model_rooms.py`).
+
+**Niveles por necesidad** (`DomainOptions`). Cada grupo lleva el primer nivel del patrón donde alguna opción cabe y los siguientes mientras sean de una hora por día (otros juegos de días: van al conjunto, sin `z`). Así el dominio baja de 482 461 a 26 927 opciones. No basta solo: los grupos no caben juntos (en la instancia, siete grupos de 5 horas de un mismo docente con indisponibilidad). Ampliar niveles en todo el modelo trae de vuelta los `z` de los días de 2 horas: con los vecinos de los que no quedan, la corrida pasó de 3 GB.
+
+**Arranque tibio y vecindarios** (`search.lns`):
+
+1. Primera vuelta con la asignación relajada (a lo más una opción por grupo; un grupo sin opciones se salta) y el objetivo de programar a la mayor cantidad. La pista es el horario actual cuando es una opción del patrón (`current_sessions`, PS-07). En esta instancia no lo es: 2 278 de sus 2 970 sesiones actuales son de 2 horas. Tiene a lo más una cuarta parte del tiempo; programó 1 124 de 1 139 en 5.5 s con 8 hilos (la mejor de su dominio) y de 1 122 a 1 124 en 13 s con 2.
+2. Para cada grupo que no quedó, un modelo chico: él y los programados que comparten su docente o una cohorte se mueven, y los demás entran fijos con sus sesiones (`movable = false`). El vecindario crece en cada intento: primero los vecinos con los niveles de una hora; luego con todos sus niveles; luego también los vecinos de los vecinos y, si lleva laboratorio, los demás grupos con laboratorio de su campus. Hasta 5 intentos, cada uno con más tiempo y otra semilla. Los días de 2 horas del vecindario solo llevan `z` en sus 12 salones más ajustados.
+3. Solo se acepta un vecindario que programa más grupos que antes, así que la solución nunca empeora. Si la fase B no pudiera repartir sus salones (la fase A lo impide), el vecindario se descarta y la búsqueda sigue con lo que tenía; un vecindario que pasa del tope de variables también se descarta.
+4. Los límites del servicio llegan en `SearchLimits.of(RunContext)`: los hilos son `SOLVER_THREADS` (con 0, los núcleos del contenedor según su cuota de cgroup, nunca todos los de la máquina), el tope de variables y la cancelación, que se revisa al armar, cada 0.2 s mientras CP-SAT resuelve (`stop_search`) y entre vecindarios.
+
+En la instancia fueron de 22 a 24 vecindarios por corrida, de 300 a 6 000 variables y de 0.03 a 3.3 s cada uno.
+
+Supuestos y pendientes (para 7.6 a 7.8):
+
+- Para que quepa un grupo, un vecino puede pasar del patrón a otros días o a un día de 2 horas, como en la construcción de la heurística, donde los primeros toman el patrón y los siguientes lo que queda (PS-04, supuesto por confirmar). Preferir el patrón y la hora actual es del objetivo (7.6), con `Option.tier`.
+- Con más de un hilo, CP-SAT no es reproducible: el tiempo cambia entre corridas.
+- **7.7** registra `lns` como motor, con avance, cancelación (el armado ya revisa `check_cancelled` y el plazo) y el reporte de lo que no quedó en `unscheduled` con `main_reason()`; con la asignación exacta, un grupo sin opciones volvería infactible todo el modelo (nota del Riel A).
+- Una pista mejor sería la salida de la heurística, con un campo opcional como `hint_sessions` que no cambie la versión del contrato. Va en otra tarea, porque toca el contrato.
+- Partir por campus (7.8) achica todavía más cada vuelta.
 
 ## Descomposición del problema
 
