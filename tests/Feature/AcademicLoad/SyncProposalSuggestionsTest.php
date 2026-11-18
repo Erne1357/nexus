@@ -12,6 +12,7 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Events\DemandForecastsComputed;
 use App\Modules\Demand\Models\DemandForecast;
@@ -94,6 +95,21 @@ it('una fila sin tocar sigue a la proyección y una corregida no', function () {
         ->and($captured->fresh()->only(['expected_students', 'suggested_expected_students']))->toBe(['expected_students' => 40, 'suggested_expected_students' => 53]);
 
     Event::assertDispatched(ProposalSuggestionsSynced::class, fn (ProposalSuggestionsSynced $event): bool => $event->count === 1 && $event->proposal->is($this->proposal));
+});
+
+it('5.6: una fila sin tocar cuya sugerencia cambia vuelve a quedar por revisar; las demás conservan su revisión', function () {
+    $reviewer = User::factory()->create();
+    $reviewed = ['reviewed_at' => now()->subHour(), 'reviewed_by' => $reviewer->id];
+    $moved = syncRowWithForecast(item: $reviewed);
+    $methodOnly = syncRowWithForecast(expected: 53, item: $reviewed);
+    $captured = syncRowWithForecast(item: ['expected_students' => 40, 'captured_at' => now(), ...$reviewed]);
+
+    syncProposalSuggestions();
+
+    expect($moved->fresh()->only(['reviewed_at', 'reviewed_by']))->toBe(['reviewed_at' => null, 'reviewed_by' => null])
+        ->and($methodOnly->fresh()->reviewed_by)->toBe($reviewer->id)
+        ->and($methodOnly->fresh()->forecast_method)->toBe(ForecastMethod::Formula)
+        ->and($captured->fresh()->reviewed_by)->toBe($reviewer->id);
 });
 
 it('una fila sin tocar que se queda sin proyección no cambia', function () {

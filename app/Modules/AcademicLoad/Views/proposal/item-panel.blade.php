@@ -9,6 +9,11 @@
     regresó, lo dice arriba con su comentario; si alguna fila es rara (ProposalAnomalies), la advierte con icono y texto,
     sin impedir guardar ni enviar. «Usar sugerido» dice el número, que mientras se teclea recalcula Alpine con
     `$suggestedSize`.
+
+    Con la proyección (tarea 5.6, opción C), cada campus lleva al final «Proyección de Nexus» con el estado de su fila
+    (Sugerido, Corregido o La proyección cambió), lo que sugiere y, si se aparta, cuánto; si cambió y el usuario corrige
+    esa fila, «Usar N · M» y «Mantener» (ResolveForecastChange); y la misma evidencia de la tarjeta de «Revisar proyección»
+    (academic-load::proposal.forecast-evidence).
 --}}
 @php
     $review = $overview->reviewFor($row->subject->department_id);
@@ -104,6 +109,43 @@
                                 <dd class="min-w-0 text-right text-sm whitespace-pre-line" data-readonly-value="notes">{{ $item->notes ?: 'Sin nota' }}</dd>
                             </div>
                         </dl>
+                    @endif
+
+                    @php
+    $forecastRow = $projection->row($item);
+@endphp
+                    @if ($forecastRow !== null)
+                        @php
+                            $forecastState = $forecastRow->suggestion->state;
+                            $forecastStateLabel = match ($forecastState) {
+                                \App\Modules\AcademicLoad\Enums\SuggestionState::Suggested => ['o-sparkles', 'Sugerido', 'text-neutral'],
+                                \App\Modules\AcademicLoad\Enums\SuggestionState::Changed => ['o-arrow-path', 'La proyección cambió', 'text-info'],
+                                default => ['o-pencil', 'Corregido', 'text-neutral'],
+                            };
+                            $forecastDifference = $forecastRow->difference();
+                        @endphp
+                        <div class="space-y-2.5 border-t border-base-300 pt-3" data-testid="panel-forecast-{{ $column['campus']?->code ?? 'unica' }}">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <span class="{{ $label }}">Proyección de Nexus</span>
+                                <span class="inline-flex items-center gap-1 text-[12.5px] font-medium {{ $forecastStateLabel[2] }}"><x-icon :name="$forecastStateLabel[0]" class="h-3.5 w-3.5" aria-hidden="true" />{{ $forecastStateLabel[1] }}</span>
+                            </div>
+                            @if ($forecastState === \App\Modules\AcademicLoad\Enums\SuggestionState::Changed)
+                                <x-alert icon="o-arrow-path" class="alert-info alert-soft items-start text-sm" data-testid="panel-forecast-change">
+                                    <div class="space-y-2">
+                                        <p>Ahora sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newGroups }}</span> grupos; cuando corregiste sugería <span class="font-mono">{{ $item->suggested_expected_students }}</span> y <span class="font-mono">{{ $item->suggested_groups }}</span>.</p>
+                                        @if ($editing)
+                                            <div class="flex flex-wrap gap-2">
+                                                <x-button :label="'Usar '.$forecastRow->suggestion->newExpected.' · '.$forecastRow->suggestion->newGroups" class="btn-sm btn-outline max-md:min-h-11" wire:click="resolveChange('{{ $item->id }}', 'use')" spinner="resolveChange('{{ $item->id }}', 'use')" data-testid="panel-use-{{ $item->id }}" />
+                                                <x-button :label="'Mantener '.$item->expected_students.' · '.$item->requested_groups" class="btn-sm btn-ghost max-md:min-h-11" wire:click="resolveChange('{{ $item->id }}', 'keep')" spinner="resolveChange('{{ $item->id }}', 'keep')" data-testid="panel-keep-{{ $item->id }}" />
+                                            </div>
+                                        @endif
+                                    </div>
+                                </x-alert>
+                            @else
+                                <p class="text-sm">Nexus sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestedExpected() }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestedGroups() }}</span> {{ $forecastRow->suggestedGroups() === 1 ? 'grupo' : 'grupos' }}.@if ($forecastDifference) <span class="inline-flex items-center gap-1 font-medium text-warning"><x-icon name="o-arrows-up-down" class="h-3.5 w-3.5" aria-hidden="true" />Lo capturado se aparta: {{ $forecastDifference['field'] === 'groups' ? 'grupos' : 'esperados' }} {{ $forecastDifference['percent'] }}.</span>@endif</p>
+                            @endif
+                            @include('academic-load::proposal.forecast-evidence', ['forecastRow' => $forecastRow, 'history' => $forecastHistory[$item->id] ?? null])
+                        </div>
                     @endif
                 </section>
             @endforeach

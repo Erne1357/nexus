@@ -19,6 +19,11 @@
     o los dos; o, mientras está, la cadena que se tocó en la leyenda. La barra dice qué está marcado y «Quitar
     resaltado» (o Esc, si no hay un panel, un diálogo ni el menú encima) lo quita: primero la cadena, luego lo demás.
     El encabezado de cada semestre cuenta lo marcado (`$figures`). Lo pinta el servidor, como en el editor del plan.
+
+    Con la proyección (tarea 5.6, opción C): la leyenda suma las marcas de la proyección y cada mosaico lleva al pie, junto
+    al departamento, la de sus filas en las columnas del usuario (ProposalForecastReview::mark): «La proyección cambió»
+    (`o-arrow-path`, info), si no «Se aparta del sugerido» (`o-arrows-up-down`, advertencia; el triángulo es de las anomalías), si no «Corregido» (lápiz); todo
+    sugerido no lleva marca. Al pie y no junto a la clave, porque ahí va el estado de la parte del departamento.
 --}}
 @if ($layout->columns === [])
     <div class="rounded-box border border-base-300 bg-base-100 px-5 py-6 text-center text-neutral" data-testid="proposal-no-items">Esta propuesta no tiene materias.</div>
@@ -39,6 +44,16 @@
                     {{ $state->label() }}
                 </span>
             @endforeach
+            @if ($projection->hasForecast())
+                <span class="hidden h-4 border-s border-base-300 sm:inline" aria-hidden="true"></span>
+                <span class="inline-flex items-center gap-1" data-testid="forecast-legend">Proyección: sin marca, sugerido</span>
+                @foreach ([['o-pencil', 'Corregido', ''], ['o-arrows-up-down', 'Se aparta del sugerido', 'text-warning'], ['o-arrow-path', 'La proyección cambió', 'text-info']] as [$legendIcon, $legendLabel, $legendTone])
+                    <span class="inline-flex items-center gap-1">
+                        <span class="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-base-300 bg-base-100 {{ $legendTone }}" aria-hidden="true"><x-icon :name="$legendIcon" class="h-4 w-4" /></span>
+                        {{ $legendLabel }}
+                    </span>
+                @endforeach
+            @endif
         </div>
 
         <x-core::semester-grid.frame :layout="$layout" data-testid="proposal-grid" :data-focus="$highlight['marked'] !== null ? '' : null">
@@ -70,6 +85,13 @@
                             $title = implode(' · ', array_filter([$firstLock?->message($code), ...$anomalies]));
                             $multi = count($columns) > 1;
                             $eligibleText = collect($columns)->map(fn ($column, $key) => ($row->cells[$key] ?? null)?->eligible_students ?? '—')->implode(' · ');
+                            $forecastMark = $projection->hasForecast() ? $projection->mark($row, $reviewKeys) : ['state' => null, 'large' => false, 'review' => null];
+                            $tileMark = match (true) {
+                                $forecastMark['state'] === 'changed' => ['changed', 'o-arrow-path', 'text-info', 'La proyección cambió'],
+                                $forecastMark['large'] => ['large', 'o-arrows-up-down', 'text-warning', 'Se aparta del sugerido'],
+                                $forecastMark['state'] === 'captured' => ['captured', 'o-pencil', '', 'Corregido'],
+                                default => null,
+                            };
                         @endphp
                         @if ($specialty !== null && ($loop->first || $overview->specialtyFor($items[$loop->index - 1]) !== $specialty))
                             <x-core::semester-grid.separator :specialty="$specialty" :name="$specialtyNames[$specialty]" wire:key="separator-{{ $semester }}-{{ $specialty }}" />
@@ -102,6 +124,9 @@
                                 <x-slot:start><span data-testid="groups-{{ $row->subject->code }}"><span class="font-sans text-xs font-normal">Grupos</span> <span class="text-[15px] font-semibold">{{ $row->groups() }}</span></span></x-slot:start>
                             @endif
                             <x-slot:end>
+                                @if ($tileMark)
+                                    <span class="inline-flex items-center {{ $tileMark[2] }}" title="{{ $tileMark[3] }}" data-forecast-mark="{{ $tileMark[0] }}"><x-icon :name="$tileMark[1]" class="h-4 w-4" aria-hidden="true" /><span class="sr-only">{{ $tileMark[3] }}</span></span>
+                                @endif
                                 @if ($code !== $majority)
                                     <span class="font-normal" data-testid="dept-{{ $row->subject->code }}" title="{{ $row->subject->department->name }}">{{ $code }}</span>
                                 @endif

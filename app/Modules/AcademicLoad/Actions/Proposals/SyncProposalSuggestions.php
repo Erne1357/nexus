@@ -18,7 +18,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * (una enviada o aceptada no se toca). En cada una, las filas que el coordinador no ha tocado (`captured_at` nulo) y cuyo
  * departamento no aceptó su parte siguen a la proyección: esperados, grupos, `suggested_*` y `forecast_method`. Con paquetes en la fila (`package_groups > 0`), los grupos son los de paquetes más los sueltos sugeridos, `ceil(max(0, esperados - nuevo ingreso del campus) / tamaño)` (tarea 5.6b), en el mismo UPDATE: solo resta el nuevo ingreso si el método es `first_semester` (solo ahí los esperados lo incluyen), `package_groups` lo recalcula el mismo UPDATE desde las cuentas, y el total se recorta al tope de grupos de una fila (sin bajar de `package_groups`), dejando en la bitácora cuántas filas se recortaron. Esta Action es la dueña de las filas sin tocar con proyección. Las que
  * corrigió no se tocan: el aviso «la proyección cambió» se calcula al leer (ProposalSuggestionState). Una fila sin
- * tocar que se queda sin proyección no cambia, y una que ya coincide no se escribe.
+ * tocar que se queda sin proyección no cambia, y una que ya coincide no se escribe. Si lo sugerido de una fila cambia, su
+ * marca de revisada se borra (`reviewed_*`, «Revisar proyección», tarea 5.6): lo que se revisó ya no es lo que sugiere.
  *
  * Una transacción por propuesta, que la bloquea (como UpdateProposalItem: propuesta y luego sus partes) y escribe con un
  * solo UPDATE por lotes, así que las consultas no crecen con las filas. Deja una entrada de bitácora por propuesta, sin
@@ -113,6 +114,8 @@ final class SyncProposalSuggestions
                     suggested_expected_students = f.expected_students,
                     suggested_groups = f.suggested_groups,
                     forecast_method = f.method,
+                    reviewed_at = case when (proposal_items.suggested_expected_students, proposal_items.suggested_groups) is distinct from (f.expected_students, f.suggested_groups) then null else proposal_items.reviewed_at end,
+                    reviewed_by = case when (proposal_items.suggested_expected_students, proposal_items.suggested_groups) is distinct from (f.expected_students, f.suggested_groups) then null else proposal_items.reviewed_by end,
                     updated_at = now()
                 from demand_forecasts f, subjects
                 where f.term_id = ?

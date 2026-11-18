@@ -136,9 +136,10 @@ final class CareerProposalQuery
      * seriación entre las materias de la propuesta, la del plan de cada fila; quiénes la coordinan
      * (RecipientsQuery::holdersByKey, una lectura para todas las columnas); y una por departamento involucrado para sus
      * catálogos sin validar (CatalogReviewQuery::pendingFor, en la modalidad, HC-14). Esa última solo se arma con
-     * `$withPendingCatalogs`, que es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío.
+     * `$withPendingCatalogs`, que es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío. `$anomalies`
+     * evita leer otra vez el mínimo por grupo si la página ya leyó los parámetros de Demand (DemandSettings).
      */
-    public function overview(CareerProposal $proposal, bool $withPendingCatalogs = true): ProposalOverview
+    public function overview(CareerProposal $proposal, bool $withPendingCatalogs = true, ?ProposalAnomalies $anomalies = null): ProposalOverview
     {
         $proposal->loadMissing([
             'term',
@@ -257,7 +258,7 @@ final class CareerProposalQuery
                 'eligible_by_campus' => $eligibleByCampus,
             ],
             pendingCatalogs: $pendingCatalogs,
-            anomalies: ProposalAnomalies::fromSettings(),
+            anomalies: $anomalies ?? ProposalAnomalies::fromSettings(),
             specialtyOf: $specialtyOf,
             specialties: $specialties,
             seriation: $seriation,
