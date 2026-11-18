@@ -390,3 +390,24 @@ def test_armar_el_modelo_revisa_la_cancelacion_y_el_plazo():
         build_variables(cp_model.CpModel(), data, budget=BuildBudget(check_cancelled=cancelled.check_cancelled))
     with pytest.raises(BuildTimeout):
         build_variables(cp_model.CpModel(), data, budget=BuildBudget(deadline=0.0))
+
+
+def test_un_prestamo_de_un_grupo_solo_le_sirve_a_ese_grupo():
+    """HC-10 como el validador (`RoomLoan`, por grupo): el préstamo con `group_id` abre el salón ajeno a g1 y no a g2,
+    aunque sean del mismo departamento; g1 deja el conjunto de salones y elige con `z`. Sin `group_id`, el préstamo es
+    del departamento (como `ContractState`)."""
+    loan = {"room_id": "ajeno", "to_department_id": "d001", "day": 1, "starts_at": "07:00", "ends_at": "08:00"}
+    data = instance(
+        groups=[group("g1", 1), group("g2", 1)],
+        rooms=[room("r1"), room("ajeno", owner_department_id="d999")],
+        agreements=[{**loan, "group_id": "g1"}],
+    )
+    _, variables = build(data, DomainOptions())
+
+    assert variables.groups["g1"].pool is None
+    assert set(variables.groups["g1"].windows[(1, 0, 1)].rooms) == {"r1", "ajeno"}
+    assert variables.groups["g2"].pool is not None
+    assert "ajeno" not in variables.pools["C1"].free(1, 0)
+
+    _, by_department = build({**data, "agreements": [loan]}, DomainOptions())
+    assert "ajeno" in by_department.pools["C1"].free(1, 0)

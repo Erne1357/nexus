@@ -328,9 +328,9 @@ def _pools(data: ModelData) -> dict[str, RoomPool]:
 
 def _pool_of(data: ModelData, group: GroupInput, variables: Variables) -> RoomPool | None:
     """El conjunto de salones del grupo: el de su campus si es de su departamento (o si HC-10 no está activa, porque
-    entonces el dueño no importa) y no trae `candidate_room_ids`."""
+    entonces el dueño no importa), no trae `candidate_room_ids` y no tiene préstamos solo suyos."""
     pool = variables.pools.get(group.campus_code)
-    if pool is None or group.candidate_room_ids:
+    if pool is None or group.candidate_room_ids or data.has_own_loans(group.id):
         return None
     if data.active("HC-10") and pool.department_id != group.department_id:
         return None
@@ -477,7 +477,7 @@ def _static_rooms(data: ModelData, group: GroupInput) -> tuple[list[str], Counte
         elif (
             data.active("HC-10")
             and data.needs_loan(room_id, group.department_id)
-            and not data.has_loans(room_id, group.department_id)
+            and not data.has_loans(room_id, group.department_id, group.id)
         ):
             rejected["HC-10"] += 1
         else:
@@ -522,7 +522,7 @@ def _check_window(
     eligible = []
     rejected: Counter[str] = Counter()
     for room_id in rooms:
-        reason = data.room_reason(room_id, group.department_id, day, start, end)
+        reason = data.room_reason(room_id, group.department_id, day, start, end, group.id)
         if reason is None:
             eligible.append(room_id)
         else:
