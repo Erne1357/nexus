@@ -9,11 +9,11 @@ use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\SuggestedGroups;
-use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Rules\GroupCapacity;
 use App\Modules\Scheduling\Rules\GroupCode;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -142,7 +142,7 @@ final class CreateGroupsFromProposal
             ->where('term_id', $proposal->term_id)
             ->where('subject_id', $subject->getKey())
             ->pluck('code')->all();
-        $capacity = $this->capacityFor($subject, $item->campus_id, $sizes);
+        $capacity = GroupCapacity::for($subject, $item->campus_id, $sizes);
         $groups = [];
 
         foreach ($slots as $slot) {
@@ -197,17 +197,5 @@ final class CreateGroupsFromProposal
         }
 
         return $groups;
-    }
-
-    private function capacityFor(Subject $subject, string $campusId, SuggestedGroups $sizes): int
-    {
-        $default = SubjectRoomDefault::query()
-            ->with('room')
-            ->where('subject_id', $subject->getKey())
-            ->where('campus_id', $campusId)
-            ->orderBy('priority')
-            ->first();
-
-        return $default?->room?->capacity ?? $sizes->sizeFor((bool) $subject->needs_lab);
     }
 }

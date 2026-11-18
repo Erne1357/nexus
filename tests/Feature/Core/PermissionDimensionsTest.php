@@ -95,6 +95,7 @@ function dimensionTables(): array
         'scheduling.session' => 'group_sessions',
         'scheduling.room' => 'group_sessions',
         'scheduling.quota' => 'group_quotas',
+        'scheduling.parallels' => 'groups',
         'staffing.ranking' => 'staffing_rankings',
         'staffing.teacher' => 'group_teacher_assignments',
         'staffing.teacher_load' => 'teacher_term_loads',
@@ -169,6 +170,7 @@ function modalityLevelPermissions(): array
 {
     return [
         'scheduling.schedule.view' => 'MS6: los horarios se leen a nivel de modalidad; el campus es un filtro de la pantalla.',
+        'scheduling.parallels.arrange' => 'Tarea 8.8: el jefe del departamento que imparte arma los paralelos de toda su modalidad, de cualquier campus, como decide los acuerdos (M12).',
         'academic_load.agreement.view' => 'MS6: los acuerdos se leen a nivel de modalidad, del departamento que pide o del que decide.',
         'academic_load.agreement.decide' => 'M12: el jefe decide los acuerdos de toda la modalidad de su departamento, de cualquier campus.',
         'academic_load.demand.view_department' => 'Tarea 5.7: «Demanda por materia» es de todo el Tec, con una insignia por campus; se lee a nivel de modalidad.',
