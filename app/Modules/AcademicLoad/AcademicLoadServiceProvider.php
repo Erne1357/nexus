@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad;
 
 use App\Modules\Academic\Events\DepartmentDeleting;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\AcademicLoad\Actions\Transitions\CancelReanalysis;
 use App\Modules\AcademicLoad\Console\EvaluateForecastCommand;
 use App\Modules\AcademicLoad\Console\ImportSiiGroups;
 use App\Modules\AcademicLoad\Console\PruneExports;
@@ -12,6 +13,7 @@ use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\ProposalForecastDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
@@ -19,6 +21,7 @@ use App\Modules\AcademicLoad\Enums\ForecastEvaluationStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\AcademicLoad\Events\CareerProposalReturned;
 use App\Modules\AcademicLoad\Events\CareerProposalSubmitted;
 use App\Modules\AcademicLoad\Events\LoadTransitioned;
@@ -43,11 +46,16 @@ use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Notifications\LoadRepublished;
+use App\Modules\AcademicLoad\Notifications\ReanalysisAvailable;
 use App\Modules\AcademicLoad\Policies\DemandBoardPolicy;
 use App\Modules\AcademicLoad\Policies\ForecastEvaluationPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
 use App\Modules\AcademicLoad\Queries\DemandBoard;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\AcademicLoad\Queries\ReanalysisAvailabilityQuery;
+use App\Modules\AcademicLoad\Queries\ReanalysisChangesQuery;
+use App\Modules\AcademicLoad\Queries\ReanalysisCycleQuery;
 use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
@@ -74,12 +82,16 @@ use App\Modules\Demand\Events\DemandForecastsComputed;
 use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
+use App\Modules\Imports\Enums\BatchStatus;
+use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Students\Models\KardexRecord;
 use Closure;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -259,6 +271,17 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::Reanalysis, 'Cargas cerradas publicadas con su versión 1', fn (DemoContext $demo) => $demo->runSeederPerModality(PublicationDemoSeeder::class, [
                 'term' => $demo->termCode,
             ])),
+            // Los casos del re-análisis (fase 8, #614), sobre lo publicado: primero llegan las calificaciones y se recalcula la
+            // proyección; luego los jefes inician sus re-análisis. Scheduling y Staffing siguen con los ajustes y las versiones.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Calificaciones del semestre anterior al 85 % con su lote de kárdex, y la proyección recalculada', fn (DemoContext $demo) => $demo->runSeeder(ReanalysisDemoSeeder::class, [
+                'mode' => 'grades',
+                'term' => $demo->termCode,
+                'seed' => $demo->seed,
+            ])),
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Re-análisis iniciados por los jefes, uno cancelado y vuelto a iniciar', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisDemoSeeder::class, [
+                'mode' => 'start',
+                'term' => $demo->termCode,
+            ])),
         ];
     }
 
@@ -324,6 +347,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                     default => true,
                 };
             }),
+            ...$this->reanalysisCaseChecks(),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Scheduling), 'Cada carrera ofrecida tiene su propuesta aceptada', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds, $proposals): true|string {
                 $offered = count($offeredCareerIds($demo)) * count($modalityIds($demo));
                 $accepted = $proposals($demo)->where('status', ProposalStatus::Accepted)->count();
@@ -349,6 +373,155 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                     ->count();
 
                 return $behind === 0 ? true : "{$behind} cargas con partes aceptadas no están en propuesta.";
+            }),
+        ];
+    }
+
+    /**
+     * Una revisión por caso del re-análisis en `reanalisis-casos` (fase 8, #614), sobre las cargas que el plan de
+     * ReanalysisDemoSeeder le da a cada caso en cada modalidad del volumen. Un caso que el plan no reparte (con pocas
+     * cargas: el volumen demo tiene cuatro, sin «cerrada» ni «republicada») no tiene qué revisar y pasa.
+     *
+     * @return list<DemoCheck>
+     */
+    private function reanalysisCaseChecks(): array
+    {
+        $at = [DemoCheckpoint::ReanalysisCases];
+        $loads = function (DemoContext $demo, string ...$cases): Collection {
+            $loads = new Collection;
+
+            foreach (Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->get() as $modality) {
+                $loads = $loads->concat(ReanalysisDemoSeeder::loadsIn($demo->term()->getKey(), $modality->getKey(), $cases));
+            }
+
+            return $loads->values();
+        };
+        $codes = fn (Collection $loads): string => $loads->map(fn (AcademicLoad $load): string => $load->department->code)->implode(', ');
+        $reasons = fn (AcademicLoad $load): array => app(ReanalysisAvailabilityQuery::class)->reasons($load);
+        $hasChanges = fn (AcademicLoad $load): bool => app(ReanalysisChangesQuery::class)->hasChanges($load);
+        $versions = fn (AcademicLoad $load): array => $load->snapshots()->orderBy('version')->pluck('reason', 'version')->map(fn (?SnapshotReason $reason): ?string => $reason?->value)->all();
+        // Los avisos de la republicación: los del docente no llevan puesto (`data.role`); los de los coordinadores y los de los
+        // jefes de otros departamentos llegan con el suyo (NotifyHolders), dos puestos distintos.
+        $notices = fn (): array => DB::table('notifications')->where('type', LoadRepublished::class)
+            ->selectRaw("coalesce(data::jsonb ->> 'role', '') as role, count(*) as total")->groupByRaw("coalesce(data::jsonb ->> 'role', '')")
+            ->pluck('total', 'role')->all();
+
+        return [
+            new DemoCheck($at, 'Las calificaciones del semestre anterior van entre 80 y 90 % capturadas, con su lote de kárdex después de la publicación', function (DemoContext $demo) use ($loads): true|string {
+                $load = $loads($demo, ...ReanalysisDemoSeeder::CASES)->first();
+
+                if ($load === null) {
+                    return true;
+                }
+
+                $progress = app(ReanalysisAvailabilityQuery::class)->progress($load);
+                $batch = ImportBatch::query()->where('template', 'kardex')->where('status', BatchStatus::Applied->value)
+                    ->where('original_name', ReanalysisDemoSeeder::batchName(TermCode::previousRegular($demo->termCode)))->exists();
+
+                return match (true) {
+                    ! $batch => 'No hay lote de kárdex con las calificaciones del semestre anterior.',
+                    $progress['percent'] < 80 || $progress['percent'] > 90 => "Van {$progress['graded']} de {$progress['total']} calificaciones ({$progress['percent']} %).",
+                    default => true,
+                };
+            }),
+            new DemoCheck($at, 'Hay cargas con el re-análisis habilitado sin iniciar, y su jefe tiene el aviso', function (DemoContext $demo) use ($loads, $codes): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_AVAILABLE)->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Published
+                    && app(ReanalysisAvailabilityQuery::class)->isAvailable($load)
+                    && DB::table('notifications')->where('type', ReanalysisAvailable::class)
+                        ->whereRaw("data::jsonb -> 'parameters' ->> 'departamento' = ?", [$load->department_id])
+                        ->whereRaw("data::jsonb ->> 'term_id' = ?", [$load->term_id])
+                        ->exists());
+
+                return $behind->isEmpty() ? true : "Sin el re-análisis habilitado o sin el aviso a su jefe: {$codes($behind)}.";
+            }),
+            new DemoCheck($at, 'Hay cargas publicadas sin re-análisis habilitado, con su motivo', function (DemoContext $demo) use ($loads, $reasons): true|string {
+                $all = $loads($demo, ...ReanalysisDemoSeeder::CASES);
+                $blocked = $all->filter(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Published && $reasons($load) !== []);
+
+                return $all->isEmpty() || $blocked->isNotEmpty() ? true : 'Toda carga publicada tiene el re-análisis habilitado.';
+            }),
+            new DemoCheck($at, 'Hay cargas en re-análisis sin cambios, que se pueden cancelar', function (DemoContext $demo) use ($loads, $codes, $hasChanges): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_RESTARTED, ReanalysisDemoSeeder::CASE_UNCHANGED)
+                    ->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Reanalysis && ! $hasChanges($load));
+
+                return $behind->isEmpty() ? true : "No están en re-análisis sin cambios: {$codes($behind)}.";
+            }),
+            new DemoCheck($at, 'Hay cargas que cancelaron su re-análisis y lo volvieron a iniciar', function (DemoContext $demo) use ($loads, $codes): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_RESTARTED)->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Reanalysis
+                    && $load->transitions()->where('comment', CancelReanalysis::COMMENT)->exists());
+
+                return $behind->isEmpty() ? true : "No cancelaron y volvieron a iniciar su re-análisis: {$codes($behind)}.";
+            }),
+            new DemoCheck($at, 'Hay cargas en re-análisis con cambios, que ya no se cancelan, devueltas por Subdirección (RA-08)', function (DemoContext $demo) use ($loads, $codes, $hasChanges): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_CHANGED)->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Reanalysis && $hasChanges($load)
+                    && $load->transitions()->where('from_status', LoadStatus::Closed->value)->where('to_status', LoadStatus::Reanalysis->value)->exists());
+
+                return $behind->isEmpty() ? true : "No están en re-análisis con cambios y devueltas: {$codes($behind)}.";
+            }),
+            new DemoCheck($at, 'Hay cargas re-analizadas y cerradas, por publicar su versión siguiente', function (DemoContext $demo) use ($loads, $codes): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_CLOSED)->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Closed
+                    && app(ReanalysisCycleQuery::class)->closedFromReanalysis($load));
+
+                return $behind->isEmpty() ? true : "No están cerradas después de su re-análisis: {$codes($behind)}.";
+            }),
+            new DemoCheck($at, 'Hay versiones 2 por re-análisis con su diff guardado y cada tipo de cambio', function (DemoContext $demo) use ($loads, $codes): true|string {
+                $versioned = $loads($demo, ReanalysisDemoSeeder::CASE_REPUBLISHED, ReanalysisDemoSeeder::CASE_CORRECTED);
+
+                if ($versioned->isEmpty()) {
+                    return true;
+                }
+
+                $snapshots = LoadSnapshot::query()->whereIn('academic_load_id', $versioned->map(fn (AcademicLoad $load): string => $load->getKey())->all())->where('version', 2)->get();
+                $missing = $versioned->reject(fn (AcademicLoad $load): bool => $snapshots->contains(fn (LoadSnapshot $snapshot): bool => $snapshot->academic_load_id === $load->getKey()
+                    && $snapshot->reason === SnapshotReason::Reanalysis && $snapshot->diff !== null));
+                $kinds = [];
+
+                foreach ($snapshots as $snapshot) {
+                    foreach (['added', 'cancelled', 'changed'] as $kind) {
+                        $kinds[$kind] = ($kinds[$kind] ?? false) || ($snapshot->diff['groups'][$kind] ?? []) !== [];
+                    }
+
+                    foreach ($snapshot->diff['groups']['changed'] ?? [] as $changed) {
+                        foreach (array_keys($changed['changes']) as $kind) {
+                            $kinds[$kind] = true;
+                        }
+                    }
+                }
+
+                $absent = array_values(array_filter(['added', 'cancelled', 'changed', 'schedule', 'teacher', 'room', 'quota', 'career_quotas'], fn (string $kind): bool => ! ($kinds[$kind] ?? false)));
+
+                return match (true) {
+                    $missing->isNotEmpty() => "Sin versión 2 por re-análisis con diff: {$codes($missing)}.",
+                    $absent !== [] => 'Las versiones 2 no traen: '.implode(', ', $absent).'.',
+                    default => true,
+                };
+            }),
+            new DemoCheck($at, 'Se avisó a docentes, coordinadores y jefes de otros departamentos al republicar', function (DemoContext $demo) use ($loads, $notices): true|string {
+                if ($loads($demo, ReanalysisDemoSeeder::CASE_REPUBLISHED, ReanalysisDemoSeeder::CASE_CORRECTED)->isEmpty()) {
+                    return true;
+                }
+
+                $sent = $notices();
+                $teachers = (int) ($sent[''] ?? 0);
+                $roles = count(array_filter(array_keys($sent), fn (int|string $role): bool => $role !== ''));
+
+                return match (true) {
+                    $teachers === 0 => 'Ningún aviso de republicación a los docentes.',
+                    $roles < 2 => 'Los avisos de republicación no llegaron a coordinadores y a jefes de otros departamentos (puestos: '.$roles.').',
+                    default => true,
+                };
+            }),
+            new DemoCheck($at, 'Las cargas republicadas siguen en su versión 2 y esperan calificaciones nuevas', function (DemoContext $demo) use ($loads, $codes, $reasons, $versions): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_REPUBLISHED)->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Published
+                    && $versions($load) === [1 => 'published', 2 => 'reanalysis'] && $reasons($load) !== []);
+
+                return $behind->isEmpty() ? true : "No están publicadas en su versión 2 sin re-análisis habilitado: {$codes($behind)}.";
+            }),
+            new DemoCheck($at, 'Hay cargas en su versión 3 por corrección después del re-análisis', function (DemoContext $demo) use ($loads, $codes, $versions): true|string {
+                $behind = $loads($demo, ReanalysisDemoSeeder::CASE_CORRECTED)->reject(fn (AcademicLoad $load): bool => $load->status === LoadStatus::Published
+                    && $versions($load) === [1 => 'published', 2 => 'reanalysis', 3 => 'correction']);
+
+                return $behind->isEmpty() ? true : "No llegaron a la versión 3 por corrección: {$codes($behind)}.";
             }),
         ];
     }
