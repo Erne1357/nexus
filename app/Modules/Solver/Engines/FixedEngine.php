@@ -16,7 +16,7 @@ use Closure;
 /**
  * El motor de prueba (tarea 6.3): sin buscar nada, pone cada grupo movible en sesiones de una hora, una por día en los
  * primeros días del campus (4 h: lunes a jueves; 5 h: lunes a viernes; 6 h: con sábado si la rejilla lo tiene, como el SII;
- * decisión del usuario, 18 de noviembre de 2026), todas a la misma hora. La hora de inicio rota por grupo desde el inicio
+ * decisión del usuario, 17 de noviembre de 2026), todas a la misma hora. La hora de inicio rota por grupo desde el inicio
  * de la jornada para que no caigan todos a las 07:00. Va en su primer salón candidato o en el primer salón de su campus.
  * Un grupo con más horas que días queda sin programar. No revisa reglas duras, así que nunca dice `feasible`:
  * devuelve `partial` y lo avisa en el log. Sirve para que la corrida, la pantalla y la aceptación (6.8 a 6.10) se

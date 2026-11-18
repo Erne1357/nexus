@@ -111,6 +111,7 @@ final class BuildSolverInput
             $settings->timeLimitFor($scope),
             new Scope(ScopeKind::from($scope->value), $scopeId),
             (int) $state->setting('staffing.min_campus_travel_minutes', CampusTravel::DEFAULT_MINUTES),
+            max(0, $profile->weeklyHoursTolerance ?? (int) $state->setting('scheduling.weekly_hours_tolerance', 0)),
             array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $cohorts[$group->id] ?? [], $usesRooms), $included),
             $this->teachers($state, $term, $included, $includedIds, $movable),
             $usesRooms ? $this->rooms($state, $campusIds, $roomIds, $includedIds) : [],

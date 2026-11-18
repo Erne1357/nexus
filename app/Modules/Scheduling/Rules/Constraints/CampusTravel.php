@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Constraints;
 
+use App\Modules\Scheduling\Rules\Timeline;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\State\StateSession;
@@ -30,7 +31,7 @@ final class CampusTravel implements Constraint
         foreach ($scope->teacherIds($state) as $teacherId) {
             $name = $state->teacher($teacherId)?->name ?? 'El docente';
 
-            foreach ($this->byDay($state->teacherSessions($teacherId)) as $sessions) {
+            foreach (Timeline::byDay($state->teacherSessions($teacherId)) as $sessions) {
                 for ($i = 0, $last = count($sessions) - 1; $i < $last; $i++) {
                     [$first, $next] = [$sessions[$i], $sessions[$i + 1]];
                     $free = $next->start - $first->end;
@@ -49,27 +50,6 @@ final class CampusTravel implements Constraint
                 }
             }
         }
-    }
-
-    /**
-     * Las sesiones del docente por día, en orden de inicio.
-     *
-     * @param  list<StateSession>  $sessions
-     * @return array<int, list<StateSession>>
-     */
-    private function byDay(array $sessions): array
-    {
-        $days = [];
-
-        foreach ($sessions as $session) {
-            $days[$session->day][] = $session;
-        }
-
-        foreach ($days as &$day) {
-            usort($day, fn (StateSession $a, StateSession $b): int => [$a->start, $a->end] <=> [$b->start, $b->end]);
-        }
-
-        return $days;
     }
 
     /**

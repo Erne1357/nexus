@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
@@ -280,6 +281,16 @@ it('trae el contrato: versión, corrida, periodo, modalidad, alcance, traslado, 
         ->and($input->options->suggestTeachers)->toBeFalse();
 });
 
+it('la tolerancia de HC-12 sale del perfil de la modalidad y, sin ella, de la configuración global', function () {
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(0);
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'scheduling.weekly_hours_tolerance', 'value' => 15]);
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(15);
+
+    $this->pres->update(['settings' => [...$this->pres->settings, 'weekly_hours_tolerance' => 30]]);
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(30);
+});
+
 it('el traslado y el tiempo máximo salen de los parámetros', function () {
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.min_campus_travel_minutes', 'value' => 45]);
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.time_limits', 'value' => ['department' => 120, 'career' => 20]]);
@@ -350,6 +361,33 @@ it('un grupo fuera de la corrida que usa un salón que un movible ya usa entra f
 
     expect($groups[$roomMate->id]->movable)->toBeFalse()
         ->and($groups[$roomMate->id]->fixedSessions)->toHaveCount(1);
+});
+
+it('HC-03: los grupos de una instancia de paquete llevan su clave de cohorte y los de otra carga que la comparten entran fijos', function () {
+    $package = ProposalPackage::factory()->create();
+    $loose = buildInputGroup($this->prog, $this->s1, $this->isc, $this->planIsc, 1, ['package_id' => $package->id, 'package_number' => 2, 'code' => 'PK1']);
+    $basic = buildInputGroup($this->fis, $this->s1, $this->isc, $this->planIsc, 1, ['package_id' => $package->id, 'package_number' => 2, 'code' => 'PK2']);
+    $other = buildInputGroup($this->fis, $this->s1, $this->isc, $this->planIsc, 1, ['package_id' => $package->id, 'package_number' => 1, 'code' => 'PK3']);
+
+    $groups = buildInputGroupsOf(buildInputForDepartment($this->sistemas));
+
+    expect($groups[$loose->id]->cohorts)->toContain("package:{$package->id}:S1:2")
+        ->and($groups[$loose->id]->movable)->toBeTrue()
+        ->and($groups[$basic->id]->cohorts)->toContain("package:{$package->id}:S1:2")
+        ->and($groups[$basic->id]->movable)->toBeFalse()
+        ->and($groups[$other->id] ?? null)->toBeNull();
+});
+
+it('HC-03: el mismo paquete con el mismo número en dos campus no queda en la misma cohorte', function () {
+    $package = ProposalPackage::factory()->create();
+    $inS1 = buildInputGroup($this->prog, $this->s1, $this->isc, $this->planIsc, 1, ['package_id' => $package->id, 'package_number' => 1, 'code' => 'PK1']);
+    $inS2 = buildInputGroup($this->prog, $this->s2, $this->isc, $this->planIsc, 1, ['package_id' => $package->id, 'package_number' => 1, 'code' => 'PK2']);
+
+    $groups = buildInputGroupsOf(buildInputForDepartment($this->sistemas));
+    $keyOf = fn (Group $group): array => array_values(array_filter($groups[$group->id]->cohorts, fn (string $key): bool => str_starts_with($key, 'package:')));
+
+    expect($keyOf($inS1))->toBe(["package:{$package->id}:S1:1"])
+        ->and($keyOf($inS2))->toBe(["package:{$package->id}:S2:1"]);
 });
 
 it('los pesos blandos salen del parámetro solver.soft_weights, con SC-01 por la llave sc_01', function () {
