@@ -36,8 +36,10 @@ final class States
         int $capacity = 35,
         bool $active = true,
         string $modality = 'PRES',
+        ?string $package = null,
+        ?int $packageNumber = null,
     ): StateGroup {
-        return new StateGroup($id, $campus, $modality, $subject ?? "S-{$id}", $department, $career, $plan, $semester, $code ?? $id, $teacher, $capacity, $active);
+        return new StateGroup($id, $campus, $modality, $subject ?? "S-{$id}", $department, $career, $plan, $semester, $code ?? $id, $teacher, $capacity, $active, $package, $packageNumber);
     }
 
     public static function subject(string $id, string $name = 'Materia', int $theory = 3, int $practice = 2, bool $lab = false, bool $active = true): StateSubject

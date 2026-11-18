@@ -170,7 +170,7 @@ final class ExportSolverFixture extends Command
     }
 
     /**
-     * `plan:<plan>:<semestre>:<campus>` y `package:<paquete>:<número>`: solo cambian las llaves.
+     * `plan:<plan>:<semestre>:<campus>` y `package:<paquete>:<campus>:<número>`: solo cambian las llaves.
      */
     private function cohortKey(string $key): string
     {

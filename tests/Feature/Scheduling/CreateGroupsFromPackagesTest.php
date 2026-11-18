@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\DB;
 /*
 | CreateGroupsFromProposal con paquetes (tarea 5.6b; reglas-de-negocio.md, «Propuesta de carrera»): por cada paquete, campus
 | y n de 1 a la cuenta, un grupo de cada materia del paquete con `package_id` y `package_number = n`; los grupos sueltos de la
-| fila (`requested_groups` menos `package_groups`) nacen sin paquete. La cohorte del motor es `package:<id>:<n>` (fase 6).
+| fila (`requested_groups` menos `package_groups`) nacen sin paquete. La cohorte del motor es `package:<id>:<campus>:<n>` (fase 6).
 */
 
 beforeEach(function () {
