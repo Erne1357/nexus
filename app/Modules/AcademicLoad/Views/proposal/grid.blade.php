@@ -114,9 +114,9 @@
                             </x-slot:icon>
                             @if ($multi)
                                 <x-slot:requisites class="flex items-baseline" data-testid="figures-{{ $row->subject->code }}" title="Alumnos posibles por campus: {{ collect($columns)->map(fn ($column, $key) => ($column['campus']?->code ?? '—').' '.(($row->cells[$key] ?? null)?->eligible_students ?? 0))->implode(' · ') }}"><span class="truncate">Pos. <span class="font-mono">{{ $eligibleText }}</span></span></x-slot:requisites>
-                                <x-slot:start><span class="flex items-center gap-1.5" data-testid="groups-{{ $row->subject->code }}">
+                                <x-slot:start><span class="flex items-center gap-1" data-testid="groups-{{ $row->subject->code }}">
                                     @foreach ($columns as $key => $column)
-                                        <span @class(['inline-flex items-center gap-0.5', 'text-neutral' => (($row->cells[$key] ?? null)?->requested_groups ?? 0) === 0])><x-academic-load::campus-tag :campus="$column['campus']" size="xs" /><span class="text-[13px] font-semibold">{{ ($row->cells[$key] ?? null)?->requested_groups ?? '—' }}</span></span>
+                                        <span @class(['inline-flex items-center gap-px', 'text-neutral' => (($row->cells[$key] ?? null)?->requested_groups ?? 0) === 0])><x-academic-load::campus-tag :campus="$column['campus']" size="xs" /><span class="text-[13px] font-semibold">{{ ($row->cells[$key] ?? null)?->requested_groups ?? '—' }}</span></span>
                                     @endforeach
                                 </span></x-slot:start>
                             @else
@@ -127,15 +127,21 @@
                                 @if ($tileMark)
                                     <span class="inline-flex items-center {{ $tileMark[2] }}" title="{{ $tileMark[3] }}" data-forecast-mark="{{ $tileMark[0] }}"><x-icon :name="$tileMark[1]" class="h-4 w-4" aria-hidden="true" /><span class="sr-only">{{ $tileMark[3] }}</span></span>
                                 @endif
-                                @if ($code !== $majority)
-                                    <span class="font-normal" data-testid="dept-{{ $row->subject->code }}" title="{{ $row->subject->department->name }}">{{ $code }}</span>
-                                @endif
                                 @if ($anomalies !== [])
                                     <span class="inline-flex items-center gap-0.5 font-semibold text-warning" data-testid="anomaly-{{ $row->subject->code }}">
-                                        <x-icon name="o-exclamation-triangle" class="w-4 h-4" aria-hidden="true" />
-                                        <span data-anomaly-count>{{ count($anomalies) }}</span>
+                                        <x-icon name="o-exclamation-triangle" @class(['shrink-0', 'w-3.5 h-3.5' => $multi, 'w-4 h-4' => ! $multi]) aria-hidden="true" />
+                                        {{-- Con varios campus el pie no da para la cuenta: queda el icono, y la cuenta para el lector de pantalla y en el title del mosaico. --}}
+                                        @if ($multi)
+                                            <span data-anomaly-count class="sr-only">{{ count($anomalies) }}</span>
+                                        @else
+                                            <span data-anomaly-count>{{ count($anomalies) }}</span>
+                                        @endif
                                         <span class="sr-only">Revisar: {{ implode('; ', $anomalies) }}</span>
                                     </span>
+                                @endif
+                                {{-- Prioridad del pie (decidida el 17 de noviembre de 2026): grupos por campus, marca, anomalía; el departamento se cae primero. --}}
+                                @if ($code !== $majority)
+                                    <span class="font-normal" data-testid="dept-{{ $row->subject->code }}" title="{{ $row->subject->department->name }}">{{ $code }}</span>
                                 @endif
                             </x-slot:end>
                         </x-core::semester-grid.tile>

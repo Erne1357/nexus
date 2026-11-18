@@ -28,13 +28,13 @@
 
     <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div role="group" aria-label="Motivo" data-testid="reason-filter"
-            class="max-md:grid max-md:w-full max-md:grid-cols-2 max-md:gap-1 md:join">
+            class="max-desktop:grid max-desktop:w-full max-desktop:grid-cols-3 max-desktop:gap-1 desktop:join">
             @foreach ($filterOptions as $filter => $filterLabel)
                 @php
     $testKey = $filter === '' ? 'todas' : $filter;
 @endphp
                 <button type="button" wire:click="filterReason('{{ $filter }}')" aria-pressed="{{ $reason === $filter ? 'true' : 'false' }}" data-testid="reason-{{ $testKey }}"
-                    @class(['btn btn-sm md:join-item max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-col max-md:gap-0 max-md:py-1 max-md:whitespace-normal', 'btn-primary' => $reason === $filter])>
+                    @class(['btn btn-sm desktop:join-item max-desktop:h-auto max-desktop:min-h-11 max-desktop:min-w-0 max-desktop:flex-col max-desktop:gap-0 max-desktop:py-1 max-desktop:whitespace-normal', 'btn-primary' => $reason === $filter])>
                     <span>{{ $filterLabel }}</span>
                     <span class="font-mono text-[12.5px] opacity-85" data-testid="reason-count-{{ $testKey }}">{{ $reviewCounts[$filter] }}</span>
                 </button>
@@ -63,7 +63,7 @@
                 $suggestedGroups = $card->effectiveGroups();
             @endphp
             <article id="review-{{ $cardItem->id }}" data-item="review-{{ $cardItem->id }}" tabindex="-1" wire:key="review-{{ $cardItem->id }}" data-testid="review-card-{{ $cardItem->id }}"
-                class="grid gap-x-6 gap-y-3 border-base-300 px-4 py-4 outline-none not-first:border-t data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-primary @min-[56rem]:grid-cols-[17rem_minmax(0,1fr)_13rem] @min-[56rem]:px-5">
+                class="grid gap-x-6 gap-y-3 border-base-300 px-4 py-4 outline-none not-first:border-t data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-primary @min-[64rem]:grid-cols-[17rem_minmax(0,1fr)_13rem] @min-[64rem]:px-5">
                 <div class="min-w-0 space-y-1">
                     <div class="flex flex-wrap gap-1.5">
                         @foreach ($card->reasons as $cardReason)
@@ -96,24 +96,24 @@
                     @include('academic-load::proposal.forecast-evidence', ['forecastRow' => $card, 'history' => $forecastHistory[$cardItem->id] ?? null])
                 </div>
 
-                <div class="flex flex-col gap-1.5 @max-[56rem]:flex-row @max-[56rem]:flex-wrap">
+                <div class="flex flex-col gap-1.5 @max-[64rem]:flex-row @max-[64rem]:flex-wrap">
                     @if ($canAct)
                         <div class="contents" data-testid="review-actions-{{ $cardItem->id }}">
                             @if ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Changed)
-                                <x-button :label="'Usar '.$card->suggestion->newExpected.' · '.$card->suggestion->newGroups" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                                <x-button :label="'Usar '.$card->suggestion->newExpected.' · '.$card->suggestion->newGroups" class="btn-sm btn-outline @max-[64rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="resolveChange('{{ $cardItem->id }}', 'use')" spinner="resolveChange('{{ $cardItem->id }}', 'use')" data-testid="review-use-{{ $cardItem->id }}" />
-                                <x-button :label="'Mantener '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                                <x-button :label="'Mantener '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[64rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="resolveChange('{{ $cardItem->id }}', 'keep')" spinner="resolveChange('{{ $cardItem->id }}', 'keep')" data-testid="review-keep-{{ $cardItem->id }}" />
                             @elseif ($state === \App\Modules\AcademicLoad\Enums\SuggestionState::Captured)
-                                <x-button :label="'Usar sugerido '.$card->suggestedExpected().' · '.$suggestedGroups" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                                <x-button :label="'Usar sugerido '.$card->suggestedExpected().' · '.$suggestedGroups" class="btn-sm btn-outline @max-[64rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="applySuggestion('{{ $cardItem->id }}')" spinner="applySuggestion('{{ $cardItem->id }}')" data-testid="review-suggested-{{ $cardItem->id }}" />
-                                <x-button :label="'Dejar '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                                <x-button :label="'Dejar '.$cardItem->expected_students.' · '.$cardItem->requested_groups" class="btn-sm @max-[64rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="markReviewed('{{ $cardItem->id }}')" spinner="markReviewed('{{ $cardItem->id }}')" data-testid="review-leave-{{ $cardItem->id }}" />
                             @else
-                                <x-button label="Está bien" class="btn-sm btn-outline @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                                <x-button label="Está bien" class="btn-sm btn-outline @max-[64rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                     wire:click="markReviewed('{{ $cardItem->id }}')" spinner="markReviewed('{{ $cardItem->id }}')" data-testid="review-ok-{{ $cardItem->id }}" />
                             @endif
-                            <x-button label="Abrir en el panel" icon="o-arrow-top-right-on-square" class="btn-sm btn-ghost @max-[56rem]:flex-auto whitespace-nowrap max-md:min-h-11"
+                            <x-button label="Abrir en el panel" icon="o-arrow-top-right-on-square" class="btn-sm btn-ghost @max-[64rem]:flex-auto whitespace-nowrap max-md:min-h-11"
                                 wire:click="edit('{{ $cardItem->subject_id }}')" data-opener data-testid="review-open-{{ $cardItem->id }}" />
                         </div>
                     @else

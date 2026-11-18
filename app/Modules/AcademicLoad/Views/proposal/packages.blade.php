@@ -128,7 +128,7 @@
             <x-icon name="o-rectangle-group" class="mt-0.5 h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
             <p class="min-w-0 flex-1 basis-64 text-sm"><span class="font-semibold">Todavía no hay paquetes.</span> <span class="text-neutral">Arma el primero con las materias de 1.º y, si hace falta, alguna de 2.º; luego di cuántos abre {{ $count > 1 ? 'cada campus' : 'el campus' }}.</span></p>
             @if ($packagesManageable && $packages->firstSemester !== [])
-                <x-button label="Armar paquete con las materias de 1.º" icon="o-rectangle-group" class="btn-sm btn-primary max-md:min-h-11 max-md:w-full" wire:click="newPackage(true)" spinner="newPackage" data-opener data-testid="packages-first" />
+                <x-button label="Armar paquete con las materias de 1.º" icon="o-rectangle-group" class="btn-sm btn-outline max-md:min-h-11 max-md:w-full" wire:click="newPackage(true)" spinner="newPackage" data-opener data-testid="packages-first" />
             @endif
         </div>
     @else

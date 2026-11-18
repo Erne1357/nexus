@@ -31,17 +31,20 @@
                     {{-- De toda la lente, sin el filtro de departamento: lo que filtra se dice en las cifras. --}}
                     <span data-testid="demand-scope">{{ $lensSubjects }} {{ $lensSubjects === 1 ? 'materia' : 'materias' }} {{ $board->isCareerLens() ? 'de '.$lensDepartments.' '.($lensDepartments === 1 ? 'departamento' : 'departamentos') : 'en '.count($board->careers).' '.(count($board->careers) === 1 ? 'carrera' : 'carreras') }}</span>
                 </p>
-                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="demand-run">
-                    <x-icon name="o-sparkles" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    @if ($board->computedAt)
-                        <span>Proyección del {{ $board->computedAt->setTimezone(config('app.timezone'))->format('d/m/Y') }} a las {{ $board->computedAt->setTimezone(config('app.timezone'))->format('G:i') }}</span>
-                    @else
-                        <span>Todavía no hay proyección</span>
-                    @endif
-                    <span aria-hidden="true">·</span>
-                    <span>Propuestas enviadas: <b class="font-semibold text-base-content"><span class="font-mono">{{ $board->sentCareers() }}</span> de <span class="font-mono">{{ count($board->careers) }}</span></b> {{ count($board->careers) === 1 ? 'carrera' : 'carreras' }}</span>
-                    <span aria-hidden="true">·</span>
-                    <span>Resalta lo que se aparta {{ $board->settings->highlightThreshold }} % o más</span>
+                {{-- Debajo de 1200 px, un dato por renglón y sin «·», que quedaría suelto al final de un renglón. --}}
+                <p class="mt-1 flex items-start gap-x-2 text-sm text-neutral" data-testid="demand-run">
+                    <x-icon name="o-sparkles" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span class="flex min-w-0 flex-wrap gap-x-2 gap-y-0.5">
+                        @if ($board->computedAt)
+                            <span class="max-desktop:basis-full">Proyección del {{ $board->computedAt->setTimezone(config('app.timezone'))->format('d/m/Y') }} a las {{ $board->computedAt->setTimezone(config('app.timezone'))->format('G:i') }}</span>
+                        @else
+                            <span class="max-desktop:basis-full">Todavía no hay proyección</span>
+                        @endif
+                        <span aria-hidden="true" class="max-desktop:hidden">·</span>
+                        <span class="max-desktop:basis-full">Propuestas enviadas: <b class="font-semibold text-base-content"><span class="font-mono">{{ $board->sentCareers() }}</span> de <span class="font-mono">{{ count($board->careers) }}</span></b> {{ count($board->careers) === 1 ? 'carrera' : 'carreras' }}</span>
+                        <span aria-hidden="true" class="max-desktop:hidden">·</span>
+                        <span class="max-desktop:basis-full">Resalta lo que se aparta {{ $board->settings->highlightThreshold }} % o más</span>
+                    </span>
                 </p>
             @endif
         </div>

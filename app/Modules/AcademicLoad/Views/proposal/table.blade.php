@@ -15,7 +15,8 @@
     la tabla ancha es solo visual (`aria-hidden`), cada cifra de solo lectura y cada «Posibles» dice su campo y su campus
     para lectores de pantalla. La columna de solo lectura va en `secondary/40`, que se distingue en claro y en oscuro.
 
-    Si toda la propuesta está bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta sobre la tabla; por
+    Si toda la propuesta está bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta que la página pone sobre
+    los paquetes y la tabla, porque los paquetes también quedan bloqueados; por
     renglón solo lo que es distinto («CB ya aceptó su parte»). El renglón se pinta por el estado de la parte de su
     departamento (regresada, aceptada o pendiente) y lleva su icono; las anomalías van con icono y texto, con el campus
     de la fila. El filtro de grupos («Con grupos», «Sin grupos») deja solo sus renglones. Con un departamento elegido,
@@ -37,10 +38,6 @@
     };
 @endphp
 <div @class(['@container space-y-3', $maxWidth]) data-testid="proposal-table" data-table-width>
-    @if ($generalLock)
-        <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock->message('')" data-testid="table-lock" />
-    @endif
-
     {{-- Ancho: las columnas de cada campus lado a lado. --}}
     <div class="{{ $wide }}">
         <div class="sticky top-(--shell-top) z-10 grid items-end gap-x-3 rounded-t-box border border-base-300 bg-base-100 px-4 py-2" style="grid-template-columns: {{ $template }}" aria-hidden="true">

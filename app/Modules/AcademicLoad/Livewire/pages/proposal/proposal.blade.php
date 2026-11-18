@@ -81,27 +81,24 @@
                         <x-icon name="o-users" class="h-4 w-4 shrink-0" aria-hidden="true" />
                         <span>{{ count($coordinators) > 1 ? 'Coordinan:' : 'Coordina:' }}</span>
                         @foreach ($coordinators as $coordinator)
-                            <span class="inline-flex items-center gap-1.5">
+                            {{-- «(tú)» y lo que cubre van en el mismo texto que el nombre: al partirse no quedan sueltos. --}}
+                            <span class="inline-flex items-start gap-1.5">
                                 <x-academic-load::campus-tag :campus="$coordinator['campusKey'] === null ? null : $columns[$coordinator['campusKey']]['campus']" />
-                                <span class="text-base-content">{{ $coordinator['name'] }}</span>
-                                @if ($coordinator['me'])<span>(tú)</span>@endif
-                                @if ($coordinator['covers'])<span>· {{ $coordinator['covers'] }}</span>@endif
+                                <span><span class="text-base-content">{{ $coordinator['name'] }}</span>@if ($coordinator['me']) (tú)@endif @if ($coordinator['covers'])· {{ $coordinator['covers'] }}@endif</span>
                             </span>
-                            @if (! $loop->last)<span aria-hidden="true">·</span>@endif
+                            {{-- En el celular cada coordinador ya va en su renglón: el «·» quedaría solo. --}}
+                            @if (! $loop->last)<span aria-hidden="true" class="max-sm:hidden">·</span>@endif
                         @endforeach
                     </p>
                 @endif
-                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="forecast-line">
-                    <x-icon name="o-sparkles" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{{ $forecastLine }}</span>
+                <p class="mt-1 flex items-start gap-x-2 text-sm text-neutral" data-testid="forecast-line">
+                    <x-icon name="o-sparkles" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0">{{ $forecastLine }}</span>
                 </p>
                 @if ($sent)
-                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="proposal-sent">
-                        <x-icon name="o-paper-airplane" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                        <span>Enviada por <span class="font-medium text-base-content">{{ $sent['name'] }}</span>@if ($sent['campus']) ({{ $sent['campus'] }})@endif el {{ $sent['at'] }}</span>
-                        @if ($sent['returned'])
-                            <span aria-hidden="true">·</span><span>{{ $sent['returned'] }}</span>
-                        @endif
+                    <p class="mt-1 flex items-start gap-x-2 text-sm text-neutral" data-testid="proposal-sent">
+                        <x-icon name="o-paper-airplane" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span class="min-w-0">Enviada por <span class="font-medium text-base-content">{{ $sent['name'] }}</span>@if ($sent['campus']) ({{ $sent['campus'] }})@endif el {{ $sent['at'] }}@if ($sent['returned']) · {{ $sent['returned'] }}@endif</span>
                     </p>
                 @endif
             </div>
@@ -124,8 +121,12 @@
         </div>
 
         @if ($scopeNote)
-            <x-alert icon="o-lock-closed" class="alert-info alert-soft text-sm" data-testid="proposal-scope">
-                <span>Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados, los grupos y los paquetes de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</span>
+            {{-- En el celular, una línea y «Más» con el detalle (decidido el 17 de noviembre de 2026). --}}
+            <x-alert icon="o-lock-closed" class="alert-info alert-soft min-h-0 items-center py-1.5 text-sm" data-testid="proposal-scope">
+                <div x-data="{ more: false }" class="min-w-0">
+                    <p x-show="! more" class="md:hidden">Cambias lo de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. <button type="button" class="link font-medium" x-on:click="more = true" aria-expanded="false" data-testid="proposal-scope-more">Más</button></p>
+                    <p x-bind:class="{ 'max-md:hidden': ! more }" class="max-md:hidden">Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados, los grupos y los paquetes de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</p>
+                </div>
             </x-alert>
         @endif
 
@@ -161,7 +162,8 @@
         @endif
 
         @if ($recalculated > 0)
-            <x-alert icon="o-arrow-path" class="alert-info alert-soft min-h-0 items-center gap-x-2 py-1.5 text-sm" data-testid="recalc-alert">
+            {{-- En el celular, «Revisar proyección» baja debajo del texto en vez de angostarlo. --}}
+            <x-alert icon="o-arrow-path" class="alert-info alert-soft min-h-0 items-center gap-x-2 py-1.5 text-sm max-sm:grid-flow-row max-sm:grid-cols-[auto_1fr] max-sm:gap-y-1 max-sm:[&>:last-child]:col-start-2" data-testid="recalc-alert">
                 <span>La proyección se recalculó el {{ $projection->computedAtText((string) config('app.timezone')) }}; lo sugerido se actualizó solo; en <span class="font-semibold">{{ $recalculated }} {{ $recalculated === 1 ? 'materia que corregiste' : 'materias que corregiste' }}</span> ahora sugiere otra cosa.</span>
                 <x-slot:actions>
                     <x-button label="Revisar proyección" class="btn-xs btn-ghost" wire:click="setView('revisar')" data-testid="recalc-review" />
@@ -172,11 +174,11 @@
         @if ($projection->hasForecast())
             <div role="tablist" aria-label="Propuesta y proyección" class="tabs tabs-border flex-nowrap overflow-x-auto" data-testid="forecast-tabs">
                 <button type="button" role="tab" id="tab-proposal" aria-controls="proposal-panel" aria-selected="{{ $view !== 'revisar' ? 'true' : 'false' }}" wire:click="showProposal" data-testid="tab-proposal"
-                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view !== 'revisar'])>
+                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view !== 'revisar', 'text-neutral!' => $view === 'revisar'])>
                     <x-icon name="o-table-cells" class="h-4 w-4" aria-hidden="true" />Propuesta
                 </button>
                 <button type="button" role="tab" id="tab-review" aria-controls="proposal-panel" aria-selected="{{ $view === 'revisar' ? 'true' : 'false' }}" wire:click="setView('revisar')" data-testid="tab-review"
-                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view === 'revisar'])>
+                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view === 'revisar', 'text-neutral!' => $view !== 'revisar'])>
                     <x-icon name="o-sparkles" class="h-4 w-4" aria-hidden="true" />Revisar proyección
                     @if ($reviewCounts[''] > 0)
                         <span class="badge badge-info badge-soft badge-sm font-mono" data-testid="review-count">{{ $reviewCounts[''] }}</span>
@@ -190,13 +192,14 @@
                 @include('academic-load::proposal.review')
             @else
                 <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-                    <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <div role="group" aria-label="Vista" class="join">
                             <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
                                 @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
                             <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
                                 @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
                         </div>
+                        <span class="h-6 border-s border-base-300" aria-hidden="true"></span>
                         <div role="group" aria-label="Materias" class="join" data-testid="groups-filter">
                             @foreach (['' => 'Todas', 'con' => 'Con grupos', 'sin' => 'Sin grupos'] as $filter => $filterLabel)
                                 <button type="button" wire:click="filterGroups('{{ $filter }}')" aria-pressed="{{ $groupsFilter === $filter ? 'true' : 'false' }}" data-testid="filter-{{ $filter === '' ? 'todas' : $filter }}"
@@ -219,6 +222,10 @@
                     @include('academic-load::proposal.departments')
 
                     <div class="min-w-0 space-y-4">
+                        {{-- Arriba de los paquetes, que también quedan bloqueados (decidido el 17 de noviembre de 2026). --}}
+                        @if ($view === 'tabla' && $generalLock)
+                            <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock->message('')" data-testid="table-lock" />
+                        @endif
                         @if ($packages?->shown())
                             @include('academic-load::proposal.packages')
                         @endif
@@ -241,13 +248,13 @@
             </x-modal>
         @endif
 
-        <x-drawer wire:model.live="showPackage" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="package-drawer-title" data-testid="package-drawer">
+        <x-drawer wire:model.live="showPackage" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="package-drawer-title" data-testid="package-drawer">
             @if ($showPackage)
                 @include('academic-load::proposal.package-panel')
             @endif
         </x-drawer>
 
-        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
+        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
             @if ($selected !== null)
                 @include('academic-load::proposal.item-panel', ['row' => $selected])
             @endif

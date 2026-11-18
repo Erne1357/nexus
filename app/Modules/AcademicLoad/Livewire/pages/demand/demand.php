@@ -220,6 +220,7 @@ new #[Title('Demanda por materia')] class extends Component
             'lensDepartments' => count($board->departments()),
             'figures' => $shown->figures(),
             'visible' => $visible,
+            'columns' => $shown->columnsFor($visible, $campusId),
             'footer' => $shown->footer($visible, $campusId),
             'filterCounts' => $shown->filterCounts($campusId),
             'campusId' => $campusId,

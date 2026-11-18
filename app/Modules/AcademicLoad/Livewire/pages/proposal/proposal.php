@@ -37,6 +37,7 @@ use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Support\SemesterGrid;
+use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Support\Collection;
@@ -508,7 +509,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         $expected = max(0, (int) ($this->form[$item->id]['expected_students'] ?? $item->expected_students));
         $this->form[$item->id] = [
             'expected_students' => $this->form[$item->id]['expected_students'] ?? $item->expected_students,
-            'requested_groups' => $this->suggestedRowGroups($item, $expected, (bool) $item->subject->needs_lab, SuggestedGroups::fromSettings(), $forecasts->intakes($proposal)),
+            'requested_groups' => $this->suggestedRowGroups($item, $expected, (bool) $item->subject->needs_lab, SuggestedGroups::fromSettings(), $forecasts->intakes($proposal),
+                ProposalForecastQuery::methodFor($item, $forecasts->currentFor($proposal, $item))),
             'notes' => (string) ($this->form[$item->id]['notes'] ?? $item->notes),
         ];
     }
@@ -841,6 +843,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $highlight = $this->highlight($gridSemesters, $chains, $departments);
         $packageBlock = $this->view !== 'revisar' || $this->showPackage ? $packages->forOverview($overview, $settings->groupSizes->defaultSize) : null;
         $panelNewStudents = $selected === null ? [] : $forecasts->intakes($proposal);
+        $panelMethods = $this->panelMethods($selected, $projection);
 
         return [
             ...$this->modalityViewData(),
@@ -861,8 +864,9 @@ new #[Title('Propuesta de carrera')] class extends Component
             'majority' => $walk['majority'],
             'submitReason' => $this->submitReason($overview),
             'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
-            'suggested' => $this->suggested($selected, $rule, $panelNewStudents),
+            'suggested' => $this->suggested($selected, $rule, $panelNewStudents, $panelMethods),
             'panelNewStudents' => $panelNewStudents,
+            'panelMethods' => $panelMethods,
             'canSubmit' => Gate::allows('submit', $proposal),
             'submitNotice' => $this->showSubmit ? $header->submitNotice($viewerId) : null,
             'gridSemesters' => $gridSemesters,
@@ -1313,9 +1317,10 @@ new #[Title('Propuesta de carrera')] class extends Component
      * `$suggestedSize`, el tamaño objetivo de la materia; con paquetes, también los de paquetes y el nuevo ingreso.
      *
      * @param  array<string, int>  $newStudents
+     * @param  array<string, ?ForecastMethod>  $methods  el método vigente de cada fila (panelMethods())
      * @return array<string, int>
      */
-    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule, array $newStudents): array
+    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule, array $newStudents, array $methods): array
     {
         if ($selected === null) {
             return [];
@@ -1325,7 +1330,8 @@ new #[Title('Propuesta de carrera')] class extends Component
 
         foreach ($selected->items() as $item) {
             if (isset($this->form[$item->id])) {
-                $suggested[$item->id] = $this->suggestedRowGroups($item, max(0, (int) ($this->form[$item->id]['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab, $rule, $newStudents);
+                $suggested[$item->id] = $this->suggestedRowGroups($item, max(0, (int) ($this->form[$item->id]['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab, $rule, $newStudents,
+                    $methods[$item->id]);
             }
         }
 
@@ -1333,14 +1339,37 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
+     * El método vigente de cada fila de la materia abierta en el panel, por id de fila (ProposalForecastQuery::methodFor, con
+     * la fila de la proyección que ya leyó la revisión): con él se calcula «Usar sugerido» en el servidor y en el navegador,
+     * igual que el estado de la fila.
+     *
+     * @return array<string, ?ForecastMethod>
+     */
+    private function panelMethods(?ProposalSubject $selected, ProposalForecastReview $projection): array
+    {
+        if ($selected === null) {
+            return [];
+        }
+
+        $methods = [];
+
+        foreach ($selected->items() as $item) {
+            $methods[$item->id] = ProposalForecastQuery::methodFor($item, $projection->row($item)?->forecast);
+        }
+
+        return $methods;
+    }
+
+    /**
      * Los grupos sugeridos de una fila para unos esperados: sin paquetes, los de la regla; con paquetes, los de paquetes
      * más los sueltos sugeridos, restando el nuevo ingreso de su campus si la fila es de primer semestre (SuggestedRowGroups).
+     * `$method` es el vigente de la fila (ProposalForecastQuery::methodFor), no el que guardó.
      *
      * @param  array<string, int>  $newStudents  el nuevo ingreso por llave de columna (ProposalForecastQuery::intakes)
      */
-    private function suggestedRowGroups(ProposalItem $item, int $expected, bool $needsLab, SuggestedGroups $rule, array $newStudents): int
+    private function suggestedRowGroups(ProposalItem $item, int $expected, bool $needsLab, SuggestedGroups $rule, array $newStudents, ?ForecastMethod $method): int
     {
-        return SuggestedRowGroups::for($rule->for($expected, $needsLab), $expected, $item->package_groups, $item->forecast_method, $newStudents[$item->campus_id ?? ''] ?? 0, $needsLab, $rule);
+        return SuggestedRowGroups::for($rule->for($expected, $needsLab), $expected, $item->package_groups, $method, $newStudents[$item->campus_id ?? ''] ?? 0, $needsLab, $rule);
     }
 
     /**

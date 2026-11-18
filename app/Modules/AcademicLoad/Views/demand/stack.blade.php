@@ -1,10 +1,10 @@
 {{--
-    Debajo de 768 px, la matriz de «Demanda por materia» en renglones apilados (maqueta C a 390 px): por materia, su
+    Debajo de 1024 px, la matriz de «Demanda por materia» en renglones apilados (maqueta C a 390 px): por materia, su
     clave y su total de todo el Tec con el reparto por campus, el nombre y una etiqueta por cada carrera que la lleva en
     el campus del filtro, con su celda (resaltada o punteada como en la matriz). Cada renglón abre el drawer.
 --}}
 @php($lensId = $board->career?->getKey())
-<ul class="divide-y divide-base-300 md:hidden" data-testid="demand-cards">
+<ul class="divide-y divide-base-300 lg:hidden" data-testid="demand-cards">
     @foreach ($visible as $row)
         @php($subject = $row->subject)
         @php($total = $row->total($campusId))
@@ -34,7 +34,7 @@
                             <span @class([
                                 'inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[13px]',
                                 'border-warning/40 bg-warning/12 text-warning' => $cell->large,
-                                'border-dashed border-base-content/35 text-neutral' => $cell->pending,
+                                'border-dashed border-base-content/20 text-neutral' => $cell->pending,
                                 'border-base-300' => ! $cell->large && ! $cell->pending,
                                 'bg-info/8' => $column['career']->getKey() === $lensId && ! $cell->large,
                             ])><span class="font-mono text-xs font-bold text-base-content" aria-hidden="true">{{ $column['career']->code }}</span>@include('academic-load::demand.cell', ['cell' => $cell, 'label' => $column['career']->code, 'bare' => true])</span>
