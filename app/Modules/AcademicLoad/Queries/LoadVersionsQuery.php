@@ -2,33 +2,65 @@
 
 namespace App\Modules\AcademicLoad\Queries;
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Rules\SnapshotDiff;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Las versiones publicadas de una carga, para la línea de versiones del componente de publicar (tarea 4.3, DESIGN.md
- * «Publicación»): cuándo, quién, con qué comentario y cuántos grupos y sesiones tenía cada una, y lo que cambió una
- * versión contra la anterior. Lee solo `load_snapshots` y `load_transitions`: los conteos salen del payload en SQL,
- * sin traer las fotos; las dos fotos se leen solo para comparar una versión.
+ * «Publicación») y el tablero de versiones (8.10): cuándo, quién, con qué comentario, de dónde salió (`reason`), cuántos
+ * grupos y sesiones tenía cada una y el resumen de lo que cambió contra la anterior, y el diff completo de una versión.
+ * Lee solo `load_snapshots` y `load_transitions`: los conteos y el resumen salen en SQL, sin traer las fotos. El diff es el
+ * guardado al publicar (tarea 8.4); el de una versión publicada antes de esa tarea se calcula al leerlo con las dos fotos.
+ * Para el tablero da también las cargas con versiones que el usuario ve (loadsWithVersions()) y el nombre de las carreras
+ * del diff.
  */
 final class LoadVersionsQuery
 {
     /**
-     * De la primera a la última. El comentario es el de la transición a publicada de esa versión (la N-ésima).
+     * De la primera a la última. El comentario es el de la transición a publicada de esa versión (la N-ésima; la de cancelar
+     * un re-análisis, `reanalysis` → `published`, no crea versión y no cuenta, RA-10); `reopened`,
+     * desde la 2, la transición con que la carga salió de publicada después de la versión anterior (la reapertura a ajustes
+     * con su motivo, o el inicio del re-análisis), con quién y cuándo. `teachers` cuenta los docentes distintos de la foto.
+     * `reason` y `summary` (el resumen del diff guardado, SnapshotDiff) son nulos en las versiones publicadas antes de la
+     * tarea 8.4, y `summary` también en la versión 1.
      *
-     * @return list<array{version: int, publishedAt: CarbonImmutable, publisher: string, comment: ?string, groups: int, sessions: int}>
+     * @return list<array{version: int, publishedAt: CarbonImmutable, publisher: string, comment: ?string, reopened: ?array{to: LoadStatus, by: string, at: CarbonImmutable, comment: ?string}, groups: int, sessions: int, teachers: int, reason: ?SnapshotReason, summary: ?array<string, int>}>
      */
     public function versions(AcademicLoad $load): array
     {
-        $comments = $load->transitions()
-            ->where('to_status', LoadStatus::Published->value)
-            ->orderBy('created_at')->orderBy('id')
-            ->pluck('comment')
-            ->all();
+        $comments = [];
+        $reopened = [];
+
+        foreach ($load->transitions()
+            ->join('users', 'users.id', '=', 'load_transitions.user_id')
+            ->orderBy('load_transitions.created_at')->orderBy('load_transitions.id')
+            ->get(['load_transitions.from_status', 'load_transitions.to_status', 'load_transitions.comment', 'load_transitions.created_at', 'users.name as user_name']) as $transition) {
+            if ($transition->to_status === LoadStatus::Published && $transition->from_status === LoadStatus::Reanalysis) {
+                unset($reopened[count($comments) + 1]);
+            } elseif ($transition->to_status === LoadStatus::Published) {
+                $comments[] = $transition->comment;
+            } elseif ($transition->from_status === LoadStatus::Published && $comments !== []) {
+                $reopened[count($comments) + 1] ??= [
+                    'to' => $transition->to_status,
+                    'by' => (string) $transition->getAttribute('user_name'),
+                    'at' => $transition->created_at->toImmutable(),
+                    'comment' => $transition->comment,
+                ];
+            }
+        }
 
         return LoadSnapshot::query()
             ->where('academic_load_id', $load->getKey())
@@ -37,53 +69,148 @@ final class LoadVersionsQuery
             ->get([
                 'load_snapshots.version',
                 'load_snapshots.created_at',
+                'load_snapshots.reason',
+                DB::raw("load_snapshots.diff->'summary' as diff_summary"),
                 'users.name as publisher',
                 DB::raw("jsonb_array_length(load_snapshots.payload->'groups') as groups_count"),
                 DB::raw("(select coalesce(sum(jsonb_array_length(g->'sessions')), 0) from jsonb_array_elements(load_snapshots.payload->'groups') g) as sessions_count"),
+                DB::raw("(select count(distinct g->'teacher'->>'id') from jsonb_array_elements(load_snapshots.payload->'groups') g) as teachers_count"),
             ])
             ->map(fn (LoadSnapshot $row): array => [
                 'version' => $row->version,
                 'publishedAt' => $row->created_at,
                 'publisher' => $row->publisher,
                 'comment' => $comments[$row->version - 1] ?? null,
+                'reopened' => $reopened[$row->version] ?? null,
                 'groups' => (int) $row->groups_count,
                 'sessions' => (int) $row->sessions_count,
+                'teachers' => (int) $row->teachers_count,
+                'reason' => $row->reason,
+                'summary' => $row->diff_summary === null ? null : json_decode($row->diff_summary, true),
             ])
             ->all();
     }
 
     /**
-     * Lo que cambió la versión contra la anterior, por grupo (`groups.id`): grupos que entraron y salieron, grupos con
-     * otro docente y grupos con otro salón en alguna sesión. Null en la primera versión o si no existe.
+     * Lo que cambió la versión contra la anterior, con la forma de SnapshotDiff: el guardado al publicarla o, si es de
+     * antes de la tarea 8.4, calculado con las dos fotos y el departamento de cada carrera de hoy. Null en la primera
+     * versión, si no existe o si falta la anterior.
      *
-     * @return array{added: int, removed: int, teachers: int, rooms: int}|null
+     * @return array<string, mixed>|null
      */
-    public function changes(AcademicLoad $load, int $version): ?array
+    public function diff(AcademicLoad $load, int $version): ?array
     {
         if ($version < 2) {
             return null;
         }
 
-        $payloads = LoadSnapshot::query()
-            ->where('academic_load_id', $load->getKey())
-            ->whereIn('version', [$version - 1, $version])
-            ->pluck('payload', 'version')
-            ->map(fn (array $payload): array => SnapshotPayload::normalize($payload));
+        $stored = LoadSnapshot::query()->where('academic_load_id', $load->getKey())->where('version', $version)->first(['id', 'diff']);
 
-        if ($payloads->count() < 2) {
+        if ($stored?->diff !== null) {
+            return $stored->diff;
+        }
+
+        if ($stored === null) {
             return null;
         }
 
-        $before = collect($payloads[$version - 1]['groups'])->keyBy('id');
-        $after = collect($payloads[$version]['groups'])->keyBy('id');
-        $kept = $after->keys()->intersect($before->keys());
-        $rooms = fn (array $group): array => array_map(fn (array $session): ?string => $session['room']['id'] ?? null, $group['sessions']);
+        // Las fotos no cambian (trigger de la base): el diff calculado de una versión de antes de la tarea 8.4 se guarda
+        // por el id de su foto, para no sacar las dos cargas útiles en cada render.
+        return Cache::rememberForever("load_snapshot_diff:{$stored->getKey()}", function () use ($load, $version): ?array {
+            $payloads = LoadSnapshot::query()
+                ->where('academic_load_id', $load->getKey())
+                ->whereIn('version', [$version - 1, $version])
+                ->pluck('payload', 'version');
+
+            if ($payloads->count() < 2) {
+                return null;
+            }
+
+            $before = SnapshotPayload::normalize($payloads[$version - 1]);
+            $after = SnapshotPayload::normalize($payloads[$version]);
+            $departments = Career::withTrashed()->whereKey(SnapshotDiff::careerIds($before, $after))->pluck('department_id', 'id')->all();
+
+            return SnapshotDiff::between($before, $after, $departments);
+        });
+    }
+
+    /**
+     * Las cifras de la línea de versiones (diff()): grupos que entraron y salieron, grupos con otro docente y grupos con
+     * otro salón en alguna sesión. Null en la primera versión o si no existe.
+     *
+     * @return array{added: int, removed: int, teachers: int, rooms: int}|null
+     */
+    public function changes(AcademicLoad $load, int $version): ?array
+    {
+        $diff = $this->diff($load, $version);
+
+        if ($diff === null) {
+            return null;
+        }
+
+        $changed = collect($diff['groups']['changed']);
 
         return [
-            'added' => $after->keys()->diff($before->keys())->count(),
-            'removed' => $before->keys()->diff($after->keys())->count(),
-            'teachers' => $kept->filter(fn (string $id): bool => ($before[$id]['teacher']['id'] ?? null) !== ($after[$id]['teacher']['id'] ?? null))->count(),
-            'rooms' => $kept->filter(fn (string $id): bool => $rooms($before[$id]) !== $rooms($after[$id]))->count(),
+            'added' => count($diff['groups']['added']),
+            'removed' => count($diff['groups']['cancelled']),
+            'teachers' => $changed->filter(fn (array $entry): bool => array_key_exists('teacher', $entry['changes']))->count(),
+            'rooms' => $changed->filter(fn (array $entry): bool => array_key_exists('room', $entry['changes']))->count(),
         ];
+    }
+
+    /**
+     * Las versiones para el tablero de versiones (tarea 8.10): las de versions(), de la primera a la última, con el motivo
+     * siempre dicho y el resumen de lo que cambió también en las publicadas antes de la tarea 8.4 (`legacy`): su motivo se
+     * deduce (SnapshotReason::inferredFor()) y su resumen se calcula con diff(). Esas no avisaron a nadie: los avisos de
+     * la republicación son de la misma tarea.
+     *
+     * @return list<array{version: int, publishedAt: CarbonImmutable, publisher: string, comment: ?string, reopened: ?array{to: LoadStatus, by: string, at: CarbonImmutable, comment: ?string}, groups: int, sessions: int, teachers: int, reason: SnapshotReason, legacy: bool, summary: ?array<string, int>}>
+     */
+    public function board(AcademicLoad $load): array
+    {
+        return array_map(function (array $version) use ($load): array {
+            $legacy = $version['reason'] === null;
+
+            return [
+                ...$version,
+                'reason' => $version['reason'] ?? SnapshotReason::inferredFor($version['version'], $version['reopened']['to'] ?? null),
+                'legacy' => $legacy,
+                'summary' => $version['summary'] ?? ($legacy && $version['version'] > 1 ? ($this->diff($load, $version['version'])['summary'] ?? null) : null),
+            ];
+        }, $this->versions($load));
+    }
+
+    /**
+     * Las cargas del periodo en la modalidad que ya tienen alguna versión publicada y que el usuario ve
+     * (`academic_load.load.view` sobre su modalidad y su departamento), por clave del departamento, con el departamento
+     * (aunque esté borrado), la modalidad y el periodo: las que ofrece el tablero de versiones.
+     *
+     * @return Collection<int, AcademicLoad>
+     */
+    public function loadsWithVersions(Actor $actor, Term $term, Modality $modality): Collection
+    {
+        return $actor->constrain(AcademicLoad::query()
+            ->where('academic_loads.term_id', $term->getKey())
+            ->where('academic_loads.modality_id', $modality->getKey())
+            ->where('academic_loads.current_version', '>', 0), AcademicLoadPermission::LoadView, [
+                'modality' => 'academic_loads.modality_id',
+                'unit' => 'academic_loads.department_id',
+            ])
+            ->join('departments', 'departments.id', '=', 'academic_loads.department_id')
+            ->orderBy('departments.code')
+            ->select('academic_loads.*')
+            ->with(['department' => fn ($query) => $query->withTrashed(), 'modality', 'term'])
+            ->get();
+    }
+
+    /**
+     * El nombre de cada carrera, por id (también las borradas): las del diff solo traen su clave.
+     *
+     * @param  list<string>  $ids
+     * @return array<string, string>
+     */
+    public function careerNames(array $ids): array
+    {
+        return $ids === [] ? [] : Career::withTrashed()->whereKey($ids)->pluck('name', 'id')->all();
     }
 }

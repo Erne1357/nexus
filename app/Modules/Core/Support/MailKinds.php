@@ -16,6 +16,7 @@ final class MailKinds
         'PasswordResetLink' => 'Restablecer contraseña',
         'UserEmailChanged' => 'Aviso de cambio de correo',
         'CatalogReviewsPending' => 'Validación de catálogos pendiente',
+        'LoadRepublished' => 'Carga republicada',
     ];
 
     public static function knows(string $kind): bool

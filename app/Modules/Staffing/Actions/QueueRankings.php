@@ -31,7 +31,7 @@ final class QueueRankings
      *
      * @var list<LoadStatus>
      */
-    public const array OPEN_STATUSES = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
+    public const array OPEN_STATUSES = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis];
 
     public function forScope(string $termId, string $modalityId, string $departmentId): void
     {

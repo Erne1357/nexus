@@ -42,6 +42,7 @@ use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\ReanalysisChangesDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\GroupStatus;
@@ -69,6 +70,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Scheduling\Policies\ParallelsPolicy;
 use App\Modules\Scheduling\Queries\Parallels;
+use App\Modules\Scheduling\Queries\ReanalysisLoadsQuery;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Database\Eloquent\Builder;
@@ -148,6 +150,8 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
     /**
      * «Horarios», el editor de horarios (tarea 3.5), y «Choques y avance», el tablero (3.4), para quien ve los horarios.
+     * «Re-análisis de la carga» (tarea 8.2, pantalla) en «Cierre y publicación», para quien ve la carga o la propuesta de
+     * una carrera (RA-07), mientras el periodo tenga alguna carga publicada (ReanalysisLoadsQuery::menuCondition).
      *
      * @return list<NavigationItem>
      */
@@ -163,6 +167,10 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
             new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
+            // Después de «Cierre de la carga» y «Avance del cierre» (Staffing, orden 0) y antes de «Horarios publicados» (orden 2).
+            new NavigationItem('Re-análisis de la carga', 'scheduling.reanalysis', 'o-arrow-path', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
+                whyUnavailable: ReanalysisLoadsQuery::menuCondition(),
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
     }
 
@@ -260,6 +268,11 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 'term' => $demo->termCode,
                 'seed' => $demo->seed,
                 'mode' => 'rooms',
+            ])),
+            // Los casos del re-análisis (fase 8, #614): después de que AcademicLoad inicia los re-análisis, el jefe ajusta las
+            // cargas cuyo caso cambia; Staffing cambia docentes, cierra y republica.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Ajustes del re-análisis: cupos ampliados, grupos abiertos y cerrados, sesiones movidas y salones cambiados', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisChangesDemoSeeder::class, [
+                'term' => $demo->termCode,
             ])),
         ];
     }

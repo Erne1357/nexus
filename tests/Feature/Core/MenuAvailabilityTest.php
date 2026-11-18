@@ -110,8 +110,9 @@ it('MN-04: la condición de la carga se consulta una vez por menú, aunque la de
     app(Actor::class)->activeTerm();
 
     $queries = 0;
+    // Solo la de la carga en curso (`status`): «Re-análisis de la carga» tiene su propia condición (cargas publicadas).
     DB::listen(function (QueryExecuted $query) use (&$queries): void {
-        if (str_contains($query->sql, 'academic_loads')) {
+        if (str_contains($query->sql, 'academic_loads') && str_contains($query->sql, '"status"')) {
             $queries++;
         }
     });

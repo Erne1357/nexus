@@ -3,9 +3,10 @@
 use Illuminate\Support\Facades\Route;
 
 /*
-| Rutas de Scheduling: el editor de horarios, el tablero de choques, los acuerdos entre departamentos y la pestaña
-| «Paralelos» de la bandeja del departamento (tarea 8.8). Quién entra lo decide la página (permisos de Scheduling,
-| InterdepartmentalAgreementPolicy o ParallelsPolicy) en mount() y en cada método, no la ruta.
+| Rutas de Scheduling: el editor de horarios, el tablero de choques, los acuerdos entre departamentos, el re-análisis
+| de la carga (tarea 8.2, pantalla) y la pestaña «Paralelos» de la bandeja del departamento (tarea 8.8). Quién entra
+| lo decide la página (permisos de Scheduling, InterdepartmentalAgreementPolicy o ParallelsPolicy) en mount() y en
+| cada método, no la ruta.
 */
 
 Route::middleware('auth')->prefix('scheduling')->name('scheduling.')->group(function () {
@@ -13,4 +14,5 @@ Route::middleware('auth')->prefix('scheduling')->name('scheduling.')->group(func
     Route::livewire('/conflicts', 'scheduling::pages.conflicts')->name('conflicts');
     Route::livewire('/agreements', 'scheduling::pages.agreements')->name('agreements');
     Route::livewire('/parallels', 'scheduling::pages.parallels')->name('parallels');
+    Route::livewire('/reanalysis', 'scheduling::pages.reanalysis')->name('reanalysis');
 });

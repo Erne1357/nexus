@@ -53,6 +53,23 @@ final class AcademicLoadPolicy
         return $this->can($user, AcademicLoadPermission::LoadReopen, $load);
     }
 
+    /**
+     * Iniciar el re-análisis: el jefe del departamento de la carga, en su modalidad (RA-01, confirmado el 17 de noviembre
+     * de 2026). Subdirección no lo inicia: ve la carga y la devuelve (`reopen`, RA-08).
+     */
+    public function startReanalysis(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartReanalysis, $load);
+    }
+
+    /**
+     * Cancelar el re-análisis sin cambios (RA-10): quien lo inicia, con el mismo permiso y alcance que `startReanalysis`.
+     */
+    public function cancelReanalysis(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartReanalysis, $load);
+    }
+
     public function approve(User $user, AcademicLoad $load): bool
     {
         return $this->can($user, AcademicLoadPermission::LoadApprove, $load);

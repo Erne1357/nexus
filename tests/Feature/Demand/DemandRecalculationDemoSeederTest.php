@@ -86,3 +86,20 @@ it('reparte aprobadas y reprobadas de forma repetible con la semilla', function 
     expect($counts)->toBe(['aprobada' => 4, 'reprobada' => 4])
         ->and(KardexRecord::query()->where('result', KardexResult::Cursando)->count())->toBe(0);
 });
+
+it('dice de antemano qué materias va a calificar, sin depender de la semilla', function () {
+    expect(DemandRecalculationDemoSeeder::subjectsToGrade('20271', 1))->toBe([$this->a->id])
+        ->and(DemandRecalculationDemoSeeder::subjectsToGrade('20271', 2))->toBe([$this->a->id, $this->c->id]);
+});
+
+it('con una parte capturada califica materias completas hasta llegarle y, si se le pide, no recalcula', function () {
+    expect(DemandRecalculationDemoSeeder::subjectsToCapture('20271', 0.5))->toBe([$this->a->id])
+        ->and(DemandRecalculationDemoSeeder::subjectsToCapture('20271', 0.85))->toBe([$this->a->id, $this->c->id]);
+
+    (new DemandRecalculationDemoSeeder)->run(term: '20271', failureShare: 0.0, capturedShare: 0.5, refresh: false);
+
+    expect(KardexRecord::query()->where('subject_id', $this->a->id)->where('term_code', '20263')->pluck('result')->unique()->all())->toEqual([KardexResult::Aprobada])
+        ->and(KardexRecord::query()->where('subject_id', $this->c->id)->where('result', KardexResult::Cursando)->count())->toBe(2)
+        ->and(lateGradesRow($this->b)->pending_prerequisite_students)->toBe(6)
+        ->and(DemandRecalculationDemoSeeder::subjectsToCapture('20271', 0.5))->toBe([]);
+});

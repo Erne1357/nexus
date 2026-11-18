@@ -121,10 +121,16 @@ it('rechaza si la carga no está en asignación ni ajustes y acepta en ajustes',
 
     $errors = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[0], $this->actor));
 
-    expect($errors['group'])->toBe(['La carga está en Propuesta: los docentes se asignan en Asignación o Ajustes.'])
+    expect($errors['group'])->toBe(['La carga está en Propuesta: los docentes se asignan en Asignación, Ajustes o Re-análisis.'])
         ->and($this->group->fresh()->teacher_id)->toBeNull();
 
     $this->load->update(['status' => LoadStatus::Adjusting]);
+
+    expect(assignTeacher($this->group, $this->teachers[0], $this->actor)->exists)->toBeTrue();
+});
+
+it('asigna docentes con la carga en re-análisis', function () {
+    $this->load->update(['status' => LoadStatus::Reanalysis]);
 
     expect(assignTeacher($this->group, $this->teachers[0], $this->actor)->exists)->toBeTrue();
 });

@@ -17,8 +17,9 @@ use PDOException;
 
 /**
  * La única regla de «grupo editable» del editor de horarios (3.5) y de los cupos (3.6): el grupo no está cancelado y
- * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en propuesta, asignación o
- * ajustes ("Aprobaciones y permisos"). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más
+ * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en propuesta, asignación,
+ * ajustes o re-análisis ("Aprobaciones y permisos"; en re-análisis, fase 8, tarea 8.1, la carga se edita con el validador
+ * como en ajustes y la última versión publicada sigue intacta y pública). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más
  * restrictivo).
  *
  * Orden de candados: las Actions toman la carga con lockLoad() (FOR SHARE) antes de bloquear el grupo (FOR UPDATE),
@@ -28,7 +29,7 @@ use PDOException;
 final class LoadEditability
 {
     /** @var list<LoadStatus> */
-    public const array EDITABLE = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
+    public const array EDITABLE = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis];
 
     private const string DEADLOCK = '40P01';
 

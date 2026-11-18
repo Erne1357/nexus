@@ -61,6 +61,7 @@ final class ActivityEvents
         'quotas_updated' => 'Cupos',
         'parallels_arranged' => 'Paralelos armados',
         'seats_changed' => 'Lugares cambiados',
+        'capacity_updated' => 'Capacidad del grupo',
         'session_placed' => 'Sesión acomodada',
         'session_updated' => 'Sesión cambiada',
         'session_removed' => 'Sesión quitada',

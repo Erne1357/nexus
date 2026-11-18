@@ -136,6 +136,7 @@ new class extends Component
                 : 'Publica Subdirección o el jefe del departamento.',
             $load->status === LoadStatus::Published => 'Ya está publicada. Para cambiarla, Subdirección la reabre.',
             $load->status === LoadStatus::Closed && $profile->requiresSubdireccionApproval => 'Primero va el visto bueno de Subdirección.',
+            $load->status === LoadStatus::Reanalysis => 'En re-análisis se cierra la carga para republicarla; si no cambió nada, se cancela el re-análisis.',
             ! $load->status->canTransitionTo(LoadStatus::Published, $profile) => 'Se publica cuando la carga está cerrada.',
             default => null,
         };
