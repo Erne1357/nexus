@@ -27,6 +27,18 @@ Sustituir la heurística por un motor de optimización real para los casos donde
 - Asignación automática de docentes como decisión: la salida puede sugerir docente, el jefe decide.
 - Exponer el servicio fuera de la red de Docker.
 
+## Punto de partida (17 de noviembre de 2026)
+
+Ajustes que trae la fase 6 y que cambian lo que dicen las tareas de abajo:
+
+- **El contrato es multi-campus.** Una corrida es la carga de un departamento en una modalidad, en todos sus campus: la entrada trae `campuses[]` (una rejilla por campus), cada grupo su `campus_code`, y el modelo tiene una rejilla de bloques por campus. Los modelos pydantic del servicio espejan los DTOs de `app/Modules/Solver/Contract/`.
+- **Cohortes en vez de «alumno tipo» calculado por el motor.** Quien arma la entrada pone `cohorts[]` en cada grupo (HC-03 por plan, semestre y campus, más los paquetes de primer semestre); el motor solo garantiza que los grupos con la misma clave no se empalmen. `current_sessions[]` permite marcar `changed` en la salida.
+- **SC-09, traslado entre campus.** Hay nueve reglas blandas, no ocho (`travel_minutes` en la entrada; `busy` de los docentes lleva su `campus_code`): el objetivo de 7.6 incluye SC-09.
+- **7.8, descomposición:** sigue el orden que sugiere `PlanRun`; el tronco común primero es una sugerencia, no se exige (`docs/arquitectura/solver.md`, «Descomposición del problema»). Lo que no es de la carga entra como `busy` o como grupos con `movable = false`.
+- **7.10, fixtures:** son `tiny`, `small`, `medium`, `infeasible` y `department-multicampus` (carga de un departamento con dos campus); el de tamaño real de Campus II corre fuera del CI de PR.
+- **7.11, motor predeterminado por modalidad:** la decisión se guarda en `solver.default_engine` por **modalidad** (ADR-0025), no por campus.
+- **Reparto del servicio:** 7.1 a 7.3 (esqueleto, compose y API) traen un **motor de prueba** (`services/solver/app/engine/trivial.py`, equivalente a `FixedEngine` de PHP) para que la API funcione de punta a punta y `CpSatEngine` (7.9) se construya contra ella; el modelo CP-SAT (7.4 a 7.7) viene de otro riel y se registra como motor cuando exista. La dependencia nueva está en [ADR-0027](../decisiones/0027-servicio-del-motor-en-python.md).
+
 ## Tareas
 
 | Id | Tarea | Módulo | Dónde y por qué | Pruebas | Persona |

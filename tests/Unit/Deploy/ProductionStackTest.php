@@ -25,7 +25,8 @@ it('fija por tag y digest toda imagen de terceros del stack de producción', fun
     foreach (deployServices($file) as $name => $service) {
         $image = $service['image'] ?? null;
 
-        if ($image === null || str_starts_with($image, '${APP_IMAGE')) {
+        // Las imágenes propias (la app y el servicio del motor, ADR-0027) se construyen del repositorio: no son de terceros.
+        if ($image === null || str_starts_with($image, '${APP_IMAGE') || str_starts_with($image, '${SOLVER_IMAGE')) {
             continue;
         }
 
