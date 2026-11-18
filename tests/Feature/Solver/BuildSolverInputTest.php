@@ -351,3 +351,9 @@ it('un grupo fuera de la corrida que usa un salón que un movible ya usa entra f
     expect($groups[$roomMate->id]->movable)->toBeFalse()
         ->and($groups[$roomMate->id]->fixedSessions)->toHaveCount(1);
 });
+
+it('los pesos blandos salen del parámetro solver.soft_weights, con SC-01 por la llave sc_01', function () {
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.soft_weights', 'value' => ['sc_01' => 0, 'sc_02' => 50]]);
+
+    expect(buildInputForDepartment()->input->softWeights->toArray())->toBe(['SC-01' => 0, 'SC-02' => 50, 'SC-03' => 5, 'SC-04' => 4, 'SC-05' => 3, 'SC-06' => 2, 'SC-07' => 3, 'SC-08' => 2, 'SC-09' => 2]);
+});

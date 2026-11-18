@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Solver\Enums\RunScope;
+use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Rules\SolverSettings;
 
 /*
@@ -25,4 +26,22 @@ it('declara el parámetro con los mismos valores de omisión que usa al leerlo',
 
     expect($definition->key)->toBe(SolverSettings::TIME_LIMITS_SETTING)
         ->and(SolverSettings::fromValue($definition->default))->toEqual(new SolverSettings);
+});
+
+it('sin parámetro los pesos blandos son los de la tabla SC y salen con la llave SC-01', function () {
+    expect(SolverSettings::fromValue(null, null)->softWeightsByRule())->toBe(['SC-01' => 10, 'SC-02' => 6, 'SC-03' => 5, 'SC-04' => 4, 'SC-05' => 3, 'SC-06' => 2, 'SC-07' => 3, 'SC-08' => 2, 'SC-09' => 2]);
+});
+
+it('lee los pesos guardados y usa el de omisión en los que faltan o no son enteros de 0 a 100', function () {
+    $settings = SolverSettings::fromValue(null, ['sc_01' => 0, 'sc_02' => 100, 'sc_03' => 101, 'sc_04' => -1, 'sc_05' => '7', 'sc_06' => 2.5, 'sc_09' => 20]);
+
+    expect($settings->softWeightsByRule())->toBe(['SC-01' => 0, 'SC-02' => 100, 'SC-03' => 5, 'SC-04' => 4, 'SC-05' => 3, 'SC-06' => 2, 'SC-07' => 3, 'SC-08' => 2, 'SC-09' => 20]);
+});
+
+it('declara los pesos blandos con un campo por regla, permiso de Subdirección y los mismos valores de omisión', function () {
+    $definition = collect(SolverSettings::definitions())->firstWhere('key', SolverSettings::SOFT_WEIGHTS_SETTING);
+
+    expect(array_keys($definition->fields))->toBe(array_keys(SolverSettings::DEFAULT_SOFT_WEIGHTS))
+        ->and($definition->permission)->toBe(SolverPermission::SettingUpdate)
+        ->and(SolverSettings::fromValue(null, $definition->default))->toEqual(new SolverSettings);
 });
