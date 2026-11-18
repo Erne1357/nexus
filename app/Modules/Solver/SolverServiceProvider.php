@@ -75,6 +75,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
             Role::Subdireccion->value => [
                 SolverPermission::DepartmentRunView,
                 SolverPermission::CareerRunView,
+                SolverPermission::SettingUpdate,
             ],
         ];
     }
