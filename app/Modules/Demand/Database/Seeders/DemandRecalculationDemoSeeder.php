@@ -28,21 +28,27 @@ final class DemandRecalculationDemoSeeder extends Seeder
         $subjectIds = KardexRecord::query()
             ->where('term_code', $inProgress)
             ->where('result', KardexResult::Cursando)
-            ->groupBy('subject_id')
+            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
+            ->groupBy('kardex_records.subject_id', 'subjects.code')
             ->orderByRaw('count(*) desc')
-            ->orderBy('subject_id')
+            ->orderBy('subjects.code')
             ->limit($subjects)
-            ->pluck('subject_id')
+            ->pluck('kardex_records.subject_id')
             ->all();
 
-        $rows = KardexRecord::query()
-            ->where('term_code', $inProgress)
-            ->where('result', KardexResult::Cursando)
-            ->whereIn('subject_id', $subjectIds)
-            ->pluck('id')
+        // Por claves de negocio (número de control y clave de materia), nunca por uuid: v7 cambia en cada corrida.
+        $keyed = KardexRecord::query()
+            ->join('students', 'students.id', '=', 'kardex_records.student_id')
+            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
+            ->where('kardex_records.term_code', $inProgress)
+            ->where('kardex_records.result', KardexResult::Cursando)
+            ->whereIn('kardex_records.subject_id', $subjectIds)
+            ->get(['kardex_records.id', 'students.control_number', 'subjects.code'])
+            ->mapWithKeys(fn (KardexRecord $row): array => [$row->id => $row->control_number.'|'.$row->code.'|'.$seed])
             ->all();
+        $rows = array_keys($keyed);
 
-        usort($rows, fn (string $a, string $b): int => [crc32($a.$seed), $a] <=> [crc32($b.$seed), $b]);
+        usort($rows, fn (string $a, string $b): int => [crc32($keyed[$a]), $keyed[$a]] <=> [crc32($keyed[$b]), $keyed[$b]]);
         $failed = array_slice($rows, 0, (int) round(count($rows) * $failureShare));
         $passed = array_slice($rows, count($failed));
 
