@@ -250,6 +250,54 @@ Tarea 6.7. `Engines/PhpHeuristic/LocalSearch` corre dentro del mismo motor, desp
 
 En `department-multicampus`, por regla (antes → después): SC-01 460 → 360 (−22 %), SC-05 5 709 → 5 217 (−9 %), SC-06 960 → 546 (−43 %), SC-04 16 784 → 16 708 (−0.5 %), SC-09 338 → 296, SC-07 36 → 21, SC-08 342 → 340, SC-02 120 → 120; SC-03 en cero (sin salones por defecto). Paró por convergencia tras 3 616 iteraciones (algo más de tres vueltas), muy dentro de los 300 s de la corrida de departamento. SC-04 casi no baja porque tiene poco margen: aun asignando a cada docente sus grupos a horas distintas sin ver salones, cohortes ni huecos, lo menos que puede dar con una hora por día a la misma hora es 15 272 (−9 % como mucho), y casi todas las horas preferidas que quedan libres le abren huecos al docente. Lo que impide cada mejora de SC-04 es el propio docente: sus otros grupos (HC-01) o su indisponibilidad (HC-09), no los salones. Un intercambio en cadena (el otro grupo a su mejor hora y no solo a la del primero) dio 23 617 con el doble de tiempo, así que no se dejó.
 
+## Modelo CP-SAT: variables y restricciones duras
+
+Tareas 7.4 y 7.5. El modelo vive en `services/solver/app/model/`: `pattern.py` (la rejilla y el patrón de sesiones, espejo de `Grid` y `SessionPattern` en PHP), `data.py` (la entrada indexada una vez: reglas activas, ocupación fija, bloqueos y préstamos), `variables.py` (7.4) y `constraints.py` (7.5). Todavía no es un motor del servicio: el objetivo (7.6), la resolución con avance y relajación (7.7) y su registro como motor vienen después.
+
+### Variables (7.4)
+
+Dos familias de booleanas, enlazadas:
+
+- `y[g, o]`, el horario: una por opción factible de cada grupo movible. Una opción es un reparto de unidades en días de `SessionPattern` (el patrón, los otros juegos de días y los de menos días con un día de 2 horas; PS-01 a PS-04) con su bloque de inicio común (PS-02), y fija las ventanas del grupo, una por día: (día, bloque, unidades). Cada opción guarda su nivel de PS-04 (`tier`), para que el objetivo prefiera el patrón.
+- `z[g, w, s]`, el salón de cada ventana `w`: puede cambiar de un día a otro, como en la heurística y en el contrato (cada sesión trae su `room_id`), y en un día de 2 horas las dos van en el mismo salón (PS-05). Se enlazan con `Σ_s z[g, w, s] = Σ_{o ∋ w} y[g, o]`, una restricción por ventana. Un campus sin salones (`uses_rooms` falso) no tiene `z`.
+
+**Ocupación.** `Occupancy` guarda, por docente, salón y cohorte y por día, las ventanas posibles con sus literales: los `y` de las opciones que pasan por la ventana (para docente y cohorte) o el `z` de su salón. Dos ventanas se empalman si y solo si una contiene el inicio de la otra, así que la exclusividad se pone en cada inicio de ventana (`cliques`), en minutos: vale aunque un docente tenga grupos en dos campus con bloques distintos. `at(recurso, día, minuto)` da los literales de un minuto para el objetivo (7.6).
+
+**Lo fijo no tiene variables.** Los grupos con `movable = false` (con sus `fixed_sessions`), `teachers[].busy` (en cualquier campus) y `rooms[].busy` son constantes que recortan el dominio de su docente, sus salones y sus cohortes. Los `fixed_sessions` de un grupo movible no cuentan: se programa desde cero, como en `ContractState` y `Builder` (PS-07).
+
+**Dominio pre-filtrado.** Solo se crea lo que cabe con las reglas activas (`hard_rules`); lo que una regla desactivada permitiría entra al dominio:
+
+| Qué no se crea | Regla |
+|---|---|
+| Ventanas fuera de los días, la jornada o la alineación del campus | HC-04 (siempre: las ventanas salen de la rejilla) |
+| Opciones con horas que la rejilla no da exactas, salvo dentro de la tolerancia | HC-12 |
+| Ventanas en que el docente no está disponible | HC-09 |
+| Ventanas en que el docente, una de sus cohortes o el salón ya están ocupados por lo fijo | HC-01, HC-03, HC-02 |
+| Salones con menos lugares que el grupo | HC-05 |
+| Salones de otro departamento donde la unión de sus préstamos aceptados no cubre la ventana | HC-10 |
+| Salones bloqueados en la ventana | HC-11 |
+| Opciones cuyas ventanas con laboratorio, taller o sala de cómputo libre no alcanzan sus horas de práctica | HC-06 |
+| Salones de otro campus o fuera de `candidate_room_ids` | El contrato (siempre) |
+
+Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_options`, `rejected_rooms`); un grupo sin opciones (`Variables.unplaceable()`, con `main_reason()`) es lo que la relajación (7.7) reporta como sin programar. Con bloques de 50 o 90 min, las horas que la rejilla no da exactas toman las dos cantidades de bloques más cercanas: con HC-12 activa, solo las que quedan dentro de `weekly_hours_tolerance`, así que con tolerancia 0 el grupo no tiene opciones, como en la heurística (PS-06); sin HC-12, las dos (supuesto por confirmar: la heurística no usa la tolerancia).
+
+**Por qué esta forma** (medido el 18 de noviembre de 2026 con `department-multicampus`, OR-Tools 9.15: 1 139 grupos movibles; en promedio 424 opciones, 116 ventanas y 130 salones por grupo después de pre-filtrar; el pre-filtro quitó 240 757 de 723 218 opciones, 221 895 por HC-09):
+
+| Forma | Booleanas | Qué dice |
+|---|---|---|
+| (a) `x[g, o, s]`: una para opción y salón, el mismo salón todos los días | 11 861 284 | No expresa la práctica en laboratorio un día y la teoría en aula los demás: `tiny` no tiene solución así (su laboratorio prestado es solo el martes). Solo con el patrón serían 202 707, pero sin los niveles de PS-04 `small` y `medium` no caben. |
+| (b) `y[g, o]` + `z[g, w, s]` | 482 461 + 9 453 754 = 9 936 215 | El salón por día, como la heurística y el contrato. |
+
+(b) es más chica que (a) con todos los niveles y es la única que dice lo mismo que la heurística, así que es la elegida. Pero ninguna cabe entera en la instancia real: armar (b) toma 66 s y 5.2 GB, antes de resolver. Lo que multiplica es el salón: 130 salones para cada una de las 116 ventanas de cada grupo, porque casi todos los salones del campus le sirven a casi todos los grupos. Para `tiny`, `small` y `medium` son 446, 1 623 y 2 782 variables.
+
+### Tamaño de la instancia real
+
+El modelo exacto sirve para corridas chicas (los fixtures, una carrera chica). Para la carga de un departamento hay que achicar el salón antes de resolver; queda para 7.7 y 7.10, con estas mediciones de `department-multicampus` como punto de partida:
+
+- **Salón en dos fases** (lo que conviene probar primero). Primero el horario (`y`, 0.48 M) con una cota agregada de salones por campus, día y bloque: los grupos que piden al menos `c` lugares no pasan de los salones libres con al menos `c` lugares, una por cada capacidad distinta de los grupos, y aparte la de los espacios de práctica. Después, con las horas fijas, un modelo solo de salones con una ventana por grupo y día (unas 5 200 por ~130 salones: ~0.7 M de `z`), donde HC-02, HC-10, HC-11 y PS-05 son exactos y SC-03 y SC-06 eligen. Si la segunda fase no tiene solución, se corta esa combinación en la primera y se repite.
+- **Juntar salones iguales** no alcanza: con su ocupación de fuera de la corrida, 400 de los 426 salones son distintos (81 clases si no se cuenta la ocupación).
+- **Recortar los salones de cada grupo** con un orden fijo (por defecto, tipo, capacidad), como sugiere «Riesgos y notas» de la fase 7: todos los grupos de 35 lugares quedarían con los mismos salones y en promedio hay unos 40 grupos por bloque en C1, así que un recorte por debajo de lo que pide la hora pico vuelve infactible la instancia y uno por encima casi no la achica.
+
 ## Descomposición del problema
 
 La unidad de corrida es la carga: un departamento en una modalidad, con sus grupos de todos sus campus (decisión del usuario, 17 de noviembre de 2026). Lo que no es de la carga entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, como `busy` o como grupos con `movable = false`, y las sesiones ya aceptadas, como `fixed_sessions`.

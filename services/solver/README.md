@@ -11,6 +11,7 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 | `app/config.py` | Variables de entorno (`Settings`) |
 | `app/contract/` | Modelos pydantic de la entrada y la salida v1, espejo de `app/Modules/Solver/Contract/` |
 | `app/engine/` | Interfaz de motor (`Engine`, `RunContext`) y el motor de prueba |
+| `app/model/` | El modelo CP-SAT (7.4 en adelante): rejilla y patrón de sesiones, datos indexados de la entrada y variables con su dominio pre-filtrado. Todavía no es un motor del servicio; ver `docs/arquitectura/solver.md`, «Modelo CP-SAT: variables y restricciones duras» |
 | `app/runs.py` | Corridas en memoria, hilos de trabajo, límite de simultáneas, cancelación |
 | `app/api/` | Aplicación FastAPI (`factory.py`), autenticación y esquemas de respuesta |
 | `tests/` | pytest: API, contrato, fixtures compartidos, OR-Tools |
@@ -22,6 +23,7 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 | `SOLVER_TOKEN` | (obligatoria) | Token compartido con Nexus. Sin ella el servicio no arranca. |
 | `SOLVER_DEFAULT_TIME_LIMIT` | `60` | Límite de tiempo por defecto, en segundos, que se pasa a los motores |
 | `SOLVER_THREADS` | `0` | Hilos de CP-SAT; `0` usa los núcleos disponibles. `options.threads` de la entrada tiene prioridad |
+| `SOLVER_MAX_MODEL_VARIABLES` | `1500000` | Variables que puede tener el modelo CP-SAT de una corrida. Si las pasa, la corrida falla al armarlo con un mensaje claro, antes de agotar la memoria del servicio (las corridas comparten un proceso) |
 | `SOLVER_MAX_CONCURRENT_RUNS` | `2` | Corridas en cola o en curso antes de responder `429` |
 | `SOLVER_MAX_STORED_RUNS` | `50` | Corridas terminadas que se conservan en memoria |
 | `SOLVER_ENGINE` | `trivial` | Motor que atiende las corridas |
