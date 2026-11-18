@@ -385,8 +385,8 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
 
     expect(navigationGroupsFor($admin, NavigationArea::Academico))->toBe([
         'validacion' => ['Validación de catálogos', 'Avance de validación'],
-        'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Precisión de la proyección'],
-        'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
+        'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección'],
+        'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
         'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados'],
     ])
@@ -501,7 +501,7 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
+        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
@@ -616,8 +616,8 @@ describe('menú', function () {
 
         expect(menuRowsIn($page, 'academico'))->toBe([
             'Validación', 'Validación de catálogos', 'Avance de validación',
-            'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Precisión de la proyección',
-            'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
+            'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección',
+            'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor',
             'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
             'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados',
         ])
@@ -632,7 +632,7 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation'));
 
         expect($page->querySelector('#nexus-menu [data-menu-group]'))->toBeNull()
-            ->and(menuRowsIn($page, 'academico'))->toBe(['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados']);
+            ->and(menuRowsIn($page, 'academico'))->toBe(['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados']);
     });
 
     it('marca la entrada de la pantalla actual con aria-current y solo a ella', function () {

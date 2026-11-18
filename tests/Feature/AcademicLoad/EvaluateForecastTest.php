@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Actions\EvaluateForecast;
 use App\Modules\AcademicLoad\Actions\RequestForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluationRow;
+use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Rules\ForecastAccuracy;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -160,6 +161,42 @@ it('DM-27: guarda una fila por carrera, campus y materia con proyectado, real y 
         ->progress->toBe(100)
         ->stage->toBe(EvaluateForecast::STAGE_SAVING)
         ->totals->out_of_scope->toEqual(['students' => 0, 'subjects' => 2]);
+});
+
+it('DM-27: actual_groups lleva los grupos físicos de la materia en el campus: nulo sin historial del periodo, 0 si la materia no tiene', function () {
+    evaluationScenario();
+    $other = Campus::factory()->create(['code' => 'K2']);
+    $evaluation = runningEvaluation();
+    app(EvaluateForecast::class)->run($evaluation);
+
+    expect(collect(evaluationRows($evaluation))->pluck('actual_groups')->unique()->all())->toBe([null]);
+
+    $parent = HistoricalGroup::factory()->fromSii()->create(['term_code' => '20261', 'subject_id' => $this->a->id, 'campus_id' => $this->k1->id, 'group_code' => 'A']);
+    HistoricalGroup::factory()->fromSii()->create(['term_code' => '20261', 'subject_id' => $this->a->id, 'campus_id' => $this->k1->id, 'group_code' => 'A2', 'parallel_of' => $parent->id]);
+    HistoricalGroup::factory()->fromSii()->create(['term_code' => '20261', 'subject_id' => $this->a->id, 'campus_id' => $this->k1->id, 'group_code' => 'B']);
+    HistoricalGroup::factory()->fromSii()->create(['term_code' => '20261', 'subject_id' => $this->b->id, 'campus_id' => $other->id, 'group_code' => 'A']);
+
+    app(EvaluateForecast::class)->run($evaluation);
+    $rows = evaluationRows($evaluation);
+
+    expect($rows['EA-1@K1']->actual_groups)->toBe(2)
+        ->and($rows['EB-2@K1']->actual_groups)->toBe(0);
+});
+
+it('DM-27: dos carreras con la misma materia y campus llevan el mismo número de grupos abiertos', function () {
+    evaluationScenario();
+    $second = StudyPlan::factory()->create(['code' => 'PL-E2']);
+    $second->career->update(['code' => 'ISY']);
+    CareerCampus::factory()->create(['career_id' => $second->career_id, 'campus_id' => $this->k1->id]);
+    placeInPlan($second, $this->a);
+    HistoricalGroup::factory()->fromSii()->count(3)->create(['term_code' => '20261', 'subject_id' => $this->a->id, 'campus_id' => $this->k1->id]);
+    $evaluation = runningEvaluation();
+
+    app(EvaluateForecast::class)->run($evaluation);
+    $rows = $evaluation->rows()->where('subject_id', $this->a->id)->get();
+
+    expect($rows)->toHaveCount(2)
+        ->and($rows->pluck('actual_groups')->all())->toBe([3, 3]);
 });
 
 it('DM-27: lo cursado en un campus sin oferta o en una carrera que no se proyecta no genera filas: queda en out_of_scope', function () {

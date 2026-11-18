@@ -4,6 +4,7 @@
             "students.my_record.view"
         ],
         "coordinador": [
+            "academic_load.demand.view_career",
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
             "academic_load.proposal.update",
@@ -27,6 +28,7 @@
             "academic_load.agreement.decide",
             "academic_load.agreement.request",
             "academic_load.agreement.view",
+            "academic_load.demand.view_department",
             "academic_load.load.close",
             "academic_load.load.export",
             "academic_load.load.export_sii",
@@ -72,6 +74,7 @@
         ],
         "jefe_proyecto_docente": [
             "academic_load.agreement.view",
+            "academic_load.demand.view_department",
             "academic_load.load.export",
             "academic_load.load.view",
             "academic_load.proposal_review.view",
@@ -92,6 +95,7 @@
         ],
         "subdireccion": [
             "academic_load.agreement.view",
+            "academic_load.demand.view_department",
             "academic_load.forecast_evaluation.run",
             "academic_load.forecast_evaluation.view",
             "academic_load.load.approve",
@@ -141,6 +145,7 @@
             "scheduling.schedule.view",
             "solver.career_run.view",
             "solver.department_run.view",
+            "solver.setting.update",
             "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher_load.view",
@@ -185,6 +190,8 @@
             "academic_load.agreement.decide",
             "academic_load.agreement.request",
             "academic_load.agreement.view",
+            "academic_load.demand.view_career",
+            "academic_load.demand.view_department",
             "academic_load.forecast_evaluation.run",
             "academic_load.forecast_evaluation.view",
             "academic_load.load.approve",

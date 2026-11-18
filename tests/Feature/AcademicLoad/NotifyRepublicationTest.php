@@ -21,7 +21,7 @@ use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 
 /*
-| RA-05 y RA-06 (confirmados el 18 de noviembre de 2026; tarea 8.4): al republicar, Nexus avisa solo a quien le cambió
+| RA-05 y RA-06 (confirmados el 17 de noviembre de 2026; tarea 8.4): al republicar, Nexus avisa solo a quien le cambió
 | algo, por la campana y el correo institucional: a cada docente afectado (con exactamente lo que cambió para él, también
 | al que no tiene usuario, por correo), a los coordinadores de las carreras afectadas y a los jefes de otros departamentos
 | cuando se tocan sus préstamos de salón o sus grupos compartidos. No avisa a Servicios Escolares, a Subdirección, al jefe

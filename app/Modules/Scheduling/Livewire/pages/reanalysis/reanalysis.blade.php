@@ -1,6 +1,6 @@
 {{--
     Re-análisis de la carga (tarea 8.2, pantalla, #602; opción B «Por materia» de .impeccable/mocks/reanalisis/, elegida
-    por el usuario el 18 de noviembre de 2026). El título con el departamento, la modalidad y el periodo; a la derecha, la
+    por el usuario el 17 de noviembre de 2026). El título con el departamento, la modalidad y el periodo; a la derecha, la
     insignia del estado de la carga, el select «Carga» a quien ve varias y el de «Modalidad» con más de una.
 
     - Publicada: el estado con la línea del ciclo e «Iniciar re-análisis»; debajo, lo que pide el re-análisis (RA-02) y

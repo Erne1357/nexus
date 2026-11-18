@@ -47,7 +47,7 @@ use App\Modules\Solver\Rules\SolverSettings;
  *   de otro departamento que todavía no tiene sesiones, se avisa y no se impide nada.
  *
  * Los parámetros: traslado `staffing.min_campus_travel_minutes` (SC-09), tiempo máximo de SolverSettings, reglas duras
- * HC-01 a HC-13 y los pesos por omisión de la tabla SC de docs/dominio/reglas-de-negocio.md. Los bloques preferidos
+ * HC-01 a HC-13 y los pesos de `solver.soft_weights` (por omisión, los de la tabla SC de docs/dominio/reglas-de-negocio.md). Los bloques preferidos
  * del docente (`preferred`) los lee de Faculty porque la foto no los trae, y los salones por defecto por materia
  * (`subject_room_defaults`) quedan vacíos mientras la foto no los traiga.
  */
@@ -55,9 +55,6 @@ final class BuildSolverInput
 {
     /** @var list<string> */
     public const array HARD_RULES = ['HC-01', 'HC-02', 'HC-03', 'HC-04', 'HC-05', 'HC-06', 'HC-07', 'HC-08', 'HC-09', 'HC-10', 'HC-11', 'HC-12', 'HC-13'];
-
-    /** @var array<string, int> */
-    public const array DEFAULT_SOFT_WEIGHTS = ['SC-01' => 10, 'SC-02' => 6, 'SC-03' => 5, 'SC-04' => 4, 'SC-05' => 3, 'SC-06' => 2, 'SC-07' => 3, 'SC-08' => 2, 'SC-09' => 2];
 
     public function __construct(private readonly ScheduleStateQuery $states) {}
 
@@ -103,22 +100,25 @@ final class BuildSolverInput
         $roomIds = $usesRooms ? $this->usedRoomIds($state, $included, $agreements) : [];
         $campusIds = $this->campusIds($state, $included, $roomIds);
 
+        $settings = SolverSettings::fromSettings();
+
         $input = new SolverInput(
             SolverInput::VERSION,
             $runId,
             $term->code,
             $modality->code,
             $this->campuses($state, $campusIds, $modality->id),
-            SolverSettings::fromSettings()->timeLimitFor($scope),
+            $settings->timeLimitFor($scope),
             new Scope(ScopeKind::from($scope->value), $scopeId),
             (int) $state->setting('staffing.min_campus_travel_minutes', CampusTravel::DEFAULT_MINUTES),
+            max(0, $profile->weeklyHoursTolerance ?? (int) $state->setting('scheduling.weekly_hours_tolerance', 0)),
             array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $cohorts[$group->id] ?? [], $usesRooms), $included),
             $this->teachers($state, $term, $included, $includedIds, $movable),
             $usesRooms ? $this->rooms($state, $campusIds, $roomIds, $includedIds) : [],
             $agreements,
             [],
             self::HARD_RULES,
-            new SoftWeights(self::DEFAULT_SOFT_WEIGHTS),
+            new SoftWeights($settings->softWeightsByRule()),
             new SolverOptions,
         );
 

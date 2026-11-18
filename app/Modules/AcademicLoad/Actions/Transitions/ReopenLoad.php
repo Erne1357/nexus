@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 /**
  * Reabre una carga cerrada, aprobada o publicada: vuelve a ajustes para corregirla (P3, confirmado el 10 de noviembre
  * de 2026). Una carga cerrada o aprobada que venía de un re-análisis (su último cierre salió de `reanalysis`) no vuelve a
- * ajustes sino a `reanalysis` (RA-08, confirmado el 18 de noviembre de 2026), y la versión publicada anterior sigue vigente.
+ * ajustes sino a `reanalysis` (RA-08, confirmado el 17 de noviembre de 2026), y la versión publicada anterior sigue vigente.
  * El destino se decide con la carga bloqueada (la modalidad FOR SHARE y la carga FOR UPDATE, el mismo orden de
  * TransitionLoad) y no con el modelo que llegó: si la carga ya no está en el estado que quien llama veía, se rechaza en
  * lugar de elegir un destino con datos viejos. El motivo es obligatorio y queda como comentario de su historial. Es

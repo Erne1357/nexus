@@ -2,10 +2,10 @@
 
 namespace App\Modules\Staffing\Actions;
 
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\SetGroupTeacher;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -26,12 +26,11 @@ final class UnassignTeacher
     {
         $reason = trim($reason);
 
-        DB::transaction(function () use ($group, $actor, $reason): void {
-            $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
+        $editability = app(LoadEditability::class);
 
-            $load = AcademicLoad::query()
-                ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
-                ->first();
+        $editability->guard(fn () => DB::transaction(function () use ($group, $actor, $reason, $editability): void {
+            $load = $editability->lockLoad($group);
+            $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
             if ($load === null || ! $load->status->acceptsTeacherAssignment()) {
                 $label = $load?->status->label() ?? 'sin carga';
@@ -60,6 +59,6 @@ final class UnassignTeacher
                 ->event('teacher_unassigned')
                 ->withProperties(['previous_teacher_id' => $previous, 'reason' => $reason])
                 ->log("Quitó el docente del grupo {$group->code}");
-        });
+        }), 'group');
     }
 }

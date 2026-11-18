@@ -15,7 +15,8 @@
     la tabla ancha es solo visual (`aria-hidden`), cada cifra de solo lectura y cada «Posibles» dice su campo y su campus
     para lectores de pantalla. La columna de solo lectura va en `secondary/40`, que se distingue en claro y en oscuro.
 
-    Si toda la propuesta está bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta sobre la tabla; por
+    Si toda la propuesta está bloqueada (`$generalLock`), el motivo se dice una vez, en una alerta que la página pone sobre
+    los paquetes y la tabla, porque los paquetes también quedan bloqueados; por
     renglón solo lo que es distinto («CB ya aceptó su parte»). El renglón se pinta por el estado de la parte de su
     departamento (regresada, aceptada o pendiente) y lleva su icono; las anomalías van con icono y texto, con el campus
     de la fila. El filtro de grupos («Con grupos», «Sin grupos») deja solo sus renglones. Con un departamento elegido,
@@ -37,10 +38,6 @@
     };
 @endphp
 <div @class(['@container space-y-3', $maxWidth]) data-testid="proposal-table" data-table-width>
-    @if ($generalLock)
-        <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock->message('')" data-testid="table-lock" />
-    @endif
-
     {{-- Ancho: las columnas de cada campus lado a lado. --}}
     <div class="{{ $wide }}">
         <div class="sticky top-(--shell-top) z-10 grid items-end gap-x-3 rounded-t-box border border-base-300 bg-base-100 px-4 py-2" style="grid-template-columns: {{ $template }}" aria-hidden="true">
@@ -139,7 +136,7 @@
                         @class(['space-y-2 px-4 py-3 outline-none [&:not(:nth-child(2))]:border-t border-base-300 data-[found]:ring-2 data-[found]:ring-inset data-[found]:ring-error', $rowTone])>
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0 flex-1 space-y-0.5">
-                                @include('academic-load::proposal.subject-cell', ['row' => $row, 'code' => $code, 'part' => $part])
+                                @include('academic-load::proposal.subject-cell', ['row' => $row, 'code' => $code, 'part' => $part, 'inCard' => true])
                             </div>
                             @include('academic-load::proposal.open-button', ['row' => $row])
                         </div>

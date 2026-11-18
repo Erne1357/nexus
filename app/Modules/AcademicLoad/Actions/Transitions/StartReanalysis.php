@@ -11,12 +11,12 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Inicia el re-análisis de una carga publicada: `published` → `reanalysis` (tarea 8.1; RA-01, confirmado el 18 de noviembre
+ * Inicia el re-análisis de una carga publicada: `published` → `reanalysis` (tarea 8.1; RA-01, confirmado el 17 de noviembre
  * de 2026). Lo inicia el jefe del departamento (la Action autoriza `startReanalysis` de AcademicLoadPolicy para quien
  * actúa, así quien la llame después no se salta la policy) y solo está
  * habilitado cuando llegaron las calificaciones del semestre actual y la proyección ya las refleja (RA-02): la guarda es
  * ReanalysisAvailabilityQuery, que se evalúa con la carga ya bloqueada. No exige estar en la ventana del calendario
- * (el calendario solo informa; confirmado el 18 de noviembre de 2026).
+ * (el calendario solo informa; confirmado el 17 de noviembre de 2026).
  *
  * No toca la foto publicada: la última versión sigue siendo la pública mientras la carga está en re-análisis. En
  * re-análisis la carga se edita como en ajustes (LoadEditability); se cierra con CloseLoad (mismas guardas de HC-15), pasa

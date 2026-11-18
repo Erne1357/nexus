@@ -38,6 +38,9 @@
                     <span class="text-[12.5px] text-neutral">sin oferta</span>
                 @elseif ($percent === null)
                     <span class="text-[12.5px] text-neutral">sin demanda</span>
+                @elseif (abs($percent) > 999)
+                    {{-- Con muy pocos esperados el porcentaje se dispara (1 esperado y 35 cupos son −3 400 %): basta decir que pasa de 999 %. --}}
+                    <span class="font-mono text-[12.5px] tabular-nums text-neutral">{{ $percent > 0 ? '+' : '−' }}999&nbsp;%+</span>
                 @else
                     <x-academic-load::percent :value="$percent / 100" :digits="0" signed class="text-[12.5px] text-neutral" />
                 @endif

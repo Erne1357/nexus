@@ -94,3 +94,23 @@ it('da al departamento sus materias con las filas de todas las carreras y campus
         ->and($rows[$own->id]->sum('expected_students'))->toBe(75)
         ->and($rows[$own->id]->every(fn (DemandForecast $forecast): bool => $forecast->relationLoaded('career') && $forecast->relationLoaded('campus')))->toBeTrue();
 });
+
+it('da las filas de esas materias de todas las carreras y campus, para la lente de carrera del tablero (5.7)', function () {
+    $calculus = Subject::factory()->create(['code' => 'ACF-0901']);
+    $physics = Subject::factory()->create(['code' => 'AEF-1001']);
+    $alien = Subject::factory()->create();
+    $other = Career::factory()->create();
+    forecastFor($this->term, $this->career, $calculus, $this->c1, ['expected_students' => 40]);
+    forecastFor($this->term, $other, $calculus, $this->c2, ['expected_students' => 15]);
+    forecastFor($this->term, $other, $physics, $this->c1, ['expected_students' => 9]);
+    forecastFor($this->term, $this->career, $alien, $this->c1);
+    forecastFor(Term::factory()->create(), $this->career, $calculus, $this->c1);
+
+    $rows = app(DemandForecastsQuery::class)->forSubjects($this->term, $this->modality, [$calculus->id, $physics->id]);
+
+    expect($rows->keys()->all())->toBe([$calculus->id, $physics->id])
+        ->and($rows[$calculus->id]->sum('expected_students'))->toBe(55)
+        ->and($rows[$physics->id])->toHaveCount(1)
+        ->and($rows[$calculus->id]->every(fn (DemandForecast $forecast): bool => $forecast->relationLoaded('career') && $forecast->relationLoaded('campus')))->toBeTrue()
+        ->and(app(DemandForecastsQuery::class)->forSubjects($this->term, $this->modality, []))->toBeEmpty();
+});

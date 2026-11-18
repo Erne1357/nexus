@@ -20,7 +20,7 @@ use Livewire\Livewire;
 use Tests\Support\Scheduling\ReanalysisWorld;
 
 /*
-| «Re-análisis de la carga» (tarea 8.2, pantalla, #602; opción B «Por materia», elegida por el usuario el 18 de noviembre
+| «Re-análisis de la carga» (tarea 8.2, pantalla, #602; opción B «Por materia», elegida por el usuario el 17 de noviembre
 | de 2026): el jefe inicia el re-análisis de su carga publicada cuando llegan las calificaciones del semestre actual
 | (RA-01, RA-02), ve la diferencia de demanda por materia y campus (RA-04, RA-09), lo cancela mientras no cambie nada
 | (RA-10) o lo cierra en «Cierre de la carga». El coordinador ve solo su carrera y no ajusta (RA-07). Subdirección ve.

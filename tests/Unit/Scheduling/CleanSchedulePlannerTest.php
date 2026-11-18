@@ -208,3 +208,19 @@ it('da lo mismo con los mismos datos', function () {
     expect((new CleanSchedulePlanner(['D1' => 4]))->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms()))
         ->toBe((new CleanSchedulePlanner(['D1' => 4]))->plan($groups, CLEAN_PLANNER_DAYS, 420, 1260, 60, cleanPlannerRooms()));
 });
+
+it('HC-03: los grupos de una misma instancia de paquete no se enciman aunque sean de planes o semestres distintos', function () {
+    $package = fn (array $group, string $key): array => $group + ['cohorts' => [$key]];
+    $groups = [
+        $package(cleanPlannerGroup('A', 'PRES|C2|P1|1', 'S1', [[120, SessionKind::Teoria]]), 'package:K:C2:1'),
+        $package(cleanPlannerGroup('B', 'PRES|C2|P2|1', 'S2', [[120, SessionKind::Teoria]]), 'package:K:C2:1'),
+        $package(cleanPlannerGroup('C', 'PRES|C2|P3|1', 'S3', [[120, SessionKind::Teoria]]), 'package:K:C2:2'),
+    ];
+
+    $plan = (new CleanSchedulePlanner)->plan($groups, [1, 2], 420, 540, 60, cleanPlannerRooms());
+    $withoutPackages = (new CleanSchedulePlanner)->plan(array_map(fn (array $group): array => array_diff_key($group, ['cohorts' => true]), $groups), [1, 2], 420, 540, 60, cleanPlannerRooms());
+
+    expect(cleanPlannerOverlap($withoutPackages, 'A', 'B'))->toBeTrue()
+        ->and(cleanPlannerOverlap($plan, 'A', 'B'))->toBeFalse()
+        ->and(cleanPlannerOverlap($plan, 'A', 'C'))->toBeTrue();
+});

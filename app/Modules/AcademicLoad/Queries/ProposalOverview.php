@@ -34,6 +34,7 @@ final readonly class ProposalOverview
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la propuesta, por clave, con cuántas
      * @param  array<string, list<string>>  $seriation  materia → las materias de la propuesta que pide por seriación en el plan de su fila
      * @param  list<array{user: User, campuses: list<string>}>  $coordinators  quienes coordinan la carrera en la modalidad, por nombre, con las llaves de las columnas que cubren (columnKey)
+     * @param  array<string, int>  $explained  por id de fila, lo que explica la proyección vigente (ProposalAnomalies::explained); sin la fila si no hay
      */
     public function __construct(
         public CareerProposal $proposal,
@@ -47,6 +48,7 @@ final readonly class ProposalOverview
         public array $specialties = [],
         public array $seriation = [],
         public array $coordinators = [],
+        public array $explained = [],
     ) {}
 
     /**
@@ -196,7 +198,7 @@ final readonly class ProposalOverview
      */
     public function anomaliesFor(ProposalItem $item): array
     {
-        return $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups);
+        return $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups, $this->explained[$item->getKey()] ?? null);
     }
 
     /**

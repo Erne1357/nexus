@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Solver\Contract\ContractException;
 use App\Modules\Solver\Contract\RunStatus;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
@@ -30,4 +31,24 @@ test('la salida tiny se lee y vuelve a su JSON exacto', function () {
     expect($output->toArray())->toBe($data)
         ->and($output->status)->toBe(RunStatus::Feasible)
         ->and($output->sessions)->toHaveCount(9);
+});
+
+test('la tolerancia de HC-12 ausente vale 0 y presente se conserva', function () {
+    $data = contractFixture('input');
+    unset($data['weekly_hours_tolerance']);
+
+    expect(SolverInput::fromArray($data)->weeklyHoursTolerance)->toBe(0);
+
+    $data['weekly_hours_tolerance'] = 30;
+    $input = SolverInput::fromArray($data);
+
+    expect($input->weeklyHoursTolerance)->toBe(30)
+        ->and($input->toArray()['weekly_hours_tolerance'])->toBe(30);
+});
+
+test('la tolerancia de HC-12 negativa se rechaza con su ruta', function () {
+    $data = contractFixture('input');
+    $data['weekly_hours_tolerance'] = -1;
+
+    expect(fn () => SolverInput::fromArray($data))->toThrow(ContractException::class, 'weekly_hours_tolerance');
 });

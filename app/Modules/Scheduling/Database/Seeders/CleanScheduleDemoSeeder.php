@@ -122,6 +122,7 @@ final class CleanScheduleDemoSeeder extends Seeder
                 'department' => $group->department_id,
                 'capacity' => (int) $group->capacity,
                 'pieces' => CleanSchedulePlanner::pieces((int) $group->subject->theory_hours, (int) $group->subject->practice_hours, (bool) $group->subject->needs_lab, count($profile->days)),
+                'cohorts' => $group->package_id === null || $group->package_number === null ? [] : ["package:{$group->package_id}:{$campus->code}:{$group->package_number}"],
             ] + ($group->sessions->isEmpty() ? [] : ['sessions' => $group->sessions->map(fn (GroupSession $session): array => [
                 'day' => $session->day,
                 'start' => Minutes::of($session->starts_at),

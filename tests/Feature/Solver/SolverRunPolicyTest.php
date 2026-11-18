@@ -1,14 +1,19 @@
 <?php
 
+use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Solver\Models\SolverRun;
+use App\Modules\Solver\Queries\CareerLoadsQuery;
 
 /*
 | SolverRunPolicy (tarea 6.2; reglas-de-negocio.md, «Aprobaciones y permisos»; decisión del usuario del 17 de noviembre
 | de 2026): el jefe de departamento lanza y acepta las corridas de la carga de su departamento; el coordinador lanza
-| corridas de su carrera para explorar, sin aceptarlas; Subdirección ve todas. El admin, siempre.
+| corridas de su carrera para explorar, sin aceptarlas; Subdirección ve todas. El admin, siempre. El coordinador ve
+| además las corridas de departamento de las cargas que tocan su carrera (tarea 6.10), nunca las de otro coordinador.
 */
 
 beforeEach(function () {
@@ -69,4 +74,48 @@ it('al admin le permite todo sobre las corridas terminadas', function () {
     expect($admin->can('view', $this->careerRun))->toBeTrue()
         ->and($admin->can('launchForDepartment', [SolverRun::class, $this->presencial->id, departmentKey(10)]))->toBeTrue()
         ->and($admin->can('apply', $this->departmentRun))->toBeTrue();
+});
+
+it('el coordinador ve las corridas de departamento de las cargas que tocan su carrera, no las de otras cargas ni las de otro coordinador', function () {
+    $coordinador = solverUser(Role::Coordinador, ['career_id' => careerKey(20)]);
+    $otherLoad = SolverRun::factory()->done()->create(['modality_id' => $this->presencial->id, 'department_id' => departmentKey(11)]);
+    $otherCareer = SolverRun::factory()->forCareer()->done()->create(['modality_id' => $this->presencial->id, 'career_id' => careerKey(21)]);
+
+    expect($coordinador->can('view', $this->departmentRun))->toBeFalse();
+    app()->forgetScopedInstances();
+
+    Group::factory()->create([
+        'term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'owner_career_id' => careerKey(20),
+        'subject_id' => Subject::factory()->create(['department_id' => departmentKey(10)])->id,
+    ]);
+
+    expect($coordinador->can('view', $this->departmentRun))->toBeTrue()
+        ->and($coordinador->can('apply', $this->departmentRun))->toBeFalse()
+        ->and($coordinador->can('view', $otherLoad))->toBeFalse()
+        ->and($coordinador->can('view', $otherCareer))->toBeFalse();
+});
+
+it('el coordinador no ve la corrida de una carga con grupos de su carrera solo en otra modalidad o en otro periodo', function () {
+    $coordinador = solverUser(Role::Coordinador, ['career_id' => careerKey(20)]);
+    $subject = Subject::factory()->create(['department_id' => departmentKey(10)]);
+    $group = fn (array $attributes): Group => Group::factory()->create(['owner_career_id' => careerKey(20), 'subject_id' => $subject->id, ...$attributes]);
+
+    $group(['term_id' => $this->departmentRun->term_id, 'modality_id' => modalityOf('EAD')->id]);
+    $group(['term_id' => Term::factory()->create()->id, 'modality_id' => $this->presencial->id]);
+    $group(['term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'owner_career_id' => careerKey(21)]);
+
+    expect($coordinador->can('view', $this->departmentRun))->toBeFalse()
+        ->and(app(CareerLoadsQuery::class)->careersOf($this->departmentRun->term_id, $this->presencial->id, departmentKey(10)))->toBe([careerKey(21)]);
+});
+
+it('el coordinador no ve la corrida de una carga de otro departamento sin grupos de su carrera, aunque su carrera tenga grupos en otra carga', function () {
+    $coordinador = solverUser(Role::Coordinador, ['career_id' => careerKey(20)]);
+    Group::factory()->create([
+        'term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'owner_career_id' => careerKey(20),
+        'subject_id' => Subject::factory()->create(['department_id' => departmentKey(11)])->id,
+    ]);
+    $otherLoad = SolverRun::factory()->done()->create(['term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'department_id' => departmentKey(11)]);
+
+    expect($coordinador->can('view', $this->departmentRun))->toBeFalse()
+        ->and($coordinador->can('view', $otherLoad))->toBeTrue();
 });

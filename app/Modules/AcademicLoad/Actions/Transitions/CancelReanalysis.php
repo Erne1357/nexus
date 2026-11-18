@@ -12,7 +12,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Cancela el re-análisis de una carga mientras no haya cambiado nada: `reanalysis` → `published` sin versión nueva (tarea 8.1,
- * seguimiento #600; RA-10, confirmado el 18 de noviembre de 2026). Lo cancela quien lo inicia (la Action autoriza
+ * seguimiento #600; RA-10, confirmado el 17 de noviembre de 2026). Lo cancela quien lo inicia (la Action autoriza
  * `cancelReanalysis` de AcademicLoadPolicy, el mismo permiso y alcance que StartReanalysis: el jefe del departamento y el admin).
  *
  * La guarda se evalúa con la carga ya bloqueada (TransitionLoad: la modalidad FOR SHARE y la carga FOR UPDATE, el estado que

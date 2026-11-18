@@ -22,7 +22,7 @@ use Mary\Traits\Toast;
 
 /**
  * Re-análisis de la carga (tarea 8.2, pantalla, #602; RA-01 a RA-10; opción B «Por materia» de
- * `.impeccable/mocks/reanalisis/`, elegida por el usuario el 18 de noviembre de 2026). La carga del departamento en el
+ * `.impeccable/mocks/reanalisis/`, elegida por el usuario el 17 de noviembre de 2026). La carga del departamento en el
  * periodo activo y la modalidad de la página (`?modalidad=`, M1), elegida con el select «Carga» (`?departamento=`) a quien
  * ve varias; solo las que ya se publicaron alguna vez.
  *

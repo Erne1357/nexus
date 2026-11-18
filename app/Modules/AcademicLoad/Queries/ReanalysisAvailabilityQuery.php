@@ -21,7 +21,7 @@ use Illuminate\Support\Collection;
  * Si el re-análisis de una carga publicada está habilitado (RA-02, fase 8; tarea 8.1). Es una consulta sobre lo que hay
  * hoy y no una bandera guardada: el jefe la pregunta al iniciar (StartReanalysis la usa de guarda) y el aviso «ya puedes
  * re-analizar» la usa para saber a quién avisar. Lo que habilita el re-análisis son las calificaciones del semestre
- * actual (confirmado el 18 de noviembre de 2026), y se comprueban cuatro cosas, cada una con su motivo:
+ * actual (confirmado el 17 de noviembre de 2026), y se comprueban cuatro cosas, cada una con su motivo:
  *
  * 1. La carga está publicada.
  * 2. Un lote de kárdex se aplicó después de su última publicación (`published_at`): es la referencia contra la que se
@@ -30,7 +30,7 @@ use Illuminate\Support\Collection;
  *    de `20273` se re-analiza con las de `20271`, DM-01): hay al menos una fila aprobada o reprobada de ese periodo entre
  *    los alumnos activos de la modalidad cuyo `updated_at` es posterior a `published_at`. Una reimportación sin
  *    calificaciones nuevas no basta: la importación solo toca `updated_at` de lo que cambió. No se exige que todos estén
- *    calificados: «el jefe decide, viendo el avance» (confirmado el 18 de noviembre de 2026), y `progress()` le dice
+ *    calificados: «el jefe decide, viendo el avance» (confirmado el 17 de noviembre de 2026), y `progress()` le dice
  *    cuántas van (N de M, %). Si llegan más calificaciones después, la carga vuelve a publicarse y puede re-analizarse
  *    otra vez.
  * 4. La proyección de demanda del periodo de la carga y su modalidad se recalculó después de ese lote: todas sus filas
