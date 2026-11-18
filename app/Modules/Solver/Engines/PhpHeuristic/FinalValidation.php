@@ -11,11 +11,13 @@ use Closure;
 
 /**
  * La validación final de la heurística (tarea 6.6): el evaluador en memoria es la autoridad, no los índices del
- * constructor. Si le quedan violaciones duras en grupos movibles con sesiones, quita las sesiones de los menos grupos
- * que las resuelven todas: primero el que aparece en más violaciones y, entre los que empatan, el que se colocó después.
- * Cada uno queda sin programar con la regla y el mensaje del evaluador como motivo, y se vuelve a validar hasta que no
- * quede ninguna. Así nunca sale un choque duro en los movibles. Quitar sesiones no crea choques, así que pasado el
- * plazo quita de una vez todos los grupos de las violaciones que queden y termina.
+ * constructor. Si le quedan violaciones duras en grupos movibles con sesiones, las cubre de forma voraz: quita las
+ * sesiones del grupo que aparece en más violaciones (si empatan, del que se colocó después), descarta las que ese grupo
+ * resuelve y repite con las que quedan. Es voraz: no garantiza quitar el mínimo de grupos. Cada uno queda sin programar
+ * con la regla y el mensaje del evaluador como motivo, y se vuelve a validar hasta que no quede ninguna. Así nunca sale
+ * un choque duro en los movibles. En cada pasada reporta el avance (de 91 a 99, con el puntaje de esa evaluación), por
+ * donde quien lanza la corrida puede cancelarla. Quitar sesiones no crea choques, así que pasado el plazo quita de una
+ * vez todos los grupos de las violaciones que queden y termina con una evaluación más.
  *
  * HC-08 no depende del horario (cuenta los grupos del docente, tengan o no sesiones): quitar sesiones no lo corrige, así
  * que se deja en la salida como problema de la entrada (PS-08, supuesto por confirmar). Sin estado entre llamadas.
@@ -33,9 +35,10 @@ final readonly class FinalValidation
      * @param  array<string, list<ProposedSession>>  $sessions  por grupo colocado
      * @param  array<string, int>  $placementOrder  en qué turno se colocó cada grupo
      * @param  (Closure(): float)|null  $clock  con `deadline`, el reloj del plazo
+     * @param  (Closure(int $percent, ?int $bestScore): void)|null  $progress  se llama en cada pasada
      * @return array{array<string, list<ProposedSession>>, array<string, list<string>>, ContractEvaluation, int}
      */
-    public function clean(SolverInput $input, array $sessions, array $placementOrder, ?Closure $clock = null, float $deadline = INF): array
+    public function clean(SolverInput $input, array $sessions, array $placementOrder, ?Closure $clock = null, float $deadline = INF, ?Closure $progress = null): array
     {
         $removed = [];
         $evaluations = 0;
@@ -43,6 +46,7 @@ final readonly class FinalValidation
         do {
             $evaluation = $this->evaluator->evaluate($input, array_merge([], ...array_values($sessions)));
             $evaluations++;
+            $progress?->__invoke(min(99, 90 + $evaluations), $evaluation->softScore->total);
             $late = $clock !== null && $clock() >= $deadline;
             $round = $this->victims($evaluation->hardViolations, $sessions, $placementOrder, $late);
 
@@ -57,7 +61,8 @@ final readonly class FinalValidation
 
     /**
      * Los grupos a los que se quitan las sesiones, con sus motivos: un cubrimiento voraz de las violaciones (el grupo en
-     * más violaciones primero; empate, el colocado después) o, con `$all`, todos los grupos colocados que aparecen.
+     * más violaciones primero; empate, el colocado después; no siempre el mínimo) o, con `$all`, todos los grupos
+     * colocados que aparecen.
      *
      * @param  list<HardViolation>  $violations
      * @param  array<string, list<ProposedSession>>  $sessions

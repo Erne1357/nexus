@@ -25,8 +25,8 @@ use Closure;
  * problema de la entrada y la corrida sale `partial` (PS-08, supuesto por confirmar). La búsqueda local que mejora el puntaje
  * llega con la 6.7.
  *
- * Sale `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Reporta el avance (hasta 90 al construir, 100
- * con el puntaje del evaluador) y respeta `time_limit_seconds`: construye hasta el límite menos lo que guarda para
+ * Sale `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Reporta el avance (hasta 90 al construir, de 91
+ * a 99 en cada pasada de la validación y 100 al final, con el puntaje del evaluador) y respeta `time_limit_seconds`: construye hasta el límite menos lo que guarda para
  * validar y devuelve lo que lleva, validado. En las métricas, `iterations` son los candidatos revisados y
  * `intermediate_solutions` las veces que validó una solución con el evaluador.
  *
@@ -89,7 +89,7 @@ final class PhpHeuristicEngine implements SolverEngine
             });
 
         [$sessions, $removed, $evaluation, $evaluations] = (new FinalValidation)->clean($input, $build->sessions, $build->placementOrder,
-            $clock, $started + $input->timeLimitSeconds - $reserve / 2);
+            $clock, $started + $input->timeLimitSeconds - $reserve / 2, $progress);
         $unscheduled = $build->unscheduled + $removed;
         $status = $unscheduled === [] && $evaluation->hardViolations === [] ? RunStatus::Feasible : RunStatus::Partial;
         $progress?->__invoke(100, $evaluation->softScore->total);
@@ -128,8 +128,11 @@ final class PhpHeuristicEngine implements SolverEngine
             $log[] = "Se acabó el tiempo límite ({$input->timeLimitSeconds} s) antes de terminar: lo colocado se validó y lo demás queda sin programar.";
         }
 
-        if ($build->overloadedTeachers !== []) {
-            $log[] = 'HC-08: '.count($build->overloadedTeachers).' docente(s) con más horas asignadas de las que les quedan. No depende del horario: corrígelo en la asignación de docentes.';
+        $overloaded = array_unique(array_map(fn (HardViolation $violation): ?string => $violation->teacherId,
+            array_filter($violations, fn (HardViolation $violation): bool => $violation->rule === 'HC-08')));
+
+        if ($overloaded !== []) {
+            $log[] = 'HC-08: '.count($overloaded).' docente(s) con más horas asignadas de las que les quedan. No depende del horario: corrígelo en la asignación de docentes.';
         }
 
         return $log;

@@ -397,7 +397,7 @@ it('la validación final quita solo al grupo que resuelve los choques, no a cada
         ->and($evaluation->hardViolations)->toBe([]);
 });
 
-it('pasado el plazo, la validación final quita de una vez a todos los grupos de los choques', function () {
+it('la validación final reporta su avance en cada pasada y, pasado el plazo, quita de una vez a todos los grupos de los choques', function () {
     $input = heuristicInput(
         [heuristicGroup('a', ['teacher_id' => 't1']), heuristicGroup('b', ['teacher_id' => 't1']), heuristicGroup('c', ['teacher_id' => 't2'])],
         [heuristicTeacher('t1'), heuristicTeacher('t2')],
@@ -405,11 +405,24 @@ it('pasado el plazo, la validación final quita de una vez a todos los grupos de
     );
     $week = fn (string $groupId, string $roomId): array => array_map(fn (int $day): ProposedSession => new ProposedSession($groupId, $day, '07:00', '08:00', $roomId, SessionKind::Theory, true), [1, 2, 3, 4]);
 
-    [$sessions, $removed, , $evaluations] = (new FinalValidation)->clean($input, ['a' => $week('a', 'r1'), 'b' => $week('b', 'r2'), 'c' => $week('c', 'r2')], ['a' => 0, 'b' => 1, 'c' => 2], fn (): float => 10.0, 5.0);
+    $now = 0.0;
+    $clock = function () use (&$now): float {
+        $now += 3.0;
+
+        return $now;
+    };
+    $calls = [];
+    $progress = function (int $percent, ?int $score) use (&$calls): void {
+        $calls[] = [$percent, $score];
+    };
+
+    [$sessions, $removed, $evaluation, $evaluations] = (new FinalValidation)->clean($input, ['a' => $week('a', 'r1'), 'b' => $week('b', 'r2'), 'c' => $week('c', 'r2')], ['a' => 0, 'b' => 1, 'c' => 2], $clock, 2.0, $progress);
 
     expect($sessions)->toBe([])
         ->and(array_keys($removed))->toEqualCanonicalizing(['a', 'b', 'c'])
-        ->and($evaluations)->toBe(2);
+        ->and($evaluations)->toBe(2)
+        ->and(array_column($calls, 0))->toBe([91, 92])
+        ->and(end($calls)[1])->toBe($evaluation->softScore->total);
 });
 
 it('coloca al docente que se pasa de horas y reporta HC-08 como violación de la entrada (PS-08)', function () {
@@ -419,7 +432,7 @@ it('coloca al docente que se pasa de horas y reporta HC-08 como violación de la
     expect($output->status)->toBe(RunStatus::Partial)
         ->and(heuristicPatternOf($output, 'g1')[0])->toBe([1, 2, 3, 4])
         ->and(array_map(fn ($violation): string => $violation->rule, $output->hardViolations))->toBe(['HC-08'])
-        ->and(implode(' ', $output->log))->toContain('HC-08');
+        ->and(implode(' ', $output->log))->toContain('HC-08: 1 docente(s)');
 });
 
 it('reporta su avance hasta 100 con el puntaje blando', function () {
@@ -430,6 +443,7 @@ it('reporta su avance hasta 100 con el puntaje blando', function () {
 
     expect($calls)->not->toBe([])
         ->and(array_column($calls, 0))->toBe(array_values(array_unique(array_column($calls, 0))))
+        ->and($calls)->toContain([91, $output->softScore->total])
         ->and(end($calls))->toBe([100, $output->softScore->total]);
 });
 
