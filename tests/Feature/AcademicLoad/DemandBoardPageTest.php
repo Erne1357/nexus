@@ -154,6 +154,9 @@ describe('jefe de departamento', function () {
             ->assertSeeHtml('data-testid="demand-by-campus"')
             ->assertSeeHtml('data-testid="demand-drawer-row-ISIC-C1"')
             ->assertSeeHtml('data-testid="demand-drawer-row-IGE-C2"')
+            // Debajo de 768 px, los mismos renglones apilados (DESIGN.md, «Responsivo»).
+            ->assertSeeHtml('data-testid="demand-by-campus-list"')
+            ->assertSeeHtml('data-testid="demand-drawer-item-ISIC-C1"')
             ->assertSee('Historia de la materia en Ene-Jun')
             ->assertSee('Historia de la materia')
             ->assertSee('Requiere laboratorio')

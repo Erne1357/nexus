@@ -11,7 +11,6 @@
 @php($hours = $drawer->weeklyHours())
 @php($breakdown = $drawer->breakdown())
 @php($lensId = $board->career?->getKey())
-@php($signed = fn (int $n): string => $n > 0 ? "+{$n}" : ($n < 0 ? '−'.abs($n) : '0'))
 @php($label = 'text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral')
 <div class="flex h-dvh flex-col" data-testid="demand-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
@@ -34,7 +33,33 @@
     <div class="flex-1 space-y-6 overflow-y-auto px-5 py-4">
         <section aria-labelledby="demand-by-campus-title" data-testid="demand-by-campus">
             <h3 id="demand-by-campus-title" class="{{ $label }}">Por campus</h3>
-            <div class="mt-2 overflow-x-auto rounded-box border border-base-300">
+            {{-- Debajo de 768 px, renglones apilados (DESIGN.md, «Responsivo»): el campus y luego sus cifras. --}}
+            <ul class="mt-2 divide-y divide-base-300 rounded-box border border-base-300 md:hidden" data-testid="demand-by-campus-list">
+                @foreach ([...$breakdown['campuses'], ['campus' => false, ...$breakdown['total']]] as $line)
+                    @php($cell = $line['cell'])
+                    @php($isTotal = $line['campus'] === false)
+                    <li @class(['px-3 py-2.5', 'bg-base-200' => $isTotal])>
+                        <p class="text-sm font-medium">
+                            @if ($isTotal)
+                                Todo el Tec
+                            @elseif ($line['campus'] !== null)
+                                <span class="inline-flex items-center gap-2"><x-core::campus-tag :campus="$line['campus']" decorative />{{ $line['campus']->name }}</span>
+                            @else
+                                Sin campus
+                            @endif
+                        </p>
+                        <dl class="mt-1.5 grid grid-cols-3 gap-x-3 gap-y-1.5 text-sm">
+                            <div><dt class="text-xs text-neutral">Elegibles</dt><dd class="font-mono tabular-nums">{{ $line['eligible'] }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Esperados</dt><dd class="font-mono tabular-nums">{{ $line['expected'] }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Sugeridos</dt><dd class="font-mono tabular-nums">{{ $cell->suggested }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Pedidos</dt><dd class="font-mono font-semibold tabular-nums">{{ $cell->counted }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Diferencia</dt><dd @class(['whitespace-nowrap', 'text-warning' => $cell->large])>@include('academic-load::demand.difference', ['cell' => $cell])</dd></div>
+                            <div><dt class="text-xs text-neutral" title="Horas a la semana de lo pedido: grupos por {{ $hours }} h">Horas</dt><dd class="font-mono tabular-nums">{{ $cell->counted * $hours }}</dd></div>
+                        </dl>
+                    </li>
+                @endforeach
+            </ul>
+            <div class="mt-2 overflow-x-auto rounded-box border border-base-300 max-md:hidden">
                 <table class="table table-sm">
                     <thead class="bg-base-200">
                         <tr class="{{ $label }}">
@@ -65,21 +90,7 @@
                                 <td class="text-end font-mono tabular-nums">{{ $line['expected'] }}</td>
                                 <td class="text-end font-mono tabular-nums">{{ $cell->suggested }}</td>
                                 <td class="text-end font-mono font-semibold tabular-nums">{{ $cell->counted }}</td>
-                                <td @class(['whitespace-nowrap text-end', 'text-warning' => $cell->large])>
-                                    @if ($cell->difference() === 0)
-                                        <span class="font-mono text-neutral">0</span>
-                                    @else
-                                        <span class="inline-flex items-center gap-1">
-                                            @if ($cell->large)
-                                                <x-icon :name="$cell->difference() > 0 ? 'o-arrow-trending-up' : 'o-arrow-trending-down'" class="h-3.5 w-3.5" aria-hidden="true" />
-                                            @endif
-                                            <span class="font-mono font-semibold tabular-nums">{{ $signed($cell->difference()) }}</span>
-                                            @if ($cell->percent() !== null)
-                                                <small class="font-mono tabular-nums">{{ $signed($cell->percent()) }} %</small>
-                                            @endif
-                                        </span>
-                                    @endif
-                                </td>
+                                <td @class(['whitespace-nowrap text-end', 'text-warning' => $cell->large])>@include('academic-load::demand.difference', ['cell' => $cell])</td>
                                 <td class="text-end font-mono tabular-nums">{{ $cell->counted * $hours }}</td>
                             </tr>
                         @endforeach
@@ -90,7 +101,36 @@
 
         <section aria-labelledby="demand-by-career-title" data-testid="demand-by-career">
             <h3 id="demand-by-career-title" class="{{ $label }}">Por carrera</h3>
-            <div class="mt-2 overflow-x-auto rounded-box border border-base-300">
+            {{-- Debajo de 768 px, renglones apilados: la carrera, su estado, campus y semestre, y luego sus cifras. --}}
+            <ul class="mt-2 divide-y divide-base-300 rounded-box border border-base-300 md:hidden" data-testid="demand-by-career-list">
+                @foreach ($drawer->rows as $line)
+                    @php($mine = $line->career->getKey() === $lensId)
+                    <li @class(['px-3 py-2.5', 'bg-info/8' => $mine]) data-testid="demand-drawer-item-{{ $line->career->code }}-{{ $line->campus?->code ?? 'sin-campus' }}">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">@include('academic-load::demand.career-line', ['line' => $line, 'mine' => $mine])</div>
+                            <p class="flex shrink-0 items-center gap-2 text-xs text-neutral">
+                                @if (count($board->campuses) > 0)
+                                    <x-core::campus-tag :campus="$line->campus" />
+                                @endif
+                                <span>Sem. <span class="font-mono">{{ $line->semester ?? '–' }}</span></span>
+                            </p>
+                        </div>
+                        <dl class="mt-1.5 grid grid-cols-4 gap-x-3 text-sm">
+                            <div><dt class="text-xs text-neutral">Elegibles</dt><dd class="font-mono tabular-nums">{{ $line->eligible }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Esperados</dt><dd class="font-mono tabular-nums">{{ $line->expected }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Sugeridos</dt><dd class="font-mono tabular-nums">{{ $line->suggested }}</dd></div>
+                            <div><dt class="text-xs text-neutral">Pedidos</dt><dd class="font-mono tabular-nums">
+                                @if ($line->state->counts())
+                                    <b class="font-semibold">{{ $line->requested }}</b>
+                                @else
+                                    <span class="text-neutral" title="Sin propuesta enviada: cuenta lo sugerido">{{ $line->suggested }}*</span>
+                                @endif
+                            </dd></div>
+                        </dl>
+                    </li>
+                @endforeach
+            </ul>
+            <div class="mt-2 overflow-x-auto rounded-box border border-base-300 max-md:hidden">
                 <table class="table table-sm">
                     <thead class="bg-base-200">
                         <tr class="{{ $label }}">
@@ -109,21 +149,7 @@
                         @foreach ($drawer->rows as $line)
                             @php($mine = $line->career->getKey() === $lensId)
                             <tr @class(['bg-info/8' => $mine]) data-testid="demand-drawer-row-{{ $line->career->code }}-{{ $line->campus?->code ?? 'sin-campus' }}">
-                                <th scope="row" class="font-normal">
-                                    <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                                        <span class="font-mono font-bold" title="{{ $line->career->name }}">{{ $line->career->code }}</span>
-                                        @include('academic-load::demand.state', ['state' => $line->state])
-                                        @if ($mine)
-                                            <span class="text-xs text-neutral">(tu carrera)</span>
-                                        @endif
-                                    </span>
-                                    <span class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-neutral">
-                                        <span>{{ $line->method?->label() ?? 'Sin proyección' }}</span>
-                                        @if ($line->needsReview)
-                                            <span class="inline-flex items-center gap-1 font-medium text-warning" title="Materia de especialidad: depende de qué especialidad elige cada alumno."><x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5" aria-hidden="true" />Revisar</span>
-                                        @endif
-                                    </span>
-                                </th>
+                                <th scope="row" class="font-normal">@include('academic-load::demand.career-line', ['line' => $line, 'mine' => $mine])</th>
                                 @if (count($board->campuses) > 0)
                                     <td><x-core::campus-tag :campus="$line->campus" /></td>
                                 @endif

@@ -87,13 +87,14 @@
                                 @if ($coordinator['me'])<span>(tú)</span>@endif
                                 @if ($coordinator['covers'])<span>· {{ $coordinator['covers'] }}</span>@endif
                             </span>
-                            @if (! $loop->last)<span aria-hidden="true">·</span>@endif
+                            {{-- En el celular cada coordinador ya va en su renglón: el «·» quedaría solo. --}}
+                            @if (! $loop->last)<span aria-hidden="true" class="max-sm:hidden">·</span>@endif
                         @endforeach
                     </p>
                 @endif
-                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="forecast-line">
-                    <x-icon name="o-sparkles" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span>{{ $forecastLine }}</span>
+                <p class="mt-1 flex items-start gap-x-2 text-sm text-neutral" data-testid="forecast-line">
+                    <x-icon name="o-sparkles" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span class="min-w-0">{{ $forecastLine }}</span>
                 </p>
                 @if ($sent)
                     <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="proposal-sent">
@@ -161,7 +162,8 @@
         @endif
 
         @if ($recalculated > 0)
-            <x-alert icon="o-arrow-path" class="alert-info alert-soft min-h-0 items-center gap-x-2 py-1.5 text-sm" data-testid="recalc-alert">
+            {{-- En el celular, «Revisar proyección» baja debajo del texto en vez de angostarlo. --}}
+            <x-alert icon="o-arrow-path" class="alert-info alert-soft min-h-0 items-center gap-x-2 py-1.5 text-sm max-sm:grid-flow-row max-sm:grid-cols-[auto_1fr] max-sm:gap-y-1 max-sm:[&>:last-child]:col-start-2" data-testid="recalc-alert">
                 <span>La proyección se recalculó el {{ $projection->computedAtText((string) config('app.timezone')) }}; lo sugerido se actualizó solo; en <span class="font-semibold">{{ $recalculated }} {{ $recalculated === 1 ? 'materia que corregiste' : 'materias que corregiste' }}</span> ahora sugiere otra cosa.</span>
                 <x-slot:actions>
                     <x-button label="Revisar proyección" class="btn-xs btn-ghost" wire:click="setView('revisar')" data-testid="recalc-review" />
@@ -241,13 +243,13 @@
             </x-modal>
         @endif
 
-        <x-drawer wire:model.live="showPackage" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="package-drawer-title" data-testid="package-drawer">
+        <x-drawer wire:model.live="showPackage" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="package-drawer-title" data-testid="package-drawer">
             @if ($showPackage)
                 @include('academic-load::proposal.package-panel')
             @endif
         </x-drawer>
 
-        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-screen max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
+        <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="proposal-drawer-title" data-testid="proposal-drawer">
             @if ($selected !== null)
                 @include('academic-load::proposal.item-panel', ['row' => $selected])
             @endif
