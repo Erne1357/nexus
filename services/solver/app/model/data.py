@@ -101,7 +101,7 @@ class ModelData:
                     _add(model.teacher_fixed, group.teacher_id, session.day, span)
                 if session.room_id is not None:
                     _add(model.room_fixed, session.room_id, session.day, span)
-                for key in set(group.cohorts):
+                for key in sorted(set(group.cohorts)):
                     _add(model.cohort_fixed, key, session.day, span)
         for agreement in data.agreements:
             span = (minutes(agreement.starts_at), minutes(agreement.ends_at))

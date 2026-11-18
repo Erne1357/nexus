@@ -86,3 +86,18 @@ def test_una_regla_desactivada_no_se_revisa(tiny_input, tiny_output):
     tiny_input["hard_rules"] = [rule for rule in tiny_input["hard_rules"] if rule != "HC-04"]
 
     assert violations(tiny_input, tiny_output) == []
+
+
+def test_el_verificador_no_depende_del_modelo():
+    """El verificador solo lee el contrato: un error que compartan el modelo y sus datos no se le escapa."""
+    import ast
+    from pathlib import Path
+
+    import app.model.verify as verify
+
+    tree = ast.parse(Path(verify.__file__).read_text())
+    imported = {node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
+
+    assert all(
+        module is not None and module.startswith(("app.contract", "collections", "dataclasses")) for module in imported
+    )
