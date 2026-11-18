@@ -4,13 +4,12 @@ namespace App\Modules\AcademicLoad\Database\Seeders;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
-use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Proposals\AcceptProposalReview;
 use App\Modules\AcademicLoad\Actions\Proposals\ReturnProposalReview;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
-use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Database\Seeders\Concerns\FindsProposalActors;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\CareerProposal;
@@ -18,14 +17,12 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\RecipientsQuery;
 use Closure;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Arr;
@@ -62,6 +59,7 @@ use RuntimeException;
  */
 final class AcademicLoadDemoSeeder extends Seeder
 {
+    use FindsProposalActors;
     use RefusesProduction;
 
     /** Generador con semilla: la misma da los mismos datos. */
@@ -383,14 +381,6 @@ final class AcademicLoadDemoSeeder extends Seeder
         }
     }
 
-    /**
-     * El primer coordinador que corrige la fila (ProposalUpdate sobre su campus, M7), o false si nadie la cubre.
-     */
-    private function rowHolder(CareerProposal $proposal, ProposalItem $item): User|false
-    {
-        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $item->campus_id, career: $proposal->career_id))[0]['user'] ?? false;
-    }
-
     private function submit(CareerProposal $proposal, User $coordinator): ?CareerProposal
     {
         try {
@@ -413,32 +403,6 @@ final class AcademicLoadDemoSeeder extends Seeder
             ->select('proposal_reviews.*')
             ->with('department')
             ->get();
-    }
-
-    /**
-     * Quien arma y envía la propuesta: el primer coordinador de la carrera en la modalidad que corrige las filas de un
-     * campus de la demo; si no hay, cualquiera de la carrera en la modalidad (M6).
-     *
-     * @param  Collection<int, Campus>  $campuses
-     */
-    private function coordinatorOf(Modality $modality, Career $career, Collection $campuses): ?User
-    {
-        $recipients = app(RecipientsQuery::class);
-
-        foreach ($campuses as $campus) {
-            $holder = $recipients->holders(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $modality->getKey(), campus: $campus->getKey(), career: $career->getKey()))[0] ?? null;
-
-            if ($holder !== null) {
-                return $holder['user'];
-            }
-        }
-
-        return $recipients->holders(AcademicLoadPermission::ProposalSubmit, Target::of(modality: $modality->getKey(), career: $career->getKey()))[0]['user'] ?? null;
-    }
-
-    private function headOf(Modality $modality, Department $department): ?User
-    {
-        return app(RecipientsQuery::class)->holders(AcademicLoadPermission::ProposalReviewDecide, Target::of(modality: $modality->getKey(), unit: $department->getKey()))[0]['user'] ?? null;
     }
 
     /**

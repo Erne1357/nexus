@@ -76,6 +76,26 @@ final readonly class ProposalHeader
     }
 
     /**
+     * Lo que queda por revisar de la proyección en una columna que el usuario no corrige (M7; «Revisar proyección», 5.6):
+     * «En C2 hay 3 materias por revisar; las revisa <nombres>.»
+     */
+    public function pendingReviewLine(string $key, int $count): string
+    {
+        $names = array_column(array_filter($this->coordinators, fn (array $row): bool => in_array($key, $row['keys'], true)), 'name');
+        $where = $this->column($key)['code'] ?? 'esta columna';
+
+        if ($count === 0) {
+            return "En {$where} no hay materias por revisar.";
+        }
+
+        $subjects = $count === 1 ? '1 materia' : "{$count} materias";
+
+        return $names === []
+            ? "En {$where} hay {$subjects} por revisar; no tiene coordinador que las revise."
+            : "En {$where} hay {$subjects} por revisar; las revisa {$this->join($names)}.";
+    }
+
+    /**
      * El aviso de alcance (M7) a quien corrige las columnas de `$editableKeys` y no las demás; null si corrige todas o
      * ninguna.
      *

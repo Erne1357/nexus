@@ -22,6 +22,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Enums\ForecastMethod;
+use App\Modules\Demand\Models\DemandForecast;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
@@ -203,6 +205,28 @@ describe('con lo que piden varias carreras', function () {
 
         expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([['2 grupos para 60 alumnos'], ['1 grupo para 30 alumnos']])
             ->and(inboxOf()->career($this->isc->id)['anomalies'])->toBe(2);
+    });
+
+    it('con proyección vigente, compara los esperados con lo que explica: posibles, pendientes de seriación y nuevo ingreso (confirmado el 17 de noviembre de 2026)', function () {
+        $calculo = ProposalItem::query()->where('career_proposal_id', $this->iscProposal->id)->where('subject_id', $this->calculo->id)->sole();
+        $calculo->forceFill(['eligible_students' => 40, 'expected_students' => 60])->save();
+        $forecast = DemandForecast::factory()->create([
+            'term_id' => $this->term->id,
+            'career_id' => $this->isc->id,
+            'subject_id' => $this->calculo->id,
+            'campus_id' => $this->campus->id,
+            'pending_prerequisite_students' => 0,
+            'new_students' => 20,
+            'method' => ForecastMethod::FirstSemester,
+        ]);
+
+        expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([[], []])
+            ->and(inboxOf()->career($this->isc->id)['anomalies'])->toBe(0);
+
+        $forecast->update(['new_students' => 10]);
+
+        expect(array_column(inboxOf()->rowsFor($this->isc->id), 'anomalies'))->toBe([['60 esperados con 50 que explica la proyección'], []])
+            ->and(inboxOf()->career($this->isc->id)['anomalies'])->toBe(1);
     });
 
     it('las filas de una parte regresada se ven, y su total no la cuenta; sin parte no hay filas', function () {

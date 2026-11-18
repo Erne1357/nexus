@@ -10,6 +10,8 @@
     $split = fn (string $total): array => count($columns) > 1
         ? array_map(fn ($key) => ['campus' => $columns[$key]['campus'], 'value' => $overview->totals[$total][$key] ?? 0], array_keys($columns))
         : [];
+    // En el celular la barra fija lleva la etiqueta corta en un renglón y sin el reparto por campus (decidido el 17 de noviembre de 2026).
+    $short = ['subjects' => 'Materias', 'eligible' => 'Posibles'];
     $figures = [
         ['Materias con grupos', $overview->totals['subjects'], $overview->totals['subjects_total'], [], 'subjects'],
         ['Grupos', $overview->totals['groups'], null, $split('groups_by_campus'), 'groups'],
@@ -20,10 +22,10 @@
     <div class="sticky bottom-3 z-10 grid grid-cols-3 rounded-box border border-base-300 bg-base-100 shadow-float" data-testid="proposal-totals">
         @foreach ($figures as [$label, $value, $of, $byCampus, $slug])
             <div class="flex min-w-0 flex-col justify-start gap-0.5 border-base-300 px-3 py-2 sm:px-5 md:gap-1 md:py-3 [&:nth-child(n+2)]:border-l">
-                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $label }}</span>
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">@isset($short[$slug])<span class="max-md:hidden">{{ $label }}</span><span class="md:hidden">{{ $short[$slug] }}</span>@else{{ $label }}@endisset</span>
                 <span class="font-mono text-xl font-semibold tabular-nums md:text-2xl">{{ $value }}@if ($of !== null)<span class="font-normal text-neutral"> / {{ $of }}</span>@endif</span>
                 @if ($byCampus !== [])
-                    <span class="flex flex-wrap items-center gap-x-2.5 gap-y-1" data-testid="totals-{{ $slug }}-by-campus">
+                    <span class="flex flex-wrap items-center gap-x-2.5 gap-y-1 max-md:hidden" data-testid="totals-{{ $slug }}-by-campus">
                         @foreach ($byCampus as $entry)
                             <span class="inline-flex items-center gap-1.5"><x-academic-load::campus-tag :campus="$entry['campus']" /><span class="font-mono text-sm font-semibold tabular-nums">{{ $entry['value'] }}</span></span>
                         @endforeach
