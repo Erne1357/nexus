@@ -9,11 +9,11 @@ use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Rules\SuggestedGroups;
-use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Rules\GroupCapacity;
 use App\Modules\Scheduling\Rules\GroupCode;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -37,8 +37,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * lee, así que dos llamadas a la vez no duplican, y toma un bloqueo de aviso por periodo y materia para que las claves
  * provisionales de dos propuestas de carreras distintas no choquen.
  *
- * La capacidad es la del salón por defecto de la materia en el campus de la fila (el de menor prioridad, sin contar los
- * borrados); sin él, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). El cupo de la carrera dueña nace
+ * La capacidad es la de GroupCapacity: la del salón por defecto de la materia en el campus de la fila (el de menor
+ * prioridad, sin contar los borrados); sin él, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). El cupo de la carrera dueña nace
  * igual a la capacidad. Cada grupo deja su entrada en la bitácora, con su campus y su modalidad, y, después del commit y
  * solo si nació alguno, GroupsCreated avisa una vez por decisión con la modalidad de la propuesta y todos los grupos,
  * de cualquier campus: quien lo escucha lee el campus de cada grupo.
@@ -142,7 +142,7 @@ final class CreateGroupsFromProposal
             ->where('term_id', $proposal->term_id)
             ->where('subject_id', $subject->getKey())
             ->pluck('code')->all();
-        $capacity = $this->capacityFor($subject, $item->campus_id, $sizes);
+        $capacity = GroupCapacity::for($subject, $item->campus_id, $sizes);
         $groups = [];
 
         foreach ($slots as $slot) {
@@ -197,17 +197,5 @@ final class CreateGroupsFromProposal
         }
 
         return $groups;
-    }
-
-    private function capacityFor(Subject $subject, string $campusId, SuggestedGroups $sizes): int
-    {
-        $default = SubjectRoomDefault::query()
-            ->with('room')
-            ->where('subject_id', $subject->getKey())
-            ->where('campus_id', $campusId)
-            ->orderBy('priority')
-            ->first();
-
-        return $default?->room?->capacity ?? $sizes->sizeFor((bool) $subject->needs_lab);
     }
 }

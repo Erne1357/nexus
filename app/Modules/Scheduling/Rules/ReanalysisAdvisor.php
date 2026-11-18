@@ -9,6 +9,7 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorGroup;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorRoom;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorSession;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupBase;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 
 /**
@@ -30,7 +31,11 @@ use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
  *    - **Cambiar salón** si aun así falta: en un grupo con salón en todas sus sesiones, cada sesión que no alcanza pasa al
  *      salón más chico que sí, libre a esa hora (los que no piden préstamo primero); si ninguno alcanza, al más grande.
  *      Dos grupos no se llevan el mismo salón a la misma hora.
- *    - **Abrir grupo**, una sola por bloque, con lo que falta de cada carrera: sin acción, llega con el motor (8.3b).
+ *    - **Abrir grupo** (tarea 8.3b), una por carrera que sigue faltante: un grupo nuevo suelto y sin docente, con la
+ *      capacidad de GroupCapacity, la carrera como dueña (su plan vigente con la materia y su semestre) y lo que le falta
+ *      como cupo, hasta la capacidad (`newGroup`, NewGroupSpec). El horario y el salón no los pone el asesor: los pide el
+ *      drawer al motor al abrir la tarjeta (NewGroupPlacementQuery). Sin `$opening` (un bloque sin campus) o sin plan
+ *      vigente de la carrera, la tarjeta solo avisa y se abre en Horarios.
  * 2. **Sobrante**: **cerrar un grupo** que tiene lugares de una carrera sobrante, si al cerrarlo ninguna carrera queda
  *    faltante. Los lugares que hacen falta (lo esperado menos lo que queda) pasan a los demás grupos donde la carrera ya
  *    tiene cupo, dentro de lo que tienen libre (sin subir su capacidad). Una carrera sin clasificar conserva todos sus
@@ -59,9 +64,10 @@ final class ReanalysisAdvisor
      * @param  list<ReanalysisRow>  $rows
      * @param  list<AdvisorGroup>  $groups
      * @param  array<string, string>  $careerCodes  id => clave de las carreras con cupo que no están en las filas
+     * @param  NewGroupBase|null  $opening  con qué se abriría un grupo nuevo en el bloque (tarea 8.3b)
      * @return list<ReanalysisSuggestion>
      */
-    public function advise(array $rows, array $groups, array $careerCodes, DemandSettings $settings): array
+    public function advise(array $rows, array $groups, array $careerCodes, DemandSettings $settings, ?NewGroupBase $opening = null): array
     {
         $this->capacity = [];
         $this->quotas = [];
@@ -128,7 +134,7 @@ final class ReanalysisAdvisor
             }
 
             if ($short($gap)) {
-                $missing[$careerCodes[$careerId]] = $gap;
+                $missing[$careerId] = $gap;
             }
         }
 
@@ -138,7 +144,7 @@ final class ReanalysisAdvisor
         return [
             ...$expand,
             ...$rooms,
-            ...($missing === [] ? [] : [$this->open($missing)]),
+            ...array_map(fn (string $careerId, int $gap): ReanalysisSuggestion => $this->open($careerId, $careerCodes[$careerId], $gap, $groups, $opening), array_keys($missing), $missing),
             ...($close === null ? [] : [$close]),
         ];
     }
@@ -436,16 +442,48 @@ final class ReanalysisAdvisor
     }
 
     /**
-     * @param  array<string, int>  $missing  por clave de la carrera
+     * Abrir un grupo para una carrera que sigue faltante con todo lo de arriba (tarea 8.3b). `expected` lleva todos los
+     * grupos del bloque como se leyeron: quien aplica revisa con los candados puestos que ninguno haya crecido ni haya
+     * nacido otro.
+     *
+     * @param  list<AdvisorGroup>  $groups
      */
-    private function open(array $missing): ReanalysisSuggestion
+    private function open(string $careerId, string $code, int $gap, array $groups, ?NewGroupBase $opening): ReanalysisSuggestion
     {
+        $spec = $opening?->specFor($careerId, $code, $gap);
+        $evidence = [
+            "{$code}: faltan {$gap} lugares aunque se amplíen los grupos que caben",
+            $groups === [] ? 'No hay grupos de la materia en el campus.' : 'Ningún grupo puede crecer más: su salón no da para más y no hay uno más grande libre a su hora (HC-05).',
+        ];
+
+        if ($spec === null) {
+            return new ReanalysisSuggestion(
+                key: "open_group:{$careerId}",
+                kind: ReanalysisSuggestionKind::OpenGroup,
+                title: "Hace falta abrir un grupo para {$code}",
+                evidence: $evidence,
+                effect: [$opening === null
+                    ? 'Ábrelo en Horarios: la materia no tiene campus en esta modalidad.'
+                    : "Ábrelo en Horarios: {$code} no tiene un plan vigente con la materia."],
+                careerId: $careerId,
+                expected: $this->expectedOf(array_map(fn (AdvisorGroup $group): string => $group->id, $groups)),
+            );
+        }
+
         return new ReanalysisSuggestion(
-            key: 'open_group',
+            key: "open_group:{$careerId}",
             kind: ReanalysisSuggestionKind::OpenGroup,
-            title: 'Hace falta abrir un grupo',
-            evidence: array_map(fn (string $code, int $gap): string => "{$code}: faltan {$gap} lugares aunque se amplíen los grupos que caben", array_keys($missing), $missing),
-            effect: ['Llega con la sugerencia del motor (tarea 8.3b): horario, salón y cupos por carrera.'],
+            title: "Abrir un grupo de {$spec->subjectCode} para {$code}",
+            evidence: $evidence,
+            effect: [
+                "Grupo nuevo en {$spec->campusCode}, suelto, con la clave que le toque por su hora.",
+                "Capacidad {$spec->capacity} · {$spec->seats} lugares para {$code} (semestre {$spec->semester}).",
+                'Sin docente: asígnalo en Asignación docente.',
+            ],
+            careerId: $careerId,
+            seats: $spec->seats,
+            expected: $this->expectedOf(array_map(fn (AdvisorGroup $group): string => $group->id, $groups)),
+            newGroup: $spec,
         );
     }
 

@@ -40,7 +40,7 @@ use Illuminate\Validation\ValidationException;
  * - **Cerrar grupo:** suma los lugares de `relocations` a los grupos que los reciben (SetGroupQuotas) y cancela el grupo
  *   (CancelGroup: pierde su horario y sus acuerdos vivos). Uno con docente no se cierra hasta quitárselo en Asignación
  *   docente (`blockedReason`; CancelGroup tampoco lo deja).
- * - **Abrir grupo** no se aplica: llega con el motor (tarea 8.3b).
+ * - **Abrir grupo** no se aplica aquí: lleva el horario y el salón del motor y lo crea OpenReanalysisGroup (tarea 8.3b).
  *
  * Los lugares se suman a lo que el grupo tenga en ese momento, no a lo que vio la sugerencia.
  */
@@ -63,8 +63,8 @@ final class ApplyReanalysisSuggestion
         $gate = Gate::forUser($actor);
         $gate->authorize('startReanalysis', $load);
 
-        if (! $suggestion->isApplicable()) {
-            throw ValidationException::withMessages(['suggestion' => 'Abrir un grupo llega con la sugerencia del motor: aquí todavía no se aplica.']);
+        if ($suggestion->kind === ReanalysisSuggestionKind::OpenGroup) {
+            throw ValidationException::withMessages(['suggestion' => 'Abrir un grupo se aplica con el horario y el salón que encuentre el motor.']);
         }
 
         if ($suggestion->blockedReason !== null) {

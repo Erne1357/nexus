@@ -10,6 +10,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Scheduling\Events\NewGroupPlacementRequested;
 use App\Modules\Solver\Console\ExportSolverFixture;
 use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
 use App\Modules\Solver\Console\SolverBenchmark;
@@ -17,8 +18,10 @@ use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Enums\SolverPermission;
+use App\Modules\Solver\Listeners\ProvideNewGroupPlacement;
 use App\Modules\Solver\Queries\CareerLoadsQuery;
 use App\Modules\Solver\Rules\SolverSettings;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Módulo Solver (fases 6 y 7, R2): el motor que sugiere horarios y salones para la carga de un departamento en una
@@ -44,9 +47,15 @@ final class SolverServiceProvider extends ModuleServiceProvider
         $this->app->scoped(CareerLoadsQuery::class);
     }
 
+    /**
+     * Contesta dónde cabe el grupo nuevo de «Abrir un grupo» del re-análisis (tarea 8.3b): Scheduling lo pide con un
+     * evento porque no puede depender del motor.
+     */
     public function boot(): void
     {
         parent::boot();
+
+        Event::listen(NewGroupPlacementRequested::class, ProvideNewGroupPlacement::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([ExportSolverFixture::class, PruneSolverRunFilesCommand::class, SolverBenchmark::class]);
