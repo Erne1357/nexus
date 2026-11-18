@@ -4,14 +4,19 @@ namespace App\Modules\AcademicLoad\Actions\Transitions;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Reabre una carga cerrada, aprobada o publicada: vuelve a ajustes para corregirla (P3, confirmado el 10 de noviembre
  * de 2026). Una carga cerrada o aprobada que venía de un re-análisis (su último cierre salió de `reanalysis`) no vuelve a
- * ajustes sino a `reanalysis` (RA-08, confirmado el 18 de noviembre de 2026), y la versión publicada anterior sigue vigente. El motivo es obligatorio y queda como comentario de su historial. Es también como Subdirección regresa con
- * comentarios una carga que revisa para el visto bueno (tarea 4.2). De ajustes vuelve a asignación y se cierra otra
+ * ajustes sino a `reanalysis` (RA-08, confirmado el 18 de noviembre de 2026), y la versión publicada anterior sigue vigente.
+ * El destino se decide con la carga bloqueada (la modalidad FOR SHARE y la carga FOR UPDATE, el mismo orden de
+ * TransitionLoad) y no con el modelo que llegó: si la carga ya no está en el estado que quien llama veía, se rechaza en
+ * lugar de elegir un destino con datos viejos. El motivo es obligatorio y queda como comentario de su historial. Es
+ * también como Subdirección regresa con comentarios una carga que revisa para el visto bueno (tarea 4.2). De ajustes vuelve a asignación y se cierra otra
  * vez; volver a publicar crea otra versión del snapshot (tarea 4.3). Quién puede reabrirla lo decide
  * AcademicLoadPolicy::reopen antes de llamarla.
  */
@@ -22,7 +27,7 @@ final class ReopenLoad
     public function __construct(private readonly TransitionLoad $transition) {}
 
     /**
-     * @throws ValidationException si falta el motivo o el estado de la carga no permite reabrirla
+     * @throws ValidationException si falta el motivo, la carga cambió de estado o el estado no permite reabrirla
      */
     public function handle(AcademicLoad $load, User $actor, ?string $reason): AcademicLoad
     {
@@ -30,7 +35,18 @@ final class ReopenLoad
             throw ValidationException::withMessages(['reason' => 'Escribe el motivo para reabrir la carga.']);
         }
 
-        return $this->transition->handle($load, $this->target($load), $actor, $reason, $this->reopenable(...));
+        return DB::transaction(function () use ($load, $actor, $reason): AcademicLoad {
+            Modality::withTrashed()->whereKey($load->modality_id)->sharedLock()->firstOrFail();
+            $locked = $load->newQuery()->lockForUpdate()->findOrFail($load->getKey());
+
+            if ($locked->status !== $load->status) {
+                throw ValidationException::withMessages([
+                    'status' => "La carga cambió de estado (ahora está en {$locked->status->label()}): recárgala y vuelve a intentarlo.",
+                ]);
+            }
+
+            return $this->transition->handle($load, $this->target($locked), $actor, $reason, $this->reopenable(...));
+        });
     }
 
     /**

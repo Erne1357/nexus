@@ -15,6 +15,7 @@ use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\LoadTransition;
 use App\Modules\AcademicLoad\Notifications\LoadReopened;
 use App\Modules\AcademicLoad\Notifications\ReanalysisAvailable;
+use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisAvailabilityQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Modality;
@@ -23,13 +24,19 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Events\DemandForecastsComputed;
 use App\Modules\Demand\Models\DemandForecast;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Staffing\Actions\AssignTeacher;
+use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
@@ -470,6 +477,12 @@ it('RA-02: no repite el aviso a quien ya lo recibió después del último kárde
 
     expect($jefe->notifications()->where('type', ReanalysisAvailable::class)->count())->toBe(1);
 
+    // La deduplicación lee estas llaves del JSON del aviso (NotifyReanalysisAvailable::alreadyNotified): si una cambia de nombre, se avisaría en cada recálculo.
+    $data = $jefe->notifications()->where('type', ReanalysisAvailable::class)->sole()->data;
+    expect($data['parameters']['departamento'])->toBe($s['load']->department_id)
+        ->and($data['modality_id'])->toBe($s['load']->modality_id)
+        ->and($data['term_id'])->toBe($s['load']->term_id);
+
     // Otro lote de kárdex, después de ese aviso, vuelve a habilitar y a avisar.
     ImportBatch::factory()->create(['template' => 'kardex', 'status' => BatchStatus::Applied, 'applied_at' => now()->addMinute()]);
     DemandForecast::query()->update(['computed_at' => now()->addMinutes(2)]);
@@ -491,4 +504,151 @@ it('RA-08: al devolver una carga re-analizada a re-análisis, la campana avisa a
 
     Notification::assertSentTo($jefe, LoadReopened::class, fn (LoadReopened $notice): bool => $notice->message($jefe)->body === 'Falta cerrar el grupo de Cálculo');
     Notification::assertNotSentTo($subdireccion, LoadReopened::class);
+});
+
+it('RA-02: una reimportación sin calificaciones nuevas no habilita el re-análisis; con calificaciones nuevas sí', function () {
+    $s = reanalysisScenario();
+    // Las calificaciones ya estaban en Nexus antes de la publicación: el lote nuevo no las tocó.
+    KardexRecord::query()->update(['updated_at' => now()->subDays(10)]);
+
+    expect(app(ReanalysisAvailabilityQuery::class)->reasons($s['load']))
+        ->toBe(['No hay calificaciones nuevas de 20271 en Presencial después de la versión 1 de la carga: importa las del semestre actual.']);
+
+    KardexRecord::query()->sole()->update(['grade' => 95]);
+
+    expect(app(ReanalysisAvailabilityQuery::class)->reasons($s['load']))->toBe([]);
+});
+
+it('RA-02: lo que sigue cursando no cuenta como calificación nueva', function () {
+    $s = reanalysisScenario();
+    KardexRecord::query()->update(['updated_at' => now()->subDays(10)]);
+    KardexRecord::factory()->inProgress()->create(['student_id' => $s['student']->id, 'subject_id' => Subject::factory()->create()->id, 'term_code' => '20271']);
+
+    expect(implode(' | ', app(ReanalysisAvailabilityQuery::class)->reasons($s['load'])))->toContain('No hay calificaciones nuevas de 20271');
+});
+
+it('RA-01: la Action autoriza a quien actúa: un coordinador que la llama directo recibe 403 y la carga sigue publicada', function () {
+    $s = reanalysisScenario();
+    $coordinador = User::factory()->withRole(Role::Coordinador, ['career_id' => careerKey(20)])->create();
+    $otherHead = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(11)])->create();
+
+    foreach ([$coordinador, $otherHead] as $user) {
+        expect(fn () => app(StartReanalysis::class)->handle($s['load'], $user))->toThrow(AuthorizationException::class);
+    }
+
+    expect($s['load']->fresh()->status)->toBe(LoadStatus::Published)
+        ->and(LoadTransition::query()->count())->toBe(0);
+});
+
+it('RA-01: un segundo inicio sobre la misma carga se rechaza y deja un solo renglón de transición', function () {
+    $s = reanalysisScenario();
+    $jefe = reanalysisHead();
+    $stale = AcademicLoad::query()->findOrFail($s['load']->id);
+
+    app(StartReanalysis::class)->handle($s['load'], $jefe);
+
+    expect(fn () => app(StartReanalysis::class)->handle($stale, $jefe))->toThrow(ValidationException::class);
+
+    expect(LoadTransition::query()->count())->toBe(1)
+        ->and($s['load']->fresh()->status)->toBe(LoadStatus::Reanalysis);
+});
+
+it('RA-08: un modelo viejo no decide el destino: si la carga ya se publicó, la devolución se rechaza y no hay re-análisis', function () {
+    $s = reanalysisScenario();
+    $load = $s['load'];
+    app(StartReanalysis::class)->handle($load, $this->admin);
+    app(CloseLoad::class)->handle($load, $this->admin);
+    $stale = AcademicLoad::query()->findOrFail($load->id);
+    expect($stale->status)->toBe(LoadStatus::Closed);
+
+    app(PublishLoad::class)->handle($load, $this->admin);
+
+    expect(fn () => app(ReopenLoad::class)->handle($stale, $this->admin, 'Corregir'))
+        ->toThrow(ValidationException::class, 'La carga cambió de estado (ahora está en Publicada)');
+
+    expect($load->fresh()->status)->toBe(LoadStatus::Published)
+        ->and(LoadTransition::query()->count())->toBe(3);
+});
+
+it('RA-08: la devolución elige el último cierre, no uno anterior: un cierre normal antiguo y un re-análisis reciente', function (bool $approval) {
+    $s = reanalysisScenario($approval ? approvalModality() : null);
+    $load = $s['load'];
+    $step = fn () => $this->travel(1)->minutes();
+
+    // Primer ciclo, normal: publicada → ajustes → asignación → cerrada (desde asignación) → (aprobada) → publicada.
+    app(ReopenLoad::class)->handle($load, $this->admin, 'Corrección');
+    $step();
+    app(TransitionLoad::class)->handle($load, LoadStatus::Staffing, $this->admin, null, fn (): array => []);
+    $step();
+    app(CloseLoad::class)->handle($load, $this->admin);
+    $step();
+
+    if ($approval) {
+        app(ApproveLoad::class)->handle($load, $this->admin);
+        $step();
+    }
+
+    app(PublishLoad::class)->handle($load, $this->admin);
+    $step();
+
+    // Segundo ciclo, de re-análisis: la guarda de disponibilidad no es lo que se prueba aquí.
+    app(TransitionLoad::class)->handle($load, LoadStatus::Reanalysis, $this->admin, null, fn (): array => []);
+    $step();
+    app(CloseLoad::class)->handle($load, $this->admin);
+    $step();
+
+    if ($approval) {
+        app(ApproveLoad::class)->handle($load, $this->admin);
+        $step();
+    }
+
+    app(ReopenLoad::class)->handle($load, $this->admin, 'Falta un grupo');
+
+    expect($load->fresh()->status)->toBe(LoadStatus::Reanalysis);
+
+    // Se cierra otra vez desde re-análisis y se publica; un tercer ciclo normal vuelve a ajustes.
+    $step();
+    app(CloseLoad::class)->handle($load, $this->admin);
+    $step();
+
+    if ($approval) {
+        app(ApproveLoad::class)->handle($load, $this->admin);
+        $step();
+    }
+
+    app(PublishLoad::class)->handle($load, $this->admin);
+    $step();
+    app(ReopenLoad::class)->handle($load, $this->admin, 'Corrección normal');
+    $step();
+    app(TransitionLoad::class)->handle($load, LoadStatus::Staffing, $this->admin, null, fn (): array => []);
+    $step();
+    app(CloseLoad::class)->handle($load, $this->admin);
+    $step();
+    app(ReopenLoad::class)->handle($load, $this->admin, 'Otra');
+
+    expect($load->fresh()->status)->toBe(LoadStatus::Adjusting);
+})->with(['sin visto bueno' => false, 'con visto bueno (reapertura desde aprobada)' => true]);
+
+it('RA-01: editar un grupo en re-análisis no cambia lo que lee el público: la última versión publicada sigue igual', function () {
+    $s = reanalysisScenario();
+    $load = $s['load'];
+    $group = Group::factory()->create(['term_id' => $load->term_id, 'modality_id' => $load->modality_id, 'department_id' => $load->department_id, 'subject_id' => Subject::factory()->create(['department_id' => $load->department_id])->id, 'code' => 'D']);
+    GroupSession::factory()->for($group)->on(1, '10:00', '12:00')->create();
+    $teacher = Teacher::factory()->create();
+    TeacherPosition::factory()->for($teacher)->tiempoCompleto()->create();
+    StaffingRanking::factory()->create(['group_id' => $group->id, 'teacher_id' => $teacher->id, 'rank' => 1]);
+    $term = $load->term;
+    $modality = $load->modality;
+    $query = app(PublishedScheduleQuery::class);
+
+    $before = ['schedule' => $query->schedule($term, $modality), 'version' => $query->version($term, $modality), 'payload' => LoadSnapshot::query()->latestVersion()->where('academic_load_id', $load->id)->sole()->payload];
+
+    app(StartReanalysis::class)->handle($load, $this->admin);
+    app(AssignTeacher::class)->handle($group, $teacher, $this->admin);
+
+    expect($group->fresh()->teacher_id)->toBe($teacher->id)
+        ->and($query->schedule($term, $modality))->toEqual($before['schedule'])
+        ->and($query->version($term, $modality))->toBe($before['version'])
+        ->and(LoadSnapshot::query()->latestVersion()->where('academic_load_id', $load->id)->sole()->payload)->toBe($before['payload'])
+        ->and(LoadSnapshot::query()->where('academic_load_id', $load->id)->count())->toBe(1);
 });

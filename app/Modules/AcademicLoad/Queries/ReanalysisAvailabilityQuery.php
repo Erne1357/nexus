@@ -13,6 +13,7 @@ use App\Modules\Students\Enums\StudentStatus;
 use App\Modules\Students\Models\KardexRecord;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -23,12 +24,15 @@ use Illuminate\Support\Collection;
  * actual (confirmado el 18 de noviembre de 2026), y se comprueban cuatro cosas, cada una con su motivo:
  *
  * 1. La carga está publicada.
- * 2. Un lote de kárdex se aplicó después de su última publicación (`published_at`).
- * 3. Las calificaciones del semestre ordinario anterior al de la carga (TermCode::previousRegular: la carga de `20273`
- *    se re-analiza con las de `20271`, DM-01) ya empezaron a llegar: hay al menos una fila aprobada o reprobada de ese
- *    periodo entre los alumnos activos de la modalidad. No se exige que todos estén calificados: «el jefe decide,
- *    viendo el avance» (confirmado el 18 de noviembre de 2026), y `progress()` le dice cuántas van (N de M, %). Si
- *    llegan más calificaciones después, la carga vuelve a publicarse y puede re-analizarse otra vez.
+ * 2. Un lote de kárdex se aplicó después de su última publicación (`published_at`): es la referencia contra la que se
+ *    compara la frescura de la proyección.
+ * 3. Llegaron calificaciones nuevas del semestre ordinario anterior al de la carga (TermCode::previousRegular: la carga
+ *    de `20273` se re-analiza con las de `20271`, DM-01): hay al menos una fila aprobada o reprobada de ese periodo entre
+ *    los alumnos activos de la modalidad cuyo `updated_at` es posterior a `published_at`. Una reimportación sin
+ *    calificaciones nuevas no basta: la importación solo toca `updated_at` de lo que cambió. No se exige que todos estén
+ *    calificados: «el jefe decide, viendo el avance» (confirmado el 18 de noviembre de 2026), y `progress()` le dice
+ *    cuántas van (N de M, %). Si llegan más calificaciones después, la carga vuelve a publicarse y puede re-analizarse
+ *    otra vez.
  * 4. La proyección de demanda del periodo de la carga y su modalidad se recalculó después de ese lote: todas sus filas
  *    tienen `computed_at` posterior a la aplicación del último lote de kárdex. La cadena que recalcula es asíncrona
  *    (lote, avance de alumnos, proyección), por eso sin esto el jefe compararía contra una proyección vieja.
@@ -48,6 +52,15 @@ final class ReanalysisAvailabilityQuery
      */
     public function reasons(AcademicLoad $load): array
     {
+        return $this->evaluate($load, fn (): ?string => $this->oldestForecast($load));
+    }
+
+    /**
+     * @param  Closure(): ?string  $oldestForecast  el `computed_at` más viejo de la proyección del periodo y la modalidad
+     * @return list<string>
+     */
+    private function evaluate(AcademicLoad $load, Closure $oldestForecast): array
+    {
         $load->loadMissing(['term', 'modality']);
 
         if ($load->status !== LoadStatus::Published) {
@@ -66,15 +79,15 @@ final class ReanalysisAvailabilityQuery
 
         $reasons = [];
         $previous = TermCode::previousRegular($load->term->code);
-        $graded = $this->kardexRows($load, $previous)->whereIn('kardex_records.result', self::GRADED)->exists();
+        $graded = $this->kardexRows($load, $previous)->whereIn('kardex_records.result', self::GRADED);
 
-        if (! $graded) {
-            $reasons[] = "No hay calificaciones de {$previous} en {$load->modality->name}: importa las del semestre actual.";
+        if (! (clone $graded)->where('kardex_records.updated_at', '>', $load->published_at)->exists()) {
+            $reasons[] = $graded->exists()
+                ? "No hay calificaciones nuevas de {$previous} en {$load->modality->name} después de la versión {$load->current_version} de la carga: importa las del semestre actual."
+                : "No hay calificaciones de {$previous} en {$load->modality->name}: importa las del semestre actual.";
         }
 
-        $oldest = DemandForecast::query()
-            ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)
-            ->min('computed_at');
+        $oldest = $oldestForecast();
 
         if ($oldest === null) {
             $reasons[] = "La proyección de demanda de {$load->term->code} en {$load->modality->name} no se ha calculado.";
@@ -83,6 +96,13 @@ final class ReanalysisAvailabilityQuery
         }
 
         return $reasons;
+    }
+
+    private function oldestForecast(AcademicLoad $load): ?string
+    {
+        return DemandForecast::query()
+            ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)
+            ->min('computed_at');
     }
 
     /**
@@ -116,13 +136,21 @@ final class ReanalysisAvailabilityQuery
      */
     public function availableLoads(string $termId, string $modalityId): Collection
     {
-        return AcademicLoad::query()
+        $loads = AcademicLoad::query()
             ->where('term_id', $termId)->where('modality_id', $modalityId)
             ->where('status', LoadStatus::Published)
             ->with(['term', 'modality', 'department'])
-            ->get()
-            ->filter(fn (AcademicLoad $load): bool => $this->isAvailable($load))
-            ->values();
+            ->get();
+
+        if ($loads->isEmpty()) {
+            return $loads;
+        }
+
+        // Todas comparten periodo y modalidad: la proyección se lee una vez, no por carga.
+        $oldest = $this->oldestForecast($loads->first());
+        $forecast = fn (): ?string => $oldest;
+
+        return $loads->filter(fn (AcademicLoad $load): bool => $this->evaluate($load, $forecast) === [])->values();
     }
 
     /**

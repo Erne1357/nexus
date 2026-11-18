@@ -264,7 +264,7 @@ trait ClosesLoads
             ];
         }
 
-        if (in_array($status, [LoadStatus::Proposed, LoadStatus::Staffing], true)) {
+        if (in_array($status, [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Reanalysis], true)) {
             $missing = $closing->missing();
             $actions[] = [
                 'key' => 'close',
@@ -277,7 +277,7 @@ trait ClosesLoads
                     $missing > 0 => $closing->missingLabel().' para cerrar.',
                     default => null,
                 },
-                'explained' => Gate::allows('close', $load) && $status === LoadStatus::Staffing && $missing > 0,
+                'explained' => Gate::allows('close', $load) && in_array($status, [LoadStatus::Staffing, LoadStatus::Reanalysis], true) && $missing > 0,
             ];
         }
 

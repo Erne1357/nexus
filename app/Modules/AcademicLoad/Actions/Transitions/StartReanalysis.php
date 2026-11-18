@@ -6,11 +6,14 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Queries\ReanalysisAvailabilityQuery;
 use App\Modules\Core\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Inicia el re-análisis de una carga publicada: `published` → `reanalysis` (tarea 8.1; RA-01, confirmado el 18 de noviembre
- * de 2026). Lo inicia el jefe del departamento (AcademicLoadPolicy::startReanalysis, antes de llamarla) y solo está
+ * de 2026). Lo inicia el jefe del departamento (la Action autoriza `startReanalysis` de AcademicLoadPolicy para quien
+ * actúa, así quien la llame después no se salta la policy) y solo está
  * habilitado cuando llegaron las calificaciones del semestre actual y la proyección ya las refleja (RA-02): la guarda es
  * ReanalysisAvailabilityQuery, que se evalúa con la carga ya bloqueada. No exige estar en la ventana del calendario
  * (el calendario solo informa; confirmado el 18 de noviembre de 2026).
@@ -29,10 +32,13 @@ final class StartReanalysis
     ) {}
 
     /**
+     * @throws AuthorizationException si quien actúa no puede iniciar el re-análisis de la carga
      * @throws ValidationException si la carga no está publicada, el re-análisis no está habilitado o un módulo lo veta
      */
     public function handle(AcademicLoad $load, User $actor, ?string $comment = null): AcademicLoad
     {
+        Gate::forUser($actor)->authorize('startReanalysis', $load);
+
         return $this->transition->handle($load, LoadStatus::Reanalysis, $actor, $comment, $this->availability->reasons(...));
     }
 }
