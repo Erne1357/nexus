@@ -15,6 +15,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Queries\NewGroupPlacementQuery;
 use App\Modules\Scheduling\Rules\GroupCode;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
@@ -45,7 +46,8 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * - Sin docente: la asignación es de Staffing (Asignación docente).
  *
  * Las demás reglas duras (HC-03, por ejemplo, si a esa hora ya se acomodó otro grupo de su semestre) se guardan y quedan
- * marcadas como en el editor; el motor ya las revisó al proponer.
+ * marcadas como en el editor; el motor ya las revisó al proponer. Un deadlock de la base sale como error de validación
+ * (LoadEditability::guard()), no como un 500.
  */
 final class OpenReanalysisGroup
 {
@@ -57,6 +59,7 @@ final class OpenReanalysisGroup
     public function __construct(
         private readonly ReplaceGroupSessions $sessions,
         private readonly NewGroupPlacementQuery $placements,
+        private readonly LoadEditability $editability,
     ) {}
 
     /**
@@ -81,7 +84,7 @@ final class OpenReanalysisGroup
 
         $this->authorizeGroup($gate, self::draft($load, $spec));
 
-        $group = DB::transaction(function () use ($load, $suggestion, $spec, $placement, $actor): Group {
+        $group = $this->editability->guard(fn (): Group => DB::transaction(function () use ($load, $suggestion, $spec, $placement, $actor): Group {
             $status = AcademicLoad::query()->whereKey($load->getKey())->sharedLock()->first(['id', 'status'])?->status;
 
             if ($status !== LoadStatus::Reanalysis) {
@@ -105,7 +108,7 @@ final class OpenReanalysisGroup
             GroupsCreated::dispatch($load->term_id, $load->modality_id, [$group->id]);
 
             return $group;
-        });
+        }), 'suggestion');
 
         return $group->refresh();
     }

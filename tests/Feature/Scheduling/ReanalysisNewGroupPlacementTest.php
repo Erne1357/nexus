@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
@@ -13,8 +14,10 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\NewGroupPlacementQuery;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
 use App\Modules\Scheduling\Validation\Minutes;
+use App\Modules\Solver\Queries\NewGroupSlotQuery;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Tests\Support\Scheduling\ReanalysisWorld;
 
 /*
@@ -91,20 +94,63 @@ it('HC-03: en una materia sin grupos, no se empalma con la cohorte del semestre 
             && Minutes::overlap(Minutes::of($mate->starts_at), Minutes::of($mate->ends_at), Minutes::of($session['startsAt']), Minutes::of($session['endsAt']))))->toBe([]);
 });
 
-it('HC-10: no propone un salón apartado por un préstamo vivo a esa hora, así que lo que propone pasa la revisión de aplicar', function () {
-    $first = $this->world->newGroupPlacement();
-    $session = $first->sessions[0];
-    InterdepartmentalAgreement::factory()->create([
-        'term_id' => $this->world->term->id, 'campus_id' => $this->world->c2->id, 'room_id' => $session['roomId'],
-        'day' => $session['day'], 'starts_at' => $session['startsAt'], 'ends_at' => $session['endsAt'],
+it('HC-10: nunca sugiere un salón de otro departamento, aunque la carga tenga ahí el préstamo aceptado de otro grupo', function () {
+    Room::query()->where('campus_id', $this->world->c2->id)->update(['capacity' => 30]);
+    $owner = Department::factory()->create(['name' => 'Sistemas']);
+    $borrowed = Room::factory()->capacity(70)->create(['building_id' => Building::factory()->create(['campus_id' => $this->world->c2->id])->id, 'code' => 'SC-70', 'department_id' => $owner->id]);
+    $a = $this->world->groups['A'];
+    GroupSession::query()->where('group_id', $a->id)->update(['room_id' => $borrowed->id]);
+    InterdepartmentalAgreement::factory()->accepted()->create([
+        'term_id' => $this->world->term->id, 'campus_id' => $this->world->c2->id, 'modality_id' => $this->world->modality->id,
+        'from_department_id' => $this->world->department->id, 'to_department_id' => $owner->id, 'group_id' => $a->id,
+        'room_id' => $borrowed->id, 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '11:00',
     ]);
-    $spec = $this->world->openGroupSuggestion()->newGroup;
 
     $placement = $this->world->newGroupPlacement();
 
-    expect($placement->isPlaced())->toBeTrue()
-        ->and(app(NewGroupPlacementQuery::class)->conflicts($this->world->load, $spec, $first))->toBe(["{$first->roomCode($session['roomId'])} está prestado a otro grupo (HC-10) el lunes 9:00–10:00."])
-        ->and(app(NewGroupPlacementQuery::class)->conflicts($this->world->load, $spec, $placement))->toBe([]);
+    expect($placement->isPlaced())->toBeFalse()
+        ->and($placement->roomIds())->not->toContain($borrowed->id)
+        ->and($placement->reasons[0])->toStartWith('HC-05');
+});
+
+it('lo que propone el motor pasa la revisión de aplicar; si no, lo da sin lugar con ese motivo', function () {
+    $placement = $this->world->newGroupPlacement();
+    $spec = $this->world->openGroupSuggestion()->newGroup;
+
+    expect(app(NewGroupPlacementQuery::class)->conflicts($this->world->load, $spec, $placement))->toBe([]);
+
+    $other = $this->world->group($this->world->differential, $this->world->iind, 20, $this->world->c2, 1, day: 5);
+    $session = $placement->sessions[0];
+    GroupSession::factory()->for($other)->inRoom(Room::query()->whereKey($session['roomId'])->sole())->on($session['day'], $session['startsAt'], $session['endsAt'])->create();
+    Event::forget(NewGroupPlacementRequested::class);
+    Event::listen(NewGroupPlacementRequested::class, fn (NewGroupPlacementRequested $event) => $event->providePlacement($placement));
+
+    $stale = $this->world->newGroupPlacement();
+
+    expect($stale->isPlaced())->toBeFalse()
+        ->and($stale->reasons)->toBe(["{$placement->roomCode($session['roomId'])} ya está ocupado (HC-02) el lunes 9:00–10:00."]);
+});
+
+it('si se acaba el tiempo, lo dice para el jefe y no como en una corrida', function () {
+    $now = 0.0;
+    $clock = function () use (&$now): float {
+        return $now += 10.0;
+    };
+
+    $placement = app(NewGroupSlotQuery::class)->place($this->world->load, $this->world->openGroupSuggestion()->newGroup, $clock);
+
+    expect($placement->isPlaced())->toBeFalse()
+        ->and($placement->reasons)->toBe(['El motor no le encontró lugar a tiempo: vuelve a buscar en un momento.']);
+});
+
+it('si el motor falla, la tarjeta dice que no hay lugar, sin un error de la página', function () {
+    $spec = $this->world->openGroupSuggestion()->newGroup;
+    $broken = new NewGroupSpec((string) Str::uuid7(), $spec->subjectCode, $spec->campusId, $spec->campusCode, $spec->careerId, $spec->careerCode, $spec->studyPlanId, $spec->semester, $spec->capacity, $spec->seats);
+
+    $placement = app(NewGroupPlacementQuery::class)->place($this->world->load, $broken);
+
+    expect($placement->isPlaced())->toBeFalse()
+        ->and($placement->reasons)->toBe(['El motor falló al buscar el lugar y ya quedó registrado: vuelve a intentar o ábrelo en Horarios.']);
 });
 
 it('sin grupos de la carga en el campus lo dice sin armar la entrada del motor', function () {

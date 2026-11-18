@@ -112,6 +112,15 @@ it('HC-02 y HC-11: si el salón sugerido ya se ocupó o se bloqueó a esa hora, 
     expect(openReanalysisGroupErrors($this->world, $this->jefe, $this->suggestion, $this->placement)['suggestion'][0])->toContain('está bloqueado (HC-11)');
 });
 
+it('HC-10: si el salón sugerido pasó a otro departamento, no crea nada: el grupo nuevo no tiene préstamo', function () {
+    $session = $this->placement->sessions[0];
+    Room::query()->whereKey($session['roomId'])->update(['department_id' => Department::factory()->create(['name' => 'Sistemas'])->id]);
+
+    expect(openReanalysisGroupErrors($this->world, $this->jefe, $this->suggestion, $this->placement)['suggestion'][0])
+        ->toBe("Esto cambió desde que buscaste el lugar: {$this->placement->roomCode($session['roomId'])} es de Sistemas y el grupo nuevo no tiene préstamo (HC-10) el lunes 9:00–10:00. {$this->placement->roomCode($session['roomId'])} es de Sistemas y el grupo nuevo no tiene préstamo (HC-10) el martes 9:00–10:00. Vuelve a buscar horario y salón.")
+        ->and(newReanalysisGroups($this->world))->toBe(2);
+});
+
 it('no se aplica con la carga fuera de re-análisis', function () {
     $this->world->load->update(['status' => LoadStatus::Closed]);
 

@@ -3,10 +3,7 @@
 namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\Academic\Models\Subject;
-use App\Modules\AcademicLoad\Enums\AgreementKind;
-use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
-use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
@@ -25,18 +22,21 @@ use Illuminate\Support\Facades\Event;
  * El horario y el salón de «Abrir un grupo» del re-análisis (tarea 8.3b).
  *
  * - `place()` pide al motor dónde cabe el grupo nuevo (NewGroupPlacementRequested: Scheduling no ve a Solver, que
- *   contesta con la heurística y todo lo demás fijo) y le pone la clave y la capacidad de sus salones. Null si nadie
- *   contesta. Tarda lo que tarda armar la entrada de la carga (0.7–0.9 s con la demo masiva): se llama al abrir la
- *   tarjeta, nunca al pintar.
+ *   contesta con la heurística y todo lo demás fijo) y le pone la clave y la capacidad de sus salones. Como red, revisa lo
+ *   que propone con conflicts(): si algo no pasa, lo devuelve sin lugar con ese motivo, para que la tarjeta nunca ofrezca
+ *   un lugar que al aplicar diría «Esto cambió…». Null si nadie contesta. Tarda lo que tarda armar la entrada de la carga
+ *   (0.7–0.9 s con la demo masiva): se llama al abrir la tarjeta, nunca al pintar.
  * - `freeRooms()` son los salones a los que se puede cambiar el grupo nuevo al editarlo, solo si todas sus sesiones van en
- *   un mismo salón: del campus, activos, sin préstamo (del departamento de la carga o de nadie; supuesto por confirmar),
- *   de la capacidad del grupo o más (HC-05), del tipo que pide cada sesión (la práctica de una materia con laboratorio en
- *   laboratorio, taller o sala de cómputo; lo demás en aula, como ReanalysisSuggestionsQuery; HC-06) y libres a todas sus
- *   horas: sin otra sesión (HC-02), sin bloqueo (HC-11) y sin el préstamo vivo de otro grupo (HC-10). El más chico primero.
- * - `conflicts()` es la misma revisión para las sesiones que se van a escribir: lo que OpenReanalysisGroup revisa con los
- *   candados puestos antes de crear el grupo.
+ *   un mismo salón: del campus, activos, sin dueño o del departamento de la carga (el grupo nuevo no tiene préstamos, y el
+ *   validador solo acepta en un salón ajeno el préstamo del propio grupo, HC-10), de la capacidad del grupo o más (HC-05),
+ *   del tipo que pide cada sesión (la práctica de una materia con laboratorio en laboratorio, taller o sala de cómputo; lo
+ *   demás en aula, como ReanalysisSuggestionsQuery; HC-06) y libres a todas sus horas: sin otra sesión (HC-02) ni bloqueo
+ *   (HC-11). El más chico primero.
+ * - `conflicts()` es la misma revisión para las sesiones que se van a escribir (el salón activo en el campus, sin dueño o
+ *   del departamento, sin otra sesión ni bloqueo a esa hora): lo que OpenReanalysisGroup revisa con los candados puestos
+ *   antes de crear el grupo. Son las mismas reglas que los salones candidatos del motor (NewGroupSlotQuery).
  *
- * Las dos últimas leen en cuatro consultas, sin importar cuántos salones o sesiones haya.
+ * Las dos últimas leen en tres consultas, sin importar cuántos salones o sesiones haya.
  */
 final class NewGroupPlacementQuery
 {
@@ -53,8 +53,10 @@ final class NewGroupPlacementQuery
         $rooms = Room::withTrashed()->whereIn('id', $placement->roomIds())->get(['id', 'code', 'capacity'])
             ->mapWithKeys(fn (Room $room): array => [$room->id => ['code' => $room->code, 'capacity' => $room->capacity]])
             ->all();
+        $placement = $placement->withRooms($rooms);
+        $conflicts = $this->conflicts($load, $spec, $placement);
 
-        return $placement->withRooms($rooms);
+        return $conflicts === [] ? $placement : new NewGroupPlacement([], reasons: $conflicts, seconds: $placement->seconds);
     }
 
     /**
@@ -97,7 +99,7 @@ final class NewGroupPlacementQuery
     public function conflicts(AcademicLoad $load, NewGroupSpec $spec, NewGroupPlacement $placement): array
     {
         $roomIds = $placement->roomIds();
-        $usable = Room::query()->whereIn('id', $roomIds)->where('campus_id', $spec->campusId)->where('is_active', true)->pluck('code', 'id');
+        $rooms = Room::query()->whereIn('id', $roomIds)->with(['department' => fn ($query) => $query->withTrashed()])->get(['id', 'campus_id', 'department_id', 'is_active'])->keyBy('id');
         $busy = $this->occupancy($load, $spec->campusId, $roomIds, $placement);
         $conflicts = [];
 
@@ -108,7 +110,12 @@ final class NewGroupPlacementQuery
 
             $code = $placement->roomCode($session['roomId']) ?? 'su salón';
             $when = mb_strtolower(Minutes::dayLabel($session['day'])).' '.Minutes::labelOf($session['startsAt']).'–'.Minutes::labelOf($session['endsAt']);
-            $reason = isset($usable[$session['roomId']]) ? $busy($session['roomId'], $session) : 'ya no está activo';
+            $room = $rooms[$session['roomId']] ?? null;
+            $reason = match (true) {
+                $room === null || ! $room->is_active || $room->campus_id !== $spec->campusId => 'ya no está activo en el campus',
+                $room->department_id !== null && $room->department_id !== $load->department_id => 'es de '.($room->department?->name ?? 'otro departamento').' y el grupo nuevo no tiene préstamo (HC-10)',
+                default => $busy($session['roomId'], $session),
+            };
 
             if ($reason !== null) {
                 $conflicts[] = "{$code} {$reason} el {$when}.";
@@ -131,7 +138,8 @@ final class NewGroupPlacementQuery
 
     /**
      * Qué ocupa un salón a la hora de una sesión del grupo nuevo, o null si está libre: las sesiones activas del periodo en
-     * el campus (HC-02), los bloqueos del salón (HC-11) y los préstamos vivos (HC-10), de los días del grupo nuevo.
+     * el campus (HC-02) y los bloqueos del salón (HC-11), de los días del grupo nuevo. Los préstamos de un salón sin dueño
+     * o del departamento no cuentan: ahí el validador no revisa HC-10.
      *
      * @param  list<string>  $roomIds
      * @return Closure(string, array{day: int, startsAt: string, endsAt: string}): ?string
@@ -155,24 +163,14 @@ final class NewGroupPlacementQuery
             ->toBase()
             ->get(['room_id', 'day', 'starts_at', 'ends_at'])
             ->groupBy('room_id');
-        $loans = InterdepartmentalAgreement::query()
-            ->where('kind', AgreementKind::RoomLoan->value)
-            ->where('term_id', $load->term_id)
-            ->whereIn('status', AgreementStatus::liveValues())
-            ->whereIn('room_id', $roomIds)
-            ->whereIn('day', $days)
-            ->toBase()
-            ->get(['room_id', 'day', 'starts_at', 'ends_at'])
-            ->groupBy('room_id');
 
-        return function (string $roomId, array $session) use ($sessions, $blocks, $loans): ?string {
+        return function (string $roomId, array $session) use ($sessions, $blocks): ?string {
             $overlaps = fn (object $row): bool => (int) $row->day === $session['day']
                 && Minutes::overlap(Minutes::of($row->starts_at), Minutes::of($row->ends_at), Minutes::of($session['startsAt']), Minutes::of($session['endsAt']));
 
             return match (true) {
                 ($sessions[$roomId] ?? collect())->contains($overlaps) => 'ya está ocupado (HC-02)',
                 ($blocks[$roomId] ?? collect())->contains($overlaps) => 'está bloqueado (HC-11)',
-                ($loans[$roomId] ?? collect())->contains($overlaps) => 'está prestado a otro grupo (HC-10)',
                 default => null,
             };
         };
