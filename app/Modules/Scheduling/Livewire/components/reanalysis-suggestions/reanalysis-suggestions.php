@@ -43,7 +43,7 @@ use Mary\Traits\Toast;
  * vuelve al recargar; no se guarda. Al aplicar, avisa a la página con `reanalysis-adjusted` para que pinte lo ya ajustado.
  *
  * «Abrir un grupo» (tarea 8.3b) pide su horario y su salón al motor solo cuando el jefe lo busca en su tarjeta
- * (`findPlacement()`, NewGroupPlacementQuery: 0.7–0.8 s con la demo masiva, así que va en la petición y no en cola) y lo
+ * (`findPlacement()`, NewGroupPlacementQuery: 0.7–0.9 s con la demo masiva, así que va en la petición y no en cola) y lo
  * guarda en `placements` con la firma de la sugerencia: nunca se calcula al pintar, y si la sugerencia cambia (se aplicó
  * otra), el lugar ya no se usa y se vuelve a buscar. «Editar» elige otro salón libre de la lista cuando todas sus sesiones
  * van en uno (NewGroupPlacementQuery::freeRooms()); «Aplicar» lo crea con OpenReanalysisGroup, que revisa con los candados

@@ -48,8 +48,8 @@ final class SolverServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Contesta dónde cabe el grupo nuevo de «Abrir un grupo» del re-análisis (tarea 8.3b): Scheduling lo pide con un
-     * evento porque no puede depender del motor.
+     * Los comandos del motor y, para «Abrir un grupo» del re-análisis (tarea 8.3b), quien contesta dónde cabe el grupo
+     * nuevo: Scheduling lo pide con un evento porque no puede depender del motor.
      */
     public function boot(): void
     {

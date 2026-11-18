@@ -9,6 +9,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
+use App\Modules\Solver\Contract\CampusGrid;
 use App\Modules\Solver\Contract\GroupInput;
 use App\Modules\Solver\Contract\HardViolation;
 use App\Modules\Solver\Contract\ProposedSession;
@@ -56,6 +57,11 @@ final class NewGroupSlotQuery
             "reanalysis-new-group:{$load->getKey()}",
         );
         $virtual = $this->virtualGroup($spec, $load);
+
+        if (! in_array($spec->campusCode, array_map(fn (CampusGrid $campus): string => $campus->code, $build->input->campuses), true)) {
+            return new NewGroupPlacement([], reasons: ["La carga no tiene grupos en {$spec->campusCode}: ábrelo en Horarios."], seconds: round($clock() - $started, 2));
+        }
+
         $input = $this->withOnlyMovable($build->input, $virtual);
         $output = (new PhpHeuristicEngine(search: null))->solve($input);
 
@@ -80,7 +86,7 @@ final class NewGroupSlotQuery
             score: $placed === [] ? 0 : $output->softScore->total,
             scoreByRule: $placed === [] ? [] : $byRule,
             reasons: $placed === [] && $reasons === [] ? ['El motor no le encontró lugar.'] : $reasons,
-            evidence: $placed === [] ? [] : ['Sin choques duros con los '.(count($input->groups) - 1).' grupos que deja fijos', $this->scoreLine($output->softScore->total, $byRule)],
+            evidence: $placed === [] ? [] : ['Sin choques duros con los '.number_format(count($input->groups) - 1).' grupos que deja fijos', $this->scoreLine($output->softScore->total, $byRule)],
             seconds: round($clock() - $started, 2),
         );
     }

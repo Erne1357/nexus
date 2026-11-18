@@ -27,7 +27,7 @@ use Illuminate\Support\Facades\Event;
  *
  * - `place()` pide al motor dónde cabe el grupo nuevo (NewGroupPlacementRequested: Scheduling no ve a Solver, que
  *   contesta con la heurística y todo lo demás fijo) y le pone la clave y la capacidad de sus salones. Null si nadie
- *   contesta. Tarda lo que tarda armar la entrada de la carga (0.7–0.8 s con la demo masiva): se llama al abrir la
+ *   contesta. Tarda lo que tarda armar la entrada de la carga (0.7–0.9 s con la demo masiva): se llama al abrir la
  *   tarjeta, nunca al pintar.
  * - `freeRooms()` son los salones a los que se puede cambiar el grupo nuevo al editarlo, solo si todas sus sesiones van en
  *   un mismo salón: del campus, activos, sin préstamo (del departamento de la carga o de nadie; supuesto por confirmar),
