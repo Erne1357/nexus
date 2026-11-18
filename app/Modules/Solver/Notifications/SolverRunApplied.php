@@ -18,7 +18,7 @@ use Illuminate\Support\Str;
 final class SolverRunApplied extends NexusNotification
 {
     /**
-     * @param  array{groups: int, sessions: int}|null  $summary  el resumen de ApplySolverRun; nulo si falló
+     * @param  array{groups: int, sessions: int, conflicts_pending?: bool}|null  $summary  el resumen de ApplySolverRun; nulo si falló
      */
     public function __construct(private readonly SolverRun $run, private readonly ?array $summary = null, private readonly ?string $error = null) {}
 
@@ -39,7 +39,7 @@ final class SolverRunApplied extends NexusNotification
 
         return new NotificationMessage(
             title: $failed ? "No se pudo aplicar la corrida del motor para {$scope}" : "La corrida del motor para {$scope} se aplicó",
-            body: Str::limit($failed ? $this->error : "{$this->summary['sessions']} sesiones escritas en {$this->summary['groups']} grupos; choques recalculados.", 160),
+            body: Str::limit($failed ? $this->error : "{$this->summary['sessions']} sesiones escritas en {$this->summary['groups']} grupos".(($this->summary['conflicts_pending'] ?? false) ? '. Los choques quedan por recalcular.' : '; choques recalculados.'), 160),
             icon: $failed ? 'o-exclamation-triangle' : 'o-check-circle',
             route: 'solver.runs',
             parameters: ['corrida' => $this->run->getKey()],

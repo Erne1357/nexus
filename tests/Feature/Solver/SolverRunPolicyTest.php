@@ -3,9 +3,11 @@
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Solver\Models\SolverRun;
+use App\Modules\Solver\Queries\CareerLoadsQuery;
 
 /*
 | SolverRunPolicy (tarea 6.2; reglas-de-negocio.md, «Aprobaciones y permisos»; decisión del usuario del 17 de noviembre
@@ -80,6 +82,7 @@ it('el coordinador ve las corridas de departamento de las cargas que tocan su ca
     $otherCareer = SolverRun::factory()->forCareer()->done()->create(['modality_id' => $this->presencial->id, 'career_id' => careerKey(21)]);
 
     expect($coordinador->can('view', $this->departmentRun))->toBeFalse();
+    app()->forgetScopedInstances();
 
     Group::factory()->create([
         'term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'owner_career_id' => careerKey(20),
@@ -90,4 +93,17 @@ it('el coordinador ve las corridas de departamento de las cargas que tocan su ca
         ->and($coordinador->can('apply', $this->departmentRun))->toBeFalse()
         ->and($coordinador->can('view', $otherLoad))->toBeFalse()
         ->and($coordinador->can('view', $otherCareer))->toBeFalse();
+});
+
+it('el coordinador no ve la corrida de una carga con grupos de su carrera solo en otra modalidad o en otro periodo', function () {
+    $coordinador = solverUser(Role::Coordinador, ['career_id' => careerKey(20)]);
+    $subject = Subject::factory()->create(['department_id' => departmentKey(10)]);
+    $group = fn (array $attributes): Group => Group::factory()->create(['owner_career_id' => careerKey(20), 'subject_id' => $subject->id, ...$attributes]);
+
+    $group(['term_id' => $this->departmentRun->term_id, 'modality_id' => modalityOf('EAD')->id]);
+    $group(['term_id' => Term::factory()->create()->id, 'modality_id' => $this->presencial->id]);
+    $group(['term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'owner_career_id' => careerKey(21)]);
+
+    expect($coordinador->can('view', $this->departmentRun))->toBeFalse()
+        ->and(app(CareerLoadsQuery::class)->careersOf($this->departmentRun->term_id, $this->presencial->id, departmentKey(10)))->toBe([careerKey(21)]);
 });

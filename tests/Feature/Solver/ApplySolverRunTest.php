@@ -15,6 +15,7 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Actions\Sessions\ReplaceGroupSessions;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Events\ScheduleConflictsSynced;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Actions\ApplySolverRun;
@@ -28,6 +29,7 @@ use App\Modules\Solver\Notifications\SolverRunApplied;
 use App\Modules\Solver\Support\RunPayloads;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
@@ -268,4 +270,41 @@ it('pedir aceptar exige la corrida terminada y al jefe de la carga', function ()
 
     expect(fn () => app(RequestApplySolverRun::class)->handle($run, $coordinador))->toThrow(AuthorizationException::class);
     Queue::assertNothingPushed();
+});
+
+it('SV-05: sobre una carga que ya no se edita no acepta, aunque no haya nada que escribir', function (?LoadStatus $status) {
+    $run = doneSolverRun([$this->same->id => [[1, '07:00', '09:00']]]);
+    $load = AcademicLoad::query()->ofDepartment($this->term->id, $this->pres->id, $this->sistemas->id)->sole();
+    $status === null ? $load->delete() : $load->forceFill(['status' => $status])->save();
+
+    expect(fn () => applySolverRun($run))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors()['run'][0])->toStartWith('La carga ya no se puede editar:'))
+        ->and($run->fresh()->status)->toBe(SolverRunStatus::Done)
+        ->and(Activity::query()->where('subject_id', $run->id)->where('event', 'applied')->exists())->toBeFalse();
+})->with([
+    'cerrada' => [LoadStatus::Closed],
+    'aprobada' => [LoadStatus::Approved],
+    'sin carga' => [null],
+]);
+
+it('de dos aceptaciones de la misma corrida, la segunda falla: revisa el estado con la corrida bloqueada', function () {
+    $run = standardRun();
+    $second = $run->fresh();
+
+    applySolverRun($run);
+
+    expect(fn () => applySolverRun($second))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['run' => ['Solo se acepta una corrida terminada.']]))
+        ->and(Activity::query()->where('subject_id', $run->id)->where('event', 'applied')->count())->toBe(1);
+});
+
+it('si el recálculo de choques falla después de escribir, la corrida queda aplicada y el resumen lo dice', function () {
+    $run = standardRun();
+    Event::listen(ScheduleConflictsSynced::class, fn () => throw new RuntimeException('Valkey no responde.'));
+
+    $summary = applySolverRun($run);
+
+    expect($summary['conflicts_pending'])->toBeTrue()
+        ->and($run->fresh()->status)->toBe(SolverRunStatus::Applied)
+        ->and(appliedSessionsOf($this->placing))->toBe(['3 10:00-12:00']);
 });

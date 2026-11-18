@@ -5,8 +5,9 @@
       grupos y sesiones de hoy y los grupos por campus; a la derecha «Lanzar corrida» (deshabilitado con su motivo).
     - El aviso de tronco común (SV-20) cuando otra carga que comparte alumnos todavía no tiene horario.
     - El renglón de selectores (solver::runs.controls) y la línea de la corrida elegida (motor, quién, insignias).
-    - Según el estado: la semana con la bandeja (solver::runs.compare), el avance de la que corre (con `wire:poll` solo
-      entonces), su falla o la línea de aplicada, descartada o cancelada.
+    - Según el estado: la semana con la bandeja (solver::runs.compare), el avance de la que corre
+      (solver::components.run-progress, con `wire:poll` solo entonces), su falla o la línea de aplicada, descartada o
+      cancelada.
     - El historial (solver::runs.history) y los drawers y modales (solver::runs.panels).
 --}}
 @php
@@ -110,7 +111,7 @@
             @include('solver::runs.controls')
 
             @if ($run->status->isInProgress())
-                <section class="grid gap-3.5 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" wire:poll.2s="refreshRun" data-testid="run-live">
+                <section class="grid gap-3.5 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" data-testid="run-live">
                     <div class="flex flex-wrap items-center justify-between gap-2">
                         <h2 class="text-lg font-bold">Corrida <span class="font-mono">{{ $row['number'] }}</span> · {{ $run->scope_kind === \App\Modules\Solver\Enums\RunScope::Department ? 'toda la carga del departamento' : 'carrera '.($run->career->code ?? '') }}</h2>
                         @if ($can['cancel'])
@@ -119,35 +120,13 @@
                             </button>
                         @endif
                     </div>
-                    @if ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Queued)
-                        <p class="flex items-center gap-2 text-neutral"><x-icon name="o-clock" class="h-5 w-5 shrink-0" aria-hidden="true" />En cola: empieza en cuanto la tome la cola.</p>
-                    @else
-                        <dl class="grid overflow-hidden rounded-box border border-base-300 md:grid-cols-3">
-                            <div class="grid gap-1 px-4 py-3">
-                                <dt class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Avance</dt>
-                                <dd class="font-mono text-2xl font-semibold">{{ $run->progress }}<small class="text-sm font-normal text-neutral"> %</small></dd>
-                                <progress class="progress progress-primary h-2 w-full" value="{{ $run->progress }}" max="100" aria-label="Avance de la corrida"></progress>
-                            </div>
-                            <div class="grid gap-1 border-base-300 px-4 py-3 max-md:border-t md:border-l">
-                                <dt class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Mejor puntaje hasta ahora</dt>
-                                <dd class="font-mono text-2xl font-semibold">{{ $run->best_score === null ? '—' : number_format($run->best_score) }}</dd>
-                                <p class="text-sm text-neutral">Menos es mejor.</p>
-                            </div>
-                            <div class="grid gap-1 border-base-300 px-4 py-3 max-md:border-t md:border-l">
-                                <dt class="text-[11.5px] font-medium tracking-[0.09em] text-neutral uppercase">Tiempo</dt>
-                                <dd class="font-mono text-2xl font-semibold">{{ gmdate('i:s', min($live['elapsed'], 5999)) }}<small class="text-sm font-normal text-neutral"> de {{ gmdate('i:s', $live['limit']) }}</small></dd>
-                                @if ($run->cancel_requested_at)
-                                    <p class="text-sm text-warning">Se pidió cancelarla: se detiene en su siguiente aviso.</p>
-                                @endif
-                            </div>
-                        </dl>
-                    @endif
+                    <livewire:solver::components.run-progress :run-id="$run->id" :wire:key="'progress-'.$run->id" />
                     <p class="text-sm text-neutral">La semana aparece cuando termina; mientras, la carga no cambia.</p>
                 </section>
             @elseif ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Applying)
-                <section class="grid gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" wire:poll.2s="refreshRun" data-testid="run-applying">
+                <section class="grid gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" data-testid="run-applying">
                     <h2 class="text-lg font-bold">Corrida <span class="font-mono">{{ $row['number'] }}</span> · {{ $scopeText($run) }}</h2>
-                    <p class="flex items-center gap-2 text-neutral" role="status"><x-icon name="o-arrow-path" class="h-5 w-5 shrink-0 animate-spin" aria-hidden="true" />Aplicando…  Se escribe el horario en segundo plano; la campana avisa al terminar.</p>
+                    <livewire:solver::components.run-progress :run-id="$run->id" :wire:key="'progress-'.$run->id" />
                 </section>
             @elseif ($run->status === \App\Modules\Solver\Enums\SolverRunStatus::Failed)
                 <section class="grid gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" data-testid="run-failed">
