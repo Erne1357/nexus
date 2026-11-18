@@ -8,6 +8,7 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Demand\Enums\DemandPermission;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
@@ -60,6 +61,7 @@ function dimensionTables(): array
         'core.login_notice' => 'login_notices',
         'core.login_shortcut' => 'login_shortcuts',
         'core.setting' => 'settings',
+        'demand.setting' => 'settings',
         // La bitácora (1.22-D) es de toda la instalación: no lleva campus.
         'core.activity' => 'activity_log',
         'core.queue' => 'failed_jobs',
@@ -84,6 +86,7 @@ function dimensionTables(): array
         'academic_load.proposal' => 'career_proposals',
         'academic_load.proposal_review' => 'proposal_reviews',
         'academic_load.agreement' => 'interdepartmental_agreements',
+        'academic_load.forecast_evaluation' => 'forecast_evaluations',
         'scheduling.schedule' => 'groups',
         'scheduling.group' => 'groups',
         'scheduling.session' => 'group_sessions',
@@ -116,6 +119,8 @@ function dimensionExceptions(): array
         'imports.batch.view' => $admin,
         'imports.batch.create' => $admin,
         'imports.batch.apply' => $admin,
+        'academic_load.forecast_evaluation.view' => $tec,
+        'academic_load.forecast_evaluation.run' => $tec,
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
         'catalog_validation.review.open' => $admin,
@@ -192,6 +197,8 @@ function modalityDimensionExceptions(): array
         'core.assignment.appoint' => $admin,
         'core.assignment.end' => $admin,
         'core.term.manage_calendar' => $tec,
+        'academic_load.forecast_evaluation.view' => $tec,
+        'academic_load.forecast_evaluation.run' => $tec,
     ];
 }
 
@@ -235,6 +242,7 @@ $enums = [
     ImportsPermission::class,
     CatalogValidationPermission::class,
     AcademicLoadPermission::class,
+    DemandPermission::class,
     SchedulingPermission::class,
     SolverPermission::class,
     StaffingPermission::class,

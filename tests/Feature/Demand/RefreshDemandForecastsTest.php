@@ -5,11 +5,13 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Actions\UpdateSettings;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Demand\Actions\RefreshDemandForecasts;
 use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Events\DemandForecastsComputed;
@@ -266,4 +268,23 @@ it('como si se corriera durante el periodo anterior, ve solo a quienes estaban i
         ->and($rows[$this->b->id.'@'.$this->k1->id]['eligible_students'])->toBe(5)
         ->and($rows[$this->b->id.'@'.$this->k1->id]['pending_prerequisite_students'])->toBe(5)
         ->and($rows[$this->a->id.'@'.$this->k1->id]['current_students'])->toBe(5);
+});
+
+it('cambiar el tamaño de grupo cambia los grupos sugeridos en la siguiente corrida', function () {
+    forecastFixture();
+    $sizes = fn (int $default, int $lab) => app(UpdateSettings::class)->handle(
+        collect(app(SettingRegistry::class)->byModule()['demand'])->filter(fn ($d): bool => $d->key === 'demand.target_group_size')->values()->all(),
+        ['demand.target_group_size' => ['default' => $default, 'lab' => $lab]],
+    );
+
+    // FB-2 pide laboratorio y espera 10 alumnos en K1: con 25 por grupo es 1 y con 4 son 3.
+    $sizes(35, 25);
+    app(RefreshDemandForecasts::class)->handle($this->term, modalityOf('PRES'));
+    $before = forecastRows()['FB-2@K1']->suggested_groups;
+
+    $sizes(35, 4);
+    app(RefreshDemandForecasts::class)->handle($this->term, modalityOf('PRES'));
+
+    expect($before)->toBe(1)
+        ->and(forecastRows()['FB-2@K1']->suggested_groups)->toBe(3);
 });

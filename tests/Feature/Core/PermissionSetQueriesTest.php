@@ -110,10 +110,10 @@ it('CF-03 y CF-S1: el catálogo dice de cada permiso su módulo, sus dimensiones
     User::factory()->count(2)->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(20)])->create();
     User::factory()->admin()->withRole(Role::Coordinador, ['campus_id' => $campus->id, 'career_id' => careerKey(21)])->create();
     User::factory()->withRole(Role::Docente)->create();
-    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingView->value]);
+    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingUpdate->value]);
 
     $catalog = collect(app(PermissionCatalogQuery::class)->all())->keyBy('key');
-    $setting = $catalog['core.setting.view'];
+    $setting = $catalog['core.setting.update'];
 
     expect($catalog->keys()->all())->toBe(array_map(fn ($permission): string => $permission->value, app(PermissionRegistry::class)->permissions()))
         ->and($setting['module'])->toBe('core')

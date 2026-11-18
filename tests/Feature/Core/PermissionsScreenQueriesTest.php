@@ -83,18 +83,18 @@ it('agrupa los permisos por módulo en el orden de la pantalla, con Core partido
 
     expect(array_column($groups, 'label'))->toBe([
         'Institución', 'Cuentas y configuración', 'Catálogos académicos', 'Edificios y salones', 'Docentes', 'Alumnos',
-        'Importaciones', 'Validación de catálogos', 'Carga académica', 'Horarios', 'Asignación docente', 'Motor de horarios',
+        'Importaciones', 'Validación de catálogos', 'Proyección de demanda', 'Carga académica', 'Horarios', 'Asignación docente', 'Motor de horarios',
     ])
         ->and(array_sum(array_map(fn (array $group): int => count($group['rows']), $groups)))->toBe(count(app(PermissionRegistry::class)->permissions()))
         ->and(PermissionCatalogQuery::grouped([['key' => 'otro.cosa.ver', 'group' => 'otro', 'group_label' => 'otro']]))->toBe([['id' => 'otro', 'label' => 'otro', 'rows' => [['key' => 'otro.cosa.ver', 'group' => 'otro', 'group_label' => 'otro']]]]);
 });
 
 it('el catálogo reusa los puestos que ya se leyeron y trae el origen como dato', function () {
-    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingView->value]);
+    DB::table('position_permissions')->insert(['role' => Role::Coordinador->value, 'permission' => CorePermission::SettingUpdate->value]);
     $positions = app(PositionsQuery::class)->all();
     DB::table('position_permissions')->delete();
 
-    $setting = collect(app(PermissionCatalogQuery::class)->all($positions))->firstWhere('key', 'core.setting.view');
+    $setting = collect(app(PermissionCatalogQuery::class)->all($positions))->firstWhere('key', 'core.setting.update');
 
     expect($setting['positions'][1]['role'])->toBe(Role::Coordinador)
         ->and($setting['positions'][1]['sources'])->toBe([['kind' => 'loose', 'name' => null]]);

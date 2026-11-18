@@ -8,6 +8,7 @@ use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Staffing\Rules\RankingWeights;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Validation\ValidationException;
+use Tests\Fixtures\Authorization\FakePermission;
 use Tests\TestCase;
 
 /*
@@ -120,4 +121,12 @@ it('CF-S7: Asignación docente, Horarios, Proyección de demanda y Motor de hora
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
         'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits',
     ]);
+});
+
+it('CF-S7: un parámetro puede declarar el permiso de su módulo y un aviso al guardarlo, y por omisión no trae ninguno', function () {
+    $plain = demoIntSetting();
+    $owned = new SettingDefinition('demo.owned', 'demo', 'Demo', 'Tamaño', 'Ayuda', SettingType::Integer, 5, ['min:1'], permission: FakePermission::ViewAny, savedNotice: 'Se recalcula.');
+
+    expect($plain->permission)->toBeNull()->and($plain->savedNotice)->toBeNull()
+        ->and($owned->permission)->toBe(FakePermission::ViewAny)->and($owned->savedNotice)->toBe('Se recalcula.');
 });
