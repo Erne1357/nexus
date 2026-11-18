@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
 use App\Modules\Academic\Database\Seeders\DemoStaffSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
@@ -71,6 +72,8 @@ class MassiveSeeder extends Seeder
         $this->callWith(StudentsDemoSeeder::class, ['studentsPerOffering' => ['C1' => 670, 'C2' => 660]]);
 
         $this->command?->info(sprintf('Alumnos, kárdex y avance en total: %.1f s.', (hrtime(true) - $started) / 1e9));
+
+        $this->call(HistoricalGroupsDemoSeeder::class);
 
         $started = hrtime(true);
         $this->call([TermHistorySeeder::class, TermCalendarDemoSeeder::class]);

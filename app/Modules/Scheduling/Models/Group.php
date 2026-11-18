@@ -7,6 +7,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\ProposalItem;
+use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -29,7 +30,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * reticular donde se acomoda, su clave del SII, su docente vigente, su capacidad y su estado. Su departamento es el
  * de la materia.
  */
-#[Fillable(['term_id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'proposal_item_id', 'notes', 'close_justification', 'close_justified_by', 'close_justified_at'])]
+#[Fillable(['term_id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'proposal_item_id', 'package_id', 'package_number', 'notes', 'close_justification', 'close_justified_by', 'close_justified_at'])]
 #[UseFactory(GroupFactory::class)]
 class Group extends Model
 {
@@ -44,6 +45,7 @@ class Group extends Model
         return [
             'semester' => 'integer',
             'capacity' => 'integer',
+            'package_number' => 'integer',
             'status' => GroupStatus::class,
             'close_justified_at' => 'immutable_datetime',
         ];
@@ -115,6 +117,16 @@ class Group extends Model
     public function teacher(): BelongsTo
     {
         return $this->belongsTo(Teacher::class);
+    }
+
+    /**
+     * El paquete del que nace el grupo (5.6b); nulo en un grupo suelto.
+     *
+     * @return BelongsTo<ProposalPackage, $this>
+     */
+    public function package(): BelongsTo
+    {
+        return $this->belongsTo(ProposalPackage::class, 'package_id');
     }
 
     /**
