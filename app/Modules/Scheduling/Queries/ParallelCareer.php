@@ -28,4 +28,12 @@ final readonly class ParallelCareer
     {
         return $this->status === InboxStatus::Accepted;
     }
+
+    /**
+     * Si su parte se regresó: no cuenta hasta que la reenvíen (la otra que no cuenta es la que no tiene esperados).
+     */
+    public function isReturned(): bool
+    {
+        return $this->status === InboxStatus::Returned;
+    }
 }

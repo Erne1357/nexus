@@ -77,13 +77,17 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * En una transacción: toma la carga (FOR SHARE), el candado de aviso de claves de la materia (el de CreateGroupsFromProposal,
  * así una parte que se acepta a la vez espera) y bloquea los grupos sueltos. Deja bitácora por grupo tocado (cupos
- * `parallels_arranged`, alta `created`, baja `cancelled`) y, después del commit y solo si cambió algo, avisa con
+ * `parallels_arranged`, alta `created`, baja `cancelled`) y, si cambió algo, una entrada `parallels_arranged` en la materia
+ * con el periodo, la modalidad, el campus y la foto de lo que quedó (la que marca la materia «Armada»), y, después del commit y solo si cambió algo, avisa con
  * GroupQuotasChanged por grupo, GroupsCreated, GroupCancelled y GroupScheduleChanged (CancelGroup) y ParallelGroupsArranged,
  * con lo que cambió para cada carrera.
  */
 final class ArmParallelGroups
 {
     public const int MAX_GROUPS = 60;
+
+    /** El evento de bitácora de armar: en cada grupo cuyos cupos cambian y, una vez por arreglo, en la materia. */
+    public const string LOG_EVENT = 'parallels_arranged';
 
     public function __construct(
         private readonly LoadEditability $editability,
@@ -162,6 +166,10 @@ final class ArmParallelGroups
 
         $result = new ParallelArrangement($kept, $created, $cancelled);
 
+        if ($result->changed()) {
+            $this->logArrangement($term, $modality, $subject, $campus, $result, $actor);
+        }
+
         if ($created !== []) {
             GroupsCreated::dispatch($term->getKey(), $modality->getKey(), array_map(fn (Group $group): string => $group->getKey(), $created));
         }
@@ -171,6 +179,43 @@ final class ArmParallelGroups
         }
 
         return $result;
+    }
+
+    /**
+     * Una entrada en la bitácora de la materia por cada arreglo que cambió algo (uno sin cambios no la escribe), con el
+     * periodo, la modalidad, el campus y la foto de lo que quedó (`snapshot`: por id de grupo, sus cupos por carrera).
+     * ParallelsQuery::lastArrangements() lee la última de cada materia y campus, y la materia está «Armada» mientras sus
+     * grupos sueltos y sus cupos sigan siendo los de esa foto, aunque el arreglo sea solo de completos y restos de una
+     * carrera (supuesto por confirmar).
+     */
+    private function logArrangement(Term $term, Modality $modality, Subject $subject, Campus $campus, ParallelArrangement $result, User $actor): void
+    {
+        $groups = count($result->kept) + count($result->created);
+        $snapshot = [];
+
+        foreach ($result->kept as $row) {
+            $snapshot[$row['group']->getKey()] = $row['after'];
+        }
+
+        foreach ($result->created as $group) {
+            $snapshot[$group->getKey()] = $group->quotas->pluck('max_seats', 'career_id')->map(fn ($seats): int => (int) $seats)->all();
+        }
+
+        activity()
+            ->causedBy($actor)
+            ->performedOn($subject)
+            ->event(self::LOG_EVENT)
+            ->withProperties([
+                'term_id' => $term->getKey(),
+                'modality_id' => $modality->getKey(),
+                'campus_id' => $campus->getKey(),
+                'groups' => $groups,
+                'kept' => count($result->kept),
+                'created' => count($result->created),
+                'cancelled' => count($result->cancelled),
+                'snapshot' => $snapshot,
+            ])
+            ->log("Armó los paralelos de {$subject->name} en {$campus->code}: ".($groups === 1 ? '1 grupo' : "{$groups} grupos"));
     }
 
     /**
@@ -359,7 +404,7 @@ final class ArmParallelGroups
         activity()
             ->causedBy($actor)
             ->performedOn($group)
-            ->event('parallels_arranged')
+            ->event(self::LOG_EVENT)
             ->withChanges(['old' => ['quotas' => $before, ...($proposed === [] ? [] : ['proposed' => $proposed])], 'attributes' => ['quotas' => $after]])
             ->log("Armó los paralelos de {$subject->name}: repartió los cupos del grupo {$group->code}");
 

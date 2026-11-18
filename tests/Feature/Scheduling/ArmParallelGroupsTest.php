@@ -195,11 +195,21 @@ it('deja bitácora por cada grupo tocado y dice qué horario se perdió al cance
     expect(array_map(fn (array $row): array => [$row['group']->code, $row['sessions'], $row['minutes']], $result->lostSchedules()))->toBe([['1', 1, 120]])
         ->and(GroupSession::query()->where('group_id', $isic1->id)->count())->toBe(0);
 
-    $arranged = Activity::query()->where('event', 'parallels_arranged')->sole();
+    $arranged = Activity::query()->where('event', 'parallels_arranged')->where('subject_type', (new Group)->getMorphClass())->sole();
     $cancelled = Activity::query()->where('event', 'cancelled')->where('subject_id', $isic1->id)->sole();
+    $subject = Activity::query()->where('event', 'parallels_arranged')->where('subject_id', $this->world->subject->id)->sole();
 
     expect($arranged->subject_id)->toBe($isic2->id)
         ->and($arranged->causer_id)->toBe($this->actor->id)
+        ->and($subject->properties->only(['term_id', 'modality_id', 'campus_id', 'groups', 'kept', 'created', 'cancelled'])->all())->toBe([
+            'term_id' => $this->world->term->id,
+            'modality_id' => $this->world->modality->id,
+            'campus_id' => $this->world->campus->id,
+            'groups' => 1,
+            'kept' => 1,
+            'created' => 0,
+            'cancelled' => 1,
+        ])
         ->and($arranged->attribute_changes['old'])->toEqual(['quotas' => [$this->isic->id => 35]])
         ->and($arranged->attribute_changes['attributes'])->toEqual(['quotas' => [$this->isic->id => 30, $this->iind->id => 5]])
         ->and($cancelled->attribute_changes['old']['sessions'])->toBe([['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'kind' => 'teoria', 'room_id' => null]])
@@ -231,7 +241,7 @@ it('cancelar una propuesta sin tocar los cupos también es un cambio: deja bitá
     expect($result->changed())->toBeTrue()
         ->and($proposal->fresh()->status)->toBe(AgreementStatus::Cancelled)
         ->and(armedSeats($isic1))->toBe(['ISIC' => 35])
-        ->and(Activity::query()->where('event', 'parallels_arranged')->sole()->attribute_changes['old'])->toEqual(['quotas' => [$this->isic->id => 35], 'proposed' => [$this->iind->id => 3]])
+        ->and(Activity::query()->where('event', 'parallels_arranged')->where('subject_type', (new Group)->getMorphClass())->sole()->attribute_changes['old'])->toEqual(['quotas' => [$this->isic->id => 35], 'proposed' => [$this->iind->id => 3]])
         ->and($heard)->toHaveCount(1)
         ->and($heard[0]->careers)->toBe([$this->iind->id => ['before' => [['code' => '1', 'seats' => 3]], 'after' => [], 'group' => null]]);
 });

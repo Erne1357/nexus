@@ -18,7 +18,11 @@ use App\Modules\Core\Models\Campus;
  * - `suggestion`: los grupos que sugiere Nexus (ParallelGroups::layout), cada uno con sus cupos y el grupo que se queda
  *   (ParallelPlacement), sin pasar la capacidad real de ese grupo; `short`, los esperados de cada carrera que no caben en
  *   ningún grupo de la sugerencia (`carrera => alumnos`), y `cancelled`, los que sobrarían, del de más avance al de menos;
- * - `whyNot`: por qué no hay nada que juntar, o null si juntando se ahorran grupos.
+ * - `whyNot`: por qué no hay nada que juntar, o null si juntando se ahorran grupos;
+ * - `newCapacity`: la capacidad de un grupo que naciera al armar (GroupCapacity), para la vista previa del drawer
+ *   (ParallelDraft);
+ * - `lastArrangement`: la foto del último armado con ArmParallelGroups (`grupo => [carrera => lugares]`), o null si nunca
+ *   se armó (ParallelsQuery::lastArrangements()).
  */
 final readonly class ParallelSubject
 {
@@ -29,6 +33,7 @@ final readonly class ParallelSubject
      * @param  list<ParallelSlot>  $suggestion
      * @param  list<ParallelExisting>  $cancelled
      * @param  array<string, int>  $short
+     * @param  array<string, array<string, int>>|null  $lastArrangement
      */
     public function __construct(
         public Subject $subject,
@@ -41,6 +46,8 @@ final readonly class ParallelSubject
         public array $cancelled,
         public ?string $whyNot,
         public array $short = [],
+        public int $newCapacity = 0,
+        public ?array $lastArrangement = null,
     ) {}
 
     public function size(): int
@@ -81,10 +88,23 @@ final readonly class ParallelSubject
     }
 
     /**
-     * Si sus grupos ya se juntaron: algún grupo suelto tiene cupos de dos carreras o más (supuesto por confirmar).
+     * Si está armada (supuesto por confirmar): si ya se armó con ArmParallelGroups, mientras sus grupos sueltos vivos y sus
+     * cupos sean los de la foto del último armado, aunque sea solo de completos y restos de una carrera; si cambiaron (otra
+     * parte aceptada, otros cupos, un grupo cancelado), vuelve a estar por armar. Si nunca se armó, si algún grupo suelto ya
+     * tiene cupos de dos carreras o más.
      */
     public function arranged(): bool
     {
+        if ($this->lastArrangement !== null) {
+            $live = [];
+
+            foreach ($this->groups as $group) {
+                $live[$group->id] = $group->quotas;
+            }
+
+            return $live == $this->lastArrangement;
+        }
+
         return array_any($this->groups, fn (ParallelExisting $group): bool => count($group->quotas) > 1);
     }
 

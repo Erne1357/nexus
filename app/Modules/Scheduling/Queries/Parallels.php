@@ -3,14 +3,15 @@
 namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 
 /**
  * La pestaña «Paralelos» de la bandeja de un departamento en una modalidad y un periodo (tarea 8.8, opción B;
  * ParallelsQuery::for): un renglón por materia y campus con algo que pedir (ParallelSubject), por clave de materia y de
- * campus, y por qué la carga no deja armar (`blockedReason`, LoadEditability), o null. Quién la ve y quién arma lo decide
- * ParallelsPolicy.
+ * campus, y por qué la carga no deja armar (`blockedReason`, LoadEditability), o null, con el estado de la carga
+ * (`loadStatus`, null sin carga) para el encabezado. Quién la ve y quién arma lo decide ParallelsPolicy.
  */
 final readonly class Parallels
 {
@@ -23,6 +24,7 @@ final readonly class Parallels
         public Department $department,
         public ?string $blockedReason,
         public array $subjects,
+        public ?LoadStatus $loadStatus = null,
     ) {}
 
     /**
