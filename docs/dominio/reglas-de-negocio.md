@@ -98,7 +98,7 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 
 ## Patrón de sesiones
 
-Cómo reparte el motor las horas de un grupo en la semana (tarea 6.6; docs/arquitectura/solver.md, «Heurística PHP: construcción»).
+Cómo reparte el motor las horas de un grupo en la semana (tareas 6.6 y 6.7; docs/arquitectura/solver.md, «Heurística PHP: construcción» y «Heurística PHP: búsqueda local»).
 
 | Id | Regla |
 |---|---|
@@ -110,6 +110,7 @@ Cómo reparte el motor las horas de un grupo en la semana (tarea 6.6; docs/arqui
 | PS-06 | Si el bloque del campus no es de 60 minutos, una hora son los bloques que la forman cuando 60 es múltiplo del bloque (30, 20, 15 min); si no (50 o 90 min), cada sesión es un bloque y las horas semanales tienen que dar bloques enteros, o el grupo queda sin programar por HC-12 (supuesto por confirmar). |
 | PS-07 | Todo grupo movible se reprograma desde cero. Su horario actual sirve para marcar qué cambió y, como desempate, para quedarse en la hora y el salón actuales si no empeora nada (supuesto por confirmar). |
 | PS-08 | HC-08 no depende del horario: si los grupos movibles de un docente suman más horas de las que le quedan, el motor los programa igual y reporta HC-08 como problema de la entrada; la corrida sale parcial (supuesto por confirmar). |
+| PS-09 | La búsqueda local que mejora el puntaje mueve grupos enteros con su patrón: una hora por día, a la misma hora todos sus días. Nunca lleva un grupo a un nivel de días peor que el que tiene (de su patrón a otros días, o de una hora por día a dos el mismo día), pero sí lo puede regresar hacia su patrón. Dos grupos que intercambian horas conservan cada uno sus días (supuesto por confirmar). |
 
 ## Editor de horarios
 

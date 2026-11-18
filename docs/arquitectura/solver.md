@@ -164,7 +164,7 @@ Lo caro de un grupo es lo que recorre todo: los pares de sesiones de su salón e
 
 ## Heurística PHP: construcción
 
-Tarea 6.6. `Engines/PhpHeuristic/PhpHeuristicEngine` (clave `heuristic`, «Heurística (PHP)», contrato v1, `checksHardRules()` verdadero) coloca los grupos movibles con una construcción voraz (`Builder`) y valida el resultado con el evaluador en memoria (`FinalValidation`). Se registra en `solver.engines` después del motor de prueba, así que es el predeterminado mientras no llegue `solver.default_engine` (7.11). La búsqueda local que mejora el puntaje es la 6.7.
+Tarea 6.6. `Engines/PhpHeuristic/PhpHeuristicEngine` (clave `heuristic`, «Heurística (PHP)», contrato v1, `checksHardRules()` verdadero) coloca los grupos movibles con una construcción voraz (`Builder`) y valida el resultado con el evaluador en memoria (`FinalValidation`). Se registra en `solver.engines` después del motor de prueba, así que es el predeterminado mientras no llegue `solver.default_engine` (7.11). Después de validar lo construido corre la búsqueda local (6.7, la sección siguiente) y vuelve a validar.
 
 **Patrón de sesiones** (`SessionPattern`; reglas-de-negocio.md, «Patrón de sesiones», PS-01 a PS-08). Sesiones de una hora, una por día en días distintos y a la misma hora todos los días. Las opciones van por niveles y gana el mejor candidato del primer nivel donde alguno cabe:
 
@@ -193,7 +193,7 @@ Con más horas que días del campus (6 sin sábado, 7…), el patrón ya es de t
 
 **Validación final.** El evaluador es la autoridad. Si le quedan violaciones duras en grupos movibles, se cubren de forma voraz: se quitan las sesiones del grupo que aparece en más violaciones (si empatan, del colocado después) y se repite con las que quedan, sin garantizar el mínimo de grupos. Cada uno queda sin programar con la regla y el mensaje del evaluador, y se vuelve a validar hasta que no quede ninguna. Quitar sesiones no crea choques, así que pasado el plazo se quitan de una vez todos los grupos de las violaciones que queden. HC-08 no depende del horario: un docente cuyos grupos movibles suman más de lo que le queda se pasa igual con o sin sesiones, así que sus grupos se colocan, la violación queda en `hard_violations` y la corrida sale `partial` (PS-08, supuesto por confirmar).
 
-**Salida.** `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Cada grupo sin programar lleva sus motivos con la regla al frente, del que más candidatos descartó al que menos: «HC-09: el docente no tiene disponibilidad a una misma hora en lunes a jueves ni en otros días», «HC-03: choca con su cohorte (el paquete #1: …)», «HC-06: no queda laboratorio… libre». El avance llega a 90 al construir, va de 91 a 99 en cada pasada de la validación (con el puntaje de esa evaluación, así que la corrida se puede cancelar ahí) y llega a 100 al final. Con `time_limit_seconds` construye hasta el límite menos lo que guarda para validar (0.25 s más 0.2 ms por grupo de la entrada, hasta la mitad del límite), valida con plazo y devuelve lo que lleva, validado; lo que no alcanzó queda sin programar con ese motivo (o con el suyo, si nunca iba a caber). En `metrics`, `iterations` son los candidatos revisados e `intermediate_solutions` las validaciones con el evaluador. El `log` dice cuántos colocó, cuántos fueron a otros días o con dos horas el mismo día, si se acabó el tiempo y qué docentes se pasan de horas.
+**Salida.** `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Cada grupo sin programar lleva sus motivos con la regla al frente, del que más candidatos descartó al que menos: «HC-09: el docente no tiene disponibilidad a una misma hora en lunes a jueves ni en otros días», «HC-03: choca con su cohorte (el paquete #1: …)», «HC-06: no queda laboratorio… libre». Sin búsqueda local (`new PhpHeuristicEngine(search: null)`, para medir), el avance llega a 90 al construir, va de 91 a 99 en cada pasada de la validación (con el puntaje de esa evaluación, así que la corrida se puede cancelar ahí) y llega a 100 al final; con `time_limit_seconds` construye hasta el límite menos lo que guarda para validar (0.25 s más 0.2 ms por grupo de la entrada, hasta la mitad del límite), valida con plazo y devuelve lo que lleva, validado; lo que no alcanzó queda sin programar con ese motivo (o con el suyo, si nunca iba a caber). En `metrics`, `iterations` son los candidatos revisados e `intermediate_solutions` las validaciones con el evaluador. Con la búsqueda, el avance, el plazo y las métricas cambian como dice la sección siguiente. El `log` dice cuántos colocó, cuántos fueron a otros días o con dos horas el mismo día, si se acabó el tiempo y qué docentes se pasan de horas.
 
 **Medición** (17 de noviembre de 2026, PHP 8.5 sin cobertura, contenedor `app`):
 
@@ -206,6 +206,41 @@ Con más horas que días del campus (6 sin sábado, 7…), el patrón ya es de t
 | department-multicampus | 1.5 s | 1 139 de 1 139 | 0 | 0 | 24 749 |
 
 En `department-multicampus` revisó 24 950 candidatos y validó una vez; 49 grupos fueron a otros días y 19 llevan un día de dos horas. El desglose: SC-04 16 784, SC-05 5 709, SC-06 960, SC-01 460, SC-08 342, SC-09 338, SC-02 120, SC-07 36 (SC-03 en cero: la instancia no trae salones por defecto). Como referencia, el horario actual de la demo da 42 543 (13 668 de SC-02, porque trae sesiones de varias horas), la misma construcción sin el desempate blando 33 893 y con los grupos en el orden de la entrada (sin `GroupOrder`) 26 658. Sin los términos del docente en el orden, `medium` deja un grupo sin programar.
+
+## Heurística PHP: búsqueda local
+
+Tarea 6.7. `Engines/PhpHeuristic/LocalSearch` corre dentro del mismo motor, después de validar lo construido, sobre los mismos índices de ocupación del `Builder`: libera un grupo (`release`), pregunta qué otras colocaciones le caben (`alternatives`, `placementAt`, `roomAlternatives`) y lo vuelve a colocar (`assign`). Cada ocupación de los índices guarda su dueño en una lista por docente, salón o cohorte y día, así que liberar reconstruye los bloques de ese día sin el grupo, exacto aunque dos ocupaciones toquen el mismo bloque.
+
+**Movimientos.** Siempre sobre grupos movibles colocados, enteros y con su patrón (PS-01 a PS-05): una hora por día, a la misma hora todos sus días.
+
+| Movimiento | Qué hace |
+|---|---|
+| Mover | El grupo a otra hora de inicio, o a otro juego de días de su nivel o de uno mejor, con los salones que elige la construcción en esa hora. Un grupo en su patrón no sale de él; uno que fue a otros días o con dos horas un día puede volver hacia el patrón, nunca alejarse (PS-09). |
+| Intercambiar | Con un grupo colocado del mismo campus que ocupa, por docente (HC-01) o por cohorte (HC-03), una hora a la que el grupo no puede ir: cada uno toma la hora de inicio del otro y conserva sus días (un grupo de 4 horas y uno de 3 pueden cambiar de hora). |
+| Cambiar salón | En un día o en todos, por un salón por defecto de la materia (SC-03) o uno del edificio de la sesión pegada del docente (SC-06), libre y que le sirva. Mover a la misma hora también vuelve a elegir salones. |
+| Desplazar al docente | Todos los grupos movibles colocados del docente, las mismas horas antes o después, cada uno en sus días. Mueve su bloque de clases sin abrirle huecos: es lo que necesita SC-04 cuando mover un solo grupo a sus preferidos le abre huecos que cuestan más (SC-05). Se revisa en la iteración del primer grupo del docente. |
+
+**Aceptación.** Un movimiento solo se considera si cabe en los índices del constructor, que revisan HC-01 a HC-13 como al construir (no crea choques duros), y entra solo si baja el puntaje blando; menor es mejor. Es mejor mejora por grupo y primera mejora entre grupos: de todos los movimientos de un grupo toma el que más baja el puntaje y lo aplica en seguida. Revisar los movimientos de un grupo cuesta poco (unas decenas de horas y salones), y esperar a recorrer los 1 139 grupos para aplicar un solo movimiento sería muy lento. Los empates se quedan con el primero que encontró (nivel, juego de días y hora más temprana) y los grupos se recorren en el orden en que se colocaron. No hay nada aleatorio: la misma entrada da siempre la misma salida, así que `options.seed` no se usa.
+
+**Puntaje incremental** (`LocalScore`). Da el mismo puntaje que el evaluador (`SoftScorer` con los pesos de la entrada), con las mismas cuentas de `Timeline` y las mismas unidades, partido en términos que dependen de un docente en un día (SC-05, SC-06 y SC-09, con sus grupos fijos y su `busy`), de una cohorte en un día (SC-01), de un grupo (SC-02, SC-03, SC-04 y SC-08) o de un par de grupos de semestres seguidos (SC-07). El delta de un movimiento solo vuelve a contar los términos de los docentes y cohortes de los grupos que cambian, en los días de antes y de después, los de esos grupos y sus pares; los demás quedan guardados. Las pruebas comparan el total con el evaluador regla por regla en los fixtures y en `department-multicampus`, y el delta de cambios de uno y dos grupos con la diferencia del evaluador.
+
+**Paro.** Por el plazo o por iteraciones seguidas sin mejora (una iteración es revisar los movimientos de un grupo). Por omisión, una vuelta completa a los grupos sin mejora: es un óptimo local de estos movimientos, otra vuelta daría lo mismo. El contrato no trae un campo para cambiarlo (`options` solo trae `threads`, `seed`, `suggest_teachers` y `return_intermediate`), así que es un parámetro del constructor (`new LocalSearch(maxIdleIterations: N)`).
+
+**Plazo, avance y métricas.** Construye hasta el límite menos lo que guarda para validar (0.25 s más 0.2 ms por grupo de la entrada, hasta la mitad del límite), igual que sin búsqueda, para que la búsqueda nunca le quite tiempo a la construcción, y valida lo construido. Solo si la construcción terminó y todavía no llega esa reserva, busca hasta ella y valida otra vez con lo que queda; si no, el `log` dice que no quedó tiempo para la búsqueda. El avance va hasta 50 al construir, de 51 a 59 al validar lo construido, de 60 a 90 al buscar (lo que más haya avanzado entre el reloj y las iteraciones sin mejora, con el puntaje que lleva), de 91 a 99 en la validación final y 100 al terminar. En `metrics`, `iterations` son las iteraciones de la búsqueda e `intermediate_solutions` las soluciones que encontró: la construida más una por movimiento aceptado. El contrato no tiene campos para el puntaje inicial ni para los movimientos por tipo: van en el `log` («Búsqueda local: 3 616 iteraciones y 31 121 movimientos revisados; aceptó 187 (27 de mover, 84 de intercambiar, 66 de cambiar salón y 10 de desplazar docente). El puntaje blando bajó de 24 749 a 23 608.»), con por qué paró.
+
+**Garantía.** Lo que propone la búsqueda pasa por `FinalValidation`, como lo construido. Si esa validación quitara un grupo o diera un puntaje peor que el de antes de buscar (no debería: los movimientos solo entran si caben y bajan el puntaje), el motor devuelve lo validado antes de buscar y lo dice en el `log`. Así la búsqueda nunca empeora el puntaje ni agrega una violación dura.
+
+**Medición** (17 de noviembre de 2026, PHP 8.5 sin cobertura, contenedor `app`; antes es la construcción sola, `search: null`):
+
+| Fixture | Antes | Después | Tiempo con búsqueda | Movimientos aceptados |
+|---|---|---|---|---|
+| tiny | 44 | 44 | < 0.01 s | 0 |
+| small | 141 | 79 | 0.01 s | 1 (intercambiar) |
+| medium | 64 | 64 | 0.02 s | 0 |
+| infeasible | 12 | 12 | < 0.01 s | 0 |
+| department-multicampus | 24 749 | 23 608 (−4.6 %) | 21–26 s (construir 1.5 s) | 187 |
+
+En `department-multicampus`, por regla (antes → después): SC-01 460 → 360 (−22 %), SC-05 5 709 → 5 217 (−9 %), SC-06 960 → 546 (−43 %), SC-04 16 784 → 16 708 (−0.5 %), SC-09 338 → 296, SC-07 36 → 21, SC-08 342 → 340, SC-02 120 → 120; SC-03 en cero (sin salones por defecto). Paró por convergencia tras 3 616 iteraciones (algo más de tres vueltas), muy dentro de los 300 s de la corrida de departamento. SC-04 casi no baja porque tiene poco margen: aun asignando a cada docente sus grupos a horas distintas sin ver salones, cohortes ni huecos, lo menos que puede dar con una hora por día a la misma hora es 15 272 (−9 % como mucho), y casi todas las horas preferidas que quedan libres le abren huecos al docente. Lo que impide cada mejora de SC-04 es el propio docente: sus otros grupos (HC-01) o su indisponibilidad (HC-09), no los salones. Un intercambio en cadena (el otro grupo a su mejor hora y no solo a la del primero) dio 23 617 con el doble de tiempo, así que no se dejó.
 
 ## Descomposición del problema
 
@@ -242,7 +277,7 @@ Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte que
 
 `php artisan solver:benchmark [--engine=*] [--fixture=*] [--markdown]` corre cada motor registrado (o los de `--engine`) sobre cada fixture (o los de `--fixture`) y mide el tiempo con `hrtime`. La tabla de consola trae motor, fixture, grupos movibles, sesiones propuestas, sin programar, violaciones duras, puntaje blando, estado, segundos y «Cumple» (✓/✗ contra `expected.json` en los motores que declaran `checksHardRules()`; «—» en los demás). Con `--markdown` imprime la tabla con las columnas de abajo para pegarla aquí. Un motor o fixture desconocido termina con error.
 
-Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reglas duras ni calcula puntaje, así que sus ceros no miden nada y solo muestran que el comando corre. Las filas de la heurística llegan con la 6.7.
+Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reglas duras ni calcula puntaje, así que sus ceros no miden nada y solo muestran que el comando corre. Las filas de la heurística (construcción y búsqueda local, 6.7) son del 17 de noviembre de 2026; las de la línea base de la fase se vuelven a correr al cerrarla.
 
 | Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando | Sin programar |
 |---|---|---|---|---|---|
@@ -251,6 +286,11 @@ Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reg
 | medium | fixed | 0.00 s | 0 | 0 | 0 |
 | infeasible | fixed | 0.00 s | 0 | 0 | 0 |
 | department-multicampus | fixed | 0.01 s | 0 | 0 | 0 |
+| tiny | heuristic | 0.01 s | 0 | 44 | 0 |
+| small | heuristic | 0.01 s | 0 | 79 | 0 |
+| medium | heuristic | 0.01 s | 0 | 64 | 0 |
+| infeasible | heuristic | 0.00 s | 0 | 12 | 2 |
+| department-multicampus | heuristic | 25.93 s | 0 | 23608 | 0 |
 
 ## Despliegue del servicio Python
 
