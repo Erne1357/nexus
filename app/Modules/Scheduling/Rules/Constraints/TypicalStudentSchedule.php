@@ -34,7 +34,7 @@ final class TypicalStudentSchedule implements Constraint
 
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
-        yield from $this->packageOverlaps($state, $scope);
+        $reported = [];
 
         foreach ($this->semestersIn($state, $scope) as [$modalityId, $campusId, $studyPlanId, $semester]) {
             $bySubject = [];
@@ -50,65 +50,72 @@ final class TypicalStudentSchedule implements Constraint
             $pairs = [...$this->singleGroupOverlaps($state, $bySubject, $studyPlanId, $semester)];
 
             if ($pairs !== []) {
-                yield from $pairs;
+                foreach ($pairs as $violation) {
+                    $reported[self::pairKey($violation->groupId, $violation->related['other_group_id'])] = true;
+
+                    yield $violation;
+                }
 
                 continue;
             }
 
             yield from $this->coreViolations($state, $bySubject, $studyPlanId, $semester);
         }
+
+        yield from $this->packageOverlaps($state, $scope, $reported);
+    }
+
+    private static function pairKey(string $a, string $b): string
+    {
+        return $a < $b ? "{$a}|{$b}" : "{$b}|{$a}";
     }
 
     /**
-     * Los empalmes entre grupos de la misma instancia de un paquete, reportados en los dos grupos. Los grupos del
-     * alcance son el punto de partida; la pareja se reporta una vez por lado aunque los dos estén en el alcance.
+     * Los empalmes entre grupos de la misma instancia de un paquete, reportados en los dos grupos. Agrupa en una sola
+     * pasada los grupos activos con paquete por su clave de Cohorts (que lleva el campus) y compara solo dentro de las
+     * cohortes que tienen algún grupo del alcance. La clave no cruza modalidades: un paquete (`package_id`) es de una
+     * propuesta, que es de una carrera y una modalidad. Salta los pares que la rama del plan ya reportó.
      *
+     * @param  array<string, true>  $reported
      * @return iterable<Violation>
      */
-    private function packageOverlaps(ScheduleState $state, ValidationScope $scope): iterable
+    private function packageOverlaps(ScheduleState $state, ValidationScope $scope, array $reported): iterable
     {
-        $active = array_filter($state->groups(), fn (StateGroup $group): bool => $group->isActive && $group->packageId !== null);
+        $byKey = [];
 
-        if ($active === []) {
-            return;
+        foreach ($state->groups() as $group) {
+            if ($group->isActive && $group->packageId !== null && $group->packageNumber !== null) {
+                $byKey[Cohorts::packageKey($state, $group)][] = $group;
+            }
         }
 
-        $cohorts = Cohorts::of($state, $active);
-        $inScope = array_flip($scope->groupIds());
-        $seen = [];
+        foreach ($byKey as $members) {
+            $count = count($members);
 
-        foreach ($active as $group) {
-            if (! isset($inScope[$group->id])) {
-                continue;
-            }
+            for ($i = 0; $i < $count; $i++) {
+                for ($j = $i + 1; $j < $count; $j++) {
+                    [$a, $b] = [$members[$i], $members[$j]];
 
-            foreach ($active as $other) {
-                if ($other->id === $group->id || $other->campusId !== $group->campusId || ! in_array(Cohorts::packageKey($state, $group), $cohorts[$other->id], true) || ! in_array(Cohorts::packageKey($state, $group), $cohorts[$group->id], true)) {
-                    continue;
-                }
+                    if (! $scope->hasGroup($a->id) && ! $scope->hasGroup($b->id)) {
+                        continue;
+                    }
 
-                $pair = $group->id < $other->id ? "{$group->id}|{$other->id}" : "{$other->id}|{$group->id}";
+                    $overlap = $this->firstOverlap($state, $a, $b);
 
-                if (isset($seen[$pair])) {
-                    continue;
-                }
+                    if ($overlap === null || isset($reported[self::pairKey($a->id, $b->id)])) {
+                        continue;
+                    }
 
-                $seen[$pair] = true;
-                $overlap = $this->firstOverlap($state, $group, $other);
-
-                if ($overlap === null) {
-                    continue;
-                }
-
-                foreach ([[$group, $other, $overlap[0], $overlap[1]], [$other, $group, $overlap[1], $overlap[0]]] as [$mine, $theirs, $mySession, $theirSession]) {
-                    yield Violation::hard(
-                        $this->rule(),
-                        "Paquete #{$mine->packageNumber} en {$state->campusCode($mine->campusId)}: {$state->labelOf($mine->id)} se empalma con {$state->labelOf($theirs->id)} el {$theirSession->describe()}; los alumnos del paquete no pueden llevar las dos.",
-                        'group',
-                        $mine->id,
-                        $mine->id,
-                        ['package_id' => $mine->packageId, 'package_number' => $mine->packageNumber, 'other_group_id' => $theirs->id, 'session_id' => $mySession->id, 'other_session_id' => $theirSession->id],
-                    );
+                    foreach ([[$a, $b, $overlap[0], $overlap[1]], [$b, $a, $overlap[1], $overlap[0]]] as [$mine, $theirs, $mySession, $theirSession]) {
+                        yield Violation::hard(
+                            $this->rule(),
+                            "Paquete #{$mine->packageNumber} en {$state->campusCode($mine->campusId)}: {$state->labelOf($mine->id)} se empalma con {$state->labelOf($theirs->id)} el {$theirSession->describe()}; los alumnos del paquete no pueden llevar las dos.",
+                            'group',
+                            $mine->id,
+                            $mine->id,
+                            ['package_id' => $mine->packageId, 'package_number' => $mine->packageNumber, 'other_group_id' => $theirs->id, 'session_id' => $mySession->id, 'other_session_id' => $theirSession->id],
+                        );
+                    }
                 }
             }
         }

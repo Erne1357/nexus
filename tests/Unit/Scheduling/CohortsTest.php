@@ -95,3 +95,11 @@ it('HC-03: un grupo cancelado con paquete no lleva la cohorte del paquete, y sin
 
     expect(cohortsOf($state, ['A', 'B']))->toBe(['A' => [], 'B' => ['plan:P1:1:C2']]);
 });
+
+it('HC-03: un grupo de paquete sin campus lleva el marcador «none» en la clave', function () {
+    $state = States::builder()
+        ->group(States::group('A', subject: 'CAL', campus: '', package: 'PK', packageNumber: 1))
+        ->build();
+
+    expect(cohortsOf($state, ['A'])['A'])->toContain('package:PK:none:1');
+});

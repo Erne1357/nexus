@@ -182,3 +182,19 @@ it('HC-03: el choque de paquete se reporta una vez por lado aunque los dos grupo
 
     expect(typicalStudentViolations($state, ValidationScope::groups('A', 'B')))->toHaveCount(2);
 });
+
+it('HC-03: un par que es alumno tipo por plan y misma instancia de paquete se reporta una sola vez por lado', function () {
+    $state = States::builder()
+        ->subject(States::subject('CAL'))
+        ->subject(States::subject('QUI'))
+        ->group(States::group('A', subject: 'CAL', package: 'PK', packageNumber: 1))
+        ->group(States::group('B', subject: 'QUI', package: 'PK', packageNumber: 1))
+        ->session('A', 1, '07:00', '09:00')
+        ->session('B', 1, '08:00', '10:00')
+        ->build();
+
+    $violations = typicalStudentViolations($state, ValidationScope::groups('A', 'B'));
+
+    expect($violations)->toHaveCount(2)
+        ->and(array_map(fn (Violation $violation): ?string => $violation->groupId, $violations))->toBe(['A', 'B']);
+});

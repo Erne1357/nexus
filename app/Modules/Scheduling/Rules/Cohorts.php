@@ -15,6 +15,9 @@ use App\Modules\Scheduling\Validation\State\StateGroup;
  */
 final class Cohorts
 {
+    /** Marcador del grupo sin campus (como `CareerProposal::WITHOUT_CAMPUS`, que Scheduling no puede importar). */
+    public const string WITHOUT_CAMPUS = 'none';
+
     /**
      * Las claves de cohorte de cada grupo dado, por id de grupo: lista vacía si no lleva ninguna.
      *
@@ -48,7 +51,9 @@ final class Cohorts
      */
     public static function packageKey(ScheduleState $state, StateGroup $group): string
     {
-        return "package:{$group->packageId}:{$state->campusCode($group->campusId)}:{$group->packageNumber}";
+        $campus = $group->campusId === '' ? self::WITHOUT_CAMPUS : $state->campusCode($group->campusId);
+
+        return "package:{$group->packageId}:{$campus}:{$group->packageNumber}";
     }
 
     private static function isSoleGroupOfSubject(ScheduleState $state, StateGroup $group): bool
