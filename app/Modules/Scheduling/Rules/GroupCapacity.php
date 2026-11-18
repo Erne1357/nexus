@@ -5,23 +5,46 @@ namespace App\Modules\Scheduling\Rules;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Facilities\Models\SubjectRoomDefault;
+use Illuminate\Support\Collection;
 
 /**
- * La capacidad con la que nace un grupo nuevo (tarea 3.3, CreateGroupsFromProposal; tarea 8.3b, abrir un grupo en el
- * re-análisis): la del salón por defecto de la materia en el campus (el de menor prioridad, sin contar los borrados);
- * sin él, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio).
+ * La capacidad con que nace un grupo nuevo de una materia en un campus (CreateGroupsFromProposal, ArmParallelGroups): la del
+ * salón por defecto de la materia en ese campus, el de menor prioridad sin contar los salones por defecto borrados; sin él, o
+ * si su salón se borró, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). Es la regla de antes de la 8.8, sin
+ * cambios.
  */
 final class GroupCapacity
 {
-    public static function for(Subject $subject, string $campusId, ?SuggestedGroups $sizes = null): int
+    public static function for(Subject $subject, string $campusId, SuggestedGroups $sizes): int
     {
-        $default = SubjectRoomDefault::query()
-            ->with('room')
-            ->where('subject_id', $subject->getKey())
-            ->where('campus_id', $campusId)
-            ->orderBy('priority')
-            ->first();
+        return self::forMany([[$subject, $campusId]], $sizes)["{$subject->getKey()}|{$campusId}"];
+    }
 
-        return $default?->room?->capacity ?? ($sizes ?? SuggestedGroups::fromSettings())->sizeFor((bool) $subject->needs_lab);
+    /**
+     * La de varias materias y campus con dos consultas, por `materia|campus`.
+     *
+     * @param  iterable<array{0: Subject, 1: string}>  $pairs
+     * @return array<string, int>
+     */
+    public static function forMany(iterable $pairs, SuggestedGroups $sizes): array
+    {
+        $pairs = collect($pairs);
+
+        if ($pairs->isEmpty()) {
+            return [];
+        }
+
+        $defaults = SubjectRoomDefault::query()
+            ->with('room')
+            ->whereIn('subject_id', $pairs->map(fn (array $pair): string => $pair[0]->getKey())->unique()->all())
+            ->whereIn('campus_id', $pairs->pluck(1)->unique()->all())
+            ->orderBy('priority')
+            ->get()
+            ->groupBy(fn (SubjectRoomDefault $default): string => "{$default->subject_id}|{$default->campus_id}")
+            ->map(fn (Collection $rows): SubjectRoomDefault => $rows->first());
+
+        return $pairs->mapWithKeys(fn (array $pair): array => [
+            "{$pair[0]->getKey()}|{$pair[1]}" => $defaults->get("{$pair[0]->getKey()}|{$pair[1]}")?->room?->capacity ?? $sizes->sizeFor((bool) $pair[0]->needs_lab),
+        ])->all();
     }
 }

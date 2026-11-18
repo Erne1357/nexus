@@ -11,6 +11,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Queries\ReanalysisRow;
 use App\Modules\Demand\Rules\DemandSettings;
+use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
@@ -221,6 +222,6 @@ final class ReanalysisSuggestionsQuery
             ->mapWithKeys(fn (object $row): array => [$row->career_id => ['studyPlanId' => $row->id, 'semester' => max(1, (int) $row->semester)]])
             ->all();
 
-        return new NewGroupBase($subject->id, $subject->code, $campusId, $block->campus->code, GroupCapacity::for($subject, $campusId), $plans);
+        return new NewGroupBase($subject->id, $subject->code, $campusId, $block->campus->code, GroupCapacity::for($subject, $campusId, SuggestedGroups::fromSettings()), $plans);
     }
 }

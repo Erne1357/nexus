@@ -37,10 +37,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * lee, así que dos llamadas a la vez no duplican, y toma un bloqueo de aviso por periodo y materia para que las claves
  * provisionales de dos propuestas de carreras distintas no choquen.
  *
- * La capacidad es la de GroupCapacity: la del salón por defecto de la materia en el campus de la fila (el de menor
- * prioridad, sin contar los borrados); sin él, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). El
- * cupo de la carrera dueña nace igual a la capacidad. Cada grupo deja su entrada en la bitácora, con su campus y su
- * modalidad, y, después del commit y
+ * La capacidad es la del salón por defecto de la materia en el campus de la fila (el de menor prioridad, sin contar los
+ * borrados); sin él, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). El cupo de la carrera dueña nace
+ * igual a la capacidad. Cada grupo deja su entrada en la bitácora, con su campus y su modalidad, y, después del commit y
  * solo si nació alguno, GroupsCreated avisa una vez por decisión con la modalidad de la propuesta y todos los grupos,
  * de cualquier campus: quien lo escucha lee el campus de cada grupo.
  */
