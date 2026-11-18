@@ -48,11 +48,16 @@ enum SnapshotReason: string
     }
 
     /**
-     * El motivo de una versión publicada antes de la tarea 8.4, que no lo guardó: la 1 es la publicación y las demás,
-     * correcciones, porque antes del re-análisis (8.1) solo se republicaba al reabrir la carga a ajustes (P3).
+     * El motivo de una versión publicada antes de la tarea 8.4, que no lo guardó: la 1 es la publicación; las demás, según
+     * a dónde fue la carga al salir de publicada antes de esta versión (`$reopenedTo`): al re-análisis, un re-análisis;
+     * si no, una corrección, porque antes del re-análisis (8.1) solo se republicaba al reabrir la carga a ajustes (P3).
      */
-    public static function inferredFor(int $version): self
+    public static function inferredFor(int $version, ?LoadStatus $reopenedTo = null): self
     {
-        return $version === 1 ? self::Published : self::Correction;
+        return match (true) {
+            $version === 1 => self::Published,
+            $reopenedTo === LoadStatus::Reanalysis => self::Reanalysis,
+            default => self::Correction,
+        };
     }
 }

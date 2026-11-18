@@ -84,15 +84,16 @@ final class VersionChanges
      *
      * @param  array<string, mixed>  $diff
      * @param  array<string, string>  $names  el nombre de cada carrera, por id
+     * @param  array<string, mixed>|null  $careers  SnapshotDiff::careers($diff) si el llamador ya lo tiene
      * @return list<array{code: string, name: ?string, lines: list<string>}>
      */
-    public static function byCareer(array $diff, array $names = []): array
+    public static function byCareer(array $diff, array $names = [], ?array $careers = null): array
     {
         $careers = array_map(fn (array $career): array => [
             'code' => $career['career']['code'],
             'name' => $names[$career['career']['id']] ?? null,
             'lines' => array_map(SnapshotDiffText::entry(...), $career['entries']),
-        ], array_values(SnapshotDiff::careers($diff)));
+        ], array_values($careers ?? SnapshotDiff::careers($diff)));
 
         usort($careers, fn (array $a, array $b): int => strcmp($a['code'], $b['code']));
 

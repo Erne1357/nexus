@@ -142,7 +142,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             // carga en curso: las versiones siguen ahí al cerrar el periodo.
             new NavigationItem('Versiones publicadas', 'academic-load.versions', 'o-rectangle-stack', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView)),
-            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
+            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 2,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
     }

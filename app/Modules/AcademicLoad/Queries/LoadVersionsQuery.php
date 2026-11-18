@@ -15,6 +15,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -109,20 +110,28 @@ final class LoadVersionsQuery
             return $stored->diff;
         }
 
-        $payloads = $stored === null ? collect() : LoadSnapshot::query()
-            ->where('academic_load_id', $load->getKey())
-            ->whereIn('version', [$version - 1, $version])
-            ->pluck('payload', 'version');
-
-        if ($payloads->count() < 2) {
+        if ($stored === null) {
             return null;
         }
 
-        $before = SnapshotPayload::normalize($payloads[$version - 1]);
-        $after = SnapshotPayload::normalize($payloads[$version]);
-        $departments = Career::withTrashed()->whereKey(SnapshotDiff::careerIds($before, $after))->pluck('department_id', 'id')->all();
+        // Las fotos no cambian (trigger de la base): el diff calculado de una versión de antes de la tarea 8.4 se guarda
+        // por el id de su foto, para no sacar las dos cargas útiles en cada render.
+        return Cache::rememberForever("load_snapshot_diff:{$stored->getKey()}", function () use ($load, $version): ?array {
+            $payloads = LoadSnapshot::query()
+                ->where('academic_load_id', $load->getKey())
+                ->whereIn('version', [$version - 1, $version])
+                ->pluck('payload', 'version');
 
-        return SnapshotDiff::between($before, $after, $departments);
+            if ($payloads->count() < 2) {
+                return null;
+            }
+
+            $before = SnapshotPayload::normalize($payloads[$version - 1]);
+            $after = SnapshotPayload::normalize($payloads[$version]);
+            $departments = Career::withTrashed()->whereKey(SnapshotDiff::careerIds($before, $after))->pluck('department_id', 'id')->all();
+
+            return SnapshotDiff::between($before, $after, $departments);
+        });
     }
 
     /**
@@ -164,7 +173,7 @@ final class LoadVersionsQuery
 
             return [
                 ...$version,
-                'reason' => $version['reason'] ?? SnapshotReason::inferredFor($version['version']),
+                'reason' => $version['reason'] ?? SnapshotReason::inferredFor($version['version'], $version['reopened']['to'] ?? null),
                 'legacy' => $legacy,
                 'summary' => $version['summary'] ?? ($legacy && $version['version'] > 1 ? ($this->diff($load, $version['version'])['summary'] ?? null) : null),
             ];

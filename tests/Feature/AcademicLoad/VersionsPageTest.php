@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\LoadTransition;
+use App\Modules\AcademicLoad\Queries\LoadVersionsQuery;
 use App\Modules\AcademicLoad\Rules\SnapshotDiff;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Authorization\Actor;
@@ -18,6 +19,8 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -259,7 +262,7 @@ describe('la línea y la versión elegida', function () {
 
         expect(domOf($page)->querySelector('a[data-testid="file-pdf"]'))->toBeNull()
             ->and(domOf($page)->querySelector('[data-testid="file-pdf"]')->getAttribute('aria-disabled'))->toBe('true');
-        $page->assertSee('Solo se descargan los de la versión vigente (v3): Nexus arma cada archivo con lo publicado hoy.');
+        $page->assertSee('Los archivos de las versiones anteriores no se ofrecen: solo se descargan los de la versión vigente (v3).');
     });
 
     it('«Ver por docente o carrera» abre lo que se le avisó a cada uno', function () {
@@ -375,5 +378,53 @@ describe('quién la ve', function () {
 
     it('un invitado va al login', function () {
         $this->get(route('academic-load.versions'))->assertRedirect(route('login'));
+    });
+});
+
+describe('datos inconsistentes, motivo deducido y caché del diff', function () {
+    it('una carga con versión vigente pero sin fotos muestra el estado vacío, no un 500', function () {
+        $empty = Department::factory()->create(['code' => 'EX', 'name' => 'Sin fotos']);
+        AcademicLoad::factory()->for($this->term)->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => $empty->id, 'status' => LoadStatus::Published, 'current_version' => 2]);
+
+        versionsPageAs($this->subdireccion, ['departamento' => $empty->id])
+            ->assertOk()
+            ->assertSee('no hay ninguna foto que mostrar')
+            ->assertDontSee('Qué cambió contra');
+    });
+
+    it('deduce «Re-análisis» en una versión de antes de la 8.4 cuya salida de publicada fue al re-análisis, y «Corrección» si fue a ajustes', function () {
+        $query = new LoadVersionsQuery;
+        $board = $query->board($this->load);
+
+        // La 2 de la carga de prueba salió de «adjusting»; la 3 guarda su motivo.
+        expect(collect($board)->pluck('reason')->all())->toBe([SnapshotReason::Published, SnapshotReason::Correction, SnapshotReason::Reanalysis]);
+
+        $other = AcademicLoad::factory()->for($this->term)->create(['modality_id' => modalityOf('PRES')->id, 'department_id' => $this->systems->id, 'status' => LoadStatus::Published, 'current_version' => 2]);
+        foreach ([1, 2] as $version) {
+            LoadSnapshot::factory()->for($other)->withGroups([])->create(['version' => $version, 'created_by' => $this->jefe->id]);
+        }
+        foreach ([[LoadStatus::Closed, LoadStatus::Published], [LoadStatus::Published, LoadStatus::Reanalysis], [LoadStatus::Closed, LoadStatus::Published]] as [$from, $to]) {
+            LoadTransition::factory()->create(['academic_load_id' => $other->id, 'from_status' => $from, 'to_status' => $to, 'user_id' => $this->jefe->id]);
+        }
+
+        expect(collect($query->board($other))->pluck('reason')->all())->toBe([SnapshotReason::Published, SnapshotReason::Reanalysis])
+            ->and(SnapshotReason::inferredFor(1, LoadStatus::Reanalysis))->toBe(SnapshotReason::Published)
+            ->and(SnapshotReason::inferredFor(2, LoadStatus::Adjusting))->toBe(SnapshotReason::Correction)
+            ->and(SnapshotReason::inferredFor(2))->toBe(SnapshotReason::Correction);
+    });
+
+    it('el diff de una versión sin diff guardado se calcula una vez y las siguientes lecturas salen de la caché', function () {
+        $query = new LoadVersionsQuery;
+        $first = $query->diff($this->load, 2);
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $query->board($this->load);
+        $second = $query->diff($this->load, 2);
+        $payloadReads = collect(DB::getQueryLog())->filter(fn (array $log): bool => str_contains($log['query'], '"load_snapshots"."payload"') || str_contains($log['query'], 'select "payload"') || str_contains($log['query'], '"payload"') && ! str_contains($log['query'], 'payload->'))->count();
+        DB::disableQueryLog();
+
+        expect($second)->toBe($first)->and($first)->not->toBeNull()->and($payloadReads)->toBe(0)
+            ->and(Cache::has('load_snapshot_diff:'.LoadSnapshot::query()->where('academic_load_id', $this->load->id)->where('version', 2)->value('id')))->toBeTrue();
     });
 });

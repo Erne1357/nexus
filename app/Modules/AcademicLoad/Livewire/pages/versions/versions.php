@@ -131,7 +131,12 @@ new #[Title('Versiones publicadas')] class extends Component
 
         $versions = $query->board($load);
         $number = $this->version !== null && $this->version <= $load->current_version ? $this->version : $load->current_version;
-        $selected = collect($versions)->firstWhere('version', $number) ?? end($versions);
+        $selected = collect($versions)->firstWhere('version', $number) ?? ($versions === [] ? null : $versions[array_key_last($versions)]);
+
+        if ($selected === null) {
+            return ['load' => null, 'message' => 'La carga figura con versión publicada, pero no hay ninguna foto que mostrar.', ...$scope];
+        }
+
         $diff = $query->diff($load, $selected['version']);
         $next = collect($versions)->firstWhere('version', $selected['version'] + 1);
 
@@ -142,14 +147,27 @@ new #[Title('Versiones publicadas')] class extends Component
             'selected' => $selected,
             'diff' => $diff,
             'sections' => $diff === null ? [] : VersionChanges::byKind($diff),
-            'affected' => $this->showAffected && $diff !== null ? [
-                'teachers' => VersionChanges::byTeacher($diff),
-                'careers' => VersionChanges::byCareer($diff, $query->careerNames(array_keys(SnapshotDiff::careers($diff)))),
-            ] : null,
+            'affected' => $this->showAffected && $diff !== null ? $this->affected($diff, $query) : null,
             'until' => $next['publishedAt'] ?? null,
             'campuses' => $campuses->of($load->modality)->keyBy('code'),
             'files' => $this->files($load, $published),
             ...$scope,
+        ];
+    }
+
+    /**
+     * Lo que se le dijo a cada docente y a cada carrera: solo los que están en el diff de la versión (RA-05).
+     *
+     * @param  array<string, mixed>  $diff
+     * @return array{teachers: list<array{name: string, lines: list<string>}>, careers: list<array{code: string, name: ?string, lines: list<string>}>}
+     */
+    private function affected(array $diff, LoadVersionsQuery $query): array
+    {
+        $careers = SnapshotDiff::careers($diff);
+
+        return [
+            'teachers' => VersionChanges::byTeacher($diff),
+            'careers' => VersionChanges::byCareer($diff, $query->careerNames(array_keys($careers)), $careers),
         ];
     }
 

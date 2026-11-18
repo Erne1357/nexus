@@ -103,7 +103,7 @@
         @unless ($isCurrent)
             <p class="flex gap-2 text-[12.5px] text-neutral" data-testid="files-unavailable">
                 <x-icon name="o-information-circle" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>Solo se descargan los de la versión vigente (v{{ $current }}): Nexus arma cada archivo con lo publicado hoy.</span>
+                <span>Los archivos de las versiones anteriores no se ofrecen: solo se descargan los de la versión vigente (v{{ $current }}).</span>
             </p>
         @endunless
     </div>
