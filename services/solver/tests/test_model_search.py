@@ -200,9 +200,9 @@ def test_el_benchmark_reproduce_la_tabla_con_un_fixture():
 
 @pytest.mark.parametrize("name", ["small", "medium"])
 def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_duras(name):
-    """7.6: sobre lo que programó `lns`, los vecindarios con objetivo solo se aceptan si bajan el puntaje de toda la
-    solución (el de PHP): nunca suben el puntaje, nunca quitan un grupo programado y no agregan duras. El avance que
-    reporta nunca baja y el mejor puntaje nunca sube."""
+    """7.6: sobre lo que programó `lns`, los vecindarios con objetivo solo se aceptan si bajan, en ese orden, los
+    niveles del patrón y el puntaje de toda la solución (el de PHP; PS-10): nunca suben esa pareja, nunca quitan un
+    grupo programado y no agregan duras. El avance que reporta nunca baja."""
     import time
 
     from app.model.phases import SearchLimits
@@ -214,7 +214,8 @@ def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_dur
     limits = SearchLimits(workers=1)
     found = lns(model_data, time_limit=20, limits=limits, seed=7)
     placed = set(found.sessions)
-    reports: list[tuple[int, float]] = []
+    initial_tiers = sum(found.tiers.values())
+    reports: list[tuple[tuple[int, int], float]] = []
 
     result = improve(
         model_data,
@@ -222,17 +223,16 @@ def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_dur
         time.perf_counter() + 5,
         limits=limits,
         seed=7,
-        report=lambda best, progress: reports.append((best.total, progress)),
+        report=lambda state, progress: reports.append(((state.tiers, state.best.total), progress)),
     )
 
-    final = SoftScorer(data).score(found.all_sessions)
-    assert final == result.best
-    assert result.best.total <= result.initial.total
-    assert result.best.total < result.initial.total or result.accepted == 0
+    assert SoftScorer(data).score(found.all_sessions) == result.best
+    assert result.tiers == sum(found.tiers.values())
+    assert (result.tiers, result.best.total) <= (initial_tiers, result.initial.total)
     assert set(found.sessions) == placed
     assert hard_violations(data, found.all_sessions) == []
     assert reports
-    assert [best for best, _ in reports] == sorted((best for best, _ in reports), reverse=True)
+    assert [key for key, _ in reports] == sorted((key for key, _ in reports), reverse=True)
     assert [progress for _, progress in reports] == sorted(progress for _, progress in reports)
 
 

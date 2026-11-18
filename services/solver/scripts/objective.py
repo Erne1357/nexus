@@ -53,7 +53,12 @@ def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> tup
 
     def mark(phase: str, sessions: list) -> None:
         phases.append(
-            {"phase": phase, "seconds": round(time.perf_counter() - started, 1), "score": scorer.score(sessions)}
+            {
+                "phase": phase,
+                "seconds": round(time.perf_counter() - started, 1),
+                "off_pattern": sum(tier > 0 for tier in search.tiers.values()),
+                "score": scorer.score(sessions),
+            }
         )
 
     search = lns(data, time_limit=time_limit, limits=limits, seed=seed, first_share=first_share(time_limit))
@@ -85,13 +90,13 @@ def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> tup
 def table(phases: list[dict[str, Any]]) -> str:
     rules = list(phases[0]["score"].by_rule)
     lines = [
-        "| Fase | Segundos | Total | " + " | ".join(rules) + " |",
-        "|---|---|---|" + "---|" * len(rules),
+        "| Fase | Segundos | Fuera del patrón | Total | " + " | ".join(rules) + " |",
+        "|---|---|---|---|" + "---|" * len(rules),
     ]
     for row in phases:
         score = row["score"]
         values = " | ".join(f"{score.by_rule[rule]:,}" for rule in rules)
-        lines.append(f"| {row['phase']} | {row['seconds']} | {score.total:,} | {values} |")
+        lines.append(f"| {row['phase']} | {row['seconds']} | {row['off_pattern']} | {score.total:,} | {values} |")
 
     return "\n".join(lines)
 

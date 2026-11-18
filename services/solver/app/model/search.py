@@ -92,7 +92,10 @@ def lns(
     search = Search()
     search.chosen = _current_options(data)
     first_deadline = started + max(step_seconds, time_limit * first_share)
-    variables, solved = _place_most(data, DomainOptions(), search, min(deadline, first_deadline), limits, seed)
+    # La primera vuelta lleva solo el primer nivel que cabe de cada grupo, así que lo que programa queda en su patrón
+    # (PS-10); los otros días y los días de 2 horas llegan con los vecindarios, a los que no quedaron.
+    first_round = DomainOptions(one_hour_tiers=False)
+    variables, solved = _place_most(data, first_round, search, min(deadline, first_deadline), limits, seed)
     if solved is None or not _keep(search, solved, variables, data, replace=True):
         search.sessions, search.chosen = {}, {}
         search.unplaced = [group.id for group in data.movable]
@@ -200,8 +203,9 @@ def _current_options(data: ModelData) -> dict[str, OptionKey]:
 def _place_most(
     data: ModelData, options: DomainOptions, search: Search, deadline: float, limits: SearchLimits, seed: int
 ) -> tuple[Variables, cp_model.CpSolver | None]:
-    """Arma y resuelve con la asignación relajada, maximizando los grupos programados, con la pista de lo que lleva la
-    búsqueda. Devuelve el solver si encontró solución."""
+    """Arma y resuelve con la asignación relajada, maximizando los grupos programados y, entre soluciones con los
+    mismos, el menor nivel del patrón (PS-10), con la pista de lo que lleva la búsqueda. Devuelve el solver si encontró
+    solución."""
     built_at = time.perf_counter()
     model = cp_model.CpModel()
     try:
@@ -211,13 +215,20 @@ def _place_most(
         return Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy()), None
     add_hard_constraints(model, variables, data, relaxed=True)
     literals = []
+    tiers = []
     for domain in variables.groups.values():
         literals.extend(option.literal for option in domain.options)
+        tiers.extend(option.tier for option in domain.options)
         hint = search.chosen.get(domain.id)
         if hint is not None and any((option.spread, option.block) == hint for option in domain.options):
             for option in domain.options:
                 model.add_hint(option.literal, (option.spread, option.block) == hint)
-    model.maximize(cp_model.LinearExpr.sum(literals))
+    # PS-10: primero los grupos programados y después el patrón. Cada grupo vale más que la suma de los niveles de
+    # todos, así que el nivel solo decide entre soluciones con los mismos programados.
+    per_group = 1 + sum(
+        max((option.tier for option in domain.options), default=0) for domain in variables.groups.values()
+    )
+    model.maximize(per_group * cp_model.LinearExpr.sum(literals) - cp_model.LinearExpr.weighted_sum(literals, tiers))
     solve_at = time.perf_counter()
 
     solver = cp_model.CpSolver()
@@ -233,7 +244,7 @@ def _place_most(
             constraints=len(model.proto.constraints),
             build_seconds=round(solve_at - built_at, 2),
             solve_seconds=round(solver.wall_time, 2),
-            placed=int(solver.objective_value) if feasible else 0,
+            placed=sum(solver.boolean_value(literal) for literal in literals) if feasible else 0,
             status=solver.status_name(status),
         )
     )
@@ -312,16 +323,21 @@ IMPROVE_GROUPS = 24
 #: Segundos de CP-SAT por vecindario de la mejora.
 IMPROVE_STEP_SECONDS = 0.4
 
+#: Hasta cuántos segundos se le dan a un vecindario cuando las vueltas no mejoran (el doble en cada vuelta).
+IMPROVE_MAX_STEP_SECONDS = 8.0
+
 #: Segundos para ajustar los salones de un vecindario (SC-03 y SC-06) antes de compararlo.
 IMPROVE_ROOM_SECONDS = 0.3
 
 
 @dataclass
 class Improvement:
-    """Lo que hizo la mejora: el puntaje al empezar y el mejor, los vecindarios revisados y los aceptados."""
+    """Lo que lleva la mejora: el puntaje al empezar, el mejor, la suma de los niveles del patrón de la mejor
+    solución (PS-04), los vecindarios revisados y los aceptados."""
 
     initial: Score
     best: Score
+    tiers: int
     steps: int = 0
     accepted: int = 0
 
@@ -332,59 +348,68 @@ def improve(
     deadline: float,
     limits: SearchLimits | None = None,
     seed: int = 0,
-    report: Callable[[Score, float], None] | None = None,
+    report: Callable[[Improvement, float], None] | None = None,
 ) -> Improvement:
     """La búsqueda por vecindarios con objetivo (7.6), sobre lo que ya programó `lns`.
 
     Cada vecindario son los grupos programados de unos docentes y los que comparten cohorte con ellos; los demás
     programados entran fijos con sus sesiones, pero siguen en el alcance del objetivo. Sus grupos se programan todos
     (asignación exacta: nunca deja fuera a uno que estaba), con sus niveles por necesidad y el que ya tenían, y el
-    modelo minimiza SC-01 a SC-09 (`objective.py`) con la pista de lo que tenían. Se acepta solo si el puntaje de toda
-    la solución (`score.py`, el de PHP) baja. Así es lexicográfico: primero los grupos programados (lo que dejó `lns`,
-    que ningún vecindario quita) y después el puntaje. Para cuando se acaba el plazo o cuando una vuelta entera a los
-    vecindarios no mejora nada. `report(mejor, avance)` se llama después de cada vecindario, con el avance del plazo
+    modelo minimiza el objetivo (`objective.py`) con la pista de lo que tenían.
+
+    Es lexicográfico (PS-10): primero los grupos programados (lo que dejó `lns`, que ningún vecindario quita), después
+    la suma de los niveles del patrón y después el puntaje de toda la solución (`score.py`, el de PHP). Un vecindario se
+    acepta solo si baja esa pareja: menos niveles, o los mismos y menos puntaje.
+
+    Cada vecindario tiene `IMPROVE_STEP_SECONDS` de CP-SAT; después de una vuelta sin mejora, el doble (hasta
+    `IMPROVE_MAX_STEP_SECONDS`). Para cuando se acaba el plazo o cuando, en una vuelta sin mejora, CP-SAT probó que cada
+    vecindario ya era lo mejor. `report(mejora, avance)` se llama después de cada vecindario, con el avance del plazo
     de 0 a 1."""
     limits = limits or SearchLimits()
     scorer = SoftScorer(data.source)
     scope = {group.id for group in data.movable}
     best = scorer.score(search.all_sessions)
-    result = Improvement(initial=best, best=best)
+    result = Improvement(initial=best, best=best, tiers=sum(search.tiers.values()))
     started = time.perf_counter()
     rng = random.Random(seed)
-    idle = 0
+    step_seconds = IMPROVE_STEP_SECONDS
     while time.perf_counter() < deadline:
         batches = _improvement_batches(data, search, rng)
-        if not batches or idle >= len(batches):
-            break
+        improved, proven = False, True
         for movable in batches:
-            if time.perf_counter() >= deadline or idle >= len(batches):
+            if time.perf_counter() >= deadline:
                 break
             limits.tick()
             result.steps += 1
-            candidate = _improve_step(data, search, movable, scope, deadline, limits, seed + result.steps)
-            idle += 1
-            if candidate is not None:
-                sessions = {**search.sessions, **candidate[0]}
+            step = _improve_step(data, search, movable, scope, deadline, step_seconds, limits, seed + result.steps)
+            proven = proven and step.proven
+            if step.sessions is not None:
+                sessions = {**search.sessions, **step.sessions}
                 proposed = [session for items in sessions.values() for session in items]
                 # Los salones del vecindario los repartió la fase B sin ver edificios: se ajustan antes de comparar.
                 room_deadline = min(deadline, time.perf_counter() + IMPROVE_ROOM_SECONDS)
                 proposed, score = improve_rooms_scored(
                     data, proposed, room_deadline, limits, scope, groups=movable, scorer=scorer
                 )
-                if score.total < best.total:
+                tiers = sum({**search.tiers, **step.tiers}.values())
+                if (tiers, score.total) < (result.tiers, result.best.total):
                     search.sessions = defaultdict(list)
                     for session in proposed:
                         search.sessions[session.group_id].append(session)
                     search.sessions = dict(search.sessions)
-                    search.chosen.update(candidate[1])
-                    search.tiers.update(candidate[2])
-                    best = score
+                    search.chosen.update(step.chosen)
+                    search.tiers.update(step.tiers)
+                    result.best, result.tiers = score, tiers
                     result.accepted += 1
-                    idle = 0
+                    improved = True
             if report is not None:
                 elapsed = time.perf_counter() - started
-                report(best, min(1.0, elapsed / max(1e-9, deadline - started)))
-    result.best = best
+                report(result, min(1.0, elapsed / max(1e-9, deadline - started)))
+        if not batches or (not improved and proven):
+            # Cada vecindario ya es el mejor que puede ser con lo demás fijo: un óptimo local de estos vecindarios.
+            break
+        # Una vuelta sin mejora con vecindarios sin resolver del todo: la siguiente les da el doble de tiempo.
+        step_seconds = IMPROVE_STEP_SECONDS if improved else min(IMPROVE_MAX_STEP_SECONDS, 2 * step_seconds)
 
     return result
 
@@ -428,18 +453,29 @@ def _improvement_batches(data: ModelData, search: Search, rng: random.Random) ->
     return batches
 
 
+@dataclass
+class _Step:
+    """Lo que dio un vecindario: sus sesiones, opciones y niveles (`None` si no hubo solución a tiempo) y si CP-SAT
+    probó que es lo mejor del vecindario."""
+
+    sessions: dict[str, list[ProposedSession]] | None = None
+    chosen: dict[str, OptionKey] = field(default_factory=dict)
+    tiers: dict[str, int] = field(default_factory=dict)
+    proven: bool = False
+
+
 def _improve_step(
     data: ModelData,
     search: Search,
     movable: set[str],
     scope: set[str],
     deadline: float,
+    step_seconds: float,
     limits: SearchLimits,
     seed: int,
-) -> tuple[dict[str, list[ProposedSession]], dict[str, OptionKey], dict[str, int]] | None:
-    """Un vecindario: sus grupos con el objetivo y lo demás fijo. Devuelve sus sesiones, opciones y niveles, o `None`
-    si no hubo solución a tiempo."""
-    step_deadline = min(deadline, time.perf_counter() + IMPROVE_STEP_SECONDS)
+) -> _Step:
+    """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT."""
+    step_deadline = min(deadline, time.perf_counter() + step_seconds)
     sub = ModelData.of(_sub_input(data.source, search, movable))
     model = cp_model.CpModel()
     options = DomainOptions(
@@ -449,9 +485,9 @@ def _improve_step(
     try:
         variables = build_variables(model, sub, options, limits.budget(step_deadline))
     except (BuildTimeout, ModelTooLarge):
-        return None
+        return _Step()
     if variables.unplaceable():
-        return None
+        return _Step()
     add_hard_constraints(model, variables, sub)
     objective = add_objective(model, variables, sub, scope=scope)
     model.minimize(objective.expression())
@@ -462,22 +498,21 @@ def _improve_step(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.05, step_deadline - time.perf_counter())
     solver.parameters.random_seed = seed
-    if run_solver(solver, model, limits) not in FEASIBLE:
-        return None
+    status = run_solver(solver, model, limits)
+    if status not in FEASIBLE:
+        return _Step()
     try:
         proposed = sessions_of(solver, variables, sub)
     except RoomAssignmentError:
-        return None
-    sessions: dict[str, list[ProposedSession]] = {group: [] for group in variables.groups}
+        return _Step()
+    step = _Step(sessions={group: [] for group in variables.groups}, proven=status == cp_model.OPTIMAL)
     for session in proposed:
-        sessions[session.group_id].append(session)
-    chosen: dict[str, OptionKey] = {}
-    tiers: dict[str, int] = {}
+        step.sessions[session.group_id].append(session)
     for domain in variables.groups.values():
         option = chosen_option(solver, domain)
         if option is None:
-            return None
-        chosen[domain.id] = (option.spread, option.block)
-        tiers[domain.id] = option.tier
+            return _Step()
+        step.chosen[domain.id] = (option.spread, option.block)
+        step.tiers[domain.id] = option.tier
 
-    return sessions, chosen, tiers
+    return step

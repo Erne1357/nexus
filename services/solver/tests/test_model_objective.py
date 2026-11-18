@@ -215,10 +215,11 @@ def test_un_peso_cero_no_crea_terminos(rule):
     assert any(objective.rules[other] for other in SCHEDULE_RULES if other != rule)
 
 
-def test_las_preferencias_desempatan_sin_ganarle_a_las_reglas():
-    """PS-04 y PS-07: sin penalizaciones, un grupo de 2 horas con lunes a miércoles va en su patrón (lunes y martes) y
-    a su hora actual (09:00). Si el docente prefiere martes y miércoles a las 07:00, SC-04 gana: otros días y otra
-    hora."""
+def test_el_patron_va_antes_que_las_reglas_y_la_hora_actual_despues():
+    """PS-10, orden lexicográfico. Un grupo de 2 horas con lunes a miércoles y su hora actual a las 09:00: sin
+    penalizaciones va en su patrón (lunes y martes) a las 09:00. Si el docente prefiere martes y miércoles a las 07:00,
+    martes y miércoles darían SC-04 = 0, pero no son su patrón: se queda lunes y martes, y SC-04 le gana a la hora
+    actual: a las 07:00 (1 hora fuera, contra 2 a las 09:00)."""
     grid = [campus(days=[1, 2, 3], day_end="14:00")]
     current = [session(1, "09:00", "10:00", "r1"), session(2, "09:00", "10:00", "r1")]
     data = instance(
@@ -231,7 +232,9 @@ def test_las_preferencias_desempatan_sin_ganarle_a_las_reglas():
 
     assert solve(data).starts("g1") == {(1, "09:00"), (2, "09:00")}
     preferring = {**data, "teachers": [teacher("t1", preferred=[slot(2, "07:00", "08:00"), slot(3, "07:00", "08:00")])]}
-    assert solve(preferring).starts("g1") == {(2, "07:00"), (3, "07:00")}
+    best = solve(preferring)
+    assert best.starts("g1") == {(1, "07:00"), (2, "07:00")}
+    assert best.by_rule["SC-04"] == best.score.by_rule["SC-04"] == 4
 
 
 def random_instance(seed: int) -> dict[str, Any]:

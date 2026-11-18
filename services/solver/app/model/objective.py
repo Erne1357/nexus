@@ -24,9 +24,10 @@ Dónde va cada regla:
 vecindario de la búsqueda los demás programados entran fijos pero siguen en el alcance, así que sus huecos y empalmes
 cuentan como en el problema completo.
 
-**Preferencias del patrón** (PS-04 y PS-07; PS-10): el nivel de la opción y las sesiones que cambian respecto a
-`current_sessions`. No compiten con las reglas: las reglas van multiplicadas por `scale`, que es mayor que la suma de
-todas las preferencias, así que solo desempatan (orden lexicográfico: reglas, nivel, hora actual).
+**Orden lexicográfico** (PS-10): primero el nivel del patrón de cada opción (PS-04: los otros días solo si el patrón no
+cabe), después las reglas y al final las sesiones que cambian respecto a `current_sessions` (PS-07), como desempate.
+Cada nivel va multiplicado por más de lo que pueden sumar todos los de abajo (`Objective.expression`); los grupos
+programados van antes que todo, y eso lo decide quien resuelve (`search.lns` y `search.improve`).
 """
 
 from collections import defaultdict
@@ -60,15 +61,20 @@ class Fixed:
 
 @dataclass
 class Objective:
-    """Los términos del objetivo, sin peso y en minutos, por regla; y las preferencias que desempatan."""
+    """Los términos del objetivo: el nivel del patrón de cada grupo, las reglas (sin peso y en minutos) y las sesiones
+    que cambian."""
 
     weights: dict[str, int]
     rules: dict[str, list[tuple[int, cp_model.LinearExprT]]] = field(
         default_factory=lambda: {rule: [] for rule in SOFT_RULES}
     )
-    preferences: list[tuple[int, cp_model.LinearExprT]] = field(default_factory=list)
-    #: Lo que vale un minuto de penalización frente a una unidad de preferencia: más que todas las preferencias juntas.
-    scale: int = 1
+    #: El nivel del patrón de la opción de cada grupo (PS-04).
+    tiers: list[tuple[int, cp_model.LinearExprT]] = field(default_factory=list)
+    #: Las sesiones de la opción de cada grupo que no estaban en `current_sessions` (PS-07).
+    changes: list[tuple[int, cp_model.LinearExprT]] = field(default_factory=list)
+    #: Lo más que pueden sumar las reglas con peso y las sesiones que cambian.
+    rules_bound: int = 0
+    changes_bound: int = 0
 
     def rule_expression(self, rule: str) -> cp_model.LinearExpr:
         return cp_model.LinearExpr.weighted_sum(
@@ -81,24 +87,24 @@ class Objective:
 
         return cp_model.LinearExpr.weighted_sum([expr for _, expr in terms], [c for c, _ in terms])
 
-    def preference(self) -> cp_model.LinearExpr:
-        return cp_model.LinearExpr.weighted_sum(
-            [expr for _, expr in self.preferences], [c for c, _ in self.preferences]
-        )
-
     def expression(self) -> cp_model.LinearExpr:
-        """Lo que se minimiza: las reglas por `scale` más las preferencias."""
-        return self.scale * self.penalty() + self.preference()
+        """Lo que se minimiza, en orden lexicográfico: el nivel del patrón, las reglas y las sesiones que cambian.
+        Cada parte se multiplica por más de lo que pueden sumar las de abajo."""
+        rule_weight = self.changes_bound + 1
+        tier_weight = rule_weight * (self.rules_bound + 1)
+
+        return tier_weight * _sum(self.tiers) + rule_weight * self.penalty() + _sum(self.changes)
 
     def by_rule(self, solver: cp_model.CpSolver) -> dict[str, int]:
         """El desglose con peso, en la unidad de PHP (minutos entre 60), de la solución del solver."""
         return {rule: self.weights[rule] * int(solver.value(self.rule_expression(rule))) // HOUR for rule in SOFT_RULES}
 
-    def add(self, rule: str, coefficient: int, expression: cp_model.LinearExprT) -> None:
-        """Un término de la regla, en minutos sin peso."""
+    def add(self, rule: str, coefficient: int, expression: cp_model.LinearExprT, bound: int) -> None:
+        """Un término de la regla, en minutos sin peso, con lo más que puede valer."""
         if self.weights[rule] == 0 or coefficient == 0:
             return
         self.rules[rule].append((coefficient, expression))
+        self.rules_bound += self.weights[rule] * bound
 
 
 def add_objective(
@@ -117,7 +123,7 @@ def add_objective(
     builder.gap_terms()
     builder.overlap_terms()
     builder.travel_terms()
-    builder.preference_terms()
+    builder.pattern_terms()
 
     return objective
 
@@ -168,7 +174,12 @@ class _Builder:
         if not any(hours_by_option):
             return
         literals = [option.literal for option in domain.options]
-        self.objective.add(rule, 1, cp_model.LinearExpr.weighted_sum(literals, [HOUR * h for h in hours_by_option]))
+        self.objective.add(
+            rule,
+            1,
+            cp_model.LinearExpr.weighted_sum(literals, [HOUR * h for h in hours_by_option]),
+            HOUR * max(hours_by_option),
+        )
 
     # --- Huecos: SC-01 por cohorte y SC-05 por docente ------------------------------------------------------------
 
@@ -245,7 +256,8 @@ class _Builder:
             model.add(gap >= bound)
             terms.append((end - start, gap))
         if terms:
-            self.objective.add(rule, 1, cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms]))
+            expression = cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
+            self.objective.add(rule, 1, expression, sum(length for length, _ in terms))
 
     def _either(
         self, first: cp_model.LinearExprT | int, second: cp_model.LinearExprT | int
@@ -332,9 +344,8 @@ class _Builder:
                     self.model.add(both >= a + b - 1)
                     terms.append((end - start, both))
             if terms:
-                self.objective.add(
-                    "SC-07", 1, cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
-                )
+                expression = cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
+                self.objective.add("SC-07", 1, expression, sum(length for length, _ in terms))
 
     def _semester_pairs(self) -> list[tuple[str, str]]:
         """Los pares de `ConsecutiveSemesters`: un grupo del alcance con una cohorte `plan:` y los de la misma cohorte
@@ -441,27 +452,30 @@ class _Builder:
                     arrive = arriving or cp_model.LinearExpr.sum(starts[(target, start)])
                     tight = self.model.new_bool_var("")
                     self.model.add(tight >= leave + arrive - 1 - cp_model.LinearExpr.sum(between))
-                    self.objective.add("SC-09", HOUR, tight)
+                    self.objective.add("SC-09", HOUR, tight, HOUR)
 
-    # --- Preferencias: PS-04 y PS-07 -------------------------------------------------------------------------------
+    # --- El nivel del patrón (PS-04) y la hora actual (PS-07) ------------------------------------------------------
 
-    def preference_terms(self) -> None:
-        total = 0
+    def pattern_terms(self) -> None:
         for domain in self.variables.groups.values():
             if not domain.options:
                 continue
+            literals = [option.literal for option in domain.options]
+            tiers = [option.tier for option in domain.options]
+            if any(tiers):
+                self.objective.tiers.append((1, cp_model.LinearExpr.weighted_sum(literals, tiers)))
             current = {
                 (slot.day, minutes(slot.starts_at), minutes(slot.ends_at)) for slot in domain.group.current_sessions
             }
             unit = domain.grid.unit_minutes
-            units = max(sum(count for _, count in option.spread) for option in domain.options)
-            costs = [option.tier * (units + 1) + _changed(option, unit, current) for option in domain.options]
-            if any(costs):
-                self.objective.preferences.append(
-                    (1, cp_model.LinearExpr.weighted_sum([option.literal for option in domain.options], costs))
-                )
-                total += max(costs)
-        self.objective.scale = total + 1
+            changed = [_changed(option, unit, current) for option in domain.options]
+            if any(changed):
+                self.objective.changes.append((1, cp_model.LinearExpr.weighted_sum(literals, changed)))
+                self.objective.changes_bound += max(changed)
+
+
+def _sum(terms: list[tuple[int, cp_model.LinearExprT]]) -> cp_model.LinearExpr:
+    return cp_model.LinearExpr.weighted_sum([expr for _, expr in terms], [c for c, _ in terms])
 
 
 def _spread_hours(option: Option, unit: int, share: int) -> int:
