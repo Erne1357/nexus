@@ -63,6 +63,8 @@ class CampusGrid(ContractModel):
     """La rejilla de bloques de un campus."""
 
     code: NonEmptyStr
+    # El orden importa: el validador de `day_end` lee `day_start` y `block_minutes`, y pydantic solo le pasa en
+    # `info.data` los campos declarados antes. No los reordenes.
     block_minutes: PositiveInt
     day_start: Time
     day_end: Time
@@ -72,7 +74,14 @@ class CampusGrid(ContractModel):
     @field_validator("day_end")
     @classmethod
     def _ordered(cls, value: str, info: ValidationInfo) -> str:
-        return check_ends_after(info.data.get("day_start"), value)
+        start, block = info.data.get("day_start"), info.data.get("block_minutes")
+        check_ends_after(start, value)
+        if start is not None and block is not None:
+            span = (int(value[:2]) * 60 + int(value[3:])) - (int(start[:2]) * 60 + int(start[3:]))
+            if span % block != 0:
+                raise ValueError(f"la jornada de {start} a {value} no se divide en bloques de {block} minutos")
+
+        return value
 
     @field_validator("days")
     @classmethod

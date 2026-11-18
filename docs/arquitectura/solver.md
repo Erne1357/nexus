@@ -46,7 +46,7 @@ Versión actual: `1`. El contrato es la frontera entre Nexus y cualquier motor; 
 | `run_id` | cadena | sí | Identificador de la corrida (`solver_runs.id`) para correlación en logs. |
 | `term` | objeto | sí | `code` del periodo. Solo informativo para el motor. |
 | `modality` | objeto | sí | `code` de la modalidad de la carga. Solo informativo. |
-| `campuses[]` | lista | sí | Un objeto por campus de la corrida: `code`, `block_minutes`, `day_start`, `day_end` (`HH:MM`), `days` (lista de 1 a 6) y `uses_rooms`. Cada campus tiene su rejilla de bloques. |
+| `campuses[]` | lista | sí | Un objeto por campus de la corrida: `code`, `block_minutes`, `day_start`, `day_end` (`HH:MM`), `days` (lista de 1 a 6) y `uses_rooms`. Cada campus tiene su rejilla de bloques, y `block_minutes` debe dividir la jornada de `day_start` a `day_end` en bloques completos (si no, la entrada se rechaza en `day_end`). |
 | `time_limit_seconds` | entero | sí | Tiempo máximo de resolución. El motor devuelve la mejor solución encontrada al vencer. |
 | `scope` | objeto | sí | `kind` (`department`: la carga del departamento en la modalidad; `career`: exploración del coordinador) e `id`. Para logs y para que la pantalla sepa qué se programó. |
 | `travel_minutes` | entero | sí | Minutos mínimos para que un docente cambie de campus entre dos sesiones seguidas (`staffing.min_campus_travel_minutes`, SC-09). |
