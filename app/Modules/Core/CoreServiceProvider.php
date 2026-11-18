@@ -258,6 +258,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 CorePermission::TermMakeCurrent,
                 CorePermission::TermManageCalendar,
                 CorePermission::TermOpen,
+                CorePermission::SettingView,
             ],
         ];
     }

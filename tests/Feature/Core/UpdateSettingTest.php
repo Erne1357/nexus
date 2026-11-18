@@ -4,9 +4,11 @@ use App\Modules\Core\Actions\ResetSetting;
 use App\Modules\Core\Actions\UpdateSetting;
 use App\Modules\Core\Actions\UpdateSettings;
 use App\Modules\Core\Enums\SettingScope;
+use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Staffing\Rules\RankingWeights;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -135,4 +137,38 @@ it('CF-S7: UpdateSettings guarda toda la tarjeta o nada, con la bitácora de cad
     app(UpdateSettings::class)->handle($definitions, ['staffing.history_terms' => 8, 'staffing.extra_hours_tolerance' => 5]);
 
     expect(Setting::query()->count())->toBe(2)->and(Activity::query()->count())->toBe(2);
+});
+
+it('CF-S7: UpdateSettings despacha SettingsUpdated una vez, con solo las llaves que cambiaron', function () {
+    Event::fake([SettingsUpdated::class]);
+    $definitions = [settingDefinitionOf('staffing.history_terms'), settingDefinitionOf('staffing.extra_hours_tolerance')];
+
+    $changed = app(UpdateSettings::class)->handle($definitions, ['staffing.history_terms' => 6, 'staffing.extra_hours_tolerance' => 5]);
+
+    expect($changed)->toBe(['staffing.extra_hours_tolerance']);
+    Event::assertDispatchedTimes(SettingsUpdated::class, 1);
+    Event::assertDispatched(SettingsUpdated::class, fn (SettingsUpdated $event): bool => $event->keys === ['staffing.extra_hours_tolerance']);
+
+    app(UpdateSettings::class)->handle($definitions, ['staffing.history_terms' => 6, 'staffing.extra_hours_tolerance' => 5]);
+    Event::assertDispatchedTimes(SettingsUpdated::class, 1);
+});
+
+it('CF-S7: UpdateSetting y ResetSetting despachan SettingsUpdated solo si cambia algo', function () {
+    Event::fake([SettingsUpdated::class]);
+    $definition = settingDefinitionOf('staffing.extra_hours_tolerance');
+
+    app(UpdateSetting::class)->handle($definition, 0);
+    app(ResetSetting::class)->handle($definition);
+    Event::assertNotDispatched(SettingsUpdated::class);
+
+    app(UpdateSetting::class)->handle($definition, 4);
+    app(ResetSetting::class)->handle($definition);
+    Event::assertDispatchedTimes(SettingsUpdated::class, 2);
+});
+
+it('CF-S7: un valor inválido no despacha SettingsUpdated', function () {
+    Event::fake([SettingsUpdated::class]);
+
+    expect(fn () => app(UpdateSetting::class)->handle(settingDefinitionOf('staffing.extra_hours_tolerance'), 99))->toThrow(ValidationException::class);
+    Event::assertNotDispatched(SettingsUpdated::class);
 });

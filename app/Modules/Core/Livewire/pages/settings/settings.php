@@ -17,6 +17,10 @@ use Mary\Traits\Toast;
  * tarjeta por módulo. Cada parámetro tiene su campo según el tipo (número, decimal, sí o no, o una tabla de valores con
  * nombre), «Guardar» por tarjeta y «Volver al valor por omisión» por parámetro.
  *
+ * Cada tarjeta es editable solo si el puesto puede cambiar todos sus parámetros: `core.setting.update` o el permiso propio que
+ * la definición declare (la Subdirección cambia los de demanda, confirmado el 16 de noviembre de 2026). Si no, se pinta en
+ * solo lectura, y «Guardar» y «Volver al valor por omisión» responden 403 aunque se llamen a mano.
+ *
  * El componente lee con SettingsQuery, autoriza con SettingPolicy en mount(), en with() y en cada acción, y llama a
  * UpdateSetting y ResetSetting, que validan con la definición del módulo. «Guardar» valida toda la tarjeta antes de escribir:
  * si un campo es inválido no se guarda ninguno de esa tarjeta. Las llaves llevan punto (`staffing.weights`), que Livewire
@@ -46,16 +50,23 @@ new #[Title('Parámetros')] class extends Component
     {
         $this->authorize('viewAny', Setting::class);
 
-        return [
-            'modules' => $settings->modules(),
-            'canUpdate' => Gate::allows('update', Setting::class),
-        ];
+        $modules = array_map(function (array $module): array {
+            $module['editable'] = collect($module['settings'])
+                ->every(fn (array $row): bool => $this->canUpdate($row['definition']));
+
+            return $module;
+        }, $settings->modules());
+
+        return ['modules' => $modules];
     }
 
     public function save(string $module, SettingsQuery $settings, SettingRegistry $registry, UpdateSettings $update): void
     {
-        $this->authorize('update', Setting::class);
         $definitions = $registry->byModule()[$module] ?? abort(404);
+
+        foreach ($definitions as $definition) {
+            $this->authorize('update', [Setting::class, $definition]);
+        }
 
         $this->resetErrorBag();
 
@@ -66,7 +77,7 @@ new #[Title('Parámetros')] class extends Component
         }
 
         try {
-            $update->handle($definitions, $values);
+            $changed = $update->handle($definitions, $values);
         } catch (ValidationException $e) {
             foreach ($e->errors() as $field => $messages) {
                 $this->addError('values.'.$field, $messages[0]);
@@ -78,19 +89,30 @@ new #[Title('Parámetros')] class extends Component
         }
 
         $this->loadValues($settings);
-        $this->success('Parámetros guardados', e($definitions[0]->moduleLabel));
+
+        $notices = collect($definitions)
+            ->filter(fn (SettingDefinition $definition): bool => in_array($definition->key, $changed, true) && $definition->savedNotice !== null)
+            ->map(fn (SettingDefinition $definition): string => $definition->savedNotice)
+            ->unique()->all();
+
+        $this->success('Parámetros guardados', implode(' ', [e($definitions[0]->moduleLabel), ...array_map(e(...), $notices)]));
     }
 
     public function resetToDefault(string $key, SettingsQuery $settings, SettingRegistry $registry, ResetSetting $reset): void
     {
-        $this->authorize('update', Setting::class);
         $definition = $registry->find($key) ?? abort(404);
+        $this->authorize('update', [Setting::class, $definition]);
 
         $reset->handle($definition);
 
         $this->resetErrorBag();
         $this->loadValues($settings);
         $this->success('Valor por omisión', e($definition->label));
+    }
+
+    private function canUpdate(SettingDefinition $definition): bool
+    {
+        return Gate::allows('update', [Setting::class, $definition]);
     }
 
     /**
