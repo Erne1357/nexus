@@ -24,7 +24,7 @@ Dónde va cada regla:
 vecindario de la búsqueda los demás programados entran fijos pero siguen en el alcance, así que sus huecos y empalmes
 cuentan como en el problema completo.
 
-**Preferencias del patrón** (PS-04 y PS-07): el nivel de la opción y las sesiones que cambian respecto a
+**Preferencias del patrón** (PS-04 y PS-07; PS-10): el nivel de la opción y las sesiones que cambian respecto a
 `current_sessions`. No compiten con las reglas: las reglas van multiplicadas por `scale`, que es mayor que la suma de
 todas las preferencias, así que solo desempatan (orden lexicográfico: reglas, nivel, hora actual).
 """
@@ -40,7 +40,7 @@ from app.contract.input import SOFT_RULES
 
 from .data import ModelData
 from .pattern import minutes
-from .score import Session, SoftScorer, hours, uncovered
+from .score import Session, SoftScorer, hours, php_int, uncovered
 from .variables import GroupDomain, Option, Span, Variables
 
 #: Los minutos de penalización de una hora o de un evento (cambio de edificio, traslado).
@@ -67,10 +67,7 @@ class Objective:
         default_factory=lambda: {rule: [] for rule in SOFT_RULES}
     )
     preferences: list[tuple[int, cp_model.LinearExprT]] = field(default_factory=list)
-    #: La cota superior de los minutos con peso (sin las preferencias): sirve para que quien maximiza los grupos
-    #: programados le dé a cada grupo más que todo el puntaje.
-    bound: int = 0
-    #: Lo que vale un minuto de penalización frente a una unidad de preferencia.
+    #: Lo que vale un minuto de penalización frente a una unidad de preferencia: más que todas las preferencias juntas.
     scale: int = 1
 
     def rule_expression(self, rule: str) -> cp_model.LinearExpr:
@@ -97,12 +94,11 @@ class Objective:
         """El desglose con peso, en la unidad de PHP (minutos entre 60), de la solución del solver."""
         return {rule: self.weights[rule] * int(solver.value(self.rule_expression(rule))) // HOUR for rule in SOFT_RULES}
 
-    def add(self, rule: str, coefficient: int, expression: cp_model.LinearExprT, bound: int) -> None:
-        """Un término de la regla (minutos sin peso) con la cota de lo que puede valer."""
+    def add(self, rule: str, coefficient: int, expression: cp_model.LinearExprT) -> None:
+        """Un término de la regla, en minutos sin peso."""
         if self.weights[rule] == 0 or coefficient == 0:
             return
         self.rules[rule].append((coefficient, expression))
-        self.bound += self.weights[rule] * bound
 
 
 def add_objective(
@@ -110,7 +106,6 @@ def add_objective(
     variables: Variables,
     data: ModelData,
     scope: Iterable[str] | None = None,
-    preferences: bool = True,
 ) -> Objective:
     """Arma los términos de SC-01, SC-02, SC-04, SC-05, SC-07, SC-08 y SC-09 (sin minimizar: quien resuelve decide
     cómo combinarlo con los grupos programados). Un peso cero apaga la regla: no crea nada."""
@@ -122,8 +117,7 @@ def add_objective(
     builder.gap_terms()
     builder.overlap_terms()
     builder.travel_terms()
-    if preferences:
-        builder.preference_terms()
+    builder.preference_terms()
 
     return objective
 
@@ -145,6 +139,10 @@ class _Builder:
         self.objective = objective
         self.in_scope = in_scope
         self.weights = objective.weights
+        #: Los docentes de los grupos del alcance: los de `ValidationScope::teacherIds`.
+        self.teachers_in_scope = {
+            scorer.groups[group_id].teacher_id for group_id in in_scope if scorer.groups[group_id].teacher_id
+        }
 
     # --- Por opción: SC-02, SC-04, SC-08 -------------------------------------------------------------------------
 
@@ -170,12 +168,7 @@ class _Builder:
         if not any(hours_by_option):
             return
         literals = [option.literal for option in domain.options]
-        self.objective.add(
-            rule,
-            1,
-            cp_model.LinearExpr.weighted_sum(literals, [HOUR * h for h in hours_by_option]),
-            HOUR * max(hours_by_option),
-        )
+        self.objective.add(rule, 1, cp_model.LinearExpr.weighted_sum(literals, [HOUR * h for h in hours_by_option]))
 
     # --- Huecos: SC-01 por cohorte y SC-05 por docente ------------------------------------------------------------
 
@@ -183,7 +176,7 @@ class _Builder:
         if self.weights["SC-05"]:
             fixed = self._teacher_fixed()
             for teacher_id, day in list(self.variables.teachers.keys()):
-                if not self._teacher_in_scope(teacher_id):
+                if teacher_id not in self.teachers_in_scope:
                     continue
                 spans = self.variables.teachers.spans(teacher_id, day)
                 self._gap(
@@ -197,9 +190,6 @@ class _Builder:
                     continue
                 spans = self.variables.cohorts.spans(key, day)
                 self._gap("SC-01", f"{key}:{day}", spans, fixed.get((key, day), []), self.data.active("HC-03"))
-
-    def _teacher_in_scope(self, teacher_id: str) -> bool:
-        return any(group.teacher_id == teacher_id for group in self.scorer.groups.values() if group.id in self.in_scope)
 
     def _gap(self, rule: str, name: str, spans: list[Span], fixed: list[Fixed], exclusive: bool) -> None:
         """Los minutos de hueco del recurso en el día, por tramos: el día se parte en los tramos entre todos los
@@ -255,9 +245,7 @@ class _Builder:
             model.add(gap >= bound)
             terms.append((end - start, gap))
         if terms:
-            minutes_total = sum(length for length, _ in terms)
-            expression = cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
-            self.objective.add(rule, 1, expression, minutes_total)
+            self.objective.add(rule, 1, cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms]))
 
     def _either(
         self, first: cp_model.LinearExprT | int, second: cp_model.LinearExprT | int
@@ -327,8 +315,7 @@ class _Builder:
         if not self.weights["SC-07"]:
             return
         for first, second in self._semester_pairs():
-            mine, theirs = self._occupation(first), self._occupation(second)
-            if mine is None and theirs is None:
+            if first not in self.variables.groups and second not in self.variables.groups:
                 continue
             terms: list[tuple[int, cp_model.LinearExprT]] = []
             for day in set(self._days(first)) & set(self._days(second)):
@@ -345,9 +332,8 @@ class _Builder:
                     self.model.add(both >= a + b - 1)
                     terms.append((end - start, both))
             if terms:
-                bound = sum(length for length, _ in terms)
                 self.objective.add(
-                    "SC-07", 1, cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms]), bound
+                    "SC-07", 1, cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
                 )
 
     def _semester_pairs(self) -> list[tuple[str, str]]:
@@ -360,16 +346,13 @@ class _Builder:
                 if parts[0] != "plan" or len(parts) != 4:
                     continue
                 _, plan, semester, campus = parts
-                number = int(semester) if semester.lstrip("-").isdigit() else 0
+                number = php_int(semester)
                 for other in (number - 1, number + 1):
                     for other_id in self.scorer.members.get(f"plan:{plan}:{other}:{campus}", []):
                         if other_id != group_id:
                             pairs[(min(group_id, other_id), max(group_id, other_id))] = None
 
         return list(pairs)
-
-    def _occupation(self, group_id: str) -> GroupDomain | None:
-        return self.variables.groups.get(group_id)
 
     def _days(self, group_id: str) -> list[int]:
         domain = self.variables.groups.get(group_id)
@@ -420,7 +403,7 @@ class _Builder:
         fixed = self._teacher_fixed()
         campus_of = {group_id: group.campus_code for group_id, group in self.scorer.groups.items()}
         for teacher_id, day in list(self.variables.teachers.keys()):
-            if not self._teacher_in_scope(teacher_id):
+            if teacher_id not in self.teachers_in_scope:
                 continue
             spans = self.variables.teachers.spans(teacher_id, day)
             constants = fixed.get((teacher_id, day), [])
@@ -458,7 +441,7 @@ class _Builder:
                     arrive = arriving or cp_model.LinearExpr.sum(starts[(target, start)])
                     tight = self.model.new_bool_var("")
                     self.model.add(tight >= leave + arrive - 1 - cp_model.LinearExpr.sum(between))
-                    self.objective.add("SC-09", HOUR, tight, HOUR)
+                    self.objective.add("SC-09", HOUR, tight)
 
     # --- Preferencias: PS-04 y PS-07 -------------------------------------------------------------------------------
 

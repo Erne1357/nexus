@@ -114,15 +114,15 @@ El motor no sabe de dónde viene cada cohorte: solo garantiza que los grupos con
 | HC-11 bloqueos de salón | Rechaza bloques en `blocks` | No se crean `z` en bloques bloqueados |
 | HC-12 horas semanales | El constructor coloca exactamente `weekly_hours` horas por grupo | Cada opción lleva las horas exactas (o dentro de la tolerancia) y cada grupo toma exactamente una |
 | HC-13 grupos válidos | Verificación previa al armar la entrada | Igual |
-| SC-01 horas seguidas del alumno tipo | Penaliza huecos por (plan, semestre, día) en la búsqueda local | Variables auxiliares de primer y último bloque por (plan, semestre, día); penaliza su diferencia menos las horas ocupadas |
-| SC-02 reparto en días | Penaliza más de N horas del mismo grupo en un día | Penalización por grupo y día cuando excede el umbral |
-| SC-03 salón por defecto | Bonifica el salón de mayor prioridad del `subject_room_defaults` | Término negativo por usar un salón por defecto |
-| SC-04 bloques preferidos del docente | Bonifica sesiones en `preferred` | Término negativo por sesión en bloque preferido |
-| SC-05 compacidad del docente | Penaliza huecos por docente y día | Primer y último bloque por docente y día, como SC-01 |
-| SC-06 cambio de edificio | Penaliza edificios distintos en horas consecutivas del docente | Penalización por par de sesiones consecutivas con edificio distinto |
-| SC-07 semestres consecutivos | Penaliza empalmes entre semestre N y N+1 de la misma carrera | Penalización por (plan, semestre, semestre+1, bloque) ocupados a la vez |
-| SC-08 turnos para honorarios | Penaliza sesiones fuera de la disponibilidad declarada de docentes de honorarios | Penalización por sesión fuera de `preferred` cuando el docente es de honorarios |
-| SC-09 traslado entre campus | Penaliza dos sesiones seguidas del docente en campus distintos con menos de `travel_minutes` entre ellas | Penalización por par de sesiones del docente en campus distintos demasiado cerca |
+| SC-01 horas seguidas del alumno tipo | Penaliza huecos por (plan, semestre, día) en la búsqueda local | Por cohorte y día, por tramos: un tramo libre con algo antes y algo después es hueco (`objective.py`) |
+| SC-02 reparto en días | Penaliza más de N horas del mismo grupo en un día | Constante de cada opción: las horas de cada día por encima del reparto parejo |
+| SC-03 salón por defecto | Bonifica el salón de mayor prioridad del `subject_room_defaults` | Fase B con objetivo (`room_model.py`): las horas fuera de los salones por defecto |
+| SC-04 bloques preferidos del docente | Bonifica sesiones en `preferred` | Constante de cada opción: las horas de sus sesiones fuera de `preferred` |
+| SC-05 compacidad del docente | Penaliza huecos por docente y día | Por docente y día, por tramos, como SC-01, con su ocupación de fuera y sus grupos fijos |
+| SC-06 cambio de edificio | Penaliza edificios distintos en horas consecutivas del docente | Fase B con objetivo: por par de sesiones pegadas del docente, un cambio si sus edificios difieren |
+| SC-07 semestres consecutivos | Penaliza empalmes entre semestre N y N+1 de la misma carrera | Por par de grupos de cohortes `plan:` de semestres seguidos y tramo común, una booleana si los dos lo ocupan |
+| SC-08 turnos para honorarios | Penaliza sesiones fuera de la disponibilidad declarada de docentes de honorarios | Como SC-04, solo con docente de honorarios |
+| SC-09 traslado entre campus | Penaliza dos sesiones seguidas del docente en campus distintos con menos de `travel_minutes` entre ellas | Un fin de sesión en un campus y un inicio en otro a menos de `travel_minutes`, sin otra sesión en medio |
 
 HC-14 a HC-18 son reglas del flujo (validación de catálogos, cierre, motivo de asignación, visibilidad, bitácora) y no entran al motor.
 
@@ -252,7 +252,7 @@ En `department-multicampus`, por regla (antes → después): SC-01 460 → 360 (
 
 ## Modelo CP-SAT: variables y restricciones duras
 
-Tareas 7.4 y 7.5. El modelo vive en `services/solver/app/model/`: `pattern.py` (la rejilla y el patrón de sesiones, espejo de `Grid` y `SessionPattern` en PHP), `data.py` (la entrada indexada una vez: reglas activas, ocupación fija, bloqueos y préstamos), `variables.py` (7.4) y `constraints.py` (7.5). Todavía no es un motor del servicio: el objetivo (7.6), la resolución con avance y relajación (7.7) y su registro como motor vienen después.
+Tareas 7.4 y 7.5. El modelo vive en `services/solver/app/model/`: `pattern.py` (la rejilla y el patrón de sesiones, espejo de `Grid` y `SessionPattern` en PHP), `data.py` (la entrada indexada una vez: reglas activas, ocupación fija, bloqueos y préstamos), `variables.py` (7.4) y `constraints.py` (7.5). El objetivo (7.6) está en «Modelo CP-SAT: objetivo»; la resolución con avance y relajación (7.7) y su registro como motor vienen después.
 
 ### Variables (7.4)
 
@@ -361,11 +361,57 @@ En la instancia fueron de 22 a 24 vecindarios por corrida, de 300 a 6 000 variab
 
 Supuestos y pendientes (para 7.6 a 7.8):
 
-- Para que quepa un grupo, un vecino puede pasar del patrón a otros días o a un día de 2 horas, como en la construcción de la heurística, donde los primeros toman el patrón y los siguientes lo que queda (PS-04, supuesto por confirmar). Preferir el patrón y la hora actual es del objetivo (7.6), con `Option.tier`.
+- Para que quepa un grupo, un vecino puede pasar del patrón a otros días o a un día de 2 horas, como en la construcción de la heurística, donde los primeros toman el patrón y los siguientes lo que queda (PS-04, supuesto por confirmar). Preferir el patrón y la hora actual es del objetivo (7.6, PS-10).
 - Con más de un hilo, CP-SAT no es reproducible: el tiempo cambia entre corridas.
 - **7.7** registra `lns` como motor, con avance, cancelación (el armado ya revisa `check_cancelled` y el plazo) y el reporte de lo que no quedó en `unscheduled` con `main_reason()`; con la asignación exacta, un grupo sin opciones volvería infactible todo el modelo (nota del Riel A).
 - Una pista mejor sería la salida de la heurística, con un campo opcional como `hint_sessions` que no cambie la versión del contrato. Va en otra tarea, porque toca el contrato.
 - Partir por campus (7.8) achica todavía más cada vuelta.
+
+## Modelo CP-SAT: objetivo
+
+Tarea 7.6. Tres piezas en `services/solver/app/model/`: `score.py` (el puntaje, el mismo número que PHP), `objective.py` (las reglas como términos lineales del modelo del horario) y `room_model.py` (la fase B con objetivo, para los salones); `search.improve` las usa en la búsqueda por vecindarios.
+
+**El puntaje es el de PHP** (`score.py`). Es un espejo de `Scheduling/Rules/Soft/*` y `SoftScorer` sobre la foto de `ContractState`, con las unidades de reglas-de-negocio.md («Unidades del puntaje blando»): el alcance son los movibles, los grupos fijos entran con sus `fixed_sessions` y los `busy` de un docente como grupos de contexto sin salón (por campus; sin `campus_code`, el de su primer grupo), una fracción de hora cuenta como hora y un peso cero no se calcula. Lee solo el contrato, como `verify.py`. El `soft_score` de la salida (total y `by_rule` de SC-01 a SC-09, que suman el total) y el mejor puntaje que se reporta salen de aquí, así que son el número de PHP aunque el objetivo del modelo sea una aproximación. Lo prueban dos lados con los mismos archivos: pytest revisa que el `soft_score` guardado en `tests/Fixtures/solver/v1/{small,medium}/cpsat-output.json` (salidas de CP-SAT, `scripts/objective.py --output`) y en `tests/Fixtures/solver/scores/all-rules` (una solución a mano que penaliza en las nueve reglas: 190 con peso 10) es el de `score.py`, y `tests/Unit/Solver/CpSatScoreTest.php` que es el de `ContractEvaluator`. Fuera del CI, la salida de `department-multicampus` también dio lo mismo en los dos lados (37 561 antes de la mejora).
+
+**Dónde va cada regla.** En el modelo, cada regla cuenta en minutos sin peso (una hora, un cambio de edificio o un traslado son 60) y se multiplica por su peso de `soft_weights`; un peso cero no crea nada.
+
+| Regla | Dónde | Cómo |
+|---|---|---|
+| SC-02 | Fase A, por opción | La constante de cada `y`: las horas de cada día por encima del techo de las semanales entre los días del campus |
+| SC-04, SC-08 | Fase A, por opción | Las horas fuera de los preferidos de cada sesión (una por unidad) de la opción; SC-08 solo con docente de honorarios |
+| SC-01, SC-05 | Fase A, por cohorte o docente y día | El día se parte en tramos entre todos los inicios y fines posibles. `antes[p] ≥ antes[p-1]`, `antes[p] ≥ ocupado[p-1]` (y al revés `después`), `hueco[p] ≥ antes[p] + después[p] - 1 - ocupado[p]`; un tramo entre dos sesiones fijas que no son del alcance solo cuenta si una sesión del modelo cae entre ellas, como en PHP |
+| SC-07 | Fase A, por par de grupos | Por cada tramo común de un par de semestres seguidos (las cohortes `plan:` de `ConsecutiveSemesters`, una vez por par), una booleana `≥ ocupa₁ + ocupa₂ - 1` |
+| SC-09 | Fase A, por docente con más de un campus | Un fin de sesión en un campus y un inicio en otro a menos de `travel_minutes`, sin otra sesión en medio: `justo ≥ sale + llega - 1 - en medio` |
+| SC-03, SC-06 | Fase B (`room_model.py`) | Con el horario fijo, un modelo por día: horas fuera del salón por defecto y, por par de sesiones pegadas del docente, `cambio ≥ Σ salones del edificio B en una - Σ en la otra` para cada edificio |
+
+Al minimizar, cada booleana auxiliar vale lo mínimo que permiten las sesiones que se usan, así que en el óptimo el desglose del modelo es el de `score.py`: lo prueban 20 instancias al azar con dos campus, preferidos, honorarios, `busy`, grupos fijos y cohortes seguidas (`test_model_objective.py`). Es exacto cuando todo cae en horas enteras (rejillas de 60 min y lo fijo alineado, como en los fixtures y en la carga real); con bloques de 30 min o lo fijo desalineado, media hora de hueco vale 30 y no una hora, y lo fijo que se empalma entre sí (dos `busy` iguales) se cuenta como PHP solo en lo que se puede: ahí el objetivo aproxima y el puntaje reportado sigue siendo el de `score.py`. Los huecos se modelaron primero con primer inicio y último fin (`hueco ≥ último - primero - ocupado`); con esa forma una instancia de 7 grupos no probaba el óptimo en 20 s y con los tramos lo prueba en 2.7 s, y en los vecindarios de la carga real la misma mejora tarda la mitad.
+
+**Preferencias del patrón** (PS-10). El nivel de la opción (`Option.tier`, PS-04) y las sesiones que cambian respecto a `current_sessions` (PS-07) solo desempatan: el modelo minimiza `scale × reglas + nivel × (unidades + 1) + sesiones que cambian`, con `scale` mayor que la suma de todas las preferencias, así que ninguna preferencia le gana a un minuto de penalización (orden lexicográfico: reglas, nivel, hora actual). En los salones desempatan, igual, el salón actual y la teoría en aula (PS-05).
+
+**Fase B con objetivo** (`room_model.py`). El emparejamiento de la fase B da salones sin choques; después, por día, un modelo chico vuelve a elegir el salón de las ventanas que pueden cambiar el puntaje (las de una materia con salón por defecto y las pegadas a otra sesión del docente con salón) y de las que ocupan, a la misma hora, un salón que esas querrían, para que dos grupos puedan cambiar. Sus candidatos son el salón actual, los por defecto y los 4 más ajustados de cada edificio cercano, todos con las mismas reglas que el dominio (campus y candidatos, HC-05, HC-11, la ocupación fija de HC-02, HC-10 y, si lleva práctica, HC-06); las demás ventanas se quedan y ocupan su salón. La pista es lo que había, y el resultado solo se queda si el puntaje no sube.
+
+**Búsqueda con objetivo** (`search.improve`). Sobre lo que programó `lns` (sin objetivo), vecindarios de los grupos de unos docentes, juntados hasta 24 grupos en un orden al azar con la semilla, más los programados que comparten cohorte con ellos. Los demás entran fijos pero siguen en el alcance del objetivo, así que sus huecos y empalmes cuentan como en el problema completo. Cada vecindario usa la asignación exacta (nunca deja fuera a un grupo que estaba), los niveles por necesidad más el que ya tenía cada grupo (`DomainOptions.keep_tiers`), la pista de lo que tenía y 0.4 s de CP-SAT; sus salones se ajustan con la fase B con objetivo (0.3 s) y se acepta solo si el puntaje de toda la solución (`score.py`) baja. Para cuando se acaba el plazo o una vuelta entera no mejora nada.
+
+*Lexicográfico por fases, no con un peso grande.* Primero se maximizan los grupos programados (`lns`, que solo acepta un vecindario que programa más) y después se minimiza el puntaje sin quitar ninguno. Se probó lo otro, un peso por grupo programado mayor que todo el puntaje en una sola resolución: con el objetivo completo la primera vuelta programó 229 de 1 139 grupos en 15 s (sin objetivo, 1 122), y con solo las constantes por opción no programó más rápido ni mejor. Por la misma razón, la primera vuelta de `lns` tiene hasta 15 s (o la cuarta parte del plazo, si es menos; `scripts/objective.py`, `first_share`): con 300 s y la cuarta parte (75 s), `lns` terminó de programar a todos a los 92 s; con 15 s, a los 32–37 s, y ese tiempo es para mejorar.
+
+**Medición** (18 de noviembre de 2026, `department-multicampus`, 2 hilos en un contenedor de 2 CPU y 2 GB como el servicio en compose, semilla 7; `scripts/objective.py`). La heurística en PHP da 24 749 al construir y 23 608 con su búsqueda local (21–26 s).
+
+| | Plazo | Total | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Heurística, construcción | 1.5 s | 24 749 | 460 | 120 | 0 | 16 784 | 5 709 | 960 | 36 | 342 | 338 |
+| Heurística con búsqueda local | 21–26 s | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
+| CP-SAT, al programar a todos (`lns`) | 35 s | 36 927 | 1 810 | 330 | 0 | 17 456 | 13 863 | 2 766 | 30 | 380 | 292 |
+| CP-SAT | 60 s | 29 137 | 460 | 330 | 0 | 17 048 | 9 402 | 1 202 | 3 | 384 | 308 |
+| CP-SAT | 300 s | 21 978 | 0 | 252 | 0 | 16 528 | 3 210 | 1 332 | 0 | 348 | 308 |
+
+En tres corridas de 300 s el total fue de 21 718 a 22 128 (la de la tabla es la de en medio): de 6 a 8 % menos que la heurística con búsqueda local; en cuatro de 60 s, de 27 663 a 30 515. Con el límite del servicio por omisión (60 s), CP-SAT queda peor que la heurística: tarda 35 s solo en programar a todos sin objetivo (la primera vuelta y los vecindarios de `lns`) y le quedan 20 s para mejorar, unos 30 vecindarios (una vuelta es de unos 45). Con los 300 s de una corrida de departamento (`solver.time_limits`, el `time_limit_seconds` del fixture) la supera, sobre todo en los huecos del docente y del alumno tipo. SC-04 casi no baja en ninguno de los dos motores: la cota que da la heurística es 15 272 (ver «Heurística PHP: búsqueda local»). En `tiny`, `small`, `medium` e `infeasible`, con el plazo de su entrada y 2 hilos, da 32, 42, 10 y 12 (la heurística, 44, 79, 64 y 12), en menos de un segundo; con un hilo, `medium` da 39 (es la salida guardada en `cpsat-output.json`).
+
+Supuestos y pendientes:
+
+- PS-10 (supuesto por confirmar): en CP-SAT, el nivel y la hora actual solo desempatan. Un grupo en su patrón puede ir a otros días de la misma cantidad (sin días de 2 horas) si eso baja el puntaje; la búsqueda local de la heurística no lo hace (PS-09).
+- Con más de un hilo, y con plazos de reloj, el resultado cambia entre corridas (los rangos de arriba).
+- Para el límite de 60 s haría falta una pista mejor que el horario actual (la salida de la heurística, con un campo opcional en el contrato; otra tarea) o programar a todos más rápido.
+- Los salones de un vecindario los reparte primero la fase B sin ver edificios; la fase B con objetivo los ajusta antes de compararlo, pero SC-06 queda en 1 064 a 1 332, más del doble que la heurística (546).
 
 ## Descomposición del problema
 

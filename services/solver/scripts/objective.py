@@ -35,6 +35,12 @@ def room_reserve(time_limit: float) -> float:
     return min(10.0, time_limit / 10)
 
 
+def first_share(time_limit: float) -> float:
+    """La primera vuelta de `lns`: la cuarta parte del plazo, hasta 15 s. Con 2 hilos programa casi lo mismo en 15 s
+    que en 75 (de 1 122 a 1 124 de 1 139 en `department-multicampus`), y lo demás sirve más para mejorar."""
+    return min(0.25, 15 / time_limit)
+
+
 def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> tuple[SolverOutput, list[dict[str, Any]]]:
     source = parse_input(json.loads((fixture / "input.json").read_text()))
     time_limit = time_limit or source.time_limit_seconds
@@ -50,7 +56,7 @@ def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> tup
             {"phase": phase, "seconds": round(time.perf_counter() - started, 1), "score": scorer.score(sessions)}
         )
 
-    search = lns(data, time_limit=time_limit, limits=limits, seed=seed)
+    search = lns(data, time_limit=time_limit, limits=limits, seed=seed, first_share=first_share(time_limit))
     mark("lns", search.all_sessions)
     improve(data, search, deadline - room_reserve(time_limit), limits=limits, seed=seed)
     mark("improve", search.all_sessions)

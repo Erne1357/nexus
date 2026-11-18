@@ -115,6 +115,7 @@ Cómo reparte el motor las horas de un grupo en la semana (tareas 6.6 y 6.7; doc
 | PS-07 | Todo grupo movible se reprograma desde cero. Su horario actual sirve para marcar qué cambió y, como desempate, para quedarse en la hora y el salón actuales si no empeora nada (supuesto por confirmar). |
 | PS-08 | HC-08 no depende del horario: si los grupos movibles de un docente suman más horas de las que le quedan, el motor los programa igual y reporta HC-08 como problema de la entrada; la corrida sale parcial (supuesto por confirmar). |
 | PS-09 | La búsqueda local que mejora el puntaje mueve grupos enteros con su patrón: una hora por día, a la misma hora todos sus días. Nunca lleva un grupo a un nivel de días peor que el que tiene (de su patrón a otros días, o de una hora por día a dos el mismo día), pero sí lo puede regresar hacia su patrón. Dos grupos que intercambian horas conservan cada uno sus días (supuesto por confirmar). |
+| PS-10 | En el motor CP-SAT, el nivel del patrón (PS-04) y la hora actual (PS-07) solo desempatan: entre soluciones con el mismo puntaje blando gana la del patrón y luego la que cambia menos sesiones; nunca le ganan a una hora de penalización. Así, un grupo en su patrón puede ir a otros días de la misma cantidad (una hora por día) si eso baja el puntaje, cosa que la búsqueda local de la heurística no hace (PS-09); a un día de 2 horas solo va si su patrón no cabe o si ya estaba ahí (supuesto por confirmar; docs/arquitectura/solver.md, «Modelo CP-SAT: objetivo»). |
 
 ## Editor de horarios
 

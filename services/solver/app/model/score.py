@@ -337,7 +337,7 @@ def consecutive_semesters(state: _State) -> int:
             if parts[0] != "plan" or len(parts) != 4:
                 continue
             _, plan, semester, campus = parts
-            number = _php_int(semester)
+            number = php_int(semester)
             for other_semester in (number - 1, number + 1):
                 for other_id in state.scorer.members.get(f"plan:{plan}:{other_semester}:{campus}", []):
                     pair = (min(group_id, other_id), max(group_id, other_id))
@@ -355,7 +355,7 @@ def consecutive_semesters(state: _State) -> int:
     return total
 
 
-def _php_int(value: str) -> int:
+def php_int(value: str) -> int:
     """`(int) $value` en PHP: el entero del principio, o cero."""
     match = re.match(r"\s*[+-]?\d+", value)
 

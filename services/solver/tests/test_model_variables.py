@@ -322,6 +322,16 @@ def test_por_omision_cada_grupo_lleva_solo_el_primer_nivel_que_cabe():
     assert sorted(variables.pooled) == [("C1", day, block) for day in (1, 2) for block in (0, 1, 2)]
 
 
+def test_keep_tiers_conserva_el_nivel_que_el_grupo_ya_tiene_en_la_busqueda():
+    """La mejora con objetivo (7.6) le deja a cada grupo el nivel de la opción que ya tiene: un grupo de 2 horas que
+    está en un día de 2 horas (nivel 1) conserva esas opciones aunque su patrón quepa."""
+    data = instance(groups=[group("g1", 2)], rooms=[room("r1"), room("r2")])
+    _, variables = build(data, DomainOptions(keep_tiers={"g1": 1}))
+
+    assert {option.tier for option in variables.groups["g1"].options} == {0, 1}
+    assert variables.option_count == 7
+
+
 def test_si_el_patron_no_cabe_entra_el_nivel_siguiente():
     """El docente no puede el martes: el patrón (lunes y martes) no cabe y entra el nivel de un día de 2 horas, que va
     con `z` explícito porque ocupa dos bloques."""
