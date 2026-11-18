@@ -29,6 +29,9 @@ from .phases import FEASIBLE
 from .solution import chosen_option, sessions_of
 from .variables import BuildBudget, DomainOptions, Variables, build_variables
 
+#: Salones con `z` de un día de 2 horas en un vecindario: los más ajustados (`DomainOptions.long_window_rooms`).
+LONG_WINDOW_ROOMS = 12
+
 #: La opción elegida de un grupo, para dar la pista: (reparto de días, bloque de inicio).
 OptionKey = tuple[tuple[tuple[int, int], ...], int]
 
@@ -107,8 +110,8 @@ def lns(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, ste
         sub = ModelData.of(_sub_input(data.source, search, set(neighbourhood)))
         before = sum(group in search.sessions for group in neighbourhood)
         step_deadline = min(deadline, time.perf_counter() + step_seconds)
-        # El grupo que no quedó, con todos sus niveles; sus vecinos, con uno más del que necesitan.
-        options = DomainOptions(extra_tiers={target: 99, **dict.fromkeys(neighbourhood[1:], 1)})
+        # El grupo que no quedó, con todos sus niveles; sus vecinos, con los de una hora por día.
+        options = DomainOptions(extra_tiers={target: 99}, long_window_rooms=LONG_WINDOW_ROOMS)
         variables, solved = _place_most(sub, options, search, step_deadline, workers, seed)
         if solved is None:
             continue

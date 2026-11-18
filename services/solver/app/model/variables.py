@@ -60,6 +60,13 @@ class DomainOptions:
     #: Niveles de más, por grupo, después del primero donde alguna opción cabe (la segunda vuelta de los que no
     #: quedaron; PS-04).
     extra_tiers: Mapping[str, int] = field(default_factory=dict)
+    #: Además, los niveles siguientes mientras sean de una hora por día (otros juegos de días, PS-04): no crean
+    #: ventanas de más de un bloque, así que entran al conjunto de salones sin `z`.
+    one_hour_tiers: bool = True
+    #: Salones con `z` de cada ventana de más de un bloque de un grupo del conjunto: los de capacidad más ajustada
+    #: (y los espacios de práctica, si los pide). `None` es todos. Lo usa la búsqueda por vecindarios para que un día
+    #: de 2 horas no cueste 130 variables.
+    long_window_rooms: int | None = None
 
 
 @dataclass(eq=False, slots=True)
@@ -384,7 +391,7 @@ def _domain(
 
     def check(key: WindowKey) -> _WindowCheck:
         if key not in checked:
-            checked[key] = _check_window(data, group, grid, domain, rooms, static_rejected, key)
+            checked[key] = _check_window(data, group, grid, domain, rooms, static_rejected, key, variables.options)
 
         return checked[key]
 
@@ -399,7 +406,15 @@ def _domain(
         for tier, spreads in enumerate(unit_tiers, start=first_tier):
             if first_with_options is None and domain.options:
                 first_with_options = tier - 1
-            if not variables.options.all_tiers and first_with_options is not None and tier > first_with_options + extra:
+            one_hour = variables.options.one_hour_tiers and all(
+                max(units for _, units in spread) == 1 for spread in spreads
+            )
+            if (
+                not variables.options.all_tiers
+                and first_with_options is not None
+                and tier > first_with_options + extra
+                and not one_hour
+            ):
                 domain.truncated = True
                 break
             for spread in spreads:
@@ -476,6 +491,7 @@ def _check_window(
     rooms: list[str],
     static_rejected: Counter[str],
     key: WindowKey,
+    options: DomainOptions,
 ) -> _WindowCheck:
     """El docente (HC-09, HC-01) y las cohortes (HC-03) libres de lo fijo en la ventana, y sus salones libres."""
     day, block, units = key
@@ -509,6 +525,11 @@ def _check_window(
         else:
             rejected[reason] += 1
     domain.rejected_rooms.update(rejected)
+    limit = options.long_window_rooms
+    if eligible and pool is not None and limit is not None and len(eligible) > limit:
+        by_fit = sorted(eligible, key=lambda room_id: (data.rooms[room_id].capacity, room_id))
+        labs = [room_id for room_id in by_fit if data.is_practice_space(room_id)] if domain.lab_practice else []
+        eligible = list(dict.fromkeys(by_fit[:limit] + labs[:limit]))
     if eligible:
         return _WindowCheck(None, tuple(eligible), any(data.is_practice_space(room_id) for room_id in eligible))
 
