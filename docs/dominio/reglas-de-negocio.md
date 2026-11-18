@@ -96,6 +96,19 @@ Cómo nacen y se acomodan los grupos (tareas 3.1 a 3.5).
 - Los choques se recalculan por periodo y modalidad (M1): una sola validación con los grupos de todos sus campus, y cada choque guarda el campus de su grupo como filtro. El tablero «Choques y avance» es de la carga de una modalidad, con el campus como filtro opcional (supuesto por confirmar).
 - Las horas de un grupo para HC-08 son las de su materia, teoría más práctica, sumadas por grupo no cancelado en todos los campus del periodo; con docente de honorarios y `staffing.honorarios_max_hours` definido, ese tope sustituye a base más tolerancia. En HC-10 los préstamos aceptados contiguos del mismo grupo, salón y día cubren juntos una sesión (supuesto por confirmar).
 
+## Patrón de sesiones
+
+Cómo reparte el motor las horas de un grupo en la semana (tarea 6.6; docs/arquitectura/solver.md, «Heurística PHP: construcción»).
+
+- Las sesiones son de 1 hora, una por día en días distintos: las materias de 4 créditos van de lunes a jueves y las de 5 o 6, de lunes a viernes o con sábado (confirmado el 17 de noviembre de 2026). El motor pone 4 horas de lunes a jueves, 5 de lunes a viernes y 6 de lunes a viernes más el sábado, si el campus trae sábado en sus días (supuesto por confirmar).
+- El grupo va a la misma hora todos sus días, como en el SII (supuesto por confirmar).
+- Con otras horas, el mismo criterio: los primeros días del campus, una hora por día (3 horas: lunes a miércoles). Con más horas que días del campus (6 sin sábado, 7 o más), todos los días con las horas de sobra repartidas, primero en los más tempranos (supuesto por confirmar).
+- Si el patrón no cabe, el motor prueba los otros juegos de días de la misma cantidad, primero los más parecidos y al final los que llevan sábado; y si tampoco caben, menos días con el reparto más parejo (5 horas en 4 días: un día de 2 horas seguidas), hasta 2 horas por día. Así un docente que no puede un día o un laboratorio prestado solo un día no dejan al grupo sin programar; SC-02 cuenta las horas de más en un día. Solo si nada cabe, el grupo queda sin programar con su motivo (supuesto por confirmar).
+- Las horas de práctica de una materia con laboratorio van en un laboratorio, taller o sala de cómputo (HC-06); las de teoría, en aula. En un día de 2 horas las dos van en el mismo salón (supuesto por confirmar).
+- Si el bloque del campus no es de 60 minutos, una hora son los bloques que la forman cuando 60 es múltiplo del bloque (30, 20, 15 min); si no (50 o 90 min), cada sesión es un bloque y las horas semanales tienen que dar bloques enteros, o el grupo queda sin programar por HC-12 (supuesto por confirmar).
+- Todo grupo movible se reprograma desde cero. Su horario actual sirve para marcar qué cambió y, como desempate, para quedarse en la hora y el salón actuales si no empeora nada (supuesto por confirmar).
+- HC-08 no depende del horario: si los grupos movibles de un docente suman más horas de las que le quedan, el motor los programa igual y reporta HC-08 como problema de la entrada; la corrida sale parcial (supuesto por confirmar).
+
 ## Editor de horarios
 
 Cómo se colocan, mueven y quitan las sesiones de un grupo (tarea 3.5).
