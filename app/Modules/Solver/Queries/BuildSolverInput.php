@@ -4,6 +4,7 @@ namespace App\Modules\Solver\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Facilities\Models\Room;
@@ -32,6 +33,8 @@ use App\Modules\Solver\Contract\TeacherInput;
 use App\Modules\Solver\Contract\TimeSlot;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Rules\SolverSettings;
+use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 /**
  * Arma el contrato de entrada del motor desde la base (tarea 6.4; docs/arquitectura/solver.md, «Contrato JSON» y
@@ -46,6 +49,10 @@ use App\Modules\Solver\Rules\SolverSettings;
  * - Aviso de tronco común (decisión del usuario, 17 de noviembre de 2026): si un movible comparte cohorte con un grupo
  *   de otro departamento que todavía no tiene sesiones, se avisa y no se impide nada.
  *
+ * - Para las alternativas de una solicitud de cambio (8.7) y para abrir un grupo (8.3b), forGroups() mueve solo los grupos
+ *   que se piden y grupos virtuales que todavía no existen (`new:<materia>:<campus>:<carrera>`); todo lo demás entra
+ *   fijo, igual que arriba.
+ *
  * Los parámetros: traslado `staffing.min_campus_travel_minutes` (SC-09), tiempo máximo de SolverSettings, reglas duras
  * HC-01 a HC-13 y los pesos de `solver.soft_weights` (por omisión, los de la tabla SC de docs/dominio/reglas-de-negocio.md). Los bloques preferidos
  * del docente (`preferred`) los lee de Faculty porque la foto no los trae, y los salones por defecto por materia
@@ -55,6 +62,9 @@ final class BuildSolverInput
 {
     /** @var list<string> */
     public const array HARD_RULES = ['HC-01', 'HC-02', 'HC-03', 'HC-04', 'HC-05', 'HC-06', 'HC-07', 'HC-08', 'HC-09', 'HC-10', 'HC-11', 'HC-12', 'HC-13'];
+
+    /** El prefijo del id de un grupo virtual (`new:<materia>:<campus>:<carrera>`; acordado con la 8.3b): nunca se escribe en la base. */
+    public const string VIRTUAL_PREFIX = 'new:';
 
     public function __construct(private readonly ScheduleStateQuery $states) {}
 
@@ -81,9 +91,106 @@ final class BuildSolverInput
     }
 
     /**
-     * @param  callable(StateGroup): bool  $isInRun
+     * Solo los grupos pedidos se mueven, con sus sesiones actuales (`current_sessions`), más los grupos virtuales de
+     * `$extraGroups`, que no existen en la base (8.3b, abrir un grupo) y nunca se escriben; todo lo demás entra fijo como
+     * en forDepartment(). Es la entrada de ProposePlacements (tareas 8.7 y 8.3b).
+     *
+     * - Los movibles son grupos activos del periodo y la modalidad, y todos (también los virtuales) de un mismo
+     *   departamento: el alcance del contrato es `department` con ese departamento, así que el contrato v1 no cambia.
+     * - Un grupo virtual lleva un id `new:<materia>:<campus>:<carrera>`, es movible, no trae sesiones y su campus existe.
+     *   Su cohorte de HC-03 se calcula como en Cohorts: `plan:<plan>:<semestre>:<campus>` si ningún grupo activo (ni otro
+     *   virtual) de su materia está en ese semestre del alumno tipo; además conserva las claves que ya traiga. Los grupos
+     *   fijos que comparten una de sus claves o su docente entran, como los de un movible. La cohorte de los grupos que ya
+     *   existen no cambia aunque el virtual les quite ser el único de su materia (más estricto; supuesto por confirmar).
+     * - La corrida (`run_id`) es otra cada vez si no se da (no hay fila en `solver_runs`) y el tiempo máximo, el de una
+     *   corrida de departamento si no se da. `$state` deja reutilizar una foto ya leída de la modalidad.
+     *
+     * @param  list<string>  $movableGroupIds
+     * @param  list<GroupInput>  $extraGroups
+     *
+     * @throws InvalidArgumentException si un grupo no es un grupo activo de la modalidad, un virtual no es válido, no hay
+     *                                  grupos o son de varios departamentos
      */
-    private function build(ScheduleState $state, Term $term, Modality $modality, RunScope $scope, string $scopeId, string $runId, callable $isInRun): SolverInputBuild
+    public function forGroups(Term $term, Modality $modality, array $movableGroupIds, array $extraGroups = [], ?string $runId = null,
+        ?int $timeLimitSeconds = null, ?ScheduleState $state = null): SolverInput
+    {
+        $state ??= $this->states->forModality($term, $modality->id);
+        $wanted = array_fill_keys($movableGroupIds, true);
+        $departments = [];
+
+        foreach (array_keys($wanted) as $groupId) {
+            $group = $state->group((string) $groupId);
+
+            if ($group === null || ! $group->isActive || $group->modalityId !== $modality->id) {
+                throw new InvalidArgumentException("El grupo {$groupId} no es un grupo activo de {$modality->code} en {$term->code}.");
+            }
+
+            $departments[$group->departmentId] = true;
+        }
+
+        foreach ($extraGroups as $extra) {
+            $departments[$extra->departmentId] = true;
+        }
+
+        if (count($departments) !== 1) {
+            throw new InvalidArgumentException($departments === [] ? 'Pide al menos un grupo que mover.' : 'Los grupos que se mueven deben ser de un mismo departamento.');
+        }
+
+        return $this->build($state, $term, $modality, RunScope::Department, (string) array_key_first($departments), $runId ?? 'groups:'.Str::uuid7(),
+            fn (StateGroup $group): bool => isset($wanted[$group->id]), $this->virtualGroups($state, $modality, $extraGroups), $timeLimitSeconds)->input;
+    }
+
+    /**
+     * Los grupos virtuales validados, con su cohorte de HC-03 (ver forGroups()).
+     *
+     * @param  list<GroupInput>  $extraGroups
+     * @return array<string, array{input: GroupInput, campusId: string}>
+     */
+    private function virtualGroups(ScheduleState $state, Modality $modality, array $extraGroups): array
+    {
+        $campusIds = Campus::query()->whereIn('code', array_map(fn (GroupInput $extra): string => $extra->campusCode, $extraGroups))->pluck('id', 'code');
+        $sameSemester = [];
+
+        foreach ($extraGroups as $extra) {
+            $sameSemester[self::semesterKey($extra->subjectCode, $extra->campusCode, $extra->studyPlanId, $extra->semester)][] = $extra->id;
+        }
+
+        $virtual = [];
+
+        foreach ($extraGroups as $extra) {
+            $campusId = $campusIds[$extra->campusCode] ?? null;
+
+            if (! str_starts_with($extra->id, self::VIRTUAL_PREFIX) || ! $extra->movable || isset($virtual[$extra->id]) || $campusId === null) {
+                throw new InvalidArgumentException("El grupo virtual {$extra->id} no es válido: su id empieza con «".self::VIRTUAL_PREFIX.'», es movible, no se repite y su campus existe.');
+            }
+
+            $others = array_filter($state->groupsOfSemester($modality->id, (string) $campusId, $extra->studyPlanId, $extra->semester),
+                fn (StateGroup $group): bool => $group->isActive && ($state->subject($group->subjectId)?->code ?? '') === $extra->subjectCode);
+            $sole = $others === [] && count($sameSemester[self::semesterKey($extra->subjectCode, $extra->campusCode, $extra->studyPlanId, $extra->semester)]) === 1;
+            $cohorts = array_values(array_unique([...($sole ? ["plan:{$extra->studyPlanId}:{$extra->semester}:{$extra->campusCode}"] : []), ...$extra->cohorts]));
+
+            $virtual[$extra->id] = [
+                'input' => new GroupInput($extra->id, $extra->campusCode, $extra->subjectCode, $extra->departmentId, $extra->ownerCareerId, $extra->studyPlanId,
+                    $extra->semester, $extra->weeklyHours, $extra->practiceHours, $extra->needsLab, $extra->capacity, $extra->teacherId, $cohorts, [],
+                    $extra->candidateRoomIds, true),
+                'campusId' => (string) $campusId,
+            ];
+        }
+
+        return $virtual;
+    }
+
+    private static function semesterKey(string $subjectCode, string $campusCode, string $studyPlanId, int $semester): string
+    {
+        return "{$subjectCode}|{$campusCode}|{$studyPlanId}|{$semester}";
+    }
+
+    /**
+     * @param  callable(StateGroup): bool  $isInRun
+     * @param  array<string, array{input: GroupInput, campusId: string}>  $virtual
+     */
+    private function build(ScheduleState $state, Term $term, Modality $modality, RunScope $scope, string $scopeId, string $runId, callable $isInRun,
+        array $virtual = [], ?int $timeLimitSeconds = null): SolverInputBuild
     {
         $profile = $state->profile($modality->id);
         $usesRooms = $profile->usesRooms;
@@ -91,14 +198,18 @@ final class BuildSolverInput
         $active = array_filter($state->groups(), fn (StateGroup $group): bool => $group->isActive && $group->modalityId === $modality->id);
         $movable = array_filter($active, $isInRun);
         $cohorts = Cohorts::of($state, $active);
+        $extras = array_values(array_map(fn (array $entry): GroupInput => $entry['input'], $virtual));
 
-        $fixed = $this->fixedGroups($state, $active, $movable, $cohorts);
+        $fixed = $this->fixedGroups($state, $active, $movable, $cohorts, $extras);
         $included = $this->ordered($state, [...$movable, ...$fixed]);
         $includedIds = array_fill_keys(array_map(fn (StateGroup $group): string => $group->id, $included), true);
 
         $agreements = $usesRooms ? $this->agreements($state, $movable) : [];
         $roomIds = $usesRooms ? $this->usedRoomIds($state, $included, $agreements) : [];
-        $campusIds = $this->campusIds($state, $included, $roomIds);
+        $campusIds = $this->campusIds($state, $included, $roomIds, array_column($virtual, 'campusId'));
+        $extraTeachers = array_values(array_filter(array_map(fn (GroupInput $extra): ?string => $extra->teacherId, $extras)));
+        $missing = array_values(array_filter($extraTeachers, fn (string $teacherId): bool => $state->teacher($teacherId) === null));
+        $state = $missing === [] ? $state : $state->withTeachers($this->states->teachers($term, $missing));
 
         $settings = SolverSettings::fromSettings();
 
@@ -108,12 +219,12 @@ final class BuildSolverInput
             $term->code,
             $modality->code,
             $this->campuses($state, $campusIds, $modality->id),
-            $settings->timeLimitFor($scope),
+            $timeLimitSeconds ?? $settings->timeLimitFor($scope),
             new Scope(ScopeKind::from($scope->value), $scopeId),
             (int) $state->setting('staffing.min_campus_travel_minutes', CampusTravel::DEFAULT_MINUTES),
             max(0, $profile->weeklyHoursTolerance ?? (int) $state->setting('scheduling.weekly_hours_tolerance', 0)),
-            array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $cohorts[$group->id] ?? [], $usesRooms), $included),
-            $this->teachers($state, $term, $included, $includedIds, $movable),
+            [...array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $cohorts[$group->id] ?? [], $usesRooms), $included), ...$extras],
+            $this->teachers($state, $term, $included, $includedIds, $movable, $extraTeachers),
             $usesRooms ? $this->rooms($state, $campusIds, $roomIds, $includedIds) : [],
             $agreements,
             [],
@@ -126,18 +237,30 @@ final class BuildSolverInput
     }
 
     /**
-     * Los grupos activos de la modalidad, fuera de la corrida, que comparten docente, salón o cohorte con un movible.
+     * Los grupos activos de la modalidad, fuera de la corrida, que comparten docente, salón o cohorte con un movible (o
+     * docente o cohorte con un grupo virtual).
      *
      * @param  array<string, StateGroup>  $active
      * @param  array<string, StateGroup>  $movable
      * @param  array<string, list<string>>  $cohorts
+     * @param  list<GroupInput>  $extras
      * @return array<string, StateGroup>
      */
-    private function fixedGroups(ScheduleState $state, array $active, array $movable, array $cohorts): array
+    private function fixedGroups(ScheduleState $state, array $active, array $movable, array $cohorts, array $extras = []): array
     {
         $teachers = [];
         $rooms = [];
         $keys = [];
+
+        foreach ($extras as $extra) {
+            if ($extra->teacherId !== null) {
+                $teachers[$extra->teacherId] = true;
+            }
+
+            foreach ($extra->cohorts as $key) {
+                $keys[$key] = true;
+            }
+        }
 
         foreach ($movable as $group) {
             if ($group->teacherId !== null) {
@@ -230,15 +353,16 @@ final class BuildSolverInput
     }
 
     /**
-     * Los campus de los grupos incluidos y de los salones que usan.
+     * Los campus de los grupos incluidos, de los salones que usan y de los grupos virtuales.
      *
      * @param  list<StateGroup>  $included
      * @param  array<string, true>  $roomIds
+     * @param  list<string>  $extraCampusIds
      * @return list<string>
      */
-    private function campusIds(ScheduleState $state, array $included, array $roomIds): array
+    private function campusIds(ScheduleState $state, array $included, array $roomIds, array $extraCampusIds = []): array
     {
-        $ids = [];
+        $ids = array_fill_keys($extraCampusIds, true);
 
         foreach ($included as $group) {
             $ids[$group->campusId] = true;
@@ -314,14 +438,17 @@ final class BuildSolverInput
      * grupos movibles, que la corrida reprograma (TeacherHourLimit). Ocupación: sus sesiones en grupos que no entran a la
      * entrada (otras modalidades, o de esta sin relación con los movibles), con el campus de cada una (SC-09).
      *
+     * Los docentes de los grupos virtuales también entran: sus horas no están en la base, así que no se suman.
+     *
      * @param  list<StateGroup>  $included
      * @param  array<string, true>  $includedIds
      * @param  array<string, StateGroup>  $movable
+     * @param  list<string>  $extraTeacherIds
      * @return list<TeacherInput>
      */
-    private function teachers(ScheduleState $state, Term $term, array $included, array $includedIds, array $movable): array
+    private function teachers(ScheduleState $state, Term $term, array $included, array $includedIds, array $movable, array $extraTeacherIds = []): array
     {
-        $ids = array_values(array_unique(array_filter(array_map(fn (StateGroup $group): ?string => $group->teacherId, $included))));
+        $ids = array_values(array_unique([...array_filter(array_map(fn (StateGroup $group): ?string => $group->teacherId, $included)), ...$extraTeacherIds]));
         sort($ids);
 
         $preferred = [];
