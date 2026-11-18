@@ -45,7 +45,7 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 
 **Patrón de sesiones** (confirmado el 18 de noviembre de 2026, como el SII): las sesiones son de una hora, una por día en días distintos y a la misma hora: 4 h van de lunes a jueves y 5 h de lunes a viernes. 6 h usan además el sábado si la rejilla del campus tiene el día 6 (supuesto por confirmar); si no, el grupo no se acomoda. Hoy lo aplica el motor de prueba; la heurística lo hereda.
 
-Los pesos son configurables por campus (`settings`, clave `solver.weights`).
+Los pesos son globales para todo el Tec y los edita Subdirección en «Parámetros» (`solver.soft_weights`; ver «Pesos editables» abajo, confirmado el 18 de noviembre de 2026).
 
 ## Ranking docente (desempate)
 

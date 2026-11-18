@@ -12,7 +12,7 @@ use App\Modules\Solver\Enums\SolverPermission;
 /**
  * Los parámetros del motor (tarea 6.3; docs/arquitectura/solver.md, «Límites de tiempo»): el tiempo máximo de una
  * corrida por alcance, 300 segundos por departamento y 60 por carrera (`solver.time_limits`). Un valor que falta o no es
- * un entero de 1 en adelante usa el de omisión. Puro: solo fromSettings() lee la base.
+ * un entero de 10 a 600 usa el de omisión. Puro: solo fromSettings() lee la base.
  */
 final readonly class SolverSettings
 {
@@ -21,6 +21,11 @@ final readonly class SolverSettings
     public const int DEFAULT_DEPARTMENT_SECONDS = 300;
 
     public const int DEFAULT_CAREER_SECONDS = 60;
+
+    /** Límites de una corrida, los mismos que acepta su lanzamiento (6.8, SV-02): de 10 s a 10 min. */
+    public const int MIN_SECONDS = 10;
+
+    public const int MAX_SECONDS = 600;
 
     public const string SOFT_WEIGHTS_SETTING = 'solver.soft_weights';
 
@@ -73,7 +78,7 @@ final readonly class SolverSettings
     {
         $value = is_array($value) ? $value : [];
         $weights = is_array($weights) ? $weights : [];
-        $positive = fn (mixed $seconds, int $fallback): int => is_int($seconds) && $seconds > 0 ? $seconds : $fallback;
+        $positive = fn (mixed $seconds, int $fallback): int => is_int($seconds) && $seconds >= self::MIN_SECONDS && $seconds <= self::MAX_SECONDS ? $seconds : $fallback;
         $weight = fn (mixed $given, int $fallback): int => is_int($given) && $given >= 0 && $given <= 100 ? $given : $fallback;
 
         $resolved = [];
@@ -102,7 +107,7 @@ final readonly class SolverSettings
         return [
             new SettingDefinition(self::TIME_LIMITS_SETTING, 'solver', 'Motor de horarios', label: 'Tiempo máximo de una corrida',
                 help: 'Cuántos segundos busca el motor un horario antes de entregar el mejor que encontró: para la carga de un departamento y para la exploración de una carrera.',
-                type: SettingType::IntegerTable, default: ['department' => self::DEFAULT_DEPARTMENT_SECONDS, 'career' => self::DEFAULT_CAREER_SECONDS], rules: ['min:1', 'max:3600'],
+                type: SettingType::IntegerTable, default: ['department' => self::DEFAULT_DEPARTMENT_SECONDS, 'career' => self::DEFAULT_CAREER_SECONDS], rules: ['min:'.self::MIN_SECONDS, 'max:'.self::MAX_SECONDS],
                 fields: ['department' => 'Carga de un departamento', 'career' => 'Exploración de una carrera'], unit: 'segundos', permission: SolverPermission::SettingUpdate),
             new SettingDefinition(self::SOFT_WEIGHTS_SETTING, 'solver', 'Motor de horarios', label: 'Pesos de las reglas blandas',
                 help: 'Cuánto pesa cada regla blanda (SC-01 a SC-09) en el puntaje del motor: de 0 a 100, y 0 la desactiva. Es de todo el Tec y aplica desde la siguiente corrida.',
