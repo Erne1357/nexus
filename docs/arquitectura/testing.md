@@ -214,8 +214,9 @@ Con el demo solo el departamento CB queda con la carga abierta fuera de los limp
 | Pantalla | Usuario y caso (`demo`) | Usuario y caso (`masivo`) |
 |---|---|---|
 | Propuesta de carrera, retícula, tabla y «Revisar proyección» (cada filtro) | `coord.isc.c2` (borrador con correcciones, filas cambiadas y «Paquete 2»), `coord.cp.c2` (oferta nueva: C1 con nuevo ingreso corregido y «Faltan 35 lugares») | `coord.ige.c2` y `coord.il.c1` (borrador con «Paquete 2»), `coord.iet.c1` (oferta nueva en C2, de solo lectura para él) |
-| Propuesta en otros estados | `coord.ige.c2` (regresada por CEA, con la parte de CB aceptada), `coord.ii.c2` (enviada con una parte aceptada y «Faltan N lugares»), `coord.il.c2` (sin tocar), `coord.la.c2` (sin propuesta) | `coord.cp.c1` (regresada), `coord.ie.c1` (enviada con una parte aceptada y «Faltan N lugares»), `coord.isc.c2` (enviada), `coord.imt.c1` (aceptada), `coord.iem.c1` (sin tocar), `coord.la.c1` (sin propuesta) |
+| Propuesta en otros estados | `coord.ige.c2` (regresada por CEA, con la parte de CB aceptada), `coord.ii.c2` (enviada con una parte aceptada y «Faltan N lugares»), `coord.il.c2` (sin tocar) | `coord.cp.c1` (regresada), `coord.ie.c1` (enviada con una parte aceptada y «Faltan N lugares»), `coord.isc.c2` (enviada), `coord.imt.c1` (aceptada), `coord.iem.c1` (sin tocar) |
 | Demanda por materia, lente del departamento | `jefe.cb`, `jefe.cea` | `jefe.cb` (32 materias en 12 carreras, cada estado por columna), `subdir` con `?departamento=` |
+| Carrera sin propuesta | LADM en el tablero («Sin prop.»); si entra `coord.la.c2`, la página la arma, como en el uso normal | LADM en el tablero; si entra `coord.la.c1` o `coord.la.c2`, la arma |
 | Demanda por materia, lente de carrera | `coord.isc.c2` | `coord.isc.c2`, `coord.ige.c2` |
 | Bandeja del departamento | `jefe.cea` (parte regresada), `jefe.cb` (partes aceptadas) | `jefe.cea`, `jefe.cb` |
 
