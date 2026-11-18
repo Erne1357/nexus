@@ -68,6 +68,8 @@ final class ActivityEvents
         'teacher_assigned' => 'Docente asignado',
         'teacher_unassigned' => 'Docente quitado',
         'group_history_imported' => 'Historial de grupos importado',
+        'launched' => 'Lanzado',
+        'cancel_requested' => 'Cancelación pedida',
     ];
 
     public static function knows(string $event): bool

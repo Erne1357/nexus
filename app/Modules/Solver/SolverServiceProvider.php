@@ -6,6 +6,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Solver\Console\ExportSolverFixture;
+use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
 use App\Modules\Solver\Console\SolverBenchmark;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
@@ -37,7 +38,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExportSolverFixture::class, SolverBenchmark::class]);
+            $this->commands([ExportSolverFixture::class, PruneSolverRunFilesCommand::class, SolverBenchmark::class]);
         }
     }
 
