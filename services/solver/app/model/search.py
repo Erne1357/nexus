@@ -94,12 +94,22 @@ def by_tiers(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0
     return search
 
 
-def lns(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, step_seconds: float = 3) -> Search:
+def lns(
+    data: ModelData,
+    time_limit: float,
+    workers: int = 0,
+    seed: int = 0,
+    step_seconds: float = 3,
+    first_share: float = 0.25,
+) -> Search:
+    """La primera vuelta tiene a lo más `first_share` del tiempo (con pocos hilos no alcanza a probar que es lo mejor
+    de su dominio y gastaría todo); el resto es para los vecindarios, de `step_seconds` cada uno."""
     started = time.perf_counter()
     deadline = started + time_limit
     search = Search()
     search.chosen = _current_options(data)
-    variables, solved = _place_most(data, DomainOptions(), search, deadline, workers, seed)
+    first_deadline = started + max(step_seconds, time_limit * first_share)
+    variables, solved = _place_most(data, DomainOptions(), search, min(deadline, first_deadline), workers, seed)
     if solved is None:
         return search
     _keep(search, solved, variables, data, replace=True)
