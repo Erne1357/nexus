@@ -40,7 +40,7 @@ use Illuminate\Support\Facades\DB;
  *    - `actual_groups` son los grupos físicos que se abrieron (TermGroupsQuery, de `historical_groups`) de la materia en el
  *      campus de la fila (en una modalidad sin salones, de todos los campus). Son de la materia, no de la carrera: filas de
  *      distintas carreras con la misma materia y campus llevan el mismo número. Nulo si el periodo no tiene ningún
- *      renglón en el historial («sin dato»); 0 si lo tiene pero la materia no.
+ *      renglón en el historial («sin dato»); 0 si lo tiene pero la materia no. Un periodo publicado a medias cuenta solo lo publicado en Nexus (supuesto por confirmar).
  *
  * Las filas se guardan carrera por carrera (por clave), cada una en su transacción con el avance, su entrada de
  * `by_career` y `careers.done`, así la pantalla ve las carreras conforme terminan. `overall`, `by_campus` y
@@ -106,7 +106,7 @@ final class EvaluateForecast
         $actual = $this->occupancy->forTerm($term->code, $modality, $campus);
         $scope = $this->inScope($modality, $campus);
         [$rows, $outOfScopeSubjects] = $this->cross($projected, $actual, $usesRooms, $scope['keys']);
-        $rows = $this->withOpenedGroups($rows, $this->groups->forTerm($term->code, $modality, $campus), $usesRooms);
+        $rows = $this->withOpenedGroups($rows, $this->groups->forTerm($term->code, $modality), $usesRooms);
         $outOfScope = [
             'students' => $this->studentsOutOfScope($term->code, $modality, $campus, $usesRooms, $scope['columns']),
             'subjects' => count($outOfScopeSubjects),

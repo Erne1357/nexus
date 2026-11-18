@@ -50,6 +50,15 @@ it('DM-27: no mezcla otro periodo ni otro campus del pedido', function () {
         ->and((new TermGroupsQuery)->forTerm('20253', $this->modality, $this->campus))->toBe([$this->subject->id => [$this->campus->id => 1]]);
 });
 
+it('DM-27: la fuente se elige por periodo sin mirar el campus: con nexus solo en C1 y sii en C2, C2 da 0', function () {
+    $c2 = Campus::factory()->create();
+    HistoricalGroup::factory()->fromNexus()->create(['subject_id' => $this->subject->id, 'campus_id' => $this->campus->id]);
+    HistoricalGroup::factory()->fromSii()->count(2)->create(['subject_id' => $this->subject->id, 'campus_id' => $c2->id]);
+
+    expect((new TermGroupsQuery)->forTerm('20261', $this->modality, $c2))->toBe([])
+        ->and((new TermGroupsQuery)->forTerm('20261', $this->modality, $this->campus))->toBe([$this->subject->id => [$this->campus->id => 1]]);
+});
+
 it('DM-27: el indicador global suma los grupos abiertos una vez por materia y campus, sin multiplicar por carreras', function () {
     $evaluation = ForecastEvaluation::factory()->create();
     $other = Subject::factory()->create();
