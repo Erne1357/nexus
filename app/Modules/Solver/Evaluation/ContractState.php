@@ -34,8 +34,8 @@ use App\Modules\Solver\Contract\TimeSlot;
  *
  * - Cada grupo de la entrada es un grupo activo, con las sesiones propuestas si es movible (sin propuesta, sin horario)
  *   o sus `fixed_sessions` si no. El alcance son los movibles.
- * - El contrato no trae ids de materia, modalidad ni campus: la materia es su clave (`subject_code`, con las horas y el
- *   laboratorio del grupo), el campus es su clave y la modalidad es una por campus (`<modalidad>:<campus>`), con el
+ * - El contrato no trae ids de materia, modalidad ni campus: la materia es su clave (`subject_code`) con las horas y el
+ *   laboratorio del grupo, el campus es su clave y la modalidad es una por campus (`<modalidad>:<campus>`), con el
  *   perfil de la rejilla de ese campus (HC-04; con bloques de tiempo, y la tolerancia de HC-12 en cero porque el motor
  *   programa las horas exactas). Las reglas solo comparan igualdad.
  * - HC-03 sigue las cohortes de la entrada: cada clave `plan:<plan>:<semestre>:<campus>` mete al grupo en ese semestre
@@ -43,8 +43,8 @@ use App\Modules\Solver\Contract\TimeSlot;
  *   materia, así que parecería el único). La clave `package:<id>:<campus>:<n>` (o la anterior, `package:<id>:<n>`) da
  *   el paquete y su número al grupo, que es lo que revisa TypicalStudentSchedule.
  * - La ocupación de fuera de la corrida entra como grupos de contexto (ids con el prefijo CONTEXT), activos y sin horas:
- *   los `busy` de un docente, uno por docente y campus (sin `campus_code`, el campus de su primer grupo; supuesto por
- *   confirmar), y los `busy` de un salón, uno por salón. Ninguna violación de un grupo de contexto sale del adaptador.
+ *   los `busy` de un docente, uno por docente y campus (sin `campus_code`, el campus de su primer grupo con él; supuesto
+ *   por confirmar), y los `busy` de un salón, uno por salón. Ninguna violación de un grupo de contexto sale del adaptador.
  * - HC-08: las horas base del docente son sus `remaining_hours` más las horas de sus grupos fijos de la entrada, sin
  *   horas externas ni tolerancia, así que lo que le queda es lo mismo que en la base.
  * - HC-10: cada préstamo aceptado (`agreements`) es de todos los grupos del departamento al que se presta.
@@ -122,7 +122,8 @@ final readonly class ContractState
         $cohorts = [];
         $fixedHours = [];
         $byDepartment = [];
-        $roomDefaults = [];
+        $subjectsByCode = [];
+        $teacherCampus = [];
 
         foreach ($input->groups as $group) {
             $subjectId = self::subjectOf($group);
@@ -150,10 +151,19 @@ final readonly class ContractState
 
             $cohorts[$group->id] = $group->cohorts;
             $byDepartment[$group->departmentId][] = $group->id;
+            $subjectsByCode[$group->subjectCode][$subjectId] = true;
+
+            if ($group->teacherId !== null) {
+                $teacherCampus[$group->teacherId] ??= $group->campusCode;
+            }
         }
 
+        $roomDefaults = [];
+
         foreach ($input->subjectRoomDefaults as $default) {
-            $roomDefaults["{$default->subjectCode}|{$default->campusCode}"][$default->roomId] = $default->priority;
+            foreach (array_keys($subjectsByCode[$default->subjectCode] ?? []) as $subjectId) {
+                $roomDefaults["{$subjectId}|{$default->campusCode}"][$default->roomId] = $default->priority;
+            }
         }
 
         $preferred = [];
@@ -166,7 +176,7 @@ final readonly class ContractState
             $byCampus = [];
 
             foreach ($teacher->busy as $slot) {
-                $byCampus[$slot->campusCode ?? self::campusOfTeacher($input, $teacher->id)][] = $slot;
+                $byCampus[$slot->campusCode ?? $teacherCampus[$teacher->id] ?? $input->campuses[0]->code ?? ''][] = $slot;
             }
 
             foreach ($byCampus as $campusCode => $slots) {
@@ -254,9 +264,15 @@ final readonly class ContractState
         return "{$input->modalityCode}:{$campusCode}";
     }
 
+    /**
+     * La materia del grupo: su clave con sus horas y su laboratorio, para que dos grupos con la misma clave y datos
+     * distintos (una entrada mal armada) no se pisen las horas; sin clave, una por grupo.
+     */
     private static function subjectOf(GroupInput $group): string
     {
-        return $group->subjectCode === '' ? "group:{$group->id}" : $group->subjectCode;
+        $code = $group->subjectCode === '' ? "group:{$group->id}" : $group->subjectCode;
+
+        return "{$code}|{$group->weeklyHours}|{$group->practiceHours}|".($group->needsLab ? 'lab' : 'aula');
     }
 
     /**
@@ -289,17 +305,6 @@ final readonly class ContractState
     private static function blocks(array $slots): array
     {
         return array_map(fn (TimeSlot $slot): array => [$slot->day, Minutes::of($slot->startsAt), Minutes::of($slot->endsAt)], $slots);
-    }
-
-    private static function campusOfTeacher(SolverInput $input, string $teacherId): string
-    {
-        foreach ($input->groups as $group) {
-            if ($group->teacherId === $teacherId) {
-                return $group->campusCode;
-            }
-        }
-
-        return $input->campuses[0]->code ?? '';
     }
 
     /**

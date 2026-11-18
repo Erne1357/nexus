@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Soft;
 
+use App\Modules\Scheduling\Rules\Timeline;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ValidationScope;
 
@@ -10,8 +11,8 @@ use App\Modules\Scheduling\Validation\ValidationScope;
  * alumno tipo es cada cohorte (las de Rules/Cohorts o las del contrato del motor, en SoftContext): los grupos que un
  * mismo alumno toma juntos.
  *
- * Unidad (supuesto por confirmar): una hora de hueco entre las sesiones de los grupos activos de una cohorte en un día;
- * una fracción de hora cuenta como hora. Cuenta cada cohorte que lleva algún grupo del alcance, completa.
+ * Unidad (supuesto por confirmar): una hora de hueco entre las sesiones de los grupos activos de una cohorte en un día,
+ * junto a una sesión de un grupo del alcance (lo que se programa); una fracción de hora cuenta como hora.
  */
 final class StudentGaps implements SoftRule
 {
@@ -37,13 +38,17 @@ final class StudentGaps implements SoftRule
 
             foreach ($context->membersOf($key) as $groupId) {
                 if ($state->group($groupId)?->isActive) {
-                    $sessions = [...$sessions, ...$state->sessionsOf($groupId)];
+                    foreach ($state->sessionsOf($groupId) as $session) {
+                        $sessions[] = $session;
+                    }
                 }
             }
 
             foreach (Timeline::byDay($sessions) as $day) {
-                foreach (Timeline::gaps($day) as [, , $minutes]) {
-                    $hours += Timeline::hours($minutes);
+                foreach (Timeline::gaps($day) as [$before, $after, $minutes]) {
+                    if ($scope->touches($before->groupId, $after->groupId)) {
+                        $hours += Timeline::hours($minutes);
+                    }
                 }
             }
         }

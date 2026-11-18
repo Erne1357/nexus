@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Soft;
 
+use App\Modules\Scheduling\Rules\Timeline;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ValidationScope;
 

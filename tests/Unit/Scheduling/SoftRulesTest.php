@@ -38,6 +38,17 @@ it('SC-01: cuenta las horas de hueco del alumno tipo por cohorte y día; una fra
         ->and((new StudentGaps)->penalty($state, ValidationScope::groups('C'), $context))->toBe(0);
 });
 
+it('SC-01: un hueco entre dos grupos que no son del alcance no cuenta, aunque sean de la cohorte', function () {
+    $state = States::builder()
+        ->group(States::group('A'))->group(States::group('F1'))->group(States::group('F2'))
+        ->session('F1', 1, '07:00', '08:00')->session('F2', 1, '11:00', '12:00')   // 3 h entre dos fijos
+        ->session('A', 2, '07:00', '08:00')->session('F1', 2, '09:00', '10:00')    // 1 h junto a A
+        ->build();
+    $context = new SoftContext(cohorts: ['A' => ['K'], 'F1' => ['K'], 'F2' => ['K']]);
+
+    expect((new StudentGaps)->penalty($state, ValidationScope::groups('A'), $context))->toBe(1);
+});
+
 it('SC-02: cuenta las horas de un grupo en un día que pasan del reparto parejo de sus horas en los días de su modalidad', function () {
     $state = States::builder()
         ->group(States::group('A', subject: 'S5'))->group(States::group('B', subject: 'S6'))
@@ -132,7 +143,8 @@ it('SC-07: cuenta las horas de empalme entre los grupos que son la única opció
     expect((new ConsecutiveSemesters)->rule())->toBe('SC-07')
         ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A'), $context))->toBe(1)
         ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A', 'B'), $context))->toBe(2)
-        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('H'), $context))->toBe(0);
+        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('H'), $context))->toBe(0)
+        ->and((new ConsecutiveSemesters)->penalty($state, ValidationScope::groups('A'), new SoftContext(cohorts: ['A' => ['plan:P1:1:C2', 'plan:P1:2:C2']])))->toBe(0);
 });
 
 it('SC-08: cuenta las horas de un grupo de docente de honorarios fuera de los bloques que declaró', function () {

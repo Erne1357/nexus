@@ -1,12 +1,12 @@
 <?php
 
-namespace App\Modules\Scheduling\Rules\Soft;
+namespace App\Modules\Scheduling\Rules;
 
 use App\Modules\Scheduling\Validation\State\StateSession;
 
 /**
- * Las cuentas de tiempo que comparten las reglas blandas: horas de penalización, sesiones por día, huecos entre
- * sesiones y minutos fuera de unos bloques.
+ * Las cuentas de tiempo que comparten las reglas: sesiones por día en orden (el traslado de SC-09 y los huecos y cambios
+ * de edificio de las blandas), huecos entre sesiones, minutos fuera de unos bloques y horas de penalización.
  */
 final class Timeline
 {

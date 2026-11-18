@@ -18,7 +18,9 @@ use App\Modules\Solver\Contract\SolverInput;
  * SoftScorer, sobre la foto de ContractState. Lo usan la heurística en PHP, la pantalla de corridas y el benchmark.
  *
  * Cada choque sale una vez como HardViolation: los de dos grupos (empalmes de docente, salón o alumno tipo) llevan los
- * dos grupos de la entrada que chocan, y nunca un grupo de contexto. El puntaje cuenta lo que toca a los grupos
+ * dos grupos de la entrada que chocan, y nunca un grupo de contexto. Si una de las dos sesiones es una candidata sin id
+ * (de withSession()), el choque sale una vez por cada grupo: así dos choques distintos entre los mismos grupos nunca se
+ * juntan. El puntaje cuenta lo que toca a los grupos
  * movibles. Sin estado entre llamadas.
  */
 final class ContractEvaluator
@@ -86,9 +88,10 @@ final class ContractEvaluator
 
             $sorted = $groupIds;
             sort($sorted);
-            $sessions = array_filter([$violation->related['session_id'] ?? null, $violation->related['other_session_id'] ?? null], 'is_string');
+            $sessions = [$violation->related['session_id'] ?? null, $violation->related['other_session_id'] ?? null];
+            $isPair = count($groupIds) === 2 && is_string($sessions[0]) && is_string($sessions[1]);
             sort($sessions);
-            $key = implode('|', [$violation->rule, ...$sorted, ...$sessions, count($groupIds) === 1 ? $violation->message : '']);
+            $key = implode('|', [$violation->rule, ...$sorted, ...array_map('strval', $sessions), $isPair ? '' : $violation->message]);
 
             $violations[$key] ??= new HardViolation(
                 $violation->rule,

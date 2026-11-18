@@ -52,7 +52,8 @@ it('una regla con peso cero, o sin peso, no se calcula; un peso de otra regla se
 
     expect($result->units)->toBe(['SC-01' => 2, 'SC-02' => 0, 'SC-03' => 0, 'SC-04' => 0, 'SC-05' => 0, 'SC-06' => 0, 'SC-07' => 0, 'SC-08' => 0, 'SC-09' => 0])
         ->and($result->total)->toBe(2)
-        ->and(array_keys($result->byRule))->toBe(SoftScorer::RULES);
+        ->and(array_keys($result->byRule))->toBe(array_keys(SoftScorer::RULES))
+        ->and(array_map(fn (string $rule): string => (new $rule)->rule(), SoftScorer::RULES))->toBe(array_combine(array_keys(SoftScorer::RULES), array_keys(SoftScorer::RULES)));
 });
 
 it('un horario mejor da un puntaje menor', function () {

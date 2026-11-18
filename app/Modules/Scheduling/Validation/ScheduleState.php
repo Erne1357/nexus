@@ -76,7 +76,7 @@ final class ScheduleState
                 continue;
             }
 
-            foreach ($this->typicalStudentSemesters[$group->id] ?? [[$group->modalityId, $group->campusId, $group->studyPlanId, $group->semester]] as [$modalityId, $campusId, $studyPlanId, $semester]) {
+            foreach ($this->typicalStudentSemestersOf($group) as [$modalityId, $campusId, $studyPlanId, $semester]) {
                 $this->bySemester[self::semesterKey($modalityId, $campusId, $studyPlanId, $semester)][] = $group;
             }
 
@@ -153,6 +153,17 @@ final class ScheduleState
     public function groupsOfSemester(string $modalityId, string $campusId, string $studyPlanId, int $semester): array
     {
         return $this->bySemester[self::semesterKey($modalityId, $campusId, $studyPlanId, $semester)] ?? [];
+    }
+
+    /**
+     * Los [modalidad, campus, plan, semestre] del alumno tipo en que cuenta el grupo (HC-03): el suyo, o los que dice la
+     * foto.
+     *
+     * @return list<array{string, string, string, int}>
+     */
+    public function typicalStudentSemestersOf(StateGroup $group): array
+    {
+        return $this->typicalStudentSemesters[$group->id] ?? [[$group->modalityId, $group->campusId, $group->studyPlanId, $group->semester]];
     }
 
     /**

@@ -13,22 +13,29 @@ use App\Modules\Scheduling\Validation\ValidationScope;
  */
 final class SoftScorer
 {
-    /** @var list<string> */
-    public const array RULES = ['SC-01', 'SC-02', 'SC-03', 'SC-04', 'SC-05', 'SC-06', 'SC-07', 'SC-08', 'SC-09'];
+    /**
+     * Las reglas, por id y en orden: el orden del desglose.
+     *
+     * @var array<string, class-string<SoftRule>>
+     */
+    public const array RULES = [
+        'SC-01' => StudentGaps::class,
+        'SC-02' => GroupDaySpread::class,
+        'SC-03' => DefaultRoom::class,
+        'SC-04' => PreferredBlocks::class,
+        'SC-05' => TeacherGaps::class,
+        'SC-06' => BuildingChanges::class,
+        'SC-07' => ConsecutiveSemesters::class,
+        'SC-08' => HonorariosAvailability::class,
+        'SC-09' => CampusTravelTime::class,
+    ];
 
     /** @var array<string, SoftRule> */
     private readonly array $rules;
 
     public function __construct()
     {
-        $rules = [];
-
-        foreach ([new StudentGaps, new GroupDaySpread, new DefaultRoom, new PreferredBlocks, new TeacherGaps,
-            new BuildingChanges, new ConsecutiveSemesters, new HonorariosAvailability, new CampusTravelTime] as $rule) {
-            $rules[$rule->rule()] = $rule;
-        }
-
-        $this->rules = $rules;
+        $this->rules = array_map(fn (string $rule): SoftRule => new $rule, self::RULES);
     }
 
     /**
@@ -36,8 +43,8 @@ final class SoftScorer
      */
     public function score(ScheduleState $state, ValidationScope $scope, SoftContext $context, array $weights): SoftResult
     {
-        $units = array_fill_keys(self::RULES, 0);
-        $byRule = array_fill_keys(self::RULES, 0);
+        $units = array_fill_keys(array_keys(self::RULES), 0);
+        $byRule = $units;
 
         foreach ($this->rules as $id => $rule) {
             $weight = $weights[$id] ?? 0;

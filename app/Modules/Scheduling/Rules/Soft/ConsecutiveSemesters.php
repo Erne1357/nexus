@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Soft;
 
+use App\Modules\Scheduling\Rules\Timeline;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ValidationScope;
 
@@ -43,7 +44,7 @@ final class ConsecutiveSemesters implements SoftRule
 
                 foreach ([(int) $semester - 1, (int) $semester + 1] as $next) {
                     foreach ($context->membersOf("plan:{$plan}:{$next}:{$campus}") as $otherId) {
-                        if (! $state->group($otherId)?->isActive) {
+                        if ($otherId === $groupId || ! $state->group($otherId)?->isActive) {
                             continue;
                         }
 

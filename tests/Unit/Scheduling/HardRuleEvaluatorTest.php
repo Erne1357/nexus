@@ -138,3 +138,14 @@ it('un salón de laboratorio no choca con HC-06 y el escenario de HC-06 solo cho
 
     expect((new HardRuleEvaluator)->evaluate($state, ValidationScope::groups('A'))->isEmpty())->toBeTrue();
 });
+
+it('HC-03: revisa también los semestres del alumno tipo en que la foto dice que cuenta un grupo del alcance', function () {
+    $state = evaluatorBuilder()->activePlan('P2')->offering('IND', 'C2')
+        ->group(States::group('A', plan: 'P1', semester: 3))->group(States::group('B', plan: 'P2', semester: 3, career: 'IND'))
+        ->typicalStudentSemesters('A', [['PRES', 'C2', 'P1', 3], ['PRES', 'C2', 'P2', 3]])
+        ->session('A', 1, '07:00', '09:00')->session('B', 1, '08:00', '10:00')
+        ->build();
+
+    expect(evaluatorRules((new HardRuleEvaluator)->forGroup($state, 'A')->violations()))->toBe(['HC-03'])
+        ->and($state->typicalStudentSemestersOf($state->groupOrFail('B')))->toBe([['PRES', 'C2', 'P2', 3]]);
+});

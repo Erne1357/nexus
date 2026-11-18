@@ -226,3 +226,41 @@ it('pregunta «¿y si…?» sobre una foto ya armada, con withSession y el alcan
         ->and($state->isInputGroup('g009'))->toBeTrue()
         ->and($state->isInputGroup(ContractState::CONTEXT.'teacher:t004:C2'))->toBeFalse();
 });
+
+it('HC-03: un tronco común movible choca con un fijo del otro plan en el que cuenta', function () {
+    $input = evaluatorMediumInput(function (array $data): array {
+        $data['groups'][] = [
+            'id' => 'g013', 'campus_code' => 'C1', 'subject_code' => 'MED-0013', 'department_id' => 'd002', 'owner_career_id' => 'c002',
+            'study_plan_id' => 'p002', 'semester' => 1, 'weekly_hours' => 2, 'practice_hours' => 0, 'needs_lab' => false, 'capacity' => 30,
+            'cohorts' => ['plan:p002:1:C1'], 'fixed_sessions' => [['day' => 4, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room_id' => 'r001', 'kind' => 'teoria']],
+            'candidate_room_ids' => [], 'movable' => false, 'current_sessions' => [],
+        ];
+
+        return $data;
+    });
+
+    expect((new ContractEvaluator)->evaluate($input, evaluatorSessions('g003', [[4, '08:00', '09:00', 'r002'], [1, '10:00', '11:00', 'r002'], [2, '10:00', '11:00', 'r002']]))->rulesByGroup())
+        ->toEqualCanonicalizing(['g003' => ['HC-03'], 'g013' => ['HC-03']]);
+});
+
+it('dos choques distintos entre los mismos dos grupos no se juntan aunque sus sesiones sean candidatas sin id', function () {
+    $state = ContractState::from(evaluatorMediumInput(), []);
+    $state = $state->withState($state->state
+        ->withSession('g007', new SessionCandidate(1, '10:00', '11:00', 'r002'))->withSession('g007', new SessionCandidate(3, '10:00', '11:00', 'r002'))
+        ->withSession('g008', new SessionCandidate(1, '10:00', '11:00', 'r001'))->withSession('g008', new SessionCandidate(3, '10:00', '11:00', 'r001')));
+
+    $teacher = array_values(array_filter((new ContractEvaluator)->hardViolations($state), fn (HardViolation $violation): bool => $violation->rule === 'HC-01'));
+
+    expect(count($teacher))->toBeGreaterThanOrEqual(2);
+});
+
+it('una materia con la misma clave y otras horas en otro grupo no le cambia las horas al primero', function () {
+    $input = evaluatorMediumInput(function (array $data): array {
+        $data['groups'][11]['subject_code'] = 'MED-0010';
+        $data['groups'][11]['weekly_hours'] = 5;
+
+        return $data;
+    });
+
+    expect((new ContractEvaluator)->evaluate($input, evaluatorSessions('g010', [[2, '14:00', '15:00', 'r002'], [3, '14:00', '15:00', 'r002'], [4, '14:00', '15:00', 'r002']]))->hardViolations)->toBe([]);
+});

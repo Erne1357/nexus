@@ -45,7 +45,7 @@ Los pesos son configurables por campus (`settings`, clave `solver.weights`).
 
 **Unidades del puntaje blando** (tarea 6.5, supuesto por confirmar). El puntaje de una solución es la suma, por regla, de su peso por su penalización; menor es mejor. Cada regla cuenta lo que toca a los grupos que se programan (los movibles de la corrida), y una fracción de hora cuenta como hora:
 
-- **SC-01:** cada hora de hueco entre las sesiones de los grupos de una cohorte (el alumno tipo de HC-03 o un paquete) en un día.
+- **SC-01:** cada hora de hueco entre las sesiones de los grupos de una cohorte (el alumno tipo de HC-03 o un paquete) en un día, junto a una sesión de un grupo que se programa.
 - **SC-02:** cada hora de un grupo en un día por encima del reparto parejo: el techo de sus horas semanales entre los días de su modalidad. Una materia de 5 h de lunes a viernes: más de 1 h en un día cuenta, y 5 h el mismo día suman 4.
 - **SC-03:** cada hora de sesión en un salón que no está entre los por defecto o sugeridos de la materia en el campus del grupo, sin importar la prioridad. Una materia sin salón por defecto en ese campus no se penaliza.
 - **SC-04:** cada hora de sesión fuera de los bloques `preferred` del docente. Un docente sin bloques preferidos no se penaliza.
