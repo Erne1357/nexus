@@ -6,6 +6,11 @@
     una cuadrícula de 330 px mínimo (a todo el ancho en celular). La ficha lleva «CLAVE · grupo», el docente (o «Por
     asignar») y la mini-semana: una celda por día del perfil con las horas y el salón de cada sesión; un día sin sesión va
     vacío y tenue. La ficha no es un enlace; el docente y cada salón sí.
+
+    Tarea 8.5: bajo el docente, la marca de lo que le cambió en la última publicación de su carga
+    (x-academic-load::published.change, que abre el detalle). Un grupo que esa publicación canceló queda en su materia,
+    en su orden, como ficha sin tinte ni franja, con filete punteado, la clave tachada, «Cancelado» y el horario que tenía
+    en una línea; no cuenta en «N grupos».
 --}}
 @use('App\Modules\Core\Support\WeekGrid')
 @use('App\Modules\AcademicLoad\Queries\PublishedWeek')
@@ -27,7 +32,7 @@
             </div>
             <p class="flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                 <span class="font-medium text-base-content">Semestre {{ $semester }}</span>
-                <span>{{ $plural(count($subjects), 'materia', 'materias') }} · {{ $plural($groupCount, 'grupo', 'grupos') }}</span>
+                <span>{{ $plural($subjectCount, 'materia', 'materias') }} · {{ $plural($groupCount, 'grupo', 'grupos') }}</span>
                 <span>Retícula <span class="font-mono">{{ $currentPlan['plan']['code'] }}</span></span>
             </p>
             @if ($updated !== '')
@@ -71,13 +76,39 @@
                         <h2 id="subject-{{ $subject['code'] }}" class="text-xl font-bold leading-tight">{{ $subject['name'] }}</h2>
                         <span class="mt-1 flex items-center gap-3 md:contents">
                             <span class="text-neutral">{{ $plural($subject['credits'], 'crédito', 'créditos') }}</span>
-                            <span class="badge badge-sm border-base-300 bg-base-100 font-medium md:ms-auto">{{ $plural(count($entry['groups']), 'grupo', 'grupos') }}</span>
+                            <span class="badge badge-sm border-base-300 bg-base-100 font-medium md:ms-auto">{{ $plural($entry['count'], 'grupo', 'grupos') }}</span>
                         </span>
                     </div>
 
                     <div class="grid gap-3 max-md:grid-cols-1 md:grid-cols-[repeat(auto-fill,minmax(330px,1fr))]">
                         @foreach ($entry['groups'] as $group)
-                            <article class="{{ $tint }} grid min-w-0 gap-2.5 rounded-box border border-base-300 py-3 ps-[18px] pe-3.5 pb-3.5" data-group="{{ $group->label() }}" wire:key="group-{{ $group->id }}">
+                            @if ($group->isCancelled())
+                                <article class="grid min-w-0 content-start gap-2 rounded-box border border-dashed border-base-300 bg-base-100 py-3 ps-[18px] pe-3.5 pb-3.5" data-group="{{ $group->label() }}" wire:key="group-{{ $group->id }}">
+                                    <div class="grid gap-0.5">
+                                        <div class="flex flex-wrap items-baseline gap-x-2">
+                                            <span class="font-mono text-[17px] font-semibold text-neutral line-through decoration-1">{{ $subject['code'] }} <span class="font-normal">·</span> {{ $group->code }}</span>
+                                            @if ($group->campus !== null)
+                                                <span class="text-sm text-neutral">{{ $group->campus['name'] }}</span>
+                                            @endif
+                                        </div>
+                                        <div class="flex min-w-0 items-center gap-1.5 text-neutral">
+                                            <x-icon name="o-user" class="h-4 w-4 shrink-0" aria-hidden="true" />
+                                            <span class="truncate">{{ $group->teacher['name'] ?? 'Por asignar' }}</span>
+                                        </div>
+                                    </div>
+                                    <x-academic-load::published.change :change="$group->change" />
+                                    @if ($profile->usesTimeBlocks && $group->sessions !== [])
+                                        <p class="flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[12.5px] text-neutral tabular-nums">
+                                            <span class="sr-only">Tenía</span>
+                                            @foreach (PublishedWeek::summary($group) as $line)
+                                                <span>{{ $line['days'] }} {{ $line['hours'] }}{{ $line['room'] !== null ? ' · '.$line['room']['code'] : ($line['kind'] === 'virtual' ? ' · Virtual' : '') }}</span>
+                                            @endforeach
+                                        </p>
+                                    @endif
+                                </article>
+                                @continue
+                            @endif
+                            <article class="{{ $tint }} grid min-w-0 content-start gap-2.5 rounded-box border border-base-300 py-3 ps-[18px] pe-3.5 pb-3.5" data-group="{{ $group->label() }}" wire:key="group-{{ $group->id }}">
                                 <div class="grid gap-0.5">
                                     <div class="flex flex-wrap items-baseline gap-x-2">
                                         <span class="font-mono text-[17px] font-semibold">{{ $subject['code'] }} <span class="font-normal text-neutral">·</span> {{ $group->code }}</span>
@@ -94,6 +125,8 @@
                                         @endif
                                     </div>
                                 </div>
+
+                                <x-academic-load::published.change :change="$group->change" />
 
                                 @if (! $profile->usesTimeBlocks)
                                     <p class="text-sm text-neutral">Sin horario fijo</p>

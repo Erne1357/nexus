@@ -15,7 +15,8 @@ use App\Modules\Core\Support\WeekGrid;
  * El PDF de una carrera, retícula y semestre (tarea 4.5): la tabla tipo SII que eligió el usuario el 10 de noviembre de
  * 2026, en carta horizontal. Un renglón por materia y, debajo, uno por grupo con su docente y una columna por día del
  * perfil de la modalidad con sus horas, su salón y si es práctica o virtual; el campus de cada grupo va junto a su clave
- * (M1). Público.
+ * (M1). Público. Desde la tarea 8.5, cada grupo lleva la marca de lo que le cambió en la última publicación de su carga y
+ * los que esa publicación canceló salen tachados en su materia, sin horario (supuesto por confirmar).
  */
 final class SemesterPdf extends PublishedPdf
 {
@@ -76,15 +77,31 @@ final class SemesterPdf extends PublishedPdf
     protected function document(PublishedSchedule $schedule, Term $term, Modality $modality): array
     {
         $groups = $schedule->semester($this->careerId, $this->planId, $this->semester);
+        $shown = self::withCancelled($groups, $schedule->cancelledIn($this->careerId, $this->planId, $this->semester));
         $career = collect($schedule->careers())->firstWhere('career.id', $this->careerId)['career'] ?? ['name' => $this->careerCode];
 
         return ['academic-load::pdf.semester', [
             'title' => $career['name'],
             'subtitle' => "Semestre {$this->semester} · Retícula {$this->planCode}",
-            'updated' => self::updated($schedule->updatedAt($groups)),
+            'updated' => self::updated($schedule->updatedAt($shown)),
             'days' => self::days($groups, $schedule),
-            'subjects' => self::subjects($groups, $schedule),
+            'subjects' => self::subjects($shown, $schedule),
         ], 'landscape'];
+    }
+
+    /**
+     * Los grupos vigentes y los cancelados juntos, en el orden de toda vista de lo publicado.
+     *
+     * @param  list<PublishedGroup>  $groups
+     * @param  list<PublishedGroup>  $cancelled
+     * @return list<PublishedGroup>
+     */
+    public static function withCancelled(array $groups, array $cancelled): array
+    {
+        $all = [...$groups, ...$cancelled];
+        usort($all, PublishedGroup::compare(...));
+
+        return $all;
     }
 
     /**
@@ -110,8 +127,8 @@ final class SemesterPdf extends PublishedPdf
      * Las materias del semestre en orden de clave, cada una con su color y sus grupos.
      *
      * @param  list<PublishedGroup>  $groups
-     *                                        La capacidad y la marca de préstamo solo las pinta el PDF del personal (DepartmentPdf).
-     * @return list<array{code: string, name: string, credits: int, color: string, groups: list<array{code: string, campus: ?string, teacher: string, capacity: int, cells: array<int, list<array{hours: string, place: string, kind: ?string, loan: bool}>>}>}>
+     *                                        La capacidad y la marca de préstamo solo las pinta el PDF del personal (DepartmentPdf). Un grupo cancelado va sin celdas.
+     * @return list<array{code: string, name: string, credits: int, color: string, groups: list<array{code: string, campus: ?string, teacher: string, capacity: int, cells: array<int, list<array{hours: string, place: string, kind: ?string, loan: bool}>>, change: ?array{label: string, added: bool}, cancelled: bool}>}>
      */
     public static function subjects(array $groups, PublishedSchedule $schedule): array
     {
@@ -131,12 +148,20 @@ final class SemesterPdf extends PublishedPdf
 
             $cells = [];
 
-            foreach ($usesTimeBlocks ? $group->sessions : [] as $session) {
+            foreach ($usesTimeBlocks && ! $group->isCancelled() ? $group->sessions : [] as $session) {
                 /** @var PublishedSession $session */
                 $cells[$session->day][] = [...self::session($session), 'loan' => $session->isLoanedTo($group->departmentId)];
             }
 
-            $subjects[$code]['groups'][] = ['code' => $group->code, 'campus' => $group->campus['code'] ?? null, 'teacher' => self::teacherOf($group), 'capacity' => $group->capacity, 'cells' => $cells];
+            $subjects[$code]['groups'][] = [
+                'code' => $group->code,
+                'campus' => $group->campus['code'] ?? null,
+                'teacher' => self::teacherOf($group),
+                'capacity' => $group->capacity,
+                'cells' => $cells,
+                'change' => self::changeOf($group),
+                'cancelled' => $group->isCancelled(),
+            ];
         }
 
         return array_values($subjects);
