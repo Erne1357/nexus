@@ -13,8 +13,11 @@ use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Solver\Console\ExportSolverFixture;
 use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
 use App\Modules\Solver\Console\SolverBenchmark;
+use App\Modules\Solver\Engines\CpSat\CpSatClient;
+use App\Modules\Solver\Engines\CpSat\CpSatEngine;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
+use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Queries\CareerLoadsQuery;
 use App\Modules\Solver\Rules\SolverSettings;
@@ -28,17 +31,33 @@ use App\Modules\Solver\Rules\SolverSettings;
 final class SolverServiceProvider extends ModuleServiceProvider
 {
     /**
-     * Los motores disponibles, con la etiqueta `solver.engines`: hoy el de prueba; la heurística (6.6) y CP-SAT (fase 7)
-     * se agregan aquí. Los motores no guardan estado, así que el registro puede ser único por proceso. CareerLoadsQuery
-     * recuerda sus respuestas en la petición: `scoped`, nunca único (Octane).
+     * Los motores disponibles, con la etiqueta `solver.engines` (engineClasses()). Los motores no guardan estado, así
+     * que el registro puede ser único por proceso; el cliente del servicio de CP-SAT se arma con `services.solver`.
+     * CareerLoadsQuery recuerda sus respuestas en la petición: `scoped`, nunca único (Octane).
      */
     public function register(): void
     {
         parent::register();
 
-        $this->app->tag([FixedEngine::class], 'solver.engines');
+        $this->app->bind(CpSatClient::class, fn (): CpSatClient => CpSatClient::fromConfig());
+        $this->app->bind(CpSatEngine::class, fn ($app): CpSatEngine => new CpSatEngine($app->make(CpSatClient::class), (int) config('services.solver.poll_interval_ms', 1000)));
+        $this->app->tag(self::engineClasses(), 'solver.engines');
         $this->app->singleton(EngineRegistry::class, fn ($app): EngineRegistry => new EngineRegistry($app->tagged('solver.engines')));
         $this->app->scoped(CareerLoadsQuery::class);
+    }
+
+    /**
+     * Los motores del registro, en orden: el de prueba siempre; la heurística (6.6) se agrega aquí. CP-SAT (7.9) solo
+     * si hay servicio configurado (SOLVER_URL y SOLVER_TOKEN, CpSatClient::configured()), así que no aparece en las
+     * pruebas ni en un servidor sin el contenedor `solver`. Va primero porque, mientras no llegue
+     * `solver.default_engine` (7.11), el predeterminado es el último registrado y CP-SAT no se propone por omisión
+     * (supuesto por confirmar). Se decide al arrancar: cambiar la configuración pide reiniciar `app` y `queue`.
+     *
+     * @return list<class-string<SolverEngine>>
+     */
+    public static function engineClasses(): array
+    {
+        return [...(CpSatClient::configured() ? [CpSatEngine::class] : []), FixedEngine::class];
     }
 
     public function boot(): void

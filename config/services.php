@@ -35,4 +35,17 @@ return [
         ],
     ],
 
+    /*
+    | El servicio del motor de horarios en Python (fase 7; services/solver/README.md), que llama CpSatEngine. Sin URL o
+    | sin token, el motor `cpsat` no se registra. Los tiempos son por petición, en segundos; `poll_interval_ms`, cada
+    | cuánto se consulta una corrida en curso.
+    */
+    'solver' => [
+        'url' => env('SOLVER_URL'),
+        'token' => env('SOLVER_TOKEN'),
+        'connect_timeout' => (float) env('SOLVER_CONNECT_TIMEOUT', 3),
+        'timeout' => (float) env('SOLVER_TIMEOUT', 30),
+        'poll_interval_ms' => (int) env('SOLVER_POLL_INTERVAL_MS', 1000),
+    ],
+
 ];
