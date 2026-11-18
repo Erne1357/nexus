@@ -39,8 +39,10 @@ use Closure;
  * vuelta daría lo mismo. El contrato no trae un campo para cambiarlo (`options` solo trae `threads`, `seed`,
  * `suggest_teachers` y `return_intermediate`), así que es un parámetro del constructor.
  *
- * **Avance.** Reporta de 0 a 100 con el puntaje que lleva: lo que más haya avanzado entre el reloj y las iteraciones sin
- * mejora. Vive lo que dura una corrida (Octane).
+ * **Avance.** Reporta en cada iteración, de 0 a 100 (sin bajar nunca), con el puntaje que lleva: lo que más haya
+ * avanzado entre el reloj y las iteraciones sin mejora. Quien lanza la corrida decide cada cuánto lo escribe y revisa
+ * ahí si la cancelaron. Ese puntaje es el de LocalScore, antes de la validación final. Vive lo que dura una corrida
+ * (Octane).
  */
 final readonly class LocalSearch
 {
@@ -102,7 +104,7 @@ final readonly class LocalSearch
                 }
 
                 $iterations++;
-                $move = $this->improve($builder, $score, $groupId, $anchors[$groupId] ?? [], $evaluated);
+                $move = $this->improve($builder, $score, $groupId, $anchors[$groupId] ?? [], $evaluated, $deadline, $clock);
 
                 if ($move === null) {
                     $idle++;
@@ -112,12 +114,8 @@ final readonly class LocalSearch
                     $idle = 0;
                 }
 
-                $percent = min(100, (int) floor(100 * max($idle / $limit, ($now - $started) / max(1e-9, $deadline - $started))));
-
-                if ($progress !== null && $percent > $reported) {
-                    $progress($percent, $current);
-                    $reported = $percent;
-                }
+                $reported = max($reported, min(100, (int) floor(100 * max($idle / $limit, ($now - $started) / max(1e-9, $deadline - $started)))));
+                $progress?->__invoke($reported, $current);
 
                 if ($idle >= $limit) {
                     break 2;
@@ -130,12 +128,13 @@ final readonly class LocalSearch
 
     /**
      * Revisa los movimientos de un grupo y aplica el que más baja el puntaje; si ninguno lo baja, lo deja como estaba.
-     * Devuelve el tipo y el delta del movimiento aplicado, o null.
+     * Devuelve el tipo y el delta del movimiento aplicado, o null. Los intercambios y los corrimientos del docente, que
+     * son los bucles largos, miran el reloj en cada paso: si vence el plazo, se queda con lo mejor que encontró.
      *
      * @param  list<string>  $team  si el grupo es el primero de su docente, todos los de ese docente (para desplazarlos)
      * @return array{'move'|'swap'|'room'|'shift', int}|null
      */
-    private function improve(Builder $builder, LocalScore $score, string $groupId, array $team, int &$evaluated): ?array
+    private function improve(Builder $builder, LocalScore $score, string $groupId, array $team, int &$evaluated, float $deadline, Closure $clock): ?array
     {
         $current = $builder->placementOf($groupId);
         $builder->release($groupId);
@@ -159,6 +158,10 @@ final readonly class LocalSearch
 
         foreach (array_unique(array_merge([], ...array_values($blocked))) as $other) {
             $theirs = $builder->placementOf($other);
+
+            if ($clock() >= $deadline) {
+                break;
+            }
 
             if ($theirs['start'] === $current['start'] || $builder->campusOf($other) !== $builder->campusOf($groupId)) {
                 continue;
@@ -189,7 +192,7 @@ final readonly class LocalSearch
         }
 
         if ($team !== []) {
-            [$best, $bestDelta] = $this->shiftTeam($builder, $score, $team, $current, $best, $bestDelta, $evaluated);
+            [$best, $bestDelta] = $this->shiftTeam($builder, $score, $team, $current, $best, $bestDelta, $evaluated, $deadline, $clock);
         }
 
         if ($best === null) {
@@ -227,7 +230,8 @@ final readonly class LocalSearch
      * @param  array{string, array<string, array<string, mixed>>}|null  $best
      * @return array{array{string, array<string, array<string, mixed>>}|null, int}
      */
-    private function shiftTeam(Builder $builder, LocalScore $score, array $team, array $first, ?array $best, int $bestDelta, int &$evaluated): array
+    private function shiftTeam(Builder $builder, LocalScore $score, array $team, array $first, ?array $best, int $bestDelta, int &$evaluated,
+        float $deadline, Closure $clock): array
     {
         $originals = [$team[0] => $first];
 
@@ -241,7 +245,7 @@ final readonly class LocalSearch
 
         $reach = $builder->dayUnits($team[0]);
 
-        for ($units = -$reach; $units <= $reach; $units++) {
+        for ($units = -$reach; $units <= $reach && $clock() < $deadline; $units++) {
             $placed = [];
 
             foreach ($units === 0 ? [] : $team as $id) {

@@ -7,10 +7,13 @@ use App\Modules\Solver\Contract\SoftWeights;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
 use App\Modules\Solver\Engines\PhpHeuristic\Builder;
+use App\Modules\Solver\Engines\PhpHeuristic\FinalValidation;
 use App\Modules\Solver\Engines\PhpHeuristic\LocalScore;
 use App\Modules\Solver\Engines\PhpHeuristic\LocalSearch;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Evaluation\ContractEvaluator;
+use Random\Engine\Mt19937;
+use Random\Randomizer;
 
 /*
 | La búsqueda local de la heurística en PHP (tarea 6.7; docs/arquitectura/solver.md, «Heurística PHP: búsqueda local»):
@@ -375,18 +378,20 @@ it('respeta el tiempo límite: para cuando el reloj llega al plazo y devuelve lo
     $input = localSearchFixture('medium');
     $builder = localSearchBuilt($input);
     $initial = (new ContractEvaluator)->evaluate($input, localSearchFlat($builder->sessions()))->softScore->total;
-    $now = 0.0;
-    $clock = function () use (&$now): float {
-        $now += 1.0;
+    $readings = [];
+    $clock = function () use (&$readings): float {
+        $readings[] = (float) count($readings) + 1;
 
-        return $now;
+        return end($readings);
     };
 
     $result = (new LocalSearch)->run($input, $builder, 3.5, $clock);
     $final = (new ContractEvaluator)->evaluate($input, localSearchFlat($result->sessions));
+    $late = array_values(array_filter($readings, fn (float $reading): bool => $reading >= 3.5));
 
-    expect($result->iterations)->toBe(2)
+    expect($result->iterations)->toBeGreaterThanOrEqual(1)->toBeLessThanOrEqual(2)
         ->and($result->timedOut)->toBeTrue()
+        ->and(count($late))->toBeLessThanOrEqual(3)
         ->and($final->hardViolations)->toBe([])
         ->and($final->softScore->total)->toBe($result->finalScore)
         ->and($result->finalScore)->toBeLessThanOrEqual($initial);
@@ -439,7 +444,7 @@ it('es determinista: la misma entrada da la misma salida', function (string $fix
     expect($run())->toBe($run());
 })->with(['small', 'medium']);
 
-it('reporta el avance de la búsqueda entre 60 y 90 con el mejor puntaje, y deja las iteraciones en las métricas', function () {
+it('reporta el avance de la búsqueda en cada iteración, entre 60 y 90 y sin bajar, con el puntaje antes de validar', function () {
     $calls = [];
     $output = (new PhpHeuristicEngine)->solve(localSearchSwapInstance(), function (int $percent, ?int $score) use (&$calls): void {
         $calls[] = [$percent, $score];
@@ -448,7 +453,349 @@ it('reporta el avance de la búsqueda entre 60 y 90 con el mejor puntaje, y deja
 
     expect($search)->not->toBe([])
         ->and($search[0])->toBe([60, 16])
-        ->and(array_column($calls, 0))->toBe(array_values(array_unique(array_column($calls, 0))))
+        ->and(array_column($calls, 0))->toBe(collect($calls)->pluck(0)->sort()->values()->all())
+        ->and(count($search))->toBeGreaterThanOrEqual($output->metrics->iterations + 1)
+        ->and(end($search)[1])->toBe($output->softScore->total)
         ->and($output->metrics->iterations)->toBeGreaterThan(0)
         ->and(implode(' ', $output->log))->toContain('Búsqueda local:');
+});
+
+/**
+ * Una entrada generada con semilla fija, al estilo de las de la demo pero chica: dos o tres campus (uno con bloques de
+ * otro tamaño y otra hora de inicio, a veces uno virtual con sábado), docentes con preferidos, indisponibilidad y
+ * `busy` desalineados, salones de varios tipos con dueño, bloqueo, `busy` y préstamos, grupos fijos, cohortes de plan
+ * y de paquete, laboratorios, salones por defecto y pesos al azar.
+ *
+ * @return array<string, mixed>
+ */
+function localSearchRandomData(int $seed, int $groupCount): array
+{
+    $random = new Randomizer(new Mt19937($seed));
+    $int = fn (int $min, int $max): int => $random->getInt($min, $max);
+    $pick = fn (array $items): mixed => $items[$random->getInt(0, count($items) - 1)];
+    $clock = fn (int $minutes): string => sprintf('%02d:%02d', intdiv($minutes, 60), $minutes % 60);
+    $block = $pick([60, 30, 20, 45, 50]);
+    $start = $pick([420, 450, 490]);
+    $campuses = [
+        ['code' => 'C1', 'block_minutes' => 60, 'day_start' => '07:00', 'day_end' => '15:00', 'days' => [1, 2, 3, 4, 5], 'uses_rooms' => true],
+        ['code' => 'C2', 'block_minutes' => $block, 'day_start' => $clock($start), 'day_end' => $clock($start + intdiv(900 - $start, $block) * $block), 'days' => [1, 2, 3, 4, 5], 'uses_rooms' => true],
+    ];
+
+    if ($int(0, 2) === 0) {
+        $campuses[] = ['code' => 'V1', 'block_minutes' => 60, 'day_start' => '07:00', 'day_end' => '13:00', 'days' => [1, 2, 3, 4, 5, 6], 'uses_rooms' => false];
+    }
+
+    $codes = array_column($campuses, 'code');
+    $teacherCount = max(3, intdiv($groupCount, 4));
+    $teachers = [];
+
+    for ($i = 0; $i < $teacherCount; $i++) {
+        $teacher = localSearchTeacher("t{$i}", ['remaining_hours' => 60, 'honorarios' => $int(0, 3) === 0]);
+
+        if ($int(0, 1) === 1) {
+            $from = 420 + $int(0, 12) * 30;
+            $teacher['preferred'][] = ['day' => $int(1, 5), 'starts_at' => $clock($from), 'ends_at' => $clock(min(900, $from + $int(1, 4) * 60))];
+        }
+
+        if ($int(0, 1) === 1) {
+            foreach ([1, 2, 3, 4] as $day) {
+                $from = 420 + $int(0, 6) * 60;
+                $teacher['preferred'][] = ['day' => $day, 'starts_at' => $clock($from), 'ends_at' => $clock($from + 180)];
+            }
+        }
+
+        if ($int(0, 2) === 0) {
+            $teacher['unavailable'][] = ['day' => $int(1, 5), 'starts_at' => '12:00', 'ends_at' => '15:00'];
+        }
+
+        for ($b = $int(0, 2); $b > 0; $b--) {
+            $from = 420 + $int(0, 14) * 25;
+            $slot = ['day' => $int(1, 5), 'starts_at' => $clock($from), 'ends_at' => $clock($from + $int(1, 3) * 35)];
+            $teacher['busy'][] = $int(0, 1) === 1 ? $slot + ['campus_code' => $pick($codes)] : $slot;
+        }
+
+        $teachers[] = $teacher;
+    }
+
+    $rooms = [];
+
+    foreach (array_filter($campuses, fn (array $campus): bool => $campus['uses_rooms']) as $campus) {
+        for ($i = $int(2, max(3, intdiv($groupCount, 6))); $i > 0; $i--) {
+            $room = localSearchRoom('r'.count($rooms), ['campus_code' => $campus['code'], 'type' => $pick(['aula', 'aula', 'aula', 'laboratorio', 'sala_computo', 'auditorio']),
+                'capacity' => $int(25, 45), 'building_id' => 'b'.$int(0, 2), 'blocks' => [], 'busy' => []]);
+
+            if ($int(0, 4) === 0) {
+                $room['owner_department_id'] = 'd'.$int(1, 2);
+            }
+
+            if ($int(0, 3) === 0) {
+                $room['blocks'][] = ['day' => $int(1, 5), 'starts_at' => '10:00', 'ends_at' => '12:00'];
+            }
+
+            if ($int(0, 3) === 0) {
+                $from = 420 + $int(0, 10) * 20;
+                $room['busy'][] = ['day' => $int(1, 5), 'starts_at' => $clock($from), 'ends_at' => $clock($from + 70)];
+            }
+
+            $rooms[] = $room;
+        }
+    }
+
+    $groups = [];
+
+    for ($i = 0; $i < $groupCount; $i++) {
+        $campus = $pick($campuses);
+        $semester = $int(1, 4);
+        $hours = $pick([2, 3, 4, 4, 5, 5, 6]);
+        $practice = $int(0, 2) === 0 ? $int(1, min(2, $hours)) : 0;
+        $cohorts = $int(0, 3) > 0 ? ["plan:p1:{$semester}:{$campus['code']}"] : [];
+
+        if ($int(0, 4) === 0) {
+            $cohorts[] = 'plan:p1:'.($semester + 1).":{$campus['code']}";
+        }
+
+        if ($int(0, 4) === 0) {
+            $cohorts[] = 'package:k'.$int(1, 2).':'.$int(1, 2);
+        }
+
+        $group = localSearchGroup(sprintf('g%03d', $i), ['campus_code' => $campus['code'], 'subject_code' => 'S'.$int(0, 6), 'department_id' => 'd'.$int(1, 2),
+            'semester' => $semester, 'weekly_hours' => $hours, 'practice_hours' => $practice, 'needs_lab' => $practice > 0 && $int(0, 1) === 1,
+            'capacity' => $int(20, 40), 'cohorts' => $cohorts, 'movable' => $int(0, 5) > 0, 'fixed_sessions' => []]);
+
+        if ($int(0, 2) > 0) {
+            $group['teacher_id'] = 't'.$int(0, $teacherCount - 1);
+        }
+
+        if (! $group['movable']) {
+            $campusRooms = array_values(array_filter($rooms, fn (array $room): bool => $room['campus_code'] === $campus['code']));
+            $first = $int(1, 3);
+            $from = 420 + $int(0, 10) * 30;
+
+            foreach ([$first, $first + 1] as $day) {
+                $group['fixed_sessions'][] = ['day' => $day, 'starts_at' => $clock($from), 'ends_at' => $clock($from + 60),
+                    'kind' => $campus['uses_rooms'] ? 'teoria' : 'virtual', 'room_id' => $campus['uses_rooms'] && $campusRooms !== [] ? $pick($campusRooms)['id'] : null];
+            }
+        }
+
+        $groups[] = $group;
+    }
+
+    $defaults = [];
+
+    for ($i = 0; $i < 4 && $rooms !== []; $i++) {
+        $room = $pick($rooms);
+        $defaults[] = ['subject_code' => 'S'.$int(0, 6), 'campus_code' => $room['campus_code'], 'room_id' => $room['id'], 'priority' => $int(0, 2)];
+    }
+
+    $agreements = [];
+
+    foreach ($rooms as $room) {
+        if (isset($room['owner_department_id']) && $int(0, 1) === 1) {
+            $agreements[] = ['room_id' => $room['id'], 'to_department_id' => $room['owner_department_id'] === 'd1' ? 'd2' : 'd1', 'day' => $int(1, 5), 'starts_at' => '07:00', 'ends_at' => '11:00'];
+        }
+    }
+
+    $weights = [];
+
+    foreach (SoftWeights::RULES as $rule) {
+        $weights[$rule] = $int(0, 3) === 0 ? 0 : $int(1, 10);
+    }
+
+    return [
+        'run_id' => "semilla-{$seed}", 'campuses' => $campuses, 'travel_minutes' => $pick([30, 60, 90]), 'groups' => $groups, 'teachers' => $teachers,
+        'rooms' => $rooms, 'agreements' => $agreements, 'subject_room_defaults' => $defaults, 'soft_weights' => $weights,
+    ];
+}
+
+/**
+ * Los bloques ocupados de los índices del constructor (sin el dueño, que depende del orden) y sus listas de ocupación.
+ *
+ * @return array<string, list<string>>
+ */
+function localSearchOccupancy(Builder $builder): array
+{
+    $reflection = new ReflectionClass($builder);
+    $occupancy = [];
+
+    foreach (['teacherAt', 'roomAt', 'cohortAt'] as $property) {
+        $paths = [];
+        $walk = function (array $level, string $path) use (&$walk, &$paths): void {
+            foreach ($level as $key => $value) {
+                is_array($value) ? $walk($value, "{$path}/{$key}") : $paths[] = "{$path}/{$key}";
+            }
+        };
+        $walk($reflection->getProperty($property)->getValue($builder), '');
+        sort($paths);
+        $occupancy[$property] = $paths;
+    }
+
+    foreach (['teacherSpans', 'roomSpans', 'cohortSpans'] as $property) {
+        $spans = [];
+
+        foreach ($reflection->getProperty($property)->getValue($builder) as $owner => $days) {
+            foreach ($days as $day => $list) {
+                foreach ($list as $span) {
+                    $spans[] = "{$owner}/{$day}/".json_encode($span);
+                }
+            }
+        }
+
+        sort($spans);
+        $occupancy[$property] = $spans;
+    }
+
+    return $occupancy;
+}
+
+it('con entradas generadas (semilla fija), el puntaje incremental es el del evaluador, no aparecen choques y los índices quedan como recién construidos', function () {
+    $evaluator = new ContractEvaluator;
+    $accepted = 0;
+
+    foreach (range(1, 40) as $seed) {
+        $input = localSearchInput([], [], [], localSearchRandomData($seed, 8 + $seed % 19));
+        $builder = new Builder($input);
+        $build = $builder->run(INF, fn (): float => 0.0);
+        [, $removed] = (new FinalValidation)->clean($input, $build->sessions, $build->placementOrder);
+
+        foreach (array_keys($removed) as $groupId) {
+            $builder->remove((string) $groupId);
+        }
+
+        $before = $evaluator->evaluate($input, localSearchFlat($builder->sessions()));
+        $result = (new LocalSearch)->run($input, $builder, INF, fn (): float => 0.0);
+        $after = $evaluator->evaluate($input, localSearchFlat($result->sessions));
+        $rebuilt = new Builder($input);
+
+        foreach ($builder->placements() as $groupId => $placement) {
+            $rebuilt->assign((string) $groupId, $placement);
+        }
+
+        $keys = fn (array $violations): array => collect($violations)->map(fn ($violation): string => $violation->rule.'|'.implode(',', $violation->groupIds))->sort()->values()->all();
+        $accepted += $result->acceptedMoves();
+
+        expect($result->initialScore)->toBe($before->softScore->total, "semilla {$seed}: el puntaje inicial")
+            ->and($result->finalScore)->toBe($after->softScore->total, "semilla {$seed}: el puntaje final")
+            ->and($result->finalScore)->toBeLessThanOrEqual($result->initialScore)
+            ->and(array_diff($keys($after->hardViolations), $keys($before->hardViolations)))->toBe([], "semilla {$seed}: choques nuevos")
+            ->and(localSearchOccupancy($builder))->toBe(localSearchOccupancy($rebuilt), "semilla {$seed}: los índices");
+    }
+
+    expect($accepted)->toBeGreaterThan(0);
+});
+
+it('rechaza mover un grupo a una hora que rompe una regla dura, aunque le convenga (HC-01, HC-02, HC-03, HC-09, HC-10, HC-11)', function (string $rule, Closure $blocking) {
+    $preferred = localSearchSlots([1, 2, 3, 4], '10:00', '11:00');
+    $base = [
+        'groups' => [localSearchGroup('g1', ['teacher_id' => 't1', 'cohorts' => ['plan:p001:1:C1']])],
+        'teachers' => [localSearchTeacher('t1', ['preferred' => $preferred]), localSearchTeacher('t2')],
+        'rooms' => [localSearchRoom('r1')],
+        'agreements' => [],
+    ];
+    $tenOClock = function (array $parts): ?array {
+        $input = localSearchInput($parts['groups'], $parts['teachers'], $parts['rooms'], ['agreements' => $parts['agreements']]);
+        $builder = localSearchBuilt($input);
+        $placement = $builder->placementOf('g1');
+        $builder->release('g1');
+
+        return $builder->placementAt('g1', $placement['option'], 3, $placement['tier']);
+    };
+    $parts = $blocking($base);
+    $input = localSearchInput($parts['groups'], $parts['teachers'], $parts['rooms'], ['agreements' => $parts['agreements']]);
+    $builder = localSearchBuilt($input);
+    $placement = $builder->placementOf('g1');
+    $builder->release('g1');
+    [$moves] = $builder->alternatives('g1');
+    $atTen = $builder->placementAt('g1', $placement['option'], 3, $placement['tier']);
+    $builder->assign('g1', $placement);
+    $result = (new LocalSearch)->run($input, $builder, INF, fn (): float => 0.0);
+
+    expect($tenOClock($base))->not->toBeNull()
+        ->and($atTen)->toBeNull()
+        ->and(array_filter($moves, fn (array $move): bool => $move['start'] === 3))->toBe([])
+        ->and(localSearchPatternOf($result->sessions['g1'], 'g1')[1])->not->toContain('10:00')
+        ->and((new ContractEvaluator)->evaluate($input, localSearchFlat($result->sessions))->hardViolations)->toBe([]);
+})->with([
+    'HC-01: el docente ya da clase el lunes a las 10' => ['HC-01', fn (array $parts): array => array_replace($parts, [
+        'teachers' => [localSearchTeacher('t1', ['preferred' => localSearchSlots([1, 2, 3, 4], '10:00', '11:00'), 'busy' => [['day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00', 'campus_code' => 'C1']]]), localSearchTeacher('t2')],
+    ])],
+    'HC-02: el único salón está ocupado el lunes a las 10' => ['HC-02', fn (array $parts): array => array_replace($parts, [
+        'rooms' => [localSearchRoom('r1', ['busy' => [['day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00']]])],
+    ])],
+    'HC-03: un grupo fijo de su cohorte va el lunes a las 10' => ['HC-03', fn (array $parts): array => array_replace($parts, [
+        'groups' => [...$parts['groups'], localSearchGroup('f1', ['teacher_id' => 't2', 'cohorts' => ['plan:p001:1:C1'], 'movable' => false,
+            'fixed_sessions' => [['day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00', 'room_id' => 'r2', 'kind' => 'teoria']]])],
+        'rooms' => [localSearchRoom('r1'), localSearchRoom('r2')],
+    ])],
+    'HC-09: el docente no está disponible el lunes a las 10' => ['HC-09', fn (array $parts): array => array_replace($parts, [
+        'teachers' => [localSearchTeacher('t1', ['preferred' => localSearchSlots([1, 2, 3, 4], '10:00', '11:00'), 'unavailable' => [['day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00']]]), localSearchTeacher('t2')],
+    ])],
+    'HC-10: el préstamo del salón ajeno no cubre el lunes a las 10' => ['HC-10', fn (array $parts): array => array_replace($parts, [
+        'rooms' => [localSearchRoom('r1', ['owner_department_id' => 'd002'])],
+        'agreements' => [
+            ...array_map(fn (int $day): array => ['room_id' => 'r1', 'to_department_id' => 'd001', 'day' => $day, 'starts_at' => '07:00', 'ends_at' => '14:00'], [2, 3, 4, 5]),
+            ['room_id' => 'r1', 'to_department_id' => 'd001', 'day' => 1, 'starts_at' => '07:00', 'ends_at' => '10:00'],
+            ['room_id' => 'r1', 'to_department_id' => 'd001', 'day' => 1, 'starts_at' => '11:00', 'ends_at' => '14:00'],
+        ],
+    ])],
+    'HC-11: el único salón está bloqueado el lunes a las 10' => ['HC-11', fn (array $parts): array => array_replace($parts, [
+        'rooms' => [localSearchRoom('r1', ['blocks' => [['day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00']]])],
+    ])],
+]);
+
+it('rechaza el intercambio que pondría al otro grupo donde su docente no puede (HC-09)', function () {
+    $cohort = ['plan:p001:1:C1'];
+    $input = localSearchInput(
+        [localSearchGroup('x', ['teacher_id' => 'tx', 'cohorts' => $cohort]), localSearchGroup('y', ['teacher_id' => 'ty', 'cohorts' => $cohort])],
+        [
+            localSearchTeacher('tx', ['preferred' => localSearchSlots([1, 2, 3, 4], '07:00', '08:00')]),
+            localSearchTeacher('ty', ['preferred' => localSearchSlots([1, 2, 3, 4], '07:00', '09:00'),
+                'unavailable' => [...localSearchSlots([1, 2, 3, 4, 5], '08:00', '09:00'), ...localSearchSlots([1, 2, 3, 4, 5], '10:00', '14:00')]]),
+        ],
+        [localSearchRoom('r1'), localSearchRoom('r2')],
+    );
+    $built = (new PhpHeuristicEngine(search: null))->solve($input);
+    $searched = (new PhpHeuristicEngine)->solve($input);
+
+    expect(localSearchPatternOf($built->sessions, 'y'))->toBe([[1, 2, 3, 4], ['07:00']])
+        ->and(localSearchPatternOf($searched->sessions, 'y'))->toBe([[1, 2, 3, 4], ['07:00']])
+        ->and(localSearchPatternOf($searched->sessions, 'x')[1])->not->toContain('07:00')
+        ->and($searched->softScore->total)->toBe($built->softScore->total)
+        ->and($searched->hardViolations)->toBe([]);
+});
+
+it('una excepción lanzada desde el avance durante la búsqueda sale de solve(): así se cancela una corrida', function () {
+    expect(fn () => (new PhpHeuristicEngine)->solve(localSearchSwapInstance(), function (int $percent): void {
+        if ($percent >= 60) {
+            throw new RuntimeException('Corrida cancelada.');
+        }
+    }))->toThrow(RuntimeException::class, 'Corrida cancelada.');
+});
+
+it('mira el reloj en cada corrimiento del docente, para no pasarse del plazo dentro de una iteración', function () {
+    $input = localSearchInput(
+        [localSearchGroup('g1', ['teacher_id' => 't1']), localSearchGroup('g2', ['teacher_id' => 't1']), localSearchGroup('g3', ['teacher_id' => 't1'])],
+        [localSearchTeacher('t1')],
+        [localSearchRoom('r1')],
+    );
+    $reads = 0;
+    $clock = function () use (&$reads): float {
+        $reads++;
+
+        return 0.0;
+    };
+
+    $result = (new LocalSearch)->run($input, localSearchBuilt($input), 1.0, $clock);
+
+    expect($reads)->toBeGreaterThanOrEqual(1 + $result->iterations + 15);
+});
+
+it('con reloj real y un límite corto, lo que tarda no pasa del límite aunque la búsqueda no termine', function () {
+    $input = localSearchInput([], [], [], [...localSearchRandomData(7, 150), 'time_limit_seconds' => 1]);
+    $started = hrtime(true);
+    $output = (new PhpHeuristicEngine(search: new LocalSearch(maxIdleIterations: PHP_INT_MAX)))->solve($input);
+    $elapsed = (hrtime(true) - $started) / 1e9;
+
+    expect($elapsed)->toBeLessThanOrEqual(1.0)
+        ->and($output->metrics->elapsedSeconds)->toBeLessThanOrEqual(1.0)
+        ->and($output->log)->toContain('La búsqueda local paró por el tiempo límite; se devuelve lo mejor que llevaba, validado.');
 });

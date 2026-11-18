@@ -27,16 +27,19 @@ use Closure;
  * quedan se pasa igual con o sin sesiones. Sus grupos se colocan, la violación queda en `hard_violations` como un
  * problema de la entrada y la corrida sale `partial` (PS-08, supuesto por confirmar).
  *
- * Sale `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Reporta el avance con el puntaje que lleva:
- * hasta 50 al construir, de 51 a 59 al validar lo construido, de 60 a 90 al buscar, de 91 a 99 en cada pasada de la
- * validación final y 100 al terminar. Respeta `time_limit_seconds`: construye hasta el límite menos lo que guarda para
- * validar (0.25 s más 0.2 ms por grupo de la entrada, hasta la mitad del límite), igual que sin búsqueda, para que la
- * búsqueda nunca le quite tiempo a la construcción, y valida. Solo si la construcción terminó y todavía no llega esa
- * reserva, busca hasta ella y valida otra vez con lo que queda; si no, lo dice en el `log`. Lo que lleva al vencer se
- * valida y se devuelve. En las métricas, `iterations` son las iteraciones de la búsqueda (los grupos revisados) e
- * `intermediate_solutions` las soluciones que encontró: la construida más una por movimiento aceptado. Sin búsqueda
- * (`search: null`, o si no quedó tiempo), las de la construcción: candidatos revisados y validaciones. El `log` trae
- * además el puntaje inicial y final, los movimientos por tipo y por qué paró.
+ * Sale `feasible` si todo cupo sin violaciones, `partial` si algo quedó. Reporta el avance con el puntaje que lleva,
+ * sin bajar nunca (al buscar, en cada iteración): hasta 50 al construir, de 51 a 59 al validar lo construido, de 60 a
+ * 90 al buscar, de 91 a 99 en cada pasada de la validación final y 100 al terminar. Respeta `time_limit_seconds`:
+ * construye hasta el límite menos lo que guarda para validar (0.25 s más 0.2 ms por grupo de la entrada, hasta la mitad
+ * del límite), igual que sin búsqueda, para que la búsqueda nunca le quite tiempo a la construcción, y valida. Solo si
+ * la construcción terminó y todavía no llega la reserva de la búsqueda (esa misma, o dos pasadas de la validación que
+ * acaba de medir si son más), busca hasta ella y valida otra vez; esa validación solo empieza si una pasada cabe en lo
+ * que queda. Si algo no cabe, se devuelve lo construido, validado, y lo dice en el `log`. Lo que lleva al vencer se
+ * valida y se devuelve. El puntaje que reporta mientras busca es el de LocalScore, antes de la validación final: si esa
+ * validación revierte, el puntaje del 100 es el de antes de buscar. En las métricas, `iterations` son las iteraciones
+ * de la búsqueda (los grupos revisados) e `intermediate_solutions` las soluciones que encontró: la construida más una
+ * por movimiento aceptado. Sin búsqueda (`search: null`, o si no quedó tiempo), las de la construcción: candidatos
+ * revisados y validaciones. El `log` trae además el puntaje inicial y final, los movimientos por tipo y por qué paró.
  *
  * Sin estado entre corridas (Octane): todo vive en solve().
  */
@@ -90,7 +93,7 @@ final class PhpHeuristicEngine implements SolverEngine
         $end = $started + $input->timeLimitSeconds;
         $reported = -1;
         $scaled = function (int $percent, ?int $score) use ($progress, &$reported): void {
-            if ($progress !== null && $percent > $reported) {
+            if ($progress !== null && $percent >= $reported) {
                 $progress($percent, $score);
                 $reported = $percent;
             }
@@ -99,14 +102,16 @@ final class PhpHeuristicEngine implements SolverEngine
         $builder = new Builder($input, $this->order);
         $build = $builder->run($end - $reserve, $clock,
             $progress === null ? null : fn (int $percent) => $scaled(intdiv($percent * ($this->search === null ? 9 : 5), 10), null));
+        $validating = $clock();
         [$sessions, $removed, $evaluation, $evaluations] = (new FinalValidation)->clean($input, $build->sessions, $build->placementOrder,
             $clock, $end - $reserve / 2, $progress === null ? null : fn (int $percent, ?int $score) => $scaled($this->search === null ? $percent : min(59, $percent - 40), $score));
+        $pass = ($clock() - $validating) / max(1, $evaluations);
         $search = null;
-        $skipped = $this->search !== null && ($build->timedOut || $clock() >= $end - $reserve);
+        $skipped = $this->search !== null && ($build->timedOut || $clock() >= $end - max($reserve, 2 * $pass));
 
         if ($this->search !== null && ! $skipped) {
             [$sessions, $evaluation, $evaluations, $search] = $this->improve($input, $builder, $build, $sessions, $removed, $evaluation, $evaluations,
-                $clock, $end, $reserve, $progress === null ? null : $scaled);
+                $clock, $end, max($reserve, 2 * $pass), $pass, $progress === null ? null : $scaled);
         }
 
         $unscheduled = $build->unscheduled + $removed;
@@ -121,18 +126,18 @@ final class PhpHeuristicEngine implements SolverEngine
 
     /**
      * La búsqueda local sobre lo construido y validado (hasta la reserva para validar), y la validación final de lo que
-     * propone. Si esa validación
-     * quitara un grupo o diera un puntaje peor (no debería: los movimientos solo entran si caben en los índices y bajan el
-     * puntaje), se queda lo validado antes de buscar.
+     * propone. Esa validación solo empieza si su primera pasada cabe en lo que queda del límite (`pass`: lo que tardó una
+     * pasada sobre lo construido); si no, o si quitara un grupo o diera un puntaje peor (no debería: los movimientos solo
+     * entran si caben en los índices y bajan el puntaje), se queda lo validado antes de buscar.
      *
      * @param  array<string, list<ProposedSession>>  $sessions
      * @param  array<string, list<string>>  $removed
      * @param  Closure(): float  $clock
      * @param  (Closure(int, ?int): void)|null  $progress
-     * @return array{array<string, list<ProposedSession>>, ContractEvaluation, int, array{result: SearchResult, initial: int, reverted: bool, detours: array{int, int}}}
+     * @return array{array<string, list<ProposedSession>>, ContractEvaluation, int, array{result: SearchResult, initial: int, reverted: bool, late: bool, detours: array{int, int}}}
      */
     private function improve(SolverInput $input, Builder $builder, BuildResult $build, array $sessions, array $removed, ContractEvaluation $evaluation,
-        int $evaluations, Closure $clock, float $end, float $reserve, ?Closure $progress): array
+        int $evaluations, Closure $clock, float $end, float $reserve, float $pass, ?Closure $progress): array
     {
         foreach (array_keys($removed) as $groupId) {
             $builder->remove((string) $groupId);
@@ -140,18 +145,23 @@ final class PhpHeuristicEngine implements SolverEngine
 
         $result = $this->search->run($input, $builder, $end - $reserve, $clock,
             $progress === null ? null : fn (int $percent, int $score) => $progress(60 + intdiv($percent * 30, 100), $score));
-        [$searched, $lost, $after, $more] = (new FinalValidation)->clean($input, $result->sessions, $build->placementOrder, $clock, $end - $reserve / 2, $progress);
-        $reverted = $lost !== [] || $after->softScore->total > $evaluation->softScore->total;
-        $search = ['result' => $result, 'initial' => $evaluation->softScore->total, 'reverted' => $reverted, 'detours' => $builder->detours()];
+        $search = ['result' => $result, 'initial' => $evaluation->softScore->total, 'reverted' => true, 'late' => $clock() + $pass > $end, 'detours' => $builder->detours()];
 
-        return $reverted ? [$sessions, $evaluation, $evaluations + $more, $search] : [$searched, $after, $evaluations + $more, $search];
+        if ($search['late']) {
+            return [$sessions, $evaluation, $evaluations, $search];
+        }
+
+        [$searched, $lost, $after, $more] = (new FinalValidation)->clean($input, $result->sessions, $build->placementOrder, $clock, $end - $pass, $progress);
+        $search['reverted'] = $lost !== [] || $after->softScore->total > $evaluation->softScore->total;
+
+        return $search['reverted'] ? [$sessions, $evaluation, $evaluations + $more, $search] : [$searched, $after, $evaluations + $more, $search];
     }
 
     /**
      * @param  array<string, list<ProposedSession>>  $sessions
      * @param  array<string, list<string>>  $unscheduled
      * @param  list<HardViolation>  $violations
-     * @param  array{result: SearchResult, initial: int, reverted: bool, detours: array{int, int}}|null  $search
+     * @param  array{result: SearchResult, initial: int, reverted: bool, late: bool, detours: array{int, int}}|null  $search
      * @return list<string>
      */
     private function log(SolverInput $input, BuildResult $build, array $sessions, array $unscheduled, array $violations, int $evaluations, ?array $search, int $score, bool $skipped): array
@@ -198,8 +208,10 @@ final class PhpHeuristicEngine implements SolverEngine
                 $result->accepted['move'], $result->accepted['swap'], $result->accepted['room'], $result->accepted['shift'],
                 $score < $search['initial'] ? "El puntaje blando bajó de {$search['initial']} a {$score}." : "El puntaje blando se quedó en {$score}.");
             $log[] = match (true) {
+                $search['late'] => 'No quedó tiempo para validar lo que propuso la búsqueda local; se devuelve lo construido, validado.',
                 $search['reverted'] => 'La validación final encontró un problema en lo que propuso la búsqueda local; se devuelve lo construido, validado.',
                 $result->timedOut => 'La búsqueda local paró por el tiempo límite; se devuelve lo mejor que llevaba, validado.',
+                $result->iterations === 0 => 'La búsqueda local no tenía grupos colocados que revisar.',
                 default => "La búsqueda local paró porque {$result->idleLimit} ".($result->idleLimit === 1 ? 'iteración seguida no mejoró' : 'iteraciones seguidas no mejoraron').' el puntaje.',
             };
         }
