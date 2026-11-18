@@ -4,9 +4,9 @@ solver.md, «Tamaño de la instancia real»).
 Las dos parten de la misma primera vuelta: salones en dos fases y cada grupo hasta el primer nivel del patrón que cabe,
 con la asignación relajada (a lo más una opción por grupo) y el objetivo de programar a la mayor cantidad de grupos.
 
-- `by_tiers`: los grupos que no quedaron, y los que comparten docente o cohorte con ellos, ganan un nivel del patrón
-  (PS-04) y se resuelve todo otra vez, con la solución anterior como pista (`add_hint`), hasta que quedan todos o ya
-  nadie puede ganar niveles.
+- `by_tiers`: los grupos que no quedaron ganan un nivel del patrón (PS-04) y se resuelve todo otra vez, con la
+  solución anterior como pista (`add_hint`), hasta que quedan todos. Si ninguno de ellos puede ganar más niveles, los
+  ganan los que comparten docente o cohorte con ellos; si tampoco, se detiene.
 - `lns`: búsqueda por vecindarios. Para cada grupo que no quedó, solo él y los que comparten docente o cohorte con él
   se mueven, con todos sus niveles; los demás grupos programados entran como fijos con sus sesiones. El modelo de cada
   vuelta es chico y la solución nunca empeora: la pista es la de antes y solo se acepta si programa más grupos.
@@ -62,25 +62,27 @@ class Search:
         return [session for sessions in self.sessions.values() for session in sessions]
 
 
-def by_tiers(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0) -> Search:
+def by_tiers(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, round_seconds: float = 15) -> Search:
     started = time.perf_counter()
     deadline = started + time_limit
     search = Search()
     extra: dict[str, int] = {}
 
     while time.perf_counter() < deadline:
-        variables, solved = _place_most(data, DomainOptions(extra_tiers=dict(extra)), search, deadline, workers, seed)
+        round_deadline = min(deadline, time.perf_counter() + round_seconds)
+        options = DomainOptions(extra_tiers=dict(extra))
+        variables, solved = _place_most(data, options, search, round_deadline, workers, seed)
         if solved is None:
             break
         _keep(search, solved, variables, data, replace=True)
         if not search.unplaced:
             search.first_feasible_seconds = time.perf_counter() - started
             break
-        grow = [
-            group_id
-            for group_id in _with_neighbours(data, search.unplaced)
-            if group_id in variables.groups and variables.groups[group_id].truncated
-        ]
+        grow = [group_id for group_id in search.unplaced if variables.groups[group_id].truncated]
+        if not grow:
+            grow = [
+                group_id for group_id in _with_neighbours(data, search.unplaced) if variables.groups[group_id].truncated
+            ]
         if not grow:
             break
         for group_id in grow:
@@ -89,7 +91,7 @@ def by_tiers(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0
     return search
 
 
-def lns(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, step_seconds: float = 5) -> Search:
+def lns(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, step_seconds: float = 3) -> Search:
     started = time.perf_counter()
     deadline = started + time_limit
     search = Search()
@@ -105,7 +107,9 @@ def lns(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, ste
         sub = ModelData.of(_sub_input(data.source, search, set(neighbourhood)))
         before = sum(group in search.sessions for group in neighbourhood)
         step_deadline = min(deadline, time.perf_counter() + step_seconds)
-        variables, solved = _place_most(sub, DomainOptions(all_tiers=True), search, step_deadline, workers, seed)
+        # El grupo que no quedó, con todos sus niveles; sus vecinos, con uno más del que necesitan.
+        options = DomainOptions(extra_tiers={target: 99, **dict.fromkeys(neighbourhood[1:], 1)})
+        variables, solved = _place_most(sub, options, search, step_deadline, workers, seed)
         if solved is None:
             continue
         placed = sum(chosen_option(solved, domain) is not None for domain in variables.groups.values())
@@ -160,7 +164,7 @@ def _place_most(
 
 
 def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data: ModelData, replace: bool) -> None:
-    """Guarda las sesiones de los grupos movibles del modelo resuelto (todos con `replace`, o solo los de un vecindario)."""
+    """Guarda las sesiones de los grupos del modelo resuelto: todos con `replace`, o solo los del vecindario."""
     sessions: dict[str, list[ProposedSession]] = defaultdict(list)
     for session in sessions_of(solver, variables, data):
         sessions[session.group_id].append(session)
