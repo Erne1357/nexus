@@ -43,7 +43,7 @@ function diffPayload(array $groups, int $version = 1): array
  * @param  array<string, mixed>  $overrides
  * @return array<string, mixed>
  */
-function diffGroup(string $id, array $overrides = []): array
+function snapshotDiffGroup(string $id, array $overrides = []): array
 {
     return array_replace([
         'id' => $id,
@@ -111,10 +111,10 @@ function diffOf(array $before, array $after): array
 }
 
 it('sin cambios, el diff está vacío (y lo que no se compara, como el tipo de sesión o la justificación, no cuenta)', function () {
-    $before = [diffGroup('g1'), diffGroup('g2', ['code' => 'B', 'teacher' => null, 'justification' => 'Docente en contratación.'])];
+    $before = [snapshotDiffGroup('g1'), snapshotDiffGroup('g2', ['code' => 'B', 'teacher' => null, 'justification' => 'Docente en contratación.'])];
     $after = [
-        diffGroup('g1', ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom('A-101'), 'practica')]]),
-        diffGroup('g2', ['code' => 'B', 'teacher' => null, 'justification' => 'Otro motivo.']),
+        snapshotDiffGroup('g1', ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom('A-101'), 'practica')]]),
+        snapshotDiffGroup('g2', ['code' => 'B', 'teacher' => null, 'justification' => 'Otro motivo.']),
     ];
 
     $diff = diffOf($before, $after);
@@ -127,7 +127,7 @@ it('sin cambios, el diff está vacío (y lo que no se compara, como el tipo de s
 });
 
 it('un grupo nuevo entra en added con las etiquetas para mostrarlo sin leer otra tabla', function () {
-    $diff = diffOf([], [diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IND', 5, false, null)]])]);
+    $diff = diffOf([], [snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IND', 5, false, null)]])]);
 
     expect($diff['groups']['added'])->toBe([[
         'id' => 'g1',
@@ -146,7 +146,7 @@ it('un grupo nuevo entra en added con las etiquetas para mostrarlo sin leer otra
 });
 
 it('un grupo que ya no está entra en cancelled, con lo que tenía en la versión anterior', function () {
-    $diff = diffOf([diffGroup('g1'), diffGroup('g2', ['code' => 'B'])], [diffGroup('g1')]);
+    $diff = diffOf([snapshotDiffGroup('g1'), snapshotDiffGroup('g2', ['code' => 'B'])], [snapshotDiffGroup('g1')]);
 
     expect($diff['groups']['cancelled'])->toHaveCount(1)
         ->and($diff['groups']['cancelled'][0])->toMatchArray(['id' => 'g2', 'code' => 'B', 'teacher' => ['id' => 'tea-ortiz', 'name' => 'Ortiz']])
@@ -156,7 +156,7 @@ it('un grupo que ya no está entra en cancelled, con lo que tenía en la versió
 });
 
 it('detecta cada clase de cambio de un grupo que sigue, con su antes y su después', function (array $after, array $changes) {
-    $diff = diffOf([diffGroup('g1')], [diffGroup('g1', $after)]);
+    $diff = diffOf([snapshotDiffGroup('g1')], [snapshotDiffGroup('g1', $after)]);
 
     expect($diff['groups']['changed'])->toHaveCount(1)
         ->and($diff['groups']['changed'][0]['group']['id'])->toBe('g1')
@@ -198,12 +198,12 @@ it('detecta cada clase de cambio de un grupo que sigue, con su antes y su despu�
 it('los lugares de una carrera cuentan una vez aunque se repitan en cada retícula', function () {
     $twoPlans = [diffPlacement('ISC', 30), diffPlacement('ISC', 30, false, 'P2')];
 
-    expect(SnapshotDiff::isEmpty(diffOf([diffGroup('g1')], [diffGroup('g1', ['placements' => $twoPlans])])))->toBeTrue();
+    expect(SnapshotDiff::isEmpty(diffOf([snapshotDiffGroup('g1')], [snapshotDiffGroup('g1', ['placements' => $twoPlans])])))->toBeTrue();
 });
 
 it('mover una sesión sin cambiar de salón es solo horario; cambiar las dos cosas da los dos cambios', function () {
-    $moved = diffOf([diffGroup('g1')], [diffGroup('g1', ['sessions' => [diffSession(3, '07:00', '09:00', diffRoom('A-101'))]])]);
-    $both = diffOf([diffGroup('g1')], [diffGroup('g1', ['sessions' => [diffSession(3, '07:00', '09:00', diffRoom('A-204'))]])]);
+    $moved = diffOf([snapshotDiffGroup('g1')], [snapshotDiffGroup('g1', ['sessions' => [diffSession(3, '07:00', '09:00', diffRoom('A-101'))]])]);
+    $both = diffOf([snapshotDiffGroup('g1')], [snapshotDiffGroup('g1', ['sessions' => [diffSession(3, '07:00', '09:00', diffRoom('A-204'))]])]);
 
     expect(array_keys($moved['groups']['changed'][0]['changes']))->toBe(['schedule'])
         ->and(array_keys($both['groups']['changed'][0]['changes']))->toBe(['schedule', 'room'])
@@ -213,25 +213,25 @@ it('mover una sesión sin cambiar de salón es solo horario; cambiar las dos cos
 it('dos sesiones que intercambian salón son un cambio de salón', function () {
     $sessions = fn (string $monday, string $wednesday): array => ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom($monday)), diffSession(3, '07:00', '09:00', diffRoom($wednesday))]];
 
-    $diff = diffOf([diffGroup('g1', $sessions('A-101', 'A-102'))], [diffGroup('g1', $sessions('A-102', 'A-101'))]);
+    $diff = diffOf([snapshotDiffGroup('g1', $sessions('A-101', 'A-102'))], [snapshotDiffGroup('g1', $sessions('A-102', 'A-101'))]);
 
     expect(array_keys($diff['groups']['changed'][0]['changes']))->toBe(['room']);
 });
 
 it('RA-05: cada docente afectado, con exactamente lo que cambió para él', function () {
     $before = [
-        diffGroup('g1'),
-        diffGroup('g2', ['code' => 'B', 'teacher' => diffTeacher('delgado')]),
-        diffGroup('g3', ['code' => 'C', 'teacher' => diffTeacher('ruiz')]),
-        diffGroup('g4', ['code' => 'D', 'teacher' => diffTeacher('soto')]),
-        diffGroup('g6', ['code' => 'F', 'teacher' => diffTeacher('lara')]),
+        snapshotDiffGroup('g1'),
+        snapshotDiffGroup('g2', ['code' => 'B', 'teacher' => diffTeacher('delgado')]),
+        snapshotDiffGroup('g3', ['code' => 'C', 'teacher' => diffTeacher('ruiz')]),
+        snapshotDiffGroup('g4', ['code' => 'D', 'teacher' => diffTeacher('soto')]),
+        snapshotDiffGroup('g6', ['code' => 'F', 'teacher' => diffTeacher('lara')]),
     ];
     $after = [
-        diffGroup('g1', ['teacher' => diffTeacher('ruiz'), 'capacity' => 35]),
-        diffGroup('g3', ['code' => 'C', 'teacher' => diffTeacher('ruiz'), 'sessions' => [diffSession(2, '09:00', '11:00', diffRoom('A-101'))]]),
-        diffGroup('g4', ['code' => 'D', 'teacher' => diffTeacher('soto')]),
-        diffGroup('g5', ['code' => 'E', 'teacher' => diffTeacher('lara')]),
-        diffGroup('g6', ['code' => 'F', 'teacher' => diffTeacher('lara'), 'placements' => [diffPlacement('ISC', 20)]]),
+        snapshotDiffGroup('g1', ['teacher' => diffTeacher('ruiz'), 'capacity' => 35]),
+        snapshotDiffGroup('g3', ['code' => 'C', 'teacher' => diffTeacher('ruiz'), 'sessions' => [diffSession(2, '09:00', '11:00', diffRoom('A-101'))]]),
+        snapshotDiffGroup('g4', ['code' => 'D', 'teacher' => diffTeacher('soto')]),
+        snapshotDiffGroup('g5', ['code' => 'E', 'teacher' => diffTeacher('lara')]),
+        snapshotDiffGroup('g6', ['code' => 'F', 'teacher' => diffTeacher('lara'), 'placements' => [diffPlacement('ISC', 20)]]),
     ];
 
     $teachers = SnapshotDiff::teachers(diffOf($before, $after));
@@ -250,7 +250,7 @@ it('RA-05: cada docente afectado, con exactamente lo que cambió para él', func
 });
 
 it('RA-05: un grupo sin docente que cambia no afecta a ningún docente', function () {
-    $diff = diffOf([diffGroup('g1', ['teacher' => null])], [diffGroup('g1', ['teacher' => null, 'capacity' => 40])]);
+    $diff = diffOf([snapshotDiffGroup('g1', ['teacher' => null])], [snapshotDiffGroup('g1', ['teacher' => null, 'capacity' => 40])]);
 
     expect(SnapshotDiff::teachers($diff))->toBe([])
         ->and($diff['summary']['teachers_affected'])->toBe(0)
@@ -258,8 +258,8 @@ it('RA-05: un grupo sin docente que cambia no afecta a ningún docente', functio
 });
 
 it('RA-05: las carreras afectadas son las que tienen lugares en el grupo antes o después, también la que sale', function () {
-    $before = [diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IGE', 5, false)]]), diffGroup('g2', ['code' => 'B'])];
-    $after = [diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IND', 5, false)]]), diffGroup('g2', ['code' => 'B'])];
+    $before = [snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IGE', 5, false)]]), snapshotDiffGroup('g2', ['code' => 'B'])];
+    $after = [snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IND', 5, false)]]), snapshotDiffGroup('g2', ['code' => 'B'])];
 
     $diff = diffOf($before, $after);
     $careers = SnapshotDiff::careers($diff);
@@ -277,9 +277,9 @@ it('RA-05: las carreras afectadas son las que tienen lugares en el grupo antes o
 
 it('RA-05: otro departamento se afecta cuando cambia una sesión en su salón prestado, no cuando cambia otra sesión del grupo', function () {
     $loaned = diffRoom('LC-2', 'dep-ind');
-    $before = [diffGroup('g1', ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom('A-101')), diffSession(3, '07:00', '09:00', $loaned)]])];
-    $ownMoved = [diffGroup('g1', ['sessions' => [diffSession(2, '07:00', '09:00', diffRoom('A-101')), diffSession(3, '07:00', '09:00', $loaned)]])];
-    $loanMoved = [diffGroup('g1', ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom('A-101')), diffSession(4, '07:00', '09:00', $loaned)]])];
+    $before = [snapshotDiffGroup('g1', ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom('A-101')), diffSession(3, '07:00', '09:00', $loaned)]])];
+    $ownMoved = [snapshotDiffGroup('g1', ['sessions' => [diffSession(2, '07:00', '09:00', diffRoom('A-101')), diffSession(3, '07:00', '09:00', $loaned)]])];
+    $loanMoved = [snapshotDiffGroup('g1', ['sessions' => [diffSession(1, '07:00', '09:00', diffRoom('A-101')), diffSession(4, '07:00', '09:00', $loaned)]])];
 
     expect(SnapshotDiff::departments(diffOf($before, $ownMoved)))->toBe([])
         ->and(array_keys(SnapshotDiff::departments(diffOf($before, $loanMoved))))->toBe(['dep-ind'])
@@ -287,7 +287,7 @@ it('RA-05: otro departamento se afecta cuando cambia una sesión en su salón pr
 });
 
 it('RA-05: un grupo con salón prestado que se crea o se cancela afecta al dueño del salón', function () {
-    $group = diffGroup('g1', ['sessions' => [diffSession(3, '07:00', '09:00', diffRoom('LC-2', 'dep-ind'))]]);
+    $group = snapshotDiffGroup('g1', ['sessions' => [diffSession(3, '07:00', '09:00', diffRoom('LC-2', 'dep-ind'))]]);
 
     expect(array_keys(SnapshotDiff::departments(diffOf([], [$group]))))->toBe(['dep-ind'])
         ->and(array_keys(SnapshotDiff::departments(diffOf([$group], []))))->toBe(['dep-ind'])
@@ -295,8 +295,8 @@ it('RA-05: un grupo con salón prestado que se crea o se cancela afecta al dueñ
 });
 
 it('RA-05: tocar un grupo compartido afecta al departamento de la otra carrera; uno solo del departamento de la carga, a nadie más', function () {
-    $shared = diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IGE', 5, false)]]);
-    $own = diffGroup('g2', ['code' => 'B']);
+    $shared = snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IGE', 5, false)]]);
+    $own = snapshotDiffGroup('g2', ['code' => 'B']);
 
     $diff = diffOf([$shared, $own], [array_replace($shared, ['teacher' => diffTeacher('ruiz')]), array_replace($own, ['capacity' => 40])]);
     $departments = SnapshotDiff::departments($diff);
@@ -307,7 +307,7 @@ it('RA-05: tocar un grupo compartido afecta al departamento de la otra carrera; 
 });
 
 it('RA-05: la carrera dueña de otro departamento no hace compartido el grupo (Básicas imparte para ISC)', function () {
-    $group = diffGroup('g1', ['placements' => [diffPlacement('IND', 30)]]);
+    $group = snapshotDiffGroup('g1', ['placements' => [diffPlacement('IND', 30)]]);
 
     $diff = diffOf([$group], [array_replace($group, ['capacity' => 35])]);
 
@@ -316,7 +316,7 @@ it('RA-05: la carrera dueña de otro departamento no hace compartido el grupo (B
 });
 
 it('una carrera sin departamento conocido no afecta a otro departamento', function () {
-    $group = diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IGE', 5, false)]]);
+    $group = snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IGE', 5, false)]]);
 
     $diff = SnapshotDiff::between(diffPayload([]), diffPayload([$group], 2));
 
@@ -325,15 +325,15 @@ it('una carrera sin departamento conocido no afecta a otro departamento', functi
 });
 
 it('da las carreras de varios payloads, cada una una vez, para buscar su departamento', function () {
-    $before = diffPayload([diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('ISC', 25, false, 'P2')]])]);
-    $after = diffPayload([diffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IND', 5, false)]])]);
+    $before = diffPayload([snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('ISC', 25, false, 'P2')]])]);
+    $after = diffPayload([snapshotDiffGroup('g1', ['placements' => [diffPlacement('ISC', 25), diffPlacement('IND', 5, false)]])]);
 
     expect(SnapshotDiff::careerIds($before, $after))->toBe(['car-ISC', 'car-IND']);
 });
 
 it('el resumen cuenta grupos, docentes, carreras y otros departamentos afectados', function () {
-    $before = [diffGroup('g1'), diffGroup('g2', ['code' => 'B', 'teacher' => diffTeacher('delgado'), 'placements' => [diffPlacement('ISC', 20), diffPlacement('IND', 10, false)]])];
-    $after = [diffGroup('g1', ['capacity' => 35]), diffGroup('g3', ['code' => 'C', 'teacher' => diffTeacher('ruiz')])];
+    $before = [snapshotDiffGroup('g1'), snapshotDiffGroup('g2', ['code' => 'B', 'teacher' => diffTeacher('delgado'), 'placements' => [diffPlacement('ISC', 20), diffPlacement('IND', 10, false)]])];
+    $after = [snapshotDiffGroup('g1', ['capacity' => 35]), snapshotDiffGroup('g3', ['code' => 'C', 'teacher' => diffTeacher('ruiz')])];
 
     expect(diffOf($before, $after)['summary'])->toBe([
         'added' => 1,
