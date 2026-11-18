@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Constraints;
 
+use App\Modules\Scheduling\Rules\Cohorts;
 use App\Modules\Scheduling\Rules\TypicalStudentCombination;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\State\StateGroup;
@@ -19,6 +20,10 @@ use App\Modules\Scheduling\Validation\Violation;
  * con varias retículas activas se revisa en cada una). Si TypicalStudentCombination encuentra combinación, no hay
  * choque. Si no: reporta cada par de grupos únicos de su materia que se empalman, en los dos grupos; y si ningún par
  * lo explica, reporta en los grupos de las materias del núcleo mínimo sin combinación.
+ *
+ * También incluye cada paquete (DM-09; supuesto por confirmar): dos grupos de la misma instancia de un paquete en un
+ * campus (la cohorte `package:<id>:<n>` de Cohorts) toman los mismos alumnos de nuevo ingreso, así que no deben
+ * empalmarse, sin importar si hay otro grupo de su materia. También rige en el editor manual.
  */
 final class TypicalStudentSchedule implements Constraint
 {
@@ -29,6 +34,8 @@ final class TypicalStudentSchedule implements Constraint
 
     public function check(ScheduleState $state, ValidationScope $scope): iterable
     {
+        yield from $this->packageOverlaps($state, $scope);
+
         foreach ($this->semestersIn($state, $scope) as [$modalityId, $campusId, $studyPlanId, $semester]) {
             $bySubject = [];
 
@@ -49,6 +56,61 @@ final class TypicalStudentSchedule implements Constraint
             }
 
             yield from $this->coreViolations($state, $bySubject, $studyPlanId, $semester);
+        }
+    }
+
+    /**
+     * Los empalmes entre grupos de la misma instancia de un paquete, reportados en los dos grupos. Los grupos del
+     * alcance son el punto de partida; la pareja se reporta una vez por lado aunque los dos estén en el alcance.
+     *
+     * @return iterable<Violation>
+     */
+    private function packageOverlaps(ScheduleState $state, ValidationScope $scope): iterable
+    {
+        $active = array_filter($state->groups(), fn (StateGroup $group): bool => $group->isActive && $group->packageId !== null);
+
+        if ($active === []) {
+            return;
+        }
+
+        $cohorts = Cohorts::of($state, $active);
+        $inScope = array_flip($scope->groupIds());
+        $seen = [];
+
+        foreach ($active as $group) {
+            if (! isset($inScope[$group->id])) {
+                continue;
+            }
+
+            foreach ($active as $other) {
+                if ($other->id === $group->id || $other->campusId !== $group->campusId || ! in_array(Cohorts::packageKey($group), $cohorts[$other->id], true) || ! in_array(Cohorts::packageKey($group), $cohorts[$group->id], true)) {
+                    continue;
+                }
+
+                $pair = $group->id < $other->id ? "{$group->id}|{$other->id}" : "{$other->id}|{$group->id}";
+
+                if (isset($seen[$pair])) {
+                    continue;
+                }
+
+                $seen[$pair] = true;
+                $overlap = $this->firstOverlap($state, $group, $other);
+
+                if ($overlap === null) {
+                    continue;
+                }
+
+                foreach ([[$group, $other, $overlap[0], $overlap[1]], [$other, $group, $overlap[1], $overlap[0]]] as [$mine, $theirs, $mySession, $theirSession]) {
+                    yield Violation::hard(
+                        $this->rule(),
+                        "Paquete #{$mine->packageNumber} en {$state->campusCode($mine->campusId)}: {$state->labelOf($mine->id)} se empalma con {$state->labelOf($theirs->id)} el {$theirSession->describe()}; los alumnos del paquete no pueden llevar las dos.",
+                        'group',
+                        $mine->id,
+                        $mine->id,
+                        ['package_id' => $mine->packageId, 'package_number' => $mine->packageNumber, 'other_group_id' => $theirs->id, 'session_id' => $mySession->id, 'other_session_id' => $theirSession->id],
+                    );
+                }
+            }
         }
     }
 

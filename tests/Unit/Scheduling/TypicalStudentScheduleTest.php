@@ -130,3 +130,55 @@ it('HC-03 sigue por campus dentro de la carga de una modalidad (MS10): el grupo 
     expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $violations))->toEqualCanonicalizing(['A', 'B'])
         ->and(array_column(array_map(fn (Violation $violation): array => $violation->related, $violations), 'other_group_id'))->not->toContain('A1');
 });
+
+it('HC-03: dos grupos de la misma instancia de un paquete que se empalman dan un choque duro en cada uno, aunque la materia tenga otro grupo', function () {
+    $state = States::builder()
+        ->subject(States::subject('CAL', 'Cálculo Diferencial'))
+        ->subject(States::subject('QUI', 'Química'))
+        ->group(States::group('A', subject: 'CAL', code: 'B', package: 'PK', packageNumber: 2))
+        ->group(States::group('A-otro', subject: 'CAL', code: 'Z'))
+        ->group(States::group('B', subject: 'QUI', code: 'C', package: 'PK', packageNumber: 2))
+        ->session('A', 1, '07:00', '09:00')
+        ->session('A-otro', 3, '07:00', '09:00')
+        ->session('B', 1, '08:00', '10:00')
+        ->build();
+
+    $violations = typicalStudentViolations($state, ValidationScope::groups('A'));
+
+    expect($violations)->toHaveCount(2)
+        ->and(array_map(fn (Violation $violation): ?string => $violation->groupId, $violations))->toBe(['A', 'B'])
+        ->and($violations[0])
+        ->rule->toBe('HC-03')
+        ->message->toBe('Paquete #2 en C2: Cálculo Diferencial, grupo B se empalma con Química, grupo C el lunes de 8:00 a 10:00; los alumnos del paquete no pueden llevar las dos.')
+        ->and($violations[0]->related)->toMatchArray(['package_id' => 'PK', 'package_number' => 2, 'other_group_id' => 'B']);
+});
+
+it('HC-03: instancias distintas del paquete, otro campus o un grupo cancelado no chocan entre sí', function () {
+    $state = States::builder()
+        ->subject(States::subject('CAL', 'Cálculo Diferencial'))
+        ->subject(States::subject('QUI', 'Química'))
+        ->group(States::group('A', subject: 'CAL', package: 'PK', packageNumber: 1))
+        ->group(States::group('B', subject: 'QUI', semester: 2, package: 'PK', packageNumber: 2))
+        ->group(States::group('C', subject: 'QUI', campus: 'C1', package: 'PK', packageNumber: 1))
+        ->group(States::group('D', subject: 'QUI', active: false, package: 'PK', packageNumber: 1))
+        ->session('A', 1, '07:00', '09:00')
+        ->session('B', 1, '07:00', '09:00')
+        ->session('C', 1, '07:00', '09:00')
+        ->session('D', 1, '07:00', '09:00')
+        ->build();
+
+    expect(typicalStudentViolations($state, ValidationScope::groups('A', 'B', 'C')))->toBe([]);
+});
+
+it('HC-03: el choque de paquete se reporta una vez por lado aunque los dos grupos estén en el alcance', function () {
+    $state = States::builder()
+        ->subject(States::subject('CAL'))
+        ->subject(States::subject('QUI'))
+        ->group(States::group('A', subject: 'CAL', package: 'PK', packageNumber: 1))
+        ->group(States::group('B', subject: 'QUI', semester: 2, package: 'PK', packageNumber: 1))
+        ->session('A', 1, '07:00', '09:00')
+        ->session('B', 1, '08:00', '10:00')
+        ->build();
+
+    expect(typicalStudentViolations($state, ValidationScope::groups('A', 'B')))->toHaveCount(2);
+});
