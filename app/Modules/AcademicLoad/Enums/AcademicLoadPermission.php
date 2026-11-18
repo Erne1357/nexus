@@ -51,7 +51,7 @@ enum AcademicLoadPermission: string implements Permission
             self::LoadStartStaffing => 'Pasar la carga a asignación docente',
             self::LoadClose => 'Cerrar la carga de un departamento',
             self::LoadReopen => 'Reabrir una carga cerrada, aprobada o publicada',
-            self::LoadStartReanalysis => 'Iniciar el re-análisis de una carga publicada',
+            self::LoadStartReanalysis => 'Iniciar el re-análisis de una carga publicada, o cancelarlo mientras no haya cambios',
             self::LoadApprove => 'Dar el visto bueno a una carga cerrada',
             self::LoadExport => 'Descargar el PDF por departamento y el Excel de lo publicado',
             self::LoadPublish => 'Publicar la carga cerrada de una modalidad sin visto bueno',

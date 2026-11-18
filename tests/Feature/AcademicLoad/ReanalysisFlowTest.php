@@ -334,13 +334,13 @@ it('RA-03: con visto bueno, el re-análisis cerrado pasa por Subdirección y rec
         ->toBe(['published>reanalysis', 'reanalysis>closed', 'closed>approved', 'approved>published']);
 });
 
-it('RA-03: del re-análisis no se publica directo ni se salta el cierre', function (LoadStatus $to) {
+it('RA-03: del re-análisis no se salta el cierre ni el visto bueno', function (LoadStatus $to) {
     $s = reanalysisScenario();
     app(StartReanalysis::class)->handle($s['load'], $this->admin);
 
     expect(fn () => app(TransitionLoad::class)->handle($s['load'], $to, $this->admin, null, fn (): array => []))
         ->toThrow(ValidationException::class, "La carga está en Re-análisis: no puede pasar a {$to->label()}.");
-})->with([LoadStatus::Published, LoadStatus::Approved, LoadStatus::Adjusting, LoadStatus::Staffing]);
+})->with([LoadStatus::Approved, LoadStatus::Adjusting, LoadStatus::Staffing]);
 
 it('RA-01: cerrar desde el re-análisis corre las mismas guardas de HC-15, y un grupo sin horario ni docente lo detiene', function () {
     $s = reanalysisScenario();

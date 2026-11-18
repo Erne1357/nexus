@@ -62,6 +62,14 @@ final class AcademicLoadPolicy
         return $this->can($user, AcademicLoadPermission::LoadStartReanalysis, $load);
     }
 
+    /**
+     * Cancelar el re-análisis sin cambios (RA-10): quien lo inicia, con el mismo permiso y alcance que `startReanalysis`.
+     */
+    public function cancelReanalysis(User $user, AcademicLoad $load): bool
+    {
+        return $this->can($user, AcademicLoadPermission::LoadStartReanalysis, $load);
+    }
+
     public function approve(User $user, AcademicLoad $load): bool
     {
         return $this->can($user, AcademicLoadPermission::LoadApprove, $load);
