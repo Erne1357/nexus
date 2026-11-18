@@ -35,6 +35,13 @@ interface SolverEngine
     public function supportedVersions(): array;
 
     /**
+     * Si el motor revisa las reglas duras (HC-01 a HC-13) al proponer. Solo a esos motores la suite de fixtures les exige
+     * resultados correctos (grupos programados, infactibilidad reportada); a los demás, como el de prueba, solo la
+     * forma de la salida y que quede dentro de la rejilla de cada campus.
+     */
+    public function checksHardRules(): bool;
+
+    /**
      * Resuelve la entrada dentro de `time_limit_seconds` y devuelve la mejor salida encontrada, con un `status` honesto.
      *
      * @param  (Closure(int $percent, ?int $bestScore): void)|null  $progress  avance de 0 a 100 y mejor puntaje blando
