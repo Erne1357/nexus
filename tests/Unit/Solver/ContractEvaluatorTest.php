@@ -264,3 +264,32 @@ it('una materia con la misma clave y otras horas en otro grupo no le cambia las 
 
     expect((new ContractEvaluator)->evaluate($input, evaluatorSessions('g010', [[2, '14:00', '15:00', 'r002'], [3, '14:00', '15:00', 'r002'], [4, '14:00', '15:00', 'r002']]))->hardViolations)->toBe([]);
 });
+
+it('HC-12 usa la tolerancia de la entrada (`weekly_hours_tolerance`)', function () {
+    $tolerant = fn (int $minutes): SolverInput => evaluatorMediumInput(function (array $data) use ($minutes): array {
+        $data['weekly_hours_tolerance'] = $minutes;
+
+        return $data;
+    });
+    $threeOfFour = evaluatorSessions('g011', [[1, '07:00', '08:00', 'r005'], [2, '07:00', '08:00', 'r005'], [3, '07:00', '08:00', 'r005']]);
+
+    expect((new ContractEvaluator)->evaluate($tolerant(0), $threeOfFour)->rulesByGroup())->toBe(['g011' => ['HC-12']])
+        ->and((new ContractEvaluator)->evaluate($tolerant(60), $threeOfFour)->hardViolations)->toBe([]);
+});
+
+it('una clave de paquete sin campus (`package:<id>:<n>`) ya no da paquete', function () {
+    $input = evaluatorMediumInput(function (array $data): array {
+        $data['groups'][6]['cohorts'] = ['package:k001:1'];
+        $data['groups'][7]['cohorts'] = ['package:k001:1'];
+        unset($data['groups'][7]['teacher_id']);
+
+        return $data;
+    });
+    $sessions = [
+        ...evaluatorSessions('g007', [[2, '10:00', '11:00', 'r002'], [4, '10:00', '11:00', 'r002'], [5, '10:00', '11:00', 'r002']]),
+        ...evaluatorSessions('g008', [[2, '10:00', '11:00', 'r001'], [4, '11:00', '12:00', 'r001'], [5, '11:00', '12:00', 'r001']]),
+    ];
+
+    expect(ContractState::from($input, [])->state->group('g007')->packageId)->toBeNull()
+        ->and((new ContractEvaluator)->evaluate($input, $sessions)->hardViolations)->toBe([]);
+});
