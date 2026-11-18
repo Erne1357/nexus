@@ -37,7 +37,8 @@
              entre pruebas: con los 128 MB de la imagen dev no llega a los browser tests. Con la
              cobertura de CI, desde la fase 2 pasaba de 512 MB al escribir el reporte, y cerca del
              límite las pruebas que reservan mucha memoria se volvían cientos de veces más lentas. -->
-        <ini name="memory_limit" value="1G"/>
+        <!-- En la fase 6 el shard 1 de CI, con pcov, se quedó sin memoria con 1 GB en tests/Arch: la suite ya no cabe. -->
+        <ini name="memory_limit" value="2G"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_LOCALE" value="es"/>
         <env name="APP_FAKER_LOCALE" value="es_MX"/>

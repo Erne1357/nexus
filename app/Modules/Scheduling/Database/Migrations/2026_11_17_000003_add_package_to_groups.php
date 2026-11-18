@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * El paquete del que nace un grupo (tarea 5.6b; docs/dominio/modelo-de-datos.md, `groups`): `package_id` es el paquete de
  * la propuesta y `package_number` cuál de los que abrió el campus (1..cuenta), ambos nulos en un grupo suelto (CHECK). La
- * cohorte del motor de horarios es `package:<package_id>:<package_number>`: los grupos con el mismo par no se empalman
+ * cohorte del motor de horarios es `package:<package_id>:<campus_code>:<package_number>`: los grupos con el mismo par no se empalman
  * (fase 6). Aquí solo se guarda.
  */
 return new class extends Migration

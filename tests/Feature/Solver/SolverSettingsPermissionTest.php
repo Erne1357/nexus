@@ -7,7 +7,7 @@ use App\Modules\Core\Models\User;
 use Livewire\Livewire;
 
 /*
-| Parámetros del motor (decisión del usuario, 18 de noviembre de 2026): Subdirección cambia los pesos SC-01 a SC-09 para
+| Parámetros del motor (decisión del usuario, 17 de noviembre de 2026): Subdirección cambia los pesos SC-01 a SC-09 para
 | todo el Tec con `solver.setting.update`, sin tocar los parámetros de otros módulos.
 */
 
