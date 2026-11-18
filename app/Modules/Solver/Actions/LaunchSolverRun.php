@@ -147,7 +147,7 @@ final class LaunchSolverRun
     private function enqueue(SolverRun $run, int $timeLimitSeconds): void
     {
         try {
-            Bus::dispatch((new RunSolver($run->getKey(), $timeLimitSeconds))->afterCommit());
+            Bus::dispatch(new RunSolver($run->getKey(), $timeLimitSeconds));
         } catch (Throwable $exception) {
             SolverRun::query()
                 ->whereKey($run->getKey())
