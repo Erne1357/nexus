@@ -137,10 +137,16 @@ Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte que
 
 ## Fixtures compartidos y pruebas
 
-- `tests/Fixtures/solver/v1/` contiene instancias del contrato con su resultado esperado: `tiny` (3 grupos, solución única conocida a mano), `small` (una carrera, un semestre), `medium` (laboratorios, tronco común entre dos carreras, un préstamo de salón), `infeasible` (docente sin bloques suficientes), `campus-ii` (tamaño real estimado, generado desde el seeder).
-- Una suite parametrizada en PHP corre cualquier `SolverEngine` sobre todos los fixtures y verifica: cero `hard_violations` donde hay solución, `unscheduled` correcto donde no, puntaje blando dentro de un rango y respeto del tiempo límite.
+- `tests/Fixtures/solver/v1/<nombre>/` trae `input.json` (instancia del contrato, válida para `SolverInput::fromArray`) y `expected.json`, que describe lo que logra un motor correcto y no una salida exacta: `feasible` (`true`, `false` o `null` si no se sabe), `must_schedule` (grupos que deben quedar completos, con sus horas semanales), `may_leave_unscheduled`, `min_unscheduled` (en las infactibles), `max_soft_score` (`null` hasta tener línea base) y `notes`.
+  - `tiny`: 3 grupos, 2 campus, un laboratorio ajeno con préstamo; `output.json` es una solución de referencia.
+  - `small`: una carrera, un semestre, un campus; 6 grupos de una cohorte, 2 docentes, 3 salones (uno de laboratorio). Factible.
+  - `medium`: 12 grupos movibles y uno fijo, 2 campus, 2 carreras con tronco común (claves de cohorte compartidas), laboratorio con préstamo aceptado, paquete (`package:<id>:1`), docente en dos campus con traslado y salón ajeno sin préstamo. Factible.
+  - `infeasible`: un docente cuyos bloques `unavailable` dejan menos horas libres que las de sus grupos (HC-09); al menos dos de sus tres grupos deben salir en `unscheduled`.
+  - `department-multicampus`: la carga de Ciencias Económico-Administrativas (1 139 grupos movibles, 2 708 con los fijos, 657 docentes, 426 salones, C1 y C2) en PRES, Ene-Jun 2027, generada de la demo masiva y anonimizada (fichas `g001`, `t001`, `r001`…). No lleva resultado esperado; se mide en el benchmark. Grupo `solver-slow` en la suite.
+- Para regenerar una instancia real: `docker compose exec -e DB_DATABASE=<base demo> app php artisan solver:export-fixture <periodo> <modalidad> <clave de departamento> <nombre> [--career=<clave>]` (por ejemplo `20271 PRES CEA department-multicampus`). Escribe solo `input.json`; `expected.json` se escribe a mano.
+- `tests/Feature/Solver/SolverFixturesTest.php` corre cada motor registrado sobre cada fixture. A todos les exige una salida válida del contrato, el `run_id` de la entrada, el tiempo límite y sesiones de grupos de la entrada, dentro de la rejilla de su campus, alineadas a bloques y en un salón de ese campus. Solo a los motores que declaran `checksHardRules()` les exige además lo de `expected.json`: cero `hard_violations` y todo programado donde hay solución, `unscheduled` correcto donde no, y las horas semanales de `must_schedule` (HC-12). El motor de prueba (`FixedEngine`) corre solo las revisiones estructurales.
 - El servicio Python lee los mismos archivos y corre la misma verificación con pytest.
-- Los fixtures grandes corren fuera del CI de PR (job nocturno o manual); `tiny`, `small` y `medium` corren en cada PR.
+- Los fixtures grandes corren fuera del CI de PR (job nocturno o manual; el CI de PR los salta con `--exclude-group=solver-slow`); `tiny`, `small`, `medium` e `infeasible` corren en cada PR.
 - El comando de benchmark reporta tiempo, violaciones y puntaje por motor y fixture; los resultados se registran aquí al cierre de las fases 6 y 7.
 
 ### Línea base (se llena al cerrar cada fase)
