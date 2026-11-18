@@ -18,8 +18,9 @@ use App\Modules\Core\Queries\RecipientsQuery;
  * Avisa a la campana según la transición de la carga (tarea 4.2). Los destinatarios son quienes tienen el permiso en la
  * modalidad y el departamento de la carga (el admin no recibe, no es titular):
  *
- * - a ajustes desde cerrada, aprobada o publicada (reabierta o regresada con comentarios): los titulares de
- *   LoadStartStaffing (el jefe), con el motivo, que es el comentario de esa transición (LoadReopened);
+ * - a ajustes desde cerrada, aprobada o publicada (reabierta o regresada con comentarios), o a re-análisis desde cerrada o
+ *   aprobada (la devolución de una carga re-analizada, RA-08): los titulares de LoadStartStaffing (el jefe), con el
+ *   motivo, que es el comentario de esa transición (LoadReopened);
  * - a cerrada en una modalidad que exige el visto bueno: los titulares de LoadApprove (LoadAwaitingApproval);
  * - a aprobada: los titulares de LoadStartStaffing (LoadApproved).
  *
@@ -38,7 +39,8 @@ final class NotifyLoadClosing
         $load->loadMissing(['department', 'modality']);
 
         [$permission, $notification] = match (true) {
-            $to === LoadStatus::Adjusting && in_array($from, self::REOPENED_FROM, true) => [AcademicLoadPermission::LoadStartStaffing, new LoadReopened($load, $load->department, $reason)],
+            ($to === LoadStatus::Adjusting && in_array($from, self::REOPENED_FROM, true))
+                || ($to === LoadStatus::Reanalysis && in_array($from, [LoadStatus::Closed, LoadStatus::Approved], true)) => [AcademicLoadPermission::LoadStartStaffing, new LoadReopened($load, $load->department, $reason)],
             $to === LoadStatus::Closed && $load->modality->profile->requiresSubdireccionApproval => [AcademicLoadPermission::LoadApprove, new LoadAwaitingApproval($load, $load->department)],
             $to === LoadStatus::Approved => [AcademicLoadPermission::LoadStartStaffing, new LoadApproved($load, $load->department)],
             default => [null, null],

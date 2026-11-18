@@ -1,0 +1,11 @@
+{
+  "status": 422,
+  "body": {
+    "detail": [
+      {
+        "path": "campuses[0].day_end",
+        "message": "la jornada de 07:00 a 21:30 no se divide en bloques de 60 minutos"
+      }
+    ]
+  }
+}

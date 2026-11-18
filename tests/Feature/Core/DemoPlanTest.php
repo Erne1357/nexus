@@ -3,6 +3,7 @@
 use App\Modules\AcademicLoad\AcademicLoadServiceProvider;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
 use App\Modules\Core\Demo\DemoPlan;
@@ -12,9 +13,11 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
+use App\Modules\Scheduling\Database\Seeders\ReanalysisChangesDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\SchedulingServiceProvider;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\ReanalysisRepublicationDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\StaffingServiceProvider;
@@ -121,11 +124,14 @@ it('los pasos reales que siembran la carga le pasan a su seeder cada modalidad d
         });
     }
 
-    // El horario limpio no recibe modalidad: recorre las de los grupos del periodo.
-    app()->instance(CleanScheduleDemoSeeder::class, new class extends Seeder
-    {
-        public function run(): void {}
-    });
+    // El horario limpio no recibe modalidad: recorre las de los grupos del periodo. Los casos del re-análisis (#614) corren
+    // sobre cargas ya publicadas, que esta prueba no siembra; aquí solo importa a qué seeders se les pasa la modalidad.
+    foreach ([CleanScheduleDemoSeeder::class, ReanalysisDemoSeeder::class, ReanalysisChangesDemoSeeder::class, ReanalysisRepublicationDemoSeeder::class] as $seeder) {
+        app()->instance($seeder, new class extends Seeder
+        {
+            public function run(): void {}
+        });
+    }
 
     foreach ([AcademicLoadServiceProvider::class, SchedulingServiceProvider::class, StaffingServiceProvider::class] as $provider) {
         foreach (app()->getProvider($provider)->demoSteps() as $step) {

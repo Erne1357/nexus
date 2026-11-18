@@ -17,11 +17,7 @@
                     aria-expanded="{{ $openVersion === $version['version'] ? 'true' : 'false' }}" aria-controls="{{ $titleId }}-detail"
                     class="relative grid grid-cols-[1.75rem_1fr] @2xl:grid-cols-1 gap-x-3 gap-y-1 @2xl:gap-y-1.5 items-center @2xl:justify-items-start text-left cursor-pointer rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary group"
                     data-testid="version-{{ $version['version'] }}">
-                    <span @class([
-                        'size-7 rounded-full grid place-items-center font-mono text-xs font-semibold border-2 border-success',
-                        'bg-success text-success-content' => $isCurrent,
-                        'bg-base-100 text-success' => ! $isCurrent,
-                    ])>v{{ $version['version'] }}</span>
+                    <x-academic-load::version-dot :version="$version['version']" :current="$isCurrent" />
                     <span class="font-semibold group-aria-expanded:underline underline-offset-3">{{ $day($version['publishedAt']).($sameDay[$day($version['publishedAt'])] > 1 ? ', '.$clock($version['publishedAt']) : '').($isCurrent ? ' · vigente' : '') }}</span>
                     <span class="col-start-2 @2xl:col-start-1 text-[12.5px] text-neutral"><span class="font-mono">{{ number_format($version['groups']) }}</span> grupos</span>
                 </button>

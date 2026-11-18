@@ -123,6 +123,7 @@ final class ApplySolverRun
                 'sessions' => array_sum(array_column($written['groups'], 'added')),
                 'removed' => array_sum(array_column($written['groups'], 'removed')),
                 'kept' => $plan->kept(),
+                'input_problems' => $plan->inputProblems,
                 'loans_requested' => $written['loans_requested'],
                 'loans_blocked' => $written['loans_blocked'],
                 'conflicts_pending' => false,

@@ -6,6 +6,7 @@ use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Core\Settings\SettingType;
+use App\Modules\Demand\Enums\DemandBalance;
 use App\Modules\Demand\Enums\DemandPermission;
 
 /**
@@ -80,6 +81,27 @@ final readonly class DemandSettings
         }
 
         return abs($captured - $suggested) * 100 >= $this->highlightThreshold * $suggested;
+    }
+
+    /**
+     * Si la oferta de una materia le falta, le sobra o la ajusta frente a lo esperado (RA-04, tarea 8.2). Usa el mismo
+     * umbral y la misma base que isLargeDifference(), con lo esperado como base y la oferta como lo capturado: es
+     * **faltante** si lo esperado supera la oferta el umbral o más de lo esperado, **sobrante** si la oferta supera lo
+     * esperado esa misma proporción de lo esperado, y **ajustada** en otro caso. Si no se espera a nadie, cualquier
+     * oferta sobra (y sin oferta está ajustada); si se espera a alguien y no hay oferta, falta siempre (es el 100 % de lo
+     * esperado, y así no depende de que el umbral, que el catálogo limita a 100, lo alcance).
+     */
+    public function balanceOf(int $expected, int $offered): DemandBalance
+    {
+        if ($expected > 0 && $offered === 0) {
+            return DemandBalance::Shortfall;
+        }
+
+        if (! $this->isLargeDifference($expected, $offered)) {
+            return DemandBalance::Adjusted;
+        }
+
+        return $offered > $expected ? DemandBalance::Surplus : DemandBalance::Shortfall;
     }
 
     /**
