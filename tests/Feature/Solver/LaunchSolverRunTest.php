@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -20,6 +21,8 @@ use App\Modules\Solver\Models\SolverRun;
 use App\Modules\Solver\Notifications\SolverRunFinished;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Rules\InputFingerprint;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -30,8 +33,8 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | Lanzar una corrida del motor (tarea 6.8): la corrida nace en cola con la entrada que arma BuildSolverInput, su huella
 | (SV-02), su motor y su límite de tiempo (SV-04), deja bitácora y despacha RunSolver. Un departamento tiene a lo más una
-| corrida en cola o corriendo (SV-01); las de carrera conviven. La Action no autoriza: lo hace el componente con
-| SolverRunPolicy.
+| corrida en cola o corriendo (SV-01); las de carrera conviven. La Action autoriza con SolverRunPolicy (launchForDepartment
+| o launchForCareer) a quien la lanza.
 */
 
 beforeEach(function () {
@@ -48,7 +51,8 @@ beforeEach(function () {
     $this->pending = launchRunGroup(2);
     $this->session = GroupSession::factory()->for($this->placed)->inRoom($this->room)->on(1, '07:00', '09:00')->create();
 
-    $this->jefe = User::factory()->create();
+    $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['campus_id' => $this->campus->id, 'department_id' => $this->sistemas->id])->create();
+    $this->coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->isc->id])->create();
 });
 
 function launchRunGroup(int $semester): Group
@@ -65,11 +69,12 @@ function launchRunGroup(int $semester): Group
     ]);
 }
 
-function launchSolverRun(RunScope $scope = RunScope::Department, ?string $scopeId = null, string $engine = 'fixed', int $seconds = 120): SolverRun
+function launchSolverRun(RunScope $scope = RunScope::Department, ?string $scopeId = null, string $engine = 'fixed', int $seconds = 120, ?User $by = null): SolverRun
 {
-    $scopeId ??= $scope === RunScope::Department ? test()->sistemas->id : test()->isc->id;
+    $department = $scope === RunScope::Department;
+    $scopeId ??= $department ? test()->sistemas->id : test()->isc->id;
 
-    return app(LaunchSolverRun::class)->handle(test()->term, test()->pres, $scope, $scopeId, $engine, $seconds, test()->jefe);
+    return app(LaunchSolverRun::class)->handle(test()->term, test()->pres, $scope, $scopeId, $engine, $seconds, $by ?? ($department ? test()->jefe : test()->coordinador));
 }
 
 /**
@@ -216,6 +221,41 @@ it('SV-01: una corrida que no se movió en 20 minutos no impide lanzar otra; que
         ->finished_at->not->toBeNull();
 
     Notification::assertSentTo($stuck->creator, SolverRunFinished::class);
+});
+
+it('solo lanza quien puede lanzar ese alcance: el jefe de otro departamento y el jefe sobre una carrera reciben 403', function (Closure $launch) {
+    Queue::fake();
+
+    expect($launch)->toThrow(AuthorizationException::class)
+        ->and(SolverRun::query()->count())->toBe(0);
+
+    Queue::assertNothingPushed();
+})->with([
+    'jefe de otro departamento' => [fn () => launchSolverRun(by: User::factory()->withRole(Role::JefeDepartamento, [
+        'campus_id' => test()->campus->id, 'department_id' => Department::factory()->create()->id,
+    ])->create())],
+    'jefe sobre una carrera' => [fn () => launchSolverRun(RunScope::Career, by: test()->jefe)],
+    'coordinador sobre el departamento' => [fn () => launchSolverRun(by: test()->coordinador)],
+]);
+
+it('si no se puede encolar, la corrida queda fallida, libera al departamento y el error sale', function () {
+    Bus::shouldReceive('dispatch')->once()->andThrow(new RuntimeException('Sin conexión con la cola.'));
+
+    expect(fn () => launchSolverRun())->toThrow(RuntimeException::class, 'Sin conexión con la cola.')
+        ->and(SolverRun::query()->sole())
+        ->status->toBe(SolverRunStatus::Failed)
+        ->error->toBe('No se pudo encolar la corrida.')
+        ->finished_at->not->toBeNull();
+});
+
+it('un error al guardar que no es del índice de SV-01 sale tal cual', function () {
+    Queue::fake();
+    SolverRun::creating(fn (): never => throw new RuntimeException('La base no respondió.'));
+
+    expect(fn () => launchSolverRun())->toThrow(RuntimeException::class, 'La base no respondió.')
+        ->and(SolverRun::query()->count())->toBe(0);
+
+    Queue::assertNothingPushed();
 });
 
 it('SV-04: rechaza un motor que no existe, un límite fuera de 10 a 600 segundos o un alcance que no existe', function (Closure $launch, array $errors) {

@@ -3,6 +3,7 @@
 use App\Modules\Solver\Models\SolverRun;
 use App\Modules\Solver\Support\RunPayloads;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /*
 | Dónde vive la entrada o la salida de una corrida (tarea 6.8; docs/arquitectura/solver.md, «Ciclo de vida»): en la
@@ -41,3 +42,13 @@ it('una corrida sin entrada o con el archivo perdido no se lee', function (array
     'sin entrada' => [['input' => null], 'La corrida no tiene entrada.'],
     'archivo perdido' => [['input' => null, 'input_path' => 'solver/runs/x/input.json'], 'No se encontró el archivo de la entrada de la corrida.'],
 ]);
+
+it('discard borra los archivos que attributes escribió y deja en paz lo que iba en la fila', function () {
+    $runId = (string) Str::uuid7();
+    $inFile = RunPayloads::attributes($runId, 'input', ['padding' => str_repeat('a', RunPayloads::ROW_LIMIT_BYTES)]);
+
+    RunPayloads::discard($inFile);
+    RunPayloads::discard(['input' => ['version' => 1], 'input_path' => null]);
+
+    Storage::disk(RunPayloads::DISK)->assertMissing($inFile['input_path']);
+});
