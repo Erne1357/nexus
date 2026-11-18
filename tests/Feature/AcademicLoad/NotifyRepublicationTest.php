@@ -236,3 +236,44 @@ it('no avisa en la versión 1, sin diff guardado ni cuando la versión no cambi�
     expect(app(NotifyRepublication::class)->handle($this->load, 3))->toBe(0);
     Notification::assertNothingSent();
 });
+
+it('RA-06: a una ficha de docente dada de baja no se le manda nada, ni campana ni correo, aunque tenga usuario o correo institucional (supuesto por confirmar)', function () {
+    Notification::fake();
+    $this->moved->update(['is_active' => false]);
+    $this->mailOnly->update(['is_active' => false]);
+    republicationScenario();
+
+    $sent = app(NotifyRepublication::class)->handle($this->load, 2);
+
+    expect($sent)->toBe(5);
+    Notification::assertNotSentTo($this->movedUser, LoadRepublished::class);
+    Notification::assertSentOnDemandTimes(LoadRepublished::class, 0);
+    Notification::assertSentTo([$this->inactiveUser, $this->iscCoordinator, $this->igeCoordinator, $this->roomOwnerHead, $this->sharedHead], LoadRepublished::class);
+});
+
+it('RA-05: las líneas que recibe el coordinador dicen el campus de cada grupo', function () {
+    Notification::fake();
+    republicationScenario();
+
+    app(NotifyRepublication::class)->handle($this->load, 2);
+
+    Notification::assertSentTo($this->iscCoordinator, LoadRepublished::class, function (LoadRepublished $notice): bool {
+        return count($notice->lines()) === 4
+            && collect($notice->lines())->every(fn (string $line): bool => str_contains($line, ' (C2)'));
+    });
+});
+
+it('RA-05: quien es docente afectado y coordinador de una carrera afectada recibe un aviso por cada papel, y no dos del mismo', function () {
+    Notification::fake();
+    $both = User::factory()->withRole(Role::Coordinador, ['career_id' => $this->isc->id])->create(['email' => 'ambos@cdjuarez.tecnm.mx']);
+    $this->moved->update(['user_id' => $both->id]);
+    republicationScenario();
+
+    app(NotifyRepublication::class)->handle($this->load, 2);
+
+    $titles = Notification::sent($both, LoadRepublished::class)->map(fn (LoadRepublished $notice): string => $notice->message($both)->title)->all();
+
+    expect($titles)->toHaveCount(2)
+        ->and($titles)->toContain('Cambiaron tus grupos en la carga de '.$this->load->department->name)
+        ->and($titles)->toContain('La carga de '.$this->load->department->name.' cambió grupos de ISC');
+});

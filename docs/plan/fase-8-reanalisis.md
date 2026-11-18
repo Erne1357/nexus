@@ -158,6 +158,7 @@ Grupo: `{"id", "code", "subject": {"id", "code", "name"}, "campus": "C2" | null,
 - En `changes` solo van las llaves que cambiaron. `schedule` compara días y horas; `room`, el salón de cada sesión con el mismo horario (si el horario cambió, el conjunto de salones), y trae las sesiones con su salón; `quota` es la capacidad del grupo; `career_quotas`, los lugares por carrera, una vez por carrera. El tipo de sesión, la justificación y los nombres no cuentan.
 - `other_departments` es interno (préstamos de salón y grupos compartidos, RA-05): la consulta pública no lo muestra, igual que los préstamos. Lo público de un cambio son grupos, horarios y salones; nunca cupos, lugares ni justificaciones (reglas «Consulta publicada»).
 - Para leerlo en español, `Rules\SnapshotDiffText` (una línea por grupo); para los afectados, `SnapshotDiff::teachers()`, `careers()` y `departments()`. `LoadVersionsQuery::versions()` trae `reason` y `summary`, y `diff()` el diff completo de una versión (o calculado al leer si la versión es de antes de la 8.4).
+- Para la vista pública (8.5), `SnapshotDiffText::publicEntries($diff)` da las mismas líneas sin lo interno: sin cupo total ni lugares por carrera (el público nunca ve cupos ni lugares, «Consulta publicada»), departamentos ni llaves; conserva grupos nuevos y cancelados, horario, salón y docente.
 - PostgreSQL no conserva el orden de las llaves de un objeto `jsonb` (sí el de las listas): no dependas de él. Una forma nueva sube `version`.
 
 ## Alcance

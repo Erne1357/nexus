@@ -26,7 +26,9 @@ use Illuminate\Support\Facades\Notification;
  * - cada docente afectado (SnapshotDiff::teachers(): el de antes y el de ahora de un grupo nuevo, cancelado o cambiado),
  *   con exactamente lo que cambió para él. El docente se resuelve con su ficha (Faculty): si tiene usuario, al usuario
  *   (campana y correo); si no tiene usuario pero sí correo institucional, solo el correo, por ruta; sin ninguno de los
- *   dos, a nadie. Una ficha borrada no recibe;
+ *   dos, a nadie. Una ficha borrada o dada de baja (`is_active = false`) no recibe nada, ni campana ni correo, aunque
+ *   tenga usuario o correo institucional (supuesto por confirmar). Quien es docente y también coordinador o jefe recibe un
+ *   aviso por cada papel, con las líneas de ese papel;
  * - los coordinadores de cada carrera afectada (SnapshotDiff::careers()): los titulares de enviar la propuesta de la
  *   carrera en la modalidad de la carga, de cualquier campus, como NotifyProposalReturned (M6, MS18);
  * - los jefes de cada otro departamento afectado (SnapshotDiff::departments(): préstamos de salón y grupos compartidos):
@@ -75,7 +77,7 @@ final class NotifyRepublication
         foreach ($affected as $id => $teacher) {
             $record = $records[$id] ?? null;
 
-            if ($record === null) {
+            if ($record === null || ! $record->is_active) {
                 continue;
             }
 

@@ -42,6 +42,38 @@ final class SnapshotDiffText
     }
 
     /**
+     * Las líneas del diff completo para quien no es de la carga (la consulta publicada, 8.5), sin lo interno: grupos
+     * nuevos, cancelados y cambiados, con horario, salón y docente; nunca cupos ni lugares por carrera (el público nunca
+     * ve cupos ni lugares, reglas «Consulta publicada»), departamentos ni llaves. Un grupo cuyo único cambio fue de cupo o
+     * de lugares por carrera no sale.
+     *
+     * @param  array<string, mixed>  $diff
+     * @return list<string>
+     */
+    public static function publicEntries(array $diff): array
+    {
+        $entries = [];
+
+        foreach ($diff['groups']['added'] as $group) {
+            $entries[] = self::entry(['kind' => 'added', 'group' => $group]);
+        }
+
+        foreach ($diff['groups']['cancelled'] as $group) {
+            $entries[] = self::entry(['kind' => 'cancelled', 'group' => $group]);
+        }
+
+        foreach ($diff['groups']['changed'] as $changed) {
+            $changes = array_diff_key($changed['changes'], ['quota' => true, 'career_quotas' => true]);
+
+            if ($changes !== []) {
+                $entries[] = self::entry(['kind' => 'changed', 'group' => $changed['group'], 'changes' => $changes]);
+            }
+        }
+
+        return $entries;
+    }
+
+    /**
      * Los cambios de un grupo que sigue, separados por «; »: horario (con los salones si también cambiaron), salón de cada
      * sesión que lo cambió, docente, cupo y lugares por carrera.
      *

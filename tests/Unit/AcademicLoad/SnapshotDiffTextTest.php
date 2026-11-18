@@ -89,3 +89,33 @@ it('dice cada clase de cambio de un grupo en una línea', function (array $entry
         'SCD-1027 Tópicos Avanzados de Programación, grupo A (C2): horario de lunes 7:00 a 9:00 a ninguno.',
     ],
 ]);
+
+it('publicEntries da las líneas del diff sin lo interno: sin cupos, lugares por carrera, departamentos ni llaves', function () {
+    $group = diffTextGroup([['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101']]);
+    $group['other_departments'] = ['dep-secreto'];
+    $diff = ['version' => 1, 'groups' => [
+        'added' => [$group],
+        'cancelled' => [array_replace($group, ['code' => 'B'])],
+        'changed' => [
+            ['group' => array_replace($group, ['code' => 'C']), 'changes' => [
+                'teacher' => ['from' => ['id' => 'tea-1', 'name' => 'Ana Ruiz'], 'to' => ['id' => 'tea-2', 'name' => 'Luis Pérez']],
+                'quota' => ['from' => 30, 'to' => 35],
+                'career_quotas' => ['from' => [['id' => 'car-ISC', 'code' => 'ISC', 'seats' => 30]], 'to' => [['id' => 'car-ISC', 'code' => 'ISC', 'seats' => 35]]],
+            ]],
+            ['group' => array_replace($group, ['code' => 'D']), 'changes' => [
+                'career_quotas' => ['from' => [['id' => 'car-ISC', 'code' => 'ISC', 'seats' => 30]], 'to' => [['id' => 'car-ISC', 'code' => 'ISC', 'seats' => 25]]],
+            ]],
+        ],
+    ], 'summary' => []];
+
+    $lines = SnapshotDiffText::publicEntries($diff);
+
+    expect($lines)->toBe([
+        'Grupo nuevo: SCD-1027 Tópicos Avanzados de Programación, grupo A (C2), lunes 7:00 a 9:00 en A-101.',
+        'Se canceló SCD-1027 Tópicos Avanzados de Programación, grupo B (C2).',
+        'SCD-1027 Tópicos Avanzados de Programación, grupo C (C2): docente de Ana Ruiz a Luis Pérez.',
+    ]);
+
+    $text = implode(' ', $lines);
+    expect($text)->not->toContain('cupo')->not->toContain('lugares por carrera')->not->toContain('ISC')->not->toContain('dep-')->not->toContain('tea-')->not->toContain('car-');
+});
