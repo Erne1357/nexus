@@ -15,7 +15,7 @@ from app.contract.output import ProposedSession
 from .constraints import add_hard_constraints
 from .data import ModelData
 from .solution import sessions_of
-from .variables import DomainOptions, build_variables
+from .variables import BuildBudget, BuildTimeout, DomainOptions, build_variables
 
 FEASIBLE = (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
@@ -62,7 +62,13 @@ def solve_hard(
     for all_tiers in (False, True) if tiers_by_need else (True,):
         started = time.perf_counter()
         model = cp_model.CpModel()
-        variables = build_variables(model, data, DomainOptions(pool_rooms=pool_rooms, all_tiers=all_tiers))
+        try:
+            variables = build_variables(
+                model, data, DomainOptions(pool_rooms=pool_rooms, all_tiers=all_tiers), BuildBudget(deadline=deadline)
+            )
+        except BuildTimeout:
+            run.status = cp_model.UNKNOWN
+            return run
         add_hard_constraints(model, variables, data)
         built = time.perf_counter()
 

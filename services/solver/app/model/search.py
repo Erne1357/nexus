@@ -23,9 +23,10 @@ from app.contract.output import ProposedSession
 
 from .constraints import add_hard_constraints
 from .data import ModelData
+from .pattern import minutes
 from .phases import FEASIBLE
 from .solution import chosen_option, sessions_of
-from .variables import BuildBudget, DomainOptions, Variables, build_variables
+from .variables import BuildBudget, BuildTimeout, DomainOptions, Occupancy, Variables, build_variables
 
 #: Salones con `z` de un día de 2 horas en un vecindario: los más ajustados (`DomainOptions.long_window_rooms`).
 LONG_WINDOW_ROOMS = 12
@@ -80,12 +81,16 @@ def lns(
     first_deadline = started + max(step_seconds, time_limit * first_share)
     variables, solved = _place_most(data, DomainOptions(), search, min(deadline, first_deadline), workers, seed)
     if solved is None:
+        search.unplaced = [group.id for group in data.movable]
         return search
     _keep(search, solved, variables, data, replace=True)
 
-    pending = [(group_id, 0) for group_id in search.unplaced]
+    pending = [(group.id, 0) for group in data.movable if group.id not in search.sessions]
     while pending and time.perf_counter() < deadline:
         target, attempt = pending.pop(0)
+        if target in search.sessions:
+            # Lo programó el vecindario de otro grupo.
+            continue
         movable = _neighbourhood(data, search, target, min(attempt, MAX_LEVEL))
         sub = ModelData.of(_sub_input(data.source, search, set(movable)))
         before = sum(group in search.sessions for group in movable)
@@ -100,6 +105,8 @@ def lns(
         )
         if solved is not None and placed > before:
             _keep(search, solved, variables, sub, replace=False)
+            # Un vecino que quedó fuera para que entraran más vuelve a la fila.
+            pending.extend((group, 0) for group in movable if group != target and group not in search.sessions)
         elif attempt < MAX_ATTEMPTS:
             pending.append((target, attempt + 1))
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
@@ -155,21 +162,23 @@ def _current_options(data: ModelData) -> dict[str, OptionKey]:
             continue
         by_day: dict[int, list[int]] = defaultdict(list)
         for slot in group.current_sessions:
-            start, end = _minutes(slot.starts_at), _minutes(slot.ends_at)
+            start, end = minutes(slot.starts_at), minutes(slot.ends_at)
             if (start - grid.start) % grid.block_minutes or (end - start) % grid.unit_minutes:
                 break
             by_day[slot.day].extend(range(start, end, grid.unit_minutes))
         else:
-            starts = {min(minutes) for minutes in by_day.values()}
-            if len(starts) == 1:
+            units = {day: sorted(day_units) for day, day_units in by_day.items()}
+            contiguous = all(
+                day_units
+                == list(range(day_units[0], day_units[0] + len(day_units) * grid.unit_minutes, grid.unit_minutes))
+                for day_units in units.values()
+            )
+            starts = {day_units[0] for day_units in units.values()}
+            if contiguous and len(starts) == 1:
                 block = (starts.pop() - grid.start) // grid.block_minutes
-                chosen[group.id] = (tuple((day, len(by_day[day])) for day in sorted(by_day)), block)
+                chosen[group.id] = (tuple((day, len(units[day])) for day in sorted(units)), block)
 
     return chosen
-
-
-def _minutes(clock: str) -> int:
-    return int(clock[:2]) * 60 + int(clock[3:])
 
 
 def _place_most(
@@ -179,7 +188,11 @@ def _place_most(
     búsqueda. Devuelve el solver si encontró solución."""
     built_at = time.perf_counter()
     model = cp_model.CpModel()
-    variables = build_variables(model, data, options, BuildBudget(deadline=deadline))
+    try:
+        variables = build_variables(model, data, options, BuildBudget(deadline=deadline))
+    except BuildTimeout:
+        # Se acabó el plazo al armar: la vuelta no da nada y lo que ya estaba programado se queda.
+        return Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy()), None
     add_hard_constraints(model, variables, data, relaxed=True)
     literals = []
     for domain in variables.groups.values():
@@ -228,7 +241,7 @@ def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data:
         if option is not None:
             search.sessions[domain.id] = sessions[domain.id]
             search.chosen[domain.id] = (option.spread, option.block)
-    search.unplaced = [domain.id for domain in variables.groups.values() if domain.id not in search.sessions]
+    search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
 
 
 def _neighbours(data: ModelData, group_id: str) -> list[str]:

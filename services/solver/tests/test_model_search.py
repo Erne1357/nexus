@@ -63,8 +63,8 @@ def test_la_asignacion_relajada_deja_fuera_al_grupo_que_no_cabe():
 
 def test_la_pista_es_el_horario_actual_cuando_es_una_opcion_del_patron():
     """PS-07: un grupo de 2 horas que hoy va lunes y martes a las 08:00 da esa opción como pista; uno que va a horas
-    distintas cada día no da pista. La pista solo orienta la búsqueda: quedarse en la hora actual es del objetivo
-    (7.6)."""
+    distintas cada día, o con un hueco entre sus horas de un día, no da pista. La pista solo orienta la búsqueda:
+    quedarse en la hora actual es del objetivo (7.6)."""
     from app.model.search import _current_options
     from tests.instances import session
 
@@ -73,9 +73,27 @@ def test_la_pista_es_el_horario_actual_cuando_es_una_opcion_del_patron():
             groups=[
                 group("patron", 2, current_sessions=[session(1, "08:00", "09:00"), session(2, "08:00", "09:00")]),
                 group("otro", 2, current_sessions=[session(1, "07:00", "08:00"), session(2, "09:00", "10:00")]),
+                group(
+                    "huecos",
+                    4,
+                    current_sessions=[
+                        session(day, start, end)
+                        for day in (1, 2)
+                        for start, end in (("07:00", "08:00"), ("09:00", "10:00"))
+                    ],
+                ),
             ],
             rooms=[room("r1"), room("r2")],
         )
     )
 
     assert _current_options(data) == {"patron": (((1, 1), (2, 1)), 1)}
+
+
+def test_si_no_alcanza_ni_a_armar_la_primera_vuelta_todos_quedan_sin_programar():
+    """Sin tiempo, el armado se detiene (BuildTimeout) y la búsqueda lo dice: ningún grupo programado, todos fuera."""
+    data = fixture("medium")
+    result = lns(ModelData.of(data), time_limit=0, workers=1, seed=7)
+
+    assert result.sessions == {}
+    assert result.unplaced == [group.id for group in data.groups if group.movable]

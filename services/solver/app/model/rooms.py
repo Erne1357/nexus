@@ -21,10 +21,7 @@ de 30 min) y los grupos de otro departamento o con candidatos llevan su `z` expl
 cuenta como salones ya tomados.
 """
 
-from collections.abc import Iterable
 from dataclasses import dataclass
-
-from ortools.sat.python import cp_model
 
 from .data import ModelData
 from .pattern import Grid
@@ -58,7 +55,10 @@ class RoomPool:
         return self._free.get((day, block), ())
 
     def fits(self, room_id: str, threshold: int, lab: bool) -> bool:
-        return self._data.rooms[room_id].capacity >= threshold and (not lab or self._data.is_practice_space(room_id))
+        return self._data.rooms[room_id].capacity >= threshold and (not lab or self.is_practice_space(room_id))
+
+    def is_practice_space(self, room_id: str) -> bool:
+        return self._data.is_practice_space(room_id)
 
     def has_room(self, day: int, block: int, threshold: int, lab: bool) -> bool:
         return any(self.fits(room, threshold, lab) for room in self.free(day, block))
@@ -85,7 +85,8 @@ def match(
     que no tomó una ventana explícita. Primero las de laboratorio y las de más lugares; cada una prueba sus salones del
     más ajustado al más grande, las de teoría primero en aula. Sin HC-02, cada una toma el primero que le sirve."""
     ordered = sorted(sessions, key=lambda session: (not session.lab, -session.threshold, session.group_id))
-    candidates = [_candidates(pool, day, block, session, taken) for session in ordered]
+    # Sin HC-02 los salones se comparten: los que tomaron las ventanas explícitas también sirven.
+    candidates = [_candidates(pool, day, block, session, taken if exclusive else set()) for session in ordered]
     if not exclusive:
         return {session: options[0] for session, options in zip(ordered, candidates, strict=True) if options}
 
@@ -118,8 +119,4 @@ def _candidates(pool: RoomPool, day: int, block: int, session: PooledSession, ta
         return rooms
 
     # La teoría prefiere aula (PS-05); dentro de cada tipo, el más ajustado (ya vienen por capacidad).
-    return sorted(rooms, key=lambda room: pool._data.is_practice_space(room))
-
-
-def chosen_rooms(solver: cp_model.CpSolver, rooms: dict[str, cp_model.IntVar]) -> Iterable[str]:
-    return (room for room, literal in rooms.items() if solver.boolean_value(literal))
+    return sorted(rooms, key=pool.is_practice_space)

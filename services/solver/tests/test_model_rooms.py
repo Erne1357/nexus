@@ -127,3 +127,12 @@ def test_la_fase_b_reparte_con_emparejamiento_y_avisa_si_no_alcanza():
     assert {session.group_id: room_id for session, room_id in assigned.items()} == {"teoria": "aula", "grande": "lab"}
     with pytest.raises(RoomAssignmentError):
         match(pool, 1, 0, sessions, {"aula"}, exclusive=True)
+
+
+def test_sin_hc02_la_fase_b_comparte_los_salones_tomados():
+    """Sin HC-02 un salón se comparte: el laboratorio que ya tomó una ventana explícita le sirve a la práctica."""
+    data = instance(rooms=[room("aula"), room("lab", type="laboratorio")])
+    pool = RoomPool(ModelData.of(parse_input(data)), "C1", "d001")
+    practice = PooledSession("practica", 1, 20, True)
+
+    assert match(pool, 1, 0, [practice], {"lab"}, exclusive=False) == {practice: "lab"}

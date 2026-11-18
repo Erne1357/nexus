@@ -407,7 +407,7 @@ def _domain(
             if first_with_options is None and domain.options:
                 first_with_options = tier - 1
             one_hour = variables.options.one_hour_tiers and all(
-                max(units for _, units in spread) == 1 for spread in spreads
+                max(count for _, count in spread) == 1 for spread in spreads
             )
             if (
                 not variables.options.all_tiers
@@ -425,6 +425,9 @@ def _domain(
                         _add_option(model, grid, domain, spread, block, tier, practice)
                     else:
                         domain.rejected_options[reason] += 1
+        if domain.truncated:
+            # Los niveles siguen de una cantidad de unidades a la otra: uno cortado corta también los que siguen.
+            break
         first_tier += len(unit_tiers)
 
     rooms_needed = sum(len(check((window.day, window.block, window.units)).rooms) for window in domain.windows.values())
