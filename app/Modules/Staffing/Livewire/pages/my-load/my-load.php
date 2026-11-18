@@ -17,6 +17,7 @@ use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Mary\Traits\Toast;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Mi carga (tareas 3.10 y 3.11), maqueta C «Columnas por día»: la cuenta de horas del docente como una ecuación y sus
@@ -80,6 +81,7 @@ new #[Title('Mi carga')] class extends Component
         $this->requestKind = ChangeRequestKind::Schedule->value;
         $this->reset('proposal', 'reason');
         $this->resetStructuredProposal();
+        $this->prefillFromRequestGroup($context, $requests);
         $this->resetErrorBag();
         $this->showRequest = true;
     }
@@ -123,6 +125,26 @@ new #[Title('Mi carga')] class extends Component
         $this->resetStructuredProposal();
         $this->reset('requestGroupId', 'proposal', 'reason');
         $this->success("Enviaste tu solicitud de cambio del grupo {$group->code}", 'Tu jefe de departamento la revisa.');
+    }
+
+    public function updatedRequestGroupId(Actor $context, MyChangeRequestsQuery $requests): void
+    {
+        $this->prefillFromRequestGroup($context, $requests);
+    }
+
+    private function prefillFromRequestGroup(Actor $context, MyChangeRequestsQuery $requests): void
+    {
+        $this->resetStructuredProposal();
+
+        if ($this->requestGroupId === '') {
+            return;
+        }
+
+        try {
+            $this->prefillProposedSessions($this->requestable($this->requestGroupId, $context, $requests)[0]);
+        } catch (HttpException) {
+            // Un grupo que no se puede pedir no se precarga; sendRequest() lo rechaza.
+        }
     }
 
     public function with(Actor $context, MyLoadQuery $query, MyChangeRequestsQuery $requests): array

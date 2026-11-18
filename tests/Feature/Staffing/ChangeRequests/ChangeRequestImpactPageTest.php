@@ -5,6 +5,7 @@ use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
 use App\Modules\Staffing\Actions\ChangeRequests\RejectChangeRequest;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
+use App\Modules\Staffing\Models\ChangeRequest;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -122,4 +123,25 @@ it('el jefe que abre una pendiente la recalcula', function () {
     Livewire::actingAs($this->w->jefeSc)->test('staffing::pages.change-requests')->call('pick', $request->id);
 
     expect($request->fresh()->impact['assessed_at'])->not->toBeNull();
+});
+
+it('el modal de nueva solicitud trae las sesiones actuales del grupo y mover solo una no da HC-12', function () {
+    $page = Livewire::actingAs($this->w->coordIsc)->test('staffing::pages.change-requests')
+        ->call('openRequest')
+        ->set('requestGroupId', $this->g1->id)
+        ->assertSet('proposedSessions', [
+            ['day' => '1', 'starts_at' => '07:00', 'ends_at' => '09:00'],
+            ['day' => '3', 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ])
+        ->assertSee('todas las sesiones del grupo')
+        ->set('proposedSessions.0.day', '5')
+        ->set('proposal', 'Mover el lunes al viernes')
+        ->set('reason', 'Empalme')
+        ->call('sendRequest')
+        ->assertHasNoErrors();
+
+    $request = ChangeRequest::query()->where('group_id', $this->g1->id)->sole();
+
+    expect($request->impact['assessable'])->toBeTrue()
+        ->and(array_column($request->impact['hard'], 'rule'))->not->toContain('HC-12');
 });

@@ -65,6 +65,10 @@ it('un solo botón abre el modal, se elige el grupo y envía la solicitud de hor
 
     $page
         ->assertSee('Solicitar cambio')
+        ->assertSet('proposedSessions', [
+            ['day' => '1', 'starts_at' => '07:00', 'ends_at' => '09:00'],
+            ['day' => '3', 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ])
         ->set('requestKind', 'schedule')
         ->set('proposal', 'Martes y jueves de 10:00 a 12:00')
         ->set('reason', 'Los lunes atiendo residencias en Campus I.')
@@ -77,7 +81,8 @@ it('un solo botón abre el modal, se elige el grupo y envía la solicitud de hor
         ->and($request->kind)->toBe(ChangeRequestKind::Schedule)
         ->and($request->status)->toBe(ChangeRequestStatus::Pending)
         ->and($request->teacher_id)->toBe($this->w->teacher->id)
-        ->and($request->proposed)->toBe(['description' => 'Martes y jueves de 10:00 a 12:00'])
+        ->and($request->proposed['description'])->toBe('Martes y jueves de 10:00 a 12:00')
+        ->and($request->proposed['sessions'])->toHaveCount(2)
         ->and($request->reason)->toBe('Los lunes atiendo residencias en Campus I.');
 });
 

@@ -317,6 +317,17 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->showRequest = true;
     }
 
+    public function updatedRequestGroupId(Actor $context, ChangeRequestsQuery $query): void
+    {
+        abort_unless($this->canRequest($context), 403);
+        $this->resetStructuredProposal();
+
+        if ($this->requestGroupId !== '' && $this->modalityId !== null) {
+            $group = $query->requestableGroup($context, (string) $context->activeTerm()?->id, $this->modalityId, $this->campusId, $this->requestGroupId);
+            $group === null || $this->prefillProposedSessions($group);
+        }
+    }
+
     public function sendRequest(Actor $context, ChangeRequestsQuery $query, RequestChange $requestChange): void
     {
         abort_unless($this->canRequest($context), 403);

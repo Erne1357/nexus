@@ -34,7 +34,7 @@
 
 @if ($isSchedule)
     <fieldset class="fieldset py-0" data-testid="request-sessions">
-        <legend class="fieldset-legend mb-1">Horario propuesto <span class="font-normal text-neutral">(opcional)</span></legend>
+        <legend class="fieldset-legend mb-1">Horario propuesto <span class="font-normal text-neutral">(todas las sesiones del grupo)</span></legend>
         @foreach ($proposedSessions as $index => $session)
             <div class="mb-2 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-2 max-sm:grid-cols-2" wire:key="proposed-session-{{ $index }}">
                 <select class="select select-sm w-full max-md:h-11" wire:model="proposedSessions.{{ $index }}.day" aria-label="Día de la sesión {{ $index + 1 }}">

@@ -5,6 +5,7 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 use App\Modules\AcademicLoad\Actions\Transitions\StartAdjusting;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
@@ -20,10 +21,11 @@ use Illuminate\Validation\ValidationException;
  * 2026); en cualquier otro estado la carga no se toca. Deja bitácora y, después del commit, avisa al solicitante y a
  * quien debe aplicarla.
  *
- * Orden de candados (el del editor de horarios y las transiciones de carga: carga, grupo, y al final la solicitud): la
- * carga del departamento FOR UPDATE (en vez de FOR SHARE, porque esta misma transacción la pasa a ajustes y subir de
- * candado entre dos aprobaciones a la vez es un deadlock), el grupo FOR UPDATE, y luego la solicitud. Con ellos, el
- * editor no cambia las sesiones entre la simulación del bloqueo de choques (CR-01) y el commit.
+ * Orden de candados (el de TransitionLoad y el editor de horarios): la modalidad FOR SHARE, la carga del departamento
+ * FOR UPDATE (en vez de FOR SHARE, porque esta misma transacción la pasa a ajustes y subir de candado entre dos
+ * aprobaciones a la vez es un deadlock), el grupo FOR UPDATE y, al final, la solicitud. Con ellos, el editor no cambia
+ * las sesiones entre la simulación del bloqueo de choques (CR-01) y el commit. StartAdjusting llama a TransitionLoad
+ * dentro de esta transacción: vuelve a pedir la modalidad y la carga que ya se tienen, en el mismo orden.
  */
 final class ApproveChangeRequest
 {
@@ -38,6 +40,8 @@ final class ApproveChangeRequest
 
         $request = DB::transaction(function () use ($request, $actor, $comment): ChangeRequest {
             $group = Group::query()->findOrFail($request->group_id, ['id', 'term_id', 'modality_id', 'department_id']);
+
+            Modality::withTrashed()->whereKey($group->modality_id)->sharedLock()->firstOrFail();
 
             $load = AcademicLoad::query()
                 ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)

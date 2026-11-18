@@ -246,8 +246,8 @@ it('empareja la propuesta con la foto de la solicitud y conserva el salón de su
     $other = impactOtherGroup($s, ['code' => 'C']);
     GroupSession::factory()->on(5, '09:00', '11:00')->inRoom($room)->create(['group_id' => $other->id]);
     $request = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
-        ['day' => 5, 'starts_at' => '10:00', 'ends_at' => '12:00'],
         ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+        ['day' => 5, 'starts_at' => '10:00', 'ends_at' => '12:00'],
     ]]);
 
     expect(array_column($request->fresh()->impact['hard'], 'rule'))->toContain('HC-02');

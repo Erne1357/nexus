@@ -177,6 +177,7 @@ final class RequestChange
             'teacher_id' => $teacherId,
             'kind' => $kind,
             'current' => $group->sessions
+                ->sortBy([['day', 'asc'], ['starts_at', 'asc']])
                 ->map(fn ($session): array => [
                     'day' => $session->day,
                     'starts_at' => substr((string) $session->starts_at, 0, 5),

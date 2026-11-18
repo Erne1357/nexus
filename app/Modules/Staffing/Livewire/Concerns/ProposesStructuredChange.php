@@ -2,6 +2,8 @@
 
 namespace App\Modules\Staffing\Livewire\Concerns;
 
+use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 
 /**
@@ -21,6 +23,23 @@ trait ProposesStructuredChange
         if (count($this->proposedSessions) < 6) {
             $this->proposedSessions[] = ['day' => '', 'starts_at' => '', 'ends_at' => ''];
         }
+    }
+
+    /**
+     * Arranca el «Horario propuesto» con las sesiones de hoy del grupo (la propuesta es el horario completo: quien pide
+     * edita solo la que mueve). Recibe un grupo ya autorizado por la pantalla.
+     */
+    private function prefillProposedSessions(Group $group): void
+    {
+        $this->proposedSessions = $group->sessions
+            ->sortBy([['day', 'asc'], ['starts_at', 'asc']])
+            ->map(fn (GroupSession $session): array => [
+                'day' => (string) $session->day,
+                'starts_at' => substr((string) $session->starts_at, 0, 5),
+                'ends_at' => substr((string) $session->ends_at, 0, 5),
+            ])
+            ->values()
+            ->all();
     }
 
     public function removeProposedSession(int $index): void
