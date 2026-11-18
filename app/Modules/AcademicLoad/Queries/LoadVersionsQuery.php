@@ -29,7 +29,8 @@ use Illuminate\Support\Facades\DB;
 final class LoadVersionsQuery
 {
     /**
-     * De la primera a la última. El comentario es el de la transición a publicada de esa versión (la N-ésima); `reopened`,
+     * De la primera a la última. El comentario es el de la transición a publicada de esa versión (la N-ésima; la de cancelar
+     * un re-análisis, `reanalysis` → `published`, no crea versión y no cuenta, RA-10); `reopened`,
      * desde la 2, la transición con que la carga salió de publicada después de la versión anterior (la reapertura a ajustes
      * con su motivo, o el inicio del re-análisis), con quién y cuándo. `teachers` cuenta los docentes distintos de la foto.
      * `reason` y `summary` (el resumen del diff guardado, SnapshotDiff) son nulos en las versiones publicadas antes de la
@@ -46,7 +47,9 @@ final class LoadVersionsQuery
             ->join('users', 'users.id', '=', 'load_transitions.user_id')
             ->orderBy('load_transitions.created_at')->orderBy('load_transitions.id')
             ->get(['load_transitions.from_status', 'load_transitions.to_status', 'load_transitions.comment', 'load_transitions.created_at', 'users.name as user_name']) as $transition) {
-            if ($transition->to_status === LoadStatus::Published) {
+            if ($transition->to_status === LoadStatus::Published && $transition->from_status === LoadStatus::Reanalysis) {
+                unset($reopened[count($comments) + 1]);
+            } elseif ($transition->to_status === LoadStatus::Published) {
                 $comments[] = $transition->comment;
             } elseif ($transition->from_status === LoadStatus::Published && $comments !== []) {
                 $reopened[count($comments) + 1] ??= [

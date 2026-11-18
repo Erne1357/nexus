@@ -117,6 +117,7 @@ stateDiagram-v2
     published --> adjusting : reabierta, con motivo (nueva versión al republicar)
     published --> reanalysis : el jefe inicia el re-análisis con las calificaciones del semestre actual importadas (R2, RA-01 y RA-02)
     reanalysis --> closed : ajustes validados, mismas guardas que el cierre (HC-15)
+    reanalysis --> published : el jefe cancela el re-análisis mientras no haya cambios, sin versión nueva (RA-10)
     closed --> reanalysis : Subdirección devuelve una carga re-analizada, con motivo (RA-08)
     approved --> reanalysis : ídem, desde aprobada (RA-08)
     published --> [*] : periodo cerrado
@@ -124,7 +125,7 @@ stateDiagram-v2
 
 Cada transición exige un rol, unas condiciones verificadas por el validador y deja una fila en `load_transitions`.
 
-El re-análisis no publica directo: sale de `published`, se cierra (`reanalysis → closed`) y sigue el camino de la primera vez (con `approved` solo si el perfil de la modalidad exige el visto bueno, RA-03) hasta `published` con la versión n + 1. Las flechas de `closed` y `approved` hacia `reanalysis` son las devoluciones de ese ciclo; `ReopenLoad` las elige en lugar de `adjusting` cuando el último cierre de la carga salió de `reanalysis`.
+El re-análisis no publica directo: sale de `published`, se cierra (`reanalysis → closed`) y sigue el camino de la primera vez (con `approved` solo si el perfil de la modalidad exige el visto bueno, RA-03) hasta `published` con la versión n + 1. Las flechas de `closed` y `approved` hacia `reanalysis` son las devoluciones de ese ciclo; `ReopenLoad` las elige en lugar de `adjusting` cuando el último cierre de la carga salió de `reanalysis`. La flecha `reanalysis → published` no es una publicación: es cancelar el re-análisis sin cambios (`CancelReanalysis`, RA-10), que vuelve a la versión vigente sin crear otra; `PublishLoad` la rechaza y, si ya cambió algo, hay que cerrar y republicar.
 
 ## Solicitud de cambio de un docente
 

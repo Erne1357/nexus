@@ -9,7 +9,7 @@ use App\Modules\Core\Models\ModalityProfile;
 | Subdirección (cerrada publica directo) y para uno con él (cerrada pasa a aprobada). Cerrada, aprobada y
 | publicada se reabren a ajustes (confirmado el 10 de noviembre de 2026). El re-análisis (tarea 8.1) sale de publicada,
 | se cierra y sigue por el mismo camino: no publica directo (RA-03), y cerrada y aprobada también pueden devolverse a
-| re-análisis (RA-08).
+| re-análisis (RA-08). La flecha de re-análisis a publicada es la de cancelar sin cambios (RA-10): solo la toma CancelReanalysis.
 */
 
 const COMMON_LOAD_TRANSITIONS = [
@@ -19,7 +19,7 @@ const COMMON_LOAD_TRANSITIONS = [
     'adjusting' => ['staffing'],
     'approved' => ['published', 'adjusting', 'reanalysis'],
     'published' => ['reanalysis', 'adjusting'],
-    'reanalysis' => ['closed'],
+    'reanalysis' => ['closed', 'published'],
 ];
 
 function allowedLoadTransitions(bool $requiresApproval): array

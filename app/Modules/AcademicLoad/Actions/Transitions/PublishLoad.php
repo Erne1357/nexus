@@ -2,12 +2,12 @@
 
 namespace App\Modules\AcademicLoad\Actions\Transitions;
 
-use App\Modules\Academic\Models\Career;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\AcademicLoad\Events\LoadSnapshotRequested;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Queries\ReanalysisChangesQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisCycleQuery;
 use App\Modules\AcademicLoad\Rules\SnapshotDiff;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
@@ -56,7 +56,7 @@ final class PublishLoad
     public function handle(AcademicLoad $load, User $actor, ?string $comment = null): LoadSnapshot
     {
         return DB::transaction(function () use ($load, $actor, $comment): LoadSnapshot {
-            $load = $this->transition->handle($load, LoadStatus::Published, $actor, $comment, fn (AcademicLoad $load): array => []);
+            $load = $this->transition->handle($load, LoadStatus::Published, $actor, $comment, self::publishable(...));
 
             $request = new LoadSnapshotRequested($load);
             event($request);
@@ -104,6 +104,20 @@ final class PublishLoad
     }
 
     /**
+     * Publicar exige una carga cerrada o aprobada. El diagrama también deja pasar de re-análisis a publicada, pero esa flecha es
+     * cancelar el re-análisis sin cambios (CancelReanalysis, RA-10): publicar desde ahí se saltaría el cierre y el visto bueno.
+     * Recibe la carga releída con bloqueo por TransitionLoad.
+     *
+     * @return list<string>
+     */
+    private static function publishable(AcademicLoad $load): array
+    {
+        return $load->status === LoadStatus::Reanalysis
+            ? ["La carga está en {$load->status->label()}: no puede pasar a Publicada; ciérrala primero, o cancela el re-análisis si no cambió nada."]
+            : [];
+    }
+
+    /**
      * La versión 1 es la publicación; una posterior, re-análisis si el último cierre de la carga salió de `reanalysis`
      * (RA-01 a RA-08) y corrección si salió de asignación (se reabrió a ajustes, P3).
      */
@@ -126,7 +140,7 @@ final class PublishLoad
      */
     private static function careerDepartments(array $previous, array $payload): array
     {
-        return Career::withTrashed()->whereKey(SnapshotDiff::careerIds($previous, $payload))->pluck('department_id', 'id')->all();
+        return ReanalysisChangesQuery::careerDepartments($previous, $payload);
     }
 
     /**
