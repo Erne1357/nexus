@@ -6,9 +6,10 @@ use App\Modules\AcademicLoad\Http\Middleware\RedirectCampusToModality;
 use Illuminate\Support\Facades\Route;
 
 /*
-| Rutas de AcademicLoad: la propuesta de carrera del coordinador, la bandeja del departamento, la precisión de la
-| proyección (tarea 5.9c) y las versiones publicadas (tarea 8.10). Quién entra lo decide la página (CareerProposalPolicy,
-| ForecastEvaluationPolicy, AcademicLoadPolicy), no la ruta.
+| Rutas de AcademicLoad: la propuesta de carrera del coordinador, la bandeja del departamento, la demanda por materia
+| (tarea 5.7), la precisión de la proyección (tarea 5.9c) y las versiones publicadas (tarea 8.10). Quién entra lo decide
+| la página (CareerProposalPolicy, ProposalReviewPolicy, DemandBoardPolicy, ForecastEvaluationPolicy,
+| AcademicLoadPolicy), no la ruta.
 |
 | La consulta pública de lo publicado (tarea 4.4) va FUERA del grupo `auth`: la ven alumnos y docentes sin cuenta. Solo
 | lee de PublishedScheduleQuery. Los alumnos de un campus comparten IP, por eso el límite es alto (supuesto por confirmar).
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->prefix('academic-load')->name('academic-load.')->group(function () {
     Route::livewire('/proposal', 'academic-load::pages.proposal')->name('proposal');
     Route::livewire('/inbox', 'academic-load::pages.inbox')->name('inbox');
+    Route::livewire('/demand', 'academic-load::pages.demand')->name('demand');
     Route::livewire('/forecast-accuracy', 'academic-load::pages.forecast-accuracy')->name('forecast-accuracy');
     Route::livewire('/versions', 'academic-load::pages.versions')->name('versions');
 });

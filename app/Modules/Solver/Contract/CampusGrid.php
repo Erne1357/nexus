@@ -27,6 +27,10 @@ final readonly class CampusGrid
         $dayStart = ContractFields::time($data, 'day_start', $path);
         $dayEnd = ContractFields::time($data, 'day_end', $path);
         ContractFields::assertOrdered($dayStart, $dayEnd, $path, 'day_end');
+        $minutes = fn (string $time): int => ((int) substr($time, 0, 2)) * 60 + (int) substr($time, 3, 2);
+        if (($minutes($dayEnd) - $minutes($dayStart)) % $blockMinutes !== 0) {
+            throw ContractException::at(ContractFields::path($path, 'day_end'), "la jornada de {$dayStart} a {$dayEnd} no se divide en bloques de {$blockMinutes} minutos");
+        }
 
         $days = [];
         foreach (ContractFields::list($data, 'days', $path) as $i => $day) {

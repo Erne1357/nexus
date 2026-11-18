@@ -4,12 +4,18 @@ namespace App\Modules\AcademicLoad\Actions\Proposals;
 
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
+use App\Modules\AcademicLoad\Enums\SuggestionState;
+use App\Modules\AcademicLoad\Events\ProposalItemReviewed;
 use App\Modules\AcademicLoad\Events\ProposalItemUpdated;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
+use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
+use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Rules\DemandSettings;
 use Closure;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -34,11 +40,19 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * de su campus (M7); quien corrige se recibe como parámetro. En la fila de un campus inactivo solo se dejan en cero los
  * grupos pedidos, también los que salen de paquetes (zeroRequestedGroups(), M14). Los grupos pedidos nunca bajan de los que salen
  * de paquetes (`package_groups`, tarea 5.6b): una ValidationException sobre `requested_groups` que manda a cambiar los paquetes. Si cambian los esperados o los grupos, la fila queda marcada como corregida
- * (`captured_at` y `captured_by`, tarea 5.5): desde ahí la proyección ya no la mueve sola; la nota sola no cuenta.
+ * (`captured_at` y `captured_by`, tarea 5.5): desde ahí la proyección ya no la mueve sola; la nota sola no cuenta. Ese
+ * cambio también borra la marca de revisada (`reviewed_at` y `reviewed_by`, tarea 5.6): lo revisado ya no es lo que hay
+ * (supuesto por confirmar). «Usar sugerido» de «Revisar proyección» es useSuggested().
  */
 final class UpdateProposalItem
 {
-    public function __construct(private readonly ProposalItemRules $rules) {}
+    /** Las marcas de quién tocó la fila: se guardan, pero no van a la bitácora ni al aviso de lo que cambió. */
+    private const array MARKS = ['captured_at', 'captured_by', 'reviewed_at', 'reviewed_by'];
+
+    public function __construct(
+        private readonly ProposalItemRules $rules,
+        private readonly ProposalForecastQuery $forecasts,
+    ) {}
 
     /**
      * @throws ValidationException
@@ -70,8 +84,91 @@ final class UpdateProposalItem
     }
 
     /**
+     * «Usar sugerido» en «Revisar proyección» (tarea 5.6, opción C elegida por el usuario el 17 de noviembre de 2026): pone
+     * los esperados y los grupos en lo que sugiere la proyección vigente y deja la fila corregida y revisada, con las guardas
+     * de change(). Bajo el bloqueo revisa el estado de la fila (ProposalSuggestionState con la proyección que hay en ese
+     * momento): solo se usa en una fila corregida cuyo `suggested_*` es el de la proyección vigente; si la proyección cambió
+     * manda a «Usar N» (ResolveForecastChange), y sin proyección o sin tocar no hay nada que usar. Con paquetes, los grupos
+     * son los de paquetes más los sueltos sugeridos (SuggestedRowGroups, regla de la 5.6b), sin pasar del tope de una fila.
+     *
+     * Deja bitácora también si solo cambian las marcas (corregida y revisada), y avisa con ProposalItemReviewed después del
+     * commit. Todo error es una ValidationException sobre `item`, que la tarjeta muestra. Quién puede lo decide
+     * CareerProposalPolicy::update sobre la fila antes de llamarla (M7).
+     *
+     * @throws ValidationException
+     */
+    public function useSuggested(ProposalItem $item, User $actor): ProposalItem
+    {
+        $valuesChanged = false;
+        $oldMarks = [];
+
+        try {
+            return DB::transaction(function () use ($item, $actor, &$valuesChanged, &$oldMarks): ProposalItem {
+                $this->change($item, $actor, function (ProposalItem $locked) use ($actor, &$valuesChanged, &$oldMarks): array {
+                    $proposal = $locked->proposal;
+                    $settings = DemandSettings::fromSettings();
+                    $forecast = $this->forecasts->currentFor($proposal, $locked);
+                    $state = $this->forecasts->stateFor($locked, $forecast, $settings);
+
+                    if ($state->state === SuggestionState::Changed) {
+                        throw ValidationException::withMessages(['item' => 'La proyección cambió después de corregirla: usa «Usar N» para tomar lo que sugiere ahora.']);
+                    }
+
+                    if ($forecast === null || $state->state === SuggestionState::None) {
+                        throw ValidationException::withMessages(['item' => 'Ya no hay proyección de esta materia: corrígela en el panel.']);
+                    }
+
+                    if ($state->state === SuggestionState::Suggested) {
+                        throw ValidationException::withMessages(['item' => 'Esta materia ya sigue lo que sugiere Nexus.']);
+                    }
+
+                    $groups = $state->effectiveGroups ?? $forecast->suggested_groups;
+
+                    if ($groups > ProposalItemRules::MAX_REQUESTED_GROUPS) {
+                        throw ValidationException::withMessages(['item' => 'Con los grupos de paquetes pasaría de '.ProposalItemRules::MAX_REQUESTED_GROUPS.' grupos: cambia los paquetes.']);
+                    }
+
+                    $valuesChanged = $locked->expected_students !== $forecast->expected_students || $locked->requested_groups !== $groups;
+                    $oldMarks = $locked->only(self::MARKS);
+
+                    return [
+                        'expected_students' => $forecast->expected_students,
+                        'requested_groups' => $groups,
+                        'captured_at' => now(),
+                        'captured_by' => $actor->getKey(),
+                        'reviewed_at' => now(),
+                        'reviewed_by' => $actor->getKey(),
+                    ];
+                });
+
+                if (! $valuesChanged) {
+                    $proposal = $item->proposal()->with(['career' => fn ($query) => $query->withTrashed(), 'modality' => fn ($query) => $query->withTrashed()])->firstOrFail();
+
+                    activity()
+                        ->performedOn($item)
+                        ->causedBy($actor)
+                        ->event(ActivityEvent::Updated)
+                        ->withChanges(['attributes' => $item->only(self::MARKS), 'old' => $oldMarks])
+                        ->withProperties(['career_proposal_id' => $proposal->getKey(), 'subject_id' => $item->subject_id, 'campus_id' => $item->campus_id])
+                        ->log("Usó lo sugerido en {$item->subject->code}".($item->campus === null ? '' : " de {$item->campus->code}")." en la propuesta de {$proposal->career->code} en {$proposal->modality->name}");
+                }
+
+                ProposalItemReviewed::dispatch($item);
+
+                return $item;
+            });
+        } catch (ValidationException $e) {
+            if (array_keys($e->errors()) === ['item']) {
+                throw $e;
+            }
+
+            throw ValidationException::withMessages(['item' => (string) collect($e->errors())->flatten()->first()]);
+        }
+    }
+
+    /**
      * Si `$values` cambia esperados o grupos de la fila, agrega la marca de que el coordinador la corrigió
-     * (`captured_at` y `captured_by`; tarea 5.5); la nota sola no cuenta.
+     * (`captured_at` y `captured_by`; tarea 5.5) y borra la de revisada (tarea 5.6); la nota sola no cuenta.
      *
      * @param  array<string, mixed>  $values
      * @return array<string, mixed>
@@ -80,7 +177,7 @@ final class UpdateProposalItem
     {
         foreach (['expected_students', 'requested_groups'] as $column) {
             if (array_key_exists($column, $values) && $values[$column] !== $locked->{$column}) {
-                return [...$values, 'captured_at' => now(), 'captured_by' => $actor->getKey()];
+                return [...$values, 'captured_at' => now(), 'captured_by' => $actor->getKey(), 'reviewed_at' => null, 'reviewed_by' => null];
             }
         }
 
@@ -90,8 +187,8 @@ final class UpdateProposalItem
     /**
      * La corrección en una transacción: bloquea la propuesta y la parte, relee la fila con bloqueo y escribe lo que
      * devuelve `$data` con la fila ya leída (con su materia y su campus), con la bitácora y el aviso si algo cambió.
-     * Es la misma guarda de ResolveForecastChange. La marca de captura se guarda pero no entra a la bitácora ni al
-     * aviso: la bitácora lleva lo que cambió en la fila, no quién la tocó.
+     * Es la misma guarda de ResolveForecastChange y de MarkProposalItemReviewed. Las marcas de captura y de revisión se
+     * guardan pero no entran a la bitácora ni al aviso: la bitácora lleva lo que cambió en la fila, no quién la tocó.
      *
      * @param  Closure(ProposalItem): array<string, mixed>  $data
      *
@@ -138,7 +235,7 @@ final class UpdateProposalItem
             $old = $item->only(array_keys($values));
             $item->fill($values);
             $dirty = array_keys($item->getDirty());
-            $changed = array_values(array_diff($dirty, ['captured_at', 'captured_by']));
+            $changed = array_values(array_diff($dirty, self::MARKS));
 
             if ($dirty === []) {
                 return $item;

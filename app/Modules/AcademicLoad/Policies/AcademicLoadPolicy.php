@@ -54,7 +54,7 @@ final class AcademicLoadPolicy
     }
 
     /**
-     * Iniciar el re-análisis: el jefe del departamento de la carga, en su modalidad (RA-01, confirmado el 18 de noviembre
+     * Iniciar el re-análisis: el jefe del departamento de la carga, en su modalidad (RA-01, confirmado el 17 de noviembre
      * de 2026). Subdirección no lo inicia: ve la carga y la devuelve (`reopen`, RA-08).
      */
     public function startReanalysis(User $user, AcademicLoad $load): bool

@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling\Queries;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
@@ -26,7 +27,12 @@ use Illuminate\Support\Facades\Gate;
  *   sus carreras (RA-07), en las cargas de los departamentos que imparten materias de sus retículas vigentes. Las carreras
  *   salen de su alcance en el servidor (Actor), nunca del navegador.
  *
+ * El alcance se decide por carga (#620): quien ve una carga completa la ve completa, y en las demás cargas de la lista ve
+ * solo las carreras suyas que se imparten en ella. Un usuario con las dos cosas (un puesto con `load.view` de un
+ * departamento y `proposal.view` de carreras) ve unas cargas completas y otras filtradas.
+ *
  * Sin estado propio, para Octane: la condición del menú se guarda una vez y no lleva nada de la petición.
+ * Las materias quitadas de la retícula, las borradas o inactivas y los planes borrados o no vigentes no dan alcance.
  */
 final class ReanalysisLoadsQuery
 {
@@ -60,9 +66,40 @@ final class ReanalysisLoadsQuery
      */
     public function careerIdsFor(Actor $context, string $modalityId): array
     {
+        if (! $context->allowsAny(AcademicLoadPermission::ProposalView)) {
+            return [];
+        }
+
         return Career::query()->orderBy('code')->get(['id', 'code'])
             ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $modalityId, career: $career->getKey())))
             ->modelKeys();
+    }
+
+    /**
+     * De unas carreras, las que se imparten en la carga de un departamento: las que tienen una materia suya en su retícula
+     * vigente (RA-07), por clave de carrera.
+     *
+     * @param  list<string>  $careerIds
+     * @return list<string>
+     */
+    public function careersTaughtBy(string $departmentId, array $careerIds): array
+    {
+        if ($careerIds === []) {
+            return [];
+        }
+
+        return StudyPlan::query()
+            ->join('study_plan_subjects', 'study_plan_subjects.study_plan_id', '=', 'study_plans.id')
+            ->join('subjects', 'subjects.id', '=', 'study_plan_subjects.subject_id')
+            ->where('study_plans.is_current', true)
+            ->whereNull('study_plan_subjects.deleted_at')
+            ->whereNull('subjects.deleted_at')
+            ->where('subjects.is_active', true)
+            ->where('subjects.department_id', $departmentId)
+            ->whereIn('study_plans.career_id', $careerIds)
+            ->distinct()
+            ->pluck('study_plans.career_id')
+            ->all();
     }
 
     /**
@@ -78,7 +115,7 @@ final class ReanalysisLoadsQuery
 
     /**
      * Qué ve el usuario de una carga: null si la ve completa (`view` de AcademicLoadPolicy); si no, las carreras de su
-     * alcance (RA-07), que pueden ser ninguna.
+     * alcance que se imparten en esa carga (RA-07), que pueden ser ninguna (entonces no la ve).
      *
      * @return list<string>|null
      */
@@ -90,7 +127,23 @@ final class ReanalysisLoadsQuery
             return null;
         }
 
-        return $this->careerIdsFor($context, $load->modality_id);
+        return $this->careersTaughtBy($load->department_id, $this->careerIdsFor($context, $load->modality_id));
+    }
+
+    /**
+     * Las cargas del select de la pantalla, por clave del departamento: las que el usuario ve completas (`load.view`) y,
+     * además, las que imparten materias de las carreras cuya propuesta ve (`proposal.view`), sin repetir. Cada una se ve
+     * como lo dice careerScopeOf().
+     *
+     * @return Collection<int, AcademicLoad>
+     */
+    public function visibleLoads(Actor $context, string $termId, string $modalityId): Collection
+    {
+        $full = $context->allowsAny(AcademicLoadPermission::LoadView) ? $this->loadsFor($context, $termId, $modalityId, null) : new Collection;
+        $careerIds = $this->careerIdsFor($context, $modalityId);
+        $partial = $careerIds === [] ? new Collection : $this->loadsFor($context, $termId, $modalityId, $careerIds);
+
+        return $full->merge($partial)->unique('id')->sortBy(fn (AcademicLoad $load): string => $load->department->code)->values();
     }
 
     /**
@@ -126,6 +179,9 @@ final class ReanalysisLoadsQuery
             ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
             ->where('study_plans.is_current', true)
             ->whereNull('study_plans.deleted_at')
+            ->whereNull('study_plan_subjects.deleted_at')
+            ->whereNull('subjects.deleted_at')
+            ->where('subjects.is_active', true)
             ->whereIn('study_plans.career_id', $careerIds))
             ->get();
     }

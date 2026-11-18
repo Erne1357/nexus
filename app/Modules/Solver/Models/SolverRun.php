@@ -20,12 +20,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Una corrida del motor de horarios (tarea 6.2): qué programó (la carga de un departamento en una modalidad, o los grupos
  * de una carrera), con qué motor, en qué estado está, su entrada y su salida del contrato (en la fila o en un archivo,
- * `*_path`), sus métricas y quién la lanzó y quién la aceptó.
+ * `*_path`; RunPayloads), sus métricas y quién la lanzó y quién la aceptó. Mientras corre lleva su avance y su mejor
+ * puntaje, y si se pidió cancelarla, cuándo (tarea 6.8); `input_hash` es la huella de su entrada (SV-02).
  */
 #[Fillable([
     'term_id', 'modality_id', 'scope_kind', 'department_id', 'career_id', 'engine', 'status',
     'input', 'input_path', 'output', 'output_path', 'metrics', 'error',
     'created_by', 'started_at', 'finished_at', 'applied_by', 'applied_at',
+    'progress', 'best_score', 'input_hash', 'cancel_requested_at', 'apply_token',
 ])]
 #[UseFactory(SolverRunFactory::class)]
 class SolverRun extends Model
@@ -47,6 +49,9 @@ class SolverRun extends Model
             'started_at' => 'immutable_datetime',
             'finished_at' => 'immutable_datetime',
             'applied_at' => 'immutable_datetime',
+            'progress' => 'integer',
+            'best_score' => 'float',
+            'cancel_requested_at' => 'immutable_datetime',
         ];
     }
 

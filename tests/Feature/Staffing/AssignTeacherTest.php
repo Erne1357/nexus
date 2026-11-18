@@ -11,6 +11,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -174,4 +175,20 @@ it('asignar otra vez al mismo docente no cambia nada ni deja otra fila', functio
     expect($again->is($first))->toBeTrue()
         ->and(GroupTeacherAssignment::query()->count())->toBe(1)
         ->and(Activity::query()->where('event', 'teacher_assigned')->count())->toBe(1);
+});
+
+it('toma la carga con FOR SHARE antes de revisar su estado y de bloquear el grupo', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = mb_strtolower($query->sql);
+    });
+
+    assignTeacher($this->group, $this->teachers[0], $this->actor);
+
+    $lockLoad = collect($queries)->search(fn (string $sql) => str_contains($sql, 'academic_loads') && str_contains($sql, 'for share'));
+    $lockGroup = collect($queries)->search(fn (string $sql) => str_contains($sql, 'from "groups"') && str_contains($sql, 'for update'));
+
+    expect($lockLoad)->not->toBeFalse()
+        ->and($lockGroup)->not->toBeFalse()
+        ->and($lockLoad)->toBeLessThan($lockGroup);
 });

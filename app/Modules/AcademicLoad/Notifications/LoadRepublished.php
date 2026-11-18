@@ -19,7 +19,7 @@ use Illuminate\Support\Str;
 
 /**
  * El aviso de la republicación de una carga (tarea 8.4): se publicó la versión n + 1 y algo le cambió a quien lo recibe
- * (RA-05, confirmado el 18 de noviembre de 2026). Cada destinatario recibe solo sus líneas (SnapshotDiff::teachers(),
+ * (RA-05, confirmado el 17 de noviembre de 2026). Cada destinatario recibe solo sus líneas (SnapshotDiff::teachers(),
  * careers() o departments(), en palabras de SnapshotDiffText):
  *
  * - el docente: «Cambiaron tus grupos en la carga de <depto>», con exactamente lo que cambió para él; lleva a su semana
@@ -31,7 +31,7 @@ use Illuminate\Support\Str;
  *
  * Todos llevan a la consulta pública, que se abre sin sesión, porque un docente puede no tener acceso a Nexus.
  *
- * RA-06 (confirmado el 18 de noviembre de 2026): va por la campana y por el correo institucional. A un usuario le llega
+ * RA-06 (confirmado el 17 de noviembre de 2026): va por la campana y por el correo institucional. A un usuario le llega
  * al institucional de su ficha de docente o, si no tiene, al de su usuario si es institucional (HeadMailAddressQuery, la
  * regla de CV11); nunca al personal, y a una cuenta dada de baja no le llega correo (supuesto por confirmar). Sin
  * dirección, solo la campana. Al docente sin usuario, que también se tiene que enterar, le llega solo el correo, a su

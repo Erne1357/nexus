@@ -19,7 +19,7 @@ use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Support\Facades\Notification;
 
 /**
- * Avisa la republicación de una carga a quien le cambió algo (RA-05 y RA-06, confirmados el 18 de noviembre de 2026;
+ * Avisa la republicación de una carga a quien le cambió algo (RA-05 y RA-06, confirmados el 17 de noviembre de 2026;
  * tarea 8.4): lee el diff guardado de la versión (SnapshotDiff) y solo si la versión es la 2 o posterior y cambió algo.
  * Cada destinatario recibe un LoadRepublished con sus líneas:
  *

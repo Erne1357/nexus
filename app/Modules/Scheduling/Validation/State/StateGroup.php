@@ -4,7 +4,8 @@ namespace App\Modules\Scheduling\Validation\State;
 
 /**
  * Un grupo en el estado que valida el validador: lo que las reglas necesitan de `groups`, con su modalidad (de la que
- * sale su perfil) y su campus (el lugar: salones, HC-03 por campus, traslados).
+ * sale su perfil) y su campus (el lugar: salones, HC-03 por campus, traslados). `packageId` y `packageNumber` son el
+ * paquete de primer semestre del que nace (DM-09) y cuál de los que abrió el campus; nulos en un grupo suelto.
  */
 final readonly class StateGroup
 {
@@ -21,11 +22,13 @@ final readonly class StateGroup
         public ?string $teacherId,
         public int $capacity,
         public bool $isActive = true,
+        public ?string $packageId = null,
+        public ?int $packageNumber = null,
     ) {}
 
     public function withTeacher(?string $teacherId): self
     {
         return new self($this->id, $this->campusId, $this->modalityId, $this->subjectId, $this->departmentId, $this->ownerCareerId,
-            $this->studyPlanId, $this->semester, $this->code, $teacherId, $this->capacity, $this->isActive);
+            $this->studyPlanId, $this->semester, $this->code, $teacherId, $this->capacity, $this->isActive, $this->packageId, $this->packageNumber);
     }
 }

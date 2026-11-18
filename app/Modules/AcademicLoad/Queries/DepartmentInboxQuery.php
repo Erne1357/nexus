@@ -12,6 +12,7 @@ use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
@@ -24,6 +25,8 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Demand\Models\DemandForecast;
+use App\Modules\Demand\Queries\DemandForecastsQuery;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
@@ -39,6 +42,7 @@ final class DepartmentInboxQuery
     public function __construct(
         private readonly CatalogReviewQuery $catalogReviews,
         private readonly ProposalReviewRules $reviewRules,
+        private readonly DemandForecastsQuery $forecasts,
     ) {}
 
     /**
@@ -48,7 +52,9 @@ final class DepartmentInboxQuery
      * en la modalidad (M1); los catálogos sin validar en ella (CatalogReviewQuery::pendingFor, HC-14); las propuestas del
      * periodo y la modalidad (M6); las partes del departamento, cada una con su propuesta ya puesta (para
      * ProposalReviewPolicy::decide sin otra consulta); las filas con grupos de sus materias en esas partes, con sus
-     * materias y sus campus; las carreras, y el tamaño objetivo de los grupos (SuggestedGroups).
+     * materias y sus campus; las carreras; el tamaño objetivo de los grupos (SuggestedGroups), y la proyección vigente de
+     * las materias del departamento (DemandForecastsQuery::forDepartment), para comparar los esperados de cada fila con lo
+     * que explica (ProposalAnomalies::explained, confirmado el 17 de noviembre de 2026).
      */
     public function inbox(Term $term, Modality $modality, Department $department): DepartmentInbox
     {
@@ -72,9 +78,10 @@ final class DepartmentInboxQuery
         $proposalsByCareer = $proposals->keyBy('career_id');
 
         $anomalies = ProposalAnomalies::fromSettings();
+        $explained = $this->explained($term, $modality, $department, $proposals, $items);
 
         $rows = $careers
-            ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items, $anomalies, $correctionBy): array {
+            ->map(function (Career $career) use ($proposalsByCareer, $reviews, $items, $anomalies, $correctionBy, $explained): array {
                 $proposal = $proposalsByCareer->get($career->getKey());
                 $review = $proposal === null || $proposal->status === ProposalStatus::Draft ? null : $reviews->get($proposal->getKey());
                 $review?->setRelation('proposal', $proposal);
@@ -92,7 +99,7 @@ final class DepartmentInboxQuery
                     'subjects' => $requested->pluck('subject_id')->unique()->count(),
                     'groups' => (int) $requested->sum('requested_groups'),
                     'rows' => $requested->values()->all(),
-                    'anomalies' => $requested->filter(fn (ProposalItem $item): bool => $anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups) !== [])->count(),
+                    'anomalies' => $requested->filter(fn (ProposalItem $item): bool => $anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups, $explained[$item->getKey()] ?? null) !== [])->count(),
                 ];
             })
             ->sortBy([
@@ -110,7 +117,47 @@ final class DepartmentInboxQuery
             careers: $rows->all(),
             subjects: $this->parallels($rows),
             anomalies: $anomalies,
+            explained: $explained,
         );
+    }
+
+    /**
+     * Lo que explica la proyección vigente para cada fila pedida (ProposalAnomalies::explained), por id de fila: la fila de la
+     * proyección de su carrera, materia y campus, con el nuevo ingreso corregido de su columna. Dos consultas; las filas sin
+     * proyección no aparecen.
+     *
+     * @param  Collection<string, CareerProposal>  $proposals  por id
+     * @param  Collection<string, Collection<int, ProposalItem>>  $items  por id de propuesta
+     * @return array<string, int>
+     */
+    private function explained(Term $term, Modality $modality, Department $department, Collection $proposals, Collection $items): array
+    {
+        if ($items->isEmpty()) {
+            return [];
+        }
+
+        $forecasts = $this->forecasts->forDepartment($term, $modality, $department)
+            ->flatten(1)
+            ->keyBy(fn (DemandForecast $forecast): string => "{$forecast->career_id}|{$forecast->subject_id}|".($forecast->campus_id ?? ''));
+        $corrected = ProposalIntake::query()->whereIn('career_proposal_id', $items->keys()->all())->whereNotNull('captured_at')
+            ->get(['career_proposal_id', 'campus_id', 'new_students'])
+            ->mapWithKeys(fn (ProposalIntake $intake): array => ["{$intake->career_proposal_id}|".($intake->campus_id ?? '') => (int) $intake->new_students]);
+        $explained = [];
+
+        foreach ($items as $proposalId => $rows) {
+            $careerId = $proposals->get($proposalId)?->career_id;
+
+            foreach ($rows as $item) {
+                $value = ProposalAnomalies::explained($item->eligible_students, $forecasts->get("{$careerId}|{$item->subject_id}|".($item->campus_id ?? '')),
+                    $corrected->get("{$proposalId}|".($item->campus_id ?? '')));
+
+                if ($value !== null) {
+                    $explained[$item->getKey()] = $value;
+                }
+            }
+        }
+
+        return $explained;
     }
 
     /**

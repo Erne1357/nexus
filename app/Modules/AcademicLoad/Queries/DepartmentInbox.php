@@ -47,6 +47,8 @@ final readonly class DepartmentInbox
         public ProposalAnomalies $anomalies = new ProposalAnomalies,
         /** La modalidad de la bandeja y de la carga (M1, M6); null solo en bandejas armadas a mano en pruebas. */
         public ?Modality $modality = null,
+        /** @var array<string, int> por id de fila, lo que explica la proyección vigente (ProposalAnomalies::explained) */
+        public array $explained = [],
     ) {}
 
     /**
@@ -87,7 +89,7 @@ final readonly class DepartmentInbox
             fn (ProposalItem $item): array => [
                 'item' => $item,
                 'total' => $this->totalFor($item->subject_id, $item->campus_id),
-                'anomalies' => $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups),
+                'anomalies' => $this->anomalies->for($item->eligible_students, $item->expected_students, $item->requested_groups, $this->explained[$item->getKey()] ?? null),
             ],
             $this->career($careerId)['rows'] ?? [],
         );

@@ -13,11 +13,16 @@ use Closure;
  *
  * Una implementación no guarda estado entre corridas (Octane): todo lo de una corrida vive en la llamada a solve().
  * Cancelar una corrida en curso lo resuelve quien la lanza (el job de la 6.8), no el motor.
+ *
+ * Por eso el motor debe llamar a `$progress` con regularidad mientras busca (por ejemplo, en cada iteración o cada
+ * solución intermedia): es la única forma en que se entera de una cancelación (SV-03). El job decide cuándo revisar (a
+ * lo más una vez por segundo) y corta lanzando una excepción desde `$progress`; el motor la deja salir y no reintenta.
+ * Un motor que nunca llama a `$progress` solo se detiene al vencer su `time_limit_seconds`.
  */
 interface SolverEngine
 {
     /**
-     * La clave con la que se elige el motor (`fixed`, `php_heuristic`, `cpsat`); va en `solver_runs.engine` y en
+     * La clave con la que se elige el motor (`fixed`, `heuristic`, `cpsat`); va en `solver_runs.engine` y en
      * `metrics.engine`.
      */
     public function key(): string;

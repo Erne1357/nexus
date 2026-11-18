@@ -22,7 +22,7 @@ use Mary\Traits\Toast;
 
 /**
  * Re-análisis de la carga (tarea 8.2, pantalla, #602; RA-01 a RA-10; opción B «Por materia» de
- * `.impeccable/mocks/reanalisis/`, elegida por el usuario el 18 de noviembre de 2026). La carga del departamento en el
+ * `.impeccable/mocks/reanalisis/`, elegida por el usuario el 17 de noviembre de 2026). La carga del departamento en el
  * periodo activo y la modalidad de la página (`?modalidad=`, M1), elegida con el select «Carga» (`?departamento=`) a quien
  * ve varias; solo las que ya se publicaron alguna vez.
  *
@@ -33,11 +33,17 @@ use Mary\Traits\Toast;
  *   carrera y campus; lo que el jefe ya ajustó por bloque y en el drawer «Lo que ya cambiaste»; «Cancelar re-análisis»
  *   (CancelReanalysis, RA-10) solo sin cambios, y «Cerrar re-análisis», que va a «Cierre de la carga». Cada bloque abre el
  *   drawer de sugerencias (`scheduling::components.reanalysis-suggestions`, que llena la tarea 8.3).
- * - **Coordinador** (RA-07): sin `academic_load.load.view`, con la propuesta de una carrera (`academic_load.proposal.view`):
- *   las cargas que imparten materias de sus carreras, los mismos bloques filtrados a ellas, sin acciones y con la nota de
- *   que los ajustes los hace la jefatura. Sus carreras se resuelven en el servidor con Actor en cada petición.
+ * - **Coordinador** (RA-07): sin `academic_load.load.view` de esa carga, con la propuesta de una carrera
+ *   (`academic_load.proposal.view`): las cargas que imparten materias de sus carreras, los mismos bloques filtrados a ellas,
+ *   sin acciones y con la nota de que los ajustes los hace la jefatura. Sus carreras se resuelven en el servidor con Actor
+ *   en cada petición.
  *
- * Entra quien ve la carga o la propuesta de una carrera; un departamento ajeno es 403. Cada método vuelve a autorizar.
+ * El alcance se decide por carga (#620), no por usuario: quien ve completa la de un departamento y, con otro permiso, ve
+ * la propuesta de carreras que se imparten en la de otro, ve la primera completa y la segunda filtrada a sus carreras
+ * (ReanalysisLoadsQuery::careerScopeOf()), y el select «Carga» lista las dos.
+ *
+ * Entra quien ve la carga o la propuesta de una carrera; una carga que no ve ni imparte materias de sus carreras es 403.
+ * Cada método vuelve a autorizar.
  */
 new #[Title('Re-análisis de la carga')] class extends Component
 {
@@ -192,17 +198,16 @@ new #[Title('Re-análisis de la carga')] class extends Component
             return [...$empty, 'modalityOptions' => $modalities, 'shownModality' => $modalities->isEmpty() ? null : $this->requiredModality(), 'campusOptions' => collect(), 'shownCampus' => null];
         }
 
-        $load = $this->authorizedLoad($context, $query);
-        $careerIds = $query->careerScopeOf($context, $load);
+        [$load, $careerIds] = $this->scoped($context, $query);
         $state = $states->of($load);
         $full = $careerIds === null;
-        $board = $state->stage === 'reanalysis' ? $boards->of($load, $careerIds, [
+        $board = $state->stage === 'reanalysis' ? $boards->of($boards->data($load, $careerIds, withChanges: $full), [
             'class' => $this->class,
             'review' => $this->review,
             'career' => $this->career,
             'campus' => $scope['shownCampus']?->getKey(),
             'search' => $this->search,
-        ], withChanges: $full) : null;
+        ]) : null;
 
         return [
             ...$scope,
@@ -222,9 +227,20 @@ new #[Title('Re-análisis de la carga')] class extends Component
 
     /**
      * La carga de la página, autorizada otra vez en esta petición: quien la ve completa (`view`) o, sin eso, quien ve la
-     * propuesta de alguna carrera en su modalidad (RA-07). Si no, 403.
+     * propuesta de carreras que se imparten en ella (RA-07). Si no, 403.
      */
     private function authorizedLoad(Actor $context, ReanalysisLoadsQuery $query): AcademicLoad
+    {
+        return $this->scoped($context, $query)[0];
+    }
+
+    /**
+     * La carga autorizada y lo que se ve de ella: null, completa; si no, las carreras de su alcance que se imparten en
+     * ella (RA-07). El alcance es de esta carga, no del usuario (#620).
+     *
+     * @return array{0: AcademicLoad, 1: list<string>|null}
+     */
+    private function scoped(Actor $context, ReanalysisLoadsQuery $query): array
     {
         abort_if($this->loadId === null, 404);
 
@@ -232,7 +248,7 @@ new #[Title('Re-análisis de la carga')] class extends Component
         $careers = $query->careerScopeOf($context, $load);
         abort_if($careers === [], 403);
 
-        return $load;
+        return [$load, $careers];
     }
 
     /**
@@ -253,15 +269,15 @@ new #[Title('Re-análisis de la carga')] class extends Component
         }
 
         $modality = $this->requiredModality();
-        $careerIds = $context->allowsAny(AcademicLoadPermission::LoadView) ? null : $query->careerIdsFor($context, $modality->getKey());
+        $seesLoads = $context->allowsAny(AcademicLoadPermission::LoadView);
 
-        if ($careerIds === []) {
+        if (! $seesLoads && $query->careerIdsFor($context, $modality->getKey()) === []) {
             $this->message = "No ves la propuesta de ninguna carrera en {$modality->name}.";
 
             return;
         }
 
-        $loads = $query->loadsFor($context, $term->getKey(), $modality->getKey(), $careerIds);
+        $loads = $query->visibleLoads($context, $term->getKey(), $modality->getKey());
         $this->loads = $loads->map(fn (AcademicLoad $load): array => [
             'id' => $load->department_id,
             'name' => "{$load->department->code} · {$load->department->name} — {$load->status->label()}",
@@ -273,14 +289,14 @@ new #[Title('Re-análisis de la carga')] class extends Component
 
         if ($this->department !== '' && $load === null) {
             // Uno que el usuario ve pero sin carga publicada lo dice; uno ajeno es 403.
-            abort_unless($careerIds === null && $query->seesDepartment($context, $this->department, $modality->getKey()), 403);
+            abort_unless($query->seesDepartment($context, $this->department, $modality->getKey()), 403);
             $this->message = ($query->department($this->department)?->name ?? 'El departamento')." no tiene una carga publicada en {$modality->name} en {$term->name}.";
 
             return;
         }
 
         if ($load === null) {
-            $this->message = $careerIds === null
+            $this->message = $seesLoads
                 ? "No hay cargas publicadas en {$modality->name} en {$term->name}: el re-análisis empieza con una carga publicada."
                 : "Ninguna carga con materias de tu carrera está publicada en {$modality->name} en {$term->name}.";
 

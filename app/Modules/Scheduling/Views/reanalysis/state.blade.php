@@ -22,7 +22,7 @@
 @endphp
 <section class="flex flex-wrap items-start justify-between gap-x-7 gap-y-4 rounded-box border border-base-300 bg-base-100 px-4 py-4 md:px-5" aria-label="Estado del re-análisis" data-testid="reanalysis-state">
     <div class="grid min-w-0 flex-[1_1_34rem] gap-3.5">
-        @include('scheduling::reanalysis.cycle', ['steps' => $state->steps])
+        @include('scheduling::reanalysis.cycle', ['steps' => $state->steps, 'full' => $full])
 
         <p class="flex items-start gap-2 border-t border-base-300 pt-3 text-sm" data-testid="reanalysis-line">
             @switch($state->stage)
