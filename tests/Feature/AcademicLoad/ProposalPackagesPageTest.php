@@ -13,11 +13,15 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\AcademicLoad\Models\ProposalPackageCampus;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
+use App\Modules\Demand\Enums\ForecastMethod;
+use App\Modules\Demand\Models\DemandForecast;
+use App\Modules\Demand\Rules\DemandSettings;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 
@@ -190,6 +194,32 @@ describe('el bloque y sus cifras', function () {
             ->call('useSuggested', $item->id);
 
         expect($page->get("form.{$item->id}.requested_groups"))->toBe(6);
+    });
+
+    it('«Usar sugerido» toma el método de la proyección vigente si cambió entre corridas, como el estado de la fila', function () {
+        packagesPagePackage([$this->calculus]);
+        $item = packagesPageItem($this->calculus, $this->c1);
+        // La fila guardó «primer semestre» y la corrida nueva (la v2 en un plan viejo) la calcula con la fórmula: los esperados
+        // ya no incluyen el nuevo ingreso, así que no se resta (5 de paquetes + 1 suelto, no 5 + 0).
+        $item->forceFill(['forecast_method' => ForecastMethod::FirstSemester, 'suggested_expected_students' => 30, 'suggested_groups' => 1])->save();
+        $forecast = DemandForecast::factory()->create([
+            'term_id' => $this->term->id,
+            'campus_id' => $this->c1->id,
+            'career_id' => $this->career->id,
+            'subject_id' => $this->calculus->id,
+            'expected_students' => 30,
+            'suggested_groups' => 1,
+            'method' => ForecastMethod::Formula,
+        ]);
+
+        $page = packagesPageAs($this->ofC1)
+            ->call('edit', $this->calculus->id)
+            ->assertSee('Usar sugerido: 6 (35 por grupo)');
+        $button = domOf($page)->querySelector('[data-testid="panel-campus-C1"] [data-testid="use-suggested"]');
+
+        expect($button?->ownerDocument->saveHTML($button))->toContain('expected - 0)')
+            ->and(app(ProposalForecastQuery::class)->stateFor($item->fresh(), $forecast, DemandSettings::fromSettings())->effectiveGroups)->toBe(6)
+            ->and($page->call('useSuggested', $item->id)->get("form.{$item->id}.requested_groups"))->toBe(6);
     });
 
     it('el panel de la materia dice cuántos grupos salen de paquetes y cuántos son sueltos', function () {

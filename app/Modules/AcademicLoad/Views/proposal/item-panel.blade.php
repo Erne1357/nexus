@@ -99,7 +99,7 @@
                                     wire:model="form.{{ $item->id }}.requested_groups" class="text-right font-mono" data-testid="field-groups" />
                             </div>
                             <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested('{{ $item->id }}')" spinner="useSuggested('{{ $item->id }}')" data-testid="use-suggested">@php
-                                $rowNewStudents = $item->forecast_method === \App\Modules\Demand\Enums\ForecastMethod::FirstSemester ? ($panelNewStudents[$item->campus_id ?? ''] ?? 0) : 0;
+                                $rowNewStudents = ($panelMethods[$item->id] ?? $item->forecast_method) === \App\Modules\Demand\Enums\ForecastMethod::FirstSemester ? ($panelNewStudents[$item->campus_id ?? ''] ?? 0) : 0;
                             @endphp<span x-text="'Usar sugerido: ' + ((expected) => {{ $item->package_groups }} > 0 ? {{ $item->package_groups }} + Math.ceil(Math.max(0, expected - {{ $rowNewStudents }}) / {{ $suggestedSize }}) : Math.ceil(expected / {{ $suggestedSize }}))(Math.max(0, parseInt($wire.form[{{ \Illuminate\Support\Js::from($item->id) }}]?.expected_students) || 0)) + ' ({{ $suggestedSize }} por grupo)'">Usar sugerido: {{ $suggested[$item->id] ?? 0 }} ({{ $suggestedSize }} por grupo)</span></x-button>
                         </div>
                         @if ($item->package_groups > 0)

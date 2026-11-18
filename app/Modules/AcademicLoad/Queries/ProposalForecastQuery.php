@@ -9,6 +9,7 @@ use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Rules\ProposalSuggestionState;
 use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
+use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Queries\DemandForecastsQuery;
 use App\Modules\Demand\Queries\TermOccupancyQuery;
@@ -94,7 +95,7 @@ final class ProposalForecastQuery
         if ($item->package_groups > 0 && $groups !== null && $expected !== null) {
             $intakes ??= $this->intakes($item->proposal);
             $needsLab ??= (bool) $item->subject()->withTrashed()->value('needs_lab');
-            $effective = SuggestedRowGroups::for($groups, $expected, $item->package_groups, $forecast?->method ?? $item->forecast_method,
+            $effective = SuggestedRowGroups::for($groups, $expected, $item->package_groups, self::methodFor($item, $forecast),
                 $intakes[(string) $item->campus_id] ?? 0, $needsLab, $settings->groupSizes);
         }
 
@@ -109,6 +110,17 @@ final class ProposalForecastQuery
             $settings,
             $effective,
         );
+    }
+
+    /**
+     * El método con que se calculó lo sugerido de una fila, el que decide si los grupos sueltos restan el nuevo ingreso
+     * (SuggestedRowGroups): el de la proyección vigente si la hay, y si no, el que la fila guardó. Una corrida nueva puede
+     * cambiarlo (la fórmula v2 deja de usar `first_semester` en los planes viejos) y la fila corregida conserva el de antes. Lo
+     * usan el estado de la fila (stateFor) y «Usar sugerido» del panel, para que den lo mismo.
+     */
+    public static function methodFor(ProposalItem $item, ?DemandForecast $forecast): ?ForecastMethod
+    {
+        return $forecast?->method ?? $item->forecast_method;
     }
 
     /**
