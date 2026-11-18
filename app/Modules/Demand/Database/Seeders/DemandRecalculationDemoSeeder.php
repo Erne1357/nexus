@@ -4,6 +4,7 @@ namespace App\Modules\Demand\Database\Seeders;
 
 use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Students\Actions\RefreshStudentProgress;
+use App\Modules\Students\Database\Seeders\ClosingGrades;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Models\KardexRecord;
 use Illuminate\Database\Seeder;
@@ -57,31 +58,7 @@ final class DemandRecalculationDemoSeeder extends Seeder
      */
     public static function subjectsToCapture(string $term, float $share): array
     {
-        $inProgress = TermCode::previousRegular($term);
-        $graded = KardexRecord::query()->where('term_code', $inProgress)->whereIn('result', [KardexResult::Aprobada, KardexResult::Reprobada])->count();
-        $pending = KardexRecord::query()
-            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
-            ->where('kardex_records.term_code', $inProgress)
-            ->where('kardex_records.result', KardexResult::Cursando)
-            ->groupBy('kardex_records.subject_id', 'subjects.code')
-            ->orderByRaw('count(*) desc')
-            ->orderBy('subjects.code')
-            ->selectRaw('kardex_records.subject_id, count(*) as total')
-            ->toBase()
-            ->get();
-        $target = (int) ceil(($graded + $pending->sum('total')) * $share);
-        $subjects = [];
-
-        foreach ($pending as $row) {
-            if ($graded >= $target) {
-                break;
-            }
-
-            $subjects[] = (string) $row->subject_id;
-            $graded += (int) $row->total;
-        }
-
-        return $subjects;
+        return ClosingGrades::subjectsToCapture(TermCode::previousRegular($term), $share);
     }
 
     public function run(string $term = '20271', int $subjects = 6, float $failureShare = 0.5, int $seed = 2027, ?float $capturedShare = null, bool $refresh = true): void
@@ -89,8 +66,6 @@ final class DemandRecalculationDemoSeeder extends Seeder
         $inProgress = TermCode::previousRegular($term);
         $subjectIds = $capturedShare === null ? self::subjectsToGrade($term, $subjects) : self::subjectsToCapture($term, $capturedShare);
 
-        // Reprobadas repetibles con la semilla: se ordenan por el número de control y la clave de la materia, que son los
-        // mismos en cada siembra, y no por el id, que es un uuid nuevo cada vez.
         $rows = KardexRecord::query()
             ->join('students', 'students.id', '=', 'kardex_records.student_id')
             ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
@@ -100,16 +75,13 @@ final class DemandRecalculationDemoSeeder extends Seeder
             ->toBase()
             ->get(['kardex_records.id', 'students.control_number', 'subjects.code'])
             ->map(fn (object $row): array => ['id' => (string) $row->id, 'key' => "{$row->control_number}|{$row->code}"])
-            ->sortBy(fn (array $row): array => [crc32($row['key'].'|'.$seed), $row['key']])
-            ->pluck('id')
-            ->values()
             ->all();
 
-        $failed = array_slice($rows, 0, (int) round(count($rows) * $failureShare));
-        $passed = array_slice($rows, count($failed));
+        // Reprobadas repetibles con la semilla (ClosingGrades::split(), la misma regla del archivo de `imports:export-demo`).
+        ['failed' => $failed, 'passed' => $passed] = ClosingGrades::split($rows, $failureShare, $seed);
 
-        KardexRecord::query()->whereIn('id', $failed)->update(['result' => KardexResult::Reprobada, 'grade' => 55]);
-        KardexRecord::query()->whereIn('id', $passed)->update(['result' => KardexResult::Aprobada, 'grade' => 82]);
+        KardexRecord::query()->whereIn('id', $failed)->update(['result' => KardexResult::Reprobada, 'grade' => ClosingGrades::FAILED_GRADE]);
+        KardexRecord::query()->whereIn('id', $passed)->update(['result' => KardexResult::Aprobada, 'grade' => ClosingGrades::PASSED_GRADE]);
 
         if ($refresh) {
             app(RefreshStudentProgress::class)->handle();
