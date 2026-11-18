@@ -19,6 +19,7 @@ enum SolverPermission: string implements Permission
     case DepartmentRunApply = 'solver.department_run.apply';
     case CareerRunView = 'solver.career_run.view';
     case CareerRunLaunch = 'solver.career_run.launch';
+    case SettingUpdate = 'solver.setting.update';
 
     public function label(): string
     {
@@ -28,6 +29,7 @@ enum SolverPermission: string implements Permission
             self::DepartmentRunApply => 'Aceptar el horario que propone el motor para la carga de un departamento',
             self::CareerRunView => 'Ver las corridas del motor de una carrera',
             self::CareerRunLaunch => 'Lanzar el motor sobre los grupos de una carrera para explorar',
+            self::SettingUpdate => 'Cambiar los parámetros del motor de horarios',
         };
     }
 
@@ -36,6 +38,7 @@ enum SolverPermission: string implements Permission
         return match ($this) {
             self::DepartmentRunView, self::DepartmentRunLaunch, self::DepartmentRunApply => [Dimension::Modality, Dimension::Unit],
             self::CareerRunView, self::CareerRunLaunch => [Dimension::Modality, Dimension::Career],
+            self::SettingUpdate => [],
         };
     }
 
@@ -45,10 +48,15 @@ enum SolverPermission: string implements Permission
     }
 
     /**
-     * Lo académico (AZ-02, AZ-S16): los departamentos académicos y la Subdirección Académica.
+     * Lo académico (AZ-02, AZ-S16): los departamentos académicos y la Subdirección Académica. Cambiar los parámetros
+     * es global y no depende de la unidad del puesto.
      */
     public function appliesTo(): ?UnitApplicability
     {
+        if ($this === self::SettingUpdate) {
+            return null;
+        }
+
         return UnitApplicability::academic();
     }
 }

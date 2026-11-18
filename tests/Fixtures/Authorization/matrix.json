@@ -140,6 +140,7 @@
             "scheduling.schedule.view",
             "solver.career_run.view",
             "solver.department_run.view",
+            "solver.setting.update",
             "staffing.change_request.view",
             "staffing.ranking.view",
             "staffing.teacher_load.view",

@@ -41,7 +41,11 @@ Reglas que Nexus hace cumplir. Cada regla tiene un identificador para referirla 
 | SC-08 | Un grupo con docente de honorarios se programa en los turnos donde hay disponibilidad declarada. | 2 | R2 |
 | SC-09 | Si un docente tiene dos sesiones seguidas el mismo día en campus distintos, entre el fin de una y el inicio de la otra quedan al menos los minutos de traslado (`staffing.min_campus_travel_minutes`, 60 por omisión); si no, es un aviso en los dos grupos que no bloquea (confirmado el 7 de noviembre de 2026). «Seguidas» es sin otra sesión del docente en medio; dos que se empalman ya son HC-01. Cuentan todas las sesiones, también las virtuales (supuesto por confirmar). Aplica igual dentro de una sola carga: la carga presencial junta grupos de C1 y C2 (M1). | — | R1 (aviso) |
 
-Los pesos son configurables por campus (`settings`, clave `solver.weights`).
+**Pesos editables** (confirmado el 18 de noviembre de 2026): la Subdirección ajusta los pesos de SC-01 a SC-09 para todo el Tec en «Parámetros» (`solver.soft_weights`, enteros de 0 a 100; 0 desactiva la regla) con el permiso `solver.setting.update`, sin despliegue. La tabla de arriba da los valores por omisión. Aplican desde la siguiente corrida del motor.
+
+**Patrón de sesiones** (confirmado el 18 de noviembre de 2026, como el SII): las sesiones son de una hora, una por día en días distintos y a la misma hora: 4 h van de lunes a jueves y 5 h de lunes a viernes. 6 h usan además el sábado si la rejilla del campus tiene el día 6 (supuesto por confirmar); si no, el grupo no se acomoda. Hoy lo aplica el motor de prueba; la heurística lo hereda.
+
+Los pesos son globales para todo el Tec y los edita Subdirección en «Parámetros» (`solver.soft_weights`; ver «Pesos editables» abajo, confirmado el 18 de noviembre de 2026).
 
 ## Ranking docente (desempate)
 
@@ -456,6 +460,7 @@ Panel de configuración del admin (14 de noviembre de 2026, riel `riel/configura
 | Aceptar el horario que propone el motor | `admin`, `jefe_departamento` del departamento en su modalidad | Tarea 6.2. Solo una corrida terminada de un departamento; escribe en `group_sessions` (confirmado el 17 de noviembre de 2026). |
 | Ver las corridas del motor | `admin`, `subdireccion` (todas), `jefe_departamento` (las de su departamento), `coordinador` (las de su carrera) | Tarea 6.2 (confirmado el 17 de noviembre de 2026). |
 | Cancelar o descartar una corrida del motor | quien la lanzó, `admin`, `jefe_departamento` (las de la carga de su departamento), `coordinador` (las de su carrera) | Tarea 6.8 (revisión del Riel A en #587; supuesto por confirmar): quien puede lanzar ese alcance (`SolverRunPolicy::cancel` y `::discard`). Cancelar es de una corrida en cola o corriendo (SV-03); descartar, de una terminada (6.10). |
+| Cambiar los parámetros del motor (pesos de las reglas blandas y tiempos máximos de una corrida) | `admin`, `subdireccion` | Tarea 6.3b. Los pesos los ajusta Subdirección para todo el Tec, sin despliegue (confirmado el 18 de noviembre de 2026). Los tiempos máximos van en la misma tarjeta de «Parámetros» y la pantalla solo edita una tarjeta completa, así que Subdirección también los cambia (supuesto por confirmar). |
 | Pasar la carga a asignación docente (`staffing`) | `admin`, `jefe_departamento` del departamento | Sin choques duros ni grupos sin horario: lo veta Scheduling al transitar. Desde aquí se asignan docentes y toda la oferta del departamento es visible para sus docentes (HC-17). Quién la pasa es el jefe del departamento (supuesto por confirmar) |
 | Ver la propuesta de carrera | `admin`, `subdireccion`, `coordinador` de la carrera y modalidad | `subdireccion`, la de cualquier carrera y modalidad, solo lectura (supuesto por confirmar). Un coordinador con campus la ve entera (AZ-S17, MS6) |
 | Armar, corregir y enviar la propuesta de carrera | `coordinador` de la carrera y modalidad | catálogos de los departamentos involucrados validados (aviso, no bloqueo). Armarla y enviarla es a nivel de modalidad; corregir una fila, que es de un campus, exige además el campus: un coordinador con campus solo corrige las filas del suyo (AZ-S17, M7, MS6; supuesto por confirmar) |
