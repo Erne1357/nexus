@@ -22,6 +22,7 @@ use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use Database\Seeders\DemoSeeder;
 use Dom\Element;
 use Dom\HTMLDocument;
 use Illuminate\Database\Eloquent\Builder;
@@ -66,6 +67,24 @@ pest()->beforeEach(function () {
         }
     });
 })->in('Browser');
+
+/**
+ * Siembra el demo completo (DemoSeeder) en un browser test y le da a PostgreSQL las estadísticas de lo sembrado.
+ *
+ * El rollback de cada prueba deja como filas muertas todo lo que sembró, y el autovacuum las limpia cuando le toca,
+ * también a media prueba siguiente: lo que esa prueba sembró sigue sin confirmar, no lo cuenta como vivo y deja
+ * `reltuples = 0` en tablas con miles de filas. El planificador las cree vacías y cada escritura de la retícula, que
+ * recalcula en la misma petición el avance de los alumnos y la proyección de demanda (la cola es `sync`), pasaba de 2 s
+ * a más de 20 s: la aserción vencía con la petición en vuelo. `ANALYZE`, dentro de la transacción de la prueba, sí
+ * cuenta lo que ella sembró; y su candado (SHARE UPDATE EXCLUSIVE en cada tabla, hasta el rollback) deja fuera al
+ * autovacuum, que se salta las tablas que no puede bloquear, por el resto de la prueba.
+ */
+function seedDemoForBrowser(): void
+{
+    test()->seed(DemoSeeder::class);
+
+    DB::unprepared('ANALYZE');
+}
 
 /**
  * El último toast que el componente mandó mostrar: MaryUI lo evalúa en el navegador como `toast({...})`.
