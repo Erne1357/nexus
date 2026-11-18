@@ -69,7 +69,7 @@ Se escribió al cerrar el núcleo de la fase 5 (Riel A) para que la fase 6 arran
 - **Fases siguientes** (para su propio punto de partida):
   - 7.11 elige el motor predeterminado por modalidad, no por campus.
   - 7.8 (descomposición en el servicio y en PHP) sigue el `PlanRun` de la 6.9: un orden sugerido con aviso, no «tronco común y luego departamentos» obligatorio.
-  - 8.1 no puede escuchar `BatchApplied` de Imports, que está a la derecha de AcademicLoad. Usa `StudentProgressRefreshed`, como la 5.4.
+  - 8.1 puede escuchar `BatchApplied` de Imports: Imports está a la izquierda de AcademicLoad en el mapa (quien no puede es Demand). Ver el «Punto de partida» de la fase 8.
   - 8.2 y 8.8 leen la demanda con la llave de `demand_forecasts` (periodo, modalidad, campus, carrera y materia).
 
 ### Reparto propuesto

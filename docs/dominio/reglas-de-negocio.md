@@ -162,6 +162,18 @@ El jefe cierra la carga de su departamento en una modalidad cuando ya no le falt
 - **Publicar revisa HC-15 otra vez:** si algo cambió después del cierre (por ejemplo, Facilities bloqueó o desactivó un salón), la publicación se veta con su motivo y hay que reabrir.
 - **Carga sin grupos:** la de un departamento sin partes aceptadas en la modalidad se queda en borrador, no se cierra ni se publica, y los tableros la muestran como «Sin grupos». No cuenta como pendiente.
 
+## Re-análisis de la carga (fase 8, R2)
+
+Con la carga de un departamento ya publicada, llegan las calificaciones del semestre que termina y la demanda real cambia: Nexus la compara con lo publicado, el jefe ajusta y se republica como versión nueva (`docs/plan/fase-8-reanalisis.md`). Decisiones del usuario del 18 de noviembre de 2026:
+
+- **RA-01.** El **jefe de departamento** inicia el re-análisis de la carga de su departamento. Subdirección la ve y puede devolverla, como en el cierre (confirmado el 18 de noviembre de 2026).
+- **RA-02.** Lo que habilita el re-análisis es importar las **calificaciones del semestre actual**, no un kárdex completo: la mayor parte del kárdex ya está en Nexus (confirmado el 18 de noviembre de 2026).
+- **RA-03.** Republicar una carga re-analizada en una modalidad que exige el visto bueno de Subdirección lo vuelve a pedir, igual que con la versión 1 (confirmado el 18 de noviembre de 2026). El usuario nombró Presencial; hoy Presencial no lo exige («Cierre y reapertura de la carga»), y mientras no se cambie su perfil la republicación de Presencial sigue el perfil (supuesto por confirmar).
+- **RA-04.** Una materia se clasifica como **sobrante**, **faltante** o **ajustada** con el mismo umbral de diferencia de la proyección, `demand.highlight_threshold` (20 % por omisión), que Subdirección y el admin editan en «Parámetros» (confirmado el 18 de noviembre de 2026).
+- **RA-05.** Al republicar, Nexus avisa a los docentes afectados, con exactamente lo que cambió para cada uno; a los coordinadores de las carreras afectadas; y a los jefes de otros departamentos cuando se tocan grupos compartidos o préstamos de salón. No avisa a Servicios Escolares (confirmado el 18 de noviembre de 2026).
+
+Supuestos por confirmar: mientras la carga está en re-análisis, el público y los docentes siguen viendo la última versión publicada (la misma regla de la reapertura); y el diff de demanda se calcula al leer, sin guardarse. El resto de las preguntas está en «Punto de partida» de la fase 8.
+
 ## Consulta publicada
 
 Páginas públicas de lo publicado (tarea 4.4, `/horarios`). El qué se publica, la última versión de cada carga y la reapertura están en «Cierre y reapertura de la carga» y en fase-4 «Respuestas de la planeación»; aquí solo lo que decide la consulta.
@@ -474,7 +486,7 @@ Panel de configuración del admin (14 de noviembre de 2026, riel `riel/configura
 | Ver «Avance del cierre» | `subdireccion`, `admin` (`academic_load.load.reopen`) | Todas las cargas del Tec en el periodo activo (confirmado el 10 de noviembre de 2026). Los jefes no lo ven (supuesto por confirmar) |
 | Visto bueno | `subdireccion` (`academic_load.load.approve`) | solo si `requires_subdireccion_approval`; Campus II no lo exige (confirmado el 10 de noviembre de 2026). Aprueba o regresa con comentarios (reabre con motivo); el admin también (supuesto por confirmar) |
 | Publicar | `subdireccion`, o `jefe_departamento` si la modalidad no exige visto bueno (su perfil, M1; antes, el campus) | carga `closed` o `approved`. Vuelve a revisar HC-15 (confirmado el 10 de noviembre de 2026). Cada publicación guarda una versión nueva de la foto y conserva las anteriores (HC-18); el historial docente queda como dice la última (`academic_load.load.publish` y `publish_approved`) |
-| Re-análisis | `coordinador`, `jefe_departamento` | nueva importación de kardex (R2) |
+| Re-análisis | `jefe_departamento` del departamento inicia; `subdireccion` ve y devuelve | Con calificaciones del semestre actual importadas (RA-01 y RA-02, confirmado el 18 de noviembre de 2026). Antes decía `coordinador` y `jefe_departamento`; si el coordinador ve o aplica ajustes queda por confirmar (fase 8) |
 
 Alcance de cada rol: la Subdirección Académica es una para todo el Tec y el jefe de departamento es uno por departamento para todo el Tec, así que su alcance no lleva campus y vale en cada campus activo (confirmado el 30 de octubre de 2026). El coordinador lo es de sus carreras en una modalidad, con campus opcional: con campus solo trabaja ese campus; sin campus, todos los de su modalidad (M5, confirmado el 12 de noviembre de 2026; antes, de una carrera en un campus, porque sus alumnos son de un campus, confirmado el 30 de octubre de 2026). Los docentes no están atados a un campus: dan clase en cualquier campus o modalidad (confirmado el 30 de octubre de 2026); por eso un alcance de `docente` sin campus vale en todos los campus activos.
 
