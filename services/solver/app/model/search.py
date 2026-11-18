@@ -24,9 +24,10 @@ from app.contract.output import ProposedSession
 from .constraints import add_hard_constraints
 from .data import ModelData
 from .pattern import minutes
-from .phases import FEASIBLE
+from .phases import FEASIBLE, SearchLimits, run_solver
+from .rooms import RoomAssignmentError
 from .solution import chosen_option, sessions_of
-from .variables import BuildBudget, BuildTimeout, DomainOptions, Occupancy, Variables, build_variables
+from .variables import BuildTimeout, DomainOptions, ModelTooLarge, Occupancy, Variables, build_variables
 
 #: Salones con `z` de un día de 2 horas en un vecindario: los más ajustados (`DomainOptions.long_window_rooms`).
 LONG_WINDOW_ROOMS = 12
@@ -67,26 +68,32 @@ class Search:
 def lns(
     data: ModelData,
     time_limit: float,
-    workers: int = 0,
+    limits: SearchLimits | None = None,
     seed: int = 0,
     step_seconds: float = 3,
     first_share: float = 0.25,
 ) -> Search:
     """La primera vuelta tiene a lo más `first_share` del tiempo (con pocos hilos no alcanza a probar que es lo mejor
-    de su dominio y gastaría todo); el resto es para los vecindarios, de `step_seconds` cada uno."""
+    de su dominio y gastaría todo); el resto es para los vecindarios, de `step_seconds` cada uno.
+
+    `limits` trae los hilos, el tope de variables (la primera vuelta lanza `ModelTooLarge` si lo pasa; un vecindario
+    que lo pasa se descarta) y la cancelación, que se revisa al armar, mientras CP-SAT resuelve y entre vecindarios.
+    Los plazos son de reloj: con la misma semilla, una máquina más lenta puede llegar a otra solución."""
+    limits = limits or SearchLimits()
     started = time.perf_counter()
     deadline = started + time_limit
     search = Search()
     search.chosen = _current_options(data)
     first_deadline = started + max(step_seconds, time_limit * first_share)
-    variables, solved = _place_most(data, DomainOptions(), search, min(deadline, first_deadline), workers, seed)
-    if solved is None:
+    variables, solved = _place_most(data, DomainOptions(), search, min(deadline, first_deadline), limits, seed)
+    if solved is None or not _keep(search, solved, variables, data, replace=True):
+        search.sessions, search.chosen = {}, {}
         search.unplaced = [group.id for group in data.movable]
         return search
-    _keep(search, solved, variables, data, replace=True)
 
     pending = [(group.id, 0) for group in data.movable if group.id not in search.sessions]
     while pending and time.perf_counter() < deadline:
+        limits.tick()
         target, attempt = pending.pop(0)
         if target in search.sessions:
             # Lo programó el vecindario de otro grupo.
@@ -97,14 +104,16 @@ def lns(
         # Cada intento, más tiempo y otra semilla: el vecindario grande no siempre se resuelve en el primero.
         step_deadline = min(deadline, time.perf_counter() + step_seconds * (attempt + 1))
         options = DomainOptions(extra_tiers=movable, long_window_rooms=LONG_WINDOW_ROOMS)
-        variables, solved = _place_most(sub, options, search, step_deadline, workers, seed + attempt)
+        try:
+            variables, solved = _place_most(sub, options, search, step_deadline, limits, seed + attempt)
+        except ModelTooLarge:
+            variables, solved = Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy()), None
         placed = (
             0
             if solved is None
             else sum(chosen_option(solved, domain) is not None for domain in variables.groups.values())
         )
-        if solved is not None and placed > before:
-            _keep(search, solved, variables, sub, replace=False)
+        if solved is not None and placed > before and _keep(search, solved, variables, sub, replace=False):
             # Un vecino que quedó fuera para que entraran más vuelve a la fila.
             pending.extend((group, 0) for group in movable if group != target and group not in search.sessions)
         elif attempt < MAX_ATTEMPTS:
@@ -182,14 +191,14 @@ def _current_options(data: ModelData) -> dict[str, OptionKey]:
 
 
 def _place_most(
-    data: ModelData, options: DomainOptions, search: Search, deadline: float, workers: int, seed: int
+    data: ModelData, options: DomainOptions, search: Search, deadline: float, limits: SearchLimits, seed: int
 ) -> tuple[Variables, cp_model.CpSolver | None]:
     """Arma y resuelve con la asignación relajada, maximizando los grupos programados, con la pista de lo que lleva la
     búsqueda. Devuelve el solver si encontró solución."""
     built_at = time.perf_counter()
     model = cp_model.CpModel()
     try:
-        variables = build_variables(model, data, options, BuildBudget(deadline=deadline))
+        variables = build_variables(model, data, options, limits.budget(deadline))
     except BuildTimeout:
         # Se acabó el plazo al armar: la vuelta no da nada y lo que ya estaba programado se queda.
         return Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy()), None
@@ -206,9 +215,8 @@ def _place_most(
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.1, deadline - solve_at)
-    solver.parameters.num_workers = workers
     solver.parameters.random_seed = seed
-    status = solver.solve(model)
+    status = run_solver(solver, model, limits)
     feasible = status in FEASIBLE
     search.steps.append(
         Step(
@@ -226,10 +234,16 @@ def _place_most(
     return variables, solver if feasible else None
 
 
-def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data: ModelData, replace: bool) -> None:
-    """Guarda las sesiones de los grupos del modelo resuelto: todos con `replace`, o solo los del vecindario."""
+def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data: ModelData, replace: bool) -> bool:
+    """Guarda las sesiones de los grupos del modelo resuelto: todos con `replace`, o solo los del vecindario. Si la
+    fase B no reparte los salones (no debería: la fase A lo garantiza), no guarda nada y devuelve `False`: la búsqueda
+    se queda con lo que tenía."""
     sessions: dict[str, list[ProposedSession]] = defaultdict(list)
-    for session in sessions_of(solver, variables, data):
+    try:
+        proposed = sessions_of(solver, variables, data)
+    except RoomAssignmentError:
+        return False
+    for session in proposed:
         sessions[session.group_id].append(session)
     if replace:
         search.sessions = {}
@@ -242,6 +256,8 @@ def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data:
             search.sessions[domain.id] = sessions[domain.id]
             search.chosen[domain.id] = (option.spread, option.block)
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
+
+    return True
 
 
 def _neighbours(data: ModelData, group_id: str) -> list[str]:

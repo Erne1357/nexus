@@ -19,7 +19,7 @@ FEASIBLE = (cp_model.OPTIMAL, cp_model.FEASIBLE)
 def status_of(data: dict, without: tuple[str, ...] = (), exact: bool = False) -> int:
     """El estado del modelo duro: en dos fases con niveles por necesidad (por omisión) o el exacto de 7.5."""
     data = {**data, "hard_rules": [rule for rule in HARD_RULES if rule not in without]}
-    run = solve_hard(model_data(data), time_limit=5, workers=1, pool_rooms=not exact, tiers_by_need=not exact)
+    run = solve_hard(model_data(data), time_limit=5, pool_rooms=not exact, tiers_by_need=not exact)
 
     return run.status
 

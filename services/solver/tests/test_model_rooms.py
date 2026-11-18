@@ -12,9 +12,11 @@ import pytest
 from ortools.sat.python import cp_model
 
 from app.contract import parse_input
+from app.model import constraints
 from app.model.data import ModelData
 from app.model.phases import FEASIBLE, solve_hard
-from app.model.rooms import PooledSession, RoomAssignmentError, RoomPool, match
+from app.model.rooms import NONE, PooledSession, RoomAssignmentError, RoomPool, match
+from app.model.search import lns
 from app.model.verify import hard_violations
 from tests.instances import campus, group, instance, model_data, room, slot, teacher
 
@@ -83,8 +85,8 @@ def test_las_dos_fases_dicen_lo_mismo_que_el_modelo_exacto(seed):
     data = random_instance(seed)
     model_input = model_data(data)
 
-    exact = solve_hard(model_input, time_limit=10, workers=1, pool_rooms=False, tiers_by_need=False)
-    pooled = solve_hard(model_input, time_limit=10, workers=1, pool_rooms=True, tiers_by_need=False)
+    exact = solve_hard(model_input, time_limit=10, pool_rooms=False, tiers_by_need=False)
+    pooled = solve_hard(model_input, time_limit=10, pool_rooms=True, tiers_by_need=False)
 
     assert exact.status != cp_model.UNKNOWN
     assert (pooled.status in FEASIBLE) == (exact.status in FEASIBLE)
@@ -136,3 +138,116 @@ def test_sin_hc02_la_fase_b_comparte_los_salones_tomados():
     practice = PooledSession("practica", 1, 20, True)
 
     assert match(pool, 1, 0, [practice], {"lab"}, exclusive=False) == {practice: "lab"}
+
+
+def lab_and_room_counterexample() -> dict[str, Any]:
+    """El contraejemplo del Riel A: en un solo bloque, un laboratorio de 40 y un aula de 20 contra una práctica de 20
+    y una teoría de 35. Cada cuenta sola pasa (una teoría de 35 cabe en un salón; una práctica de 20, en uno), pero los
+    dos solo caben en el laboratorio."""
+    return instance(
+        campuses=[campus(days=[1], day_end="08:00")],
+        groups=[group("practica", 1, capacity=20, needs_lab=True, practice_hours=1), group("teoria", 1, capacity=35)],
+        rooms=[room("lab", type="laboratorio", capacity=40), room("aula", capacity=20)],
+    )
+
+
+@pytest.mark.parametrize("exact", [False, True], ids=["dos fases", "exacto"])
+def test_el_contraejemplo_de_laboratorio_y_aula_es_infactible_al_armar_el_modelo(exact):
+    model_input = model_data(lab_and_room_counterexample())
+
+    run = solve_hard(model_input, time_limit=5, pool_rooms=not exact, tiers_by_need=not exact)
+
+    assert run.status == cp_model.INFEASIBLE
+    result = lns(model_input, time_limit=5, seed=7)
+    assert len(result.unplaced) == 1
+    assert hard_violations(parse_input(lab_and_room_counterexample()), result.all_sessions) == []
+
+
+def without_cross_pairs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Quita los pares cruzados de la cuenta de la fase A: deja solo los de teoría sola y práctica sola."""
+    keep = constraints.threshold_pairs
+    monkeypatch.setattr(
+        constraints,
+        "threshold_pairs",
+        lambda theory, lab: [(a, b) for a, b in keep(theory, lab) if NONE in (a, b)],
+    )
+
+
+def test_sin_los_pares_cruzados_la_fase_b_no_alcanza(monkeypatch):
+    """El par cruzado es el único que amarra el contraejemplo: sin él la fase A da una solución que la fase B no puede
+    repartir, y `solve_hard` lo dice en vez de devolver sesiones sin salón."""
+    without_cross_pairs(monkeypatch)
+
+    run = solve_hard(model_data(lab_and_room_counterexample()), time_limit=5)
+
+    assert run.status == cp_model.UNKNOWN
+    assert run.sessions == []
+    assert "Sin salón" in (run.error or "")
+
+
+def tight_instance(seed: int) -> dict[str, Any]:
+    """Una instancia que aprieta Hall: un día de 1 o 2 bloques, de 4 a 8 grupos de una hora de 20, 30 o 35 lugares
+    (algunos con práctica de laboratorio) para 1 o 2 laboratorios y de 3 a 5 aulas de varios tamaños, sin docentes:
+    solo los salones amarran."""
+    rng = random.Random(1000 + seed)
+    rooms = [
+        room(f"lab{index}", type="laboratorio", capacity=rng.choice([25, 35, 40])) for index in range(rng.randint(1, 2))
+    ]
+    rooms += [room(f"aula{index}", capacity=rng.choice([25, 30, 35, 40])) for index in range(rng.randint(3, 5))]
+    groups = []
+    for index in range(rng.randint(4, 8)):
+        lab = rng.random() < 0.4
+        groups.append(
+            group(
+                f"g{index}",
+                1,
+                capacity=rng.choice([20, 30, 35]),
+                needs_lab=lab,
+                practice_hours=1 if lab else 0,
+            )
+        )
+
+    return instance(
+        campuses=[campus(days=[1], day_end=rng.choice(["08:00", "09:00"]))],
+        groups=groups,
+        rooms=rooms,
+    )
+
+
+TIGHT_SEEDS = range(60)
+
+
+def test_la_familia_apretada_dice_lo_mismo_que_el_exacto_y_la_fase_b_siempre_reparte():
+    """Con todos los grupos de una hora y solo los salones por amarrar, la fase A es factible exactamente cuando el
+    modelo exacto lo es, la fase B reparte siempre que la A tiene solución y salen casos de los dos lados."""
+    outcomes = []
+    for seed in TIGHT_SEEDS:
+        data = tight_instance(seed)
+        model_input = model_data(data)
+        exact = solve_hard(model_input, time_limit=10, pool_rooms=False, tiers_by_need=False)
+        pooled = solve_hard(model_input, time_limit=10, pool_rooms=True, tiers_by_need=False)
+
+        assert exact.status != cp_model.UNKNOWN, seed
+        assert pooled.error is None, seed
+        assert pooled.feasible == exact.feasible, seed
+        if pooled.feasible:
+            assert hard_violations(parse_input(data), pooled.sessions) == [], seed
+        outcomes.append(pooled.feasible)
+
+    # Con estas semillas: 22 factibles y 38 infactibles.
+    assert outcomes.count(True) >= 15
+    assert outcomes.count(False) >= 15
+
+
+def test_en_la_familia_apretada_sin_pares_cruzados_la_fase_b_falla(monkeypatch):
+    """La familia apretada sí ejercita los pares cruzados: sin ellos, en alguna instancia la fase A queda factible y
+    la fase B no puede repartir."""
+    without_cross_pairs(monkeypatch)
+
+    failures = [
+        seed
+        for seed in TIGHT_SEEDS
+        if solve_hard(model_data(tight_instance(seed)), time_limit=10, tiers_by_need=False).error is not None
+    ]
+
+    assert failures

@@ -91,18 +91,22 @@ def add_pool_capacity(model: cp_model.CpModel, variables: Variables, data: Model
         thresholds = {window: variables.groups[window.group_id].threshold for window in windows}
         theory = [*sorted(set(thresholds.values())), NONE]
         lab = [*sorted({thresholds[window] for window in windows if window.lab is not None}), NONE]
-        for low_theory in theory:
-            for low_lab in lab:
-                if low_theory == NONE and low_lab == NONE:
-                    continue
-                rooms = pool.union(day, block, low_theory, low_lab)
-                counted = [_pool_terms(window, thresholds[window], low_theory, low_lab) for window in windows]
-                explicit = [literal for room in rooms for literal in variables.rooms.at(room, day, minute)]
-                # Cada ventana del conjunto suma a lo más 1 y cada ventana explícita, a lo más un salón: si ni así
-                # pasan de los salones, la restricción sobra.
-                if sum(1 for terms in counted if terms) + len(explicit) > len(rooms):
-                    terms = [term for window_terms in counted for term in window_terms]
-                    model.add(cp_model.LinearExpr.sum(terms + explicit) <= len(rooms))
+        for low_theory, low_lab in threshold_pairs(theory, lab):
+            rooms = pool.union(day, block, low_theory, low_lab)
+            counted = [_pool_terms(window, thresholds[window], low_theory, low_lab) for window in windows]
+            explicit = [literal for room in rooms for literal in variables.rooms.at(room, day, minute)]
+            # Cada ventana del conjunto suma a lo más 1 y cada ventana explícita, a lo más un salón: si ni así
+            # pasan de los salones, la restricción sobra.
+            if sum(1 for terms in counted if terms) + len(explicit) > len(rooms):
+                terms = [term for window_terms in counted for term in window_terms]
+                model.add(cp_model.LinearExpr.sum(terms + explicit) <= len(rooms))
+
+
+def threshold_pairs(theory: list[int], lab: list[int]) -> list[tuple[int, int]]:
+    """Los pares de umbrales de la cuenta: cada umbral de teoría con cada uno de práctica, más cada uno solo (`NONE`
+    del otro lado). Los pares cruzados son los que atrapan una teoría grande y una práctica que solo caben en el mismo
+    laboratorio."""
+    return [(low_theory, low_lab) for low_theory in theory for low_lab in lab if (low_theory, low_lab) != (NONE, NONE)]
 
 
 def _pool_terms(window: Window, threshold: int, low_theory: int, low_lab: int) -> list:

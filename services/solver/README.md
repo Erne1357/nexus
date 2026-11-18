@@ -15,6 +15,7 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 | `app/runs.py` | Corridas en memoria, hilos de trabajo, límite de simultáneas, cancelación |
 | `app/api/` | Aplicación FastAPI (`factory.py`), autenticación y esquemas de respuesta |
 | `tests/` | pytest: API, contrato, fixtures compartidos, OR-Tools |
+| `scripts/benchmark.py` | Reproduce la tabla de «Tamaño de la instancia real» (`docs/arquitectura/solver.md`) con un fixture compartido; solo en la imagen `dev` |
 
 ## Configuración
 

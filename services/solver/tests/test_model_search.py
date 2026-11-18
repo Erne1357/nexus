@@ -23,7 +23,7 @@ def fixture(name: str):
 def test_la_busqueda_programa_todo_el_fixture_sin_duras(name):
     """En `medium` la primera vuelta no alcanza: los vecindarios le dan los otros niveles a quien no quedó."""
     data = fixture(name)
-    result = lns(ModelData.of(data), time_limit=20, workers=1, seed=7)
+    result = lns(ModelData.of(data), time_limit=20, seed=7)
 
     assert result.unplaced == []
     assert result.first_feasible_seconds is not None
@@ -34,7 +34,7 @@ def test_la_busqueda_programa_todo_el_fixture_sin_duras(name):
 def test_en_el_fixture_infactible_quedan_los_que_no_caben():
     """`infeasible`: al menos dos de los tres grupos de t001 quedan sin programar, y lo programado no tiene duras."""
     data = fixture("infeasible")
-    result = lns(ModelData.of(data), time_limit=10, workers=1, seed=7)
+    result = lns(ModelData.of(data), time_limit=10, seed=7)
 
     assert len(result.unplaced) >= 2
     assert set(result.unplaced) <= {"g001", "g002", "g003"}
@@ -93,7 +93,106 @@ def test_la_pista_es_el_horario_actual_cuando_es_una_opcion_del_patron():
 def test_si_no_alcanza_ni_a_armar_la_primera_vuelta_todos_quedan_sin_programar():
     """Sin tiempo, el armado se detiene (BuildTimeout) y la búsqueda lo dice: ningún grupo programado, todos fuera."""
     data = fixture("medium")
-    result = lns(ModelData.of(data), time_limit=0, workers=1, seed=7)
+    result = lns(ModelData.of(data), time_limit=0, seed=7)
 
     assert result.sessions == {}
     assert result.unplaced == [group.id for group in data.groups if group.movable]
+
+
+def test_un_vecindario_cuyos_salones_no_se_reparten_se_descarta_sin_perder_la_solucion(monkeypatch):
+    """Si la fase B fallara en un vecindario (la fase A lo impide), ese vecindario se descarta y la búsqueda sigue con
+    lo que tenía, en vez de perder todo lo programado."""
+    from app.model import search as search_module
+    from app.model.rooms import RoomAssignmentError
+
+    original = search_module.sessions_of
+    calls = []
+
+    def first_only(*args):
+        calls.append(1)
+        if len(calls) > 1:
+            raise RoomAssignmentError("Sin salón (prueba).")
+        return original(*args)
+
+    monkeypatch.setattr(search_module, "sessions_of", first_only)
+    data = fixture("medium")
+    result = lns(ModelData.of(data), time_limit=10, seed=7)
+
+    assert len(calls) > 1
+    assert result.sessions
+    assert result.unplaced
+    assert hard_violations(data, result.all_sessions) == []
+
+
+def test_la_busqueda_revisa_la_cancelacion():
+    """La cancelación del servicio (`RunContext.check_cancelled`) se revisa al armar y entre vecindarios: la excepción
+    sale de la búsqueda."""
+    from app.engine import RunContext
+    from app.engine.base import RunCancelled
+    from app.model.phases import SearchLimits
+
+    context = RunContext(threads=1, is_cancelled=lambda: True)
+
+    with pytest.raises(RunCancelled):
+        lns(ModelData.of(fixture("medium")), time_limit=10, limits=SearchLimits.of(context))
+
+
+def test_la_cancelacion_detiene_a_cp_sat_mientras_resuelve():
+    """Un modelo que tardaría los 20 s de su límite (una mochila con muchas restricciones): cancelado a los 0.3 s,
+    CP-SAT se detiene y la excepción sale en menos de 3 s."""
+    import random
+    import time
+
+    from app.model.phases import SearchLimits, run_solver
+
+    rng = random.Random(3)
+    model = cp_model.CpModel()
+    items = [model.new_bool_var("") for _ in range(300)]
+    for _ in range(30):
+        model.add(sum(rng.randint(1, 50) * item for item in items) <= 2000)
+    model.maximize(sum(rng.randint(1, 50) * item for item in items))
+    started = time.perf_counter()
+
+    def cancel_after() -> None:
+        if time.perf_counter() - started > 0.3:
+            raise RuntimeError("cancelada")
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 20
+    with pytest.raises(RuntimeError, match="cancelada"):
+        run_solver(solver, model, SearchLimits(workers=1, check_cancelled=cancel_after))
+    assert time.perf_counter() - started < 3
+
+
+def test_los_limites_salen_del_contexto_de_la_corrida(monkeypatch):
+    """Los hilos son los del servicio (`SOLVER_THREADS`); con 0, los núcleos del contenedor, nunca todos los de la
+    máquina. El tope de variables y la cancelación también vienen del contexto."""
+    from app.engine import RunContext
+    from app.model import phases
+
+    monkeypatch.setattr(phases, "available_cpus", lambda: 2)
+    context = RunContext(threads=0, max_model_variables=123)
+    limits = phases.SearchLimits.of(context)
+
+    assert limits.workers == 2
+    assert limits.max_variables == 123
+    assert limits.check_cancelled == context.check_cancelled
+    assert phases.SearchLimits.of(RunContext(threads=3)).workers == 3
+    assert limits.budget(1.0).max_variables == 123
+
+
+def test_el_benchmark_reproduce_la_tabla_con_un_fixture():
+    """`scripts/benchmark.py` corre cada forma en su proceso y da la fila de la tabla de solver.md."""
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "benchmark.py"
+    spec = importlib.util.spec_from_file_location("benchmark", path)
+    benchmark = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(benchmark)
+
+    output = benchmark.main(["tiny", "--forms", "lns,two-phase", "--time-limit", "5", "--threads", "1"])
+
+    rows = output.splitlines()[2:]
+    assert [row.split(" | ")[0] for row in rows] == ["| lns", "| two-phase"]
+    assert all("3 de 3 | 0 |" in row for row in rows)

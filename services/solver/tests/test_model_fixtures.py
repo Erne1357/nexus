@@ -31,9 +31,7 @@ def fixture(name: str) -> tuple[SolverInput, dict[str, Any]]:
 
 def solve(data: SolverInput, exact: bool = False) -> tuple[int, list[ProposedSession]]:
     """En dos fases con niveles por necesidad (por omisión) o con el modelo exacto de 7.5; un hilo, reproducible."""
-    run = solve_hard(
-        ModelData.of(data), time_limit=20, workers=1, seed=7, pool_rooms=not exact, tiers_by_need=not exact
-    )
+    run = solve_hard(ModelData.of(data), time_limit=20, seed=7, pool_rooms=not exact, tiers_by_need=not exact)
 
     return run.status, run.sessions
 
