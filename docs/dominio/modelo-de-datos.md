@@ -28,12 +28,12 @@ flowchart LR
     AcademicLoad --> Scheduling
     Facilities --> Scheduling
     Faculty --> Scheduling --> Staffing
-    Scheduling --> Solver
+    Scheduling --> Solver --> Staffing
     Scheduling --> Enrollment
     Students --> Enrollment
 ```
 
-Regla: un módulo solo puede depender de los módulos que están a su izquierda en este mapa. `Core` no depende de nadie.
+Regla: un módulo solo puede depender de los módulos que están a su izquierda en este mapa. `Core` no depende de nadie. Staffing depende de Solver para pedir alternativas a una solicitud de cambio, y Solver nunca lee Staffing ([ADR-0029](../decisiones/0029-staffing-depende-de-solver.md)).
 
 ## Core
 
