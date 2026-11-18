@@ -16,7 +16,9 @@ use App\Modules\Core\Models\Campus;
  * - `groups`: los grupos sueltos que ya existen (de cualquier carrera), por orden de creación;
  * - `suggestion`: los grupos que sugiere Nexus (ParallelGroups::layout), cada uno con sus cupos y el grupo que se queda
  *   (ParallelPlacement), y `cancelled`, los que sobrarían, del de más avance al de menos;
- * - `whyNot`: por qué no hay nada que juntar, o null si juntando se ahorran grupos.
+ * - `whyNot`: por qué no hay nada que juntar, o null si juntando se ahorran grupos;
+ * - `newCapacity`: la capacidad de un grupo que naciera al armar (GroupCapacity), para la vista previa del drawer
+ *   (ParallelDraft).
  */
 final readonly class ParallelSubject
 {
@@ -37,6 +39,7 @@ final readonly class ParallelSubject
         public array $suggestion,
         public array $cancelled,
         public ?string $whyNot,
+        public int $newCapacity,
     ) {}
 
     public function size(): int

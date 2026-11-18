@@ -41,7 +41,8 @@ use Mary\Traits\Toast;
  * abre una carrera: son los parámetros con los que llega la notificación de una propuesta enviada. Ven la bandeja
  * quienes ven la carga (ProposalReviewPolicy::viewAny) y deciden el jefe del departamento y el admin
  * (ProposalReviewPolicy::decide), con la policy antes de cada método. Todo lo que muestra sale de
- * DepartmentInboxQuery; las escrituras, de AcceptProposalReview y ReturnProposalReview.
+ * DepartmentInboxQuery; las escrituras, de AcceptProposalReview y ReturnProposalReview. Arriba de los paneles, las
+ * pestañas «Bandeja · Paralelos» (tarea 8.8): la segunda es la pantalla de Scheduling donde se arman los paralelos.
  */
 new #[Title('Bandeja del departamento')] class extends Component
 {
@@ -281,7 +282,7 @@ new #[Title('Bandeja del departamento')] class extends Component
     public function with(DepartmentInboxQuery $query): array
     {
         if ($this->departmentId === null) {
-            return ['inbox' => null, ...$this->modalityViewData()];
+            return ['inbox' => null, 'tabs' => [], ...$this->modalityViewData()];
         }
 
         $inbox = $this->inbox($query);
@@ -336,6 +337,24 @@ new #[Title('Bandeja del departamento')] class extends Component
             'selfApproval' => $target !== null && SelfApproval::applies(auth()->user(), $target['proposal']?->submitted_by),
             'targetAnomalies' => $target === null ? [] : $this->anomalousRows($inbox->rowsFor($target['career']->getKey())),
             'parallelsTarget' => $this->parallelsTarget($inbox),
+            'tabs' => $this->tabs($campus),
+        ];
+    }
+
+    /**
+     * Las pestañas «Bandeja · Paralelos» (tarea 8.8; academic-load::inbox.tabs), con la modalidad, el departamento y el
+     * campus de la página. «Paralelos» es de Scheduling: se conoce solo por el nombre de su ruta, y quien ve esta bandeja
+     * la ve también, porque ParallelsPolicy::view pide el mismo permiso con el mismo alcance que ProposalReviewPolicy::viewAny.
+     *
+     * @return array{inbox: string, parallels: ?string}
+     */
+    private function tabs(?Campus $campus): array
+    {
+        $params = array_filter(['modalidad' => $this->requiredModality()->code, 'depto' => $this->department, 'campus' => $campus?->code]);
+
+        return [
+            'inbox' => route('academic-load.inbox', $params),
+            'parallels' => Route::has('scheduling.parallels') ? route('scheduling.parallels', $params) : null,
         ];
     }
 

@@ -79,7 +79,7 @@ final class ParallelsQuery
             ->get();
 
         if ($items->isEmpty()) {
-            return new Parallels($term, $modality, $department, $blocked, []);
+            return new Parallels($term, $modality, $department, $blocked, [], $load?->status);
         }
 
         $careers = Career::query()->withTrashed()->whereIn('id', $proposals->only($statuses->keys()->all())->pluck('career_id')->all())->get()->keyBy('id');
@@ -105,7 +105,7 @@ final class ParallelsQuery
             ->values()
             ->all();
 
-        return new Parallels($term, $modality, $department, $blocked, $subjects);
+        return new Parallels($term, $modality, $department, $blocked, $subjects, $load?->status);
     }
 
     /**
@@ -247,6 +247,7 @@ final class ParallelsQuery
             suggestion: $suggestion,
             cancelled: array_map(fn (string $id): ParallelExisting => $byId[$id], $placement->cancelled),
             whyNot: $this->whyNot($careers, $parallels),
+            newCapacity: $newCapacity,
         );
     }
 
