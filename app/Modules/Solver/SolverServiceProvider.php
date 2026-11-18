@@ -2,8 +2,13 @@
 
 namespace App\Modules\Solver;
 
+use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\NavigationArea;
+use App\Modules\Core\Enums\NavigationGroup;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Solver\Console\ExportSolverFixture;
 use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
@@ -40,6 +45,22 @@ final class SolverServiceProvider extends ModuleServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([ExportSolverFixture::class, PruneSolverRunFilesCommand::class, SolverBenchmark::class]);
         }
+    }
+
+    /**
+     * «Corridas del motor» (tarea 6.10), al final del grupo Horarios (MN-01): para quien ve corridas de una carga o de
+     * una carrera, disponible mientras haya carga en curso (MN-02, MN-04: la misma condición que las pantallas de la
+     * carga).
+     *
+     * @return list<NavigationItem>
+     */
+    public function navigation(): array
+    {
+        return [
+            new NavigationItem('Corridas del motor', 'solver.runs', 'o-cpu-chip', NavigationArea::Academico, group: NavigationGroup::Horarios,
+                whyUnavailable: LoadProgressQuery::menuCondition(),
+                visible: static fn (Actor $context): bool => $context->allowsAny(SolverPermission::DepartmentRunView) || $context->allowsAny(SolverPermission::CareerRunView)),
+        ];
     }
 
     /**

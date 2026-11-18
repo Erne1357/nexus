@@ -9,13 +9,15 @@ use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Models\SolverRun;
+use App\Modules\Solver\Queries\CareerLoadsQuery;
 
 /**
  * Quién lanza, ve y acepta corridas del motor (tarea 6.2; reglas-de-negocio.md, «Aprobaciones y permisos»; decisión del
  * usuario del 17 de noviembre de 2026):
  *
  * - El jefe de departamento lanza y acepta las corridas de la carga de su departamento en su modalidad.
- * - El coordinador lanza corridas de su carrera para explorar y comparar; no las acepta.
+ * - El coordinador lanza corridas de su carrera para explorar y comparar; no las acepta. Ve las suyas y las de
+ *   departamento de las cargas que tocan su carrera (tarea 6.10), nunca las de carrera de otro coordinador.
  * - Subdirección ve todas.
  * - Solo se acepta una corrida terminada de un departamento: la de carrera no escribe el horario.
  * - Cancela (SV-03) o descarta una corrida quien la lanzó o quien puede lanzar ese alcance (tarea 6.8, revisión del
@@ -29,11 +31,28 @@ final class SolverRunPolicy
 {
     use AuthorizesActor;
 
+    /**
+     * Ve una corrida de departamento quien ve las de esa carga y el coordinador de una carrera que la carga toca
+     * (CareerLoadsQuery; tarea 6.10); una de carrera, quien ve las de esa carrera. Nunca la de carrera de otro
+     * coordinador.
+     */
     public function view(User $user, SolverRun $run): bool
     {
-        return $run->scope_kind === RunScope::Department
-            ? $this->actor($user)->allows(SolverPermission::DepartmentRunView, Target::of(modality: $run->modality_id, unit: $run->department_id))
-            : $this->actor($user)->allows(SolverPermission::CareerRunView, Target::of(modality: $run->modality_id, career: $run->career_id));
+        $actor = $this->actor($user);
+
+        if ($run->scope_kind === RunScope::Career) {
+            return $actor->allows(SolverPermission::CareerRunView, Target::of(modality: $run->modality_id, career: $run->career_id));
+        }
+
+        if ($actor->allows(SolverPermission::DepartmentRunView, Target::of(modality: $run->modality_id, unit: $run->department_id))) {
+            return true;
+        }
+
+        return $actor->allowsAny(SolverPermission::CareerRunView)
+            && array_any(
+                app(CareerLoadsQuery::class)->careersOf($run->term_id, $run->modality_id, $run->department_id),
+                fn (string $careerId): bool => $actor->allows(SolverPermission::CareerRunView, Target::of(modality: $run->modality_id, career: $careerId)),
+            );
     }
 
     public function launchForDepartment(User $user, string $modalityId, string $departmentId): bool

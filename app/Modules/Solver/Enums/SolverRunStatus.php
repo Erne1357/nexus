@@ -2,6 +2,8 @@
 
 namespace App\Modules\Solver\Enums;
 
+use App\Modules\Core\Enums\StatusTone;
+
 /**
  * El ciclo de vida de una corrida (docs/arquitectura/solver.md): en cola, corriendo, terminada (con salida válida del
  * contrato), fallida, aplicada (el jefe la aceptó y se escribió en `group_sessions`), descartada (el jefe la descartó
@@ -24,11 +26,37 @@ enum SolverRunStatus: string
         return match ($this) {
             self::Queued => 'En cola',
             self::Running => 'Corriendo',
-            self::Done => 'Terminada',
+            self::Done => 'Lista',
             self::Failed => 'Fallida',
             self::Applied => 'Aplicada',
             self::Discarded => 'Descartada',
             self::Cancelled => 'Cancelada',
+        };
+    }
+
+    /**
+     * El tono de su insignia (DESIGN.md, «Insignias de estado»).
+     */
+    public function tone(): StatusTone
+    {
+        return match ($this) {
+            self::Queued, self::Running => StatusTone::Info,
+            self::Done => StatusTone::Success,
+            self::Failed => StatusTone::Error,
+            self::Applied => StatusTone::SuccessSolid,
+            self::Discarded, self::Cancelled => StatusTone::Neutral,
+        };
+    }
+
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Queued => 'o-clock',
+            self::Running => 'o-arrow-path',
+            self::Done, self::Applied => 'o-check-circle',
+            self::Failed => 'o-x-circle',
+            self::Discarded => 'o-archive-box-x-mark',
+            self::Cancelled => 'o-stop-circle',
         };
     }
 
