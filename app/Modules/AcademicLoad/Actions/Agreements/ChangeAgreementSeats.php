@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Deja los lugares de un grupo compartido aceptado en los de su cupo (reglas-de-negocio.md, «Cupos por carrera»; supuesto
- * por confirmar, decidido por la coordinación de los rieles el 18 de noviembre de 2026): la cifra vigente es la de
+ * por confirmar, decidido por la coordinación de los rieles el 17 de noviembre de 2026): la cifra vigente es la de
  * `group_quotas`, así que cuando el departamento que imparte cambia los lugares de esa carrera directo (sin nuevo acuerdo,
  * confirmado el 8 de noviembre de 2026; SetGroupQuotas, ArmParallelGroups), el acuerdo toma la cifra nueva. Quién y cuándo
  * lo decidió no cambian. Lo llama Scheduling dentro de su transacción, con el grupo bloqueado.

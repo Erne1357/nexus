@@ -7,7 +7,7 @@ namespace App\Modules\Scheduling\Queries;
  * sus cupos por carrera, su carrera dueña, su capacidad y el grupo que ya existe y se queda en él (null si nace nuevo).
  * `full` es un completo de una carrera (los demás son los restos: mixtos o de una sola carrera).
  *
- * Cupos (confirmado el 18 de noviembre de 2026): en un mixto, cada carrera recibe sus esperados en exclusiva y lo demás
+ * Cupos (confirmado el 17 de noviembre de 2026): en un mixto, cada carrera recibe sus esperados en exclusiva y lo demás
  * queda libre. En un grupo de una sola carrera, su cupo es toda la capacidad, como nace un grupo al aceptar una parte
  * (supuesto por confirmar). La dueña es la del grupo que se queda; en uno nuevo, la de más lugares (supuesto por confirmar).
  */

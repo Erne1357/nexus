@@ -278,7 +278,7 @@ final class ParallelsQuery
      * uno nuevo, GroupCapacity), y los esperados que no caben en ninguno (supuesto por confirmar):
      *
      * - un grupo de una sola carrera le da toda su capacidad; lo que pasa de ella sobra;
-     * - en un mixto cada carrera recibe sus esperados en exclusiva y lo demás queda libre (confirmado el 18 de noviembre de
+     * - en un mixto cada carrera recibe sus esperados en exclusiva y lo demás queda libre (confirmado el 17 de noviembre de
      *   2026); si suman más que la capacidad, sobra lo de la carrera con más lugares;
      * - lo que sobra de cada carrera se acomoda en los lugares libres de otros mixtos, primero donde ya va la carrera, y lo que
      *   no cabe queda de menos (`short`).

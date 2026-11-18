@@ -85,7 +85,7 @@ final readonly class ParallelGroups
      * Los grupos de la sugerencia, cada uno como `carrera => esperados` (tarea 8.8, armar paralelos): primero los completos
      * de cada carrera, en el orden recibido, y luego los mixtos. Los restos se acomodan del más grande al más chico, cada
      * uno entero en el mixto donde mejor cabe (el de menos lugares libres que lo recibe); solo si no cabe en ninguno se
-     * parte, empezando por el mixto con más lugares libres (supuesto por confirmar, maqueta B del 18 de noviembre de 2026).
+     * parte, empezando por el mixto con más lugares libres (supuesto por confirmar, maqueta B del 17 de noviembre de 2026).
      * En cada grupo, la carrera con más esperados primero; en un empate, el orden recibido.
      *
      * @return list<array<string, int>>

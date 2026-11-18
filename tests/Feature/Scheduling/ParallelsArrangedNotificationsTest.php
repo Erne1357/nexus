@@ -13,7 +13,7 @@ use Tests\Support\Scheduling\ParallelsWorld;
 
 /*
 | Avisos al armar paralelos (tarea 8.8): sin acuerdo que aceptar, se avisa por la campana a los coordinadores de cada carrera
-| cuyos lugares cambiaron y al jefe de su departamento cuando no es el que imparte (confirmado el 18 de noviembre de 2026),
+| cuyos lugares cambiaron y al jefe de su departamento cuando no es el que imparte (confirmado el 17 de noviembre de 2026),
 | con sus grupos y lugares antes y después.
 */
 

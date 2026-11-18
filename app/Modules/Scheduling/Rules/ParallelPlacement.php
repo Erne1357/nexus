@@ -7,7 +7,7 @@ namespace App\Modules\Scheduling\Rules;
  * se queda en cada grupo del arreglo, y cuáles sobran. La usan la sugerencia (ParallelsQuery) y la escritura
  * (ArmParallelGroups), así que las dos dicen lo mismo. Pura: no lee la base.
  *
- * - Se queda el de más avance (confirmado el 18 de noviembre de 2026): primero los que no se pueden cancelar (`locked`: con
+ * - Se queda el de más avance (confirmado el 17 de noviembre de 2026): primero los que no se pueden cancelar (`locked`: con
  *   docente o con una solicitud de cambio abierta), luego los de más minutos colocados y, en un empate, el primero recibido
  *   (quien llama los manda por orden de creación).
  * - Un grupo que se queda conserva su carrera dueña (su plan y su semestre son de ella), así que solo entra en un grupo
@@ -17,7 +17,7 @@ namespace App\Modules\Scheduling\Rules;
  *   lugar libre, se mueve a otro de los que ya se quedaron cuando eso le abre uno. Así se cancelan los de menos avance
  *   posibles: nunca se cancela uno con docente o con horario si había forma de dejarlo.
  * - Los que no encuentran lugar sobran (se cancelan); los que sobran sin poder cancelarse quedan bloqueados: un grupo con
- *   docente nunca se cancela (confirmado el 18 de noviembre de 2026) y uno con una solicitud de cambio abierta tampoco,
+ *   docente nunca se cancela (confirmado el 17 de noviembre de 2026) y uno con una solicitud de cambio abierta tampoco,
  *   hasta resolverla (supuesto por confirmar).
  */
 final readonly class ParallelPlacement
