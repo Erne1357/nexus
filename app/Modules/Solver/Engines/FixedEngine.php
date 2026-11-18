@@ -14,9 +14,11 @@ use App\Modules\Solver\Contract\UnscheduledGroup;
 use Closure;
 
 /**
- * El motor de prueba (tarea 6.3): sin buscar nada, pone cada grupo movible en horas seguidas desde el inicio de la
- * jornada de su campus, un día por grupo según su orden, en su primer salón candidato o en el primer salón de su campus.
- * Un grupo que no cabe en la jornada queda sin programar. No revisa reglas duras, así que nunca dice `feasible`:
+ * El motor de prueba (tarea 6.3): sin buscar nada, pone cada grupo movible en sesiones de una hora, una por día en los
+ * primeros días del campus (4 h: lunes a jueves; 5 h: lunes a viernes; 6 h: con sábado si la rejilla lo tiene, como el SII;
+ * decisión del usuario, 18 de noviembre de 2026), todas a la misma hora. La hora de inicio rota por grupo desde el inicio
+ * de la jornada para que no caigan todos a las 07:00. Va en su primer salón candidato o en el primer salón de su campus.
+ * Un grupo con más horas que días queda sin programar. No revisa reglas duras, así que nunca dice `feasible`:
  * devuelve `partial` y lo avisa en el log. Sirve para que la corrida, la pantalla y la aceptación (6.8 a 6.10) se
  * construyan y se prueben antes que la heurística, y como motor siempre disponible en las pruebas.
  */
@@ -61,24 +63,26 @@ final class FixedEngine implements SolverEngine
 
         foreach ($movable as $index => $group) {
             $grid = $campuses[$group->campusCode];
-            $start = self::minutes($grid->dayStart);
-            $end = $start + $group->weeklyHours * 60;
+            $dayStart = self::minutes($grid->dayStart);
+            $hoursInDay = intdiv(self::minutes($grid->dayEnd) - $dayStart, 60);
 
-            if ($end > self::minutes($grid->dayEnd)) {
-                $unscheduled[] = new UnscheduledGroup($group->id, ['El motor de prueba no lo acomoda en la jornada de su campus.']);
+            if ($hoursInDay < 1 || $group->weeklyHours > count($grid->days)) {
+                $unscheduled[] = new UnscheduledGroup($group->id, [$hoursInDay < 1
+                    ? 'La jornada de su campus no tiene horas.'
+                    : "El grupo tiene {$group->weeklyHours} horas a la semana y su campus solo tiene ".count($grid->days).' días; el motor de prueba pone una hora por día.']);
 
                 continue;
             }
 
+            $start = $dayStart + ($index % $hoursInDay) * 60;
             $roomId = $grid->usesRooms ? ($group->candidateRoomIds[0] ?? $this->firstRoomOf($input, $group->campusCode)) : null;
-            $day = $grid->days[$index % count($grid->days)];
 
             for ($hour = 0; $hour < $group->weeklyHours; $hour++) {
                 $sessions[] = new ProposedSession(
                     groupId: $group->id,
-                    day: $day,
-                    startsAt: self::clock($start + $hour * 60),
-                    endsAt: self::clock($start + ($hour + 1) * 60),
+                    day: $grid->days[$hour],
+                    startsAt: self::clock($start),
+                    endsAt: self::clock($start + 60),
                     roomId: $roomId,
                     kind: $grid->usesRooms ? ($hour < $group->weeklyHours - $group->practiceHours ? SessionKind::Theory : SessionKind::Practice) : SessionKind::Virtual,
                     changed: true,

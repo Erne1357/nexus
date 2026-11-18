@@ -281,6 +281,16 @@ it('trae el contrato: versión, corrida, periodo, modalidad, alcance, traslado, 
         ->and($input->options->suggestTeachers)->toBeFalse();
 });
 
+it('la tolerancia de HC-12 sale del perfil de la modalidad y, sin ella, de la configuración global', function () {
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(0);
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'scheduling.weekly_hours_tolerance', 'value' => 15]);
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(15);
+
+    $this->pres->update(['settings' => [...$this->pres->settings, 'weekly_hours_tolerance' => 30]]);
+    expect(buildInputForDepartment()->input->weeklyHoursTolerance)->toBe(30);
+});
+
 it('el traslado y el tiempo máximo salen de los parámetros', function () {
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'staffing.min_campus_travel_minutes', 'value' => 45]);
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.time_limits', 'value' => ['department' => 120, 'career' => 20]]);
@@ -378,4 +388,10 @@ it('HC-03: el mismo paquete con el mismo número en dos campus no queda en la mi
 
     expect($keyOf($inS1))->toBe(["package:{$package->id}:S1:1"])
         ->and($keyOf($inS2))->toBe(["package:{$package->id}:S2:1"]);
+});
+
+it('los pesos blandos salen del parámetro solver.soft_weights, con SC-01 por la llave sc_01', function () {
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.soft_weights', 'value' => ['sc_01' => 0, 'sc_02' => 50]]);
+
+    expect(buildInputForDepartment()->input->softWeights->toArray())->toBe(['SC-01' => 0, 'SC-02' => 50, 'SC-03' => 5, 'SC-04' => 4, 'SC-05' => 3, 'SC-06' => 2, 'SC-07' => 3, 'SC-08' => 2, 'SC-09' => 2]);
 });

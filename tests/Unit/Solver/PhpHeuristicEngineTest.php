@@ -460,7 +460,7 @@ it('en un campus sin salones las sesiones son virtuales y sin salón', function 
 it('responde con error a una versión del contrato que no entiende', function () {
     $input = heuristicInput([heuristicGroup('g1')], [], [heuristicRoom('r1')]);
     $other = new SolverInput(2, $input->runId, $input->termCode, $input->modalityCode, $input->campuses, $input->timeLimitSeconds, $input->scope,
-        $input->travelMinutes, $input->groups, $input->teachers, $input->rooms, $input->agreements, $input->subjectRoomDefaults, $input->hardRules,
+        $input->travelMinutes, $input->weeklyHoursTolerance, $input->groups, $input->teachers, $input->rooms, $input->agreements, $input->subjectRoomDefaults, $input->hardRules,
         $input->softWeights, $input->options);
     $output = (new PhpHeuristicEngine)->solve($other);
 

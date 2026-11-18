@@ -29,6 +29,7 @@
         "id": "d001"
     },
     "travel_minutes": 60,
+    "weekly_hours_tolerance": 0,
     "groups": [
         {
             "id": "g001",

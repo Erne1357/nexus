@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Database\Factories\ProposalPackageFactory;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +32,26 @@ class ProposalPackage extends Model
     protected function casts(): array
     {
         return ['position' => 'integer'];
+    }
+
+    /**
+     * El nombre de un paquete sin nombre, por su código: «Paquete 1» para «P1» (tarea 5.6b, la pantalla).
+     *
+     * @return Attribute<string, never>
+     */
+    protected function defaultName(): Attribute
+    {
+        return Attribute::get(fn (): string => 'Paquete '.preg_replace('/\D/', '', (string) $this->code));
+    }
+
+    /**
+     * Cómo se llama en pantalla: su nombre o, sin él, el de su código («Paquete 1»).
+     *
+     * @return Attribute<string, never>
+     */
+    protected function label(): Attribute
+    {
+        return Attribute::get(fn (): string => $this->name ?? $this->default_name);
     }
 
     /**

@@ -458,6 +458,111 @@ it('el tope de grupos no tumba la sincronización: recorta, deja bitácora y las
         ->and($big->fresh()->requested_groups)->toBeGreaterThanOrEqual($big->fresh()->package_groups);
 });
 
+/**
+ * La fila de la proyección de una fila de la propuesta en C1.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function packageForecastFor(ProposalItem $item, array $attributes): DemandForecast
+{
+    return DemandForecast::factory()->create([
+        'term_id' => test()->proposal->term_id,
+        'modality_id' => test()->proposal->modality_id,
+        'career_id' => test()->career->id,
+        'subject_id' => $item->subject_id,
+        'campus_id' => test()->c1->id,
+        ...$attributes,
+    ]);
+}
+
+it('corregir el nuevo ingreso mueve los esperados de las filas sin tocar de 1.º: los de la proyección menos su nuevo ingreso más el corregido', function () {
+    $first = untouchedFirstSemesterRow(160, 5, 140);
+    packageForecastFor($first, ['expected_students' => 160, 'suggested_groups' => 5, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+    $captured = untouchedFirstSemesterRow(160, 5, 140);
+    packageForecastFor($captured, ['expected_students' => 160, 'suggested_groups' => 5, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+    $captured->update(['expected_students' => 150, 'requested_groups' => 5, 'captured_at' => now()]);
+    $second = untouchedFirstSemesterRow(70, 2, 140, method: ForecastMethod::Formula);
+    packageForecastFor($second, ['expected_students' => 70, 'suggested_groups' => 2, 'new_students' => null, 'method' => ForecastMethod::Formula]);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 70, $this->actor);
+
+    // 160 − 140 + 70 = 90 esperados; sin paquetes, los grupos de la regla: 90 / 35 hacia arriba = 3. Lo sugerido no cambia.
+    expect($first->fresh()->only(['expected_students', 'requested_groups', 'suggested_expected_students', 'suggested_groups']))
+        ->toBe(['expected_students' => 90, 'requested_groups' => 3, 'suggested_expected_students' => 160, 'suggested_groups' => 5])
+        ->and($first->fresh()->captured_at)->toBeNull()
+        ->and($captured->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 150, 'requested_groups' => 5])
+        ->and($second->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 70, 'requested_groups' => 2]);
+
+    // Con un paquete, los de paquetes cubren el nuevo ingreso corregido (2) y los sueltos, a los rezagados: 90 − 70 = 20, 1.
+    app(CreateProposalPackage::class)->handle($this->proposal, [$first->subject_id], null, $this->actor);
+
+    expect($first->fresh()->only(['expected_students', 'package_groups', 'requested_groups']))->toBe(['expected_students' => 90, 'package_groups' => 2, 'requested_groups' => 3]);
+
+    // Al recalcular la proyección se conserva: el nuevo ingreso corregido sigue mandando.
+    app(SyncProposalIntakes::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+    app(SyncProposalSuggestions::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+
+    expect($first->fresh()->only(['expected_students', 'package_groups', 'requested_groups']))->toBe(['expected_students' => 90, 'package_groups' => 2, 'requested_groups' => 3]);
+});
+
+it('la oferta nueva: con 0 de nuevo ingreso y su corrección a 35, las filas sin tocar de 1.º esperan 35', function () {
+    $first = untouchedFirstSemesterRow(0, 0, 0);
+    packageForecastFor($first, ['eligible_students' => 0, 'expected_students' => 0, 'suggested_groups' => 0, 'new_students' => 0, 'method' => ForecastMethod::FirstSemester]);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 35, $this->actor);
+
+    expect($first->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 35, 'requested_groups' => 1]);
+});
+
+it('una propuesta enviada no mueve sus filas: el nuevo ingreso no se corrige y la sincronización no la toca', function () {
+    $first = untouchedFirstSemesterRow(160, 5, 140);
+    packageForecastFor($first, ['expected_students' => 160, 'suggested_groups' => 5, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+    ProposalIntake::query()->where('career_proposal_id', $this->proposal->id)->where('campus_id', $this->c1->id)->update(['new_students' => 70, 'captured_at' => now()]);
+    $this->proposal->forceFill(['status' => ProposalStatus::Submitted])->save();
+
+    expect(packageErrors(fn () => app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 80, $this->actor)))->not->toBeNull();
+
+    app(SyncProposalSuggestions::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+
+    expect($first->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 160, 'requested_groups' => 5]);
+});
+
+it('en una propuesta regresada, las filas del departamento que ya aceptó su parte no se mueven; las demás sí', function () {
+    $accepted = untouchedFirstSemesterRow(160, 5, 140);
+    $other = untouchedFirstSemesterRow(160, 5, 140);
+    $other->subject->update(['department_id' => $this->subjectC->department_id]);
+    foreach ([$accepted, $other] as $item) {
+        packageForecastFor($item, ['expected_students' => 160, 'suggested_groups' => 5, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+    }
+    $this->proposal->forceFill(['status' => ProposalStatus::Returned])->save();
+    ProposalReview::factory()->accepted()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->dept->id]);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 70, $this->actor);
+
+    expect($accepted->fresh()->expected_students)->toBe(160)
+        ->and($other->fresh()->expected_students)->toBe(90);
+});
+
+it('corregir el nuevo ingreso de la columna sin campus solo mueve esa columna, no las demás', function () {
+    $intake = ProposalIntake::factory()->create(['career_proposal_id' => $this->proposal->id, 'campus_id' => null, 'new_students' => 140, 'suggested_new_students' => 140]);
+    $noCampus = untouchedFirstSemesterRow(160, 5, 140);
+    $noCampus->update(['campus_id' => null]);
+    DemandForecast::factory()->create([
+        'term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id, 'career_id' => $this->career->id,
+        'subject_id' => $noCampus->subject_id, 'campus_id' => null, 'expected_students' => 160, 'suggested_groups' => 5,
+        'new_students' => 140, 'method' => ForecastMethod::FirstSemester,
+    ]);
+    // En C1, la proyección ya no es la de la fila: una sincronización de todos los campus la movería.
+    $onC1 = untouchedFirstSemesterRow(160, 5, 140);
+    packageForecastFor($onC1, ['expected_students' => 200, 'suggested_groups' => 6, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, null, 70, $this->actor);
+
+    expect($intake->fresh()->new_students)->toBe(70)
+        ->and($noCampus->fresh()->expected_students)->toBe(90)
+        ->and($onC1->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 160, 'requested_groups' => 5]);
+});
+
 it('registra el conteo viejo y el nuevo de cada columna que se mueve', function () {
     $item = untouchedFirstSemesterRow(160, 5, 140);
     app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);
