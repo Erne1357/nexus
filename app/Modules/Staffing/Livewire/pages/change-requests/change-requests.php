@@ -8,12 +8,14 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
+use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
 use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
 use App\Modules\Staffing\Actions\ChangeRequests\RejectChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Livewire\Concerns\ProposesStructuredChange;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\ChangeRequestsQuery;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
@@ -55,6 +57,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Solicitudes de cambio')] class extends Component
 {
+    use ProposesStructuredChange;
     use Toast;
     use WithModalityCampusFilter;
 
@@ -199,7 +202,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     /**
      * Abre una solicitud de la lista; en pantallas angostas, su detalle.
      */
-    public function pick(string $id, Actor $context, ChangeRequestsQuery $query): void
+    public function pick(string $id, Actor $context, ChangeRequestsQuery $query, AssessChangeImpact $assess): void
     {
         $request = $this->visibleOrFail($id, $context, $query);
 
@@ -208,7 +211,29 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->vetoReasons = [];
         $this->resetErrorBag();
         $this->mobileDetail = true;
+        $this->refreshImpactIfStale($request, $assess);
         $this->dispatch('request-detail-opened');
+    }
+
+    /**
+     * Recalcula el impacto de la solicitud elegida (CR-01); lo hace quien la decide.
+     */
+    public function recalculateImpact(Actor $context, ChangeRequestsQuery $query, AssessChangeImpact $assess): void
+    {
+        $request = $this->selectedOrFail($context, $query);
+        $this->authorize('decide', $request);
+
+        $assess->handle($request);
+    }
+
+    /**
+     * Al abrir una pendiente, su impacto se rehace si el horario de la modalidad cambió después de calcularlo.
+     */
+    private function refreshImpactIfStale(ChangeRequest $request, AssessChangeImpact $assess): void
+    {
+        if ($request->status === ChangeRequestStatus::Pending && $assess->isStale($request)) {
+            $assess->handle($request);
+        }
     }
 
     public function back(): void
@@ -284,6 +309,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     {
         abort_unless($this->canRequest($context), 403);
 
+        $this->resetStructuredProposal();
         $this->reset('requestGroupId', 'proposal', 'reason');
         $this->requestKind = ChangeRequestKind::Schedule->value;
         $this->resetErrorBag();
@@ -314,7 +340,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->authorize('create', [ChangeRequest::class, $group]);
 
         try {
-            $request = $requestChange->handle($group, auth()->user(), ChangeRequestKind::from($this->requestKind), $this->proposal, $this->reason);
+            $request = $requestChange->handle($group, auth()->user(), ChangeRequestKind::from($this->requestKind), $this->proposal, $this->reason, $this->structuredProposal());
         } catch (ValidationException $e) {
             foreach ($e->errors() as $field => $messages) {
                 $this->addError($field === 'description' ? 'proposal' : $field, $messages[0]);
@@ -324,6 +350,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         }
 
         $this->showRequest = false;
+        $this->resetStructuredProposal();
         $this->reset('requestGroupId', 'proposal', 'reason', 'status', 'kind', 'search', 'comment', 'vetoReasons');
         $this->requestId = $request->id;
         $this->mobileDetail = true;

@@ -7,6 +7,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Livewire\Concerns\ProposesStructuredChange;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\MyChangeRequestsQuery;
 use App\Modules\Staffing\Queries\MyLoadQuery;
@@ -33,6 +34,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Mi carga')] class extends Component
 {
+    use ProposesStructuredChange;
     use Toast;
 
     /** El motivo de un grupo publicado que en lo vivo ya no es suyo: se reasignó o se canceló después de publicar. */
@@ -77,6 +79,7 @@ new #[Title('Mi carga')] class extends Component
 
         $this->requestKind = ChangeRequestKind::Schedule->value;
         $this->reset('proposal', 'reason');
+        $this->resetStructuredProposal();
         $this->resetErrorBag();
         $this->showRequest = true;
     }
@@ -107,7 +110,7 @@ new #[Title('Mi carga')] class extends Component
         }
 
         try {
-            $requestChange->handle($group, auth()->user(), ChangeRequestKind::from($this->requestKind), $this->proposal, $this->reason);
+            $requestChange->handle($group, auth()->user(), ChangeRequestKind::from($this->requestKind), $this->proposal, $this->reason, $this->structuredProposal());
         } catch (ValidationException $e) {
             foreach ($e->errors() as $field => $messages) {
                 $this->addError($field === 'description' ? 'proposal' : $field, $messages[0]);
@@ -117,6 +120,7 @@ new #[Title('Mi carga')] class extends Component
         }
 
         $this->showRequest = false;
+        $this->resetStructuredProposal();
         $this->reset('requestGroupId', 'proposal', 'reason');
         $this->success("Enviaste tu solicitud de cambio del grupo {$group->code}", 'Tu jefe de departamento la revisa.');
     }

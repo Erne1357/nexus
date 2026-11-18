@@ -5,6 +5,7 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
+use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
@@ -26,12 +27,18 @@ use Illuminate\Validation\ValidationException;
  */
 final class RequestChange
 {
-    public function __construct(private readonly NotifyChangeRequest $notify) {}
+    public function __construct(private readonly NotifyChangeRequest $notify, private readonly AssessChangeImpact $assess) {}
 
     /**
+     * `$structured` es lo que se propone en forma que el validador entiende (opcional, CR-01): `sessions` (día 1 a 7,
+     * `starts_at` y `ends_at` en H:i) para un cambio de horario, o `room` (la clave del salón del campus del grupo)
+     * para uno de salón. Sin eso la solicitud solo lleva la descripción y su impacto no se puede simular.
+     *
+     * @param  array{sessions?: list<array{day: int|string, starts_at: string, ends_at: string}>, room?: string}  $structured
+     *
      * @throws ValidationException
      */
-    public function handle(Group $group, User $actor, ChangeRequestKind $kind, string $description, string $reason): ChangeRequest
+    public function handle(Group $group, User $actor, ChangeRequestKind $kind, string $description, string $reason, array $structured = []): ChangeRequest
     {
         $description = trim($description);
         $reason = trim($reason);
@@ -45,17 +52,77 @@ final class RequestChange
         }
 
         try {
-            $request = DB::transaction(fn (): ChangeRequest => $this->create($group, $actor, $kind, $description, $reason));
+            $request = DB::transaction(fn (): ChangeRequest => $this->create($group, $actor, $kind, $description, $reason, $structured));
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages(['group' => 'Ya tienes una solicitud abierta para este grupo.']);
         }
 
+        $this->assessAfterCommit($request);
         $this->notify->requested($request);
 
         return $request;
     }
 
-    private function create(Group $group, User $actor, ChangeRequestKind $kind, string $description, string $reason): ChangeRequest
+    /**
+     * El impacto nace con la solicitud (CR-01), fuera de su transacción: si el cálculo falla, la solicitud ya existe y
+     * el jefe lo recalcula al abrirla.
+     */
+    private function assessAfterCommit(ChangeRequest $request): void
+    {
+        try {
+            $this->assess->handle($request);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $structured
+     * @return array<string, mixed>
+     *
+     * @throws ValidationException
+     */
+    private function proposal(Group $group, ChangeRequestKind $kind, string $description, array $structured): array
+    {
+        $proposed = ['description' => $description];
+
+        if ($kind === ChangeRequestKind::Room) {
+            $code = trim((string) ($structured['room'] ?? ''));
+
+            if ($code !== '') {
+                $room = Room::query()->where('campus_id', $group->campus_id)->where('is_active', true)->whereRaw('lower(code) = ?', [mb_strtolower($code)])->first();
+
+                if ($room === null) {
+                    throw ValidationException::withMessages(['proposedRoom' => 'Ese salón no existe en el campus del grupo.']);
+                }
+
+                $proposed += ['room' => $room->code, 'room_id' => $room->id];
+            }
+
+            return $proposed;
+        }
+
+        $sessions = [];
+
+        foreach (array_values($structured['sessions'] ?? []) as $session) {
+            $day = (int) ($session['day'] ?? 0);
+            $start = (string) ($session['starts_at'] ?? '');
+            $end = (string) ($session['ends_at'] ?? '');
+
+            if ($day < 1 || $day > 7 || ! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $start) || ! preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $end) || $end <= $start) {
+                throw ValidationException::withMessages(['proposedSessions' => 'Cada sesión propuesta lleva día y una hora de inicio anterior a la de fin.']);
+            }
+
+            $sessions[] = ['day' => $day, 'starts_at' => $start, 'ends_at' => $end];
+        }
+
+        return $sessions === [] ? $proposed : $proposed + ['sessions' => $sessions];
+    }
+
+    /**
+     * @param  array<string, mixed>  $structured
+     */
+    private function create(Group $group, User $actor, ChangeRequestKind $kind, string $description, string $reason, array $structured): ChangeRequest
     {
         $group = Group::query()->with(['teacher', 'sessions.room'])->lockForUpdate()->findOrFail($group->getKey());
 
@@ -96,7 +163,7 @@ final class RequestChange
                 ])
                 ->values()
                 ->all(),
-            'proposed' => ['description' => $description],
+            'proposed' => $this->proposal($group, $kind, $description, $structured),
             'reason' => $reason,
             'status' => ChangeRequestStatus::Pending,
         ]);
