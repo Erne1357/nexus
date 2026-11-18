@@ -22,9 +22,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Una solicitud de cambio de horario o de salón de un grupo (tarea 3.11). No es catálogo: no se desactiva ni se
- * borra. `current` es la foto de las sesiones al pedirla; `proposed` trae la `description` libre de lo que se pide.
+ * borra. `current` es la foto de las sesiones al pedirla; `proposed` trae la `description` libre de lo que se pide;
+ * `impact`, lo que el cambio provoca (CR-01), y `alternatives`, los acomodos del motor y la elegida (CR-02 y CR-03).
  */
-#[Fillable(['term_id', 'modality_id', 'department_id', 'group_id', 'requested_by', 'teacher_id', 'kind', 'current', 'proposed', 'reason', 'status', 'decided_by', 'decided_at', 'decision_comment', 'applied_by', 'applied_at', 'impact'])]
+#[Fillable(['term_id', 'modality_id', 'department_id', 'group_id', 'requested_by', 'teacher_id', 'kind', 'current', 'proposed', 'reason', 'status', 'decided_by', 'decided_at', 'decision_comment', 'applied_by', 'applied_at', 'impact', 'alternatives'])]
 #[UseFactory(ChangeRequestFactory::class)]
 class ChangeRequest extends Model
 {
@@ -42,6 +43,7 @@ class ChangeRequest extends Model
             'current' => 'array',
             'proposed' => 'array',
             'impact' => 'array',
+            'alternatives' => 'array',
             'decided_at' => 'immutable_datetime',
             'applied_at' => 'immutable_datetime',
             'created_at' => 'immutable_datetime',

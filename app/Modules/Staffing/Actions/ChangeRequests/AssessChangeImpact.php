@@ -9,6 +9,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\SessionCandidate;
+use App\Modules\Scheduling\Validation\ValidationScope;
 use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -31,7 +32,9 @@ use Illuminate\Support\Facades\DB;
  *
  * El impacto: `hard` y `soft`, una entrada por regla con sus mensajes y los grupos, docentes y salones de los
  * choques; `affected_groups` (los grupos con los que choca, con su materia y docente), `affected_teachers` y
- * `assessed_at`. La cadena de movimientos para dejarlo sin choques queda para la búsqueda del motor (8.7).
+ * `assessed_at`. La cadena de movimientos para dejarlo sin choques la busca el motor (8.7): proposal() le da a
+ * ProposeChangeAlternatives las sesiones que se proponen, y simulateSessions() revisa una alternativa con varios grupos
+ * (CR-02 y CR-03) con la misma cuenta de «solo lo que agrega».
  */
 final class AssessChangeImpact
 {
@@ -45,7 +48,7 @@ final class AssessChangeImpact
     public function simulate(ChangeRequest $request): array
     {
         $group = Group::query()->with(['sessions', 'teacher'])->findOrFail($request->group_id);
-        $assessable = ($request->proposed['sessions'] ?? []) !== [] || isset($request->proposed['room_id']);
+        $assessable = self::isAssessable($request);
 
         $impact = ['assessable' => $assessable, 'hard' => [], 'soft' => [], 'affected_groups' => [], 'affected_teachers' => []];
 
@@ -58,6 +61,67 @@ final class AssessChangeImpact
         }
 
         return $impact + ['assessed_at' => now()->toIso8601String()];
+    }
+
+    /**
+     * Si la solicitud trae un horario o un salón que se pueda simular (CR-01).
+     */
+    public static function isAssessable(ChangeRequest $request): bool
+    {
+        return ($request->proposed['sessions'] ?? []) !== [] || isset($request->proposed['room_id']);
+    }
+
+    /**
+     * Las sesiones que el grupo tendría con la solicitud, como las simula simulate() (con el salón y el tipo de la sesión
+     * que cada una reemplaza); vacía si la solicitud no se puede simular.
+     *
+     * @return list<SessionCandidate>
+     */
+    public function proposal(ChangeRequest $request): array
+    {
+        if (! self::isAssessable($request)) {
+            return [];
+        }
+
+        return $this->candidates($request, Group::query()->with('sessions')->findOrFail($request->group_id));
+    }
+
+    /**
+     * El impacto de dejar varios grupos de la modalidad con exactamente estas sesiones (una alternativa del motor, CR-02 y
+     * CR-03), sin escribir: solo lo que agregan (lo que esos grupos ya tenían mal no cuenta, y un mismo choque cuenta una
+     * vez). Con `$fresh` lee la foto de nuevo; sin él usa la que esta instancia ya leyó (la de simulate(), para revisar
+     * varias alternativas seguidas sin volver a leer la base).
+     *
+     * @param  array<string, list<SessionCandidate>>  $sessionsByGroup
+     * @return array{hard: list<array<string, mixed>>, soft: list<array<string, mixed>>}
+     */
+    public function simulateSessions(string $termId, string $modalityId, array $sessionsByGroup, bool $fresh = true): array
+    {
+        if ($fresh) {
+            $this->validator->forget();
+        }
+
+        $state = $this->validator->stateFor($termId, $modalityId);
+        $scope = new ValidationScope(array_map('strval', array_keys($sessionsByGroup)));
+        $existing = [];
+
+        foreach ($this->validator->validate($state, $scope)->violations() as $violation) {
+            $existing[$violation->key()] = true;
+        }
+
+        foreach ($sessionsByGroup as $groupId => $candidates) {
+            $state = $state->withSessions((string) $groupId, $candidates);
+        }
+
+        $added = [];
+
+        foreach ($this->validator->validate($state, $scope)->violations() as $violation) {
+            isset($existing[$violation->key()]) || $added[$violation->key()] = $violation;
+        }
+
+        $added = array_values($added);
+
+        return ['hard' => $this->byRule($added, ConflictSeverity::Hard), 'soft' => $this->byRule($added, ConflictSeverity::Soft)];
     }
 
     /**

@@ -9,6 +9,7 @@ use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Notifications\ChangeRequestApproved;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
+use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -22,6 +23,9 @@ use Illuminate\Validation\ValidationException;
  * Apply y que el editor. Con ellos, el editor no cambia las sesiones entre la simulación del bloqueo de choques (CR-01) y
  * el commit. StartAdjusting llama a TransitionLoad dentro de esta transacción: vuelve a pedir la modalidad y la carga
  * que ya se tienen, en el mismo orden.
+ *
+ * Aprobar eligiendo una alternativa del motor (CR-03, ChooseChangeAlternative) es este mismo flujo con otra revisión en
+ * lugar del bloqueo de choques de la propuesta original: approve() con la suya.
  */
 final class ApproveChangeRequest
 {
@@ -32,9 +36,23 @@ final class ApproveChangeRequest
      */
     public function handle(ChangeRequest $request, User $actor, ?string $comment = null): ChangeRequest
     {
+        return $this->approve($request, $actor, $comment, $this->blockHardClashes(...));
+    }
+
+    /**
+     * El flujo de aprobar con `$check` en lugar del bloqueo de choques: corre con los candados tomados, la solicitud
+     * pendiente y la carga en asignación o ajustes, antes de escribir; lanza ValidationException para no aprobar y puede
+     * dejar otros atributos en la solicitud, que se guardan con la aprobación.
+     *
+     * @param  Closure(ChangeRequest): void  $check
+     *
+     * @throws ValidationException
+     */
+    public function approve(ChangeRequest $request, User $actor, ?string $comment, Closure $check): ChangeRequest
+    {
         $comment = $comment === null || trim($comment) === '' ? null : trim($comment);
 
-        $request = $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor, $comment): ChangeRequest {
+        $request = $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor, $comment, $check): ChangeRequest {
             $load = $this->locks->lock($request);
 
             if ($request->status !== ChangeRequestStatus::Pending) {
@@ -45,7 +63,7 @@ final class ApproveChangeRequest
                 throw ValidationException::withMessages(['status' => 'La carga del departamento está en '.($load?->status->label() ?? 'ningún estado').': solo se deciden solicitudes con la carga en asignación o en ajustes.']);
             }
 
-            $this->blockHardClashes($request);
+            $check($request);
 
             $request->update(['status' => ChangeRequestStatus::Approved, 'decided_by' => $actor->getKey(), 'decided_at' => now(), 'decision_comment' => $comment]);
 
