@@ -6,8 +6,8 @@ use App\Modules\AcademicLoad\Http\Middleware\RedirectCampusToModality;
 use Illuminate\Support\Facades\Route;
 
 /*
-| Rutas de AcademicLoad: la propuesta de carrera del coordinador y la bandeja del departamento. Quién entra lo decide la página
-| (CareerProposalPolicy), no la ruta.
+| Rutas de AcademicLoad: la propuesta de carrera del coordinador, la bandeja del departamento y la demanda por materia (tarea
+| 5.7). Quién entra lo decide la página (CareerProposalPolicy, ProposalReviewPolicy, DemandBoardPolicy), no la ruta.
 |
 | La consulta pública de lo publicado (tarea 4.4) va FUERA del grupo `auth`: la ven alumnos y docentes sin cuenta. Solo
 | lee de PublishedScheduleQuery. Los alumnos de un campus comparten IP, por eso el límite es alto (supuesto por confirmar).
@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth')->prefix('academic-load')->name('academic-load.')->group(function () {
     Route::livewire('/proposal', 'academic-load::pages.proposal')->name('proposal');
     Route::livewire('/inbox', 'academic-load::pages.inbox')->name('inbox');
+    Route::livewire('/demand', 'academic-load::pages.demand')->name('demand');
 });
 
 Route::middleware('throttle:published-schedule')->prefix('horarios')->name('published.')->group(function () {
