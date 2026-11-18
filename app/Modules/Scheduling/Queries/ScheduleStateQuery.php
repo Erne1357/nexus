@@ -44,7 +44,8 @@ use Illuminate\Database\Eloquent\Builder;
  * Lee de la base el ScheduleState de un periodo visto desde una modalidad (tarea 3.2; M1: la carga es por departamento
  * y modalidad, con los grupos de todos sus campus), en pocas consultas agregadas:
  *
- * - todos los grupos de la modalidad, de todos sus campus (los cancelados, inactivos), con sus sesiones y cupos;
+ * - todos los grupos de la modalidad, de todos sus campus (los cancelados, inactivos), con sus sesiones y los cupos de los
+ *   no cancelados: un grupo cancelado conserva sus cupos de historia (CancelGroup) y no cuentan;
  * - los grupos activos con docente de las otras modalidades del periodo, porque HC-01 cruza campus y modalidades, y
  *   los que tienen alguna sesión con salón, porque un salón lo comparten las modalidades de su campus (HC-02);
  * - las materias de esos grupos, los salones de los campus donde la modalidad tiene grupos y los que usan esas
@@ -103,10 +104,9 @@ final class ScheduleStateQuery
             });
 
         $focus = $modalityId === null ? collect() : $groups->where('modality_id', $modalityId);
-        $focusIds = $focus->pluck('id')->all();
         $campusIds = $focus->pluck('campus_id')->unique()->values()->all();
 
-        GroupQuota::query()->whereIn('group_id', $focusIds)
+        GroupQuota::query()->whereIn('group_id', $focus->reject(fn (Group $group): bool => $group->status === GroupStatus::Cancelled)->pluck('id')->all())
             ->get(['group_id', 'career_id', 'max_seats', 'is_owner'])
             ->each(fn (GroupQuota $quota) => $builder->quota(new StateQuota($quota->group_id, $quota->career_id, $quota->max_seats, $quota->is_owner)));
 

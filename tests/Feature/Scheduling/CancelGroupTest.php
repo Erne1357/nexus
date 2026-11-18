@@ -2,10 +2,14 @@
 
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\CancelGroup;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Notifications\LoanCancelled;
+use App\Modules\Staffing\Models\ChangeRequest;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Tests\Support\Scheduling\ParallelsWorld;
 
@@ -31,18 +35,29 @@ function cancelGroupErrors(Group $group): array
     return [];
 }
 
-it('cancela el grupo, borra sus sesiones y cancela sus acuerdos vivos', function () {
+it('cancela el grupo, borra sus sesiones y cancela sus acuerdos vivos, y el dueño del salón recibe el aviso de siempre', function () {
+    Notification::fake();
     $this->world->withSession($this->group, hours: 2);
     $loan = InterdepartmentalAgreement::factory()->accepted()->create([
         'term_id' => $this->world->term->id, 'campus_id' => $this->world->campus->id, 'group_id' => $this->group->id,
         'from_department_id' => $this->world->department->id,
     ]);
+    $owner = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $loan->to_department_id])->create();
 
     $result = app(CancelGroup::class)->handle($this->group, $this->actor);
 
     expect([$result['sessions'], $result['minutes'], $result['group']->status])->toBe([1, 120, GroupStatus::Cancelled])
         ->and($this->group->sessions()->count())->toBe(0)
         ->and($loan->fresh()->status)->toBe(AgreementStatus::Cancelled);
+
+    Notification::assertSentTo($owner, LoanCancelled::class);
+});
+
+it('no cancela un grupo con una solicitud de cambio pendiente o aprobada', function () {
+    ChangeRequest::factory()->forGroup($this->group)->create();
+
+    expect(cancelGroupErrors($this->group))->toBe(['group' => ['Resuelve primero la solicitud de cambio de Cálculo Integral, grupo 1.']])
+        ->and($this->group->fresh()->status)->toBe(GroupStatus::Planned);
 });
 
 it('no cancela un grupo con docente ni uno ya cancelado', function () {

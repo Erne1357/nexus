@@ -4,8 +4,10 @@ namespace App\Modules\Scheduling\Actions\Parallels;
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\CareerCampus;
+use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
+use App\Modules\AcademicLoad\Actions\Agreements\ChangeAgreementSeats;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
@@ -25,15 +27,19 @@ use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\ParallelGroupsArranged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Queries\ParallelExisting;
+use App\Modules\Scheduling\Queries\Parallels;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
 use App\Modules\Scheduling\Rules\GroupCapacity;
 use App\Modules\Scheduling\Rules\GroupCode;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\ParallelPlacement;
 use App\Modules\Scheduling\Rules\QuotaRules;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
@@ -43,16 +49,20 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * que imparte junta lo que piden las carreras en menos grupos, sin junta ni acuerdo (confirmado el 18 de noviembre de
  * 2026). Recibe el arreglo deseado, una lista de grupos, cada uno `carrera => lugares`, y reorganiza los grupos sueltos que
  * ya existen de esa materia y campus en la carga del departamento en la modalidad; los de paquete (DM-09) no se tocan.
- * Quién puede lo decide ParallelsPolicy::arrange antes de llamarla.
+ * Autoriza adentro: la materia debe ser del departamento recibido y el actor debe poder `ParallelsPolicy::arrange` en él y
+ * en la modalidad (si no, AuthorizationException), así que quien la llame con una materia de otro departamento no la arma.
  *
  * - Qué grupo se queda en cada grupo del arreglo lo decide ParallelPlacement, igual que la sugerencia de ParallelsQuery: el
  *   de más avance (con docente; luego con más horario), que conserva su clave, su horario, su docente y su carrera dueña.
- *   Un grupo con docente nunca se cancela: si el arreglo no le deja lugar, se rechaza con el motivo.
+ *   Un grupo con docente nunca se cancela, ni uno con una solicitud de cambio abierta (GroupsCancelling, Staffing): si el
+ *   arreglo no le deja lugar, se rechaza con el motivo.
  * - Los que sobran se cancelan con CancelGroup: pierden sus sesiones (el resultado lo dice) y sus acuerdos vivos.
  * - Los cupos de cada grupo que queda son los del arreglo, en exclusiva, escritos directo y sin acuerdo, también los de
  *   carreras de otros departamentos (confirmado el 18 de noviembre de 2026); lo que no reparte el arreglo queda libre. Las
  *   propuestas vivas de grupo compartido del grupo se cancelan, y un acuerdo aceptado se cancela si su carrera ya no tiene
- *   cupo; el aceptado de una carrera que sigue se queda (sus lugares cambian directo, como en SetGroupQuotas).
+ *   cupo; el aceptado de una carrera que sigue se queda y toma los lugares nuevos (ChangeAgreementSeats, como en
+ *   SetGroupQuotas). Los cupos que nacen al armar no llevan renglón de acuerdo: su único registro es la bitácora del grupo
+ *   (`parallels_arranged` y `created`), conforme a la decisión del usuario de armar sin acuerdo.
  * - HC-07: los cupos de cada grupo no pasan su capacidad (la del grupo que se queda o la del que nace).
  * - Si el arreglo pide más grupos de los que existen, crea los que faltan, sueltos y sin horario, como
  *   CreateGroupsFromProposal (capacidad de GroupCapacity, clave provisional), de la fila de su carrera dueña: la de más
@@ -79,15 +89,22 @@ final class ArmParallelGroups
         private readonly ParallelsQuery $parallels,
         private readonly CancelGroup $cancelGroup,
         private readonly CancelAgreement $cancelAgreement,
+        private readonly ChangeAgreementSeats $agreementSeats,
     ) {}
 
     /**
      * @param  list<array<string, int>>  $arrangement
      *
+     * @throws AuthorizationException si la materia no es del departamento o el actor no arma sus paralelos en la modalidad
      * @throws ValidationException
      */
-    public function handle(Term $term, Modality $modality, Subject $subject, Campus $campus, array $arrangement, User $actor): ParallelArrangement
+    public function handle(Term $term, Modality $modality, Department $department, Subject $subject, Campus $campus, array $arrangement, User $actor): ParallelArrangement
     {
+        if ($subject->department_id !== $department->getKey()) {
+            throw new AuthorizationException("{$subject->name} no es de {$department->name}.");
+        }
+
+        Gate::forUser($actor)->authorize('arrange', [Parallels::class, $modality, $department]);
         $this->ensureShape($arrangement);
 
         try {
@@ -115,16 +132,18 @@ final class ArmParallelGroups
         $items = $this->acceptedItems($term, $modality, $subject, $campus);
         $careers = $this->ensureCareers($arrangement, $items, $subject, $campus);
         $groups = $this->parallels->looseGroups($term->getKey(), $modality->getKey(), $subject->department_id, $subject->getKey(), $campus->getKey())->lockForUpdate()->get()->keyBy('id');
-        $placement = ParallelPlacement::place($arrangement, $groups->map(fn (Group $group): array => ParallelsQuery::existing($group)->forPlacement())->values()->all());
+        $vetoes = ParallelsQuery::vetoes($groups->values(), [$subject->getKey() => $subject->name]);
+        $existing = $groups->map(fn (Group $group): ParallelExisting => ParallelsQuery::existing($group, $vetoes[$group->getKey()] ?? null));
+        $placement = ParallelPlacement::place($arrangement, $existing->map(fn (ParallelExisting $group): array => $group->forPlacement())->values()->all());
 
-        $this->ensureNoTeacherCancelled($placement, $groups, $careers);
+        $this->ensureNothingLockedCancelled($placement, $existing, $careers);
         $newCapacity = GroupCapacity::for($subject, $campus->getKey(), SuggestedGroups::fromSettings());
         $this->ensureWithinCapacity($arrangement, $placement, $groups, $newCapacity);
 
         $before = $groups->map(fn (Group $group): array => $group->quotas->pluck('max_seats', 'career_id')->all())->all();
         $proposed = $this->proposedSeats($groups->keys()->all());
         $cancelled = array_map(fn (string $id): array => $this->cancelGroup->handle($groups[$id], $actor, 'groups'), $placement->cancelled);
-        $retired = array_map(fn (array $row): string => $row['group']->code, $cancelled);
+        $taken = [...Group::query()->active()->where('term_id', $term->getKey())->where('subject_id', $subject->getKey())->pluck('code')->all(), ...array_map(fn (array $row): string => $row['group']->code, $cancelled)];
         $kept = [];
         $created = [];
 
@@ -134,7 +153,8 @@ final class ArmParallelGroups
                 $this->rewriteQuotas($group, $seats, $proposed[$group->getKey()] ?? [], $subject, $actor);
                 $kept[] = ['group' => $group, 'before' => $before[$group->getKey()], 'proposed' => $proposed[$group->getKey()] ?? [], 'after' => $seats];
             } else {
-                $created[] = $this->create($term, $modality, $subject, $campus, $items[(string) array_search(max($seats), $seats, true)], $seats, $newCapacity, $retired, $actor);
+                $created[] = $group = $this->create($term, $modality, $subject, $campus, $items[(string) array_search(max($seats), $seats, true)], $seats, $newCapacity, $taken, $actor);
+                $taken[] = $group->code;
             }
         }
 
@@ -225,21 +245,23 @@ final class ArmParallelGroups
     }
 
     /**
-     * @param  Collection<string, Group>  $groups
+     * Ningún grupo que no se puede cancelar sobra: con docente o con una solicitud de cambio abierta.
+     *
+     * @param  Collection<string, ParallelExisting>  $existing
      * @param  Collection<string, Career>  $careers
      *
      * @throws ValidationException
      */
-    private function ensureNoTeacherCancelled(ParallelPlacement $placement, Collection $groups, Collection $careers): void
+    private function ensureNothingLockedCancelled(ParallelPlacement $placement, Collection $existing, Collection $careers): void
     {
         if ($placement->blocked === []) {
             return;
         }
 
-        $group = $groups[$placement->blocked[0]];
-        $owner = $careers->get($group->owner_career_id)?->code ?? Career::withTrashed()->whereKey($group->owner_career_id)->value('code');
+        $group = $existing[$placement->blocked[0]];
+        $owner = $careers->get($group->ownerCareerId)?->code ?? Career::withTrashed()->whereKey($group->ownerCareerId)->value('code');
 
-        throw ValidationException::withMessages(['groups' => "El grupo {$group->code} de {$owner} tiene docente y el arreglo no le deja lugar: deja un grupo con lugares de {$owner} o quítale primero el docente."]);
+        throw ValidationException::withMessages(['groups' => $group->lockReason($owner)]);
     }
 
     /**
@@ -304,8 +326,9 @@ final class ArmParallelGroups
             ->live()
             ->orderBy('id')
             ->get()
-            ->reject(fn (InterdepartmentalAgreement $agreement): bool => $agreement->status === AgreementStatus::Accepted && isset($after[$agreement->career_id]))
-            ->each(fn (InterdepartmentalAgreement $agreement) => $this->cancelAgreement->handle($agreement, $actor));
+            ->each(fn (InterdepartmentalAgreement $agreement) => $agreement->status === AgreementStatus::Accepted && isset($after[$agreement->career_id])
+                ? $this->agreementSeats->handle($agreement, $after[$agreement->career_id], $actor)
+                : $this->cancelAgreement->handle($agreement, $actor));
 
         $quotas = $group->quotas->keyBy('career_id');
         $before = $quotas->map(fn (GroupQuota $quota): int => $quota->max_seats)->all();
@@ -344,15 +367,14 @@ final class ArmParallelGroups
 
     /**
      * Crea un grupo suelto y sin horario de la fila de su carrera dueña, con los cupos del arreglo. Su clave provisional no
-     * repite la de un grupo que se canceló en el mismo arreglo (`$retired`), para que el aviso no confunda el grupo nuevo con
-     * el que se fue.
+     * repite ninguna de `$taken`: las de los grupos sin cancelar de la materia y las de los que se cancelaron en el mismo
+     * arreglo, para que el aviso no confunda el grupo nuevo con el que se fue.
      *
      * @param  array<string, int>  $seats
-     * @param  list<string>  $retired
+     * @param  list<string>  $taken
      */
-    private function create(Term $term, Modality $modality, Subject $subject, Campus $campus, ProposalItem $item, array $seats, int $capacity, array $retired, User $actor): Group
+    private function create(Term $term, Modality $modality, Subject $subject, Campus $campus, ProposalItem $item, array $seats, int $capacity, array $taken, User $actor): Group
     {
-        $taken = [...Group::query()->active()->where('term_id', $term->getKey())->where('subject_id', $subject->getKey())->pluck('code')->all(), ...$retired];
         $owner = $item->proposal->career_id;
 
         $group = Group::query()->create([

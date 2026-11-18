@@ -29,6 +29,7 @@ beforeEach(function () {
     $this->jefeIsic = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->isic->department_id])->create();
     $this->jefeIind = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->iind->department_id])->create();
     $this->jefeCb = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+    $this->jefeItic = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->itic->department_id])->create();
     $this->subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
     [$this->first] = $this->world->groupsOf($this->world->request($this->isic, 30, 2), 2);
@@ -41,7 +42,7 @@ function armParallelsForNotices(): void
 {
     $world = test()->world;
 
-    app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->subject, $world->campus, [
+    app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $world->subject, $world->campus, [
         [test()->isic->id => 30, test()->iind->id => 3, test()->lmat->id => 2],
         [test()->itic->id => 35],
     ], test()->jefeCb);
@@ -72,6 +73,18 @@ it('dice con qué grupo, qué cupo y qué cambió, y lleva al editor con el grup
             && $message->modalityId === $this->world->modality->id;
     });
     Notification::assertSentTo($this->coordinators['IIND'], ParallelsArranged::class, fn (ParallelsArranged $notice): bool => $notice->message($this->coordinators['IIND'])->body === 'IIND: 3 lugares en el grupo 1.');
+});
+
+it('la carrera dueña de un grupo que se cancela y se queda sin lugares también recibe el aviso', function () {
+    Notification::fake();
+    $world = $this->world;
+
+    app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $world->subject, $world->campus, [
+        [$this->isic->id => 30, $this->iind->id => 3, $this->lmat->id => 2],
+    ], $this->jefeCb);
+
+    Notification::assertSentTo($this->coordinators['ITIC'], ParallelsArranged::class, fn (ParallelsArranged $notice): bool => $notice->message($this->coordinators['ITIC'])->body === 'ITIC se queda sin lugares. Antes: 35 en el 3.');
+    Notification::assertSentTo($this->jefeItic, ParallelsArranged::class);
 });
 
 it('avisa a la carrera que se queda sin lugares, sin grupo que abrir', function () {

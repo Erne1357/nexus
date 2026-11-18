@@ -14,7 +14,8 @@ use App\Modules\Staffing\Rules\PositionTag;
  * El ranking completo y el historial de asignaciones de los grupos que la asignación docente tiene abiertos, y el
  * lugar de un docente en el ranking de un grupo (HC-16). Un número fijo de consultas sin importar cuántos grupos o
  * renglones: los rankings con sus docentes, las plazas vigentes de esos docentes y el historial con quién asignó y
- * quién reemplazó.
+ * quién reemplazó. Un grupo cancelado no tiene ranking aunque RankGroups todavía no haya borrado sus renglones (tarea 8.8:
+ * al armar paralelos se cancelan grupos).
  */
 final class GroupRankingQuery
 {
@@ -29,7 +30,7 @@ final class GroupRankingQuery
         }
 
         $rankings = StaffingRanking::query()
-            ->whereIn('group_id', $groupIds)
+            ->whereIn('group_id', Group::query()->active()->whereIn('id', $groupIds)->select('id'))
             ->with(['teacher' => fn ($query) => $query->withTrashed()->select(['id', 'name'])])
             ->orderBy('rank')
             ->get();
