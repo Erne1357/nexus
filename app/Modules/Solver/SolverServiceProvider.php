@@ -27,12 +27,16 @@ use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Engines\SolverEngine;
+use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Models\SolverRun;
+use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Queries\CareerLoadsQuery;
+use App\Modules\Solver\Rules\InputFingerprint;
 use App\Modules\Solver\Rules\SolverSettings;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
 /**
  * Módulo Solver (fases 6 y 7, R2): el motor que sugiere horarios y salones para la carga de un departamento en una
@@ -143,7 +147,10 @@ final class SolverServiceProvider extends ModuleServiceProvider
     /**
      * Desde «asignacion», cada modalidad del volumen con grupos en los campus de la demo tiene corridas en cada estado
      * que deja el paso (todos menos «aplicando», que es de paso, y «aplicada», que va solo en `todo`), en el periodo de la
-     * demo: un conteo agrupado.
+     * demo: un conteo agrupado. Al llegar a «asignacion», además, las listas de departamento siguen vigentes: la huella
+     * de un armado de hoy es la suya (SV-02, el criterio de ApplySolverRun::isCurrent y de la pantalla), con un armado por
+     * departamento. La aplicada no tiene revisión: solo va en `todo`, que no corre revisiones; la cubre
+     * SolverRunsDemoAppliedTest.
      */
     public function demoChecks(): array
     {
@@ -164,6 +171,24 @@ final class SolverServiceProvider extends ModuleServiceProvider
                 })->filter();
 
                 return $missing->isEmpty() ? true : 'Faltan corridas del motor '.$missing->implode('; ').'.';
+            }),
+            // Solo al llegar: desde «salones» los docentes y los salones cambian la entrada de todas.
+            new DemoCheck([DemoCheckpoint::Staffing], 'Las corridas listas de departamento siguen vigentes (SV-02)', function (DemoContext $demo): true|string {
+                $term = $demo->term();
+                $stale = SolverRun::query()->where('term_id', $term->getKey())
+                    ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))
+                    ->where('scope_kind', RunScope::Department)->where('status', SolverRunStatus::Done)
+                    ->with(['department' => fn ($department) => $department->withTrashed()])
+                    ->get(['id', 'modality_id', 'department_id', 'input_hash'])
+                    ->groupBy(fn (SolverRun $run): string => "{$run->modality_id}|{$run->department_id}")
+                    ->flatMap(function (Collection $runs) use ($term): Collection {
+                        $first = $runs->first();
+                        $hash = InputFingerprint::of(app(BuildSolverInput::class)->forDepartment($term, Modality::withTrashed()->findOrFail($first->modality_id), $first->department, 'demo-check')->input);
+
+                        return $runs->reject(fn (SolverRun $run): bool => $run->input_hash === $hash);
+                    });
+
+                return $stale->isEmpty() ? true : 'Vencidas: '.$stale->countBy(fn (SolverRun $run): string => $run->department->code)->map(fn (int $count, string $code): string => "{$code} ({$count})")->implode(', ').'.';
             }),
         ];
     }

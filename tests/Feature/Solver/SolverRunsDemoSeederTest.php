@@ -16,8 +16,11 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Scheduling\Events\GroupScheduleChanged;
+use App\Modules\Scheduling\Events\ScheduleConflictsSynced;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Solver\Actions\ApplySolverRun;
 use App\Modules\Solver\Database\Seeders\SolverRunsDemoSeeder;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverRunStatus;
@@ -29,6 +32,7 @@ use App\Modules\Solver\Support\RunPayloads;
 use Database\Seeders\DemoSeeder;
 use Database\Seeders\MassiveSeeder;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Event;
 use Spatie\Activitylog\Models\Activity;
 
 /*
@@ -190,6 +194,42 @@ it('es idempotente: volver a sembrar deja los mismos conteos', function () {
         ->and(SolverRun::query()->count())->toBe(10);
 });
 
+it('es idempotente por estado: si a una siembra le faltó una corrida, la siguiente solo crea esa', function () {
+    seedSolverRunsDemo();
+    $before = SolverRun::query()->pluck('status')->map->value->countBy()->sortKeys()->all();
+    $kept = SolverRun::query()->where('status', '!=', SolverRunStatus::Queued)->pluck('id')->sort()->values()->all();
+    SolverRun::query()->where('status', SolverRunStatus::Queued)->delete();
+
+    seedSolverRunsDemo();
+
+    expect(SolverRun::query()->pluck('status')->map->value->countBy()->sortKeys()->all())->toBe($before)
+        ->and(SolverRun::query()->where('status', '!=', SolverRunStatus::Queued)->pluck('id')->sort()->values()->all())->toBe($kept);
+});
+
+it('acepta primero: las corridas listas de departamento que lanza después siguen vigentes (SV-02)', function () {
+    seedSolverRunsDemo();
+
+    $done = SolverRun::query()->where('scope_kind', RunScope::Department)->where('status', SolverRunStatus::Done)->get();
+
+    expect($done)->toHaveCount(3)
+        ->and($done->reject(fn (SolverRun $run): bool => app(ApplySolverRun::class)->isCurrent($run))->pluck('engine')->all())->toBe([]);
+});
+
+it('después de aceptar manda un solo GroupScheduleChanged, con las horas cambiadas, de un grupo de la carga aceptada', function () {
+    Event::fake([GroupScheduleChanged::class]);
+
+    seedSolverRunsDemo();
+
+    Event::assertDispatchedTimes(GroupScheduleChanged::class, 1);
+    Event::assertDispatched(GroupScheduleChanged::class, fn (GroupScheduleChanged $event): bool => $event->timesChanged && $event->group->department_id === $this->industrial->id);
+});
+
+it('si los choques quedan por recalcular después de aceptar, se detiene con el motivo', function () {
+    Event::listen(ScheduleConflictsSynced::class, fn () => throw new RuntimeException('Valkey no responde.'));
+
+    expect(fn () => seedSolverRunsDemo())->toThrow(RuntimeException::class, 'La corrida de II se aplicó, pero los choques quedaron por recalcular (conflicts_pending).');
+});
+
 it('sin aceptar, la corrida del departamento de la aceptación se queda lista', function () {
     app(SolverRunsDemoSeeder::class)->run('PRES', ['K1', 'K2'], '20271', apply: false);
 
@@ -227,7 +267,7 @@ it('el paso de la demo por puntos lleva a «asignacion» y siembra cada modalida
 });
 
 it('la revisión de la demo pasa con todos los estados y dice cuáles faltan', function () {
-    $check = collect(app()->getProvider(SolverServiceProvider::class)->demoChecks())->sole();
+    $check = collect(app()->getProvider(SolverServiceProvider::class)->demoChecks())->firstWhere('label', 'Hay corridas del motor en todos sus estados');
     $demo = new DemoContext(DemoVolume::Demo, ['K1', 'K2']);
 
     expect($check->at)->toBe(DemoCheckpoint::since(DemoCheckpoint::Staffing))
@@ -262,4 +302,17 @@ it('DemoSeeder y MassiveSeeder siembran las corridas solo con demo.showcase', fu
         ['campuses' => ['C2'], 'apply' => true],
         ['campuses' => ['C1', 'C2'], 'apply' => true],
     ]);
+});
+
+it('la revisión de vigencia de «asignacion» pasa con lo que deja el paso y nombra el departamento cuya carga cambió', function () {
+    $check = collect(app()->getProvider(SolverServiceProvider::class)->demoChecks())->firstWhere('label', 'Las corridas listas de departamento siguen vigentes (SV-02)');
+    $demo = new DemoContext(DemoVolume::Demo, ['K1', 'K2']);
+    app(SolverRunsDemoSeeder::class)->run('PRES', ['K1', 'K2'], '20271', apply: false);
+
+    expect($check->at)->toBe([DemoCheckpoint::Staffing])
+        ->and(($check->passes)($demo))->toBeTrue();
+
+    GroupSession::query()->whereRelation('group', 'department_id', $this->basicas->id)->first()->update(['starts_at' => '16:00', 'ends_at' => '18:00']);
+
+    expect(($check->passes)($demo))->toBe('Vencidas: CB (2).');
 });
