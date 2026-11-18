@@ -43,7 +43,7 @@ beforeEach(function () {
     TermOpening::factory()->create(['term_id' => $this->term->id]);
     $this->k1 = Campus::factory()->create(['code' => 'K1']);
     $this->k2 = Campus::factory()->create(['code' => 'K2']);
-    $this->plan = StudyPlan::factory()->create(['code' => 'PL-RC']);
+    $this->plan = StudyPlan::factory()->create(['code' => 'PL-RC', 'is_current' => true]); // vigente: el nuevo ingreso solo entra a su plan (DM-05, v2)
     CareerCampus::factory()->create(['career_id' => $this->plan->career_id, 'campus_id' => $this->k1->id]);
     $this->department = Department::factory()->create();
     $this->a = Subject::factory()->create(['code' => 'RA-1', 'department_id' => $this->department->id]);
@@ -152,7 +152,8 @@ it('conserva los casos de historia: un solo periodo, especialidad por revisar y 
     $a = $rows->firstWhere('subject_id', $this->a->id);
 
     expect($b)->history_terms_used->toBe(1)->method->toBe(ForecastMethod::Formula)
-        ->and($rows->where('needs_review', true)->pluck('subject_id')->all())->toEqualCanonicalizing([$this->c->id, $this->d->id])
+        // Especialidad (C y D) y, desde la v2, la materia que nadie tomó en la ventana aunque tenía elegibles (X, DM-04).
+        ->and($rows->where('needs_review', true)->pluck('subject_id')->all())->toEqualCanonicalizing([$this->c->id, $this->d->id, $this->x->id])
         ->and($a)->method->toBe(ForecastMethod::FirstSemester)->new_students->toBe(4);
 });
 
