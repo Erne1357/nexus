@@ -73,13 +73,16 @@
                         </p>
                     </div>
                     <div class="min-w-0 space-y-1.5">
-                        <div @class(['flex h-6 overflow-hidden rounded-field border text-[11.5px] font-mono font-semibold', 'border-error bg-error/10' => $over > 0, 'border-base-300 '.$stripes => $over === 0]) role="img"
+                        <div @class(['flex h-6 overflow-hidden rounded-field border bg-base-100 text-[11.5px] font-mono font-semibold', 'border-error' => $over > 0, 'border-base-300' => $over === 0]) role="img"
                             aria-label="{{ collect($slot->quotas)->map(fn ($seats, $career) => $draft->code($career).' '.$seats)->join(', ') }} de {{ $slot->capacity }} lugares{{ $over > 0 ? ', pasa la capacidad por '.$over : '' }}">
                             @foreach ($slot->quotas as $career => $seats)
-                                <span @class(['flex min-w-0 items-center justify-center truncate border-e border-base-100 px-1', 'bg-error/25 text-error' => $over > 0, 'bg-info/20 text-base-content' => $over === 0]) style="width: {{ $seats / $base * 100 }}%">{{ $seats / $base > 0.14 ? $draft->code($career).' '.$seats : '' }}</span>
+                                <span @class(['flex min-w-0 items-center justify-center truncate border-e border-base-100 px-1', 'bg-error/20 text-error' => $over > 0, 'bg-info/20 text-base-content' => $over === 0]) style="width: {{ $seats / $base * 100 }}%">{{ $seats / $base > 0.14 ? $draft->code($career).' '.$seats : '' }}</span>
                             @endforeach
+                            @if ($slot->free() > 0)
+                                <span class="block {{ $stripes }}" style="width: {{ $slot->free() / $base * 100 }}%"></span>
+                            @endif
                         </div>
-                        <p class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-neutral">
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-neutral">
                             <span><b class="font-mono text-base-content">{{ $quotaSum }}</b> de {{ $slot->capacity }} lugares</span>
                             <span><b class="font-mono text-base-content">{{ $expectedSum }}</b> esperados</span>
                             @if ($over > 0)
@@ -90,7 +93,7 @@
                             @if ($lowFill)
                                 <x-core::status-badge tone="warning" icon="o-arrow-trending-down" label="Poco lleno" data-testid="parallels-low-{{ $index }}" />
                             @endif
-                        </p>
+                        </div>
                         <p class="flex flex-wrap gap-1.5 text-[12.5px]">
                             @foreach ($slot->expected as $career => $count)
                                 <span class="rounded-field border border-base-300 px-2 py-0.5"><span class="font-mono font-semibold">{{ $draft->code($career) }}</span> <span class="font-mono">{{ $slot->quotas[$career] ?? $count }}</span> <span class="text-neutral">· {{ $count }} esp.</span></span>

@@ -19,7 +19,7 @@
 <div class="flex h-dvh flex-col" data-testid="parallels-panel">
     <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
         <div class="min-w-0 flex-1">
-            <p class="flex flex-wrap items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 <span class="font-mono text-[15px] font-semibold">{{ $row->subject->code }}</span>
                 <x-core::campus-tag :campus="$row->campus" size="lg" />
                 @if ($row->arranged())
@@ -27,7 +27,7 @@
                 @else
                     <x-core::status-badge tone="warning" icon="o-clock" label="Por armar" />
                 @endif
-            </p>
+            </div>
             <h2 id="parallels-drawer-title" tabindex="-1" class="mt-1 text-xl font-bold leading-tight">{{ $row->subject->name }} en {{ $row->campus->name }}</h2>
             <p class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-neutral">
                 <span><span class="font-mono">{{ $hours }}</span> h a la semana</span>
