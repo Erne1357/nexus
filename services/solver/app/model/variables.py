@@ -18,6 +18,14 @@ que recortan el dominio.
 
 La ocupación de cada docente, salón y cohorte por día queda en `Occupancy`: lo que usan las restricciones (HC-01 a
 HC-03) y lo que usará el objetivo (7.6).
+
+Para que quepa la carga de un departamento (`DomainOptions`, por omisión):
+
+- **Salones en dos fases**: las ventanas de un bloque de los grupos del conjunto de salones de su campus (`RoomPool`)
+  no llevan `z`; la fase A cuenta salones por bloque y la fase B los reparte (`rooms.py`). Las demás ventanas llevan su
+  `z` explícito.
+- **Niveles por necesidad**: cada grupo lleva solo las opciones del primer nivel del patrón donde alguna cabe (PS-04);
+  si así no hay solución, se arma con todos los niveles.
 """
 
 from bisect import bisect_right
@@ -31,9 +39,23 @@ from app.contract.input import GroupInput
 
 from .data import ModelData, overlaps
 from .pattern import DaySpread, Grid, tiers
+from .rooms import RoomPool
 
 #: La llave de una ventana dentro de su grupo: (día, bloque de inicio, unidades).
 WindowKey = tuple[int, int, int]
+
+#: Un bloque de la rejilla de un campus: (campus, día, bloque).
+BlockKey = tuple[str, int, int]
+
+
+@dataclass(frozen=True)
+class DomainOptions:
+    """Cómo se arma el dominio."""
+
+    #: Salones en dos fases: las ventanas de un bloque de los grupos de un `RoomPool` no llevan `z`.
+    pool_rooms: bool = True
+    #: Todos los niveles del patrón; si no, cada grupo hasta el primer nivel donde alguna opción cabe.
+    all_tiers: bool = False
 
 
 @dataclass(eq=False)
@@ -48,8 +70,12 @@ class Window:
     end: int
     #: Las opciones del grupo que pasan por esta ventana: su suma vale 1 si el grupo la usa.
     options: list["Option"] = field(default_factory=list)
-    #: El salón de la ventana: salón -> literal.
+    #: El salón de la ventana: salón -> literal (vacío si la ventana es del conjunto de salones).
     rooms: dict[str, cp_model.IntVar] = field(default_factory=dict)
+    #: Si su salón lo cuenta la fase A y lo reparte la fase B, sin `z`.
+    pooled: bool = False
+    #: En una ventana del conjunto de un grupo con laboratorio: verdadero si va en un espacio de práctica (HC-06).
+    lab: cp_model.IntVar | None = None
 
     @property
     def literals(self) -> list[cp_model.IntVar]:
@@ -80,6 +106,12 @@ class GroupDomain:
     grid: Grid
     #: Si su práctica pide laboratorio, taller o sala de cómputo (HC-06 activa y el campus usa salones).
     lab_practice: bool
+    #: Los lugares que pide a su salón (HC-05; 0 si la regla no está activa).
+    threshold: int = 0
+    #: El conjunto de salones de su campus, si sus ventanas de un bloque van sin `z`.
+    pool: RoomPool | None = None
+    #: Si quedaron niveles del patrón sin revisar porque uno anterior ya tenía opciones.
+    truncated: bool = False
     options: list[Option] = field(default_factory=list)
     windows: dict[WindowKey, Window] = field(default_factory=dict)
     #: Opciones descartadas por la primera regla que las impide.
@@ -180,6 +212,11 @@ class Variables:
     teachers: Occupancy
     rooms: Occupancy
     cohorts: Occupancy
+    options: DomainOptions = field(default_factory=DomainOptions)
+    #: El conjunto de salones de cada campus que lo usa.
+    pools: dict[str, RoomPool] = field(default_factory=dict)
+    #: Las ventanas del conjunto en cada bloque.
+    pooled: dict[BlockKey, list[Window]] = field(default_factory=dict)
 
     @property
     def option_count(self) -> int:
@@ -189,21 +226,58 @@ class Variables:
     def room_count(self) -> int:
         return sum(len(window.rooms) for domain in self.groups.values() for window in domain.windows.values())
 
+    @property
+    def lab_count(self) -> int:
+        return sum(window.lab is not None for domain in self.groups.values() for window in domain.windows.values())
+
+    @property
+    def truncated(self) -> bool:
+        """Si algún grupo quedó sin sus otros niveles: una segunda vuelta con todos podría tener solución."""
+        return any(domain.truncated for domain in self.groups.values())
+
     def unplaceable(self) -> list[GroupDomain]:
         """Los grupos sin ninguna opción: ninguna solución los programa (gancho de la relajación, 7.7)."""
         return [domain for domain in self.groups.values() if not domain.options]
 
 
-def build_variables(model: cp_model.CpModel, data: ModelData) -> Variables:
+def build_variables(model: cp_model.CpModel, data: ModelData, options: DomainOptions | None = None) -> Variables:
     """Crea `y` y `z` del dominio pre-filtrado y enlaza cada ventana con su salón."""
-    variables = Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy())
+    options = options or DomainOptions()
+    variables = Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy(), options=options)
+    if options.pool_rooms:
+        variables.pools = _pools(data)
 
     for group in data.movable:
-        domain = _domain(model, data, group)
+        domain = _domain(model, data, group, variables)
         variables.groups[group.id] = domain
         _register(domain, variables)
 
     return variables
+
+
+def _pools(data: ModelData) -> dict[str, RoomPool]:
+    """Un conjunto de salones por campus con salones: el del departamento con más grupos movibles en él."""
+    departments: dict[str, Counter[str]] = defaultdict(Counter)
+    for group in data.movable:
+        if data.grids[group.campus_code].uses_rooms:
+            departments[group.campus_code][group.department_id] += 1
+
+    return {
+        campus: RoomPool(data, campus, min(counts, key=lambda department: (-counts[department], department)))
+        for campus, counts in departments.items()
+    }
+
+
+def _pool_of(data: ModelData, group: GroupInput, variables: Variables) -> RoomPool | None:
+    """El conjunto de salones del grupo: el de su campus si es de su departamento (o si HC-10 no está activa, porque
+    entonces el dueño no importa) y no trae `candidate_room_ids`."""
+    pool = variables.pools.get(group.campus_code)
+    if pool is None or group.candidate_room_ids:
+        return None
+    if data.active("HC-10") and pool.department_id != group.department_id:
+        return None
+
+    return pool
 
 
 def unit_counts(group: GroupInput, grid: Grid, data: ModelData) -> list[int]:
@@ -237,12 +311,20 @@ class _WindowCheck:
     reason: str | None
     rooms: tuple[str, ...] = ()
     has_lab: bool = False
+    #: Si es una ventana de un bloque de un grupo con conjunto de salones: sin `z`.
+    pooled: bool = False
 
 
-def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput) -> GroupDomain:
+def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput, variables: Variables) -> GroupDomain:
     grid = data.grids[group.campus_code]
     lab_practice = grid.uses_rooms and group.needs_lab and group.practice_hours > 0 and data.active("HC-06")
-    domain = GroupDomain(group=group, grid=grid, lab_practice=lab_practice)
+    domain = GroupDomain(
+        group=group,
+        grid=grid,
+        lab_practice=lab_practice,
+        threshold=group.capacity if data.active("HC-05") else 0,
+        pool=_pool_of(data, group, variables),
+    )
     rooms, static_rejected = _static_rooms(data, group) if grid.uses_rooms else ([], Counter())
     domain.rejected_rooms.update(static_rejected)
     checked: dict[WindowKey, _WindowCheck] = {}
@@ -260,6 +342,9 @@ def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput) -> Grou
         practice = practice_units(group, grid, units) if lab_practice else 0
         unit_tiers = tiers(units, grid.days)
         for tier, spreads in enumerate(unit_tiers, start=first_tier):
+            if domain.options and not variables.options.all_tiers:
+                domain.truncated = True
+                break
             for spread in spreads:
                 last = grid.blocks - max(count for _, count in spread) * grid.blocks_per_unit
                 for block in range(last + 1):
@@ -271,7 +356,14 @@ def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput) -> Grou
         first_tier += len(unit_tiers)
 
     for window in domain.windows.values():
-        for room_id in check((window.day, window.block, window.units)).rooms:
+        window_check = check((window.day, window.block, window.units))
+        window.pooled = window_check.pooled
+        if window.pooled:
+            if lab_practice and window_check.has_lab:
+                window.lab = model.new_bool_var("")
+                model.add(window.lab <= cp_model.LinearExpr.sum(window.literals))
+            continue
+        for room_id in window_check.rooms:
             window.rooms[room_id] = model.new_bool_var("")
         if grid.uses_rooms:
             model.add(cp_model.LinearExpr.sum(list(window.rooms.values())) == cp_model.LinearExpr.sum(window.literals))
@@ -344,10 +436,15 @@ def _check_window(
     if not grid.uses_rooms:
         return _WindowCheck(None)
 
+    pool = domain.pool
+    if pool is not None and units * grid.blocks_per_unit == 1 and pool.has_room(day, block, domain.threshold, False):
+        has_lab = domain.lab_practice and pool.has_room(day, block, domain.threshold, True)
+        return _WindowCheck(None, has_lab=has_lab, pooled=True)
+
     eligible = []
     rejected: Counter[str] = Counter()
     for room_id in rooms:
-        reason = _room_reason(data, group, room_id, day, start, end)
+        reason = data.room_reason(room_id, group.department_id, day, start, end)
         if reason is None:
             eligible.append(room_id)
         else:
@@ -362,21 +459,6 @@ def _check_window(
     reasons = rejected + static_rejected
 
     return _WindowCheck(min(reasons, key=lambda rule: (-reasons[rule], rule)) if reasons else "HC-02")
-
-
-def _room_reason(data: ModelData, group: GroupInput, room_id: str, day: int, start: int, end: int) -> str | None:
-    if data.active("HC-11") and overlaps(data.room_blocks.get(room_id, {}).get(day, []), start, end):
-        return "HC-11"
-    if data.active("HC-02") and overlaps(data.room_fixed.get(room_id, {}).get(day, []), start, end):
-        return "HC-02"
-    if (
-        data.active("HC-10")
-        and data.needs_loan(room_id, group.department_id)
-        and not data.loan_covers(room_id, group.department_id, day, start, end)
-    ):
-        return "HC-10"
-
-    return None
 
 
 def _add_option(
@@ -408,5 +490,7 @@ def _register(domain: GroupDomain, variables: Variables) -> None:
             variables.teachers.add(group.teacher_id, window.day, span)
         for cohort in cohorts:
             variables.cohorts.add(cohort, window.day, span)
+        if window.pooled:
+            variables.pooled.setdefault((group.campus_code, window.day, window.block), []).append(window)
         for room_id, literal in window.rooms.items():
             variables.rooms.add(room_id, window.day, Span(window.start, window.end, group.id, (literal,)))

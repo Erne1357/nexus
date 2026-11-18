@@ -24,7 +24,8 @@ from ortools.sat.python import cp_model
 from app.contract.output import HardViolation
 
 from .data import HARD_RULES, ModelData
-from .variables import Occupancy, Variables
+from .rooms import NONE
+from .variables import Occupancy, Variables, Window
 
 
 class RuleKind(StrEnum):
@@ -63,8 +64,52 @@ def add_hc01(model: cp_model.CpModel, variables: Variables, data: ModelData) -> 
 
 def add_hc02(model: cp_model.CpModel, variables: Variables, data: ModelData) -> None:
     """HC-02 (`RoomOverlap`): un salón no tiene dos sesiones que se empalmen. En un día de 2 horas las dos van en el
-    mismo salón (PS-05), así que una ventana ocupa su salón completa."""
+    mismo salón (PS-05), así que una ventana ocupa su salón completa.
+
+    Las ventanas con `z` explícito, con cliques por salón; las del conjunto de salones, con la cuenta por bloque de la
+    fase A (`add_pool_capacity`), que garantiza que la fase B las reparte sin choques.
+    """
     _no_overlap(model, variables.rooms)
+    add_pool_capacity(model, variables, data)
+
+
+def add_pool_capacity(model: cp_model.CpModel, variables: Variables, data: ModelData) -> None:
+    """La fase A de los salones (`rooms.py`): en cada bloque, para cada par de umbrales (a de teoría, b de práctica),
+    las sesiones del conjunto que solo caben en `U(a, b)` más los salones de `U(a, b)` que tomaron las ventanas
+    explícitas no pasan de `|U(a, b)|`. Es la condición de Hall de cada conjunto de sesiones del bloque."""
+    for (campus, day, block), windows in variables.pooled.items():
+        pool = variables.pools[campus]
+        minute = pool.grid.minute_of(block)
+        thresholds = {window: variables.groups[window.group_id].threshold for window in windows}
+        theory = [*sorted(set(thresholds.values())), NONE]
+        lab = [*sorted({thresholds[window] for window in windows if window.lab is not None}), NONE]
+        for low_theory in theory:
+            for low_lab in lab:
+                if low_theory == NONE and low_lab == NONE:
+                    continue
+                rooms = pool.union(day, block, low_theory, low_lab)
+                counted = [_pool_terms(window, thresholds[window], low_theory, low_lab) for window in windows]
+                explicit = [literal for room in rooms for literal in variables.rooms.at(room, day, minute)]
+                # Cada ventana del conjunto suma a lo más 1 y cada ventana explícita, a lo más un salón: si ni así
+                # pasan de los salones, la restricción sobra.
+                if sum(1 for terms in counted if terms) + len(explicit) > len(rooms):
+                    terms = [term for window_terms in counted for term in window_terms]
+                    model.add(cp_model.LinearExpr.sum(terms + explicit) <= len(rooms))
+
+
+def _pool_terms(window: Window, threshold: int, low_theory: int, low_lab: int) -> list:
+    """Lo que la ventana pone en la cuenta de `U(low_theory, low_lab)`: toda si cabe por los dos lados, la teoría
+    (`v - l`) o la práctica (`l`) si solo por uno."""
+    in_theory = threshold >= low_theory
+    in_lab = window.lab is not None and threshold >= low_lab
+    if in_theory and (in_lab or window.lab is None):
+        return list(window.literals)
+    if in_theory:
+        return [*window.literals, -window.lab]
+    if in_lab:
+        return [window.lab]
+
+    return []
 
 
 def add_hc03(model: cp_model.CpModel, variables: Variables, data: ModelData) -> None:
@@ -95,7 +140,7 @@ def add_hc06(model: cp_model.CpModel, variables: Variables, data: ModelData) -> 
             for window in domain.windows.values()
             for room_id, literal in window.rooms.items()
             if data.is_practice_space(room_id)
-        ]
+        ] + [window.units * window.lab for window in domain.windows.values() if window.lab is not None]
         practice = [option.practice * option.literal for option in domain.options]
         model.add(cp_model.LinearExpr.sum(lab_units) >= cp_model.LinearExpr.sum(practice))
 

@@ -132,6 +132,22 @@ class ModelData:
     def loan_covers(self, room_id: str, department_id: str, day: int, start: int, end: int) -> bool:
         return covered(self.loans.get((room_id, department_id), {}).get(day, []), start, end)
 
+    def room_reason(self, room_id: str, department_id: str, day: int, start: int, end: int) -> str | None:
+        """La regla activa que impide usar el salón en [start, end) a un grupo del departamento, o `None`: bloqueo
+        (HC-11), ocupación fija (HC-02) o salón ajeno sin préstamo que lo cubra (HC-10)."""
+        if self.active("HC-11") and overlaps(self.room_blocks.get(room_id, {}).get(day, []), start, end):
+            return "HC-11"
+        if self.active("HC-02") and overlaps(self.room_fixed.get(room_id, {}).get(day, []), start, end):
+            return "HC-02"
+        if (
+            self.active("HC-10")
+            and self.needs_loan(room_id, department_id)
+            and not self.loan_covers(room_id, department_id, day, start, end)
+        ):
+            return "HC-10"
+
+        return None
+
 
 def _add(index: dict, key: object, day: int, span: Span) -> None:
     index.setdefault(key, {}).setdefault(day, []).append(span)

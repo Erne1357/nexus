@@ -7,26 +7,21 @@ rejilla de casi todas es un solo bloque (lunes de 07:00 a 08:00), así que un gr
 import pytest
 from ortools.sat.python import cp_model
 
-from app.model.constraints import RULES, RuleKind, add_hard_constraints, input_problems
+from app.model.constraints import RULES, RuleKind, input_problems
 from app.model.data import HARD_RULES
-from app.model.variables import build_variables
+from app.model.phases import solve_hard
 from tests.instances import campus, group, instance, model_data, room, session, slot, teacher
 
 ONE_SLOT = [campus(days=[1], day_end="08:00")]
 FEASIBLE = (cp_model.OPTIMAL, cp_model.FEASIBLE)
 
 
-def status_of(data: dict, without: tuple[str, ...] = ()) -> int:
+def status_of(data: dict, without: tuple[str, ...] = (), exact: bool = False) -> int:
+    """El estado del modelo duro: en dos fases con niveles por necesidad (por omisión) o el exacto de 7.5."""
     data = {**data, "hard_rules": [rule for rule in HARD_RULES if rule not in without]}
-    model_input = model_data(data)
-    model = cp_model.CpModel()
-    variables = build_variables(model, model_input)
-    add_hard_constraints(model, variables, model_input)
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 5
-    solver.parameters.num_workers = 1
+    run = solve_hard(model_data(data), time_limit=5, workers=1, pool_rooms=not exact, tiers_by_need=not exact)
 
-    return solver.solve(model)
+    return run.status
 
 
 CASES = {
@@ -117,12 +112,13 @@ CASES = {
 }
 
 
+@pytest.mark.parametrize("exact", [False, True], ids=["dos fases", "exacto"])
 @pytest.mark.parametrize("case", list(CASES))
-def test_la_instancia_que_rompe_la_regla_es_infactible_y_sin_la_regla_factible(case):
+def test_la_instancia_que_rompe_la_regla_es_infactible_y_sin_la_regla_factible(case, exact):
     rule = case[:5]
 
-    assert status_of(CASES[case]) == cp_model.INFEASIBLE
-    assert status_of(CASES[case], without=(rule,)) in FEASIBLE
+    assert status_of(CASES[case], exact=exact) == cp_model.INFEASIBLE
+    assert status_of(CASES[case], without=(rule,), exact=exact) in FEASIBLE
 
 
 def test_hc04_es_la_rejilla_y_no_se_desactiva():
