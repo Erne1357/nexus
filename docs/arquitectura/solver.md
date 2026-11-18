@@ -324,7 +324,7 @@ Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_op
 | Exacta (7.4 y 7.5) | 9 936 215 | 158 779 | 66 s + 17 s | 5.2 GB | no se llega a resolver | — |
 | Dos fases, cada grupo solo con el primer nivel que cabe | 13 301 | 11 995 | 1.2 s | 0.19 GB | infactible (el presolve lo prueba al instante) | — |
 | Dos fases, ampliando niveles en todo el modelo a los que no quedan | hasta 131 151 | 23 728 | 2–4 s por vuelta | 2.3 GB | no llega en 60 s (1 125 a lo más) | 0 |
-| **Dos fases + LNS, 2 hilos** (2 CPU y 2 GB, como el servicio en compose) | 30 432 (vecindarios de 300 a 5 600) | 14 114 | 2.0 s | 0.54 GB | **35.1 s** | **0** |
+| **Dos fases + LNS, 2 hilos** (2 CPU y 2 GB, como el servicio en compose) | 30 432 (vecindarios de 300 a 6 000) | 14 114 | 2.0–2.2 s | 0.49–0.54 GB | **34–35 s** | **0** |
 | Dos fases + LNS, 8 hilos | 30 432 | 14 114 | 2.1 s | 0.91 GB | 25.6 s | 0 |
 
 Límite de 60 s (el del servicio por omisión), semilla 7, Python 3.12 y OR-Tools 9.15; las duras, con el verificador de `verify.py`, que no comparte código con el modelo. La heurística en PHP tarda 1.5 s en construir con 0 duras; CP-SAT todavía no tiene objetivo (7.6), así que aquí solo se mide llegar a una solución completa.
@@ -340,11 +340,11 @@ Límite de 60 s (el del servicio por omisión), semilla 7, Python 3.12 y OR-Tool
 
 **Arranque tibio y vecindarios** (`search.lns`):
 
-1. Primera vuelta con la asignación relajada (a lo más una opción por grupo; un grupo sin opciones se salta) y el objetivo de programar a la mayor cantidad. La pista es el horario actual cuando es una opción del patrón (`current_sessions`, PS-07). En esta instancia no lo es: 2 278 de sus 2 970 sesiones actuales son de 2 horas. Tiene a lo más una cuarta parte del tiempo; programó 1 124 de 1 139 (en 5.5 s con 8 hilos, la mejor de su dominio; en 13 s con 2).
+1. Primera vuelta con la asignación relajada (a lo más una opción por grupo; un grupo sin opciones se salta) y el objetivo de programar a la mayor cantidad. La pista es el horario actual cuando es una opción del patrón (`current_sessions`, PS-07). En esta instancia no lo es: 2 278 de sus 2 970 sesiones actuales son de 2 horas. Tiene a lo más una cuarta parte del tiempo; programó 1 124 de 1 139 en 5.5 s con 8 hilos (la mejor de su dominio) y de 1 122 a 1 124 en 13 s con 2.
 2. Para cada grupo que no quedó, un modelo chico: él y los programados que comparten su docente o una cohorte se mueven, y los demás entran fijos con sus sesiones (`movable = false`). El vecindario crece en cada intento: primero los vecinos con los niveles de una hora; luego con todos sus niveles; luego también los vecinos de los vecinos y, si lleva laboratorio, los demás grupos con laboratorio de su campus. Hasta 5 intentos, cada uno con más tiempo y otra semilla. Los días de 2 horas del vecindario solo llevan `z` en sus 12 salones más ajustados.
 3. Solo se acepta un vecindario que programa más grupos que antes, así que la solución nunca empeora.
 
-En la instancia fueron 22 vecindarios de 300 a 5 600 variables, de 0.01 a 3 s cada uno.
+En la instancia fueron de 22 a 24 vecindarios por corrida, de 300 a 6 000 variables y de 0.03 a 3.3 s cada uno.
 
 Supuestos y pendientes (para 7.6 a 7.8):
 
