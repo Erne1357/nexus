@@ -58,6 +58,14 @@ enum LoadStatus: string
      * directo. Aprobada solo existe en las modalidades que lo exigen. Cerrada, Aprobada y Publicada se reabren a Ajustes,
      * con motivo (ReopenLoad; P3, confirmado el 10 de noviembre de 2026).
      *
+     * El re-análisis (fase 8, RA-01 a RA-08) es otro ciclo que sale de Publicada y vuelve a ella por el cierre: Publicada
+     * pasa a Re-análisis (StartReanalysis), de ahí a Cerrada (CloseLoad) y sigue como la primera vez, con el visto bueno
+     * si la modalidad lo exige (RA-03) y la publicación de la versión n + 1. Cerrada y Aprobada también tienen a
+     * Re-análisis como destino: es como Subdirección devuelve una carga re-analizada (RA-08), que ReopenLoad elige en
+     * lugar de Ajustes cuando el último cierre vino de Re-análisis. Desde Re-análisis no se publica: la única flecha a Publicada es
+     * la de cancelar el re-análisis sin cambios (CancelReanalysis, RA-10), que vuelve a la versión vigente sin una nueva; PublishLoad la
+     * rechaza (publicar exige Cerrada o Aprobada) y solo CancelReanalysis la toma.
+     *
      * @return list<self>
      */
     public function transitions(ModalityProfile $profile): array
@@ -67,11 +75,20 @@ enum LoadStatus: string
             self::Proposed => [self::Staffing],
             self::Staffing => [self::Adjusting, self::Closed],
             self::Adjusting => [self::Staffing],
-            self::Closed => [$profile->requiresSubdireccionApproval ? self::Approved : self::Published, self::Adjusting],
-            self::Approved => [self::Published, self::Adjusting],
+            self::Closed => [$profile->requiresSubdireccionApproval ? self::Approved : self::Published, self::Adjusting, self::Reanalysis],
+            self::Approved => [self::Published, self::Adjusting, self::Reanalysis],
             self::Published => [self::Reanalysis, self::Adjusting],
-            self::Reanalysis => [self::Published],
+            self::Reanalysis => [self::Closed, self::Published],
         };
+    }
+
+    /**
+     * Si en este estado se asignan y quitan docentes: Asignación, Ajustes y Re-análisis (el jefe ajusta la carga re-analizada
+     * y RA-05 avisa a los docentes afectados al republicar). Las solicitudes de cambio siguen limitadas a Asignación y Ajustes.
+     */
+    public function acceptsTeacherAssignment(): bool
+    {
+        return in_array($this, [self::Staffing, self::Adjusting, self::Reanalysis], true);
     }
 
     public function canTransitionTo(self $to, ModalityProfile $profile): bool

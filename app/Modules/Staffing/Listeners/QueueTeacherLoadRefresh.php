@@ -17,8 +17,8 @@ use App\Modules\Staffing\Jobs\RefreshTeacherLoads;
 /**
  * Encola el recálculo de `teacher_term_loads` (RefreshTeacherLoads; tarea 3.12) del periodo que cambió: los grupos con
  * docente de Scheduling (asignar, cancelar, nacer) y, de Faculty, las plazas, las horas externas (de su periodo), los
- * datos y las adscripciones de un docente, que valen para cada periodo con una carga en `proposed`, `staffing` o
- * `adjusting`. Todos salen después del commit, así que el job lee lo guardado.
+ * datos y las adscripciones de un docente, que valen para cada periodo con una carga en `proposed`, `staffing`,
+ * `adjusting` o `reanalysis`. Todos salen después del commit, así que el job lee lo guardado.
  */
 final class QueueTeacherLoadRefresh
 {
@@ -50,7 +50,7 @@ final class QueueTeacherLoadRefresh
     private function openTerms(): array
     {
         return AcademicLoad::query()
-            ->whereIn('status', [LoadStatus::Proposed->value, LoadStatus::Staffing->value, LoadStatus::Adjusting->value])
+            ->whereIn('status', [LoadStatus::Proposed->value, LoadStatus::Staffing->value, LoadStatus::Adjusting->value, LoadStatus::Reanalysis->value])
             ->distinct()
             ->pluck('term_id')
             ->all();

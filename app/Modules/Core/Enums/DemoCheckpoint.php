@@ -13,6 +13,11 @@ use LogicException;
  *
  * Una fase nueva agrega su punto antes de `All` y registra sus pasos y revisiones en el provider de su módulo
  * (`ModuleServiceProvider::demoSteps()` y `demoChecks()`).
+ *
+ * `ReanalysisCases` es la excepción a «inicio de una etapa»: es la etapa 9 en curso, con cada caso del re-análisis
+ * repartido entre los departamentos (fase 8, #614), sobre lo publicado del punto 9. Va después de él y no en `All`
+ * porque la demo mezclada no publica más que una carga, y necesita todas las cargas publicadas en su versión 1; lleva el
+ * número y la etapa del re-análisis. Así `reanalisis` sigue siendo el arranque limpio de la 8.1 y la 8.11.
  */
 enum DemoCheckpoint: string
 {
@@ -25,6 +30,7 @@ enum DemoCheckpoint: string
     case Closing = 'cierre';
     case Publication = 'publicacion';
     case Reanalysis = 'reanalisis';
+    case ReanalysisCases = 'reanalisis-casos';
     case All = 'todo';
 
     public function label(): string
@@ -39,15 +45,21 @@ enum DemoCheckpoint: string
             self::Closing => 'Empezando el cierre',
             self::Publication => 'Empezando la publicación',
             self::Reanalysis => 'Empezando el re-análisis',
+            self::ReanalysisCases => 'Re-análisis con todos sus casos',
             self::All => 'Todos los casos',
         };
     }
 
     /**
-     * El número del punto: el de la etapa del proceso que empieza ahí (1 = catálogos importados).
+     * El número del punto: el de la etapa del proceso que empieza ahí (1 = catálogos importados); el de los casos del
+     * re-análisis es el de su etapa, que sigue en curso.
      */
     public function number(): ?int
     {
+        if ($this === self::ReanalysisCases) {
+            return self::Reanalysis->number();
+        }
+
         $index = array_search($this, self::staged(), true);
 
         return $index === false ? null : $index + 1;
@@ -67,7 +79,7 @@ enum DemoCheckpoint: string
             self::Rooms => Stage::Rooms,
             self::Closing => Stage::Closing,
             self::Publication => Stage::Publication,
-            self::Reanalysis => Stage::Reanalysis,
+            self::Reanalysis, self::ReanalysisCases => Stage::Reanalysis,
         };
     }
 

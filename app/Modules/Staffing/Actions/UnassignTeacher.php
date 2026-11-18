@@ -2,7 +2,6 @@
 
 namespace App\Modules\Staffing\Actions;
 
-use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\SetGroupTeacher;
 use App\Modules\Scheduling\Models\Group;
@@ -33,10 +32,10 @@ final class UnassignTeacher
             $load = $editability->lockLoad($group);
             $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
-            if ($load === null || ! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true)) {
+            if ($load === null || ! $load->status->acceptsTeacherAssignment()) {
                 $label = $load?->status->label() ?? 'sin carga';
 
-                throw ValidationException::withMessages(['group' => "La carga está en {$label}: los docentes se asignan en Asignación o Ajustes."]);
+                throw ValidationException::withMessages(['group' => "La carga está en {$label}: los docentes se asignan en Asignación, Ajustes o Re-análisis."]);
             }
 
             if ($group->teacher_id === null) {
