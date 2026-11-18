@@ -31,8 +31,8 @@ final class ParallelsArranged extends NexusNotification
     }
 
     /**
-     * @param  array<string, int>  $before  lugares de la carrera por clave de grupo, antes
-     * @param  array<string, int>  $after  y después
+     * @param  list<array{code: string, seats: int}>  $before  lugares de la carrera en cada grupo, antes
+     * @param  list<array{code: string, seats: int}>  $after  y después
      */
     public function __construct(
         private readonly string $termId,
@@ -87,13 +87,13 @@ final class ParallelsArranged extends NexusNotification
     /**
      * «35 lugares en el grupo 1, 35 en el 2 y 7 en el 5» (`long`) o «35 en el 1 y 35 en el 2».
      *
-     * @param  array<string, int>  $seats
+     * @param  list<array{code: string, seats: int}>  $seats
      */
     private static function places(array $seats, bool $long = false): string
     {
         $parts = [];
 
-        foreach ($seats as $code => $count) {
+        foreach ($seats as ['code' => $code, 'seats' => $count]) {
             $parts[] = $long && $parts === [] ? ($count === 1 ? '1 lugar' : "{$count} lugares")." en el grupo {$code}" : "{$count} en el {$code}";
         }
 

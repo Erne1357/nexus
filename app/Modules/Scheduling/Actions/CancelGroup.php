@@ -39,19 +39,20 @@ final class CancelGroup
     ) {}
 
     /**
+     * @param  string  $key  la llave de los errores (`groups` cuando lo llama ArmParallelGroups)
      * @return array{group: Group, sessions: int, minutes: int}
      *
      * @throws ValidationException
      */
-    public function handle(Group $group, User $actor): array
+    public function handle(Group $group, User $actor, string $key = 'group'): array
     {
-        return $this->editability->guard(fn (): array => DB::transaction(function () use ($group, $actor): array {
+        return $this->editability->guard(fn (): array => DB::transaction(function () use ($group, $actor, $key): array {
             $this->editability->lockLoad($group);
             $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
-            $this->editability->ensure($group, 'grupos', 'group');
+            $this->editability->ensure($group, 'grupos', $key);
 
             if ($group->teacher_id !== null) {
-                throw ValidationException::withMessages(['group' => "El grupo {$group->code} tiene docente: quítalo antes de cancelarlo."]);
+                throw ValidationException::withMessages([$key => "El grupo {$group->code} tiene docente: quítalo antes de cancelarlo."]);
             }
 
             $sessions = GroupSession::query()->where('group_id', $group->getKey())->orderBy('day')->orderBy('starts_at')->lockForUpdate()->get();
@@ -80,6 +81,6 @@ final class CancelGroup
             }
 
             return ['group' => $group, 'sessions' => $sessions->count(), 'minutes' => (int) $sessions->sum('minutes')];
-        }), 'group');
+        }), $key);
     }
 }

@@ -82,16 +82,16 @@ use Illuminate\Support\Facades\Event;
 final class SchedulingServiceProvider extends ModuleServiceProvider
 {
     /**
-     * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
-     * Facilities, disponibilidad, horas externas y plazas de Faculty, y el perfil de una modalidad de Core.
-     */
-    /**
      * La pestaña «Paralelos» (Parallels) no es un modelo: su policy se registra a mano.
      *
      * @var array<class-string, class-string>
      */
     protected array $policies = [Parallels::class => ParallelsPolicy::class];
 
+    /**
+     * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
+     * Facilities, disponibilidad, horas externas y plazas de Faculty, y el perfil de una modalidad de Core.
+     */
     private const array RECOMPUTE_ON = [
         GroupsCreated::class,
         GroupScheduleChanged::class,

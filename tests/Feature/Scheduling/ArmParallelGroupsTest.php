@@ -65,6 +65,17 @@ function armParallelsErrors(array $arrangement): array
 }
 
 /**
+ * Una propuesta viva de grupo compartido de CB a la carrera en el grupo.
+ */
+function armParallelsProposal(Group $group, string $careerId, int $seats): InterdepartmentalAgreement
+{
+    return InterdepartmentalAgreement::factory()->sharedGroup($seats)->create([
+        'term_id' => test()->world->term->id, 'modality_id' => test()->world->modality->id, 'group_id' => $group->id, 'career_id' => $careerId,
+        'from_department_id' => test()->world->department->id, 'to_department_id' => Career::query()->findOrFail($careerId)->department_id,
+    ]);
+}
+
+/**
  * Los cupos de un grupo con claves de carrera, la dueña primero.
  *
  * @return array<string, int>
@@ -191,16 +202,41 @@ it('deja bitácora por cada grupo tocado y dice qué horario se perdió al cance
 it('cancela las propuestas vivas de grupo compartido del grupo que se queda y escribe el cupo directo', function () {
     [$isic1] = $this->world->groupsOf($this->world->request($this->isic, 30, 1));
     $this->world->request($this->iind, 5, 1);
-    $proposal = InterdepartmentalAgreement::factory()->sharedGroup()->create([
-        'term_id' => $this->world->term->id, 'modality_id' => $this->world->modality->id,
-        'group_id' => $isic1->id, 'career_id' => $this->iind->id, 'max_seats' => 3,
-        'from_department_id' => $this->world->department->id, 'to_department_id' => $this->iind->department_id,
-    ]);
+    $proposal = armParallelsProposal($isic1, $this->iind->id, 3);
 
     armParallels([['ISIC' => 30, 'IIND' => 5]]);
 
     expect($proposal->fresh()->status)->toBe(AgreementStatus::Cancelled)
         ->and(armedSeats($isic1))->toBe(['ISIC' => 30, 'IIND' => 5]);
+});
+
+it('cancelar una propuesta sin tocar los cupos también es un cambio: deja bitácora y avisa a la carrera que la perdió', function () {
+    [$isic1] = $this->world->groupsOf($this->world->request($this->isic, 35, 1));
+    $this->world->request($this->iind, 5, 1);
+    $proposal = armParallelsProposal($isic1, $this->iind->id, 3);
+    $heard = [];
+    Event::listen(ParallelGroupsArranged::class, function (ParallelGroupsArranged $event) use (&$heard): void {
+        $heard[] = $event;
+    });
+
+    $result = armParallels([['ISIC' => 35]]);
+
+    expect($result->changed())->toBeTrue()
+        ->and($proposal->fresh()->status)->toBe(AgreementStatus::Cancelled)
+        ->and(armedSeats($isic1))->toBe(['ISIC' => 35])
+        ->and(Activity::query()->where('event', 'parallels_arranged')->sole()->attribute_changes['old'])->toEqual(['quotas' => [$this->isic->id => 35], 'proposed' => [$this->iind->id => 3]])
+        ->and($heard)->toHaveCount(1)
+        ->and($heard[0]->careers)->toBe([$this->iind->id => ['before' => [['code' => '1', 'seats' => 3]], 'after' => [], 'group' => null]]);
+});
+
+it('un grupo nuevo no repite la clave del que se canceló en el mismo arreglo', function () {
+    [$isic1, $isic2] = $this->world->groupsOf($this->world->request($this->isic, 35, 2), 2);
+    $this->world->request($this->iind, 35, 1);
+
+    $result = armParallels([['ISIC' => 35], ['IIND' => 35]]);
+
+    expect($isic2->fresh()->status)->toBe(GroupStatus::Cancelled)
+        ->and(array_map(fn (Group $group): string => $group->code, $result->created))->toBe(['3']);
 });
 
 it('avisa después del commit con lo que cambió para cada carrera, y sin cambios no avisa', function () {
@@ -223,8 +259,8 @@ it('avisa después del commit con lo que cambió para cada carrera, y sin cambio
         ->and($cancelled->group->is($isic2))->toBeTrue()
         ->and([$arranged->subjectId, $arranged->campusId, $arranged->departmentId])->toBe([$this->world->subject->id, $this->world->campus->id, $this->world->department->id])
         ->and($arranged->careers)->toBe([
-            $this->isic->id => ['before' => ['1' => 35, '2' => 35], 'after' => ['1' => 30], 'group' => $isic1->id],
-            $this->iind->id => ['before' => [], 'after' => ['1' => 5], 'group' => $isic1->id],
+            $this->isic->id => ['before' => [['code' => '1', 'seats' => 35], ['code' => '2', 'seats' => 35]], 'after' => [['code' => '1', 'seats' => 30]], 'group' => $isic1->id],
+            $this->iind->id => ['before' => [], 'after' => [['code' => '1', 'seats' => 5]], 'group' => $isic1->id],
         ]);
 
     armParallels([['ISIC' => 30, 'IIND' => 5]]);

@@ -6,14 +6,15 @@ use App\Modules\Scheduling\Models\Group;
 
 /**
  * Lo que dejó armar los paralelos de una materia en un campus (ArmParallelGroups), para que la pantalla lo diga:
- * - `kept`: los grupos que se quedaron, con sus cupos antes y después (`carrera => lugares`);
+ * - `kept`: los grupos que se quedaron, con sus cupos antes y después (`carrera => lugares`) y los lugares de las propuestas
+ *   vivas de grupo compartido que tenían, que se cancelaron;
  * - `created`: los grupos que nacieron, sueltos y sin horario;
  * - `cancelled`: los que se cancelaron, con cuántas sesiones y minutos de horario perdieron.
  */
 final readonly class ParallelArrangement
 {
     /**
-     * @param  list<array{group: Group, before: array<string, int>, after: array<string, int>}>  $kept
+     * @param  list<array{group: Group, before: array<string, int>, proposed: array<string, int>, after: array<string, int>}>  $kept
      * @param  list<Group>  $created
      * @param  list<array{group: Group, sessions: int, minutes: int}>  $cancelled
      */
@@ -24,12 +25,12 @@ final readonly class ParallelArrangement
     ) {}
 
     /**
-     * Si cambió algo: un cupo, un grupo nuevo o uno cancelado.
+     * Si cambió algo: un cupo, una propuesta cancelada, un grupo nuevo o uno cancelado.
      */
     public function changed(): bool
     {
         return $this->created !== [] || $this->cancelled !== []
-            || array_any($this->kept, fn (array $row): bool => $row['before'] != $row['after']);
+            || array_any($this->kept, fn (array $row): bool => $row['before'] != $row['after'] || $row['proposed'] !== []);
     }
 
     /**

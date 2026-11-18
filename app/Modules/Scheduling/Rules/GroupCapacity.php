@@ -9,8 +9,9 @@ use Illuminate\Support\Collection;
 
 /**
  * La capacidad con que nace un grupo nuevo de una materia en un campus (CreateGroupsFromProposal, ArmParallelGroups): la del
- * salón por defecto de la materia en ese campus (el de menor prioridad, sin contar los salones borrados); sin él, el tamaño
- * objetivo de SuggestedGroups (35, o 25 con laboratorio).
+ * salón por defecto de la materia en ese campus, el de menor prioridad sin contar los salones por defecto borrados; sin él, o
+ * si su salón se borró, el tamaño objetivo de SuggestedGroups (35, o 25 con laboratorio). Es la regla de antes de la 8.8, sin
+ * cambios.
  */
 final class GroupCapacity
 {

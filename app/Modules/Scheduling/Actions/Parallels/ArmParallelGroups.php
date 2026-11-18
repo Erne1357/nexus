@@ -3,6 +3,7 @@
 namespace App\Modules\Scheduling\Actions\Parallels;
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
@@ -121,17 +122,19 @@ final class ArmParallelGroups
         $this->ensureWithinCapacity($arrangement, $placement, $groups, $newCapacity);
 
         $before = $groups->map(fn (Group $group): array => $group->quotas->pluck('max_seats', 'career_id')->all())->all();
-        $cancelled = array_map(fn (string $id): array => $this->cancelGroup->handle($groups[$id], $actor), $placement->cancelled);
+        $proposed = $this->proposedSeats($groups->keys()->all());
+        $cancelled = array_map(fn (string $id): array => $this->cancelGroup->handle($groups[$id], $actor, 'groups'), $placement->cancelled);
+        $retired = array_map(fn (array $row): string => $row['group']->code, $cancelled);
         $kept = [];
         $created = [];
 
         foreach ($arrangement as $index => $seats) {
             if (isset($placement->kept[$index])) {
                 $group = $groups[$placement->kept[$index]];
-                $this->rewriteQuotas($group, $seats, $subject, $actor);
-                $kept[] = ['group' => $group, 'before' => $before[$group->getKey()], 'after' => $seats];
+                $this->rewriteQuotas($group, $seats, $proposed[$group->getKey()] ?? [], $subject, $actor);
+                $kept[] = ['group' => $group, 'before' => $before[$group->getKey()], 'proposed' => $proposed[$group->getKey()] ?? [], 'after' => $seats];
             } else {
-                $created[] = $this->create($term, $modality, $subject, $campus, $items[(string) array_search(max($seats), $seats, true)], $seats, $newCapacity, $actor);
+                $created[] = $this->create($term, $modality, $subject, $campus, $items[(string) array_search(max($seats), $seats, true)], $seats, $newCapacity, $retired, $actor);
             }
         }
 
@@ -142,7 +145,7 @@ final class ArmParallelGroups
         }
 
         if ($result->changed()) {
-            ParallelGroupsArranged::dispatch($term->getKey(), $modality->getKey(), $campus->getKey(), $subject->getKey(), $subject->department_id, $this->careerChanges($result, $before));
+            ParallelGroupsArranged::dispatch($term->getKey(), $modality->getKey(), $campus->getKey(), $subject->getKey(), $subject->department_id, $this->careerChanges($result, $before, $proposed));
         }
 
         return $result;
@@ -202,7 +205,9 @@ final class ArmParallelGroups
     private function ensureCareers(array $arrangement, Collection $items, Subject $subject, Campus $campus): Collection
     {
         $ids = array_values(array_unique(array_merge(...array_map(array_keys(...), $arrangement))));
-        $careers = Career::query()->withTrashed()->whereIn('id', array_filter($ids, fn (string $id): bool => Str::isUuid($id)))->get()->keyBy('id');
+        $uuids = array_values(array_filter($ids, fn (string $id): bool => Str::isUuid($id)));
+        $careers = Career::query()->withTrashed()->whereIn('id', $uuids)->get()->keyBy('id');
+        $offered = CareerCampus::query()->whereIn('career_id', $uuids)->where('campus_id', $campus->getKey())->where('is_active', true)->pluck('career_id')->flip();
 
         foreach ($ids as $id) {
             $career = $careers->get($id) ?? throw ValidationException::withMessages(['groups' => 'Una carrera del arreglo no existe.']);
@@ -211,7 +216,7 @@ final class ArmParallelGroups
                 throw ValidationException::withMessages(['groups' => "{$career->code} no tiene aceptada su parte con {$subject->name} en {$campus->code}: acéptala antes de armar."]);
             }
 
-            if (! $career->is_active || $career->trashed() || ! $career->offerings()->where('campus_id', $campus->getKey())->where('is_active', true)->exists()) {
+            if (! $career->is_active || $career->trashed() || ! $offered->has($id)) {
                 throw ValidationException::withMessages(['groups' => "{$career->code} no está activa u ofrecida en {$campus->code} (HC-13)."]);
             }
         }
@@ -261,12 +266,37 @@ final class ArmParallelGroups
     }
 
     /**
+     * Los lugares de las propuestas vivas de grupo compartido (todavía sin decidir) de los grupos, por id de grupo y de
+     * carrera: apartan lugares (HC-07) y, al armar, se cancelan.
+     *
+     * @param  list<string>  $groupIds
+     * @return array<string, array<string, int>>
+     */
+    private function proposedSeats(array $groupIds): array
+    {
+        $seats = [];
+
+        InterdepartmentalAgreement::query()
+            ->where('kind', AgreementKind::SharedGroup->value)
+            ->whereIn('group_id', $groupIds)
+            ->where('status', AgreementStatus::Proposed->value)
+            ->get(['group_id', 'career_id', 'max_seats'])
+            ->each(function (InterdepartmentalAgreement $agreement) use (&$seats): void {
+                $seats[$agreement->group_id][$agreement->career_id] = (int) $agreement->max_seats;
+            });
+
+        return $seats;
+    }
+
+    /**
      * Deja los cupos del grupo en los del arreglo: cancela sus propuestas vivas de grupo compartido y los acuerdos aceptados
      * de carreras que salen, y borra, baja, sube y crea, en ese orden, para que ninguna suma intermedia pase la capacidad.
+     * Cancelar una propuesta también es un cambio: deja su bitácora y avisa aunque los cupos queden igual.
      *
      * @param  array<string, int>  $after
+     * @param  array<string, int>  $proposed  los lugares de sus propuestas vivas, por carrera
      */
-    private function rewriteQuotas(Group $group, array $after, Subject $subject, User $actor): void
+    private function rewriteQuotas(Group $group, array $after, array $proposed, Subject $subject, User $actor): void
     {
         InterdepartmentalAgreement::query()
             ->where('kind', AgreementKind::SharedGroup->value)
@@ -280,7 +310,7 @@ final class ArmParallelGroups
         $quotas = $group->quotas->keyBy('career_id');
         $before = $quotas->map(fn (GroupQuota $quota): int => $quota->max_seats)->all();
 
-        if ($before == $after) {
+        if ($before == $after && $proposed === []) {
             return;
         }
 
@@ -305,7 +335,7 @@ final class ArmParallelGroups
             ->causedBy($actor)
             ->performedOn($group)
             ->event('parallels_arranged')
-            ->withChanges(['old' => ['quotas' => $before], 'attributes' => ['quotas' => $after]])
+            ->withChanges(['old' => ['quotas' => $before, ...($proposed === [] ? [] : ['proposed' => $proposed])], 'attributes' => ['quotas' => $after]])
             ->log("Armó los paralelos de {$subject->name}: repartió los cupos del grupo {$group->code}");
 
         $group->load('quotas');
@@ -313,13 +343,16 @@ final class ArmParallelGroups
     }
 
     /**
-     * Crea un grupo suelto y sin horario de la fila de su carrera dueña, con los cupos del arreglo.
+     * Crea un grupo suelto y sin horario de la fila de su carrera dueña, con los cupos del arreglo. Su clave provisional no
+     * repite la de un grupo que se canceló en el mismo arreglo (`$retired`), para que el aviso no confunda el grupo nuevo con
+     * el que se fue.
      *
      * @param  array<string, int>  $seats
+     * @param  list<string>  $retired
      */
-    private function create(Term $term, Modality $modality, Subject $subject, Campus $campus, ProposalItem $item, array $seats, int $capacity, User $actor): Group
+    private function create(Term $term, Modality $modality, Subject $subject, Campus $campus, ProposalItem $item, array $seats, int $capacity, array $retired, User $actor): Group
     {
-        $taken = Group::query()->active()->where('term_id', $term->getKey())->where('subject_id', $subject->getKey())->pluck('code')->all();
+        $taken = [...Group::query()->active()->where('term_id', $term->getKey())->where('subject_id', $subject->getKey())->pluck('code')->all(), ...$retired];
         $owner = $item->proposal->career_id;
 
         $group = Group::query()->create([
@@ -355,34 +388,31 @@ final class ArmParallelGroups
     }
 
     /**
-     * Lo que cambió para cada carrera: sus lugares por clave de grupo antes y después, y el grupo donde le quedan más; solo
-     * las carreras cuyos lugares cambiaron.
+     * Lo que cambió para cada carrera, solo de las carreras cuyos lugares cambiaron: sus lugares en cada grupo antes (cupos y
+     * propuestas vivas) y después, como `{code, seats}`, y el grupo donde le quedan más. Se compara por grupo, no por clave.
      *
      * @param  array<string, array<string, int>>  $before  cupos de cada grupo suelto antes, por id de grupo
-     * @return array<string, array{before: array<string, int>, after: array<string, int>, group: ?string}>
+     * @param  array<string, array<string, int>>  $proposed  propuestas vivas de cada grupo antes, por id de grupo
+     * @return array<string, array{before: list<array{code: string, seats: int}>, after: list<array{code: string, seats: int}>, group: ?string}>
      */
-    private function careerChanges(ParallelArrangement $result, array $before): array
+    private function careerChanges(ParallelArrangement $result, array $before, array $proposed): array
     {
         $careers = [];
         $add = function (string $side, Group $group, array $seats) use (&$careers): void {
             foreach ($seats as $careerId => $count) {
-                $careers[$careerId] ??= ['before' => [], 'after' => [], 'group' => null, 'most' => 0];
-                $careers[$careerId][$side][$group->code] = $count;
-
-                if ($side === 'after' && $count > $careers[$careerId]['most']) {
-                    $careers[$careerId]['group'] = $group->getKey();
-                    $careers[$careerId]['most'] = $count;
-                }
+                $careers[$careerId] ??= ['before' => [], 'after' => []];
+                $careers[$careerId][$side][$group->getKey()] = ['code' => (string) $group->code, 'seats' => $count];
             }
         };
 
         foreach ($result->kept as $row) {
-            $add('before', $row['group'], $row['before']);
+            $add('before', $row['group'], $row['before'] + $row['proposed']);
             $add('after', $row['group'], $row['after']);
         }
 
         foreach ($result->cancelled as $row) {
-            $add('before', $row['group'], $before[$row['group']->getKey()]);
+            $id = $row['group']->getKey();
+            $add('before', $row['group'], $before[$id] + ($proposed[$id] ?? []));
         }
 
         foreach ($result->created as $group) {
@@ -391,7 +421,11 @@ final class ArmParallelGroups
 
         return collect($careers)
             ->reject(fn (array $change): bool => $change['before'] == $change['after'])
-            ->map(fn (array $change): array => ['before' => $change['before'], 'after' => $change['after'], 'group' => $change['group']])
+            ->map(function (array $change): array {
+                $most = collect($change['after'])->sortByDesc('seats')->keys()->first();
+
+                return ['before' => array_values($change['before']), 'after' => array_values($change['after']), 'group' => $most === null ? null : (string) $most];
+            })
             ->all();
     }
 }

@@ -74,6 +74,14 @@ it('dice con qué grupo, qué cupo y qué cambió, y lleva al editor con el grup
     Notification::assertSentTo($this->coordinators['IIND'], ParallelsArranged::class, fn (ParallelsArranged $notice): bool => $notice->message($this->coordinators['IIND'])->body === 'IIND: 3 lugares en el grupo 1.');
 });
 
+it('avisa a la carrera que se queda sin lugares, sin grupo que abrir', function () {
+    $notice = new ParallelsArranged($this->world->term->id, $this->world->modality->id, 'Ciencias Básicas', 'ACF-0902 Cálculo Integral', 'C1', 'IIND', [['code' => '1', 'seats' => 3], ['code' => '4', 'seats' => 2]], [], null);
+    $message = $notice->message($this->coordinators['IIND']);
+
+    expect($message->body)->toBe('IIND se queda sin lugares. Antes: 3 en el 1 y 2 en el 4.')
+        ->and($message->parameters)->toBe([]);
+});
+
 it('deja de abrirse si el grupo se canceló', function () {
     $message = new NotificationMessage(title: 'x', body: 'y', icon: 'o-arrows-pointing-in', route: 'scheduling.editor', parameters: ['grupo' => $this->first->id]);
     $context = app(Actor::class)->forUser($this->coordinators['ISIC']);
