@@ -252,3 +252,20 @@ it('empareja la propuesta con la foto de la solicitud y conserva el salón de su
 
     expect(array_column($request->fresh()->impact['hard'], 'rule'))->toContain('HC-02');
 });
+
+it('empareja primero por coincidencia exacta con la foto y luego por posición, aunque el orden haya cambiado', function () {
+    $s = changeScenario();
+    $room = impactRoom($s);
+    GroupSession::factory()->on(2, '07:00', '09:00')->create(['group_id' => $s['group']->id]);
+    GroupSession::factory()->on(4, '07:00', '09:00')->inRoom($room)->create(['group_id' => $s['group']->id]);
+    $other = impactOtherGroup($s, ['code' => 'C']);
+    GroupSession::factory()->on(5, '09:00', '11:00')->inRoom($room)->create(['group_id' => $other->id]);
+    $request = impactRequest($s, ChangeRequestKind::Schedule, ['sessions' => [
+        ['day' => 5, 'starts_at' => '10:00', 'ends_at' => '12:00'],
+        ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00'],
+    ]]);
+
+    $impact = app(AssessChangeImpact::class)->simulate($request->fresh());
+
+    expect(array_column($impact['hard'], 'rule'))->toContain('HC-02');
+});

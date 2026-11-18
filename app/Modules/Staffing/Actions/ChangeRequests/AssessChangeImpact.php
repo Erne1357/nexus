@@ -117,32 +117,47 @@ final class AssessChangeImpact
     }
 
     /**
-     * La sesión viva que cada propuesta reemplaza, por su posición: la de `current` (la foto al pedirla) reconocida
-     * por su día y sus horas en las sesiones de hoy; sin foto, la misma posición de las sesiones vivas.
+     * La sesión viva que cada propuesta reemplaza. Primero por coincidencia exacta con `current` (la foto al pedirla):
+     * la propuesta con el mismo día y las mismas horas que una sesión de la foto, que se reconoce en la sesión viva que
+     * hoy las tenga. Las propuestas que quedan se emparejan por posición con las sesiones vivas que quedan, en el orden
+     * de la foto (sin foto, por día y hora); las de más quedan sin pareja, sin salón.
      *
      * @param  Collection<int, GroupSession>  $live
      * @return array<int, GroupSession>
      */
     private function pairs(ChangeRequest $request, Collection $live): array
     {
+        $proposals = array_values($request->proposed['sessions'] ?? []);
         $snapshot = array_values($request->current ?? []);
+        $clock = fn (mixed $time): string => substr((string) $time, 0, 5);
+        $same = fn (GroupSession $session, array $other): bool => $session->day === (int) ($other['day'] ?? 0)
+            && $clock($session->starts_at) === $clock($other['starts_at'] ?? '')
+            && $clock($session->ends_at) === $clock($other['ends_at'] ?? '');
 
-        if ($snapshot === []) {
-            return $live->all();
-        }
-
-        $taken = [];
         $pairs = [];
+        $taken = [];
 
-        foreach ($snapshot as $index => $photo) {
-            $match = $live->first(fn (GroupSession $session): bool => ! isset($taken[$session->id])
-                && $session->day === (int) ($photo['day'] ?? 0)
-                && substr((string) $session->starts_at, 0, 5) === ($photo['starts_at'] ?? '')
-                && substr((string) $session->ends_at, 0, 5) === ($photo['ends_at'] ?? ''));
+        foreach ($proposals as $index => $proposal) {
+            $match = $live->first(fn (GroupSession $session): bool => ! isset($taken[$session->id]) && $same($session, $proposal)
+                && ($snapshot === [] || array_any($snapshot, fn (array $photo): bool => $same($session, $photo))));
 
             if ($match !== null) {
                 $taken[$match->id] = true;
                 $pairs[$index] = $match;
+            }
+        }
+
+        $rest = $snapshot === []
+            ? $live->reject(fn (GroupSession $session): bool => isset($taken[$session->id]))->values()
+            : collect($snapshot)
+                ->map(fn (array $photo): ?GroupSession => $live->first(fn (GroupSession $session): bool => ! isset($taken[$session->id]) && $same($session, $photo)))
+                ->filter()
+                ->values();
+
+        foreach ($proposals as $index => $proposal) {
+            if (! isset($pairs[$index]) && $rest->isNotEmpty()) {
+                $pairs[$index] = $rest->shift();
+                $taken[$pairs[$index]->id] = true;
             }
         }
 

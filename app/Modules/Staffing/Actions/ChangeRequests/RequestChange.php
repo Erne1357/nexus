@@ -10,6 +10,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
@@ -30,7 +31,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class RequestChange
 {
-    public function __construct(private readonly NotifyChangeRequest $notify, private readonly AssessChangeImpact $assess) {}
+    public function __construct(private readonly NotifyChangeRequest $notify, private readonly AssessChangeImpact $assess, private readonly LoadEditability $editability) {}
 
     /**
      * `$structured` es lo que se propone en forma que el validador entiende (opcional, CR-01): `sessions` (día 1 a 7,
@@ -55,7 +56,7 @@ final class RequestChange
         }
 
         try {
-            $request = DB::transaction(fn (): ChangeRequest => $this->create($group, $actor, $kind, $description, $reason, $structured));
+            $request = $this->editability->guard(fn (): ChangeRequest => DB::transaction(fn (): ChangeRequest => $this->create($group, $actor, $kind, $description, $reason, $structured)), 'group', 'Otra persona está cambiando este grupo; intenta de nuevo.');
         } catch (UniqueConstraintViolationException) {
             throw ValidationException::withMessages(['group' => 'Ya tienes una solicitud abierta para este grupo.']);
         }
@@ -146,6 +147,9 @@ final class RequestChange
      */
     private function create(Group $group, User $actor, ChangeRequestKind $kind, string $description, string $reason, array $structured): ChangeRequest
     {
+        $ids = Group::query()->findOrFail($group->getKey(), ['id', 'term_id', 'modality_id', 'department_id']);
+        Modality::withTrashed()->whereKey($ids->modality_id)->sharedLock()->firstOrFail();
+        $this->editability->lockLoad($ids);
         $group = Group::query()->with(['teacher', 'sessions.room'])->lockForUpdate()->findOrFail($group->getKey());
 
         if ($group->status === GroupStatus::Cancelled) {
