@@ -382,7 +382,7 @@ describe('menú', function () {
         AcademicLoad::factory()->create(['term_id' => $this->world->term->id, 'modality_id' => $this->world->modality->id, 'department_id' => Department::factory()->create()->id]);
 
         expect(reanalysisMenuOf($this->jefe))->toContain('Cierre de la carga', 'Re-análisis de la carga')
-            ->and(array_slice(reanalysisMenuOf($this->jefe), array_search('Cierre de la carga', reanalysisMenuOf($this->jefe), true), 3))->toBe(['Cierre de la carga', 'Re-análisis de la carga', 'Horarios publicados'])
+            ->and(array_slice(reanalysisMenuOf($this->jefe), array_search('Cierre de la carga', reanalysisMenuOf($this->jefe), true), 3))->toBe(['Cierre de la carga', 'Re-análisis de la carga', 'Versiones publicadas'])
             ->and(reanalysisMenuOf($this->world->coordinator($this->world->isc)))->toContain('Re-análisis de la carga')
             ->and(reanalysisMenuOf(User::factory()->withRole(Role::Docente)->create()))->not->toContain('Re-análisis de la carga');
     });
