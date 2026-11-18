@@ -63,6 +63,8 @@ class CampusGrid(ContractModel):
     """La rejilla de bloques de un campus."""
 
     code: NonEmptyStr
+    # El orden importa: el validador de `day_end` lee `day_start` y `block_minutes`, y pydantic solo le pasa en
+    # `info.data` los campos declarados antes. No los reordenes.
     block_minutes: PositiveInt
     day_start: Time
     day_end: Time
