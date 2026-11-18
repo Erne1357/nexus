@@ -1,5 +1,6 @@
 {{-- PDF de la semana de un docente o de un salón (TeacherPdf, RoomPdf): días por bloques del perfil de la modalidad, elegido
-     por el usuario el 10 de noviembre de 2026. Cada sesión abarca sus bloques con el color de su materia. --}}
+     por el usuario el 10 de noviembre de 2026. Cada sesión abarca sus bloques con el color de su materia; la de un grupo que
+     cambió en la última publicación lleva su marca junto a «CLAVE · grupo» (tarea 8.5). --}}
 @extends('academic-load::pdf.layout')
 
 @section('content')
@@ -28,7 +29,7 @@
                                 <td rowspan="{{ $cell['span'] }}" style="padding: 2px;">
                                     @foreach ($cell['items'] as $item)
                                         <div style="border-left: 3px solid {{ $item['color'] }}; background: #f6f3f2; padding: 3px 4px; margin-bottom: 2px;">
-                                            <div class="mono"><b>{{ $item['label'] }}</b></div>
+                                            <div class="mono"><b>{{ $item['label'] }}</b>@if ($item['change'] !== null) <span @class(['tag change', 'change-added' => $item['change']['added']])>{{ $item['change']['label'] }}</span>@endif</div>
                                             <div>{{ $item['subject'] }}</div>
                                             <div class="mono dim">{{ $item['hours'] }} · {{ $item['place'] }}@if ($item['kind']) <span class="tag">{{ $item['kind'] }}</span>@endif</div>
                                         </div>

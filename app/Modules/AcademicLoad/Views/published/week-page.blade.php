@@ -7,6 +7,11 @@
     que se empalman van en carriles (WeekGrid::lay()). Desde 1200 px, a la derecha, la lista de sus grupos. Bajo 768 px,
     los días en botones (`?dia=`) y la lista de horas del día. Recrea la marca de la semana del editor de Scheduling,
     que AcademicLoad no importa. Sin `uses_time_blocks` no hay semana: solo la lista de grupos.
+
+    Tarea 8.5: un grupo que cambió en la última publicación de su carga lleva en la lista de grupos su marca
+    (x-academic-load::published.change, que abre el detalle) y, en sus bloques de la semana y en la lista del día, el
+    icono de la marca junto a «CLAVE · grupo» (con el texto para lectores de pantalla). Los cancelados no salen aquí: ya no
+    tienen horas en la semana (supuesto por confirmar).
 --}}
 @use('App\Modules\Core\Support\WeekGrid')
 @use('App\Modules\AcademicLoad\Queries\PublishedWeek')
@@ -25,6 +30,7 @@
         return $placement === null ? null : ['career' => $placement['career']['code'], 'semester' => $placement['semester']];
     };
     $metaOf = fn (array $item): array => $teacherMode ? ['room', $item['room']] : ['teacher', $item['teacher']];
+    $changeColor = fn ($change): string => $change->isAdded() ? 'text-success' : 'text-info';
 @endphp
 <div class="grid gap-5">
     <div class="grid gap-3">
@@ -79,8 +85,13 @@
                                     @endphp
                                     <div class="{{ $chainOf($item['subject_code']) }} {{ $tint }} absolute top-[calc(var(--top)*3.5rem+1px)] left-[calc(var(--lane)*100%/var(--lanes)+2px)] z-[2] flex h-[calc(var(--span)*3.5rem-2px)] w-[calc(100%/var(--lanes)-4px)] min-w-0 flex-col overflow-hidden rounded-field border border-base-300 py-0.5 ps-2 pe-1 text-left text-[11.5px] leading-[1.25]"
                                         style="--top: {{ $item['top'] }}; --span: {{ $item['span'] }}; --lane: {{ $item['lane'] }}; --lanes: {{ $item['lanes'] }}"
-                                        data-session="{{ $item['title'] }}" aria-label="{{ $item['title'] }}, {{ $item['subject'] }}, {{ $dayName($item['day']) }} {{ WeekGrid::range($item['starts_at'], $item['ends_at']) }}">
-                                        <span class="truncate font-mono font-semibold [word-spacing:-0.3em]">{{ $item['title'] }}</span>
+                                        data-session="{{ $item['title'] }}" aria-label="{{ $item['title'] }}, {{ $item['subject'] }}, {{ $dayName($item['day']) }} {{ WeekGrid::range($item['starts_at'], $item['ends_at']) }}{{ $item['change'] !== null ? ', '.$item['change']->label() : '' }}">
+                                        <span class="flex min-w-0 items-center justify-between gap-1">
+                                            <span class="truncate font-mono font-semibold [word-spacing:-0.3em]">{{ $item['title'] }}</span>
+                                            @if ($item['change'] !== null)
+                                                <span class="inline-flex shrink-0 {{ $changeColor($item['change']) }}" title="{{ $item['change']->label() }}" aria-hidden="true"><x-icon :name="$item['change']->icon()" class="h-3 w-3" /></span>
+                                            @endif
+                                        </span>
                                         <span class="truncate">{{ $item['subject'] }}</span>
                                         <span class="flex items-center justify-between gap-1 text-neutral">
                                             @if ($metaKind === 'room')
@@ -131,7 +142,12 @@
                                 <div class="grid grid-cols-[58px_minmax(0,1fr)] items-stretch gap-2.5" data-session="{{ $item['title'] }}">
                                     <div class="grid content-between justify-items-end py-2 font-mono text-[13px]/[1.3] tabular-nums"><b class="font-semibold">{{ WeekGrid::clock($item['starts_at']) }}</b><span class="text-neutral">{{ WeekGrid::clock($item['ends_at']) }}</span></div>
                                     <div class="{{ $chainOf($item['subject_code']) }} {{ $tint }} grid min-w-0 gap-0.5 rounded-field border border-base-300 py-2 ps-4 pe-3">
-                                        <span class="font-mono font-semibold">{{ $item['title'] }}</span>
+                                        <span class="flex items-center gap-1.5">
+                                            <span class="font-mono font-semibold">{{ $item['title'] }}</span>
+                                            @if ($item['change'] !== null)
+                                                <span class="inline-flex {{ $changeColor($item['change']) }}" title="{{ $item['change']->label() }}"><x-icon :name="$item['change']->icon()" class="h-3.5 w-3.5" aria-hidden="true" /><span class="sr-only">{{ $item['change']->label() }}</span></span>
+                                            @endif
+                                        </span>
                                         <span>{{ $item['subject'] }}</span>
                                         <span class="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-neutral">
                                             <span class="inline-flex items-center gap-1"><x-academic-load::published.kind-icon :kind="$item['kind']" always class="[&_svg]:h-3.5 [&_svg]:w-3.5" /></span>
@@ -170,6 +186,7 @@
                 <div class="{{ $chainOf($group->subject['code']) }} relative grid gap-0.5 border-t border-base-300 py-3 ps-4 before:absolute before:start-0 before:top-3 before:bottom-3 before:w-1 before:rounded-xs before:bg-(--chain)" data-group="{{ $group->label() }}">
                     <span class="font-mono font-semibold">{{ $group->label() }}</span>
                     <span class="font-medium">{{ $group->subject['name'] }}</span>
+                    <x-academic-load::published.change :change="$group->change" class="my-0.5" />
                     @if ($teacherMode)
                         @if ($place !== null)
                             <span class="text-[13px] text-neutral"><span class="font-mono">{{ $place['career'] }}</span> · semestre {{ $place['semester'] }}</span>

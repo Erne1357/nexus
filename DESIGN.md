@@ -319,6 +319,11 @@ Fuera de la sesión, `/horarios` (`academic-load::pages.published.*`, layout `la
 - **Inicio:** «Horarios», periodo, modalidad, el campus del filtro si hay uno, y «Actualizado el…»; «Tu carrera y semestre» (una fila por carrera: clave en Mono, retícula con select si hay varias, botones de semestre de 44 px en celular); desde 1200 px a la derecha «Por docente» y «Por salón» con buscador sin acentos. Estado vacío: «Todavía no hay horarios publicados para Campus II en Enero–Junio 2027.» Solo con sesión y permiso, la franja «Sin publicar» y, con `academic_load.load.export`, el recuadro «Exportes del personal»: «Excel de la modalidad» (con una columna con el campus de cada grupo) y un select de departamento con «PDF del departamento» (botones `btn-outline btn-sm`, a todo el ancho y de 44 px en celular); descargan por `published.export`, con la misma página de espera que los PDF públicos.
 - **Semestre:** «← Horarios», carrera, «Semestre N · N materias · N grupos» y la retícula en Mono, selectores de carrera, retícula y semestre (el estado vive en la URL) y la leyenda de iconos. Una sección por materia en orden de clave, con su franja `--chain-N` (cíclica), clave en Mono, nombre, créditos e insignia «N grupos»; debajo, fichas en cuadrícula `auto-fill` de 330 px mínimo (todo el ancho en celular) con tinte de la materia al 5 % y franja de 4 px a la izquierda (como el editor). La ficha: «CLAVE · grupo», el docente (o «Por asignar») y la mini-semana con una celda por día del perfil (horas y salón en Mono; «Virtual»; `o-beaker` práctica, `o-computer-desktop` virtual, teoría sin icono; día sin sesión vacío con borde punteado).
 - **Docente y salón:** desde 768 px la semana de Cuadrícula día x hora (carriles para lo que se empalma, renglón de 3.5rem, bloques con el tinte de su materia); desde 1200 px la lista de grupos a la derecha; en celular, botones de día (`?dia=`) y la lista de horas del día.
+- **«Actualizado el …»** (todas las vistas): `o-clock` y la fecha con la hora local, «Actualizado el 20 de enero de 2027 a las 13:05», en 14 px tenue bajo los datos del título.
+- **La marca «Cambió»** (tarea 8.5, `x-academic-load::published.change`): lo que le cambió a un grupo en la última publicación de su carga, con `<x-core::status-badge>`. «Cambió: horario» (o «salón», «docente», «horario, salón y docente») en `info` con `o-arrow-path`; «Grupo nuevo» en `success` con `o-plus-circle`; «Cancelado» en `error` con `o-x-circle`. Nunca la versión ni cupos. En un grupo que sigue, la insignia lleva `o-chevron-down` y es el `<summary>` de un `<details>`: abre debajo, en 13 px tenue, el detalle en palabras («Horario de lunes 7:00 a 9:00 a martes 7:00 a 9:00.»), con teclado y sin JavaScript; en celular el `<summary>` mide 44 px. Va en su propio renglón para no romper el de la clave:
+  - en la ficha del semestre, entre el docente y la mini-semana;
+  - en la lista de grupos del docente y del salón, bajo la materia; en los bloques de la semana y en la lista del día, solo el icono de la marca en su color junto a «CLAVE · grupo», y su texto para lectores de pantalla.
+  - **Grupo cancelado** (solo en el semestre): una ficha en su materia y en su orden, sin tinte ni franja, con filete punteado sobre `base-100`, la clave tachada en tenue, el docente en tenue, «Cancelado» y el horario que tenía en una línea Mono de 12.5 px («V 7:00–9:00 · B-12»). No cuenta en «N grupos» ni en «N materias».
 - **Nunca** cupos, capacidad, versiones, estados, justificaciones ni RFC, ni avisos de lo que falta o de semestre incompleto: «Por asignar» va en texto neutro, sin alarma.
 
 ### Ficha del docente
@@ -761,17 +766,18 @@ El tablero de versiones de una carga (`academic-load::pages.versions`, `/academi
 Los PDF de lo publicado (tarea 4.5; [ADR-0021](docs/decisiones/0021-dompdf-para-los-pdf-publicados.md)), con el formato que eligió el usuario el 10 de noviembre de 2026: tabla tipo SII para el semestre y el departamento, y semana para el docente y el salón. Van en carta horizontal y los arma DomPDF desde `app/Modules/AcademicLoad/Views/pdf/`. Usan DejaVu Sans y DejaVu Sans Mono, que vienen con DomPDF, en lugar de Atkinson, y los colores de este documento escritos en la plantilla, porque el PDF no carga `app.css`.
 
 - **Marco:**
-  - Arriba, «Nexus · Horarios» y «Instituto Tecnológico de Ciudad Juárez» a la izquierda, y el campus y el periodo a la derecha, sobre la franja roja de 2 pt.
-  - Abajo, «Horarios oficiales del Instituto Tecnológico de Ciudad Juárez · Actualizado el …» y el número de página.
+  - Arriba, «Nexus · Horarios» y «Instituto Tecnológico de Ciudad Juárez» a la izquierda, y el campus y el periodo a la derecha con «Actualizado el … a las …» debajo (tarea 8.5), sobre la franja roja de 2 pt.
+  - Abajo, «Horarios oficiales del Instituto Tecnológico de Ciudad Juárez» y el número de página.
   - El título es el nombre de la carrera, del docente o del salón, y debajo va su dato (semestre y retícula, número de grupos o edificio).
 - **Semestre (y departamento):**
   - Columnas Grupo, Docente y una por día del perfil de la modalidad.
   - Un renglón por materia, con fondo `#f6f3f2` y una franja de 4 pt con su color `chain-N`: la clave en Mono negrita, el nombre en negrita y luego «5 créditos · 3 grupos».
   - Debajo, un renglón por grupo con la misma franja: «CLAVE · grupo» en Mono y el docente o «Por asignar» en tenue. En cada día, las horas en Mono negrita y debajo el salón, «Virtual» o «Por asignar». La práctica lleva la marca «PRÁCTICA» en azul información. Un día sin clase lleva una raya tenue.
   - Ningún renglón se parte entre páginas.
+  - **Qué cambió** (tarea 8.5): bajo «CLAVE · grupo», la marca en negritas de 6.5 pt en mayúsculas: «CAMBIÓ: HORARIO» en azul información, «GRUPO NUEVO» en verde éxito, «CANCELADO» en rojo error. Un grupo cancelado lleva la clave tachada en tenue y, en lugar de los días, «Se canceló este grupo.».
 - **Semana (docente y salón):**
   - «N horas a la semana» y una tabla con la hora en Mono y una columna por día.
-  - Cada sesión es una caja con la franja de 3 pt de su materia sobre `#f6f3f2`, que abarca sus bloques. Lleva «CLAVE · grupo», la materia y, en tenue, las horas con el salón (docente) o el docente (salón).
+  - Cada sesión es una caja con la franja de 3 pt de su materia sobre `#f6f3f2`, que abarca sus bloques. Lleva «CLAVE · grupo», la materia y, en tenue, las horas con el salón (docente) o el docente (salón). La de un grupo que cambió lleva su marca junto a la clave, como en el semestre.
 - **Lo que nunca sale:** cupos, capacidad, versiones, estados, justificaciones ni el RFC, igual que en la consulta pública.
 
 ## Elevation & Depth
