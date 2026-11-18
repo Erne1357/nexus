@@ -20,6 +20,7 @@ use App\Modules\Solver\SolverServiceProvider;
 use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Sleep;
@@ -49,13 +50,21 @@ function cpsatRecording(string $name): array
 }
 
 /**
- * @param  string|array{status: int, body: mixed}  $recording  el nombre de una grabación, la grabación misma o
- *                                                             `connection-lost` para una conexión rechazada
+ * @param  string|array{status: int, body: mixed}  $recording  el nombre de una grabación, la grabación misma,
+ *                                                             `connection-lost` para una conexión rechazada o
+ *                                                             `timed-out` para una consulta que se vence (el reloj
+ *                                                             avanza los 5 s de `poll_timeout`)
  */
 function cpsatResponse(string|array $recording, Request $request): PromiseInterface
 {
     if ($recording === 'connection-lost') {
         return Factory::failedConnection('cURL error 7: Failed to connect to solver port 8000: Connection refused')($request);
+    }
+
+    if ($recording === 'timed-out') {
+        Carbon::setTestNow(now()->addSeconds(5));
+
+        return Factory::failedConnection('cURL error 28: Operation timed out after 5001 milliseconds with 0 bytes received')($request);
     }
 
     $recording = is_string($recording) ? cpsatRecording($recording) : $recording;
@@ -185,7 +194,7 @@ it('si el aviso de avance corta la corrida (cancelación), la cancela en el serv
     expect(cpsatSentRequests())->toBe(['POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}", "DELETE /runs/{$runId}"]);
 });
 
-it('cancela la corrida en el servicio y lanza un tiempo agotado al pasar el límite más el margen', function () {
+it('cancela la corrida en el servicio y lanza un tiempo agotado cuando otra consulta ya no cabe en el límite más el margen', function () {
     cpsatFakeService(['running']);
     $input = cpsatTinyInput();
     $started = now();
@@ -193,11 +202,43 @@ it('cancela la corrida en el servicio y lanza un tiempo agotado al pasar el lím
     expect(fn () => cpsatEngine()->solve($input))->toThrow(CpSatRunFailed::class, 'El servicio del motor no respondió a tiempo.');
 
     $requests = cpsatSentRequests();
+    $deadline = $input->timeLimitSeconds + CpSatEngine::DEADLINE_MARGIN_SECONDS;
 
     expect(end($requests))->toBe('DELETE /runs/'.cpsatRecording('submitted')['body']['run_id'])
-        ->and((int) $started->diffInSeconds(now()))->toBe($input->timeLimitSeconds + CpSatEngine::DEADLINE_MARGIN_SECONDS)
-        ->and(CpSatEngine::DEADLINE_MARGIN_SECONDS)->toBeLessThan(RunSolver::TIMEOUT_MARGIN);
+        ->and($started->diffInSeconds(now()))->toBeGreaterThanOrEqual($deadline - 5)->toBeLessThanOrEqual($deadline);
 });
+
+it('con el servicio colgado, cancela y lanza «no respondió a tiempo» antes de que el worker corte la corrida', function (int $hangsAfter, int $hungPolls) {
+    $input = cpsatTinyInput();
+    $started = now();
+    $hung = 0;
+
+    Http::fake(function (Request $request) use ($started, $hangsAfter, &$hung): PromiseInterface {
+        if ($request->method() !== 'GET') {
+            return cpsatResponse($request->method() === 'POST' ? 'submitted' : 'cancelled', $request);
+        }
+
+        if ($started->diffInSeconds(now()) < $hangsAfter) {
+            return cpsatResponse('running', $request);
+        }
+
+        $hung++;
+
+        return cpsatResponse('timed-out', $request);
+    });
+
+    expect(fn () => cpsatEngine()->solve($input))->toThrow(CpSatRunFailed::class, 'El servicio del motor no respondió a tiempo.');
+
+    $requests = cpsatSentRequests();
+
+    expect(end($requests))->toBe('DELETE /runs/'.cpsatRecording('submitted')['body']['run_id'])
+        ->and($hung)->toBe($hungPolls)
+        ->and($started->diffInSeconds(now()))->toBeLessThanOrEqual($input->timeLimitSeconds + CpSatEngine::DEADLINE_MARGIN_SECONDS)
+        ->toBeLessThan($input->timeLimitSeconds + RunSolver::TIMEOUT_MARGIN);
+})->with([
+    'desde la primera consulta: se vencen los tres intentos' => [0, 3],
+    'cerca del límite: el reintento ya no cabe' => [33, 1],
+]);
 
 it('sin servicio (conexión rechazada) lanza que no está disponible y no reintenta el envío', function () {
     Http::fake(['*' => Http::failedConnection('cURL error 7: Failed to connect to solver port 8000: Connection refused')]);

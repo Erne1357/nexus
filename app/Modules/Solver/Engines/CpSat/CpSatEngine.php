@@ -19,7 +19,9 @@ use Throwable;
  *   servicio. Si `$progress` lanza (la cancelación de RunSolver, SV-03), cancela la corrida en el servicio y deja salir
  *   la excepción.
  * - En `done` valida la salida contra el contrato; en `failed` lanza con el motivo del servicio.
- * - Si la corrida pasa de su `time_limit_seconds` más DEADLINE_MARGIN_SECONDS, la cancela en el servicio y lanza.
+ * - El límite es `time_limit_seconds` más DEADLINE_MARGIN_SECONDS desde que empieza solve(). Ninguna consulta ni
+ *   reintento empieza si no terminaría antes del límite (CpSatClient::status()); cuando ya no cabe otra, o el servicio
+ *   no contesta (consultas vencidas), cancela la corrida en el servicio y lanza «no respondió a tiempo».
  * - Si el servicio no está, lanza SolverServiceUnavailable (SV-08: la corrida queda fallida con el mensaje).
  *
  * Cancelar en el servicio es de buena fe: si esa petición también falla, se ignora y sale el error original. No guarda
@@ -30,8 +32,16 @@ final readonly class CpSatEngine implements SolverEngine
     public const string KEY = 'cpsat';
 
     /**
-     * Lo que se espera al servicio después del límite de la corrida: el tiempo de armar y mandar la salida. Va por
-     * debajo de RunSolver::TIMEOUT_MARGIN para que la corrida termine con este mensaje y no la corte el worker.
+     * Lo que se espera al servicio después del límite de la corrida: el tiempo de armar y mandar la salida. Con él, el
+     * peor caso queda por debajo de RunSolver::TIMEOUT_MARGIN (60 s) y la corrida termina con este mensaje antes de
+     * que la corte el worker. Con L = `time_limit_seconds` y los valores por omisión:
+     *
+     * - el envío (`timeout`, 30 s) termina antes de L + 30, porque L es de al menos 1 s;
+     * - toda consulta, también un reintento, empieza solo si termina antes de L + 30 (`poll_timeout`, 5 s);
+     * - después de la última que cabe vienen una pausa (`poll_interval_ms`, 1 s) y la cancelación (5 s).
+     *
+     * Peor caso: L + 30 + 1 + 5 = L + 36 s, más lo que tarda RunSolver en leer la entrada y guardar la salida; 24 s
+     * por debajo de L + 60. Subir `poll_interval_ms`, `poll_timeout` o este margen gasta esa holgura.
      */
     public const int DEADLINE_MARGIN_SECONDS = 30;
 
@@ -66,7 +76,13 @@ final readonly class CpSatEngine implements SolverEngine
         $runId = $this->client->submit($input->toArray());
 
         while (true) {
-            $run = $this->client->status($runId);
+            try {
+                $run = $this->client->status($runId, $deadline);
+            } catch (SolverServiceTimedOut $exception) {
+                $this->cancelQuietly($runId);
+
+                throw CpSatRunFailed::timedOut($exception);
+            }
 
             if ($run['status'] === 'done') {
                 return $this->output($input, $run['output'] ?? null);
@@ -78,12 +94,6 @@ final readonly class CpSatEngine implements SolverEngine
                 'cancelled' => throw CpSatRunFailed::cancelledByService(),
                 default => throw CpSatRunFailed::unknownStatus($run['status']),
             };
-
-            if (now()->greaterThanOrEqualTo($deadline)) {
-                $this->cancelQuietly($runId);
-
-                throw CpSatRunFailed::timedOut();
-            }
 
             Sleep::for($this->pollIntervalMs)->milliseconds();
         }

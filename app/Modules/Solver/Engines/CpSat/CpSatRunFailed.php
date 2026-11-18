@@ -20,9 +20,9 @@ final class CpSatRunFailed extends RuntimeException
             : 'El servicio del motor no pudo resolver la corrida: '.rtrim($reason, '.').'.');
     }
 
-    public static function timedOut(): self
+    public static function timedOut(?SolverServiceTimedOut $previous = null): self
     {
-        return new self('El servicio del motor no respondió a tiempo.');
+        return new self('El servicio del motor no respondió a tiempo.', 0, $previous);
     }
 
     public static function cancelledByService(): self
