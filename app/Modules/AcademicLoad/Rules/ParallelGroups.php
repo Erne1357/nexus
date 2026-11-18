@@ -80,4 +80,73 @@ final readonly class ParallelGroups
     {
         return count($this->mixedShares) > 1;
     }
+
+    /**
+     * Los grupos de la sugerencia, cada uno como `carrera => esperados` (tarea 8.8, armar paralelos): primero los completos
+     * de cada carrera, en el orden recibido, y luego los mixtos. Los restos se acomodan del más grande al más chico, cada
+     * uno entero en el mixto donde mejor cabe (el de menos lugares libres que lo recibe); solo si no cabe en ninguno se
+     * parte, empezando por el mixto con más lugares libres (supuesto por confirmar, maqueta B del 18 de noviembre de 2026).
+     * En cada grupo, la carrera con más esperados primero; en un empate, el orden recibido.
+     *
+     * @return list<array<string, int>>
+     */
+    public function layout(): array
+    {
+        $groups = [];
+
+        foreach ($this->careers as $career => $row) {
+            for ($i = 0; $i < $row['full']; $i++) {
+                $groups[] = [$career => $this->size];
+            }
+        }
+
+        return [...$groups, ...$this->mixedGroups()];
+    }
+
+    /**
+     * @return list<array<string, int>>
+     */
+    private function mixedGroups(): array
+    {
+        $bins = array_fill(0, $this->mixed, []);
+        $free = array_fill(0, $this->mixed, $this->size);
+        $shares = $this->mixedShares;
+        uksort($shares, fn (string $a, string $b): int => $shares[$b] <=> $shares[$a]);
+
+        foreach ($shares as $career => $left) {
+            $fit = null;
+
+            foreach ($free as $bin => $seats) {
+                if ($seats >= $left && ($fit === null || $seats < $free[$fit])) {
+                    $fit = $bin;
+                }
+            }
+
+            if ($fit !== null) {
+                $bins[$fit][$career] = $left;
+                $free[$fit] -= $left;
+
+                continue;
+            }
+
+            $roomiest = array_keys($free);
+            usort($roomiest, fn (int $a, int $b): int => $free[$b] <=> $free[$a]);
+
+            foreach ($roomiest as $bin) {
+                $take = min($left, $free[$bin]);
+
+                if ($take > 0) {
+                    $bins[$bin][$career] = $take;
+                    $free[$bin] -= $take;
+                    $left -= $take;
+                }
+            }
+        }
+
+        return array_map(function (array $bin): array {
+            uksort($bin, fn (string $a, string $b): int => $bin[$b] <=> $bin[$a]);
+
+            return $bin;
+        }, $bins);
+    }
 }
