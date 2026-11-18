@@ -67,6 +67,26 @@ final class CareerProposalPolicy
             && $this->can($user, AcademicLoadPermission::ProposalSubmit, $proposal);
     }
 
+    /**
+     * Armar, cambiar las materias, renombrar y borrar un paquete (tarea 5.6b): la composición es de toda la carrera
+     * (confirmado el 16 y 17 de noviembre de 2026), así que la tiene quien envía la propuesta, cualquier coordinador de la
+     * carrera en la modalidad (M6), con o sin campus (supuesto por confirmar).
+     */
+    public function managePackages(User $user, CareerProposal $proposal): bool
+    {
+        return $this->can($user, AcademicLoadPermission::ProposalSubmit, $proposal);
+    }
+
+    /**
+     * Capturar cuántos paquetes abre un campus y su nuevo ingreso esperado (tarea 5.6b): es una columna de la propuesta y se
+     * decide como corregir una fila (M7): un coordinador con campus solo cambia la suya y uno sin campus, la de todos. La
+     * columna sin campus de una modalidad sin salones (MS5) solo la cubre un coordinador sin campus.
+     */
+    public function updateColumn(User $user, CareerProposal $proposal, ?Campus $campus): bool
+    {
+        return $this->actor($user)->allows(AcademicLoadPermission::ProposalUpdate, Target::of(modality: $proposal->modality_id, campus: $campus?->getKey(), career: $proposal->career_id));
+    }
+
     public function submit(User $user, CareerProposal $proposal): bool
     {
         return $this->can($user, AcademicLoadPermission::ProposalSubmit, $proposal);

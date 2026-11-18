@@ -77,7 +77,7 @@ final class StudentRecordQuery
                 attempt: $shownRow?->attempt,
                 prerequisites: $this->codes($prerequisites, $subjects),
                 missing: $this->codes(array_filter($prerequisites, fn (string $id): bool => ! isset($passed[$id])), $subjects),
-                creditShare: $grid->creditShare[$subjectId] ?? null,
+                creditShare: $grid->creditShareOf($subjectId),
                 beyondReach: $reach !== null && $semester > $reach,
                 chain: $chainOf[$subjectId] ?? null,
             );
