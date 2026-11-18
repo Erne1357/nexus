@@ -7,6 +7,8 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\ForecastEvaluation;
 use App\Modules\AcademicLoad\Models\ForecastEvaluationRow;
+use App\Modules\AcademicLoad\Queries\SubjectGroupHistoryQuery;
+use App\Modules\AcademicLoad\Queries\TermGroupsQuery;
 use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\AcademicLoad\Rules\ForecastAccuracy;
 use App\Modules\Core\Models\Campus;
@@ -35,8 +37,10 @@ use Illuminate\Support\Facades\DB;
  *      método NOT_PROJECTED (compute() cubre todo el alcance, así que es solo una defensa);
  *    - lo cursado fuera del alcance (otra carrera, un campus sin oferta, una materia fuera de la propuesta) no se guarda
  *      ni cuenta como error: va a `totals.out_of_scope`;
- *    - `actual_groups` queda nulo: los grupos reales salen de `historical_groups` del Riel B
- *      (SubjectGroupHistoryQuery), que todavía no está en develop. Pendiente de un PR corto.
+ *    - `actual_groups` son los grupos físicos que se abrieron (TermGroupsQuery, de `historical_groups`) de la materia en el
+ *      campus de la fila (en una modalidad sin salones, de todos los campus). Son de la materia, no de la carrera: filas de
+ *      distintas carreras con la misma materia y campus llevan el mismo número. Nulo si el periodo no tiene ningún
+ *      renglón en el historial («sin dato»); 0 si lo tiene pero la materia no. Un periodo publicado a medias cuenta solo lo publicado en Nexus (supuesto por confirmar).
  *
  * Las filas se guardan carrera por carrera (por clave), cada una en su transacción con el avance, su entrada de
  * `by_career` y `careers.done`, así la pantalla ve las carreras conforme terminan. `overall`, `by_campus` y
@@ -85,6 +89,7 @@ final class EvaluateForecast
         private readonly TermOccupancyQuery $occupancy,
         private readonly ForecastScopeQuery $scope,
         private readonly TermKardexQuery $kardex,
+        private readonly TermGroupsQuery $groups,
     ) {}
 
     public function run(ForecastEvaluation $evaluation): void
@@ -101,6 +106,7 @@ final class EvaluateForecast
         $actual = $this->occupancy->forTerm($term->code, $modality, $campus);
         $scope = $this->inScope($modality, $campus);
         [$rows, $outOfScopeSubjects] = $this->cross($projected, $actual, $usesRooms, $scope['keys']);
+        $rows = $this->withOpenedGroups($rows, $this->groups->forTerm($term->code, $modality), $usesRooms);
         $outOfScope = [
             'students' => $this->studentsOutOfScope($term->code, $modality, $campus, $usesRooms, $scope['columns']),
             'subjects' => count($outOfScopeSubjects),
@@ -206,7 +212,7 @@ final class EvaluateForecast
      * @param  list<array<string, mixed>>  $projected  filas de RefreshDemandForecasts::compute()
      * @param  list<array{career_id: string, campus_id: ?string, subject_id: string, occupancy: Occupancy}>  $actual
      * @param  array<string, true>  $scope  llaves carrera|campus|materia del alcance
-     * @return array{0: list<array{career_id: string, campus_id: ?string, subject_id: string, eligible: int, projected: int, suggested_groups: int, actual_students: int, actual_groups: null, baseline: int, forecast_method: string}>, 1: array<string, true>}
+     * @return array{0: list<array{career_id: string, campus_id: ?string, subject_id: string, eligible: int, projected: int, suggested_groups: int, actual_students: int, actual_groups: ?int, baseline: int, forecast_method: string}>, 1: array<string, true>}
      */
     private function cross(array $projected, array $actual, bool $usesRooms, array $scope): array
     {
@@ -254,6 +260,30 @@ final class EvaluateForecast
         }
 
         return [array_values($rows), $outside];
+    }
+
+    /**
+     * Pone `actual_groups` (DM-27): los grupos de la materia en el campus de la fila, iguales para las carreras que la
+     * comparten; todos los campus juntos en una modalidad sin salones; nulo si el periodo no tiene historial de grupos.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     * @param  array<string, array<string, int>>  $groups  materia → campus (o `none`) → grupos
+     * @return list<array<string, mixed>>
+     */
+    private function withOpenedGroups(array $rows, array $groups, bool $usesRooms): array
+    {
+        if ($groups === []) {
+            return $rows;
+        }
+
+        foreach ($rows as &$row) {
+            $bySubject = $groups[$row['subject_id']] ?? [];
+            $row['actual_groups'] = $usesRooms
+                ? ($bySubject[$row['campus_id'] ?? SubjectGroupHistoryQuery::NO_CAMPUS] ?? 0)
+                : array_sum($bySubject);
+        }
+
+        return $rows;
     }
 
     /**

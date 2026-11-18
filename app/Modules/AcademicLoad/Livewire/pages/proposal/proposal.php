@@ -2,10 +2,18 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Actions\Proposals\CreateProposalPackage;
+use App\Modules\AcademicLoad\Actions\Proposals\DeleteProposalPackage;
+use App\Modules\AcademicLoad\Actions\Proposals\MarkProposalItemReviewed;
+use App\Modules\AcademicLoad\Actions\Proposals\ResolveForecastChange;
+use App\Modules\AcademicLoad\Actions\Proposals\SetPackageCount;
 use App\Modules\AcademicLoad\Actions\Proposals\StartCareerProposal;
 use App\Modules\AcademicLoad\Actions\Proposals\SubmitCareerProposal;
+use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalIntake;
 use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalItem;
+use App\Modules\AcademicLoad\Actions\Proposals\UpdateProposalPackage;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\ForecastReason;
 use App\Modules\AcademicLoad\Enums\ProposalLock;
 use App\Modules\AcademicLoad\Enums\ProposalReviewStatus;
 use App\Modules\AcademicLoad\Enums\ProposalStatus;
@@ -14,18 +22,27 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Queries\CareerProposalQuery;
+use App\Modules\AcademicLoad\Queries\ProposalForecastQuery;
+use App\Modules\AcademicLoad\Queries\ProposalForecastReview;
+use App\Modules\AcademicLoad\Queries\ProposalForecastRow;
 use App\Modules\AcademicLoad\Queries\ProposalHeader;
 use App\Modules\AcademicLoad\Queries\ProposalOverview;
+use App\Modules\AcademicLoad\Queries\ProposalPackagesQuery;
 use App\Modules\AcademicLoad\Queries\ProposalSubject;
+use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\AcademicLoad\Rules\ProposalItemRules;
+use App\Modules\AcademicLoad\Rules\SuggestedRowGroups;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Support\SemesterGrid;
+use App\Modules\Demand\Enums\ForecastMethod;
+use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
@@ -55,21 +72,62 @@ use Mary\Traits\Toast;
  * carrera (M6). Todo lo que muestra sale de
  * CareerProposalQuery::overview; las escrituras pasan por UpdateProposalItem y SubmitCareerProposal, con la policy de
  * la propuesta o de la fila antes de cada una.
+ *
+ * Con la proyección de Demand (tarea 5.6, opción C «Revisión de la proyección», elegida por el usuario el 17 de noviembre de
+ * 2026; ProposalForecastQuery): el encabezado dice de cuándo es; la tabla y la retícula marcan cada materia (Sugerido,
+ * Corregido, Cambió y la diferencia grande); un aviso dice si la proyección cambió en filas que el coordinador corrigió; y
+ * dos pestañas separan «Propuesta» (la retícula o la tabla) de «Revisar proyección (N)» (`?vista=revisar`, filtro
+ * `?motivo=cambio|aparta|especialidad|sin-historia`): una tarjeta por fila pendiente de las columnas que el usuario corrige
+ * (o de todas, de solo lectura, si no corrige ninguna), con su evidencia y sus acciones (ResolveForecastChange,
+ * UpdateProposalItem::useSuggested y MarkProposalItemReviewed, cada una con CareerProposalPolicy::update sobre la fila,
+ * M7), 20 a la vez. Sin proyección para la propuesta, el encabezado lo dice y nada más cambia.
+ *
+ * Con los paquetes de primer semestre (tarea 5.6b; ProposalPackagesQuery): arriba de las materias, en la tabla y en la
+ * retícula, el nuevo ingreso de cada columna, los paquetes que sugiere Nexus, cuántos abre y si alcanzan, y la lista de
+ * paquetes. La composición es de toda la carrera: armar, cambiar las materias o el nombre y quitar un paquete (panel del
+ * paquete; CreateProposalPackage, UpdateProposalPackage y DeleteProposalPackage) lo hace
+ * cualquier coordinador de la carrera (CareerProposalPolicy::managePackages). Cuántos abre una columna de cada paquete y su
+ * nuevo ingreso (SetPackageCount y UpdateProposalIntake) se capturan como una fila: el coordinador de un campus, solo los
+ * suyos (CareerProposalPolicy::updateColumn, M7). Los motivos de las Actions (el tope, una parte aceptada, la propuesta
+ * enviada) van en un toast y, en la cuenta o el nuevo ingreso, también debajo del campo.
  */
 new #[Title('Propuesta de carrera')] class extends Component
 {
     use Toast;
     use WithModalityScope;
 
-    private const array VIEWS = ['reticula', 'tabla'];
+    private const array VIEWS = ['reticula', 'tabla', 'revisar'];
+
+    /** Cuántas tarjetas de «Revisar proyección» se pintan de una vez. */
+    private const int REVIEW_PAGE = 20;
 
     private const array GROUP_FILTERS = ['', 'con', 'sin'];
 
     private const array CELL_FIELDS = ['expected_students', 'requested_groups'];
 
-    /** 'reticula' o 'tabla'; otro valor muestra la retícula. */
+    /** 'reticula', 'tabla' o 'revisar' (la pestaña «Revisar proyección»); otro valor muestra la retícula. */
     #[Url(as: 'vista')]
     public string $view = 'reticula';
+
+    /** El motivo que filtra «Revisar proyección» (ForecastReason::filter()); '' todos. */
+    #[Url(as: 'motivo')]
+    public string $reason = '';
+
+    /** La vista de la pestaña «Propuesta» a la que se vuelve desde «Revisar proyección». */
+    #[Locked]
+    public string $lastView = 'reticula';
+
+    /** Cuántas tarjetas de «Revisar proyección» se pintan; «Mostrar más» suma otras 20. */
+    #[Locked]
+    public int $reviewLimit = self::REVIEW_PAGE;
+
+    /**
+     * El error de la última acción de cada tarjeta de «Revisar proyección», por id de fila: la tarjeta lo muestra.
+     *
+     * @var array<string, string>
+     */
+    #[Locked]
+    public array $reviewErrors = [];
 
     /** Código del departamento resaltado; '' ninguno. */
     #[Url(as: 'depto')]
@@ -154,6 +212,22 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     public bool $showSubmit = false;
 
+    public bool $showPackage = false;
+
+    /** El paquete abierto en su panel; null es uno nuevo. */
+    #[Locked]
+    public ?string $packageId = null;
+
+    /** El nombre que se captura en el panel del paquete; vacío es sin nombre. */
+    public string $packageName = '';
+
+    /**
+     * Las materias (por id) que se eligen en el panel del paquete. savePackage() descarta lo que no sea un id.
+     *
+     * @var list<string>
+     */
+    public array $packageSubjects = [];
+
     /** Sube con cada rechazo: la tabla repinta sus campos con lo guardado, no con lo que se tecleó. */
     public int $rejections = 0;
 
@@ -162,6 +236,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         abort_unless($context->allowsAny(AcademicLoadPermission::ProposalView), 403);
 
         $this->view = in_array($this->view, self::VIEWS, true) ? $this->view : 'reticula';
+        $this->lastView = $this->view === 'revisar' ? 'reticula' : $this->view;
+        $this->reason = ForecastReason::fromFilter($this->reason)?->filter() ?? '';
         $this->groupsFilter = in_array($this->groupsFilter, self::GROUP_FILTERS, true) ? $this->groupsFilter : '';
         $this->resolve($context, $proposals);
     }
@@ -179,7 +255,7 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     public function updatedCareerId(Actor $context, CareerProposalQuery $proposals): void
     {
-        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors');
+        $this->reset('department', 'onlyDepartment', 'chain', 'editedRows', 'subjectId', 'form', 'showDrawer', 'showSubmit', 'returnedAt', 'cellErrors', 'reason', 'reviewLimit', 'reviewErrors', 'showPackage', 'packageId', 'packageName', 'packageSubjects');
         $this->resolve($context, $proposals);
     }
 
@@ -190,6 +266,121 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->editedRows = [];
         $this->view = in_array($view, self::VIEWS, true) ? $view : 'reticula';
         $this->cellErrors = [];
+        $this->reviewLimit = self::REVIEW_PAGE;
+
+        if ($this->view !== 'revisar') {
+            $this->lastView = $this->view;
+        }
+    }
+
+    /**
+     * La pestaña «Propuesta»: la retícula o la tabla en que estaba.
+     */
+    public function showProposal(): void
+    {
+        $this->setView($this->lastView);
+    }
+
+    /**
+     * El filtro de «Revisar proyección» («Todas · La proyección cambió · Se aparta del sugerido · Especialidad · Sin
+     * historia»); un valor que no es un motivo es «Todas».
+     */
+    public function filterReason(string $filter): void
+    {
+        $this->reason = ForecastReason::fromFilter($filter)?->filter() ?? '';
+        $this->reviewLimit = self::REVIEW_PAGE;
+    }
+
+    public function showMoreReviews(): void
+    {
+        $this->reviewLimit += self::REVIEW_PAGE;
+    }
+
+    /**
+     * «Revisar: …» de una materia en la tabla o la retícula: abre «Revisar proyección» sin filtro, con las tarjetas
+     * necesarias para que se vea la de esa fila, y la lleva a la vista (`proposal-focus`).
+     */
+    public function reviewItem(string $id, CareerProposalQuery $proposals, ProposalForecastQuery $forecasts): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $overview = $proposals->overview($proposal, withPendingCatalogs: false);
+        $review = $forecasts->review($overview, DemandSettings::fromSettings());
+
+        $this->setView('revisar');
+        $this->reason = '';
+        $position = array_search($item->id, array_map(fn (ProposalForecastRow $row): string => $row->item->id, $review->pending($this->reviewKeys($overview))), true);
+
+        if ($position !== false) {
+            $this->reviewLimit = max(self::REVIEW_PAGE, (intdiv($position, self::REVIEW_PAGE) + 1) * self::REVIEW_PAGE);
+        }
+
+        $this->dispatch('proposal-focus', id: "review-{$item->id}");
+    }
+
+    /**
+     * «Usar N» o «Mantener» en una fila cuya proyección cambió (ResolveForecastChange); solo en una fila que el usuario
+     * corrige (M7).
+     */
+    public function resolveChange(string $id, string $choice, CareerProposalQuery $proposals, ResolveForecastChange $resolve): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
+
+        try {
+            $resolved = $resolve->handle($item, $choice, auth()->user());
+        } catch (ValidationException $e) {
+            $this->reportReview($e, $item->id);
+
+            return;
+        }
+
+        unset($this->reviewErrors[$item->id]);
+        $this->success($choice === ResolveForecastChange::USE ? 'Usaste lo que sugiere Nexus' : 'Mantuviste lo que capturaste', e($this->rowText($resolved)));
+    }
+
+    /**
+     * «Usar sugerido» en una fila corregida que se aparta del sugerido (UpdateProposalItem::useSuggested; M7).
+     */
+    public function applySuggestion(string $id, CareerProposalQuery $proposals, UpdateProposalItem $update): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
+
+        try {
+            $applied = $update->useSuggested($item, auth()->user());
+        } catch (ValidationException $e) {
+            $this->reportReview($e, $item->id);
+
+            return;
+        }
+
+        unset($this->reviewErrors[$item->id]);
+        $this->keepRow($applied->subject_id);
+        $this->success('Usaste lo que sugiere Nexus', e($this->rowText($applied)));
+    }
+
+    /**
+     * «Está bien» o «Dejar»: la fila queda revisada sin cambiar sus cifras (MarkProposalItemReviewed; M7).
+     */
+    public function markReviewed(string $id, CareerProposalQuery $proposals, MarkProposalItemReviewed $mark): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $item = $proposals->itemOrFail($proposal, $id);
+        $this->authorize('update', [$proposal, $item]);
+
+        try {
+            $reviewed = $mark->handle($item, auth()->user());
+        } catch (ValidationException $e) {
+            $this->reportReview($e, $item->id);
+
+            return;
+        }
+
+        unset($this->reviewErrors[$item->id]);
+        $this->success('Materia revisada', e($this->rowText($reviewed)));
     }
 
     /**
@@ -306,9 +497,10 @@ new #[Title('Propuesta de carrera')] class extends Component
 
     /**
      * «Usar sugerido» de una fila del panel: los grupos que da la regla de la propuesta para los esperados escritos en
-     * esa fila. Solo en una fila que el usuario puede corregir (M7).
+     * esa fila; con paquetes, los de paquetes más los sueltos sugeridos (SuggestedRowGroups, tarea 5.6b). Solo en una fila
+     * que el usuario puede corregir (M7).
      */
-    public function useSuggested(string $id, CareerProposalQuery $proposals): void
+    public function useSuggested(string $id, CareerProposalQuery $proposals, ProposalForecastQuery $forecasts): void
     {
         $proposal = $this->authorizedProposal('view', $proposals);
         $item = $proposals->itemOrFail($proposal, $id)->load(['subject' => fn ($query) => $query->withTrashed()]);
@@ -317,7 +509,8 @@ new #[Title('Propuesta de carrera')] class extends Component
         $expected = max(0, (int) ($this->form[$item->id]['expected_students'] ?? $item->expected_students));
         $this->form[$item->id] = [
             'expected_students' => $this->form[$item->id]['expected_students'] ?? $item->expected_students,
-            'requested_groups' => SuggestedGroups::fromSettings()->for($expected, (bool) $item->subject->needs_lab),
+            'requested_groups' => $this->suggestedRowGroups($item, $expected, (bool) $item->subject->needs_lab, SuggestedGroups::fromSettings(), $forecasts->intakes($proposal),
+                ProposalForecastQuery::methodFor($item, $forecasts->currentFor($proposal, $item))),
             'notes' => (string) ($this->form[$item->id]['notes'] ?? $item->notes),
         ];
     }
@@ -452,6 +645,126 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
+     * «Agregar paquete», o «Armar paquete con las materias de 1.º» (`$firstSemester`): el panel de un paquete nuevo, sin
+     * materias o con las de 1.º de la propuesta, salvo las de un departamento que ya aceptó su parte (esas ya no cambian).
+     * Solo quien arma la composición (CareerProposalPolicy::managePackages) y mientras la propuesta se edita; si ya se envió
+     * o se aceptó, lo dice.
+     */
+    public function newPackage(CareerProposalQuery $proposals, ProposalPackagesQuery $packages, bool $firstSemester = false): void
+    {
+        $proposal = $this->authorizedProposal('managePackages', $proposals);
+        $lock = $this->statusLock($proposal);
+
+        if ($lock !== null) {
+            $this->error('No se armó', e($lock->message('')));
+
+            return;
+        }
+
+        $this->packageId = null;
+        $this->packageName = '';
+        $this->packageSubjects = $firstSemester ? $packages->openFirstSemesterSubjectIds($proposal) : [];
+        $this->resetErrorBag();
+        $this->showPackage = true;
+    }
+
+    /**
+     * Abre un paquete en su panel: para cambiarlo, o de solo lectura si el usuario no arma la composición o la propuesta ya
+     * no se edita. Verlo es de quien ve la propuesta.
+     */
+    public function editPackage(string $id, CareerProposalQuery $proposals, ProposalPackagesQuery $packages): void
+    {
+        $package = $packages->packageOrFail($this->authorizedProposal('view', $proposals), $id);
+
+        $this->packageId = $package->id;
+        $this->packageName = (string) $package->name;
+        $this->packageSubjects = $package->subjects->pluck('subject_id')->values()->all();
+        $this->resetErrorBag();
+        $this->showPackage = true;
+    }
+
+    /**
+     * «Guardar» del panel del paquete: lo arma (CreateProposalPackage) o le cambia las materias y el nombre a la vez, en una
+     * transacción (UpdateProposalPackage). Si una Action lo rechaza, el panel se queda abierto con el motivo y no cambia
+     * nada.
+     */
+    public function savePackage(CareerProposalQuery $proposals, ProposalPackagesQuery $packages, CreateProposalPackage $create, UpdateProposalPackage $update): void
+    {
+        $proposal = $this->authorizedProposal('managePackages', $proposals);
+        $package = $this->packageId === null ? null : $packages->packageOrFail($proposal, $this->packageId);
+        $subjects = array_values(array_unique(array_filter($this->packageSubjects, fn (mixed $id): bool => is_string($id) && Str::isUuid($id))));
+        $this->resetErrorBag();
+
+        try {
+            $saved = $package === null
+                ? $create->handle($proposal, $subjects, $this->packageName, auth()->user())
+                : $update->handle($package, $subjects, $this->packageName, auth()->user());
+        } catch (ValidationException $e) {
+            $this->reportPackage($e);
+
+            return;
+        }
+
+        $this->showPackage = false;
+        $this->success($package === null ? 'Paquete armado' : 'Paquete guardado', e($saved->label));
+    }
+
+    /**
+     * «Quitar paquete», ya confirmado en el diálogo de Nexus (`x-confirm`): DeleteProposalPackage, con la policy de la
+     * composición.
+     */
+    public function deletePackage(CareerProposalQuery $proposals, ProposalPackagesQuery $packages, DeleteProposalPackage $delete): void
+    {
+        $proposal = $this->authorizedProposal('managePackages', $proposals);
+
+        if ($this->packageId === null) {
+            return;
+        }
+
+        $package = $packages->packageOrFail($proposal, $this->packageId);
+        $label = $package->label;
+
+        try {
+            $delete->handle($package, auth()->user());
+        } catch (ValidationException $e) {
+            $this->reportPackage($e);
+
+            return;
+        }
+
+        $this->showPackage = false;
+        $this->packageId = null;
+        $this->success('Paquete quitado', e("{$label}: sus materias ya no abren grupos por él."));
+    }
+
+    /**
+     * Guarda al salir del campo cuántos paquetes de uno abre una columna (`$column`, ProposalOverview::columnKey):
+     * SetPackageCount, con CareerProposalPolicy::updateColumn (M7: la de otro campus es 403).
+     */
+    public function savePackageCount(string $id, string $column, string $value, CareerProposalQuery $proposals, ProposalPackagesQuery $packages, SetPackageCount $set): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $package = $packages->packageOrFail($proposal, $id);
+        $campus = $packages->columnOrFail($proposal, $column);
+        $this->authorize('updateColumn', [$proposal, $campus]);
+
+        $this->saveColumnValue("package.{$package->id}.{$column}", $value, fn (int $count) => $set->handle($package, $campus, $count, auth()->user()));
+    }
+
+    /**
+     * Guarda al salir del campo el nuevo ingreso esperado de una columna: UpdateProposalIntake, con
+     * CareerProposalPolicy::updateColumn (M7).
+     */
+    public function saveIntake(string $column, string $value, CareerProposalQuery $proposals, ProposalPackagesQuery $packages, UpdateProposalIntake $update): void
+    {
+        $proposal = $this->authorizedProposal('view', $proposals);
+        $campus = $packages->columnOrFail($proposal, $column);
+        $this->authorize('updateColumn', [$proposal, $campus]);
+
+        $this->saveColumnValue("intake.{$column}", $value, fn (int $newStudents) => $update->handle($proposal, $campus, $newStudents, auth()->user()));
+    }
+
+    /**
      * Abre la confirmación de envío con los totales por campus, a quién se avisa y el aviso de catálogos pendientes.
      */
     public function confirmSubmit(CareerProposalQuery $proposals): void
@@ -480,23 +793,30 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * @return array<string, mixed>
      */
-    public function with(CareerProposalQuery $proposals): array
+    public function with(CareerProposalQuery $proposals, ProposalForecastQuery $forecasts, ProposalPackagesQuery $packages): array
     {
         if ($this->proposalId === null) {
             return ['proposal' => null, 'overview' => null, ...$this->modalityViewData()];
         }
 
         $proposal = $this->authorizedProposal('view', $proposals);
-        $overview = ($this->showSubmit ? null : $this->fresh) ?? $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit);
+        $settings = DemandSettings::fromSettings();
+        $overview = ($this->showSubmit ? null : $this->fresh)
+            ?? $proposals->overview($proposal, withPendingCatalogs: $this->showSubmit, anomalies: new ProposalAnomalies($settings->minGroupSize));
         $this->fresh = null;
         $walk = $this->walk($overview);
         $departments = $overview->departments();
         $gridSemesters = $overview->gridSemesters();
         $selected = $this->subjectId === null ? null : $overview->subject($this->subjectId);
-        $rule = SuggestedGroups::fromSettings();
+        $rule = $settings->groupSizes;
         $header = $overview->header((string) config('app.timezone'));
         $viewerId = auth()->id() === null ? null : (string) auth()->id();
         $columns = $this->columns($overview, $header);
+        $projection = $forecasts->review($overview, $settings);
+
+        if (! $projection->hasForecast() && $this->view === 'revisar') {
+            $this->setView($this->lastView);
+        }
 
         $known = $this->department === '' || in_array($this->department, array_map(fn (array $row): string => $row['department']->code, $departments), true);
 
@@ -521,6 +841,9 @@ new #[Title('Propuesta de carrera')] class extends Component
         }
 
         $highlight = $this->highlight($gridSemesters, $chains, $departments);
+        $packageBlock = $this->view !== 'revisar' || $this->showPackage ? $packages->forOverview($overview, $settings->groupSizes->defaultSize) : null;
+        $panelNewStudents = $selected === null ? [] : $forecasts->intakes($proposal);
+        $panelMethods = $this->panelMethods($selected, $projection);
 
         return [
             ...$this->modalityViewData(),
@@ -541,7 +864,9 @@ new #[Title('Propuesta de carrera')] class extends Component
             'majority' => $walk['majority'],
             'submitReason' => $this->submitReason($overview),
             'suggestedSize' => $selected === null ? null : $rule->sizeFor((bool) $selected->subject->needs_lab),
-            'suggested' => $this->suggested($selected, $rule),
+            'suggested' => $this->suggested($selected, $rule, $panelNewStudents, $panelMethods),
+            'panelNewStudents' => $panelNewStudents,
+            'panelMethods' => $panelMethods,
             'canSubmit' => Gate::allows('submit', $proposal),
             'submitNotice' => $this->showSubmit ? $header->submitNotice($viewerId) : null,
             'gridSemesters' => $gridSemesters,
@@ -558,7 +883,81 @@ new #[Title('Propuesta de carrera')] class extends Component
             'selected' => $selected,
             'maxExpected' => ProposalItemRules::MAX_EXPECTED_STUDENTS,
             'maxGroups' => ProposalItemRules::MAX_REQUESTED_GROUPS,
+            ...$this->forecastViewData($overview, $projection, $header, $columns, $selected, $forecasts),
+            'packages' => $packageBlock,
+            'packagesManageable' => $proposal->status->isEditable() && Gate::allows('managePackages', $proposal),
+            'openPackage' => $this->showPackage ? $packageBlock?->find($this->packageId) : null,
         ];
+    }
+
+    /**
+     * Lo de la proyección para la vista (tarea 5.6): la revisión (`projection`), las columnas cuyas filas cuenta y marca
+     * (`reviewKeys`: las que el usuario corrige, o todas si no corrige ninguna), lo pendiente por motivo, cuántas filas
+     * suyas cambiaron (el aviso de recálculo, solo mientras la propuesta se edita) y, en «Revisar proyección», las tarjetas
+     * a la vista, las revisadas y lo de las otras columnas. El historial (`forecastHistory`) se lee una vez para las
+     * tarjetas a la vista y las filas del panel abierto.
+     *
+     * @param  array<string, array{campus: ?Campus, editable: bool, zeroable: bool, zeroAlert: bool, readonly: ?string}>  $columns
+     * @return array<string, mixed>
+     */
+    private function forecastViewData(ProposalOverview $overview, ProposalForecastReview $projection, ProposalHeader $header, array $columns, ?ProposalSubject $selected, ProposalForecastQuery $forecasts): array
+    {
+        $own = array_map('strval', array_keys(array_filter($columns, fn (array $column): bool => $column['editable'])));
+        $keys = $own !== [] ? $own : array_map('strval', array_keys($columns));
+        $reason = ForecastReason::fromFilter($this->reason);
+        $pending = $this->view === 'revisar' ? $projection->pending($keys, $reason) : [];
+        $cards = array_slice($pending, 0, $this->reviewLimit);
+        $panelRows = $this->showDrawer && $selected !== null
+            ? array_values(array_filter(array_map(fn (ProposalItem $item): ?ProposalForecastRow => $projection->row($item), $selected->items())))
+            : [];
+        $evidence = [...$cards, ...$panelRows];
+
+        return [
+            'projection' => $projection,
+            'forecastLine' => $projection->headerLine((string) config('app.timezone')),
+            'reviewKeys' => $keys,
+            'reviewCounts' => $projection->counts($keys),
+            'recalculated' => $overview->proposal->status->isEditable() && $own !== [] ? $projection->changed($own) : 0,
+            'canReview' => $overview->proposal->status->isEditable() && $own !== [],
+            'reviewCards' => $cards,
+            'reviewMore' => min(self::REVIEW_PAGE, count($pending) - count($cards)),
+            'reviewedRows' => $this->view === 'revisar' ? $projection->reviewed($keys, $reason) : [],
+            'reviewOthers' => $own === [] || $this->view !== 'revisar' ? [] : array_values(array_map(
+                fn (string $key): string => $header->pendingReviewLine($key, count($projection->pending([$key]))),
+                array_diff(array_keys($columns), $own),
+            )),
+            'reasons' => ForecastReason::cases(),
+            'forecastHistory' => $evidence === [] ? [] : $forecasts->history($projection, $evidence),
+        ];
+    }
+
+    /**
+     * Las columnas que cuenta y revisa el usuario (ProposalOverview::columnKey): las que corrige (M7) o, si no corrige
+     * ninguna, todas, de solo lectura.
+     *
+     * @return list<string>
+     */
+    private function reviewKeys(ProposalOverview $overview): array
+    {
+        $samples = [];
+
+        foreach ($overview->subjects() as $subject) {
+            $samples += $subject->cells;
+        }
+
+        $own = array_keys(array_filter($samples, fn (ProposalItem $item): bool => Gate::allows('update', [$overview->proposal, $item])));
+
+        return $own !== [] ? array_map('strval', $own) : array_map(fn (?Campus $campus): string => ProposalOverview::columnKey($campus), $overview->columns);
+    }
+
+    /**
+     * «ACF-0901 en C1: 70 · 3», lo que dice el aviso de una acción de «Revisar proyección».
+     */
+    private function rowText(ProposalItem $item): string
+    {
+        $item->loadMissing(['subject' => fn ($query) => $query->withTrashed(), 'campus' => fn ($query) => $query->withTrashed()]);
+
+        return "{$item->subject->code}".($item->campus === null ? '' : " en {$item->campus->code}").": {$item->expected_students} · {$item->requested_groups}";
     }
 
     /**
@@ -662,6 +1061,16 @@ new #[Title('Propuesta de carrera')] class extends Component
     }
 
     /**
+     * El error de una acción de «Revisar proyección»: en su tarjeta (`reviewErrors`) y en un toast.
+     */
+    private function reportReview(ValidationException $e, string $itemId): void
+    {
+        $message = (string) collect($e->errors())->flatten()->first();
+        $this->reviewErrors[$itemId] = $message;
+        $this->error('No se guardó', e($message));
+    }
+
+    /**
      * Los errores de una Action: en el panel, en el campo de su fila (`form.<fila>.<campo>`) o en el suyo; en la celda
      * de la tabla que se editó (`$cell`, o la del campo que nombra el error en la fila `$itemId`) y, juntos, en un toast.
      */
@@ -755,11 +1164,67 @@ new #[Title('Propuesta de carrera')] class extends Component
      */
     private function generalLock(ProposalOverview $overview): ?ProposalLock
     {
+        return $this->statusLock($overview->proposal);
+    }
+
+    private function statusLock(CareerProposal $proposal): ?ProposalLock
+    {
         return match (true) {
-            $overview->proposal->status === ProposalStatus::Accepted => ProposalLock::Accepted,
-            ! $overview->proposal->status->isEditable() => ProposalLock::Submitted,
+            $proposal->status === ProposalStatus::Accepted => ProposalLock::Accepted,
+            ! $proposal->status->isEditable() => ProposalLock::Submitted,
             default => null,
         };
+    }
+
+    /**
+     * Guarda una cifra de una columna del bloque de paquetes (la cuenta de un paquete o el nuevo ingreso), con su celda
+     * (`$cell`) para el error y la palomita: un entero escrito, o el error en la celda y en un toast; el de la Action
+     * (`$save`), igual.
+     *
+     * @param  Closure(int): mixed  $save
+     */
+    private function saveColumnValue(string $cell, string $value, Closure $save): void
+    {
+        unset($this->cellErrors[$cell]);
+
+        if (! preg_match('/^\d+$/', trim($value))) {
+            $this->rejections++;
+            $this->cellErrors[$cell] = 'Escribe un número entero.';
+            $this->error('No se guardó', 'Escribe un número entero.');
+
+            return;
+        }
+
+        try {
+            $save((int) trim($value));
+        } catch (ValidationException $e) {
+            $this->rejections++;
+            $this->cellErrors[$cell] = (string) collect($e->errors())->flatten()->first();
+            $this->error('No se guardó', e($this->cellErrors[$cell]));
+
+            return;
+        }
+
+        [$id, $field] = explode('.', $cell, 2);
+        $this->dispatch('cell-saved', id: $id, field: $field);
+    }
+
+    /**
+     * Los errores de una Action de paquetes en el panel: las materias junto a las casillas (`packageSubjects`), el nombre
+     * junto a su campo (`packageName`) y lo demás (la propuesta enviada, una parte aceptada, el tope de una fila) arriba
+     * del pie (`package`); todos, además, en un toast.
+     */
+    private function reportPackage(ValidationException $e): void
+    {
+        foreach ($e->errors() as $field => $messages) {
+            $this->addError(match ($field) {
+                'subjects' => 'packageSubjects',
+                'name' => 'packageName',
+                default => 'package',
+            }, $messages[0]);
+        }
+
+        $this->error('No se guardó', e(collect($e->errors())->flatten()->first()));
     }
 
     /**
@@ -849,20 +1314,62 @@ new #[Title('Propuesta de carrera')] class extends Component
     /**
      * Los grupos que sugiere la regla para los esperados de cada fila del panel que se captura, por id de fila, al
      * abrirlo y al guardar: el número de «Usar sugerido: N». Mientras se teclea lo recalcula el navegador con
-     * `$suggestedSize`, el tamaño objetivo de la materia.
+     * `$suggestedSize`, el tamaño objetivo de la materia; con paquetes, también los de paquetes y el nuevo ingreso.
      *
+     * @param  array<string, int>  $newStudents
+     * @param  array<string, ?ForecastMethod>  $methods  el método vigente de cada fila (panelMethods())
      * @return array<string, int>
      */
-    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule): array
+    private function suggested(?ProposalSubject $selected, SuggestedGroups $rule, array $newStudents, array $methods): array
     {
         if ($selected === null) {
             return [];
         }
 
-        return array_map(
-            fn (array $row): int => $rule->for(max(0, (int) ($row['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab),
-            $this->form,
-        );
+        $suggested = [];
+
+        foreach ($selected->items() as $item) {
+            if (isset($this->form[$item->id])) {
+                $suggested[$item->id] = $this->suggestedRowGroups($item, max(0, (int) ($this->form[$item->id]['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab, $rule, $newStudents,
+                    $methods[$item->id]);
+            }
+        }
+
+        return $suggested;
+    }
+
+    /**
+     * El método vigente de cada fila de la materia abierta en el panel, por id de fila (ProposalForecastQuery::methodFor, con
+     * la fila de la proyección que ya leyó la revisión): con él se calcula «Usar sugerido» en el servidor y en el navegador,
+     * igual que el estado de la fila.
+     *
+     * @return array<string, ?ForecastMethod>
+     */
+    private function panelMethods(?ProposalSubject $selected, ProposalForecastReview $projection): array
+    {
+        if ($selected === null) {
+            return [];
+        }
+
+        $methods = [];
+
+        foreach ($selected->items() as $item) {
+            $methods[$item->id] = ProposalForecastQuery::methodFor($item, $projection->row($item)?->forecast);
+        }
+
+        return $methods;
+    }
+
+    /**
+     * Los grupos sugeridos de una fila para unos esperados: sin paquetes, los de la regla; con paquetes, los de paquetes
+     * más los sueltos sugeridos, restando el nuevo ingreso de su campus si la fila es de primer semestre (SuggestedRowGroups).
+     * `$method` es el vigente de la fila (ProposalForecastQuery::methodFor), no el que guardó.
+     *
+     * @param  array<string, int>  $newStudents  el nuevo ingreso por llave de columna (ProposalForecastQuery::intakes)
+     */
+    private function suggestedRowGroups(ProposalItem $item, int $expected, bool $needsLab, SuggestedGroups $rule, array $newStudents, ?ForecastMethod $method): int
+    {
+        return SuggestedRowGroups::for($rule->for($expected, $needsLab), $expected, $item->package_groups, $method, $newStudents[$item->campus_id ?? ''] ?? 0, $needsLab, $rule);
     }
 
     /**

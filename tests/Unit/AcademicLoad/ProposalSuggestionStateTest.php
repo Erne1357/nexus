@@ -83,3 +83,21 @@ it('la diferencia grande se mide contra lo sugerido vigente y solo en filas corr
         ->and($changed->largeDifferenceExpected)->toBeTrue()
         ->and(suggestionStateOf(10, 1, 50, 2, false, 50, 2)->largeDifferenceExpected)->toBeFalse();
 });
+
+it('con paquetes, la diferencia grande de grupos se mide contra los grupos sugeridos efectivos de la fila (paquetes más sueltos)', function () {
+    $atEffective = ProposalSuggestionState::of(90, 4, 90, 3, now(), 90, 3, new DemandSettings, effectiveGroups: 4);
+    $threeMore = ProposalSuggestionState::of(90, 7, 90, 3, now(), 90, 3, new DemandSettings, effectiveGroups: 4);
+
+    expect($atEffective->largeDifferenceGroups)->toBeFalse()
+        ->and($atEffective->effectiveGroups)->toBe(4)
+        ->and($threeMore->largeDifferenceGroups)->toBeTrue()
+        ->and($threeMore->largeDifferenceExpected)->toBeFalse();
+});
+
+it('«Cambió» sigue comparando lo sugerido guardado con la proyección cruda, con o sin paquetes', function () {
+    $state = ProposalSuggestionState::of(90, 4, 90, 3, now(), 100, 3, new DemandSettings, effectiveGroups: 4);
+
+    expect($state->state)->toBe(SuggestionState::Changed)
+        ->and($state->newExpected)->toBe(100)
+        ->and($state->newGroups)->toBe(3);
+});

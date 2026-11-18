@@ -10,6 +10,7 @@ use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\UnassignTeacher;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -61,5 +62,19 @@ it('rechaza si la carga ya no está en asignación ni ajustes', function () {
     $this->load->update(['status' => LoadStatus::Closed]);
 
     expect(fn () => app(UnassignTeacher::class)->handle($this->group, $this->actor, 'Renunció.'))->toThrow(ValidationException::class)
+        ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id);
+});
+
+it('toma la carga con FOR SHARE y rechaza si ya no acepta cambios de docente', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = mb_strtolower($query->sql);
+    });
+
+    $this->load->forceFill(['status' => LoadStatus::Published])->save();
+
+    expect(fn () => app(UnassignTeacher::class)->handle($this->group, $this->actor, 'Renunció.'))
+        ->toThrow(ValidationException::class)
+        ->and(collect($queries)->contains(fn (string $sql) => str_contains($sql, 'academic_loads') && str_contains($sql, 'for share')))->toBeTrue()
         ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id);
 });
