@@ -119,7 +119,7 @@ it('CF-S7: Asignación docente, Horarios, Proyección de demanda y Motor de hora
     expect(array_map(fn (SettingDefinition $d): string => $d->key, app(SettingRegistry::class)->all()))->toEqualCanonicalizing([
         'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
-        'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits',
+        'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits', 'solver.soft_weights',
     ]);
 });
 

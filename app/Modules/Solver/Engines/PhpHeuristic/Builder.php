@@ -1616,18 +1616,14 @@ final class Builder
     }
 
     /**
-     * Las claves de cohorte del grupo. La de un paquete lleva el campus del grupo, como la cuenta HC-03 (Cohorts): la
-     * forma anterior, `package:<id>:<n>`, también.
+     * Las claves de cohorte del grupo, sin repetir. La de un paquete ya lleva su campus (`package:<id>:<campus>:<n>`),
+     * como la cuenta HC-03 (Cohorts).
      *
      * @return list<string>
      */
     private function cohortsOf(GroupInput $group): array
     {
-        return array_values(array_unique(array_map(function (string $key) use ($group): string {
-            $parts = explode(':', $key);
-
-            return $parts[0] === 'package' && in_array(count($parts), [3, 4], true) ? "package:{$parts[1]}:{$group->campusCode}:".end($parts) : $key;
-        }, $group->cohorts)));
+        return array_values(array_unique($group->cohorts));
     }
 
     /**

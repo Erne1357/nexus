@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Console\PruneExports;
 use App\Modules\AcademicLoad\Database\Seeders\AcademicLoadDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\ForecastEvaluationDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\HistoricalGroupsDemoSeeder;
+use App\Modules\AcademicLoad\Database\Seeders\ProposalForecastDemoSeeder;
 use App\Modules\AcademicLoad\Database\Seeders\PublicationDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
@@ -40,8 +41,10 @@ use App\Modules\AcademicLoad\Models\HistoricalGroup;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\ProposalReview;
+use App\Modules\AcademicLoad\Policies\DemandBoardPolicy;
 use App\Modules\AcademicLoad\Policies\ForecastEvaluationPolicy;
 use App\Modules\AcademicLoad\Policies\PublishedExportPolicy;
+use App\Modules\AcademicLoad\Queries\DemandBoard;
 use App\Modules\AcademicLoad\Queries\LoadProgressQuery;
 use App\Modules\AcademicLoad\Queries\TermKardexQuery;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
@@ -62,6 +65,7 @@ use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Demand\Events\DemandForecastsComputed;
@@ -69,6 +73,7 @@ use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Faculty\Enums\HistorySource;
 use App\Modules\Faculty\Models\TeacherSubjectHistory;
 use App\Modules\Students\Models\KardexRecord;
+use Closure;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -92,6 +97,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
     protected array $policies = [
         PublishedExport::class => PublishedExportPolicy::class,
         ForecastEvaluation::class => ForecastEvaluationPolicy::class,
+        DemandBoard::class => DemandBoardPolicy::class,
     ];
 
     public function boot(): void
@@ -133,6 +139,8 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             // Evalúa periodos ya cursados: no depende de que haya carga en curso (MN-04 no la nombra; supuesto por confirmar).
             new NavigationItem('Precisión de la proyección', 'academic-load.forecast-accuracy', 'o-scale', NavigationArea::Academico, group: NavigationGroup::Propuesta, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ForecastEvaluationView)),
+            new NavigationItem('Demanda por materia', 'academic-load.demand', 'o-chart-bar', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::DemandViewDepartment) || $context->allowsAny(AcademicLoadPermission::DemandViewCareer)),
             new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
@@ -149,7 +157,9 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      * obligatorio, confirmado el 10 de noviembre de 2026); el jefe de departamento, además, propone la carga, la pasa a
      * asignación docente, la cierra, la publica si la modalidad no exige visto bueno, decide la parte de su departamento y
      * pide, ve y decide acuerdos entre departamentos (Subdirección y el jefe de proyecto docente solo los ven); el
-     * coordinador arma, corrige, envía y ve la propuesta de su carrera.
+     * coordinador arma, corrige, envía y ve la propuesta de su carrera. «Demanda por materia» (tarea 5.7, confirmado el 16
+     * de noviembre de 2026) la ven el jefe y el jefe de proyecto docente de las materias que imparte su departamento,
+     * Subdirección de cualquier departamento, y el coordinador de las materias de su carrera, en todos los departamentos.
      */
     public function grants(): array
     {
@@ -166,6 +176,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::ProposalView,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
+                AcademicLoadPermission::DemandViewDepartment,
                 AcademicLoadPermission::ForecastEvaluationView,
                 AcademicLoadPermission::ForecastEvaluationRun,
             ],
@@ -182,26 +193,32 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 AcademicLoadPermission::AgreementView,
                 AcademicLoadPermission::AgreementRequest,
                 AcademicLoadPermission::AgreementDecide,
+                AcademicLoadPermission::DemandViewDepartment,
             ],
             Role::JefeProyectoDocente->value => [
                 AcademicLoadPermission::LoadView,
                 AcademicLoadPermission::LoadExport,
                 AcademicLoadPermission::ProposalReviewView,
                 AcademicLoadPermission::AgreementView,
+                AcademicLoadPermission::DemandViewDepartment,
             ],
             Role::Coordinador->value => [
                 AcademicLoadPermission::ProposalCreate,
                 AcademicLoadPermission::ProposalUpdate,
                 AcademicLoadPermission::ProposalSubmit,
                 AcademicLoadPermission::ProposalView,
+                AcademicLoadPermission::DemandViewCareer,
             ],
         ];
     }
 
     /**
-     * Demo por puntos: cada carrera ofrecida en los campus del volumen propone y envía, y cada departamento acepta
-     * todas sus partes (AcademicLoadDemoSeeder en modo completo); así nacen los grupos y las cargas con partes pasan a
-     * propuesta, lo que lleva a «horarios». Necesita los catálogos validados del punto anterior (HC-14).
+     * Demo por puntos: al llegar a «propuesta», las propuestas precargadas con todos los casos de la fase 5 (#520,
+     * ProposalForecastDemoSeeder): sin propuesta, en borrador sin tocar y con correcciones, filas cambiadas por un recálculo,
+     * paquetes, enviadas, regresadas y con partes aceptadas. Después, cada carrera ofrecida en los campus del volumen
+     * propone y envía, y cada departamento acepta todas sus partes (AcademicLoadDemoSeeder en modo completo, que termina lo
+     * que dejó «propuesta»); así nacen los grupos y las cargas con partes pasan a propuesta, lo que lleva a «horarios».
+     * Necesita los catálogos validados del punto anterior (HC-14).
      */
     public function demoSteps(): array
     {
@@ -212,6 +229,14 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::Proposal, 'Evaluaciones de la precisión de la proyección', fn (DemoContext $demo) => $demo->runSeederPerModality(ForecastEvaluationDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
+            ])),
+            // Después de los catálogos validados (CatalogValidation) y de la proyección (Demand), que van antes en el mapa.
+            // Las modalidades juntas: el recálculo de la proyección es del kárdex y corre una sola vez.
+            new DemoStep(DemoCheckpoint::Proposal, 'Propuestas precargadas con todos los casos', fn (DemoContext $demo) => $demo->runSeeder(ProposalForecastDemoSeeder::class, [
+                'campuses' => $demo->campuses,
+                'term' => $demo->termCode,
+                'seed' => $demo->seed,
+                'modalities' => $demo->volume->modalities(),
             ])),
             new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
@@ -253,6 +278,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         };
 
         return [
+            ...$this->proposalCaseChecks($campusIds, $offeredCareerIds, $modalityIds, $proposals),
             new DemoCheck([DemoCheckpoint::Catalogs], 'Hay historial de grupos por materia', fn (): true|string => HistoricalGroup::query()->exists() || ! KardexRecord::query()->exists() ? true : 'Hay kárdex, pero no hay historial de grupos.'),
             new DemoCheck([DemoCheckpoint::Proposal], 'Hay evaluaciones de la precisión listas de los periodos con historia', fn (DemoContext $demo): true|string => $evaluations($demo)->exists() === false && $evaluable($demo)
                 ? 'No hay evaluaciones de la proyección listas.'
@@ -312,6 +338,50 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                     ->count();
 
                 return $behind === 0 ? true : "{$behind} cargas con partes aceptadas no están en propuesta.";
+            }),
+        ];
+    }
+
+    /**
+     * Las revisiones de «propuesta» (#520): cada caso de las pantallas de la fase 5 tiene al menos un ejemplo en las
+     * propuestas de la demo, en sus campus (ProposalForecastDemoSeeder::count), y alguna carrera ofrecida se quedó sin
+     * propuesta.
+     *
+     * @param  Closure(DemoContext): list<string>  $campusIds
+     * @param  Closure(DemoContext): list<string>  $offeredCareerIds
+     * @param  Closure(DemoContext): list<string>  $modalityIds
+     * @param  Closure(DemoContext): Builder<CareerProposal>  $proposals
+     * @return list<DemoCheck>
+     */
+    private function proposalCaseChecks(Closure $campusIds, Closure $offeredCareerIds, Closure $modalityIds, Closure $proposals): array
+    {
+        $cases = [
+            ProposalForecastDemoSeeder::CASE_SUGGESTED_ROW => 'La propuesta trae filas sin tocar con lo sugerido de la proyección vigente',
+            ProposalForecastDemoSeeder::CASE_CAPTURED_ROW => 'La propuesta trae filas corregidas',
+            ProposalForecastDemoSeeder::CASE_CHANGED_ROW => 'La propuesta trae filas corregidas cuya proyección cambió',
+            ProposalForecastDemoSeeder::CASE_REVIEWED_ROW => 'La propuesta trae filas revisadas',
+            ProposalForecastDemoSeeder::CASE_PACKAGE => 'La propuesta trae paquetes de primer semestre que abren grupos',
+            ProposalForecastDemoSeeder::CASE_CORRECTED_INTAKE => 'La propuesta trae un nuevo ingreso corregido',
+            ProposalForecastDemoSeeder::CASE_DRAFTING => 'Hay propuestas en captura',
+            ProposalForecastDemoSeeder::CASE_SUBMITTED => 'Hay propuestas enviadas',
+            ProposalForecastDemoSeeder::CASE_RETURNED => 'Hay propuestas regresadas',
+            ProposalForecastDemoSeeder::CASE_PARTIALLY_ACCEPTED => 'Hay propuestas con una parte aceptada',
+        ];
+
+        return [
+            ...array_map(
+                fn (string $case, string $label): DemoCheck => new DemoCheck([DemoCheckpoint::Proposal], $label,
+                    fn (DemoContext $demo): true|string => ProposalForecastDemoSeeder::count($case, $proposals($demo), $campusIds($demo)) > 0 ? true : 'Ninguna propuesta de la demo trae el caso.'),
+                array_keys($cases),
+                array_values($cases),
+            ),
+            // Por cada modalidad abierta en el periodo, las carreras ofrecidas que no tienen su propuesta en ella.
+            new DemoCheck([DemoCheckpoint::Proposal], 'Hay carreras ofrecidas sin propuesta', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds, $proposals): true|string {
+                $offered = $offeredCareerIds($demo);
+                $open = TermOpening::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))->pluck('modality_id');
+                $missing = $open->sum(fn (string $modalityId): int => count($offered) - $proposals($demo)->where('modality_id', $modalityId)->count());
+
+                return $missing > 0 ? true : 'Todas las carreras ofrecidas tienen propuesta.';
             }),
         ];
     }

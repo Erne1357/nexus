@@ -43,6 +43,7 @@
         "id": "d001"
     },
     "travel_minutes": 60,
+    "weekly_hours_tolerance": 0,
     "groups": [
         {
             "id": "g001",
@@ -200,7 +201,7 @@
             "capacity": 45,
             "teacher_id": "t005",
             "cohorts": [
-                "package:k001:1"
+                "package:k001:C1:1"
             ],
             "fixed_sessions": [],
             "candidate_room_ids": [],
@@ -221,7 +222,7 @@
             "capacity": 35,
             "teacher_id": "t005",
             "cohorts": [
-                "package:k001:1"
+                "package:k001:C1:1"
             ],
             "fixed_sessions": [],
             "candidate_room_ids": [],

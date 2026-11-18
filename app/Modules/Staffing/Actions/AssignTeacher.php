@@ -8,6 +8,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Actions\SetGroupTeacher;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
@@ -36,10 +37,13 @@ final class AssignTeacher
     {
         $reason = filled($reason) ? trim($reason) : null;
 
-        return DB::transaction(function () use ($group, $teacher, $actor, $reason): GroupTeacherAssignment {
+        $editability = app(LoadEditability::class);
+
+        return $editability->guard(fn (): GroupTeacherAssignment => DB::transaction(function () use ($group, $teacher, $actor, $reason, $editability): GroupTeacherAssignment {
+            $load = $editability->lockLoad($group);
             $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
 
-            $this->ensureLoadAllowsChanges($group);
+            $this->ensureLoadAllowsChanges($load);
 
             $current = GroupTeacherAssignment::query()->current()->where('group_id', $group->id)->lockForUpdate()->first();
 
@@ -99,18 +103,14 @@ final class AssignTeacher
                 ->log("Asignó a {$teacher->name} al grupo {$group->code} ({$place})");
 
             return $assignment;
-        });
+        }), 'group');
     }
 
     /**
      * @throws ValidationException
      */
-    private function ensureLoadAllowsChanges(Group $group): void
+    private function ensureLoadAllowsChanges(?AcademicLoad $load): void
     {
-        $load = AcademicLoad::query()
-            ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
-            ->first();
-
         if ($load === null || ! in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true)) {
             $label = $load?->status->label() ?? 'sin carga';
 

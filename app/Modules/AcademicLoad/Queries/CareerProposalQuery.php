@@ -12,6 +12,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
+use App\Modules\AcademicLoad\Models\ProposalIntake;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
@@ -25,6 +26,7 @@ use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\RecipientsQuery;
+use App\Modules\Demand\Queries\DemandForecastsQuery;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 
@@ -37,6 +39,7 @@ final class CareerProposalQuery
     public function __construct(
         private readonly CatalogReviewQuery $catalogReviews,
         private readonly RecipientsQuery $recipients,
+        private readonly DemandForecastsQuery $forecasts,
     ) {}
 
     /**
@@ -64,11 +67,12 @@ final class CareerProposalQuery
      * activo y no están borradas (las columnas de su propuesta, MS5). No se mira `careers.is_active` a propósito: una
      * carrera inactiva puede tener todavía alumnos, y lo que decide es su oferta. De ellas, las de las que el usuario
      * puede ver la propuesta en la modalidad: el coordinador, las de sus alcances (con o sin campus, porque ve toda la
-     * propuesta, M7); la subdirección y el admin, todas (CareerProposalPolicy).
+     * propuesta, M7); la subdirección y el admin, todas (CareerProposalPolicy). Con otro permiso de carrera (la lente de
+     * carrera de «Demanda por materia», `academic_load.demand.view_career`), las de ese permiso.
      *
      * @return Collection<int, Career>
      */
-    public function careersFor(Actor $context, Modality $modality): Collection
+    public function careersFor(Actor $context, Modality $modality, AcademicLoadPermission $permission = AcademicLoadPermission::ProposalView): Collection
     {
         $offered = CareerCampus::query()
             ->select('career_id')
@@ -79,7 +83,7 @@ final class CareerProposalQuery
             ->whereIn('id', $offered)
             ->orderBy('code')
             ->get()
-            ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $modality->getKey(), career: $career->getKey())))
+            ->filter(fn (Career $career): bool => $context->allows($permission, Target::of(modality: $modality->getKey(), career: $career->getKey())))
             ->values();
     }
 
@@ -135,9 +139,12 @@ final class CareerProposalQuery
      * seriación entre las materias de la propuesta, la del plan de cada fila; quiénes la coordinan
      * (RecipientsQuery::holdersByKey, una lectura para todas las columnas); y una por departamento involucrado para sus
      * catálogos sin validar (CatalogReviewQuery::pendingFor, en la modalidad, HC-14). Esa última solo se arma con
-     * `$withPendingCatalogs`, que es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío.
+     * `$withPendingCatalogs`, que es lo que pide el diálogo de enviar: sin él, `pendingCatalogs` queda vacío. Una más lee la
+     * proyección vigente de la carrera (DemandForecastsQuery::forCareer), para comparar los esperados de cada fila con lo que
+     * explica (ProposalAnomalies::explained, confirmado el 17 de noviembre de 2026). `$anomalies`
+     * evita leer otra vez el mínimo por grupo si la página ya leyó los parámetros de Demand (DemandSettings).
      */
-    public function overview(CareerProposal $proposal, bool $withPendingCatalogs = true): ProposalOverview
+    public function overview(CareerProposal $proposal, bool $withPendingCatalogs = true, ?ProposalAnomalies $anomalies = null): ProposalOverview
     {
         $proposal->loadMissing([
             'term',
@@ -256,7 +263,8 @@ final class CareerProposalQuery
                 'eligible_by_campus' => $eligibleByCampus,
             ],
             pendingCatalogs: $pendingCatalogs,
-            anomalies: ProposalAnomalies::fromSettings(),
+            explained: $this->explained($proposal, $items),
+            anomalies: $anomalies ?? ProposalAnomalies::fromSettings(),
             specialtyOf: $specialtyOf,
             specialties: $specialties,
             seriation: $seriation,
@@ -289,5 +297,24 @@ final class CareerProposalQuery
         }
 
         return array_values($byUser);
+    }
+
+    /**
+     * Lo que explica la proyección vigente para cada fila (ProposalAnomalies::explained, con el nuevo ingreso corregido de su
+     * columna), por id de fila; las filas sin proyección no aparecen. Dos consultas.
+     *
+     * @param  Collection<int, ProposalItem>  $items
+     * @return array<string, int>
+     */
+    private function explained(CareerProposal $proposal, Collection $items): array
+    {
+        $forecasts = $this->forecasts->forCareer($proposal->term, $proposal->modality, $proposal->career);
+        $corrected = ProposalIntake::query()->where('career_proposal_id', $proposal->getKey())->whereNotNull('captured_at')
+            ->get(['campus_id', 'new_students'])->mapWithKeys(fn (ProposalIntake $intake): array => [(string) $intake->campus_id => (int) $intake->new_students]);
+
+        return $items
+            ->mapWithKeys(fn (ProposalItem $item): array => [$item->getKey() => ProposalAnomalies::explained($item->eligible_students, $forecasts->get($item->subject_id)?->get($item->campus_id ?? ''), $corrected->get((string) $item->campus_id))])
+            ->filter(fn (?int $explained): bool => $explained !== null)
+            ->all();
     }
 }

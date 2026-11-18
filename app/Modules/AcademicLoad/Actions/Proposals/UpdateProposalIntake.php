@@ -18,7 +18,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * de 2026: Nexus lo precarga y el coordinador lo puede corregir). De 0 a 1000. Lo sugerido se guarda aparte
  * (`suggested_new_students`) y lo corregido queda marcado (`captured_at`, `captured_by`): la proyección ya no lo mueve
  * sola. Sin cambios no escribe. Como los paquetes sugeridos salen del nuevo ingreso vigente, después pone al día los
- * paquetes sin tocar de esa columna (SyncPackageCounts).
+ * paquetes sin tocar de esa columna (SyncPackageCounts) y, con ellos, los esperados y los grupos de las filas sin tocar de
+ * primer semestre de la columna (SyncProposalSuggestions: los de la proyección menos su nuevo ingreso más el corregido;
+ * supuesto por confirmar, pedido el 17 de noviembre de 2026). Las filas corregidas no se tocan.
  *
  * En una transacción bloquea la propuesta, en borrador o regresada. Quién puede lo decide
  * CareerProposalPolicy::updateColumn antes de llamarla (M7).
@@ -29,6 +31,7 @@ final class UpdateProposalIntake
         private readonly ProposalPackageGuard $guard,
         private readonly ProposalPackageRules $rules,
         private readonly SyncPackageCounts $sync,
+        private readonly SyncProposalSuggestions $suggestions,
     ) {}
 
     /**
@@ -59,6 +62,8 @@ final class UpdateProposalIntake
             $intake->forceFill(['new_students' => $newStudents, 'captured_at' => now(), 'captured_by' => $actor->getKey()])->save();
 
             $this->sync->handle($proposal, $actor);
+            // Las filas sin tocar de primer semestre de la columna siguen al nuevo ingreso corregido (SyncProposalSuggestions).
+            $this->suggestions->syncColumn($proposal, $intake->campus_id);
 
             activity()
                 ->performedOn($intake)

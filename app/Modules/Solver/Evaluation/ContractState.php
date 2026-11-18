@@ -36,12 +36,12 @@ use App\Modules\Solver\Contract\TimeSlot;
  *   o sus `fixed_sessions` si no. El alcance son los movibles.
  * - El contrato no trae ids de materia, modalidad ni campus: la materia es su clave (`subject_code`) con las horas y el
  *   laboratorio del grupo, el campus es su clave y la modalidad es una por campus (`<modalidad>:<campus>`), con el
- *   perfil de la rejilla de ese campus (HC-04; con bloques de tiempo, y la tolerancia de HC-12 en cero porque el motor
- *   programa las horas exactas). Las reglas solo comparan igualdad.
+ *   perfil de la rejilla de ese campus (HC-04; con bloques de tiempo) y la tolerancia de HC-12 de la entrada
+ *   (`weekly_hours_tolerance`). Las reglas solo comparan igualdad.
  * - HC-03 sigue las cohortes de la entrada: cada clave `plan:<plan>:<semestre>:<campus>` mete al grupo en ese semestre
  *   del alumno tipo, y un grupo sin clave de plan no cuenta en ninguno (la entrada no trae los otros grupos de su
- *   materia, así que parecería el único). La clave `package:<id>:<campus>:<n>` (o la anterior, `package:<id>:<n>`) da
- *   el paquete y su número al grupo, que es lo que revisa TypicalStudentSchedule.
+ *   materia, así que parecería el único). La clave `package:<id>:<campus>:<n>` da el paquete y su número al grupo,
+ *   que es lo que revisa TypicalStudentSchedule.
  * - La ocupación de fuera de la corrida entra como grupos de contexto (ids con el prefijo CONTEXT), activos y sin horas:
  *   los `busy` de un docente, uno por docente y campus (sin `campus_code`, el campus de su primer grupo con él; supuesto
  *   por confirmar), y los `busy` de un salón, uno por salón. Ninguna violación de un grupo de contexto sale del adaptador.
@@ -116,6 +116,7 @@ final readonly class ContractState
                 'day_start' => $grid->dayStart,
                 'day_end' => $grid->dayEnd,
                 'days' => $grid->days,
+                'weekly_hours_tolerance' => $input->weeklyHoursTolerance,
             ]));
         }
 
@@ -290,8 +291,8 @@ final readonly class ContractState
 
             if ($parts[0] === 'plan' && count($parts) === 4) {
                 $semesters[] = [self::modalityOf($input, $parts[3]), $parts[3], $parts[1], (int) $parts[2]];
-            } elseif ($parts[0] === 'package' && $package === null && in_array(count($parts), [3, 4], true)) {
-                $package = [$parts[1], (int) $parts[count($parts) - 1]];
+            } elseif ($parts[0] === 'package' && $package === null && count($parts) === 4) {
+                $package = [$parts[1], (int) $parts[3]];
             }
         }
 

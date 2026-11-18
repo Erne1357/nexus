@@ -9,8 +9,9 @@ use App\Modules\Core\Authorization\UnitApplicability;
 use App\Modules\Core\Enums\OrgUnitKind;
 
 /**
- * Permisos del módulo AcademicLoad: la carga académica de un departamento, la propuesta de una carrera y la
- * bandeja donde el departamento decide su parte. La clave es `academic_load.<recurso>.<accion>`. Se lee a nivel de
+ * Permisos del módulo AcademicLoad: la carga académica de un departamento, la propuesta de una carrera, la
+ * bandeja donde el departamento decide su parte y el tablero «Demanda por materia» (tarea 5.7), que se lee por
+ * departamento (las materias que imparte) o por carrera (las materias que lleva, en todos los departamentos). La clave es `academic_load.<recurso>.<accion>`. Se lee a nivel de
  * modalidad y se escribe con campus (AZ-S17, MS6): la carga y la bandeja declaran modalidad y unidad (el
  * departamento); la propuesta, modalidad y carrera, y corregir una fila (de un campus, M7) también el campus; el
  * préstamo de salón o el grupo compartido, que es de un campus, modalidad, campus y unidad.
@@ -20,6 +21,8 @@ enum AcademicLoadPermission: string implements Permission
     case AgreementView = 'academic_load.agreement.view';
     case AgreementRequest = 'academic_load.agreement.request';
     case AgreementDecide = 'academic_load.agreement.decide';
+    case DemandViewDepartment = 'academic_load.demand.view_department';
+    case DemandViewCareer = 'academic_load.demand.view_career';
     case LoadView = 'academic_load.load.view';
     case LoadPropose = 'academic_load.load.propose';
     case LoadStartStaffing = 'academic_load.load.start_staffing';
@@ -45,6 +48,8 @@ enum AcademicLoadPermission: string implements Permission
             self::AgreementView => 'Ver los acuerdos entre departamentos',
             self::AgreementRequest => 'Pedir un préstamo de salón o proponer un grupo compartido',
             self::AgreementDecide => 'Aceptar o rechazar un acuerdo dirigido al departamento',
+            self::DemandViewDepartment => 'Ver la demanda por materia de un departamento',
+            self::DemandViewCareer => 'Ver la demanda por materia de las materias de una carrera',
             self::LoadView => 'Ver la carga académica de un departamento',
             self::LoadPropose => 'Proponer la carga de un departamento',
             self::LoadStartStaffing => 'Pasar la carga a asignación docente',
@@ -76,9 +81,9 @@ enum AcademicLoadPermission: string implements Permission
         return match ($this) {
             self::AgreementRequest => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ProposalUpdate => [Dimension::Modality, Dimension::Career, Dimension::Campus],
-            self::AgreementView, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
+            self::AgreementView, self::AgreementDecide, self::DemandViewDepartment, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
             self::ForecastEvaluationView, self::ForecastEvaluationRun => [],
-            self::ProposalCreate, self::ProposalSubmit, self::ProposalView => [Dimension::Modality, Dimension::Career],
+            self::ProposalCreate, self::ProposalSubmit, self::ProposalView, self::DemandViewCareer => [Dimension::Modality, Dimension::Career],
         };
     }
 
