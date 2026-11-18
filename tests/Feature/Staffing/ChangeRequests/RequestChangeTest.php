@@ -105,6 +105,7 @@ it('exige la carga en asignación o ajustes', function (LoadStatus $status, bool
     'ajustes' => [LoadStatus::Adjusting, true],
     'cerrada' => [LoadStatus::Closed, false],
     'publicada' => [LoadStatus::Published, false],
+    're-análisis (RA-01: las solicitudes siguen limitadas a asignación y ajustes)' => [LoadStatus::Reanalysis, false],
 ]);
 
 it('rechaza un grupo cancelado', function () {

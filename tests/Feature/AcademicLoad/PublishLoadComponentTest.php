@@ -149,6 +149,11 @@ it('dice por qué no se puede publicar', function (Closure $arrange, string $rea
 
         return test()->subdireccion;
     }, 'Se publica cuando la carga está cerrada.'],
+    'en re-análisis (RA-10: se cierra, o se cancela sin cambios)' => [function () {
+        test()->load->update(['status' => LoadStatus::Reanalysis]);
+
+        return test()->subdireccion;
+    }, 'En re-análisis se cierra la carga para republicarla; si no cambió nada, se cancela el re-análisis.'],
     'con visto bueno, cerrada sin aprobar' => [function () {
         modalityOf('PRES')->update(['settings' => [...ModalityProfile::DEFAULTS, 'requires_subdireccion_approval' => true]]);
 

@@ -58,6 +58,14 @@ it('rechaza si el grupo no tiene docente', function () {
     expect(fn () => app(UnassignTeacher::class)->handle($this->group, $this->actor, 'Otra vez.'))->toThrow(ValidationException::class);
 });
 
+it('quita al docente con la carga en re-análisis', function () {
+    $this->load->update(['status' => LoadStatus::Reanalysis]);
+
+    app(UnassignTeacher::class)->handle($this->group, $this->actor, 'Renunció.');
+
+    expect($this->group->fresh()->teacher_id)->toBeNull();
+});
+
 it('rechaza si la carga ya no está en asignación ni ajustes', function () {
     $this->load->update(['status' => LoadStatus::Closed]);
 

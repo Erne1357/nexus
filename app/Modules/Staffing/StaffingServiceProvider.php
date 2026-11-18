@@ -41,6 +41,7 @@ use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\ReanalysisRepublicationDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
@@ -282,6 +283,11 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::Publication, 'Terreno limpio para cerrar: solicitudes de cambio pendientes rechazadas y acuerdos propuestos aceptados o cancelados', fn (DemoContext $demo) => $closing($demo, 'clean')),
             new DemoStep(DemoCheckpoint::Publication, 'Grupos sin docente o sin salón, con la justificación del jefe', fn (DemoContext $demo) => $closing($demo, 'justified')),
             new DemoStep(DemoCheckpoint::Publication, 'Cada carga con grupos, cerrada por su jefe (grupos confirmados)', fn (DemoContext $demo) => $closing($demo, 'closed')),
+            // Los casos del re-análisis (fase 8, #614), después de los ajustes de Scheduling: docentes cambiados, cierres, la
+            // devolución de Subdirección, las versiones 2, la reimportación del kárdex y la corrección en versión 3.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Docentes cambiados, re-análisis cerrados y republicados, una devolución y una corrección en versión 3', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisRepublicationDemoSeeder::class, [
+                'term' => $demo->termCode,
+            ])),
         ];
     }
 
