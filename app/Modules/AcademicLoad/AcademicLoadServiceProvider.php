@@ -25,6 +25,7 @@ use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Listeners\BlockDepartmentDeletionWithLoads;
 use App\Modules\AcademicLoad\Listeners\BlockReviewReopeningAfterDraft;
 use App\Modules\AcademicLoad\Listeners\CreateLoadsOnTermOpened;
+use App\Modules\AcademicLoad\Listeners\NotifyAffectedOnRepublication;
 use App\Modules\AcademicLoad\Listeners\NotifyCoordinatorsOnProposalReturned;
 use App\Modules\AcademicLoad\Listeners\NotifyDepartmentsOnProposalSubmitted;
 use App\Modules\AcademicLoad\Listeners\NotifyOnLoadClosingTransition;
@@ -111,6 +112,7 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         Event::listen(DemandForecastsComputed::class, SyncProposalsOnForecastsComputed::class);
         Event::listen(DemandForecastsComputed::class, NotifyReanalysisAvailableOnForecastsComputed::class);
         Event::listen(LoadTransitioned::class, RecordGroupHistoryOnPublication::class);
+        Event::listen(LoadTransitioned::class, NotifyAffectedOnRepublication::class);
 
         RateLimiter::for('published-schedule', fn (Request $request): Limit => Limit::perMinute(PublishedThrottle::PER_MINUTE)->by(PublishedThrottle::who($request)));
 

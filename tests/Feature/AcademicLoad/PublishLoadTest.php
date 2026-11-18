@@ -106,7 +106,7 @@ it('deja una entrada de bitácora de la publicación con su versión', function 
 
     $entry = Activity::query()->where('subject_id', $this->load->id)->where('event', 'published')->sole();
 
-    expect($entry->properties->all())->toBe(['version' => 1, 'groups' => 2, 'sessions' => 2])
+    expect($entry->properties->all())->toBe(['version' => 1, 'groups' => 2, 'sessions' => 2, 'reason' => 'published'])
         ->and($entry->causer_id)->toBe($this->publisher->id);
 });
 

@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad\Actions\Transitions;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\AcademicLoad\Queries\ReanalysisCycleQuery;
 use App\Modules\Core\Models\User;
 use Illuminate\Validation\ValidationException;
 
@@ -19,7 +20,10 @@ final class ReopenLoad
 {
     private const array REOPENABLE = [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published];
 
-    public function __construct(private readonly TransitionLoad $transition) {}
+    public function __construct(
+        private readonly TransitionLoad $transition,
+        private readonly ReanalysisCycleQuery $cycle,
+    ) {}
 
     /**
      * @throws ValidationException si falta el motivo o el estado de la carga no permite reabrirla
@@ -43,9 +47,7 @@ final class ReopenLoad
             return LoadStatus::Adjusting;
         }
 
-        $closedFrom = $load->transitions()->where('to_status', LoadStatus::Closed)->orderByDesc('created_at')->orderByDesc('id')->value('from_status');
-
-        return $closedFrom === LoadStatus::Reanalysis ? LoadStatus::Reanalysis : LoadStatus::Adjusting;
+        return $this->cycle->closedFromReanalysis($load) ? LoadStatus::Reanalysis : LoadStatus::Adjusting;
     }
 
     /**
