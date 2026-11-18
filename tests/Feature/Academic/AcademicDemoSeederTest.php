@@ -39,7 +39,9 @@ it('siembra las 6 carreras de Campus II con un plan vigente cada una', function 
     expect($offered->pluck('career.code')->all())->toEqualCanonicalizing(['LADM', 'COPU', 'ISIC', 'IIND', 'ILOG', 'IGEM'])
         ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_active', true)->count() === 1))->toBeTrue()
         ->and($offered->every(fn (CareerCampus $offering): bool => $offering->career->studyPlans()->where('is_current', true)->count() === 1))->toBeTrue()
-        ->and(CareerCampus::query()->whereRelation('campus', 'code', 'C1')->exists())->toBeFalse();
+        // En C1 solo queda la oferta que agrega la demo de Demand para el caso «carrera ofrecida por primera vez en un
+        // campus», sin alumnos (DemandRareCasesDemoSeeder, tarea 5.10b).
+        ->and(CareerCampus::query()->whereRelation('campus', 'code', 'C1')->with('career')->get()->pluck('career.code')->all())->toBe(['COPU']);
 });
 
 it('deja los casos extremos para probar las pantallas', function () {
