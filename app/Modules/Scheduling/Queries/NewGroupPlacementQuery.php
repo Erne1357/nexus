@@ -63,11 +63,11 @@ final class NewGroupPlacementQuery
      */
     public function freeRooms(AcademicLoad $load, NewGroupSpec $spec, NewGroupPlacement $placement): array
     {
-        $current = $placement->roomIds();
-
-        if (count($current) !== 1 || in_array(null, array_column($placement->sessions, 'roomId'), true)) {
+        if (! $placement->isEditable()) {
             return [];
         }
+
+        $current = $placement->roomIds();
 
         $needsLab = (bool) Subject::withTrashed()->whereKey($spec->subjectId)->value('needs_lab');
         $rooms = Room::query()

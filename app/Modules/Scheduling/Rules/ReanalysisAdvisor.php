@@ -453,7 +453,7 @@ final class ReanalysisAdvisor
         $spec = $opening?->specFor($careerId, $code, $gap);
         $evidence = [
             "{$code}: faltan {$gap} lugares aunque se amplíen los grupos que caben",
-            $groups === [] ? 'No hay grupos de la materia en el campus.' : 'Ningún grupo puede crecer más: su salón no da para más y no hay uno más grande libre a su hora (HC-05).',
+            $groups === [] ? 'No hay grupos de la materia en el campus.' : 'Ningún grupo crece más: su salón no da para más y no hay uno mayor libre a su hora (HC-05)',
         ];
 
         if ($spec === null) {

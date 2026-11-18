@@ -161,7 +161,7 @@ describe('faltante', function () {
             ->and($open->newGroup->seats)->toBe(20)
             ->and($open->newGroup->studyPlanId)->toBe('plan')
             ->and($open->newGroup->cohortKey())->toBe('plan:plan:2:C2')
-            ->and($open->evidence)->toBe(['ISIC: faltan 20 lugares aunque se amplíen los grupos que caben', 'Ningún grupo puede crecer más: su salón no da para más y no hay uno más grande libre a su hora (HC-05).'])
+            ->and($open->evidence)->toBe(['ISIC: faltan 20 lugares aunque se amplíen los grupos que caben', 'Ningún grupo crece más: su salón no da para más y no hay uno mayor libre a su hora (HC-05)'])
             ->and($open->effect)->toBe(['Grupo nuevo en C2, suelto, con la clave que le toque por su hora.', 'Capacidad 35 · 20 lugares para ISIC (semestre 2).', 'Sin docente: asígnalo en Asignación docente.'])
             ->and(array_keys($open->expected))->toBe(['group-A', 'group-B'])
             ->and($suggestions['open_group:IIND']->seats)->toBe(10);

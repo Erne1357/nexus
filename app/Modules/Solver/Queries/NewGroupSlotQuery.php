@@ -80,7 +80,7 @@ final class NewGroupSlotQuery
             score: $placed === [] ? 0 : $output->softScore->total,
             scoreByRule: $placed === [] ? [] : $byRule,
             reasons: $placed === [] && $reasons === [] ? ['El motor no le encontró lugar.'] : $reasons,
-            evidence: $placed === [] ? [] : [$this->scoreLine($output->softScore->total, $byRule), 'Sin choques duros con los '.(count($input->groups) - 1).' grupos de la carga y los que comparten salón, docente o cohorte, todos fijos.'],
+            evidence: $placed === [] ? [] : ['Sin choques duros con los '.(count($input->groups) - 1).' grupos que deja fijos', $this->scoreLine($output->softScore->total, $byRule)],
             seconds: round($clock() - $started, 2),
         );
     }
@@ -133,7 +133,7 @@ final class NewGroupSlotQuery
     }
 
     /**
-     * «Puntaje blando que agrega: 6 (SC-01 2, SC-07 4).»
+     * «Puntaje blando que agrega: 6 (SC-01 2, SC-07 4)», o solo el total si es cero.
      *
      * @param  array<string, int>  $byRule
      */
@@ -141,6 +141,6 @@ final class NewGroupSlotQuery
     {
         $parts = array_map(fn (string $rule, int $value): string => "{$rule} {$value}", array_keys($byRule), $byRule);
 
-        return "Puntaje blando que agrega: {$total}".($parts === [] ? ' (ninguna regla blanda le cuesta)' : ' ('.implode(', ', $parts).')').'.';
+        return "Puntaje blando que agrega: {$total}".($parts === [] ? '' : ' ('.implode(', ', $parts).')');
     }
 }

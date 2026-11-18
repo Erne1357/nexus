@@ -4,15 +4,19 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Scheduling\Actions\ApplyReanalysisSuggestion;
+use App\Modules\Scheduling\Actions\OpenReanalysisGroup;
 use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\NewGroupPlacementQuery;
 use App\Modules\Scheduling\Queries\ReanalysisBlock;
 use App\Modules\Scheduling\Queries\ReanalysisBoardQuery;
 use App\Modules\Scheduling\Queries\ReanalysisLoadsQuery;
 use App\Modules\Scheduling\Queries\ReanalysisSuggestions;
 use App\Modules\Scheduling\Queries\ReanalysisSuggestionsQuery;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -37,6 +41,13 @@ use Mary\Traits\Toast;
  *
  * Descartar es solo de esta pantalla (supuesto por confirmar): la sugerencia se esconde mientras la página siga abierta y
  * vuelve al recargar; no se guarda. Al aplicar, avisa a la página con `reanalysis-adjusted` para que pinte lo ya ajustado.
+ *
+ * «Abrir un grupo» (tarea 8.3b) pide su horario y su salón al motor solo cuando el jefe lo busca en su tarjeta
+ * (`findPlacement()`, NewGroupPlacementQuery: 0.7–0.8 s con la demo masiva, así que va en la petición y no en cola) y lo
+ * guarda en `placements` con la firma de la sugerencia: nunca se calcula al pintar, y si la sugerencia cambia (se aplicó
+ * otra), el lugar ya no se usa y se vuelve a buscar. «Editar» elige otro salón libre de la lista cuando todas sus sesiones
+ * van en uno (NewGroupPlacementQuery::freeRooms()); «Aplicar» lo crea con OpenReanalysisGroup, que revisa con los candados
+ * puestos que siga libre.
  */
 new class extends Component
 {
@@ -68,6 +79,26 @@ new class extends Component
     /** Los lugares que se suman al aplicar la sugerencia que se edita. */
     public ?int $editSeats = null;
 
+    /**
+     * El lugar que encontró el motor para cada «Abrir un grupo», por discardKey(): la firma de la sugerencia con la que
+     * se buscó (signature()) y el lugar (NewGroupPlacement::toArray()).
+     *
+     * @var array<string, array{signature: string, placement: array<string, mixed>}>
+     */
+    #[Locked]
+    public array $placements = [];
+
+    /**
+     * Los salones a los que se puede cambiar el grupo nuevo que se edita, por id.
+     *
+     * @var array<string, array{code: string, capacity: int}>
+     */
+    #[Locked]
+    public array $roomOptions = [];
+
+    /** El salón elegido al editar «Abrir un grupo». */
+    public ?string $editRoomId = null;
+
     /** Las sugerencias ya calculadas en esta petición (no viajan al navegador); aplicar las borra. */
     private ?ReanalysisSuggestions $advice = null;
 
@@ -88,18 +119,33 @@ new class extends Component
     }
 
     /**
-     * Aplica una sugerencia, con los lugares editados si es la que se edita.
+     * Aplica una sugerencia, con los lugares editados si es la que se edita. «Abrir un grupo» se aplica con el lugar que
+     * encontró el motor (y el salón editado); si no se pudo, ese lugar se olvida para buscarlo otra vez.
      */
-    public function apply(string $key, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query, ApplyReanalysisSuggestion $action): void
+    public function apply(string $key, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query, ApplyReanalysisSuggestion $action, OpenReanalysisGroup $open): void
     {
+        $suggestion = null;
+
         try {
             $load = $this->authorizeAdjust($context, $loads);
             $suggestion = $this->suggestion($key, $load, $context, $loads, $boards, $query);
+
+            if ($suggestion->kind === ReanalysisSuggestionKind::OpenGroup) {
+                $this->openGroup($load, $suggestion, $context, $open);
+
+                return;
+            }
+
             $seats = $this->editing === $key ? $this->editedSeats($suggestion) : null;
             $action->handle($load, $suggestion, $context->user(), $seats);
         } catch (ValidationException $exception) {
-            if ($exception->validator->errors()->has('editSeats')) {
+            if ($exception->validator->errors()->hasAny(['editSeats', 'editRoomId'])) {
                 throw $exception;
+            }
+
+            if ($suggestion?->kind === ReanalysisSuggestionKind::OpenGroup) {
+                unset($this->placements[$this->discardKey($key)]);
+                $this->cancelEdit();
             }
 
             $this->error('No se aplicó la sugerencia', e(implode(' ', $exception->validator->errors()->all())));
@@ -115,15 +161,71 @@ new class extends Component
     }
 
     /**
-     * Abre la edición de los lugares que suma una sugerencia.
+     * Busca con el motor el horario y el salón del grupo nuevo de «Abrir un grupo» y los guarda en la pantalla: se calcula
+     * aquí, una vez, nunca al pintar.
      */
-    public function edit(string $key, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query): void
+    public function findPlacement(string $key, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query, NewGroupPlacementQuery $placements): void
+    {
+        try {
+            $load = $this->authorizeAdjust($context, $loads);
+            $suggestion = $this->suggestion($key, $load, $context, $loads, $boards, $query);
+        } catch (ValidationException $exception) {
+            $this->error('No se buscó el lugar', e(implode(' ', $exception->validator->errors()->all())));
+
+            return;
+        }
+
+        abort_unless($suggestion->kind === ReanalysisSuggestionKind::OpenGroup && $suggestion->newGroup !== null, 403);
+
+        $placement = $placements->place($load, $suggestion->newGroup);
+
+        if ($placement === null) {
+            $this->error('No se buscó el lugar', 'El motor de horarios no está disponible: abre el grupo desde Horarios.');
+
+            return;
+        }
+
+        if ($this->editing === $key) {
+            $this->cancelEdit();
+        }
+
+        $this->placements[$this->discardKey($key)] = ['signature' => $this->signature($suggestion), 'placement' => $placement->toArray()];
+    }
+
+    /**
+     * Abre la edición de los lugares que suma una sugerencia o, en «Abrir un grupo», del salón del grupo nuevo: los libres
+     * a todas sus horas (si todas sus sesiones van en un salón).
+     */
+    public function edit(string $key, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query, NewGroupPlacementQuery $placements): void
     {
         try {
             $load = $this->authorizeAdjust($context, $loads);
             $suggestion = $this->suggestion($key, $load, $context, $loads, $boards, $query);
         } catch (ValidationException $exception) {
             $this->error('No se puede editar', e(implode(' ', $exception->validator->errors()->all())));
+
+            return;
+        }
+
+        if ($suggestion->kind === ReanalysisSuggestionKind::OpenGroup) {
+            $placement = $this->placementOf($suggestion);
+            abort_unless($placement !== null && $placement->isEditable(), 403);
+            $rooms = $placements->freeRooms($load, $suggestion->newGroup, $placement);
+
+            if ($rooms === []) {
+                $this->info('Sin otro salón', 'No hay otro salón libre a todas sus horas que le sirva al grupo nuevo.');
+
+                return;
+            }
+
+            $this->resetValidation();
+            $this->editing = $key;
+            $this->editRoomId = $rooms[0]->id;
+            $this->roomOptions = [];
+
+            foreach ($rooms as $room) {
+                $this->roomOptions[$room->id] = ['code' => $room->code, 'capacity' => $room->capacity];
+            }
 
             return;
         }
@@ -140,6 +242,8 @@ new class extends Component
         $this->resetValidation();
         $this->editing = null;
         $this->editSeats = null;
+        $this->editRoomId = null;
+        $this->roomOptions = [];
     }
 
     /**
@@ -159,6 +263,7 @@ new class extends Component
             $this->cancelEdit();
         }
 
+        unset($this->placements[$this->discardKey($key)]);
         $this->discarded = array_values(array_unique([...$this->discarded, $this->discardKey($key)]));
     }
 
@@ -183,7 +288,7 @@ new class extends Component
      */
     public function with(Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query): array
     {
-        $empty = ['block' => null, 'load' => null, 'suggestions' => [], 'advice' => null, 'adjustReason' => null, 'blocked' => [], 'discardedCount' => 0];
+        $empty = ['block' => null, 'load' => null, 'suggestions' => [], 'advice' => null, 'adjustReason' => null, 'blocked' => [], 'discardedCount' => 0, 'placements' => []];
 
         if (! $this->show || $this->subjectId === null) {
             return $empty;
@@ -205,8 +310,12 @@ new class extends Component
             'suggestions' => $visible,
             'advice' => $advice,
             'adjustReason' => $this->adjustReason($load),
-            'blocked' => $this->blockedReasons($visible, $advice),
+            'blocked' => $this->blockedReasons($visible, $advice, $load),
             'discardedCount' => count($advice->suggestions) - count($visible),
+            'placements' => array_filter(array_combine(
+                array_map(fn (ReanalysisSuggestion $suggestion): string => $suggestion->key, $visible),
+                array_map($this->placementOf(...), $visible),
+            )),
         ];
     }
 
@@ -243,6 +352,51 @@ new class extends Component
     private function discardKey(string $key): string
     {
         return "{$this->subjectId}|{$this->campusId}|{$key}";
+    }
+
+    /**
+     * El lugar que encontró el motor para «Abrir un grupo», si se buscó con la sugerencia como está ahora.
+     */
+    private function placementOf(ReanalysisSuggestion $suggestion): ?NewGroupPlacement
+    {
+        $stored = $suggestion->newGroup === null ? null : ($this->placements[$this->discardKey($suggestion->key)] ?? null);
+
+        return $stored !== null && $stored['signature'] === $this->signature($suggestion) ? NewGroupPlacement::fromArray($stored['placement']) : null;
+    }
+
+    /**
+     * Lo que hace única a una sugerencia de abrir un grupo: el grupo nuevo y los grupos del bloque como se leyeron.
+     */
+    private function signature(ReanalysisSuggestion $suggestion): string
+    {
+        return md5(serialize([$suggestion->newGroup, $suggestion->expected]));
+    }
+
+    /**
+     * Crea el grupo nuevo de «Abrir un grupo» con el lugar del motor y, si se editó, el salón elegido de la lista.
+     *
+     * @throws ValidationException
+     */
+    private function openGroup(AcademicLoad $load, ReanalysisSuggestion $suggestion, Actor $context, OpenReanalysisGroup $open): void
+    {
+        $placement = $this->placementOf($suggestion)
+            ?? throw ValidationException::withMessages(['suggestion' => 'Busca primero el horario y el salón del grupo nuevo.']);
+
+        if ($this->editing === $suggestion->key) {
+            $this->validate(
+                ['editRoomId' => ['required', 'string', Rule::in(array_keys($this->roomOptions))]],
+                ['editRoomId.required' => 'Elige un salón.', 'editRoomId.in' => 'Elige un salón de la lista.'],
+            );
+            $placement = $placement->withRoom((string) $this->editRoomId, $this->roomOptions[$this->editRoomId]);
+        }
+
+        $group = $open->handle($load, $suggestion, $placement, $context->user());
+
+        unset($this->placements[$this->discardKey($suggestion->key)]);
+        $this->advice = null;
+        $this->cancelEdit();
+        $this->success('Grupo abierto', e("El grupo {$group->code} de {$suggestion->newGroup->subjectCode} para {$suggestion->newGroup->careerCode}: {$placement->scheduleLabel()}. Asígnale docente en Asignación docente. Entra en la versión ".($load->current_version + 1).' al publicar.'));
+        $this->dispatch('reanalysis-adjusted');
     }
 
     private function block(AcademicLoad $load, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards): ?ReanalysisBlock
@@ -289,13 +443,23 @@ new class extends Component
      * @param  list<ReanalysisSuggestion>  $suggestions
      * @return array<string, string>
      */
-    private function blockedReasons(array $suggestions, ReanalysisSuggestions $advice): array
+    private function blockedReasons(array $suggestions, ReanalysisSuggestions $advice, AcademicLoad $load): array
     {
         $blocked = [];
 
         foreach ($suggestions as $suggestion) {
             if ($suggestion->blockedReason !== null) {
                 $blocked[$suggestion->key] = $suggestion->blockedReason;
+
+                continue;
+            }
+
+            if ($suggestion->newGroup !== null) {
+                $draft = OpenReanalysisGroup::draft($load, $suggestion->newGroup);
+
+                if (! array_all(OpenReanalysisGroup::ABILITIES, fn (string $ability): bool => Gate::allows($ability, $draft))) {
+                    $blocked[$suggestion->key] = "No puedes abrir grupos de {$suggestion->newGroup->subjectCode} en {$suggestion->newGroup->campusCode}: lo hace la jefatura de su departamento.";
+                }
 
                 continue;
             }

@@ -2,7 +2,6 @@
 
 namespace App\Modules\Scheduling\Rules\Reanalysis;
 
-use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Validation\Minutes;
 
 /**
@@ -70,6 +69,15 @@ final readonly class NewGroupPlacement
     }
 
     /**
+     * Si se le puede cambiar el salón al editarlo: todas sus sesiones van en un mismo salón (lo simple; con varios, se deja
+     * como lo propuso el motor).
+     */
+    public function isEditable(): bool
+    {
+        return $this->isPlaced() && count($this->roomIds()) === 1 && ! in_array(null, array_column($this->sessions, 'roomId'), true);
+    }
+
+    /**
      * Los salones que usa, sin repetir, en el orden de sus sesiones.
      *
      * @return list<string>
@@ -95,14 +103,6 @@ final readonly class NewGroupPlacement
         }
 
         return implode(' · ', array_map(fn (array $session): string => Minutes::dayLabel($session['day'], short: true).' '.$hours($session), $this->sessions));
-    }
-
-    /**
-     * @return list<SessionKind>
-     */
-    public function kinds(): array
-    {
-        return array_map(fn (array $session): SessionKind => SessionKind::from($session['kind']), $this->sessions);
     }
 
     /**

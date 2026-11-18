@@ -44,7 +44,7 @@ it('HC-02, HC-03, HC-04, HC-05: coloca el grupo nuevo sin duras, con todo lo dem
         ->and($placement->reasons)->toBe([])
         ->and($placement->sessions)->toHaveCount(2)
         ->and(GroupSession::query()->orderBy('id')->get(['id', 'group_id', 'day', 'starts_at', 'ends_at', 'room_id'])->toArray())->toBe($sessions)
-        ->and($placement->evidence[0])->toStartWith('Puntaje blando que agrega: ')
+        ->and($placement->evidence)->toBe(['Sin choques duros con los 4 grupos que deja fijos', 'Puntaje blando que agrega: 0'])
         ->and($placement->scheduleLabel())->not->toBe('');
 
     $a = $this->world->groups['A']->sessions()->sole();
