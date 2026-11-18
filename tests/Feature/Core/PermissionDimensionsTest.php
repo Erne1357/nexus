@@ -87,6 +87,8 @@ function dimensionTables(): array
         'academic_load.proposal' => 'career_proposals',
         'academic_load.proposal_review' => 'proposal_reviews',
         'academic_load.agreement' => 'interdepartmental_agreements',
+        // «Demanda por materia» (5.7) compara la proyección con lo pedido: su tabla con campus es la proyección.
+        'academic_load.demand' => 'demand_forecasts',
         'academic_load.forecast_evaluation' => 'forecast_evaluations',
         'scheduling.schedule' => 'groups',
         'scheduling.group' => 'groups',
@@ -169,6 +171,8 @@ function modalityLevelPermissions(): array
         'scheduling.schedule.view' => 'MS6: los horarios se leen a nivel de modalidad; el campus es un filtro de la pantalla.',
         'academic_load.agreement.view' => 'MS6: los acuerdos se leen a nivel de modalidad, del departamento que pide o del que decide.',
         'academic_load.agreement.decide' => 'M12: el jefe decide los acuerdos de toda la modalidad de su departamento, de cualquier campus.',
+        'academic_load.demand.view_department' => 'Tarea 5.7: «Demanda por materia» es de todo el Tec, con una insignia por campus; se lee a nivel de modalidad.',
+        'academic_load.demand.view_career' => 'Tarea 5.7: la lente de carrera es de todo el Tec, como la propuesta de la carrera (M7); se lee a nivel de modalidad.',
     ];
 }
 

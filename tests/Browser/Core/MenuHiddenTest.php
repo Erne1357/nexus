@@ -142,8 +142,10 @@ it('el motivo flotante es de quien lo abrió: el cursor no cierra el del foco, e
 });
 
 it('abierto, si el motivo no cabe debajo de su entrada, sale arriba', function () {
+    // Alto bajo a propósito: el menú abierto se tiene que desplazar para que «Acuerdos» quede en su orilla de abajo
+    // (con más entradas en Propuesta, a 420 px ya cabía entero y el motivo salía abajo).
     $page = signInToHiddenMenu('admin')
-        ->resize(1440, 420)
+        ->resize(1440, 360)
         ->click('@hare')
         ->assertScript('Alpine.$data(document.body).busy === false');
 
