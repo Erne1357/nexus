@@ -48,6 +48,7 @@ final class ActivityRecordTypes
         'ChangeRequest' => 'Solicitud de cambio',
         'GroupTeacherAssignment' => 'Asignación docente',
         'Student' => 'Alumno',
+        'SolverRun' => 'Corrida del motor',
     ];
 
     /**

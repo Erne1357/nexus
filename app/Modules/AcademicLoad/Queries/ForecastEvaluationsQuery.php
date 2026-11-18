@@ -397,8 +397,8 @@ final class ForecastEvaluationsQuery
 
     /**
      * Para el bloque de arriba: las materias que cuentan (DM-21), las que tienen alumnos, cuántas de ellas quedaron
-     * dentro del 15 % (DM-23) y los grupos sugeridos y abiertos. Los abiertos son nulos si ninguna fila los trae: salen del
-     * historial de grupos, que todavía no llega (EvaluateForecast).
+     * dentro del 15 % (DM-23) y los grupos sugeridos y abiertos. Los abiertos son nulos si ninguna fila los trae (periodo sin
+     * historial de grupos) y, si no, se suman una vez por materia y campus, no por carrera (EvaluateForecast).
      *
      * @return array{counted: int, withStudents: int, within: int, suggestedGroups: int, openedGroups: ?int}
      */
@@ -408,8 +408,14 @@ final class ForecastEvaluationsQuery
             ->selectRaw('count(*) filter (where actual_students > 0 or projected > 0) as counted')
             ->selectRaw('count(*) filter (where actual_students > 0) as with_students')
             ->selectRaw('coalesce(sum(suggested_groups), 0) as suggested_groups')
-            ->selectRaw('sum(actual_groups) as opened_groups')
             ->first();
+        $opened = $this->filteredRows($evaluation, $campus, $department)
+            ->whereNotNull('actual_groups')
+            ->select('subject_id', 'campus_id', 'actual_groups')
+            ->distinct()
+            ->get()
+            ->sum('actual_groups');
+        $hasOpened = $this->filteredRows($evaluation, $campus, $department)->whereNotNull('actual_groups')->exists();
         $withStudents = (int) $row->with_students;
 
         return [
@@ -417,7 +423,7 @@ final class ForecastEvaluationsQuery
             'withStudents' => $withStudents,
             'within' => (int) round(($summary->withinShare ?? 0) * $withStudents),
             'suggestedGroups' => (int) $row->suggested_groups,
-            'openedGroups' => $row->opened_groups === null ? null : (int) $row->opened_groups,
+            'openedGroups' => $hasOpened ? (int) $opened : null,
         ];
     }
 
