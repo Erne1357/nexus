@@ -50,9 +50,10 @@
             <span {{ $requisites->attributes->class('truncate text-[11.5px] leading-4 text-neutral') }}>{{ $requisites }}</span>
         @endisset
         <span class="flex h-4 items-center justify-between gap-1.5 whitespace-nowrap font-mono text-xs leading-4">
-            {{-- Si no cabe, se recorta el inicio (cifras) y nunca el final, que lleva las señales de estado. --}}
-            <span class="min-w-0 overflow-hidden">{{ $start ?? '' }}</span>
-            <span class="flex shrink-0 gap-1.5">{{ $end ?? '' }}</span>
+            {{-- El inicio (las cifras) nunca se recorta. Si el final no cabe, sus señales se caen de la última a la primera: van
+                 en un solo renglón visible y las que no caben pasan a uno oculto, así que el orden del slot es su prioridad. --}}
+            <span class="shrink-0">{{ $start ?? '' }}</span>
+            <span class="flex h-4 min-w-0 flex-wrap justify-end gap-x-1.5 overflow-hidden">{{ $end ?? '' }}</span>
         </span>
     </span>
 </{{ $tag }}>

@@ -72,5 +72,8 @@
     @endif
     @if ($field === 'requested_groups' && $item->package_groups > 0)
         <span class="self-end whitespace-nowrap text-right font-mono text-[11.5px] leading-tight text-neutral" title="{{ $item->package_groups }} de estos grupos salen de los paquetes; los demás son sueltos." data-package-groups>{{ $item->package_groups }} de <abbr title="paquetes" class="no-underline">paq.</abbr></span>
+    @elseif ($item->package_groups > 0)
+        {{-- El mismo alto que «N de paq.» bajo los grupos, para que los dos campos de la fila queden alineados. --}}
+        <span class="invisible font-mono text-[11.5px] leading-tight" aria-hidden="true">0</span>
     @endif
 </div>

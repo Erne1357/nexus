@@ -212,6 +212,7 @@ final class ProposalForecastDemoSeeder extends Seeder
             }
 
             foreach ($corrected as $entry) {
+                $this->closeOutsideRows($entry['proposal']);
                 $this->review($entry['proposal']);
                 $this->decide($entry);
             }
@@ -431,6 +432,19 @@ final class ProposalForecastDemoSeeder extends Seeder
     }
 
     /**
+     * Las filas de otros campus que piden grupos quedan corregidas en cero, como en AcademicLoadDemoSeeder: la demo solo abre
+     * grupos en sus campus (M1). Va después del recálculo, porque una fila sin tocar de primer semestre sigue al nuevo ingreso
+     * corregido de su columna (la oferta nueva fuera de la demo) y el recálculo le vuelve a dar grupos. Las corrige quien
+     * coordina esa columna o, si nadie, el admin.
+     */
+    private function closeOutsideRows(CareerProposal $proposal): void
+    {
+        foreach ($this->rows($proposal, outside: true)->where('requested_groups', '>', 0)->where('package_groups', 0) as $item) {
+            $this->orWarn(fn () => app(UpdateProposalItem::class)->handle($item, $item->expected_students, 0, $item->notes, $this->columnActor($proposal, $item->campus_id)), "fila fuera de la demo de la propuesta {$proposal->getKey()}");
+        }
+    }
+
+    /**
      * El nuevo ingreso de las columnas de los campus de la demo, en orden de campus.
      *
      * @return Collection<int, ProposalIntake>
@@ -442,18 +456,13 @@ final class ProposalForecastDemoSeeder extends Seeder
     }
 
     /**
-     * Las correcciones de una propuesta en las filas de los campus de la demo (ver el docblock de la clase). Las filas de otros
-     * campus que piden grupos quedan en cero, como en AcademicLoadDemoSeeder.
-     */
-    /**
+     * Las correcciones de una propuesta en las filas de los campus de la demo (ver el docblock de la clase); las de otros
+     * campus las cierra closeOutsideRows(), después del recálculo.
+     *
      * @param  list<string>  $graded  las materias que va a calificar el recálculo (subjectsToGrade())
      */
     private function correctRows(CareerProposal $proposal, array $graded): void
     {
-        foreach ($this->rows($proposal, outside: true)->where('requested_groups', '>', 0)->where('package_groups', 0) as $item) {
-            $this->correct($proposal, $item, $item->expected_students, 0, $item->notes);
-        }
-
         foreach ($this->rows($proposal)->filter(fn (ProposalItem $item): bool => in_array($item->subject_id, $graded, true)) as $item) {
             $this->correct($proposal, $item, $this->nudged($item->expected_students), $item->requested_groups, $item->notes);
         }

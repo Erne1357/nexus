@@ -121,8 +121,12 @@
         </div>
 
         @if ($scopeNote)
+            {{-- En el celular, una línea y «Más» con el detalle (decidido el 17 de noviembre de 2026). --}}
             <x-alert icon="o-lock-closed" class="alert-info alert-soft min-h-0 items-center py-1.5 text-sm" data-testid="proposal-scope">
-                <span>Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados, los grupos y los paquetes de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</span>
+                <div x-data="{ more: false }" class="min-w-0">
+                    <p x-show="! more" class="md:hidden">Cambias lo de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. <button type="button" class="link font-medium" x-on:click="more = true" aria-expanded="false" data-testid="proposal-scope-more">Más</button></p>
+                    <p x-bind:class="{ 'max-md:hidden': ! more }" class="max-md:hidden">Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados, los grupos y los paquetes de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</p>
+                </div>
             </x-alert>
         @endif
 
@@ -218,6 +222,10 @@
                     @include('academic-load::proposal.departments')
 
                     <div class="min-w-0 space-y-4">
+                        {{-- Arriba de los paquetes, que también quedan bloqueados (decidido el 17 de noviembre de 2026). --}}
+                        @if ($view === 'tabla' && $generalLock)
+                            <x-alert icon="o-lock-closed" class="alert-warning alert-soft text-sm" :title="$generalLock->message('')" data-testid="table-lock" />
+                        @endif
                         @if ($packages?->shown())
                             @include('academic-load::proposal.packages')
                         @endif

@@ -135,6 +135,14 @@ describe('jefe de departamento', function () {
         expect(domOf($onC2)->querySelector('[data-testid="campus-filter-C2"]')->getAttribute('aria-pressed'))->toBe('true');
     });
 
+    it('la matriz solo lleva las carreras con alguna celda en lo que se ve (decidido el 17 de noviembre de 2026)', function () {
+        $codes = fn (array $columns): array => collect($columns)->map(fn (array $column): string => $column['career']->code)->sort()->values()->all();
+
+        demandPageAs($this->jefe)->assertViewHas('columns', fn (array $columns): bool => $codes($columns) === ['IGE', 'ISIC']);
+        // En Campus II solo IGE pide o tiene sugeridos: ISIC no ocupa columna.
+        demandPageAs($this->jefe, ['campus' => 'C2'])->assertViewHas('columns', fn (array $columns): bool => $codes($columns) === ['IGE']);
+    });
+
     it('quitar filtros deja la búsqueda y el filtro vacíos', function () {
         demandPageAs($this->jefe, ['buscar' => 'nada', 'filtro' => 'diferencia'])
             ->assertSee('Quitar filtros')

@@ -1,20 +1,22 @@
 {{--
-    La matriz materias × carreras de «Demanda por materia», desde 768 px. La columna de la materia queda fija a la
+    La matriz materias × carreras de «Demanda por materia». La columna de la materia queda fija a la
     izquierda y «Todo el Tec» a la derecha al desplazar la matriz de lado dentro de su caja (la página nunca desborda);
     sus fondos son opacos y repiten el del renglón. El encabezado de cada carrera dice el estado de su propuesta con su
     icono; en la lente de carrera, la suya va primero con un filete `primary` y su columna en un tinte `info`. Cada celda
     resaltada va en `warning` con su icono de tendencia. Al pie, la suma de lo que se ve. Tocar un renglón abre su drawer.
+    Solo van las carreras con alguna celda en lo que se ve (`$columns`, DemandBoard::columnsFor). Desde 1024 px; debajo, los
+    renglones apilados (decidido el 17 de noviembre de 2026, como «Avance de validación»).
 --}}
 @php($lensId = $board->career?->getKey())
 @php($stickyBody = 'bg-base-100 group-hover:bg-[color-mix(in_oklab,var(--color-base-200)_50%,var(--color-base-100))]')
 @php($stickyOpen = 'bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))]')
-<div class="relative hidden overflow-x-auto md:block">
+<div class="relative hidden overflow-x-auto lg:block">
     <table class="w-full border-separate border-spacing-0 text-sm" data-testid="demand-table">
         <caption class="sr-only">Grupos pedidos contra sugeridos por materia y carrera{{ $shownCampus ? ' en '.$shownCampus->name : '' }}</caption>
         <thead>
             <tr>
                 <th scope="col" class="sticky left-0 z-10 min-w-44 desktop:min-w-56 max-w-72 shadow-[8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-e border-base-300 bg-base-200 px-4 py-2.5 text-start align-bottom text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Materia</th>
-                @foreach ($board->careers as $column)
+                @foreach ($columns as $column)
                     @php($mine = $column['career']->getKey() === $lensId)
                     <th scope="col" title="{{ $column['career']->name }} · {{ $column['state']->label() }}"
                         @class([
@@ -47,7 +49,7 @@
                             <span class="block text-xs text-neutral"><span class="font-mono">{{ $subject->department?->code }}</span>@if ($row->semester !== null) · semestre {{ $row->semester }}@endif</span>
                         @endif
                     </th>
-                    @foreach ($board->careers as $column)
+                    @foreach ($columns as $column)
                         @php($cell = $row->cell($column['career']->getKey(), $campusId))
                         @php($mine = $column['career']->getKey() === $lensId)
                         <td @class([
@@ -84,7 +86,7 @@
         <tfoot data-testid="demand-footer">
             <tr class="font-semibold">
                 <th scope="row" class="sticky left-0 z-10 shadow-[8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-e border-t border-base-300 bg-base-200 px-4 py-2.5 text-start">Todo el Tec · <span class="font-mono tabular-nums">{{ count($visible) }}</span> {{ count($visible) === 1 ? 'materia' : 'materias' }}</th>
-                @foreach ($board->careers as $column)
+                @foreach ($columns as $column)
                     @php($sum = $footer['careers'][$column['career']->getKey()])
                     <td class="border-t border-base-300 bg-base-200 px-2.5 py-2.5 text-end whitespace-nowrap">
                         <span aria-hidden="true"><span class="font-mono tabular-nums">{{ $sum->counted }}</span><span class="font-mono font-normal tabular-nums text-neutral">/{{ $sum->suggested }}</span></span>

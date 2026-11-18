@@ -458,6 +458,62 @@ it('el tope de grupos no tumba la sincronización: recorta, deja bitácora y las
         ->and($big->fresh()->requested_groups)->toBeGreaterThanOrEqual($big->fresh()->package_groups);
 });
 
+/**
+ * La fila de la proyección de una fila de la propuesta en C1.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function packageForecastFor(ProposalItem $item, array $attributes): DemandForecast
+{
+    return DemandForecast::factory()->create([
+        'term_id' => test()->proposal->term_id,
+        'modality_id' => test()->proposal->modality_id,
+        'career_id' => test()->career->id,
+        'subject_id' => $item->subject_id,
+        'campus_id' => test()->c1->id,
+        ...$attributes,
+    ]);
+}
+
+it('corregir el nuevo ingreso mueve los esperados de las filas sin tocar de 1.º: los de la proyección menos su nuevo ingreso más el corregido', function () {
+    $first = untouchedFirstSemesterRow(160, 5, 140);
+    packageForecastFor($first, ['expected_students' => 160, 'suggested_groups' => 5, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+    $captured = untouchedFirstSemesterRow(160, 5, 140);
+    packageForecastFor($captured, ['expected_students' => 160, 'suggested_groups' => 5, 'new_students' => 140, 'method' => ForecastMethod::FirstSemester]);
+    $captured->update(['expected_students' => 150, 'requested_groups' => 5, 'captured_at' => now()]);
+    $second = untouchedFirstSemesterRow(70, 2, 140, method: ForecastMethod::Formula);
+    packageForecastFor($second, ['expected_students' => 70, 'suggested_groups' => 2, 'new_students' => null, 'method' => ForecastMethod::Formula]);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 70, $this->actor);
+
+    // 160 − 140 + 70 = 90 esperados; sin paquetes, los grupos de la regla: 90 / 35 hacia arriba = 3. Lo sugerido no cambia.
+    expect($first->fresh()->only(['expected_students', 'requested_groups', 'suggested_expected_students', 'suggested_groups']))
+        ->toBe(['expected_students' => 90, 'requested_groups' => 3, 'suggested_expected_students' => 160, 'suggested_groups' => 5])
+        ->and($first->fresh()->captured_at)->toBeNull()
+        ->and($captured->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 150, 'requested_groups' => 5])
+        ->and($second->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 70, 'requested_groups' => 2]);
+
+    // Con un paquete, los de paquetes cubren el nuevo ingreso corregido (2) y los sueltos, a los rezagados: 90 − 70 = 20, 1.
+    app(CreateProposalPackage::class)->handle($this->proposal, [$first->subject_id], null, $this->actor);
+
+    expect($first->fresh()->only(['expected_students', 'package_groups', 'requested_groups']))->toBe(['expected_students' => 90, 'package_groups' => 2, 'requested_groups' => 3]);
+
+    // Al recalcular la proyección se conserva: el nuevo ingreso corregido sigue mandando.
+    app(SyncProposalIntakes::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+    app(SyncProposalSuggestions::class)->handle($this->proposal->term_id, $this->proposal->modality_id, null, [$this->career->id]);
+
+    expect($first->fresh()->only(['expected_students', 'package_groups', 'requested_groups']))->toBe(['expected_students' => 90, 'package_groups' => 2, 'requested_groups' => 3]);
+});
+
+it('la oferta nueva: con 0 de nuevo ingreso y su corrección a 35, las filas sin tocar de 1.º esperan 35', function () {
+    $first = untouchedFirstSemesterRow(0, 0, 0);
+    packageForecastFor($first, ['eligible_students' => 0, 'expected_students' => 0, 'suggested_groups' => 0, 'new_students' => 0, 'method' => ForecastMethod::FirstSemester]);
+
+    app(UpdateProposalIntake::class)->handle($this->proposal, $this->c1, 35, $this->actor);
+
+    expect($first->fresh()->only(['expected_students', 'requested_groups']))->toBe(['expected_students' => 35, 'requested_groups' => 1]);
+});
+
 it('registra el conteo viejo y el nuevo de cada columna que se mueve', function () {
     $item = untouchedFirstSemesterRow(160, 5, 140);
     app(CreateProposalPackage::class)->handle($this->proposal, [$item->subject_id], null, $this->actor);

@@ -1,10 +1,10 @@
 {{--
-    Debajo de 768 px, la matriz de «Demanda por materia» en renglones apilados (maqueta C a 390 px): por materia, su
+    Debajo de 1024 px, la matriz de «Demanda por materia» en renglones apilados (maqueta C a 390 px): por materia, su
     clave y su total de todo el Tec con el reparto por campus, el nombre y una etiqueta por cada carrera que la lleva en
     el campus del filtro, con su celda (resaltada o punteada como en la matriz). Cada renglón abre el drawer.
 --}}
 @php($lensId = $board->career?->getKey())
-<ul class="divide-y divide-base-300 md:hidden" data-testid="demand-cards">
+<ul class="divide-y divide-base-300 lg:hidden" data-testid="demand-cards">
     @foreach ($visible as $row)
         @php($subject = $row->subject)
         @php($total = $row->total($campusId))

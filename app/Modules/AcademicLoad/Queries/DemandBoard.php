@@ -183,6 +183,27 @@ final readonly class DemandBoard
     }
 
     /**
+     * Las columnas de carrera de la matriz para unos renglones: las que tienen alguna celda en ellos, en el orden del
+     * tablero. Con un filtro, la búsqueda o un campus, las carreras sin celdas no ocupan columna (decidido el 17 de
+     * noviembre de 2026); sin filtro, son todas.
+     *
+     * @param  list<DemandBoardSubject>  $visible
+     * @return list<array{career: Career, state: DemandProposalState}>
+     */
+    public function columnsFor(array $visible, ?string $campusId = null): array
+    {
+        return array_values(array_filter($this->careers, function (array $column) use ($visible, $campusId): bool {
+            foreach ($visible as $row) {
+                if ($row->cell($column['career']->getKey(), $campusId) !== null) {
+                    return true;
+                }
+            }
+
+            return false;
+        }));
+    }
+
+    /**
      * Los renglones que se ven: los del campus del filtro, con la búsqueda por clave o nombre (sin distinguir mayúsculas
      * ni acentos) y el filtro `difference` o `pending` ('' son todas).
      *

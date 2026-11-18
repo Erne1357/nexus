@@ -127,9 +127,6 @@
                                 @if ($tileMark)
                                     <span class="inline-flex items-center {{ $tileMark[2] }}" title="{{ $tileMark[3] }}" data-forecast-mark="{{ $tileMark[0] }}"><x-icon :name="$tileMark[1]" class="h-4 w-4" aria-hidden="true" /><span class="sr-only">{{ $tileMark[3] }}</span></span>
                                 @endif
-                                @if ($code !== $majority)
-                                    <span class="font-normal" data-testid="dept-{{ $row->subject->code }}" title="{{ $row->subject->department->name }}">{{ $code }}</span>
-                                @endif
                                 @if ($anomalies !== [])
                                     <span class="inline-flex items-center gap-0.5 font-semibold text-warning" data-testid="anomaly-{{ $row->subject->code }}">
                                         <x-icon name="o-exclamation-triangle" @class(['shrink-0', 'w-3.5 h-3.5' => $multi, 'w-4 h-4' => ! $multi]) aria-hidden="true" />
@@ -141,6 +138,10 @@
                                         @endif
                                         <span class="sr-only">Revisar: {{ implode('; ', $anomalies) }}</span>
                                     </span>
+                                @endif
+                                {{-- Prioridad del pie (decidida el 17 de noviembre de 2026): grupos por campus, marca, anomalía; el departamento se cae primero. --}}
+                                @if ($code !== $majority)
+                                    <span class="font-normal" data-testid="dept-{{ $row->subject->code }}" title="{{ $row->subject->department->name }}">{{ $code }}</span>
                                 @endif
                             </x-slot:end>
                         </x-core::semester-grid.tile>

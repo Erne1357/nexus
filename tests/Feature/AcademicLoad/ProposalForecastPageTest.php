@@ -225,9 +225,8 @@ describe('pestaña Revisar proyección', function () {
             ->toContain('no inscripción 13 %')
             ->toContain('reprobación 40 %')
             ->toContain('4 Ene-Jun')
-            ->toContain('20 cursando hoy')
-            ->toContain('= 8')
-            ->toContain('48 × (1 − 0.125) + 8')
+            ->toContain('20 cursando hoy × 40 % × (1 − 12.5 %) = 8')
+            ->toContain('48 × (1 − 12.5 %) + 8')
             ->toContain('= 50')
             ->toContain('50 ÷ 35 hacia arriba = 2')
             ->not->toContain('1.4');
@@ -380,7 +379,7 @@ it('el panel de la materia lleva, por campus, la proyección con su evidencia', 
 
     $dom = domOf(forecastPageAs($this->ofC1)->call('edit', $row->subject_id)->html());
 
-    expect(textOf($dom->querySelector('[data-testid=panel-forecast-C1]')))->toContain('Corregido')->toContain('48 × (1 − 0.125) + 8')
+    expect(textOf($dom->querySelector('[data-testid=panel-forecast-C1]')))->toContain('Corregido')->toContain('48 × (1 − 12.5 %) + 8')
         ->and(textOf($dom->querySelector('[data-testid=panel-forecast-C2]')))->toContain('Sugerido');
 });
 

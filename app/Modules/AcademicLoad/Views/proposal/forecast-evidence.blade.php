@@ -4,7 +4,8 @@
     cuántos dependen de aprobar lo que cursan hoy), las tasas y cuántos periodos las dieron, los repetidores, la cuenta de
     los esperados y de los grupos en Mono, y el historial corto de los periodos del mismo tipo (grupos, lugares, inscritos
     y reprobados). Las cifras son las de la fila de la proyección tal como vienen, sin recalcular la fórmula: el resultado
-    de cada cuenta es el que guardó Demand (fórmula v2: repetidores = cursando × reprobación × (1 − no inscripción)). Los
+    de cada cuenta es el que guardó Demand (fórmula v2: repetidores = cursando × reprobación × (1 − no inscripción)), con las
+    tasas en porcentaje de hasta 2 decimales. Los
     grupos se cuentan «esperados ÷ tamaño hacia arriba» con el tamaño de la materia (25 con laboratorio, 35 sin él); si con
     el tamaño de hoy no dan los grupos guardados, solo se dice cuántos.
 
@@ -13,7 +14,8 @@
 @php
     $forecastData = $forecastRow->forecast;
     $forecastItem = $forecastRow->item;
-    $decimal = fn (float $value): string => rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.') ?: '0';
+    // En la cuenta, cada tasa como porcentaje con hasta 2 decimales («11.25 %»), como las lee la gente (decidido el 17 de noviembre de 2026).
+    $rate = fn (float $value): string => (rtrim(rtrim(number_format($value * 100, 2, '.', ''), '0'), '.') ?: '0').' %';
     $percent = fn (float $value): int => (int) round($value * 100);
     $where = $forecastRow->campus?->code;
     $termType = $projection->termType();
@@ -27,7 +29,7 @@
         @php
             $size = $projection->settings->groupSizes->sizeFor((bool) $forecastRow->subject->subject->needs_lab);
             $withRates = $forecastData->non_enrollment_rate !== null && $forecastData->failure_rate !== null;
-            $nonEnrollment = $withRates ? $decimal($forecastData->non_enrollment_rate) : null;
+            $nonEnrollment = $withRates ? $rate($forecastData->non_enrollment_rate) : null;
         @endphp
         <dl class="space-y-1 text-sm" data-testid="forecast-evidence">
             <div class="{{ $evidenceRow }}">
@@ -59,7 +61,7 @@
             @if ($withRates)
                 <div class="{{ $evidenceRow }}">
                     <dt class="{{ $evidenceLabel }}">Repetidores</dt>
-                    <dd><span class="font-mono">{{ $forecastData->current_students }}</span> cursando hoy <span class="font-mono"><span class="whitespace-nowrap">× {{ $decimal($forecastData->failure_rate) }}</span> <span class="whitespace-nowrap">× (1 − {{ $nonEnrollment }})</span></span> = <span class="font-mono font-semibold">{{ $forecastData->expected_repeaters }}</span></dd>
+                    <dd><span class="font-mono">{{ $forecastData->current_students }}</span> cursando hoy <span class="font-mono"><span class="whitespace-nowrap">× {{ $rate($forecastData->failure_rate) }}</span> <span class="whitespace-nowrap">× (1 − {{ $nonEnrollment }})</span></span> = <span class="font-mono font-semibold">{{ $forecastData->expected_repeaters }}</span></dd>
                 </div>
             @endif
             <div class="{{ $evidenceRow }}">
