@@ -324,7 +324,7 @@ Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_op
 | Exacta (7.4 y 7.5) | 9 936 215 | 158 779 | 66 s + 17 s | 5.2 GB | no se llega a resolver | — |
 | Dos fases, cada grupo solo con el primer nivel que cabe | 13 301 | 11 995 | 1.2 s | 0.19 GB | infactible (el presolve lo prueba al instante) | — |
 | Dos fases, ampliando niveles en todo el modelo a los que no quedan | hasta 131 151 | 23 728 | 2–4 s por vuelta | 2.3 GB | no llega en 60 s (1 125 a lo más) | 0 |
-| **Dos fases + LNS, 2 hilos** (2 CPU y 2 GB, como el servicio en compose) | 30 432 (vecindarios de 300 a 6 000) | 14 114 | 2.0–2.2 s | 0.49–0.54 GB | **34–35 s** | **0** |
+| **Dos fases + LNS, 2 hilos** (2 CPU y 2 GB, como el servicio en compose) | 30 432 (vecindarios de 300 a 6 000) | 14 114 | 1.9–2.2 s | 0.48–0.54 GB | **32–35 s** | **0** |
 | Dos fases + LNS, 8 hilos | 30 432 | 14 114 | 2.1 s | 0.91 GB | 25.6 s | 0 |
 
 Límite de 60 s (el del servicio por omisión), semilla 7, Python 3.12 y OR-Tools 9.15; las duras, con el verificador de `verify.py`, que no comparte código con el modelo. La heurística en PHP tarda 1.5 s en construir con 0 duras; CP-SAT todavía no tiene objetivo (7.6), así que aquí solo se mide llegar a una solución completa.
