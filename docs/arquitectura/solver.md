@@ -449,7 +449,7 @@ Tarea 7.7. `services/solver/app/model/solve.py` resuelve una entrada de punta a 
 **Medición** (con el motor, 2 hilos, 2 CPU y 2 GB):
 - en `tiny`, `small` y `medium`, con el plazo de su entrada, `feasible` en menos de medio segundo, con 36, 42 y 49;
 - en `infeasible`, `partial` en 0.1 s, con g001 y g002 en `unscheduled` (HC-09 y HC-01) y los grupos de t002 programados;
-- en `department-multicampus`, los números de «Modelo CP-SAT: objetivo»: de 23 479 a 23 649 con 300 s y de 31 023 a 32 077 con 60 s, sin duras, en el plazo.
+- en `department-multicampus`, solo en la máquina: 27 718 a 27 765 con 60 s (60.2 s) y 23 370 con 300 s (300.3 s), todos programados, 65 fuera de su patrón y sin duras. Con 60 s reportó 111 avances, el primero a los 2.1 s.
 
 **Pruebas** (`services/solver/tests/test_engine_cpsat.py`):
 - el ciclo completo por la API con `SOLVER_ENGINE=cpsat` sobre `tiny`;
