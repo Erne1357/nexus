@@ -64,6 +64,7 @@ it('faltante: amplía el cupo hasta su salón y, con un salón más grande libre
         ->and($suggestions->find("expand_quota:{$a->id}:{$isc}")->seats)->toBe(10)
         ->and($room->seats)->toBe(20)
         ->and($room->moves[0]['to']->code)->toBe('L-70')
+        ->and($room->evidence[0])->toBe('ISIC: 70 esperados · 50 lugares con lo de arriba · faltan 20')
         ->and($suggestions->seats)->toBe([$isc => 40, $this->world->iind->id => 30])
         ->and(array_keys($suggestions->models))->toBe([$a->id, $this->world->groups['B']->id]);
 });

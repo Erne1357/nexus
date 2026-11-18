@@ -77,7 +77,7 @@
                             <span aria-hidden="true">·</span>
                             <span class="inline-flex items-center gap-1"><span class="font-mono tabular-nums">{{ $session->label() }}</span>
                                 @if ($session->room)
-                                    <x-icon name="o-map-pin" class="h-3.5 w-3.5" aria-hidden="true" /><span class="font-mono">{{ $session->room->code }}</span> (<span class="font-mono tabular-nums">{{ $session->room->capacity }}</span>)
+                                    <x-icon name="o-map-pin" class="h-3.5 w-3.5" aria-hidden="true" /><span class="font-mono">{{ $session->room->code }}</span><span class="font-mono tabular-nums">({{ $session->room->capacity }})</span>
                                 @else
                                     <span>sin salón</span>
                                 @endif

@@ -10,7 +10,7 @@
 @php($editingThis = $editing === $suggestion->key)
 @php($careerCode = $suggestion->careerId === null ? null : ($advice->careerCodes[$suggestion->careerId] ?? null))
 @php($describedBy = $reason === null ? null : $slug.'-why')
-<li class="grid gap-2.5 border-t border-base-300 px-4 py-3.5 first:border-t-0" aria-labelledby="{{ $slug }}-title" data-testid="suggestion" data-kind="{{ $suggestion->kind->value }}" data-key="{{ $suggestion->key }}">
+<li wire:key="{{ $slug }}" class="grid gap-2.5 border-t border-base-300 px-4 py-3.5 first:border-t-0" aria-labelledby="{{ $slug }}-title" data-testid="suggestion" data-kind="{{ $suggestion->kind->value }}" data-key="{{ $suggestion->key }}">
     <div class="flex items-start gap-3">
         <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-base-300 bg-base-200 text-base-content" aria-hidden="true">
             <x-icon :name="$suggestion->kind->icon()" class="h-4 w-4" />
@@ -61,8 +61,8 @@
                     data-testid="suggestion-seats"
                 />
             </div>
-            <x-button label="Aplicar" class="btn-primary btn-sm max-md:h-11" wire:click="apply('{{ $suggestion->key }}')" spinner="apply('{{ $suggestion->key }}')" data-testid="suggestion-apply-edited" />
-            <x-button label="Cancelar" class="btn-ghost btn-sm max-md:h-11" wire:click="cancelEdit" />
+            <x-button label="Aplicar" class="btn-primary btn-sm max-md:h-11" wire:click="apply('{{ $suggestion->key }}')" spinner="apply('{{ $suggestion->key }}')" id="{{ $slug }}-apply-edited" data-testid="suggestion-apply-edited" />
+            <x-button label="Cancelar" class="btn-ghost btn-sm max-md:h-11" wire:click="cancelEdit" id="{{ $slug }}-cancel-edit" />
         </div>
     @else
         <div class="grid grid-cols-3 gap-2 md:flex md:flex-wrap md:ps-11">
@@ -73,13 +73,14 @@
                         class="btn-outline btn-sm max-md:h-11"
                         wire:click="apply('{{ $suggestion->key }}')"
                         spinner="apply('{{ $suggestion->key }}')"
-                        x-confirm="{{ implode(' ', array_filter([...$suggestion->effect, $suggestion->warning])) }}"
+                        x-confirm="{{ implode(' ', array_filter([...array_slice($suggestion->effect, 0, -1), $suggestion->warning])) }}"
                         data-confirm-title="¿{{ $suggestion->title }}?"
                         data-confirm-button="Cerrar el grupo"
                         data-confirm-tone="error"
                         :disabled="$reason !== null"
                         :title="$reason"
                         :aria-describedby="$describedBy"
+                        id="{{ $slug }}-apply"
                         data-testid="suggestion-apply"
                     />
                 @else
@@ -91,6 +92,7 @@
                         :disabled="$reason !== null"
                         :title="$reason"
                         :aria-describedby="$describedBy"
+                        id="{{ $slug }}-apply"
                         data-testid="suggestion-apply"
                     />
                 @endif
@@ -102,6 +104,7 @@
                         wire:click="edit('{{ $suggestion->key }}')"
                         :disabled="$reason !== null"
                         :title="$reason"
+                        id="{{ $slug }}-edit"
                         data-testid="suggestion-edit-open"
                     />
                 @endif
@@ -112,6 +115,7 @@
                 wire:click="discard('{{ $suggestion->key }}')"
                 :disabled="$adjustReason !== null"
                 :title="$adjustReason"
+                id="{{ $slug }}-discard"
                 data-testid="suggestion-discard"
             />
         </div>

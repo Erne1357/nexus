@@ -103,13 +103,14 @@ final class ReanalysisAdvisor
 
         foreach ($shortfall as $careerId => $gap) {
             $expected = $demand[$careerId];
-            $context = ['career' => $careerId, 'code' => $careerCodes[$careerId], 'expected' => $expected, 'seats' => $seats[$careerId] ?? 0];
+            $context = ['career' => $careerId, 'code' => $careerCodes[$careerId], 'expected' => $expected, 'seats' => $seats[$careerId] ?? 0, 'after' => false];
             $short = fn (int $gap): bool => $gap > 0 && $settings->balanceOf($expected, $expected - $gap) === DemandBalance::Shortfall;
 
             foreach ($groups as $group) {
                 if ($short($gap) && isset($this->quotas[$group->id][$careerId]) && ($suggestion = $this->expand($group, $context, $gap)) !== null) {
                     $expand[] = $suggestion;
                     $gap -= $suggestion->seats;
+                    $context = [...$context, 'seats' => $context['seats'] + $suggestion->seats, 'after' => true];
                 }
             }
 
@@ -117,6 +118,7 @@ final class ReanalysisAdvisor
                 if ($short($gap) && isset($this->quotas[$group->id][$careerId]) && ($suggestion = $this->changeRoom($group, $context, $gap)) !== null) {
                     $rooms[] = $suggestion;
                     $gap -= $suggestion->seats;
+                    $context = [...$context, 'seats' => $context['seats'] + $suggestion->seats, 'after' => true];
                 }
             }
 
@@ -138,7 +140,7 @@ final class ReanalysisAdvisor
     /**
      * Ampliar el cupo de la carrera en el grupo con lo libre y, si hace falta, subiendo la capacidad hasta su salón.
      *
-     * @param  array{career: string, code: string, expected: int, seats: int}  $context
+     * @param  array{career: string, code: string, expected: int, seats: int, after: bool}  $context
      */
     private function expand(AdvisorGroup $group, array $context, int $gap): ?ReanalysisSuggestion
     {
@@ -188,7 +190,7 @@ final class ReanalysisAdvisor
     /**
      * Cambiar a salones más grandes las sesiones del grupo que no alcanzan, para subir su capacidad.
      *
-     * @param  array{career: string, code: string, expected: int, seats: int}  $context
+     * @param  array{career: string, code: string, expected: int, seats: int, after: bool}  $context
      */
     private function changeRoom(AdvisorGroup $group, array $context, int $gap): ?ReanalysisSuggestion
     {
@@ -432,11 +434,11 @@ final class ReanalysisAdvisor
     }
 
     /**
-     * @param  array{career: string, code: string, expected: int, seats: int}  $context
+     * @param  array{career: string, code: string, expected: int, seats: int, after: bool}  $context
      */
     private function demandLine(array $context): string
     {
-        return "{$context['code']}: {$context['expected']} esperados · {$context['seats']} lugares · faltan ".($context['expected'] - $context['seats']);
+        return "{$context['code']}: {$context['expected']} esperados · {$context['seats']} lugares".($context['after'] ? ' con lo de arriba' : '').' · faltan '.($context['expected'] - $context['seats']);
     }
 
     /**
