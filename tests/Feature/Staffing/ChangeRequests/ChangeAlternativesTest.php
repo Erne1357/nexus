@@ -176,6 +176,7 @@ it('CR-02: en un cambio de salón, la cadena deja las horas con el salón nuevo 
 
     expect(array_unique(array_column($mine, 'starts_at')))->toBe(['07:00'])
         ->and(array_unique(array_column($mine, 'room')))->toBe(['A-2'])
+        ->and(array_column($mine, 'replaces_session_id'))->toEqualCanonicalizing(GroupSession::query()->where('group_id', $s['group']->id)->pluck('id')->all())
         ->and(array_column($chain['affected_groups'], 'code'))->toBe(['J']);
 });
 
