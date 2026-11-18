@@ -65,11 +65,15 @@ final class ActivityEvents
         'session_updated' => 'Sesión cambiada',
         'session_removed' => 'Sesión quitada',
         'session_room_assigned' => 'Salón de la sesión',
+        'sessions_replaced' => 'Horario escrito',
         'room_removed_by_cancelled_loan' => 'Salón quitado: préstamo cancelado',
         'room_removed_by_rejected_loan' => 'Salón quitado: préstamo rechazado',
         'teacher_assigned' => 'Docente asignado',
         'teacher_unassigned' => 'Docente quitado',
         'group_history_imported' => 'Historial de grupos importado',
+        'launched' => 'Lanzado',
+        'cancel_requested' => 'Cancelación pedida',
+        'discarded' => 'Descartado',
     ];
 
     public static function knows(string $event): bool

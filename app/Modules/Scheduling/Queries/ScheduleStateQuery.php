@@ -82,7 +82,7 @@ final class ScheduleStateQuery
                     ->where(fn (Builder $reason) => $reason->whereNotNull('teacher_id')
                         ->when($modalityId !== null, fn (Builder $rooms) => $rooms->orWhereExists(GroupSession::query()->toBase()
                             ->whereColumn('group_sessions.group_id', 'groups.id')->whereNotNull('group_sessions.room_id'))))))
-            ->get(['id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status']);
+            ->get(['id', 'campus_id', 'modality_id', 'subject_id', 'department_id', 'owner_career_id', 'study_plan_id', 'semester', 'code', 'teacher_id', 'capacity', 'status', 'package_id', 'package_number']);
 
         foreach ($groups as $group) {
             $builder->group(self::stateGroup($group));
@@ -245,6 +245,8 @@ final class ScheduleStateQuery
             $group->teacher_id,
             $group->capacity,
             $group->status !== GroupStatus::Cancelled,
+            $group->package_id,
+            $group->package_number,
         );
     }
 }

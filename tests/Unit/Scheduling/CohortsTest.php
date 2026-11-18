@@ -66,3 +66,40 @@ it('HC-03: un grupo cancelado no lleva cohorte y solo se calculan los grupos que
 
     expect(cohortsOf($state, ['A', 'C']))->toBe(['A' => ['plan:P1:1:C2'], 'C' => []]);
 });
+
+it('HC-03: un grupo con paquete lleva la clave del plan y la del paquete, en ese orden', function () {
+    $state = States::builder()
+        ->campusCode('c2-id', 'C2')
+        ->group(States::group('A', subject: 'CAL', campus: 'c2-id', package: 'PK', packageNumber: 1))
+        ->group(States::group('B', subject: 'QUI', campus: 'c2-id', package: 'PK', packageNumber: 1))
+        ->build();
+
+    expect(cohortsOf($state, ['A', 'B']))->toBe(['A' => ['plan:P1:1:C2', 'package:PK:C2:1'], 'B' => ['plan:P1:1:C2', 'package:PK:C2:1']]);
+});
+
+it('HC-03: dos instancias del mismo paquete son cohortes distintas', function () {
+    $state = States::builder()
+        ->group(States::group('A1', subject: 'CAL', package: 'PK', packageNumber: 1))
+        ->group(States::group('A2', subject: 'CAL', package: 'PK', packageNumber: 2))
+        ->build();
+
+    // La materia tiene dos grupos: no hay cohorte de plan, solo la de cada instancia.
+    expect(cohortsOf($state, ['A1', 'A2']))->toBe(['A1' => ['package:PK:C2:1'], 'A2' => ['package:PK:C2:2']]);
+});
+
+it('HC-03: un grupo cancelado con paquete no lleva la cohorte del paquete, y sin paquete no cambia nada', function () {
+    $state = States::builder()
+        ->group(States::group('A', subject: 'CAL', active: false, package: 'PK', packageNumber: 1))
+        ->group(States::group('B', subject: 'QUI'))
+        ->build();
+
+    expect(cohortsOf($state, ['A', 'B']))->toBe(['A' => [], 'B' => ['plan:P1:1:C2']]);
+});
+
+it('HC-03: un grupo de paquete sin campus lleva el marcador «none» en la clave', function () {
+    $state = States::builder()
+        ->group(States::group('A', subject: 'CAL', campus: '', package: 'PK', packageNumber: 1))
+        ->build();
+
+    expect(cohortsOf($state, ['A'])['A'])->toContain('package:PK:none:1');
+});

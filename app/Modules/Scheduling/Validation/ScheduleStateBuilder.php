@@ -57,6 +57,9 @@ final class ScheduleStateBuilder
     /** @var array<string, string> */
     private array $campusCodes = [];
 
+    /** @var array<string, list<array{string, string, string, int}>> */
+    private array $typicalStudentSemesters = [];
+
     public function __construct(private readonly string $termId = 'term') {}
 
     public function group(StateGroup $group): self
@@ -154,6 +157,19 @@ final class ScheduleStateBuilder
         return $this;
     }
 
+    /**
+     * En qué semestres del alumno tipo cuenta el grupo (HC-03), como [modalidad, campus, plan, semestre], en lugar de
+     * solo el suyo; vacío, en ninguno.
+     *
+     * @param  list<array{string, string, string, int}>  $semesters
+     */
+    public function typicalStudentSemesters(string $groupId, array $semesters): self
+    {
+        $this->typicalStudentSemesters[$groupId] = $semesters;
+
+        return $this;
+    }
+
     public function setting(string $key, mixed $value): self
     {
         $this->settings[$key] = $value;
@@ -178,6 +194,7 @@ final class ScheduleStateBuilder
             $this->activePlans,
             $this->settings,
             $this->campusCodes,
+            $this->typicalStudentSemesters,
         );
     }
 }

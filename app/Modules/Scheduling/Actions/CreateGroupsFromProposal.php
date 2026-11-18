@@ -29,7 +29,7 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *
  * Los grupos de paquetes (tarea 5.6b; reglas-de-negocio.md, «Propuesta de carrera»): por cada paquete que lleva la materia y cada
  * uno de los que abre el campus de la fila (n de 1 a la cuenta), un grupo con `package_id` y `package_number = n`, y los
- * sueltos (`requested_groups` menos `package_groups`) sin paquete. La cohorte del motor es `package:<package_id>:<package_number>`
+ * sueltos (`requested_groups` menos `package_groups`) sin paquete. La cohorte del motor es `package:<package_id>:<campus_code>:<package_number>`
  * (fase 6); aquí solo se guarda.
  *
  * Es idempotente porque lo aceptado ya no cambia: por fila mira los grupos que ya nacieron de ella, en cualquier
