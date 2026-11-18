@@ -26,8 +26,8 @@
 | 3 | Captura de carga: grupos, horarios, docentes, salones | R1 | 17 nov – 4 dic 2026 | 3 en paralelo | 🟨 | [fase-3-captura-de-carga.md](docs/plan/fase-3-captura-de-carga.md) |
 | 4 | Cierre, publicación y piloto Campus II | R1 | 30 nov – 18 dic 2026 | 3 en paralelo | ⬜ | [fase-4-cierre-publicacion-piloto.md](docs/plan/fase-4-cierre-publicacion-piloto.md) |
 | 5 | Proyección de demanda | R2 | feb 2027 | 3 en paralelo | 🟨 | [fase-5-demanda.md](docs/plan/fase-5-demanda.md) |
-| 6 | Heurística de horarios y contrato del motor | R2 | feb – mar 2027 | Paralelo | ⬜ | [fase-6-heuristica-y-contrato.md](docs/plan/fase-6-heuristica-y-contrato.md) |
-| 7 | Solver CP-SAT (Python + OR-Tools) | R2 | mar – abr 2027 | Paralelo | ⬜ | [fase-7-solver-cpsat.md](docs/plan/fase-7-solver-cpsat.md) |
+| 6 | Heurística de horarios y contrato del motor | R2 | feb – mar 2027 | 3 en paralelo | 🟨 | [fase-6-heuristica-y-contrato.md](docs/plan/fase-6-heuristica-y-contrato.md) |
+| 7 | Solver CP-SAT (Python + OR-Tools) | R2 | mar – abr 2027 | 3 en paralelo | 🟨 | [fase-7-solver-cpsat.md](docs/plan/fase-7-solver-cpsat.md) |
 | 8 | Re-análisis, impacto de cambios y junta digital | R2 | abr 2027 | Paralelo | ⬜ | [fase-8-reanalisis.md](docs/plan/fase-8-reanalisis.md) |
 | 9 | Inscripción Campus II | R3 | may – jul 2027 | Paralelo | 🟦 | [fase-9-inscripcion-campus-ii.md](docs/plan/fase-9-inscripcion-campus-ii.md) |
 | 10 | Otras modalidades: EAD, EnLínea, TecNM Virtual | R4 | por definir | — | 🟦 | [fase-10-otras-modalidades.md](docs/plan/fase-10-otras-modalidades.md) |
@@ -59,7 +59,7 @@ Fechas de R1 cerradas con el equipo el 26 de octubre de 2026: producto usable el
 | Scheduling | 3 (manual + validador), 6 (heurística) | 🟨 (3.1 a 3.7 hechas: modelos y exclusiones #287; validador HC-01 a HC-13 y SC-09 #288 a #290, #312 y #320; grupos desde propuestas #291; tablero de choques y avance #294, #319 y #325; editor de horarios #300, #301, #311 y #327; cupos por carrera y grupos compartidos #298, #315 y #326; salones y préstamos #286, #292 y #316; datos demo y masivos #310 y #317. Falta la integración 3.13; la heurística es de la fase 6) |
 | Staffing | 3 | 🟨 (3.8 a 3.12 hechas: ranking docente #293, #295, #297 y #299; asignación #296, #302, #306, #318 y #321; oferta y Mi carga #309 y #314; solicitudes de cambio #304 y #314; carga por docente #308; datos demo y masivos #324. Falta la integración 3.13) |
 | Demand | 5 | 🟨 (abierta el 16 de noviembre de 2026; núcleo 5.1 a 5.4 hecho: contratos #511, tasas históricas #521, cálculo #524 y job por eventos #526; faltan 5.5 a 5.10 de los rieles B y C) |
-| Solver | 6 (contrato y cliente), 7 (servicio Python) | ⬜ |
+| Solver | 6 (contrato y cliente), 7 (servicio Python) | 🟨 (Riel A: contrato v1 multi-campus #537, `solver_runs` y permisos #538, `SolverEngine` y motor de prueba #539, entrada desde la base con cohortes #542, fixtures #555 y benchmark #556; servicio Python con API y CI #560 y #561. Faltan la heurística 6.5–6.7 (B), la corrida y la pantalla 6.8–6.10 (C) y el modelo CP-SAT 7.4–7.7) |
 | Enrollment | 9 | 🟦 |
 
 ## Cómo se actualiza este archivo

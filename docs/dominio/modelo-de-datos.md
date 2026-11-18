@@ -256,7 +256,7 @@ Staffing está a la derecha de Scheduling ([ADR-0020](../decisiones/0020-staffin
 
 | Tabla | Campos clave | Notas |
 |---|---|---|
-| `solver_runs` | `term_id`, `campus_id`, `department_id?`, `career_id?`, `engine` (`php_heuristic` / `cpsat`), `status` (`queued` / `running` / `done` / `failed` / `applied`), `input` (json o ruta), `output` (json o ruta), `metrics` (json), `created_by`, `applied_at` | Cada corrida es reproducible. El resultado se aplica a `group_sessions` solo cuando el usuario lo acepta. |
+| `solver_runs` | `term_id`, `modality_id`, `scope_kind` (`department` / `career`), `department_id?`, `career_id?`, `engine`, `status` (`queued` / `running` / `done` / `failed` / `applied`), `input?` (jsonb), `input_path?`, `output?` (jsonb), `output_path?`, `metrics?` (jsonb), `error?`, `created_by`, `started_at?`, `finished_at?`, `applied_by?`, `applied_at?` | Una corrida del motor (tarea 6.2): la carga de un departamento en una modalidad, en todos sus campus, o los grupos de una carrera (exploración del coordinador). Sin campus (decisión del usuario, 17 de noviembre de 2026). El alcance pide exactamente su llave (CHECK), y una carga tiene a lo más una corrida en cola o corriendo (índice único parcial). Entrada y salida del contrato (`docs/arquitectura/solver.md`) en la fila o, si son grandes, en un archivo bajo `storage/solver` del que se guarda la ruta, para reproducir la corrida. El resultado se aplica a `group_sessions` solo cuando el jefe lo acepta (`applied`). |
 
 El contrato JSON de entrada y salida se define en `docs/arquitectura/solver.md`.
 

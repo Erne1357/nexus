@@ -46,6 +46,7 @@ final class PermissionCatalogQuery
         'academic_load' => 'Carga académica',
         'scheduling' => 'Horarios',
         'staffing' => 'Asignación docente',
+        'solver' => 'Motor de horarios',
     ];
 
     /**

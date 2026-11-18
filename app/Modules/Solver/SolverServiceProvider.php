@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Modules\Solver;
+
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\ModuleServiceProvider;
+use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Solver\Console\ExportSolverFixture;
+use App\Modules\Solver\Console\SolverBenchmark;
+use App\Modules\Solver\Engines\EngineRegistry;
+use App\Modules\Solver\Engines\FixedEngine;
+use App\Modules\Solver\Enums\SolverPermission;
+use App\Modules\Solver\Rules\SolverSettings;
+
+/**
+ * Módulo Solver (fases 6 y 7, R2): el motor que sugiere horarios y salones para la carga de un departamento en una
+ * modalidad, en todos sus campus (docs/arquitectura/solver.md; «Punto de partida» de la fase 6). Depende de Scheduling
+ * y de lo que está a su izquierda; nadie depende de él. El motor propone y el jefe acepta: nada se escribe en
+ * `group_sessions` sin aceptación.
+ */
+final class SolverServiceProvider extends ModuleServiceProvider
+{
+    /**
+     * Los motores disponibles, con la etiqueta `solver.engines`: hoy el de prueba; la heurística (6.6) y CP-SAT (fase 7)
+     * se agregan aquí. Los motores no guardan estado, así que el registro puede ser único por proceso.
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->tag([FixedEngine::class], 'solver.engines');
+        $this->app->singleton(EngineRegistry::class, fn ($app): EngineRegistry => new EngineRegistry($app->tagged('solver.engines')));
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([ExportSolverFixture::class, SolverBenchmark::class]);
+        }
+    }
+
+    /**
+     * Los parámetros del motor (CF-S7).
+     *
+     * @return list<SettingDefinition>
+     */
+    public function settings(): array
+    {
+        return SolverSettings::definitions();
+    }
+
+    public function permissions(): array
+    {
+        return [SolverPermission::class];
+    }
+
+    /**
+     * El jefe de departamento lanza, ve y acepta las corridas de su carga; el coordinador lanza y ve las de su carrera;
+     * Subdirección ve todas (decisión del usuario, 17 de noviembre de 2026).
+     */
+    public function grants(): array
+    {
+        return [
+            Role::JefeDepartamento->value => [
+                SolverPermission::DepartmentRunView,
+                SolverPermission::DepartmentRunLaunch,
+                SolverPermission::DepartmentRunApply,
+            ],
+            Role::Coordinador->value => [
+                SolverPermission::CareerRunView,
+                SolverPermission::CareerRunLaunch,
+            ],
+            Role::Subdireccion->value => [
+                SolverPermission::DepartmentRunView,
+                SolverPermission::CareerRunView,
+            ],
+        ];
+    }
+}

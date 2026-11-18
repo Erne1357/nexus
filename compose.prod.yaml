@@ -105,6 +105,12 @@ services:
   valkey:
     logging: *logging
 
+  # Motor de horarios: en producción el token es obligatorio (en compose.yaml puede ir vacío y el servicio no arranca).
+  solver:
+    environment:
+      SOLVER_TOKEN: ${SOLVER_TOKEN:?Define SOLVER_TOKEN en .env (token compartido con el servicio del motor de horarios)}
+    logging: *logging
+
   # pg_dump diario en formato custom hacia BACKUP_DIR del servidor, con retención.
   # La imagen debe ser idéntica a la de postgres (mismo pg_dump que el servidor).
   backup:
