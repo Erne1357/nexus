@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Demand\Enums\GapBucket;
 use App\Modules\Demand\Rules\StandingCalculator;
 use App\Modules\Students\Queries\PlanGrid;
 
@@ -94,6 +95,31 @@ it('respeta el alcance: su semestre y dos más', function () {
 
     expect((new StandingCalculator)->at($grid, [standingRow('A', '20243')], '20251')->eligible)->toBe([])
         ->and((new StandingCalculator)->at($grid, [standingRow('A', '20243'), standingRow('A', '20251', 'baja'), standingRow('A', '20253', 'baja')], '20261')->eligible)->toBe(['E']);
+});
+
+it('DM-03: da a cada materia elegible su distancia al semestre del alumno en la retícula de su plan', function () {
+    $grid = new PlanGrid(
+        credits: ['P1' => 5, 'P2' => 5, 'P3' => 5, 'P4' => 5, 'P5' => 5],
+        semesterOf: ['P1' => 1, 'P2' => 2, 'P3' => 3, 'P4' => 4, 'P5' => 5],
+    );
+
+    $standing = (new StandingCalculator)->at($grid, [standingRow('P1', '20251', 'reprobada'), standingRow('P1', '20253', 'reprobada')], '20261');
+
+    expect($standing->semester)->toBe(3)
+        ->and($standing->gapOf)->toBe([
+            'P1' => GapBucket::Behind,
+            'P2' => GapBucket::Behind,
+            'P3' => GapBucket::Same,
+            'P4' => GapBucket::OneAhead,
+            'P5' => GapBucket::TwoAhead,
+        ]);
+});
+
+it('DM-03: la distancia sale del semestre estimado también como si fuera antes', function () {
+    $standing = (new StandingCalculator)->at(standingGrid(), [standingRow('A', '20253'), standingRow('C', '20261')], '20263', asOfTerm: '20261');
+
+    expect($standing->semester)->toBe(3)
+        ->and($standing->gapOf)->toBe(['B' => GapBucket::Behind, 'E' => GapBucket::TwoAhead]);
 });
 
 it('como si fuera antes: lo del periodo anterior se toma como cursando, con cualquier resultado menos baja', function () {

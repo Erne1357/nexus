@@ -5,7 +5,6 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\User;
-use Database\Seeders\DemoSeeder;
 
 /*
 | Retícula de un plan en el navegador (tarea 1.8): la cuadrícula a 1440 y 1366 px y la leyenda de cadenas en celular.
@@ -16,7 +15,7 @@ use Database\Seeders\DemoSeeder;
 // espera hasta 20 s y lo devuelve al valor por defecto al terminar.
 beforeEach(function () {
     pest()->browser()->timeout(20_000);
-    $this->seed(DemoSeeder::class);
+    seedDemoForBrowser();
     $this->plan = StudyPlan::where('code', 'ISIC-2010-224')->sole();
     User::factory()->admin()->create(['username' => 'ana.admin', 'name' => 'Ana Admin']);
 });

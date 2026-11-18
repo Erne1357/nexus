@@ -5,7 +5,8 @@ namespace App\Modules\Students\Queries;
 /**
  * La retícula de un plan para calcular el avance de sus alumnos: los créditos de cada materia del plan, en el
  * orden de la retícula, su seriación, la especialidad de las materias de especialidad, su semestre y el
- * porcentaje de créditos que piden algunas (Servicio Social y Residencia), y aparte las materias del plan que esperan
+ * porcentaje de créditos que piden algunas (Servicio Social, Residencia y, al menos SPECIALTY_CREDIT_SHARE, las de
+ * especialidad), y aparte las materias del plan que esperan
  * semestre en «Por validar» (D19), que no están en la retícula. Solo seriaciones: un correquisito no
  * impide cursar una materia (reglas-de-negocio.md, "Elegibilidad y demanda"). Una materia inactiva del catálogo
  * cuenta igual, porque el plan se ata al alumno al inscribirse. La arma PlanGridQuery; aquí solo se calcula,
@@ -13,6 +14,14 @@ namespace App\Modules\Students\Queries;
  */
 final readonly class PlanGrid
 {
+    /**
+     * El porcentaje de los créditos del plan que pide una materia de especialidad para poder cursarla
+     * (reglas-de-negocio.md, «Elegibilidad y demanda»; supuesto por confirmar: el usuario cree que es el 60 %, 17 de
+     * noviembre de 2026). Una materia de especialidad que ya pide un porcentaje mayor (por ejemplo, una residencia de
+     * especialidad) conserva el suyo.
+     */
+    public const int SPECIALTY_CREDIT_SHARE = 60;
+
     /**
      * @param  array<string, int>  $credits  id de materia → créditos, en el orden de la retícula
      * @param  array<string, list<string>>  $seriation  id de materia → ids de las materias que pide antes
@@ -45,7 +54,8 @@ final readonly class PlanGrid
      *
      * Puede cursar las materias de su semestre y de hasta dos más, y las de semestres anteriores que le faltan;
      * sin semestre (un egresado) no hay límite. Una materia que pide un porcentaje de créditos queda disponible
-     * al llegar a él (los dos confirmados el 29 de octubre de 2026).
+     * al llegar a él (los dos confirmados el 29 de octubre de 2026); una de especialidad pide al menos
+     * SPECIALTY_CREDIT_SHARE (supuesto por confirmar).
      *
      * @param  list<string>  $approved  ids de las materias que aprobó, de cualquier plan
      * @param  list<string>  $taking  ids de las materias que está cursando
@@ -80,7 +90,7 @@ final readonly class PlanGrid
             $count++;
         }
 
-        $total = $this->creditShare === [] ? 0 : $this->totalCredits ?? $this->gridCredits($chosen);
+        $total = $this->creditShare === [] && $this->specialtyOf === [] ? 0 : $this->totalCredits ?? $this->gridCredits($chosen);
         $available = array_values(array_filter($pending, fn (string $subject): bool => $this->seriationPassed($subject, $passed)
             && $this->withinReach($subject, $semester)
             && $this->creditsReached($subject, $credits, $total)));
@@ -147,11 +157,23 @@ final readonly class PlanGrid
     }
 
     /**
+     * El porcentaje de los créditos del plan que pide una materia para cursarla, o null si no pide ninguno: el de
+     * Servicio Social y Residencia (`creditShare`) y, en una materia de especialidad, al menos
+     * SPECIALTY_CREDIT_SHARE.
+     */
+    public function creditShareOf(string $subject): ?int
+    {
+        $share = max($this->creditShare[$subject] ?? 0, isset($this->specialtyOf[$subject]) ? self::SPECIALTY_CREDIT_SHARE : 0);
+
+        return $share === 0 ? null : $share;
+    }
+
+    /**
      * Sin créditos que medir (un total en cero) no da por cumplido el porcentaje.
      */
     private function creditsReached(string $subject, int $credits, int $total): bool
     {
-        $share = $this->creditShare[$subject] ?? 0;
+        $share = $this->creditShareOf($subject) ?? 0;
 
         return $share === 0 || ($total > 0 && $credits * 100 >= $share * $total);
     }
