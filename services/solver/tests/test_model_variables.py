@@ -6,9 +6,19 @@ import pytest
 from ortools.sat.python import cp_model
 
 from app.contract import parse_input
+from app.engine import RunContext
+from app.engine.base import RunCancelled
 from app.model.data import ModelData
 from app.model.pattern import Grid, tiers
-from app.model.variables import DomainOptions, Variables, build_variables, unit_counts
+from app.model.variables import (
+    BuildBudget,
+    BuildTimeout,
+    DomainOptions,
+    ModelTooLarge,
+    Variables,
+    build_variables,
+    unit_counts,
+)
 from tests.conftest import fixtures_dir
 from tests.instances import campus, group, instance, model_data, room, session, slot, teacher
 
@@ -360,3 +370,23 @@ def test_un_grupo_con_laboratorio_del_conjunto_marca_sus_ventanas_de_practica():
 
     assert variables.lab_count == 3
     assert {key for key, window in windows.items() if window.lab is not None} == {(2, 0, 1), (2, 1, 1), (2, 2, 1)}
+
+
+def test_el_presupuesto_corta_el_modelo_antes_de_pasar_el_limite_de_variables():
+    """Con 26 variables de límite, la instancia chica (7 `y` + 20 `z`) falla al ir a crear sus salones, con un
+    mensaje que dice qué hacer, en vez de agotar la memoria del servicio."""
+    data = model_data(instance(groups=[group("g1", 2)], rooms=[room("r1"), room("r2")]))
+    build_variables(cp_model.CpModel(), data, EXACT, BuildBudget(max_variables=27))
+
+    with pytest.raises(ModelTooLarge, match="SOLVER_MAX_MODEL_VARIABLES"):
+        build_variables(cp_model.CpModel(), data, EXACT, BuildBudget(max_variables=26))
+
+
+def test_armar_el_modelo_revisa_la_cancelacion_y_el_plazo():
+    data = model_data(instance(groups=[group("g1", 2)], rooms=[room("r1")]))
+    cancelled = RunContext(is_cancelled=lambda: True)
+
+    with pytest.raises(RunCancelled):
+        build_variables(cp_model.CpModel(), data, budget=BuildBudget(check_cancelled=cancelled.check_cancelled))
+    with pytest.raises(BuildTimeout):
+        build_variables(cp_model.CpModel(), data, budget=BuildBudget(deadline=0.0))

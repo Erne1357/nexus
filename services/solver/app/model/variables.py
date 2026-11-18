@@ -28,6 +28,7 @@ Para que quepa la carga de un departamento (`DomainOptions`, por omisión):
   si así no hay solución, se arma con todos los niveles.
 """
 
+import time
 from bisect import bisect_right
 from collections import Counter, defaultdict
 from collections.abc import Callable, Iterator
@@ -58,7 +59,7 @@ class DomainOptions:
     all_tiers: bool = False
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, slots=True)
 class Window:
     """Las sesiones de un grupo en un día: `units` unidades seguidas desde `block`, de `start` a `end` en minutos."""
 
@@ -83,7 +84,7 @@ class Window:
         return [option.literal for option in self.options]
 
 
-@dataclass(eq=False)
+@dataclass(eq=False, slots=True)
 class Option:
     """Una opción de horario del grupo: los días con sus unidades y el bloque de inicio."""
 
@@ -131,7 +132,7 @@ class GroupDomain:
         return min(self.rejected_options, key=lambda rule: (-self.rejected_options[rule], rule))
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Span:
     """Una ocupación posible: [start, end) en minutos, de un grupo, con los literales que la activan."""
 
@@ -141,7 +142,7 @@ class Span:
     literals: tuple[cp_model.IntVar, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class _SpanIndex:
     """Las ocupaciones de un recurso y día por inicio, para no recorrerlas todas en cada minuto."""
 
@@ -204,6 +205,45 @@ class Occupancy:
         return self._indexes[(key, day)]
 
 
+class ModelTooLarge(RuntimeError):
+    """El modelo pasaría del límite de variables (`BuildBudget.max_variables`): la corrida falla antes de agotar la
+    memoria del servicio, que comparte un proceso entre corridas."""
+
+
+class BuildTimeout(RuntimeError):
+    """Se acabó el plazo de la corrida mientras se armaba el modelo."""
+
+
+@dataclass
+class BuildBudget:
+    """Los límites al armar: cuántas variables como mucho, hasta cuándo (`time.perf_counter()`) y cómo saber si
+    cancelaron la corrida (`RunContext.check_cancelled`, que lanza `RunCancelled`). Se revisan cada
+    `GROUPS_PER_TICK` grupos y antes de crear los salones de cada grupo."""
+
+    max_variables: int | None = None
+    deadline: float | None = None
+    check_cancelled: Callable[[], None] | None = None
+
+    def tick(self) -> None:
+        if self.check_cancelled is not None:
+            self.check_cancelled()
+        if self.deadline is not None and time.perf_counter() > self.deadline:
+            raise BuildTimeout("Se acabó el tiempo de la corrida mientras se armaba el modelo.")
+
+    def reserve(self, created: int, more: int, done: int, total: int) -> None:
+        """Lanza `ModelTooLarge` si crear `more` variables pasa del límite."""
+        if self.max_variables is not None and created + more > self.max_variables:
+            raise ModelTooLarge(
+                f"El modelo pasa de {self.max_variables} variables: lleva {created} con {done} de {total} grupos "
+                f"y el siguiente agrega {more}. Corre por partes (por carrera o por campus) o sube "
+                "SOLVER_MAX_MODEL_VARIABLES si el servicio tiene memoria."
+            )
+
+
+#: Cada cuántos grupos se revisan la cancelación y el plazo al armar.
+GROUPS_PER_TICK = 25
+
+
 @dataclass
 class Variables:
     """Las variables del modelo y la ocupación que resulta de ellas."""
@@ -240,15 +280,23 @@ class Variables:
         return [domain for domain in self.groups.values() if not domain.options]
 
 
-def build_variables(model: cp_model.CpModel, data: ModelData, options: DomainOptions | None = None) -> Variables:
-    """Crea `y` y `z` del dominio pre-filtrado y enlaza cada ventana con su salón."""
+def build_variables(
+    model: cp_model.CpModel,
+    data: ModelData,
+    options: DomainOptions | None = None,
+    budget: BuildBudget | None = None,
+) -> Variables:
+    """Crea `y` y `z` del dominio pre-filtrado y enlaza cada ventana con su salón, dentro del presupuesto."""
     options = options or DomainOptions()
+    budget = budget or BuildBudget()
     variables = Variables(groups={}, teachers=Occupancy(), rooms=Occupancy(), cohorts=Occupancy(), options=options)
     if options.pool_rooms:
         variables.pools = _pools(data)
 
-    for group in data.movable:
-        domain = _domain(model, data, group, variables)
+    for index, group in enumerate(data.movable):
+        if index % GROUPS_PER_TICK == 0:
+            budget.tick()
+        domain = _domain(model, data, group, variables, budget, index)
         variables.groups[group.id] = domain
         _register(domain, variables)
 
@@ -315,7 +363,9 @@ class _WindowCheck:
     pooled: bool = False
 
 
-def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput, variables: Variables) -> GroupDomain:
+def _domain(
+    model: cp_model.CpModel, data: ModelData, group: GroupInput, variables: Variables, budget: BuildBudget, index: int
+) -> GroupDomain:
     grid = data.grids[group.campus_code]
     lab_practice = grid.uses_rooms and group.needs_lab and group.practice_hours > 0 and data.active("HC-06")
     domain = GroupDomain(
@@ -355,6 +405,8 @@ def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput, variabl
                         domain.rejected_options[reason] += 1
         first_tier += len(unit_tiers)
 
+    rooms_needed = sum(len(check((window.day, window.block, window.units)).rooms) for window in domain.windows.values())
+    budget.reserve(len(model.proto.variables), rooms_needed, index, len(data.movable))
     for window in domain.windows.values():
         window_check = check((window.day, window.block, window.units))
         window.pooled = window_check.pooled

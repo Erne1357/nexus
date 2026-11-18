@@ -160,6 +160,7 @@ class RunManager:
             context = RunContext(
                 threads=run.data.options.threads or self._settings.threads,
                 default_time_limit=self._settings.default_time_limit,
+                max_model_variables=self._settings.max_model_variables,
                 report=lambda percent, best: self._report(run, percent, best),
                 is_cancelled=run.cancel.is_set,
             )
