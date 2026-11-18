@@ -20,12 +20,13 @@ it('lista los puntos en el orden del proceso', function () {
         DemoCheckpoint::Closing,
         DemoCheckpoint::Publication,
         DemoCheckpoint::Reanalysis,
+        DemoCheckpoint::ReanalysisCases,
     ])->and(DemoCheckpoint::upTo(DemoCheckpoint::Proposal))->toBe([
         DemoCheckpoint::Catalogs,
         DemoCheckpoint::CatalogValidation,
         DemoCheckpoint::Proposal,
     ])->and(DemoCheckpoint::upTo(DemoCheckpoint::Catalogs))->toBe([DemoCheckpoint::Catalogs])
-        ->and(DemoCheckpoint::since(DemoCheckpoint::Rooms))->toBe([DemoCheckpoint::Rooms, DemoCheckpoint::Closing, DemoCheckpoint::Publication, DemoCheckpoint::Reanalysis])
+        ->and(DemoCheckpoint::since(DemoCheckpoint::Rooms))->toBe([DemoCheckpoint::Rooms, DemoCheckpoint::Closing, DemoCheckpoint::Publication, DemoCheckpoint::Reanalysis, DemoCheckpoint::ReanalysisCases])
         ->and(DemoCheckpoint::since(DemoCheckpoint::All))->toBe([]);
 });
 
@@ -48,6 +49,14 @@ it('cada punto empieza la etapa de su nombre y lleva su número', function () {
         ->and(DemoCheckpoint::Staffing->label())->toBe('Empezando la asignación docente')
         ->and(DemoCheckpoint::tryFrom('asignacion'))->toBe(DemoCheckpoint::Staffing)
         ->and(DemoCheckpoint::tryFrom('asignación'))->toBeNull();
+});
+
+it('los casos del re-análisis siguen en la etapa 9, después de su arranque', function () {
+    expect(DemoCheckpoint::ReanalysisCases->stage())->toBe(Stage::Reanalysis)
+        ->and(DemoCheckpoint::ReanalysisCases->number())->toBe(9)
+        ->and(DemoCheckpoint::ReanalysisCases->label())->toBe('Re-análisis con todos sus casos')
+        ->and(DemoCheckpoint::tryFrom('reanalisis-casos'))->toBe(DemoCheckpoint::ReanalysisCases)
+        ->and(DemoCheckpoint::upTo(DemoCheckpoint::ReanalysisCases))->toBe(DemoCheckpoint::staged());
 });
 
 it('todo no es un punto del proceso', function () {

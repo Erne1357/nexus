@@ -159,13 +159,14 @@ final class LoadClosingQuery
 
     /**
      * Lo que le falta a la carga para cerrar (fresco, con el validador al momento), o null si no aplica: una carga en
-     * borrador no tiene grupos y una publicada ya pasó el cierre.
+     * borrador no tiene grupos y una publicada ya pasó el cierre. Una en re-análisis sí lo calcula, como en asignación:
+     * cerrarla corre las mismas guardas de HC-15 (RA-01).
      *
      * @param  SupportCollection<string, GroupClosingFlags>|null  $flags  las de la carga, si ya se leyeron
      */
     public function blockers(AcademicLoad $load, ?SupportCollection $flags = null): ?ClosingBlockers
     {
-        return in_array($load->status, [LoadStatus::Draft, LoadStatus::Published, LoadStatus::Reanalysis], true)
+        return in_array($load->status, [LoadStatus::Draft, LoadStatus::Published], true)
             ? null
             : $this->closingBlockers->of($load, $flags);
     }

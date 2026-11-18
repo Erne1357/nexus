@@ -387,6 +387,58 @@ describe('cerrar', function () {
     });
 });
 
+describe('en re-análisis (RA-01, tarea 8.1)', function () {
+    beforeEach(function () {
+        $this->world->load->update(['status' => LoadStatus::Reanalysis]);
+    });
+
+    it('con faltantes, la línea del estado los cuenta y «Cerrar carga» sale deshabilitado con su motivo', function () {
+        $this->world->group();
+        $this->world->group(teacher: false);
+
+        $page = closingPage($this->jefe)
+            ->assertSee('En re-análisis · falta 1 grupo')
+            ->assertSee('1 sin docente')
+            ->assertSeeHtml('data-testid="action-close"')
+            ->assertSeeHtml('title="Falta 1 grupo para cerrar."');
+
+        expect(closingActionDisabled($page, 'close'))->toBeTrue()
+            ->and($page->instance()->blockers)->not->toBeNull();
+    });
+
+    it('sin faltantes, el jefe cierra el re-análisis desde la pantalla y la carga pasa a cerrada', function () {
+        $this->world->group();
+
+        $page = closingPage($this->jefe)->assertSeeHtml('data-testid="action-close"');
+
+        expect(closingActionDisabled($page, 'close'))->toBeFalse();
+
+        $page->call('askClose')->assertSet('showClose', true)->call('close')->assertSet('showClose', false);
+
+        expect($this->world->load->fresh()->status)->toBe(LoadStatus::Closed)
+            ->and(LoadTransition::query()->sole()->from_status)->toBe(LoadStatus::Reanalysis);
+    });
+
+    it('Subdirección también lo cierra, y no se ofrece «Volver a asignación» ni «Reabrir carga»', function () {
+        $this->world->group();
+        $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+        $page = closingPage($subdireccion, ['departamento' => $this->world->department->id])->assertSeeHtml('data-testid="action-close"');
+
+        expect(closingActionDisabled($page, 'close'))->toBeFalse();
+        $page->assertDontSeeHtml('data-testid="action-return"')->assertDontSeeHtml('data-testid="action-reopen"');
+    });
+
+    it('quien no cierra no entra a la pantalla ni puede cerrar por una llamada directa', function (Role $role) {
+        $this->world->group();
+        $user = User::factory()->withRole($role, array_filter(['campus_id' => $this->world->campus->id, 'department_id' => $this->world->department->id, 'career_id' => $role === Role::Coordinador ? careerKey(20) : null]))->create();
+
+        closingPage($user, ['departamento' => $this->world->department->id])->assertForbidden();
+
+        expect($this->world->load->fresh()->status)->toBe(LoadStatus::Reanalysis);
+    })->with([Role::JefeProyectoDocente, Role::Coordinador, Role::Docente]);
+});
+
 describe('reabrir y volver a asignación', function () {
     beforeEach(function () {
         $this->world->load->update(['status' => LoadStatus::Closed]);

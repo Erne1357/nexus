@@ -97,7 +97,7 @@ it('MS36: no reabre una carga publicada de una modalidad desactivada o borrada, 
     'borrada, reabrir' => [true, LoadStatus::Adjusting],
 ]);
 
-it('MS36: las demás transiciones de una modalidad desactivada siguen: reabrir una cerrada o publicar un re-análisis', function (LoadStatus $from, LoadStatus $to) {
+it('MS36: las demás transiciones de una modalidad desactivada siguen: reabrir una cerrada o cerrar un re-análisis', function (LoadStatus $from, LoadStatus $to) {
     $load = AcademicLoad::factory()->inStatus($from)->create(['modality_id' => modalityOf('EAD')->id]);
 
     $to === LoadStatus::Adjusting
@@ -108,7 +108,7 @@ it('MS36: las demás transiciones de una modalidad desactivada siguen: reabrir u
         ->and($load->fresh()->status)->toBe($to);
 })->with([
     'cerrada a ajustes' => [LoadStatus::Closed, LoadStatus::Adjusting],
-    're-análisis a publicada' => [LoadStatus::Reanalysis, LoadStatus::Published],
+    're-análisis a cerrada' => [LoadStatus::Reanalysis, LoadStatus::Closed],
 ]);
 
 it('exige el motivo', function (?string $reason) {
