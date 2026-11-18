@@ -151,3 +151,50 @@ it('da un ahorro negativo si lo pedido no alcanza para los esperados', function 
 it('rechaza un tamaño que no es mayor que cero', function (int $size) {
     expect(fn () => ParallelGroups::suggest($size, []))->toThrow(InvalidArgumentException::class);
 })->with([0, -35]);
+
+it('arma los grupos de la sugerencia: completos de cada carrera y un mixto con los restos', function () {
+    $parallels = ParallelGroups::suggest(35, [
+        'ISC' => ['expected' => 60, 'requested' => 2],
+        'IIND' => ['expected' => 40, 'requested' => 2],
+    ]);
+
+    expect($parallels->layout())->toBe([
+        ['ISC' => 35],
+        ['IIND' => 35],
+        ['ISC' => 25, 'IIND' => 5],
+    ]);
+});
+
+it('en los mixtos cada resto entra entero donde mejor cabe y no se parte si cabe', function () {
+    $parallels = ParallelGroups::suggest(35, [
+        'ISC' => ['expected' => 30, 'requested' => 1],
+        'IIND' => ['expected' => 30, 'requested' => 1],
+        'IGE' => ['expected' => 5, 'requested' => 1],
+        'ILOG' => ['expected' => 3, 'requested' => 1],
+    ]);
+
+    expect($parallels->mixed)->toBe(2)
+        ->and($parallels->layout())->toBe([
+            ['ISC' => 30, 'IGE' => 5],
+            ['IIND' => 30, 'ILOG' => 3],
+        ]);
+});
+
+it('parte una carrera entre mixtos solo si no cabe entera, empezando por el que tiene más lugares', function () {
+    $parallels = ParallelGroups::suggest(35, [
+        'ISC' => ['expected' => 20, 'requested' => 1],
+        'IIND' => ['expected' => 20, 'requested' => 1],
+        'IGE' => ['expected' => 20, 'requested' => 1],
+    ]);
+
+    expect($parallels->layout())->toBe([
+        ['ISC' => 20, 'IGE' => 15],
+        ['IIND' => 20, 'IGE' => 5],
+    ]);
+});
+
+it('el resto de una sola carrera queda en un grupo de esa carrera y sin restos no hay mixtos', function () {
+    expect(ParallelGroups::suggest(35, ['ISC' => ['expected' => 60, 'requested' => 2]])->layout())->toBe([['ISC' => 35], ['ISC' => 25]])
+        ->and(ParallelGroups::suggest(35, ['ISC' => ['expected' => 70, 'requested' => 2], 'IIND' => ['expected' => 0, 'requested' => 1]])->layout())->toBe([['ISC' => 35], ['ISC' => 35]])
+        ->and(ParallelGroups::suggest(35, [])->layout())->toBe([]);
+});

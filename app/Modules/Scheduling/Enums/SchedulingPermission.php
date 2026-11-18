@@ -12,7 +12,9 @@ use App\Modules\Core\Authorization\UnitApplicability;
  * `scheduling.<recurso>.<accion>`. El objetivo es un grupo: su modalidad, su campus, su departamento (unidad) y su
  * carrera dueña. Ver se limita a la modalidad (MS6, AZ-S17: quien tiene un campus ve toda la modalidad); lo que crea,
  * mueve, cancela o reparte algo de un campus declara además el campus. Asignar salón y repartir cupos son del
- * departamento que imparte, así que no declaran carrera.
+ * departamento que imparte, así que no declaran carrera. Armar los paralelos de una materia (tarea 8.8) es del jefe del
+ * departamento que imparte en toda su modalidad, de cualquier campus, como decide los acuerdos (M12): declara la modalidad
+ * y la unidad (supuesto por confirmar).
  */
 enum SchedulingPermission: string implements Permission
 {
@@ -21,6 +23,7 @@ enum SchedulingPermission: string implements Permission
     case SessionEdit = 'scheduling.session.edit';
     case RoomAssign = 'scheduling.room.assign';
     case QuotaManage = 'scheduling.quota.manage';
+    case ParallelsArrange = 'scheduling.parallels.arrange';
 
     public function label(): string
     {
@@ -30,6 +33,7 @@ enum SchedulingPermission: string implements Permission
             self::SessionEdit => 'Acomodar las sesiones de un grupo',
             self::RoomAssign => 'Asignar salón a las sesiones de un grupo',
             self::QuotaManage => 'Repartir los cupos por carrera de un grupo',
+            self::ParallelsArrange => 'Armar los paralelos de las materias del departamento',
         };
     }
 
@@ -39,6 +43,7 @@ enum SchedulingPermission: string implements Permission
             self::ScheduleView => [Dimension::Modality, Dimension::Unit, Dimension::Career],
             self::GroupManage, self::SessionEdit => [Dimension::Modality, Dimension::Campus, Dimension::Unit, Dimension::Career],
             self::RoomAssign, self::QuotaManage => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
+            self::ParallelsArrange => [Dimension::Modality, Dimension::Unit],
         };
     }
 
