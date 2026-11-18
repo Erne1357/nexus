@@ -121,7 +121,7 @@ final class ReanalysisWorld
             'owner_career_id' => $career->id,
             'study_plan_id' => $this->plans[$career->id]->id,
             'semester' => $semester,
-            'code' => chr(65 + $this->sequence++),
+            'code' => $this->sequence < 26 ? chr(65 + $this->sequence++) : 'G'.$this->sequence++,
             'capacity' => $seats,
             'teacher_id' => $this->teacher()->id,
         ]);
@@ -186,6 +186,59 @@ final class ReanalysisWorld
             'computed_at' => now()->subDays(6),
             ...$overrides,
         ]);
+    }
+
+    /**
+     * Más materias del departamento en las dos carreras, cada una con un grupo y su proyección en Campus I y Campus II
+     * (una materia más son dos campus × dos carreras = cuatro renglones del diff): para probar que lo que se lee no crece
+     * con los renglones. Antes de published().
+     */
+    public function addSubjects(int $count): self
+    {
+        for ($i = 1; $i <= $count; $i++) {
+            $subject = Subject::factory()->create(['code' => sprintf('ACF-%04d', 1000 + $i), 'name' => "Materia extra {$i}", 'department_id' => $this->department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
+
+            // Un día y una hora distintos por materia (y otro semestre cada 30) para que no choquen los alumnos de una carrera.
+            $semester = 3 + intdiv($i - 1, 30);
+            $day = 1 + ($i - 1) % 5;
+            $start = 7 + 2 * (intdiv($i - 1, 5) % 6);
+
+            foreach ([$this->isc, $this->iind] as $career) {
+                placeInPlan($this->plans[$career->id], $subject, $semester);
+            }
+
+            $this->group($subject, $this->isc, 35, $this->c2, $semester, $day, sprintf('%02d:00', $start), sprintf('%02d:00', $start + 2));
+            $this->group($subject, $this->iind, 35, $this->c1, $semester, $day, sprintf('%02d:00', $start), sprintf('%02d:00', $start + 2));
+
+            foreach ([$this->isc, $this->iind] as $career) {
+                $this->forecast($subject, $career, $this->c2, 20 + $i);
+                $this->forecast($subject, $career, $this->c1, 50 + $i);
+            }
+        }
+
+        return $this;
+    }
+
+    /**
+     * La carga de otro departamento (Presencial, el mismo periodo) que imparte una materia de la retícula de la carrera:
+     * publicada y en re-análisis, con un grupo en Campus II y la proyección de la carrera. Devuelve el departamento, su
+     * carga y la materia; la carrera la ve filtrada (RA-07) y la jefatura de ese departamento completa.
+     *
+     * @return array{department: Department, load: AcademicLoad, subject: Subject}
+     */
+    public function otherDepartmentInReanalysis(string $code, Career $career): array
+    {
+        $department = Department::factory()->create(['code' => $code, 'name' => "Departamento {$code}"]);
+        $subject = Subject::factory()->create(['code' => "{$code}-0101", 'name' => "Materia de {$code}", 'department_id' => $department->id, 'theory_hours' => 2, 'practice_hours' => 0]);
+        placeInPlan($this->plans[$career->id], $subject, 3);
+        $this->group($subject, $career, 30, $this->c2, 3);
+        $load = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['term_id' => $this->term->id, 'modality_id' => $this->modality->id, 'department_id' => $department->id]);
+        app(PublishLoad::class)->handle($load->fresh(), $this->admin, 'Carga lista');
+        $load->refresh()->update(['published_at' => now()->subDays(5)]);
+        $this->forecast($subject, $career, $this->c2, 45);
+        app(TransitionLoad::class)->handle($load->fresh(), LoadStatus::Reanalysis, $this->admin, 'Llegaron las calificaciones', fn (): array => []);
+
+        return ['department' => $department, 'load' => $load->refresh(), 'subject' => $subject];
     }
 
     /**

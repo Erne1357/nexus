@@ -27,13 +27,15 @@ final class ReanalysisChangesQuery
     /**
      * El diff (SnapshotDiff) de los grupos de ahora contra la versión vigente de la carga.
      *
+     *
+     * @param  array<string, mixed>|null  $published  el payload de la versión vigente, si ya se leyó; si no, se lee aquí
      * @return array{version: int, groups: array{added: list<array<string, mixed>>, cancelled: list<array<string, mixed>>, changed: list<array{group: array<string, mixed>, changes: array<string, mixed>}>}, summary: array{added: int, cancelled: int, changed: int, teachers_affected: int, careers_affected: int, departments_affected: int}}
      *
      * @throws LogicException si la carga no tiene versión publicada o nadie dio sus grupos
      */
-    public function since(AcademicLoad $load): array
+    public function since(AcademicLoad $load, ?array $published = null): array
     {
-        [$before, $after] = $this->payloads($load);
+        [$before, $after] = $this->payloads($load, $published);
 
         return SnapshotDiff::between($before, $after, self::careerDepartments($before, $after));
     }
@@ -66,9 +68,9 @@ final class ReanalysisChangesQuery
      *
      * @return array{0: array<string, mixed>, 1: array<string, mixed>}
      */
-    private function payloads(AcademicLoad $load): array
+    private function payloads(AcademicLoad $load, ?array $published = null): array
     {
-        $published = $load->snapshots()->where('version', $load->current_version)->first()?->payload
+        $published ??= $load->snapshots()->where('version', $load->current_version)->first()?->payload
             ?? throw new LogicException('La carga no tiene una versión publicada con la que comparar.');
 
         $request = new LoadSnapshotRequested($load);

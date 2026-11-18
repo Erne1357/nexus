@@ -35,7 +35,7 @@
                 @if ($step['date'])
                     <span class="font-mono tabular-nums">{{ $step['date'] }}</span>
                 @endif
-                @if ($step['detail'])
+                @if ($step['detail'] && (($full ?? true) || $step['key'] !== 'grades'))
                     {{ $step['date'] ? '· ' : '' }}{{ $step['detail'] }}
                 @endif
             </span>
