@@ -31,16 +31,13 @@ use Illuminate\Support\Facades\Gate;
  * solo las carreras suyas que se imparten en ella. Un usuario con las dos cosas (un puesto con `load.view` de un
  * departamento y `proposal.view` de carreras) ve unas cargas completas y otras filtradas.
  *
- * Sin estado propio, para Octane: la condición del menú se guarda una vez y no lleva nada de la petición. Lo que una
- * instancia recuerda (las carreras que ve el actor) es de esa instancia, que el contenedor arma por inyección.
+ * Sin estado propio, para Octane: la condición del menú se guarda una vez y no lleva nada de la petición.
+ * Las materias quitadas de la retícula, las borradas o inactivas y los planes borrados o no vigentes no dan alcance.
  */
 final class ReanalysisLoadsQuery
 {
     /** @var (Closure(Actor): ?string)|null */
     private static ?Closure $menuCondition = null;
-
-    /** @var array<string, list<string>> las carreras que ve el actor, por usuario y modalidad, de esta instancia */
-    private array $careersSeen = [];
 
     /**
      * La condición del menú de «Re-análisis de la carga» (MN-02): disponible mientras el periodo activo tenga alguna carga
@@ -73,9 +70,7 @@ final class ReanalysisLoadsQuery
             return [];
         }
 
-        $key = ($context->user()?->getKey() ?? '')."|{$modalityId}";
-
-        return $this->careersSeen[$key] ??= Career::query()->orderBy('code')->get(['id', 'code'])
+        return Career::query()->orderBy('code')->get(['id', 'code'])
             ->filter(fn (Career $career): bool => $context->allows(AcademicLoadPermission::ProposalView, Target::of(modality: $modalityId, career: $career->getKey())))
             ->modelKeys();
     }
@@ -97,6 +92,9 @@ final class ReanalysisLoadsQuery
             ->join('study_plan_subjects', 'study_plan_subjects.study_plan_id', '=', 'study_plans.id')
             ->join('subjects', 'subjects.id', '=', 'study_plan_subjects.subject_id')
             ->where('study_plans.is_current', true)
+            ->whereNull('study_plan_subjects.deleted_at')
+            ->whereNull('subjects.deleted_at')
+            ->where('subjects.is_active', true)
             ->where('subjects.department_id', $departmentId)
             ->whereIn('study_plans.career_id', $careerIds)
             ->distinct()
@@ -181,6 +179,9 @@ final class ReanalysisLoadsQuery
             ->join('study_plans', 'study_plans.id', '=', 'study_plan_subjects.study_plan_id')
             ->where('study_plans.is_current', true)
             ->whereNull('study_plans.deleted_at')
+            ->whereNull('study_plan_subjects.deleted_at')
+            ->whereNull('subjects.deleted_at')
+            ->where('subjects.is_active', true)
             ->whereIn('study_plans.career_id', $careerIds))
             ->get();
     }

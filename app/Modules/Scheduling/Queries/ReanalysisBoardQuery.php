@@ -43,10 +43,13 @@ final class ReanalysisBoardQuery
      */
     public function data(AcademicLoad $load, ?array $careerIds, bool $withChanges): ReanalysisBoardData
     {
+        $latest = $this->diff->latestSnapshot($load);
+        $published = $latest?->version === $load->current_version ? $latest->payload : null;
+
         return new ReanalysisBoardData(
-            diff: $this->diff->forLoad($load, $careerIds),
+            diff: $this->diff->forLoad($load, $careerIds, $latest),
             threshold: DemandSettings::fromSettings()->highlightThreshold,
-            changes: $withChanges ? $this->changesOf($load) : null,
+            changes: $withChanges ? $this->changesOf($load, $published) : null,
         );
     }
 
@@ -236,12 +239,13 @@ final class ReanalysisBoardQuery
      * Lo que cambió desde la versión vigente, en el diff de SnapshotDiff y en una entrada por grupo para la lista «Lo que
      * ya cambiaste». Null si la carga no tiene versión con la que comparar.
      *
+     * @param  array<string, mixed>|null  $published  el payload de la versión vigente ya leído por el diff
      * @return array{diff: array<string, mixed>, entries: list<array{kind: string, icon: string, subject: string, subjectName: string, group: string, campus: ?string, title: string, detail: string}>}|null
      */
-    private function changesOf(AcademicLoad $load): ?array
+    private function changesOf(AcademicLoad $load, ?array $published): ?array
     {
         try {
-            $diff = $this->changes->since($load);
+            $diff = $this->changes->since($load, $published);
         } catch (LogicException) {
             return null;
         }

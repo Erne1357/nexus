@@ -2,6 +2,8 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
@@ -11,6 +13,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Scheduling\Models\GroupQuota;
+use App\Modules\Scheduling\Queries\ReanalysisLoadsQuery;
 use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -302,6 +305,20 @@ describe('coordinador (RA-07)', function () {
             ->assertDontSeeHtml('data-testid="start-reanalysis"');
     });
 
+    it('RA-07 (supuesto por confirmar): no ve el avance de calificaciones de toda la carga, ni publicada ni en re-análisis', function () {
+        $this->world->published()->gradesArrived();
+
+        reanalysisPage($this->coordinator)
+            ->assertSee('Cuando la jefatura inicie el re-análisis')
+            ->assertDontSee('capturadas')
+            ->assertDontSee('calificaciones llegaron');
+
+        $this->world->inReanalysis($this->jefe);
+
+        reanalysisPage($this->coordinator)->assertDontSee('capturadas');
+        reanalysisPage($this->jefe)->assertSee('capturadas');
+    });
+
     it('RA-07: no inicia, no cancela ni abre lo que cambió aunque llame directo', function () {
         $this->world->published()->gradesArrived();
         reanalysisPage($this->coordinator)->call('startReanalysis')->assertForbidden();
@@ -432,7 +449,41 @@ describe('alcance por carga (RA-07, #620)', function () {
     it('el select «Carga» del coordinador lista las cargas que imparten materias de su carrera, no las que no', function () {
         $coordinator = $this->world->coordinator($this->world->isc);
 
-        reanalysisPage($coordinator)->assertSet('loads', fn (array $loads): bool => collect($loads)->pluck('id')->all() === [$this->world->department->id, $this->other['department']->id]);
+        $third = $this->world->otherDepartmentInReanalysis('QQ', $this->world->iind);
+
+        reanalysisPage($coordinator)
+            ->assertSet('loads', fn (array $loads): bool => collect($loads)->pluck('id')->all() === [$this->world->department->id, $this->other['department']->id])
+            ->assertDontSee('Departamento QQ');
+
+        reanalysisPage($coordinator, ['departamento' => $third['department']->id])->assertForbidden();
+    });
+
+    it('una materia quitada de la retícula, una materia borrada o inactiva y un plan borrado no dan alcance al coordinador', function () {
+        $coordinator = $this->world->coordinator($this->world->isc);
+        $loads = app(ReanalysisLoadsQuery::class);
+        $isc = [$this->world->isc->id];
+        $plan = StudyPlan::query()->where('career_id', $this->world->isc->id)->firstOrFail();
+        $entry = StudyPlanSubject::query()->where('subject_id', $this->other['subject']->id)->where('study_plan_id', $plan->id)->firstOrFail();
+
+        expect($loads->careersTaughtBy($this->other['department']->id, $isc))->toBe($isc);
+
+        $entry->delete();
+
+        expect($loads->careersTaughtBy($this->other['department']->id, $isc))->toBe([])
+            ->and($loads->visibleLoads(app(Actor::class)->forUser($coordinator), $this->world->term->id, $this->world->modality->id)->pluck('department_id')->all())->toBe([$this->world->department->id]);
+
+        reanalysisPage($coordinator, ['departamento' => $this->other['department']->id])->assertForbidden();
+
+        $entry->restore();
+        $this->other['subject']->update(['is_active' => false]);
+
+        expect($loads->careersTaughtBy($this->other['department']->id, $isc))->toBe([]);
+
+        $this->other['subject']->update(['is_active' => true]);
+        $plan->delete();
+
+        expect($loads->careersTaughtBy($this->other['department']->id, $isc))->toBe([])
+            ->and($loads->careersTaughtBy($this->world->department->id, $isc))->toBe([]);
     });
 
     it('el coordinador de una carrera que no se imparte en la carga recibe 403, al abrirla y en cada método', function () {
@@ -467,6 +518,7 @@ describe('consultas', function () {
             DB::enableQueryLog();
             reanalysisPage($this->jefe)->call('toggleClass', 'shortfall')->set('search', 'acf');
             DB::disableQueryLog();
+            $this->payloadReads = collect(DB::getQueryLog())->filter(fn (array $log): bool => str_contains($log['query'], 'from "load_snapshots"') && str_contains($log['query'], '"payload"'))->count();
 
             return count(DB::getQueryLog());
         };
@@ -480,6 +532,7 @@ describe('consultas', function () {
         $rowsAfter = count(domOf(reanalysisPage($this->jefe))->querySelectorAll('[data-testid="reanalysis-block"]'));
 
         expect($rowsAfter)->toBeGreaterThan($rowsBefore)
+            ->and($this->payloadReads)->toBe(3) // una lectura del payload por petición (montar y dos acciones), no dos
             ->and($many)->toBe($few)
             ->and($many)->toBeLessThanOrEqual(110);
     });

@@ -37,15 +37,13 @@ final class ReanalysisDiffQuery
 {
     /**
      * @param  list<string>|null  $careerIds  solo estas carreras; null, todas
+     * @param  LoadSnapshot|null  $latest  la última versión ya leída (latestSnapshot), para no leerla otra vez
      */
-    public function forLoad(AcademicLoad $load, ?array $careerIds = null): ReanalysisDiff
+    public function forLoad(AcademicLoad $load, ?array $careerIds = null, ?LoadSnapshot $latest = null): ReanalysisDiff
     {
         $settings = DemandSettings::fromSettings();
         $forecasts = $this->forecasts($load, $careerIds);
-        $snapshot = LoadSnapshot::query()
-            ->where('academic_load_id', $load->getKey())
-            ->orderByDesc('version')
-            ->first(['version', 'payload']);
+        $snapshot = $latest ?? $this->latestSnapshot($load);
         [$offer, $blockGroups] = $snapshot === null ? [[], []] : $this->offer(SnapshotPayload::normalize($snapshot->payload), $careerIds);
 
         $subjectIds = array_values(array_unique([
@@ -76,6 +74,17 @@ final class ReanalysisDiffQuery
             forecastComputedAt: ($computedAt = $this->lastComputedAt($load)) === null ? null : new CarbonImmutable($computedAt),
             blockGroups: $blockGroups,
         );
+    }
+
+    /**
+     * La última versión guardada de la carga (versión y payload), o null si no tiene.
+     */
+    public function latestSnapshot(AcademicLoad $load): ?LoadSnapshot
+    {
+        return LoadSnapshot::query()
+            ->where('academic_load_id', $load->getKey())
+            ->orderByDesc('version')
+            ->first(['version', 'payload']);
     }
 
     /**
