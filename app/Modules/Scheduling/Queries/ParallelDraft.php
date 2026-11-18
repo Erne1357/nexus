@@ -31,7 +31,8 @@ final readonly class ParallelDraft
      * @param  list<ParallelSlot>  $slots  los grupos que resultan
      * @param  array<int, int>  $columns  por índice de un grupo mixto, su columna
      * @param  list<ParallelExisting>  $cancelled  los grupos que ya existen y se cancelarían
-     * @param  list<ParallelExisting>  $blocked  los que se cancelarían con docente: no se arma así
+     * @param  list<ParallelExisting>  $blocked  los que se cancelarían sin poder cancelarse (con docente o con una solicitud de
+     *   cambio abierta): no se arma así
      * @param  array<string, int>  $left  por carrera, esperados sin lugar (negativo: de más)
      */
     private function __construct(
@@ -263,10 +264,7 @@ final readonly class ParallelDraft
         }
 
         if ($this->blocked !== []) {
-            $group = $this->blocked[0];
-            $owner = $this->code($group->ownerCareerId);
-
-            return "El grupo {$group->code} de {$owner} tiene docente y el arreglo no le deja lugar: deja un grupo con lugares de {$owner} o quítale primero el docente.";
+            return $this->blocked[0]->lockReason($this->code($this->blocked[0]->ownerCareerId));
         }
 
         $over = $this->overs()[0] ?? null;

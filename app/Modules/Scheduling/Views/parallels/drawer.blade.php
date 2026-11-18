@@ -36,7 +36,7 @@
                 <span>Tamaño <span class="font-mono">{{ $row->size() }}</span>{{ $row->subject->needs_lab ? ', lleva laboratorio' : '' }}</span>
                 <span><span class="font-mono">{{ count($row->careers) }}</span> {{ count($row->careers) === 1 ? 'carrera cuenta' : 'carreras cuentan' }}</span>
                 @if ($row->excluded !== [])
-                    <span data-testid="parallels-excluded">{{ collect($row->excluded)->map(fn ($career) => $career->career->code.' (regresada)')->join(', ', ' y ') }} no {{ count($row->excluded) === 1 ? 'cuenta' : 'cuentan' }}</span>
+                    <span data-testid="parallels-excluded">{{ collect($row->excluded)->map(fn ($career) => $career->career->code.($career->isReturned() ? ' (regresada)' : ' (sin esperados)'))->join(', ', ' y ') }} no {{ count($row->excluded) === 1 ? 'cuenta' : 'cuentan' }}</span>
                 @endif
             </p>
         </div>

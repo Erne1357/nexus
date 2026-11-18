@@ -11,11 +11,13 @@ use App\Modules\Core\Models\Campus;
  * campus, M8). Lleva:
  *
  * - `careers`: las carreras que cuentan (parte aceptada, o pendiente que el departamento puede decidir, como ParallelGroups
- *   en la bandeja), con algo suelto que pedir, por clave; `excluded`, las de parte regresada, que no cuentan;
+ *   en la bandeja) con esperados sueltos, por clave; `excluded`, las que no cuentan: parte regresada, o sin esperados
+ *   (aunque pidan grupos, no tienen alumnos que juntar);
  * - `parallels`: la cuenta de ParallelGroups con los esperados y grupos sueltos de cada carrera, con el tamaño objetivo;
  * - `groups`: los grupos sueltos que ya existen (de cualquier carrera), por orden de creación;
  * - `suggestion`: los grupos que sugiere Nexus (ParallelGroups::layout), cada uno con sus cupos y el grupo que se queda
- *   (ParallelPlacement), y `cancelled`, los que sobrarían, del de más avance al de menos;
+ *   (ParallelPlacement), sin pasar la capacidad real de ese grupo; `short`, los esperados de cada carrera que no caben en
+ *   ningún grupo de la sugerencia (`carrera => alumnos`), y `cancelled`, los que sobrarían, del de más avance al de menos;
  * - `whyNot`: por qué no hay nada que juntar, o null si juntando se ahorran grupos;
  * - `newCapacity`: la capacidad de un grupo que naciera al armar (GroupCapacity), para la vista previa del drawer
  *   (ParallelDraft).
@@ -28,6 +30,7 @@ final readonly class ParallelSubject
      * @param  list<ParallelExisting>  $groups
      * @param  list<ParallelSlot>  $suggestion
      * @param  list<ParallelExisting>  $cancelled
+     * @param  array<string, int>  $short
      */
     public function __construct(
         public Subject $subject,
@@ -39,7 +42,8 @@ final readonly class ParallelSubject
         public array $suggestion,
         public array $cancelled,
         public ?string $whyNot,
-        public int $newCapacity,
+        public array $short = [],
+        public int $newCapacity = 0,
     ) {}
 
     public function size(): int
@@ -109,18 +113,19 @@ final readonly class ParallelSubject
     }
 
     /**
-     * Los grupos con docente que la sugerencia tendría que cancelar: un grupo con docente nunca se cancela.
+     * Los grupos que la sugerencia tendría que cancelar y no se pueden cancelar: con docente (nunca se cancela) o con una
+     * solicitud de cambio abierta.
      *
      * @return list<ParallelExisting>
      */
     public function blocked(): array
     {
-        return array_values(array_filter($this->cancelled, fn (ParallelExisting $group): bool => $group->hasTeacher()));
+        return array_values(array_filter($this->cancelled, fn (ParallelExisting $group): bool => $group->isLocked()));
     }
 
     /**
-     * Por qué la sugerencia no se puede armar así, o null: una parte pendiente o un grupo con docente sin lugar. La carga
-     * no editable la dice Parallels::$blockedReason.
+     * Por qué la sugerencia no se puede armar así, o null: una parte pendiente, un grupo que no se puede cancelar sin
+     * lugar, o un grupo cuyos cupos pasan su capacidad real (HC-07). La carga no editable la dice Parallels::$blockedReason.
      */
     public function arrangeBlockedReason(): ?string
     {
@@ -132,13 +137,19 @@ final readonly class ParallelSubject
 
         $blocked = $this->blocked()[0] ?? null;
 
-        if ($blocked === null) {
-            return null;
+        if ($blocked !== null) {
+            return $blocked->lockReason(collect([...$this->careers, ...$this->excluded])->first(fn (ParallelCareer $career): bool => $career->career->getKey() === $blocked->ownerCareerId)?->career->code);
         }
 
-        $owner = collect([...$this->careers, ...$this->excluded])->first(fn (ParallelCareer $career): bool => $career->career->getKey() === $blocked->ownerCareerId)?->career->code;
+        foreach ($this->suggestion as $slot) {
+            if ($slot->over() > 0) {
+                $name = $slot->keeps === null ? 'un grupo nuevo' : "el grupo {$slot->keeps->code}";
 
-        return "El grupo {$blocked->code}".($owner === null ? '' : " de {$owner}").' tiene docente y el arreglo no le deja lugar: un grupo con docente no se cancela.';
+                return 'HC-07: los cupos de '.$name.' suman '.array_sum($slot->quotas)." y es de {$slot->capacity} lugares.";
+            }
+        }
+
+        return null;
     }
 
     /**

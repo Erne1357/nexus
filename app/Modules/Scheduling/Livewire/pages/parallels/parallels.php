@@ -221,7 +221,7 @@ new #[Title('Paralelos')] class extends Component
         $this->resetErrorBag();
 
         try {
-            $result = $arm->handle($parallels->term, $parallels->modality, $row->subject, $row->campus, $draft->arrangement(), auth()->user());
+            $result = $arm->handle($parallels->term, $parallels->modality, $parallels->department, $row->subject, $row->campus, $draft->arrangement(), auth()->user());
         } catch (ValidationException $e) {
             foreach ($e->errors() as $field => $messages) {
                 $this->addError($field, $messages[0]);

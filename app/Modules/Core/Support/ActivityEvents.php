@@ -60,6 +60,7 @@ final class ActivityEvents
         'groups_confirmed' => 'Grupos confirmados',
         'quotas_updated' => 'Cupos',
         'parallels_arranged' => 'Paralelos armados',
+        'seats_changed' => 'Lugares cambiados',
         'session_placed' => 'Sesión acomodada',
         'session_updated' => 'Sesión cambiada',
         'session_removed' => 'Sesión quitada',

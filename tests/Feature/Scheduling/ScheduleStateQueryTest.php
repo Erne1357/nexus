@@ -21,6 +21,8 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Rules\Constraints\QuotasWithinCapacity;
+use App\Modules\Scheduling\Validation\ValidationScope;
 
 /*
 | ScheduleStateQuery: la foto del periodo vista desde una modalidad, con los grupos de todos sus campus (M1), que leen
@@ -66,6 +68,16 @@ it('trae los grupos de la modalidad en todos sus campus, aun cancelados, y de ot
         ->and($state->subject($here->subject_id)->weeklyHours())->toBe(5)
         ->and($state->profile($this->modality->id)->days)->toBe([1, 2, 3, 4, 5, 6])
         ->and($state->profile($this->ead->id)->usesRooms)->toBe($this->ead->profile->usesRooms);
+});
+
+it('un grupo cancelado conserva sus cupos de historia, pero la foto no los trae y el validador no lo revisa (HC-07)', function () {
+    $cancelled = Group::factory()->cancelled()->withQuota()->create(['term_id' => $this->term->id, 'campus_id' => $this->campus->id]);
+
+    $state = app(ScheduleStateQuery::class)->forModality($this->term, $this->modality->id);
+
+    expect(GroupQuota::query()->where('group_id', $cancelled->id)->count())->toBe(1)
+        ->and($state->quotasOf($cancelled->id))->toBe([])
+        ->and(iterator_to_array((new QuotasWithinCapacity)->check($state, ValidationScope::groups($cancelled->id)), false))->toBe([]);
 });
 
 it('trae del docente sus horas base, externas, bloques no disponibles y si es de honorarios', function () {

@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\InboxStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\ProposalIntake;
+use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Demand\Enums\ForecastMethod;
@@ -12,6 +13,7 @@ use App\Modules\Scheduling\Queries\Parallels;
 use App\Modules\Scheduling\Queries\ParallelSlot;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
 use App\Modules\Scheduling\Queries\ParallelSubject;
+use App\Modules\Staffing\Models\ChangeRequest;
 use Illuminate\Support\Facades\DB;
 use Tests\Support\Scheduling\ParallelsWorld;
 
@@ -167,7 +169,63 @@ it('señala el grupo con docente que la sugerencia tendría que cancelar', funct
     $row = parallelsRow();
 
     expect(array_map(fn ($group): string => $group->code, $row->blocked()))->toBe(['2'])
-        ->and($row->arrangeBlockedReason())->toBe('El grupo 2 de ISIC tiene docente y el arreglo no le deja lugar: un grupo con docente no se cancela.');
+        ->and($row->arrangeBlockedReason())->toBe('El grupo 2 de ISIC tiene docente y el arreglo no le deja lugar: deja un grupo con lugares de ISIC o quítale primero el docente.');
+});
+
+it('una carrera sin esperados no cuenta: no suma grupos pedidos ni cambia por qué no hay nada que juntar', function () {
+    $this->world->request($this->isic, 60, 2);
+    $this->world->request($this->world->career('IGEM'), 0, 1);
+
+    $row = parallelsRow();
+
+    expect(array_map(fn ($career): string => $career->career->code, $row->careers))->toBe(['ISIC'])
+        ->and(array_map(fn ($career): array => [$career->career->code, $career->status], $row->excluded))->toBe([['IGEM', InboxStatus::Accepted]])
+        ->and($row->requested())->toBe(2)
+        ->and($row->whyNot)->toBe('Solo la pide ISIC');
+
+    ProposalItem::query()->where('expected_students', 60)->update(['expected_students' => 0]);
+
+    expect(parallelsRow()->whyNot)->toBe('Ninguna carrera espera alumnos');
+});
+
+it('la sugerencia no reparte más allá de la capacidad real del grupo que se queda: lo que no cabe queda de menos', function () {
+    $isic = $this->world->request($this->isic, 30, 1);
+    $this->world->request($this->iind, 5, 1);
+    $this->world->groupsOf($isic, 1, ['capacity' => 25]);
+
+    $row = parallelsRow();
+
+    expect(parallelsSlots($row))->toBe([['quotas' => ['ISIC' => 20, 'IIND' => 5], 'capacity' => 25, 'keeps' => '1']])
+        ->and($row->short)->toBe([$this->isic->id => 10])
+        ->and($row->suggestion[0]->over())->toBe(0)
+        ->and($row->arrangeBlockedReason())->toBeNull();
+});
+
+it('lo que no cabe en un grupo pasa a los lugares libres de un mixto antes de quedar de menos', function () {
+    $isic = $this->world->request($this->isic, 30, 1);
+    $this->world->request($this->iind, 20, 1);
+    $this->world->request($this->world->career('ITIC'), 10, 1);
+    $this->world->groupsOf($isic, 1, ['capacity' => 25]);
+
+    $row = parallelsRow();
+
+    expect(parallelsSlots($row))->toBe([
+        ['quotas' => ['ISIC' => 25], 'capacity' => 25, 'keeps' => '1'],
+        ['quotas' => ['IIND' => 20, 'ITIC' => 10, 'ISIC' => 5], 'capacity' => 35, 'keeps' => null],
+    ])->and($row->short)->toBe([]);
+});
+
+it('marca como bloqueado el grupo con una solicitud de cambio abierta que la sugerencia cancelaría', function () {
+    $isic = $this->world->request($this->isic, 30, 2);
+    $this->world->request($this->iind, 5, 1);
+    [$first, $second] = $this->world->groupsOf($isic, 2);
+    ChangeRequest::factory()->forGroup($first)->create();
+    ChangeRequest::factory()->forGroup($second)->create();
+
+    $row = parallelsRow();
+
+    expect(array_map(fn ($group): string => $group->code, $row->blocked()))->toBe(['2'])
+        ->and($row->arrangeBlockedReason())->toBe('Resuelve primero la solicitud de cambio de Cálculo Integral, grupo 2.');
 });
 
 it('marca la materia armada cuando un grupo suelto ya junta a dos carreras', function () {

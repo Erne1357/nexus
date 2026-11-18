@@ -1,7 +1,7 @@
 {{--
     Lo que piden, de consulta, debajo de 1024 px (maqueta B, «armar» a 390 px): por carrera que cuenta, su clave y el estado
     de su parte, sus esperados y lo que pidió, y en qué grupos quedan («1 completo · 10 lugares en Mixto 2»), con los
-    esperados sin lugar o de más; luego las regresadas, que no cuentan.
+    esperados sin lugar o de más; luego las que no cuentan (regresadas o sin esperados).
 --}}
 <ul class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300 lg:hidden" data-testid="parallels-demand-stack">
     @foreach ($row->careers as $career)
@@ -41,9 +41,13 @@
         <li class="grid gap-1 px-4 py-3 text-neutral" wire:key="stack-out-{{ $career->career->getKey() }}">
             <span class="flex flex-wrap items-center gap-2">
                 @include('scheduling::parallels.career-chip', ['code' => $career->career->code, 'name' => $career->career->name, 'accepted' => false])
-                <x-core::status-badge tone="error" icon="o-arrow-uturn-left" label="Regresada" />
+                @if ($career->isReturned())
+                    <x-core::status-badge tone="error" icon="o-arrow-uturn-left" label="Regresada" />
+                @else
+                    <x-core::status-badge tone="neutral" label="Sin esperados" />
+                @endif
             </span>
-            <span class="text-sm">No cuenta hasta que la reenvíen.</span>
+            <span class="text-sm">{{ $career->isReturned() ? 'No cuenta hasta que la reenvíen.' : 'No cuenta: pide grupos sin alumnos esperados que juntar.' }}</span>
         </li>
     @endforeach
 </ul>

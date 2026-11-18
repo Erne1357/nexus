@@ -1,10 +1,15 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\AcademicLoad\Models\ProposalPackage;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
 use App\Modules\Scheduling\Actions\Parallels\ParallelArrangement;
@@ -15,6 +20,8 @@ use App\Modules\Scheduling\Events\ParallelGroupsArranged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Staffing\Models\ChangeRequest;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
@@ -30,7 +37,7 @@ use Tests\Support\Scheduling\ParallelsWorld;
 
 beforeEach(function () {
     $this->world = ParallelsWorld::create();
-    $this->actor = User::factory()->create();
+    $this->actor = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
     $this->isic = $this->world->career('ISIC');
     $this->iind = $this->world->career('IIND');
 });
@@ -43,7 +50,7 @@ function armParallels(array $arrangement): ParallelArrangement
     $ids = Career::query()->pluck('id', 'code')->all();
 
     return app(ArmParallelGroups::class)->handle(
-        test()->world->term, test()->world->modality, test()->world->subject, test()->world->campus,
+        test()->world->term, test()->world->modality, test()->world->department, test()->world->subject, test()->world->campus,
         array_map(fn (array $seats): array => collect($seats)->mapWithKeys(fn (int $count, string $code): array => [$ids[$code] => $count])->all(), $arrangement),
         test()->actor,
     );
@@ -273,4 +280,82 @@ it('rechaza un arreglo vacío o con lugares fuera de rango', function () {
 
     expect(armParallelsErrors([]))->toBe(['groups' => ['El arreglo lleva de 1 a 60 grupos.']])
         ->and(armParallelsErrors([['ISIC' => 0]]))->toBe(['groups.0' => ['Los lugares de cada carrera van de 1 a 999.']]);
+});
+
+it('prueba negativa de alcance: no arma una materia de otro departamento ni la arma el jefe de otro departamento', function () {
+    [$isic1] = $this->world->groupsOf($this->world->request($this->isic, 30, 1));
+    $this->world->request($this->iind, 5, 1);
+    $sc = Department::factory()->create(['code' => 'SC']);
+    $foreign = Subject::factory()->create(['department_id' => $sc->id]);
+    $arrangement = [[$this->isic->id => 30, $this->iind->id => 5]];
+    $world = $this->world;
+
+    expect(fn () => app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $foreign, $world->campus, $arrangement, $this->actor))
+        ->toThrow(AuthorizationException::class)
+        ->and(fn () => app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $world->subject, $world->campus, $arrangement,
+            User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sc->id])->create()))
+        ->toThrow(AuthorizationException::class)
+        ->and(armedSeats($isic1))->toBe(['ISIC' => 35]);
+});
+
+it('prueba negativa de alcance: un jefe de CB nombrado en otra modalidad no arma la de Presencial', function () {
+    $this->world->groupsOf($this->world->request($this->isic, 30, 1));
+    $this->world->request($this->iind, 5, 1);
+    $other = Modality::factory()->create(['code' => 'DIST', 'name' => 'A distancia']);
+    RoleAssignment::query()->where('user_id', $this->actor->id)->delete();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id, 'modality_id' => $other->id])->create();
+    $world = $this->world;
+
+    expect(fn () => app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $world->subject, $world->campus,
+        [[$this->isic->id => 30, $this->iind->id => 5]], $jefe))->toThrow(AuthorizationException::class);
+});
+
+it('un grupo con una solicitud de cambio abierta no se cancela: se queda antes que otro y, si no cabe, se rechaza con el motivo', function () {
+    [$isic1, $isic2] = $this->world->groupsOf($this->world->request($this->isic, 30, 2), 2);
+    $this->world->request($this->iind, 5, 1);
+    ChangeRequest::factory()->forGroup($isic2)->approved()->create();
+
+    expect(armParallelsErrors([['IIND' => 5]]))->toBe(['groups' => ['Resuelve primero la solicitud de cambio de Cálculo Integral, grupo 2.']])
+        ->and(Group::query()->where('status', GroupStatus::Cancelled)->count())->toBe(0);
+
+    $result = armParallels([['ISIC' => 30, 'IIND' => 5]]);
+
+    expect($result->kept[0]['group']->is($isic2))->toBeTrue()
+        ->and($isic1->fresh()->status)->toBe(GroupStatus::Cancelled);
+});
+
+it('el acuerdo aceptado de una carrera que sigue toma sus lugares nuevos, con bitácora y sin cambiar quién lo decidió', function () {
+    [$isic1] = $this->world->groupsOf($this->world->request($this->isic, 30, 1));
+    $this->world->request($this->iind, 5, 1);
+    $agreement = armParallelsProposal($isic1, $this->iind->id, 10);
+    $agreement->update(['status' => AgreementStatus::Accepted, 'decided_by' => User::factory()->create()->id, 'decided_at' => now()->subDay()]);
+    $decided = $agreement->fresh()->only(['decided_by', 'decided_at']);
+    $isic1->quotas()->update(['max_seats' => 25]);
+    $isic1->quotas()->create(['career_id' => $this->iind->id, 'max_seats' => 10]);
+
+    armParallels([['ISIC' => 30, 'IIND' => 5]]);
+
+    $changed = Activity::query()->where('event', 'seats_changed')->sole();
+
+    expect($agreement->fresh()->max_seats)->toBe(5)
+        ->and($agreement->fresh()->status)->toBe(AgreementStatus::Accepted)
+        ->and($agreement->fresh()->only(['decided_by', 'decided_at']))->toEqual($decided)
+        ->and($changed->attribute_changes['old'])->toBe(['max_seats' => 10])
+        ->and($changed->attribute_changes['attributes'])->toBe(['max_seats' => 5])
+        ->and(armedSeats($isic1))->toBe(['ISIC' => 30, 'IIND' => 5]);
+});
+
+it('armar dos veces seguidas la misma materia no duplica grupos: el segundo ve los que creó el primero', function () {
+    $this->world->groupsOf($this->world->request($this->isic, 60, 2));
+    $this->world->request($this->iind, 40, 2);
+    $arrangement = [['ISIC' => 35], ['IIND' => 35], ['ISIC' => 25, 'IIND' => 5]];
+
+    expect(armParallels($arrangement)->created)->toHaveCount(2);
+
+    $again = armParallels($arrangement);
+
+    expect($again->created)->toBe([])
+        ->and($again->cancelled)->toBe([])
+        ->and($again->changed())->toBeFalse()
+        ->and(Group::query()->active()->count())->toBe(3);
 });

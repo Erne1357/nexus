@@ -19,6 +19,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Rules\SuggestedGroups;
+use App\Modules\Scheduling\Events\GroupsCancelling;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -48,7 +49,8 @@ final class ParallelsQuery
     /**
      * La pestaña de un departamento. Un número fijo de consultas, sin importar cuántas materias, carreras o grupos: la carga,
      * las propuestas, las partes del departamento, las filas pedidas con sus materias y campus, las carreras, el nuevo
-     * ingreso (solo con paquetes), los grupos sueltos con sus docentes y cupos, el tamaño objetivo y los salones por defecto
+     * ingreso (solo con paquetes), los grupos sueltos con sus docentes y cupos, una sola pregunta a Staffing por los que no
+     * se podrían cancelar (GroupsCancelling: solicitudes de cambio abiertas), el tamaño objetivo y los salones por defecto
      * (GroupCapacity) para los grupos que nacerían.
      */
     public function for(Term $term, Modality $modality, Department $department): Parallels
@@ -84,8 +86,10 @@ final class ParallelsQuery
 
         $careers = Career::query()->withTrashed()->whereIn('id', $proposals->only($statuses->keys()->all())->pluck('career_id')->all())->get()->keyBy('id');
         $intakes = $this->newStudents($items);
-        $groups = $this->looseGroups($term->getKey(), $modality->getKey(), $department->getKey())->get()
-            ->map(fn (Group $group): array => ['subject' => $group->subject_id, 'campus' => $group->campus_id, 'group' => self::existing($group)])
+        $loose = $this->looseGroups($term->getKey(), $modality->getKey(), $department->getKey())->get();
+        $vetoes = self::vetoes($loose, $items->pluck('subject.name', 'subject_id')->all());
+        $groups = $loose
+            ->map(fn (Group $group): array => ['subject' => $group->subject_id, 'campus' => $group->campus_id, 'group' => self::existing($group, $vetoes[$group->getKey()] ?? null)])
             ->groupBy(fn (array $row): string => "{$row['subject']}|{$row['campus']}");
 
         $sizes = SuggestedGroups::fromSettings();
@@ -136,9 +140,33 @@ final class ParallelsQuery
     }
 
     /**
-     * Un grupo leído con looseGroups(), como lo muestra la pestaña.
+     * Pregunta a los módulos de la derecha, con el evento con veto GroupsCancelling y una sola vez para todos, qué grupos no
+     * se podrían cancelar (una solicitud de cambio abierta), sin escribir nada: el primer motivo de cada uno, por id.
+     *
+     * @param  iterable<Group>  $groups
+     * @param  array<string, string>  $subjectNames  por id de materia
+     * @return array<string, string>
      */
-    public static function existing(Group $group): ParallelExisting
+    public static function vetoes(iterable $groups, array $subjectNames): array
+    {
+        $groups = collect($groups);
+
+        if ($groups->isEmpty()) {
+            return [];
+        }
+
+        $question = new GroupsCancelling($groups->mapWithKeys(fn (Group $group): array => [
+            $group->getKey() => ($subjectNames[$group->subject_id] ?? 'La materia').", grupo {$group->code}",
+        ])->all());
+        event($question);
+
+        return $groups->mapWithKeys(fn (Group $group): array => [$group->getKey() => $question->reasonsFor($group->getKey())[0] ?? null])->filter()->all();
+    }
+
+    /**
+     * Un grupo leído con looseGroups(), como lo muestra la pestaña, con el motivo por el que no se cancelaría (vetoes()).
+     */
+    public static function existing(Group $group, ?string $vetoed = null): ParallelExisting
     {
         return new ParallelExisting(
             id: $group->getKey(),
@@ -149,6 +177,7 @@ final class ParallelsQuery
             sessions: (int) $group->sessions_count,
             minutes: (int) $group->scheduled_minutes,
             quotas: $group->quotas->sortByDesc('is_owner')->mapWithKeys(fn (GroupQuota $quota): array => [$quota->career_id => $quota->max_seats])->all(),
+            vetoed: $vetoed,
         );
     }
 
@@ -218,8 +247,9 @@ final class ParallelsQuery
      */
     private function row(ProposalItem $item, Collection $entries, array $existing, SuggestedGroups $sizes, int $newCapacity): ParallelSubject
     {
-        [$excluded, $counting] = $entries->partition(fn (ParallelCareer $career): bool => $career->status === InboxStatus::Returned);
-        $careers = $counting->filter(fn (ParallelCareer $career): bool => $career->expected > 0 || $career->requested > 0)->values();
+        [$returned, $counting] = $entries->partition(fn (ParallelCareer $career): bool => $career->status === InboxStatus::Returned);
+        [$careers, $withoutStudents] = $counting->partition(fn (ParallelCareer $career): bool => $career->expected > 0);
+        $careers = $careers->values();
 
         $parallels = ParallelGroups::suggest($sizes->sizeFor((bool) $item->subject->needs_lab), $careers
             ->mapWithKeys(fn (ParallelCareer $career): array => [$career->career->getKey() => ['expected' => $career->expected, 'requested' => $career->requested]])
@@ -227,39 +257,107 @@ final class ParallelsQuery
         $layout = $parallels->layout();
         $placement = ParallelPlacement::place($layout, array_map(fn (ParallelExisting $group): array => $group->forPlacement(), $existing));
         $byId = collect($existing)->keyBy('id');
-        $full = array_sum(array_column($parallels->careers, 'full'));
-
-        $suggestion = array_map(function (array $expected, int $index) use ($placement, $byId, $newCapacity, $full): ParallelSlot {
-            $keeps = isset($placement->kept[$index]) ? $byId[$placement->kept[$index]] : null;
-            $owner = $keeps?->ownerCareerId ?? (string) array_key_first($expected);
-            $capacity = $keeps?->capacity ?? $newCapacity;
-
-            return new ParallelSlot($expected, count($expected) > 1 ? $expected : [$owner => $capacity], $owner, $capacity, $index < $full, $keeps);
-        }, $layout, array_keys($layout));
+        [$suggestion, $short] = self::slots($layout, $placement, $byId, $newCapacity, array_sum(array_column($parallels->careers, 'full')));
 
         return new ParallelSubject(
             subject: $item->subject,
             campus: $item->campus,
             careers: $careers->all(),
-            excluded: $excluded->values()->all(),
+            excluded: $returned->concat($withoutStudents)->sortBy(fn (ParallelCareer $career): string => $career->career->code)->values()->all(),
             parallels: $parallels,
             groups: $existing,
             suggestion: $suggestion,
             cancelled: array_map(fn (string $id): ParallelExisting => $byId[$id], $placement->cancelled),
-            whyNot: $this->whyNot($careers, $parallels),
+            whyNot: $this->whyNot($careers, $withoutStudents->isNotEmpty(), $parallels),
+            short: $short,
             newCapacity: $newCapacity,
         );
     }
 
     /**
-     * Por qué no hay nada que juntar (maqueta B): una sola carrera, cada carrera llena sus grupos o juntando no se ahorra.
+     * Los grupos de la sugerencia con sus cupos, sin pasar la capacidad real de cada uno (la del grupo que se queda o la de
+     * uno nuevo, GroupCapacity), y los esperados que no caben en ninguno (supuesto por confirmar):
      *
-     * @param  Collection<int, ParallelCareer>  $careers
+     * - un grupo de una sola carrera le da toda su capacidad; lo que pasa de ella sobra;
+     * - en un mixto cada carrera recibe sus esperados en exclusiva y lo demás queda libre (confirmado el 18 de noviembre de
+     *   2026); si suman más que la capacidad, sobra lo de la carrera con más lugares;
+     * - lo que sobra de cada carrera se acomoda en los lugares libres de otros mixtos, primero donde ya va la carrera, y lo que
+     *   no cabe queda de menos (`short`).
+     *
+     * @param  list<array<string, int>>  $layout
+     * @param  Collection<string, ParallelExisting>  $byId
+     * @return array{0: list<ParallelSlot>, 1: array<string, int>}
      */
-    private function whyNot(Collection $careers, ParallelGroups $parallels): ?string
+    private static function slots(array $layout, ParallelPlacement $placement, Collection $byId, int $newCapacity, int $full): array
+    {
+        $slots = [];
+        $overflow = [];
+
+        foreach ($layout as $index => $expected) {
+            $keeps = isset($placement->kept[$index]) ? $byId[$placement->kept[$index]] : null;
+            $owner = $keeps?->ownerCareerId ?? (string) array_key_first($expected);
+            $capacity = $keeps?->capacity ?? $newCapacity;
+            $mixed = count($expected) > 1;
+
+            if ($mixed) {
+                $excess = array_sum($expected) - $capacity;
+                arsort($expected);
+
+                foreach (array_keys($expected) as $career) {
+                    $take = min(max(0, $excess), $expected[$career]);
+                    $expected[$career] -= $take;
+                    $excess -= $take;
+                    $overflow[$career] = ($overflow[$career] ?? 0) + $take;
+                }
+
+                $expected = array_filter($expected);
+            } else {
+                $overflow[$owner] = ($overflow[$owner] ?? 0) + max(0, $expected[$owner] - $capacity);
+            }
+
+            $slots[$index] = ['expected' => $expected, 'owner' => $owner, 'capacity' => $capacity, 'mixed' => $mixed, 'keeps' => $keeps];
+        }
+
+        $short = [];
+
+        foreach (array_filter($overflow) as $career => $left) {
+            foreach ([true, false] as $carrying) {
+                foreach ($slots as $index => $slot) {
+                    $free = $slot['capacity'] - array_sum($slot['expected']);
+
+                    if ($left > 0 && $slot['mixed'] && $free > 0 && isset($slot['expected'][$career]) === $carrying) {
+                        $take = min($left, $free);
+                        $slots[$index]['expected'][$career] = ($slot['expected'][$career] ?? 0) + $take;
+                        $left -= $take;
+                    }
+                }
+            }
+
+            if ($left > 0) {
+                $short[$career] = $left;
+            }
+        }
+
+        return [array_map(fn (array $slot, int $index): ParallelSlot => new ParallelSlot(
+            $slot['expected'],
+            $slot['mixed'] ? $slot['expected'] : [$slot['owner'] => $slot['capacity']],
+            $slot['owner'],
+            $slot['capacity'],
+            $index < $full,
+            $slot['keeps'],
+        ), $slots, array_keys($slots)), $short];
+    }
+
+    /**
+     * Por qué no hay nada que juntar (maqueta B): ninguna carrera con esperados, una sola, cada carrera llena sus grupos o
+     * juntando no se ahorra. Las carreras sin esperados no cuentan.
+     *
+     * @param  Collection<int, ParallelCareer>  $careers  las que cuentan y esperan alumnos
+     */
+    private function whyNot(Collection $careers, bool $othersWithoutStudents, ParallelGroups $parallels): ?string
     {
         return match (true) {
-            $careers->isEmpty() => 'Ninguna carrera que cuente la pide',
+            $careers->isEmpty() => $othersWithoutStudents ? 'Ninguna carrera espera alumnos' : 'Ninguna carrera que cuente la pide',
             $careers->count() === 1 => 'Solo la pide '.$careers->first()->career->code,
             count($parallels->mixedShares) < 2 => 'Cada carrera llena sus grupos',
             $parallels->saved() <= 0 => 'Juntando no se ahorran grupos',
