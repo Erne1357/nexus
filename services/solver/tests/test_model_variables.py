@@ -251,6 +251,20 @@ def test_las_horas_semanales_siguen_la_rejilla_y_la_tolerancia(tolerance, rules_
     assert unit_counts(model_input.groups["g1"], grid, model_input) == expected
 
 
+def test_el_nivel_sigue_de_una_cantidad_de_unidades_a_la_otra():
+    """Sin HC-12 y con bloques de 50 min, una hora se da con 1 o 2 bloques: el patrón de la cantidad más cercana (1
+    bloque, a 10 min) es el nivel 0 y el de la otra va después de todos los niveles de la primera."""
+    data = instance(campuses=[campus(block_minutes=50, day_end="10:20")], groups=[group("g1", 1)], rooms=[room("r1")])
+    data["hard_rules"] = [rule for rule in data["hard_rules"] if rule != "HC-12"]
+    _, variables = build(data)
+    tiers_by_units = {}
+    for option in variables.groups["g1"].options:
+        units = sum(count for _, count in option.spread)
+        tiers_by_units.setdefault(units, set()).add(option.tier)
+
+    assert tiers_by_units == {1: {0, 1}, 2: {2, 3}}
+
+
 def test_las_ventanas_caen_en_la_rejilla_de_su_campus():
     """HC-04 por construcción: días del campus, dentro de la jornada y alineadas a sus bloques."""
     data = ModelData.of(parse_input(json.loads((fixtures_dir() / "v1" / "medium" / "input.json").read_text())))
