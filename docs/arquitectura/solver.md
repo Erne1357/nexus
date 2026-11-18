@@ -118,6 +118,50 @@ El motor no sabe de dónde viene cada cohorte: solo garantiza que los grupos con
 
 HC-14 a HC-18 son reglas del flujo (validación de catálogos, cierre, motivo de asignación, visibilidad, bitácora) y no entran al motor.
 
+## Evaluador en memoria
+
+Tarea 6.5. La heurística en PHP y la pantalla de corridas comparan soluciones candidatas con **las mismas clases de reglas** que el validador de la fase 3, sin base de datos y sin una segunda definición de cada regla.
+
+| Pieza | Módulo | Qué hace |
+|---|---|---|
+| `Rules/Evaluator/HardRuleEvaluator` | Scheduling | Corre HC-01 a HC-13 (las clases de `ScheduleValidator::CONSTRAINTS`, sin SC-09) sobre un `ScheduleState` y un alcance, todas o las que se piden. `forGroup()` da los choques de un grupo para preguntar «¿y si…?» después de `withSession()` o `withTeacher()`. No usa la base ni el contenedor. |
+| `Rules/Soft/*` y `Rules/Soft/SoftScorer` | Scheduling | Una clase por regla blanda, SC-01 a SC-09 (SC-09 cuenta con `CampusTravel`), con su unidad en el docblock y en `docs/dominio/reglas-de-negocio.md`. `SoftScorer` las multiplica por los pesos (`array<string, int>`; un peso cero no se calcula) y da el total, el desglose con peso y las unidades sin peso. Lo que la foto no trae (cohortes, preferidos, edificios y salones por defecto) va en `SoftContext`. |
+| `Evaluation/ContractState` | Solver | Arma el `ScheduleState` desde `SolverInput` y las sesiones propuestas de los grupos movibles (`ProposedSession`; `currentSessions()` da las actuales). Su alcance son los movibles. |
+| `Evaluation/ContractEvaluator` | Solver | `evaluate(SolverInput, list<ProposedSession>)` da `hardViolations` (`HardViolation`, un choque de dos grupos una sola vez con los dos; si una sesión es candidata sin id, una vez por grupo) y `softScore` (`SoftScore`); `evaluateState()` hace lo mismo sobre una foto ya armada (`ContractState::withState()`). Respeta `hard_rules` y `soft_weights` de la entrada. |
+
+Scheduling no conoce el contrato: Solver depende de Scheduling y no al revés.
+
+**Cómo se traduce el contrato a la foto** (`ContractState`):
+
+- Cada grupo de la entrada es un grupo activo: los movibles con las sesiones propuestas (sin propuesta, sin horario: HC-12 no lo revisa) y los fijos con `fixed_sessions`.
+- El contrato no trae ids de materia, modalidad ni campus. La materia es su `subject_code`, con las horas y el laboratorio del grupo; el campus es su código; la modalidad es una por campus, con el perfil de la rejilla de ese campus (HC-04). Las reglas solo comparan igualdad.
+- **HC-03 sigue las cohortes de la entrada.** Cada clave `plan:<plan>:<semestre>:<campus>` mete al grupo en ese semestre del alumno tipo (`ScheduleState` acepta los semestres en que cuenta cada grupo, y `TypicalStudentSchedule` revisa los de cada grupo del alcance; un tronco común puede contar en dos planes). Un grupo sin clave de plan no cuenta en ninguno: la entrada no trae los otros grupos de su materia y parecería el único. La clave `package:<id>:<campus>:<n>` (y la anterior, `package:<id>:<n>`, que todavía usan `tiny` y `medium`) da el paquete y su número al grupo.
+- La ocupación de fuera de la corrida (`teachers[].busy`, `rooms[].busy`) entra como grupos de contexto sin horas (ids con el prefijo `busy:`), uno por docente y campus y uno por salón. Sus choques no salen del evaluador.
+- HC-08: las horas base del docente son `remaining_hours` más las horas de sus grupos fijos de la entrada, así que lo que le queda es lo mismo que en la base.
+- HC-10: un préstamo aceptado (`agreements`) cubre a todos los grupos del departamento al que se presta.
+- HC-12: tolerancia cero, porque el motor programa exactamente `weekly_hours`. La base usa la tolerancia de la modalidad o `scheduling.weekly_hours_tolerance` (cero por omisión).
+
+**Lo que el contrato no trae** (el evaluador no lo puede ver; se revisa al armar la entrada o queda pendiente):
+
+- HC-07 (cupos) y HC-13 (materia, plan y carrera ofrecida): sin cupos ni catálogos en el contrato.
+- El núcleo sin combinación de HC-03: cuando ningún par de grupos únicos de su materia se empalma, pero materias con varios grupos no dejan combinación al alumno tipo. El contrato solo trae las cohortes de las materias con un solo grupo, así que ni el evaluador ni el motor lo ven. En la demo movida a propósito fueron 8 grupos de 256.
+
+**Equivalencia con la base** (`tests/Feature/Solver/ContractEvaluatorEquivalenceTest.php` y `ContractEvaluatorDemoTest.php`): con un escenario por regla (también la ocupación de otra modalidad, el grupo fijo de otro departamento, el tronco común, los préstamos y el «falso único») y con la demo al punto `cierre` movida a propósito (4 cargas presenciales, 256 grupos movibles, 222 con choques), el evaluador sobre el contrato da las mismas reglas duras por grupo movible que `ScheduleValidator` sobre `ScheduleStateQuery`, salvo lo de la lista anterior.
+
+**Costo** (17 de noviembre de 2026, `department-multicampus`: 1 139 grupos movibles, 2 708 en la entrada, 3 175 con los de contexto; PHP 8.5 sin cobertura):
+
+| Operación | Tiempo |
+|---|---|
+| Leer el JSON y `SolverInput::fromArray` | ~120–230 ms |
+| `ContractState::from` (la foto) | ~100 ms, +17 MB |
+| HC-01 a HC-13 de todos los movibles | ~90 ms (HC-08 ~45 ms, HC-02 ~27 ms) |
+| SC-01 a SC-09 de todos los movibles | ~13 ms |
+| `withSession` | ~50 µs |
+| `withSession` y `forGroup` (HC-01 a HC-13 de un grupo) | ~1 ms: HC-02 ~350 µs, HC-08 ~200 µs, HC-03 ~190 µs, el resto < 75 µs |
+| `withSession` y el puntaje blando de un grupo | ~115 µs |
+
+Lo caro de un grupo es lo que recorre todo: los pares de sesiones de su salón en la semana (`OverlappingPairs`, HC-02), todos los grupos para las horas del docente (`TeacherHourLimit`, HC-08) y todos los grupos con paquete (HC-03). Si la heurística (6.6) pregunta por cada bloque y salón candidato, esos tres son los primeros que conviene indexar.
+
 ## Descomposición del problema
 
 La unidad de corrida es la carga: un departamento en una modalidad, con sus grupos de todos sus campus (decisión del usuario, 17 de noviembre de 2026). Lo que no es de la carga entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, como `busy` o como grupos con `movable = false`, y las sesiones ya aceptadas, como `fixed_sessions`.

@@ -122,7 +122,8 @@ final class TypicalStudentSchedule implements Constraint
     }
 
     /**
-     * Los [modalidad, campus, plan, semestre] de los grupos activos del alcance, sin repetir.
+     * Los [modalidad, campus, plan, semestre] del alumno tipo en que cuentan los grupos activos del alcance, sin repetir
+     * (el suyo, o los que dice la foto que se arma del contrato del motor).
      *
      * @return list<array{string, string, string, int}>
      */
@@ -133,8 +134,12 @@ final class TypicalStudentSchedule implements Constraint
         foreach ($scope->groupIds() as $groupId) {
             $group = $state->group($groupId);
 
-            if ($group !== null && $group->isActive) {
-                $semesters["{$group->modalityId}|{$group->campusId}|{$group->studyPlanId}|{$group->semester}"] = [$group->modalityId, $group->campusId, $group->studyPlanId, $group->semester];
+            if ($group === null || ! $group->isActive) {
+                continue;
+            }
+
+            foreach ($state->typicalStudentSemestersOf($group) as [$modalityId, $campusId, $studyPlanId, $semester]) {
+                $semesters["{$modalityId}|{$campusId}|{$studyPlanId}|{$semester}"] = [$modalityId, $campusId, $studyPlanId, $semester];
             }
         }
 
