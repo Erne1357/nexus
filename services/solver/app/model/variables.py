@@ -109,6 +109,15 @@ class Span:
     literals: tuple[cp_model.IntVar, ...]
 
 
+@dataclass(frozen=True)
+class _SpanIndex:
+    """Las ocupaciones de un recurso y día por inicio, para no recorrerlas todas en cada minuto."""
+
+    starts: list[int]
+    by_start: dict[int, list[Span]]
+    longest: int
+
+
 class Occupancy:
     """La ocupación posible de un recurso (docente, salón o cohorte) por día, en minutos.
 
@@ -119,9 +128,11 @@ class Occupancy:
 
     def __init__(self) -> None:
         self._spans: dict[tuple[str, int], list[Span]] = defaultdict(list)
+        self._indexes: dict[tuple[str, int], _SpanIndex] = {}
 
     def add(self, key: str, day: int, span: Span) -> None:
         self._spans[(key, day)].append(span)
+        self._indexes.pop((key, day), None)
 
     def keys(self) -> list[tuple[str, int]]:
         return list(self._spans)
@@ -131,24 +142,34 @@ class Occupancy:
 
     def at(self, key: str, day: int, minute: int) -> list[cp_model.IntVar]:
         """Los literales de lo que ocupa el recurso en ese minuto; su suma vale 1 si está ocupado."""
-        return [
-            literal for span in self.spans(key, day) if span.start <= minute < span.end for literal in span.literals
-        ]
+        return [literal for span in self._covering(key, day, minute) for literal in span.literals]
 
     def cliques(self) -> Iterator[tuple[str, int, int, list[cp_model.IntVar]]]:
         """(recurso, día, minuto, literales) en cada inicio de ventana donde coinciden al menos dos grupos."""
-        for (key, day), spans in self._spans.items():
+        for key, day in self._spans:
+            for minute in self._index(key, day).starts:
+                covering = self._covering(key, day, minute)
+                if len({span.group_id for span in covering}) > 1:
+                    yield key, day, minute, [literal for span in covering for literal in span.literals]
+
+    def _covering(self, key: str, day: int, minute: int) -> list[Span]:
+        if (key, day) not in self._spans:
+            return []
+        index = self._index(key, day)
+        # Solo las que empiezan menos de una ventana antes pueden cubrir el minuto.
+        earlier = index.starts[bisect_right(index.starts, minute - index.longest) : bisect_right(index.starts, minute)]
+
+        return [span for start in earlier for span in index.by_start[start] if span.end > minute]
+
+    def _index(self, key: str, day: int) -> _SpanIndex:
+        if (key, day) not in self._indexes:
+            spans = self._spans[(key, day)]
             by_start: dict[int, list[Span]] = defaultdict(list)
             for span in spans:
                 by_start[span.start].append(span)
-            starts = sorted(by_start)
-            longest = max(span.end - span.start for span in spans)
-            for minute in starts:
-                # Solo las que empiezan menos de una ventana antes pueden cubrir el minuto.
-                earlier = starts[bisect_right(starts, minute - longest) : bisect_right(starts, minute)]
-                covering = [span for start in earlier for span in by_start[start] if span.end > minute]
-                if len({span.group_id for span in covering}) > 1:
-                    yield key, day, minute, [literal for span in covering for literal in span.literals]
+            self._indexes[(key, day)] = _SpanIndex(sorted(by_start), by_start, max(s.end - s.start for s in spans))
+
+        return self._indexes[(key, day)]
 
 
 @dataclass
@@ -204,6 +225,11 @@ def unit_counts(group: GroupInput, grid: Grid, data: ModelData) -> list[int]:
     return sorted(counts, key=lambda count: (abs(count * unit - required), count))
 
 
+def practice_units(group: GroupInput, grid: Grid, units: int) -> int:
+    """Las unidades de práctica de un grupo con `units` unidades semanales, redondeadas como en la heurística."""
+    return min(units, int(group.practice_hours * 60 / grid.unit_minutes + 0.5))
+
+
 @dataclass(frozen=True)
 class _WindowCheck:
     """Lo que el pre-filtro dice de una ventana: la regla que la impide (o `None`) y los salones que le sirven."""
@@ -227,9 +253,13 @@ def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput) -> Grou
 
         return checked[key]
 
+    # Los niveles siguen de una cantidad de unidades a la otra: el patrón de las horas más cercanas va antes que el de
+    # las otras.
+    first_tier = 0
     for units in unit_counts(group, grid, data):
-        practice = min(units, int(group.practice_hours * 60 / grid.unit_minutes + 0.5)) if lab_practice else 0
-        for tier, spreads in enumerate(tiers(units, grid.days)):
+        practice = practice_units(group, grid, units) if lab_practice else 0
+        unit_tiers = tiers(units, grid.days)
+        for tier, spreads in enumerate(unit_tiers, start=first_tier):
             for spread in spreads:
                 last = grid.blocks - max(count for _, count in spread) * grid.blocks_per_unit
                 for block in range(last + 1):
@@ -238,6 +268,7 @@ def _domain(model: cp_model.CpModel, data: ModelData, group: GroupInput) -> Grou
                         _add_option(model, grid, domain, spread, block, tier, practice)
                     else:
                         domain.rejected_options[reason] += 1
+        first_tier += len(unit_tiers)
 
     for window in domain.windows.values():
         for room_id in check((window.day, window.block, window.units)).rooms:
@@ -325,8 +356,9 @@ def _check_window(
     if eligible:
         return _WindowCheck(None, tuple(eligible), any(data.is_practice_space(room_id) for room_id in eligible))
 
-    # Sin salón: la regla que más salones le quitó a la ventana, contando los que se quitaron sin ver la hora; sin
-    # salones en el campus, HC-02, como la heurística.
+    # Sin salón: la regla que más salones le quitó a la ventana, contando los que se quitaron sin ver la hora. Si no se
+    # quitó ninguno, el campus no tiene salones que el grupo pueda usar (o ninguno de sus candidatos es del campus):
+    # HC-02, como `staticFailure` en la heurística, aunque la regla no esté activa.
     reasons = rejected + static_rejected
 
     return _WindowCheck(min(reasons, key=lambda rule: (-reasons[rule], rule)) if reasons else "HC-02")
