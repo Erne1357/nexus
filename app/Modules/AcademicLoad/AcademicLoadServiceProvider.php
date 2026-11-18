@@ -137,7 +137,12 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             // Evalúa periodos ya cursados: no depende de que haya carga en curso (MN-04 no la nombra; supuesto por confirmar).
             new NavigationItem('Precisión de la proyección', 'academic-load.forecast-accuracy', 'o-scale', NavigationArea::Academico, group: NavigationGroup::Propuesta, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ForecastEvaluationView)),
-            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
+            // Después de las pantallas del cierre y del re-análisis (orden 0, de Scheduling y Staffing) y antes de la consulta
+            // publicada: es la trazabilidad de lo publicado (tarea 8.10). Como Horarios publicados, no depende de que haya
+            // carga en curso: las versiones siguen ahí al cerrar el periodo.
+            new NavigationItem('Versiones publicadas', 'academic-load.versions', 'o-rectangle-stack', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView)),
+            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 2,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
     }
