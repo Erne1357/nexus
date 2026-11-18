@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
@@ -220,6 +221,25 @@ it('HC-03 se revisa por campus dentro de la carga presencial (MS10): el grupo de
     $typical = $this->validator->validateLoad($this->term, $this->modality)->forRule('HC-03');
 
     expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $typical))->toEqualCanonicalizing([$onlyHere->id, $clash->id]);
+});
+
+it('HC-03 incluye cada paquete: dos grupos de la misma instancia que se empalman chocan, aunque sus materias tengan otro grupo', function () {
+    $package = ProposalPackage::factory()->create();
+    $plan = StudyPlan::factory()->create();
+    $shared = ['owner_career_id' => $plan->career_id, 'study_plan_id' => $plan->id, 'semester' => 1];
+    $calculus = Subject::factory()->create();
+    $chemistry = Subject::factory()->create();
+    $first = validatorGroup(['subject_id' => $calculus->id, 'package_id' => $package->id, 'package_number' => 1, ...$shared]);
+    $second = validatorGroup(['subject_id' => $chemistry->id, 'package_id' => $package->id, 'package_number' => 1, ...$shared, 'semester' => 2]);
+    $otherInstance = validatorGroup(['subject_id' => $chemistry->id, 'package_id' => $package->id, 'package_number' => 2, ...$shared, 'semester' => 2]);
+    GroupSession::factory()->for($first)->on(1, '08:00', '10:00')->create();
+    GroupSession::factory()->for($second)->on(1, '09:00', '11:00')->create();
+    GroupSession::factory()->for($otherInstance)->on(1, '08:00', '10:00')->create();
+
+    $typical = $this->validator->validateLoad($this->term, $this->modality)->forRule('HC-03');
+
+    expect(array_map(fn (Violation $violation): ?string => $violation->groupId, $typical))->toEqualCanonicalizing([$first->id, $second->id])
+        ->and($typical[0]->message)->toContain('Paquete #1');
 });
 
 it('HC-04 usa la ventana de la modalidad: con sábado en su perfil, una sesión en sábado no es choque; sin él, sí', function () {

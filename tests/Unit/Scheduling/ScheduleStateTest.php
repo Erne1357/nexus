@@ -137,3 +137,21 @@ it('withSessions reemplaza todas las sesiones del grupo: las que no aparecen se 
         ->and($next->roomSessions('R1'))->toBe([])
         ->and($next->roomSessions('R2'))->toHaveCount(1);
 });
+
+it('HC-03: la foto puede decir en qué semestres del alumno tipo cuenta un grupo, en otros además del suyo o en ninguno', function () {
+    $state = States::builder()
+        ->group(States::group('A', plan: 'P1'))
+        ->group(States::group('B', plan: 'P1'))
+        ->group(States::group('C', plan: 'P2'))
+        ->group(States::group('D', plan: 'P2', active: false))
+        ->typicalStudentSemesters('A', [['PRES', 'C2', 'P1', 1], ['PRES', 'C2', 'P2', 1]])
+        ->typicalStudentSemesters('B', [])
+        ->typicalStudentSemesters('D', [['PRES', 'C2', 'P2', 1]])
+        ->build();
+
+    $ids = fn (array $groups): array => array_map(fn ($group) => $group->id, $groups);
+
+    expect($ids($state->groupsOfSemester('PRES', 'C2', 'P1', 1)))->toBe(['A'])
+        ->and($ids($state->groupsOfSemester('PRES', 'C2', 'P2', 1)))->toBe(['A', 'C'])
+        ->and($ids($state->withTeacher('A', 'T1')->withSession('C', new SessionCandidate(1, '07:00', '08:00'))->groupsOfSemester('PRES', 'C2', 'P2', 1)))->toBe(['A', 'C']);
+});

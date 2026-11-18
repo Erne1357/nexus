@@ -1,6 +1,6 @@
 # Fase 5 — Proyección de demanda
 
-**Entrega:** R2 · **Ventana:** feb 2027 · **Modo:** paralelo · **Estado:** ✅ (abierta el 16 de noviembre de 2026, cerrada el 18 de noviembre de 2026) · **Milestone:** `Fase 5 — Proyección de demanda`
+**Entrega:** R2 · **Ventana:** feb 2027 · **Modo:** paralelo · **Estado:** ✅ (abierta el 16 de noviembre de 2026, cerrada el 17 de noviembre de 2026) · **Milestone:** `Fase 5 — Proyección de demanda`
 
 ## Objetivo
 

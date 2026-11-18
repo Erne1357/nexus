@@ -39,6 +39,11 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'teachers[0].preferred[0].day', 'entre 1 y 6'],
+    'bloque que no divide la jornada' => [function (array $d) {
+        $d['campuses'][0]['block_minutes'] = 50;
+
+        return $d;
+    }, 'campuses[0].day_end', 'no se divide en bloques'],
     'fin antes del inicio' => [function (array $d) {
         $d['rooms'][1]['blocks'][0]['ends_at'] = '12:00';
 

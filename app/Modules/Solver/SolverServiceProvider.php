@@ -15,6 +15,7 @@ use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
 use App\Modules\Solver\Console\SolverBenchmark;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Queries\CareerLoadsQuery;
 use App\Modules\Solver\Rules\SolverSettings;
@@ -28,15 +29,17 @@ use App\Modules\Solver\Rules\SolverSettings;
 final class SolverServiceProvider extends ModuleServiceProvider
 {
     /**
-     * Los motores disponibles, con la etiqueta `solver.engines`: hoy el de prueba; la heurística (6.6) y CP-SAT (fase 7)
-     * se agregan aquí. Los motores no guardan estado, así que el registro puede ser único por proceso. CareerLoadsQuery
-     * recuerda sus respuestas en la petición: `scoped`, nunca único (Octane).
+     * Los motores disponibles, con la etiqueta `solver.engines`: el de prueba y la heurística en PHP (6.6); CP-SAT (fase
+     * 7) se agrega aquí. El orden importa: mientras no llegue `solver.default_engine` (7.11), el predeterminado es el
+     * último registrado, así que la heurística va después del de prueba y es la que se propone al lanzar una corrida.
+     * Los motores no guardan estado, así que el registro puede ser único por proceso. CareerLoadsQuery recuerda sus
+     * respuestas en la petición: `scoped`, nunca único (Octane).
      */
     public function register(): void
     {
         parent::register();
 
-        $this->app->tag([FixedEngine::class], 'solver.engines');
+        $this->app->tag([FixedEngine::class, PhpHeuristicEngine::class], 'solver.engines');
         $this->app->singleton(EngineRegistry::class, fn ($app): EngineRegistry => new EngineRegistry($app->tagged('solver.engines')));
         $this->app->scoped(CareerLoadsQuery::class);
     }

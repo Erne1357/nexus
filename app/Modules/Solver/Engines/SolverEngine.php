@@ -22,7 +22,7 @@ use Closure;
 interface SolverEngine
 {
     /**
-     * La clave con la que se elige el motor (`fixed`, `php_heuristic`, `cpsat`); va en `solver_runs.engine` y en
+     * La clave con la que se elige el motor (`fixed`, `heuristic`, `cpsat`); va en `solver_runs.engine` y en
      * `metrics.engine`.
      */
     public function key(): string;
