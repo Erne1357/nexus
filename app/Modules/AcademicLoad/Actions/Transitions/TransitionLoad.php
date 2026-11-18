@@ -21,8 +21,8 @@ use Illuminate\Validation\ValidationException;
  * con bloqueo (el estado que vale es el de la base, no el del modelo que llegó): es el orden de la desactivación de una
  * modalidad (UpdateModality la bloquea FOR UPDATE y luego cuenta sus cargas sin publicar, M11), así una reapertura o un
  * re-análisis que deja una carga sin publicar no se cruza con ella sin que la guarda lo vea. ApproveChangeRequest
- * toma la carga antes y la modalidad después (al pasar a ajustes); no se traba porque UpdateModality, el único que
- * bloquea la modalidad FOR UPDATE, nunca espera el bloqueo de una carga: un listener de la desactivación no debe
+ * toma el mismo orden (modalidad, carga, grupo, solicitud) antes de llamar a StartAdjusting; UpdateModality, el único
+ * que bloquea la modalidad FOR UPDATE, nunca espera el bloqueo de una carga: un listener de la desactivación no debe
  * bloquear cargas. La modalidad releída queda como la de la carga, así el diagrama lee su perfil de la base.
  *
  * Exige que el diagrama permita pasar de ahí al destino (LoadStatus::canTransitionTo, según el perfil de su modalidad)

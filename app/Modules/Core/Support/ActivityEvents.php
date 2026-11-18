@@ -72,6 +72,7 @@ final class ActivityEvents
         'launched' => 'Lanzado',
         'cancel_requested' => 'Cancelación pedida',
         'discarded' => 'Descartado',
+        'impact_assessed' => 'Impacto calculado',
     ];
 
     public static function knows(string $event): bool
