@@ -29,7 +29,9 @@ use Illuminate\Validation\ValidationException;
  * - Autoriza a quien actúa, aunque la pantalla ya lo haya hecho: ajusta el jefe del departamento de la carga (RA-07,
  *   `startReanalysis` de AcademicLoadPolicy: el mismo permiso que inicia el re-análisis) y, sobre cada grupo que toca, el
  *   permiso de GroupPolicy de lo que hace (`manageQuotas`, `manage` para la capacidad, `assignRoom`, `cancel`).
- * - Exige la carga en re-análisis, leída en compartido dentro de la transacción, y que los grupos sean de la carga.
+ * - Exige la carga en re-análisis, leída en compartido dentro de la transacción, y que los grupos sean de la carga. Bloquea
+ *   todos los grupos que toca, por id, antes de llamar a ninguna Action (dos cierres cruzados no se traban) y revisa que
+ *   sigan como cuando se calculó la sugerencia (`expected`): dos peticiones encimadas no suman dos veces.
  * - **Ampliar cupo:** suma `$seats` (los de la sugerencia, o los que editó el jefe, de 1 a `maxSeats`) al cupo de la
  *   carrera en el grupo; si no caben, primero sube la capacidad a lo repartido más lo apartado (SetGroupCapacity: HC-05,
  *   HC-07) y luego reparte (SetGroupQuotas: HC-07).
@@ -83,6 +85,7 @@ final class ApplyReanalysisSuggestion
             }
 
             $groups = $this->groupsOf($load, $suggestion);
+            $this->ensureUnchanged($suggestion, $groups);
             $group = $groups[$suggestion->groupId];
 
             match ($suggestion->kind) {
@@ -120,6 +123,35 @@ final class ApplyReanalysisSuggestion
         }
 
         return $groups->toBase();
+    }
+
+    /**
+     * Con los grupos ya bloqueados, su capacidad, sus cupos y el salón de las sesiones que se mueven siguen como cuando se
+     * calculó la sugerencia: si no, otra petición los cambió (o ya la aplicó) y no se escribe nada.
+     *
+     * @param  Collection<string, Group>  $groups
+     *
+     * @throws ValidationException
+     */
+    private function ensureUnchanged(ReanalysisSuggestion $suggestion, Collection $groups): void
+    {
+        $changed = false;
+
+        foreach ($suggestion->expected as $groupId => $expected) {
+            $quotas = $this->quotasOf($groups[$groupId]);
+            ksort($quotas);
+            $before = $expected['quotas'];
+            ksort($before);
+            $changed = $changed || $groups[$groupId]->capacity !== $expected['capacity'] || $quotas !== $before;
+        }
+
+        foreach ($suggestion->moves as $move) {
+            $changed = $changed || GroupSession::query()->whereKey($move['sessionId'])->value('room_id') !== $move['fromId'];
+        }
+
+        if ($changed) {
+            throw ValidationException::withMessages(['suggestion' => 'Esto cambió desde que abriste las sugerencias; vuelve a abrirlas.']);
+        }
     }
 
     /**

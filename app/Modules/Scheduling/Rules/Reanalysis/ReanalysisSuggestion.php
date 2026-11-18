@@ -17,7 +17,8 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
  *
  * `blockedReason` dice por qué todavía no se puede aplicar aunque se vea (cerrar un grupo con docente: primero se le quita,
  * como pide CancelGroup). `raisesCapacity`, si con los lugares sugeridos sube la capacidad del grupo (pide además
- * GroupPolicy::manage).
+ * GroupPolicy::manage). `expected` es la capacidad y los cupos de cada grupo que toca tal como estaban al calcularla: quien
+ * aplica los compara con los grupos ya bloqueados y, si cambiaron (otra pestaña la aplicó primero), no escribe.
  *
  * Quien aplica (ApplyReanalysisSuggestion) suma esos lugares a lo que el grupo tenga en ese momento y deja que las
  * Actions de la fase 3 revisen otra vez HC-05 y HC-07.
@@ -27,8 +28,9 @@ final readonly class ReanalysisSuggestion
     /**
      * @param  list<string>  $evidence
      * @param  list<string>  $effect
-     * @param  list<array{sessionId: string, when: string, from: string, to: AdvisorRoom}>  $moves
+     * @param  list<array{sessionId: string, when: string, from: string, fromId: string, to: AdvisorRoom}>  $moves
      * @param  list<array{groupId: string, groupCode: string, careerId: string, careerCode: string, seats: int}>  $relocations
+     * @param  array<string, array{capacity: int, quotas: array<string, int>}>  $expected
      */
     public function __construct(
         public string $key,
@@ -45,6 +47,7 @@ final readonly class ReanalysisSuggestion
         public array $relocations = [],
         public ?string $blockedReason = null,
         public bool $raisesCapacity = false,
+        public array $expected = [],
     ) {}
 
     public function isApplicable(): bool

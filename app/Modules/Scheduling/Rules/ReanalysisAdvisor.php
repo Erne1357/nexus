@@ -52,6 +52,9 @@ final class ReanalysisAdvisor
     /** @var list<array{room: string, session: AdvisorSession}> los salones que ya tomó un cambio */
     private array $takenRooms = [];
 
+    /** @var array<string, array{capacity: int, quotas: array<string, int>}> cada grupo como se leyó, antes de sugerir nada */
+    private array $original = [];
+
     /**
      * @param  list<ReanalysisRow>  $rows
      * @param  list<AdvisorGroup>  $groups
@@ -63,10 +66,12 @@ final class ReanalysisAdvisor
         $this->capacity = [];
         $this->quotas = [];
         $this->takenRooms = [];
+        $this->original = [];
 
         foreach ($groups as $group) {
             $this->capacity[$group->id] = $group->capacity;
             $this->quotas[$group->id] = $group->quotas;
+            $this->original[$group->id] = ['capacity' => $group->capacity, 'quotas' => $group->quotas];
         }
 
         usort($groups, fn (AdvisorGroup $a, AdvisorGroup $b): int => $a->code <=> $b->code);
@@ -186,6 +191,7 @@ final class ReanalysisAdvisor
             seats: $add,
             maxSeats: $room,
             raisesCapacity: $newCapacity > $capacity,
+            expected: $this->expectedOf([$group->id]),
         );
     }
 
@@ -216,7 +222,7 @@ final class ReanalysisAdvisor
 
         foreach ($group->sessions as $session) {
             if ($chosen[$session->id]->id !== $session->room->id) {
-                $moves[] = ['sessionId' => $session->id, 'when' => $session->label(), 'from' => $session->room->code, 'to' => $chosen[$session->id]];
+                $moves[] = ['sessionId' => $session->id, 'when' => $session->label(), 'from' => $session->room->code, 'fromId' => $session->room->id, 'to' => $chosen[$session->id]];
                 $this->takenRooms[] = ['room' => $chosen[$session->id]->id, 'session' => $session];
             }
         }
@@ -262,6 +268,7 @@ final class ReanalysisAdvisor
             maxSeats: $room,
             moves: $moves,
             raisesCapacity: $newCapacity > $capacity,
+            expected: $this->expectedOf([$group->id]),
         );
     }
 
@@ -424,6 +431,7 @@ final class ReanalysisAdvisor
             groupId: $group->id,
             relocations: $relocations,
             blockedReason: $blocked,
+            expected: $this->expectedOf([$group->id, ...array_column($relocations, 'groupId')]),
         );
     }
 
@@ -459,6 +467,18 @@ final class ReanalysisAdvisor
         $careers = implode(', ', $careers);
 
         return $teacher === null ? "Toca a {$careers}." : "Toca a {$careers} y a {$teacher}".($teacherNote === null ? '' : ", {$teacherNote}").'.';
+    }
+
+    /**
+     * La capacidad y los cupos de esos grupos como se leyeron (no como los deja otra sugerencia): lo que
+     * ApplyReanalysisSuggestion compara con los grupos bloqueados antes de escribir.
+     *
+     * @param  list<string>  $groupIds
+     * @return array<string, array{capacity: int, quotas: array<string, int>}>
+     */
+    private function expectedOf(array $groupIds): array
+    {
+        return array_intersect_key($this->original, array_flip($groupIds));
     }
 
     /**

@@ -82,6 +82,26 @@ it('«Ampliar cupo»: HC-05 y HC-07, sube la capacidad dentro del salón y el cu
         ->and(Activity::query()->where('event', 'quotas_updated')->sole()->causer_id)->toBe($this->jefe->id);
 });
 
+it('la misma sugerencia aplicada dos veces seguidas (dos pestañas) no suma dos veces', function () {
+    $a = $this->world->groups['A'];
+    $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, "expand_quota:{$a->id}:{$this->isc}");
+
+    expect(applyReanalysisErrors($this->world, $suggestion, $this->jefe))->toBe([])
+        ->and(applyReanalysisErrors($this->world, $suggestion, $this->jefe))->toBe(['suggestion' => ['Esto cambió desde que abriste las sugerencias; vuelve a abrirlas.']])
+        ->and($a->fresh()->capacity)->toBe(50)
+        ->and(reanalysisQuotasOf($a))->toBe([$this->isc => 50]);
+});
+
+it('«Cambiar salón» no se aplica si la sesión ya cambió de salón', function () {
+    reanalysisLargeRoom($this->world);
+    $a = $this->world->groups['A'];
+    $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, "change_room:{$a->id}:{$this->isc}");
+    GroupSession::query()->where('group_id', $a->id)->update(['room_id' => reanalysisLargeRoom($this->world, 'L-55', 55)->id]);
+
+    expect(applyReanalysisErrors($this->world, $suggestion, $this->jefe))->toBe(['suggestion' => ['Esto cambió desde que abriste las sugerencias; vuelve a abrirlas.']])
+        ->and($a->fresh()->capacity)->toBe(40);
+});
+
 it('«Ampliar cupo» con los lugares que editó el jefe, de 1 al máximo de la sugerencia', function () {
     $a = $this->world->groups['A'];
     $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, "expand_quota:{$a->id}:{$this->isc}");
