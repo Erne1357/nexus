@@ -20,7 +20,9 @@ use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
  * publicada), con la clase de RA-04 (`DemandSettings::balanceOf()`): así, lo que el jefe ya aplicó deja de sugerirse. Las
  * carreras de primer semestre no se clasifican (RA-09) y no dan sugerencias. Lo que propone (supuestos por confirmar):
  *
- * 1. **Faltante**, de la carrera con más faltante a la de menos, hasta cubrir lo esperado:
+ * 1. **Faltante**, de la carrera con más faltante a la de menos: cada sugerencia suma hasta lo esperado y la siguiente
+ *    solo se propone si con las anteriores la carrera sigue faltante (así, aplicar una no hace aparecer ni desaparecer
+ *    las demás de golpe):
  *    - **Ampliar cupo** en cada grupo donde la carrera ya tiene lugares (por clave): primero lo que el grupo tiene libre
  *      (HC-07: capacidad menos lo repartido y lo que apartan sus propuestas) y luego, si hace falta, sube la capacidad
  *      hasta el salón más chico de sus sesiones (HC-05). Un grupo con alguna sesión sin salón no sube de capacidad. Una
@@ -100,23 +102,25 @@ final class ReanalysisAdvisor
         $missing = [];
 
         foreach ($shortfall as $careerId => $gap) {
-            $context = ['career' => $careerId, 'code' => $careerCodes[$careerId], 'expected' => $demand[$careerId], 'seats' => $seats[$careerId] ?? 0];
+            $expected = $demand[$careerId];
+            $context = ['career' => $careerId, 'code' => $careerCodes[$careerId], 'expected' => $expected, 'seats' => $seats[$careerId] ?? 0];
+            $short = fn (int $gap): bool => $gap > 0 && $settings->balanceOf($expected, $expected - $gap) === DemandBalance::Shortfall;
 
             foreach ($groups as $group) {
-                if ($gap > 0 && isset($this->quotas[$group->id][$careerId]) && ($suggestion = $this->expand($group, $context, $gap)) !== null) {
+                if ($short($gap) && isset($this->quotas[$group->id][$careerId]) && ($suggestion = $this->expand($group, $context, $gap)) !== null) {
                     $expand[] = $suggestion;
                     $gap -= $suggestion->seats;
                 }
             }
 
             foreach ($groups as $group) {
-                if ($gap > 0 && isset($this->quotas[$group->id][$careerId]) && ($suggestion = $this->changeRoom($group, $context, $gap)) !== null) {
+                if ($short($gap) && isset($this->quotas[$group->id][$careerId]) && ($suggestion = $this->changeRoom($group, $context, $gap)) !== null) {
                     $rooms[] = $suggestion;
                     $gap -= $suggestion->seats;
                 }
             }
 
-            if ($gap > 0) {
+            if ($short($gap)) {
                 $missing[$careerCodes[$careerId]] = $gap;
             }
         }

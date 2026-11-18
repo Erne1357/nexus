@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
@@ -18,13 +19,14 @@ use Tests\Support\Scheduling\ReanalysisWorld;
 /*
 | ReanalysisSuggestionsQuery (tarea 8.3a): las sugerencias de una materia en un campus salen de sus grupos vivos y de los
 | salones más grandes libres a la hora de cada sesión (HC-02, HC-06, HC-10, HC-11), en un número fijo de consultas. El
-| mundo: Cálculo Integral en C2 con ISIC faltante (58 esperados; el grupo A de 40 lugares en un salón de 50) e IIND
+| mundo: Cálculo Integral en C2 con ISIC faltante (70 esperados; el grupo A de 40 lugares en un salón de 50) e IIND
 | ajustada; en C1 con ISIC sobrante (30 contra el grupo D de 45); Cálculo Diferencial de primer semestre (RA-09).
 */
 
 beforeEach(function () {
     $this->world = ReanalysisWorld::create();
     $this->world->published()->gradesArrived()->inReanalysis($this->world->head());
+    DemandForecast::query()->where('subject_id', $this->world->integral->id)->where('campus_id', $this->world->c2->id)->where('career_id', $this->world->isc->id)->update(['expected_students' => 70]);
 });
 
 function reanalysisSuggestionsOf(ReanalysisWorld $world, Subject $subject, Campus $campus): ReanalysisSuggestions
@@ -60,7 +62,7 @@ it('faltante: amplía el cupo hasta su salón y, con un salón más grande libre
 
     expect(reanalysisSuggestionKeys($suggestions))->toBe(["expand_quota:{$a->id}:{$isc}", "change_room:{$a->id}:{$isc}"])
         ->and($suggestions->find("expand_quota:{$a->id}:{$isc}")->seats)->toBe(10)
-        ->and($room->seats)->toBe(8)
+        ->and($room->seats)->toBe(20)
         ->and($room->moves[0]['to']->code)->toBe('L-70')
         ->and($suggestions->seats)->toBe([$isc => 40, $this->world->iind->id => 30])
         ->and(array_keys($suggestions->models))->toBe([$a->id, $this->world->groups['B']->id]);
@@ -80,7 +82,7 @@ it('HC-02, HC-06, HC-10, HC-11: no ofrece un salón ocupado, de otro tipo, apart
     $suggestions = reanalysisSuggestionsOf($this->world, $this->world->integral, $this->world->c2);
 
     expect(reanalysisSuggestionKeys($suggestions))->toBe(["expand_quota:{$this->world->groups['A']->id}:{$this->world->isc->id}", 'open_group'])
-        ->and($suggestions->find('open_group')->evidence)->toBe(['ISIC: faltan 8 lugares aunque se amplíen los grupos que caben']);
+        ->and($suggestions->find('open_group')->evidence)->toBe(['ISIC: faltan 20 lugares aunque se amplíen los grupos que caben']);
 });
 
 it('HC-10: un salón de otro departamento se ofrece después de los propios, diciendo a quién se pide', function () {

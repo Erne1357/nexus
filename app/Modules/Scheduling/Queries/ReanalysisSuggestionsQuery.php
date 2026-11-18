@@ -61,8 +61,10 @@ final class ReanalysisSuggestionsQuery
             ->orderBy('code')
             ->get();
 
+        $settings = DemandSettings::fromSettings();
+
         if ($groups->isEmpty()) {
-            return new ReanalysisSuggestions([], [], [], [], []);
+            return new ReanalysisSuggestions([], [], [], [], [], $settings->highlightThreshold);
         }
 
         $held = InterdepartmentalAgreement::query()
@@ -104,11 +106,12 @@ final class ReanalysisSuggestionsQuery
         }
 
         return new ReanalysisSuggestions(
-            suggestions: $this->advisor->advise($block->rows, $advisorGroups, $careerCodes, DemandSettings::fromSettings()),
+            suggestions: $this->advisor->advise($block->rows, $advisorGroups, $careerCodes, $settings),
             groups: $advisorGroups,
             models: $groups->keyBy('id')->all(),
             seats: $seats,
             careerCodes: $careerCodes,
+            threshold: $settings->highlightThreshold,
         );
     }
 

@@ -24,7 +24,7 @@ use Tests\Support\Scheduling\ReanalysisWorld;
 
 /*
 | ApplyReanalysisSuggestion (tarea 8.3a): cada sugerencia se aplica con las Actions de la fase 3 en una sola transacción,
-| con la carga en re-análisis y el jefe del departamento (RA-07). El mundo: Cálculo Integral en C2 con ISIC faltante (58
+| con la carga en re-análisis y el jefe del departamento (RA-07). El mundo: Cálculo Integral en C2 con ISIC faltante (70
 | esperados; el grupo A de 40 lugares en un salón de 50) y en C1 con ISIC sobrante (30 contra el grupo D de 45).
 */
 
@@ -32,6 +32,7 @@ beforeEach(function () {
     $this->world = ReanalysisWorld::create();
     $this->jefe = $this->world->head();
     $this->world->published()->gradesArrived()->inReanalysis($this->jefe);
+    DemandForecast::query()->where('subject_id', $this->world->integral->id)->where('campus_id', $this->world->c2->id)->where('career_id', $this->world->isc->id)->update(['expected_students' => 70]);
     $this->isc = $this->world->isc->id;
 });
 
@@ -100,8 +101,8 @@ it('«Cambiar salón»: mueve la sesión al salón libre, sube la capacidad y el
     app(ApplyReanalysisSuggestion::class)->handle($this->world->load, $suggestion, $this->jefe);
 
     expect(GroupSession::query()->where('group_id', $a->id)->value('room_id'))->toBe($room->id)
-        ->and($a->fresh()->capacity)->toBe(48)
-        ->and(reanalysisQuotasOf($a))->toBe([$this->isc => 48])
+        ->and($a->fresh()->capacity)->toBe(60)
+        ->and(reanalysisQuotasOf($a))->toBe([$this->isc => 60])
         ->and(Activity::query()->where('event', 'session_room_assigned')->count())->toBe(1);
 });
 

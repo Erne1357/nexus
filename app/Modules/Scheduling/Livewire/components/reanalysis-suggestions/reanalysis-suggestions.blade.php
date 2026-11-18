@@ -1,8 +1,9 @@
 {{--
     El drawer de sugerencias de una materia en un campus (x-drawer a la derecha, hasta 860 px; ADR-0023): la materia, el
     campus y en cuántos grupos se ofrece; «Demanda por carrera» (esperados con las calificaciones del semestre actual
-    contra los cupos de la versión vigente, con la diferencia y la clase de RA-04; primer semestre sin clasificar, RA-09);
-    y «Sugerencias», el espacio de la tarea 8.3 (scheduling::reanalysis.suggestions). `close()` es del x-drawer.
+    contra los cupos de la versión vigente y los de ahora, con la diferencia y la clase de RA-04; primer semestre sin
+    clasificar, RA-09); y las sugerencias de la tarea 8.3a con los grupos de ahora (scheduling::reanalysis.suggestions).
+    Al pie, a quien no ajusta, por qué; `close()` es del x-drawer.
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-[860px] p-0!" role="dialog" aria-modal="true" aria-labelledby="suggestions-title" data-testid="suggestions-drawer">
@@ -25,7 +26,7 @@
                 <div class="flex-1 space-y-6 px-5 pt-4 pb-6">
                     <section class="space-y-2" aria-labelledby="suggestions-demand">
                         <h3 id="suggestions-demand" class="text-base font-bold">Demanda por carrera</h3>
-                        <p class="text-[13px] text-neutral">Esperados con las calificaciones del semestre actual contra los cupos de la versión {{ $load->current_version }}.</p>
+                        <p class="text-[13px] text-neutral">Esperados con las calificaciones del semestre actual contra los cupos de la versión {{ $load->current_version }} y los de ahora, con lo que ya ajustaste.</p>
                         <div class="overflow-x-auto rounded-box border border-base-300">
                             <table class="table table-sm" data-testid="suggestions-evidence">
                                 <thead>
@@ -33,6 +34,7 @@
                                         <th>Carrera</th>
                                         <th class="text-end">Esperados</th>
                                         <th class="text-end">Cupos v{{ $load->current_version }}</th>
+                                        <th class="text-end">Ahora</th>
                                         <th class="text-end">Dif.</th>
                                         <th>Clase</th>
                                     </tr>
@@ -48,6 +50,14 @@
                                                 <span class="font-mono font-semibold tabular-nums">{{ number_format(\App\Modules\Scheduling\Queries\ReanalysisBoard::shownStudents($row)) }}</span>
                                             </td>
                                             <td class="text-end"><span class="font-mono tabular-nums">{{ number_format($row->offeredSeats) }}</span> <span class="text-[12.5px] text-neutral">en {{ $row->offeredGroups }}</span></td>
+                                            @php($now = $advice?->seats[$row->careerId] ?? 0)
+                                            <td class="text-end" data-testid="suggestions-now" data-career="{{ $row->careerCode }}">
+                                                @if ($now !== $row->offeredSeats)
+                                                    <span class="inline-flex items-center gap-1 font-mono font-semibold tabular-nums text-info"><x-icon name="o-pencil-square" class="h-3.5 w-3.5" aria-hidden="true" />{{ number_format($now) }}<span class="sr-only">, ya ajustado</span></span>
+                                                @else
+                                                    <span class="font-mono tabular-nums">{{ number_format($now) }}</span>
+                                                @endif
+                                            </td>
                                             <td class="text-end font-mono font-semibold tabular-nums">{{ $row->balance === null ? '—' : ($row->gap() > 0 ? '+' : ($row->gap() < 0 ? '−' : '')).number_format(abs($row->gap())) }}</td>
                                             <td>
                                                 @if ($row->balance === null)
@@ -63,10 +73,13 @@
                         </div>
                     </section>
 
-                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions])
+                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing])
                 </div>
 
-                <footer class="sticky bottom-0 flex justify-end border-t border-base-300 bg-base-100 px-5 py-3">
+                <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-base-300 bg-base-100 px-5 py-3">
+                    @if ($adjustReason !== null)
+                        <p class="me-auto text-[13px] text-neutral">{{ $adjustReason }}</p>
+                    @endif
                     <x-button label="Cerrar" class="max-md:h-11 max-md:w-full" @click="close()" />
                 </footer>
             </div>

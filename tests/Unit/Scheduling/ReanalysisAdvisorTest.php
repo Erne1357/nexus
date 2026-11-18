@@ -147,14 +147,14 @@ describe('faltante', function () {
 
     it('dos grupos no se llevan el mismo salón a la misma hora', function () {
         $big = advisorRoom('L-90', 90);
-        $suggestions = adviseBlock([advisorRow('ISIC', 150)], [
+        $suggestions = adviseBlock([advisorRow('ISIC', 200)], [
             advisorGroup('A', 50, ['ISIC' => 50], [advisorSession('s-A', advisorRoom('R-A', 50), [$big])]),
             advisorGroup('B', 50, ['ISIC' => 50], [advisorSession('s-B', advisorRoom('R-B', 50), [$big])]),
         ]);
 
         expect(array_keys($suggestions))->toBe(['change_room:group-A:ISIC', 'open_group'])
             ->and($suggestions['change_room:group-A:ISIC']->seats)->toBe(40)
-            ->and($suggestions['open_group']->evidence)->toBe(['ISIC: faltan 10 lugares aunque se amplíen los grupos que caben']);
+            ->and($suggestions['open_group']->evidence)->toBe(['ISIC: faltan 60 lugares aunque se amplíen los grupos que caben']);
     });
 });
 
@@ -206,6 +206,12 @@ describe('sobrante', function () {
 
 it('RA-09: una materia de primer semestre no se clasifica ni da sugerencias', function () {
     expect(adviseBlock([advisorRow('ISIC', 90, firstSemester: true)], [advisorGroup('A', 40, ['ISIC' => 40])]))->toBe([]);
+});
+
+it('deja de sugerir en cuanto la carrera queda dentro del umbral (RA-04)', function () {
+    $sessions = [advisorSession('s-A', advisorRoom('R-A', 50), [advisorRoom('L-80', 80)])];
+
+    expect(array_keys(adviseBlock([advisorRow('ISIC', 58)], [advisorGroup('A', 40, ['ISIC' => 40], $sessions)])))->toBe(['expand_quota:group-A:ISIC']);
 });
 
 it('una carrera ajustada no da sugerencias', function () {
