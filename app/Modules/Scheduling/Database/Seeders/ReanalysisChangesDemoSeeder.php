@@ -32,6 +32,7 @@ use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupQuotasChanged;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
+use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -73,8 +74,10 @@ use Throwable;
  *   (RoomSuggestionQuery, AssignSessionRoom).
  *
  * El cambio de docente (`teacher`) es de Staffing (ReanalysisRepublicationDemoSeeder). Abrir un grupo no tiene Action
- * todavía (la 8.3b, que depende del motor): este seeder escribe el grupo nuevo como CreateGroupsFromProposal, con su
- * bitácora, y sus sesiones, salones, clave y justificación van por las Actions.
+ * todavía (la 8.3b, que depende del motor) y CreateGroupsFromProposal no sirve: crea los grupos que le faltan a una fila de
+ * propuesta aceptada, que ya no se edita. Es la excepción de la demo: este seeder escribe el grupo nuevo y su cupo como
+ * CreateGroupsFromProposal, con su bitácora y GroupsCreated después del commit, y sus sesiones, salones, clave y
+ * justificación van por las Actions.
  *
  * Cuántos de cada uno depende del tamaño de la carga: `min(6, max(2, grupos / 40))` cupos, sesiones y salones, la mitad
  * (1 o 2) capacidades y grupos abiertos, y hasta 3 cerrados. Solo cambia una carga en re-análisis que todavía no cambió ni se cerró, así
@@ -285,6 +288,10 @@ final class ReanalysisChangesDemoSeeder extends Seeder
             ->event(ActivityEvent::Created)
             ->withChanges(['attributes' => ['code' => $group->code, 'term_id' => $group->term_id, 'campus_id' => $group->campus_id, 'modality_id' => $group->modality_id, 'subject_id' => $group->subject_id, 'owner_career_id' => $group->owner_career_id, 'study_plan_id' => $group->study_plan_id, 'semester' => $group->semester, 'capacity' => $group->capacity]])
             ->log("Abrió el grupo {$group->code} de {$row->subjectName} para {$row->careerCode} en el re-análisis: faltan {$row->gap()} lugares con las calificaciones nuevas");
+
+        // Como CreateGroupsFromProposal: avisa después del commit (choques y ranking). En la demo por puntos es un evento
+        // silenciado (demoQuietEvents) y Scheduling recalcula los choques al final.
+        GroupsCreated::dispatch($group->term_id, $group->modality_id, [$group->getKey()]);
 
         return true;
     }

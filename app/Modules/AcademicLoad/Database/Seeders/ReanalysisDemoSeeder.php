@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Database\Seeders;
 use App\Modules\AcademicLoad\Actions\Transitions\CancelReanalysis;
 use App\Modules\AcademicLoad\Actions\Transitions\StartReanalysis;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Events\LoadTransitioning;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Demo\DemoClock;
@@ -12,14 +13,19 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Database\Seeders\DemandRecalculationDemoSeeder;
+use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Imports\Enums\BatchStatus;
+use App\Modules\Imports\Events\BatchApplied;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Students\Actions\RefreshStudentProgress;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Models\KardexRecord;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
@@ -52,7 +58,9 @@ use RuntimeException;
  * Los cambios de la carga en re-análisis los hace Scheduling (ReanalysisChangesDemoSeeder) y el cambio de docente, los
  * cierres, la devolución de Subdirección, las republicaciones y la corrección, Staffing (ReanalysisRepublicationDemoSeeder):
  * AcademicLoad no puede llamar a sus Actions. Cada modo es repetible: revisa el estado de cada carga y los lotes ya
- * registrados antes de escribir, así una segunda corrida no duplica lotes, transiciones ni versiones.
+ * registrados antes de escribir, así una segunda corrida no duplica lotes, transiciones ni versiones, y una que se cayó a
+ * la mitad sigue desde donde se quedó (un lote sin la proyección recalculada se recalcula; una cancelación sin el segundo
+ * inicio, lo inicia).
  */
 final class ReanalysisDemoSeeder extends Seeder
 {
@@ -99,28 +107,61 @@ final class ReanalysisDemoSeeder extends Seeder
 
     /**
      * El caso de cada carga del periodo y la modalidad que salió de borrador (las que el punto 9 publicó), por id: por
-     * clave de departamento, en el orden de CASES y luego de EXTRA_CASES. Depende solo de qué cargas tienen grupos, no
-     * de su estado, así que los pasos y las revisiones lo calculan igual antes y después de sembrar.
+     * clave de departamento, en el orden de CASES y luego de EXTRA_CASES. La «corregida» vuelve a asignación
+     * (ReturnToStaffing): si a la carga que le toca un módulo de la derecha le vetaría esa vuelta (solicitudes de cambio
+     * aprobadas sin aplicar, choques duros; returnVetoes()), cambia su caso con la siguiente carga que sí puede volver.
+     * Depende de qué cargas tienen grupos y de esos vetos, que la demo no cambia, no del estado de la carga, así que los
+     * pasos y las revisiones lo calculan igual antes y después de sembrar.
      *
      * @return array<string, string>
      */
     public static function plan(string $termId, string $modalityId): array
     {
         $loads = AcademicLoad::query()
-            ->with('department')
+            ->with(['department', 'modality'])
             ->where('term_id', $termId)->where('modality_id', $modalityId)
             ->where('status', '!=', LoadStatus::Draft->value)
             ->get()
             ->sortBy(fn (AcademicLoad $load): string => (string) $load->department?->code)
             ->values();
 
+        $cases = $loads->keys()->map(fn (int $index): string => self::CASES[$index] ?? self::EXTRA_CASES[($index - count(self::CASES)) % count(self::EXTRA_CASES)])->all();
+
+        foreach ($cases as $index => $case) {
+            if ($case !== self::CASE_CORRECTED || self::returnVetoes($loads[$index]) === []) {
+                continue;
+            }
+
+            for ($other = $index + 1; $other < count($cases); $other++) {
+                if ($cases[$other] !== self::CASE_CORRECTED && self::returnVetoes($loads[$other]) === []) {
+                    [$cases[$index], $cases[$other]] = [$cases[$other], $cases[$index]];
+
+                    break;
+                }
+            }
+        }
+
         $plan = [];
 
         foreach ($loads as $index => $load) {
-            $plan[$load->getKey()] = self::CASES[$index] ?? self::EXTRA_CASES[($index - count(self::CASES)) % count(self::EXTRA_CASES)];
+            $plan[$load->getKey()] = $cases[$index];
         }
 
         return $plan;
+    }
+
+    /**
+     * Lo que vetaría que la carga volviera de ajustes a asignación (ReturnToStaffing), sin moverla: pregunta a los módulos
+     * de la derecha con el mismo evento con veto que TransitionLoad (LoadTransitioning). Solo lee.
+     *
+     * @return list<string>
+     */
+    public static function returnVetoes(AcademicLoad $load): array
+    {
+        $event = new LoadTransitioning($load, LoadStatus::Adjusting, LoadStatus::Staffing);
+        event($event);
+
+        return $event->reasons();
     }
 
     /**
@@ -184,34 +225,45 @@ final class ReanalysisDemoSeeder extends Seeder
         };
     }
 
+    /**
+     * Las calificaciones, el lote y la proyección. Se retoma desde donde se quedó una corrida que se cayó: no vuelve a
+     * calificar lo capturado (subjectsToCapture), no repite el lote y recalcula si la proyección es de antes del lote.
+     */
     private function grades(Term $term, int $seed): void
     {
         $previous = TermCode::previousRegular($term->code);
         $name = self::batchName($previous);
+        $batch = $this->batch($name);
 
-        if ($this->batchExists($name)) {
-            $this->command?->info("Las calificaciones de {$previous} ya están importadas ({$name}).");
+        if ($batch === null) {
+            // Después del segundo de la publicación: el lote y las calificaciones tienen que ser posteriores (RA-02).
+            DemoClock::nextSecond();
+            $published = AcademicLoad::query()->where('term_id', $term->getKey())->max('published_at');
+            $this->callWith(DemandRecalculationDemoSeeder::class, [
+                'term' => $term->code,
+                'failureShare' => self::FAILURE_SHARE,
+                'seed' => $seed,
+                'capturedShare' => self::GRADED_SHARE,
+                'refresh' => false,
+            ]);
+            $graded = $this->gradedRows($previous)->when($published !== null, fn (Builder $rows) => $rows->where('updated_at', '>', $published))->count();
+            $batch = $this->recordBatch($name, $graded, KardexRecord::query()->where('term_code', $previous)->count());
+        }
+
+        if ($this->forecastsAfter($term, $batch)) {
+            $this->command?->info("Las calificaciones de {$previous} ya están importadas ({$name}) y la proyección es posterior.");
 
             return;
         }
 
-        // Después del segundo de la publicación: el lote y las calificaciones tienen que ser posteriores (RA-02).
-        DemoClock::nextSecond();
-        $before = $this->gradedRows($previous);
-        $this->callWith(DemandRecalculationDemoSeeder::class, [
-            'term' => $term->code,
-            'failureShare' => self::FAILURE_SHARE,
-            'seed' => $seed,
-            'capturedShare' => self::GRADED_SHARE,
-            'refresh' => false,
-        ]);
-        $graded = $this->gradedRows($previous) - $before;
-        $this->recordBatch($name, $graded, KardexRecord::query()->where('term_code', $previous)->count());
-
         $this->refreshForecasts();
-        $this->command?->info("Lote de kárdex {$name} con {$graded} calificaciones nuevas; la proyección de {$term->code} se recalculó y los jefes tienen el aviso.");
+        $this->command?->info("Lote de kárdex {$name} con {$batch->updated_rows} calificaciones nuevas; la proyección de {$term->code} se recalculó y los jefes tienen el aviso.");
     }
 
+    /**
+     * El jefe inicia el re-análisis; la «cancelada y vuelta a iniciar» lo cancela y lo vuelve a iniciar. Cada paso mira el
+     * estado y el historial de la carga, así que una corrida que se cayó a la mitad sigue desde ahí.
+     */
     private function start(Term $term, Modality $modality): void
     {
         $gradesTerm = Term::query()->where('code', TermCode::previousRegular($term->code))->value('name') ?? TermCode::previousRegular($term->code);
@@ -219,71 +271,106 @@ final class ReanalysisDemoSeeder extends Seeder
         $started = [];
 
         foreach (self::loadsIn($term->getKey(), $modality->getKey(), array_values(array_diff(self::CASES, [self::CASE_AVAILABLE]))) as $load) {
-            if ($load->status !== LoadStatus::Published || $load->current_version !== 1 || $load->transitions()->where('to_status', LoadStatus::Reanalysis->value)->exists()) {
-                continue;
-            }
-
             $case = $plan[$load->getKey()];
             $head = self::headOf($load);
-            app(StartReanalysis::class)->handle($load, $head, "Llegaron las calificaciones de {$gradesTerm}: reviso grupos y cupos contra la demanda nueva.");
+            $starts = fn (): int => $load->transitions()->where('to_status', LoadStatus::Reanalysis->value)->count();
+            $cancelled = fn (): bool => $load->transitions()->where('comment', CancelReanalysis::COMMENT)->exists();
+            $before = $starts();
 
-            if ($case === self::CASE_RESTARTED) {
-                app(CancelReanalysis::class)->handle($load->fresh(), $head);
-                app(StartReanalysis::class)->handle($load->fresh(), $head, 'Lo vuelvo a iniciar para revisar también los grupos compartidos con otras carreras.');
+            if ($load->status === LoadStatus::Published && $load->current_version === 1 && $before === 0) {
+                app(StartReanalysis::class)->handle($load, $head, "Llegaron las calificaciones de {$gradesTerm}: reviso grupos y cupos contra la demanda nueva.");
             }
 
-            $started[] = $load->department->code.($case === self::CASE_RESTARTED ? ' (cancelado y vuelto a iniciar)' : '');
+            if ($case === self::CASE_RESTARTED) {
+                if ($load->fresh()->status === LoadStatus::Reanalysis && ! $cancelled()) {
+                    app(CancelReanalysis::class)->handle($load->fresh(), $head);
+                }
+
+                if ($load->fresh()->status === LoadStatus::Published && $cancelled() && $starts() === 1) {
+                    app(StartReanalysis::class)->handle($load->fresh(), $head, 'Lo vuelvo a iniciar para revisar también los grupos compartidos con otras carreras.');
+                }
+            }
+
+            if ($starts() > $before) {
+                $started[] = $load->department->code.($case === self::CASE_RESTARTED ? ' (cancelado y vuelto a iniciar)' : '');
+            }
         }
 
         $this->command?->info('Re-análisis iniciados: '.($started === [] ? 'ninguno nuevo' : implode(', ', $started)).'.');
     }
 
+    /**
+     * La reimportación sin calificaciones nuevas, solo si el plan tiene una «republicada». Como `grades`, se retoma: no
+     * repite el lote y recalcula si la proyección es de antes de él.
+     */
     private function reimport(Term $term, Modality $modality): void
     {
         $previous = TermCode::previousRegular($term->code);
         $name = self::batchName($previous, reimport: true);
 
-        if (! in_array(self::CASE_REPUBLISHED, self::plan($term->getKey(), $modality->getKey()), true) || $this->batchExists($name)) {
+        if (! in_array(self::CASE_REPUBLISHED, self::plan($term->getKey(), $modality->getKey()), true)) {
             return;
         }
 
-        // Después del segundo de las versiones 2: el lote es posterior a ellas, pero no trae calificaciones nuevas.
-        DemoClock::nextSecond();
-        $this->recordBatch($name, 0, KardexRecord::query()->where('term_code', $previous)->count());
+        $batch = $this->batch($name);
+
+        if ($batch === null) {
+            // Después del segundo de las versiones 2: el lote es posterior a ellas, pero no trae calificaciones nuevas.
+            DemoClock::nextSecond();
+            $batch = $this->recordBatch($name, 0, KardexRecord::query()->where('term_code', $previous)->count());
+        }
+
+        if ($this->forecastsAfter($term, $batch)) {
+            return;
+        }
+
         $this->refreshForecasts();
         $this->command?->info("Reimportación del kárdex de {$previous} sin calificaciones nuevas ({$name}); la proyección se recalculó otra vez.");
     }
 
     /**
-     * El lote como lo deja ApplyImportBatch al aplicar un kárdex, con su entrada de bitácora; sin archivo, porque la demo
-     * escribe el kárdex directo, como DemandRecalculationDemoSeeder.
+     * El lote como lo deja ApplyImportBatch al aplicar un kárdex: aplicado, con sus cuentas, una entrada de bitácora y
+     * BatchApplied después del commit. Es solo de la demo y no pasa por Imports (StoreImportBatch, ValidateImportBatch,
+     * ApplyImportBatch) porque esa cadena lee un archivo con los datos de cada alumno y lo escribe fila por fila: con el
+     * masivo serían unas 45 mil filas de kárdex, y el archivo (con datos personales, aunque sean inventados) quedaría en el
+     * disco `imports`. La demo escribe el kárdex directo, como DemandRecalculationDemoSeeder; ninguna otra demo registra
+     * lotes. Lo que lee RA-02 del lote es la plantilla, el estado y `applied_at`.
      */
-    private function recordBatch(string $name, int $updated, int $rows): void
+    private function recordBatch(string $name, int $updated, int $rows): ImportBatch
     {
         $admin = User::query()->where('username', 'admin')->firstOrFail();
-        $batch = new ImportBatch([
-            'template' => 'kardex',
-            'original_name' => $name,
-            'status' => BatchStatus::Applied,
-            'total_rows' => $rows,
-            'valid_rows' => $rows,
-            'processed_rows' => $rows,
-            'updated_rows' => $updated,
-            'unchanged_rows' => $rows - $updated,
-            'uploaded_by' => $admin->getKey(),
-            'applied_by' => $admin->getKey(),
-            'applied_at' => now(),
-        ]);
-        $batch->id = $batch->newUniqueId();
-        $batch->file_path = "{$batch->id}.csv";
-        $batch->save();
 
-        activity()
-            ->performedOn($batch)
-            ->causedBy($admin)
-            ->event('applied')
-            ->withProperties(['created' => 0, 'updated' => $updated, 'unchanged' => $rows - $updated, 'skipped' => 0])
-            ->log("Aplicó {$name} de Kárdex: {$updated} cambios y ".($rows - $updated).' sin cambios');
+        return DB::transaction(function () use ($admin, $name, $updated, $rows): ImportBatch {
+            $batch = new ImportBatch([
+                'template' => 'kardex',
+                'original_name' => $name,
+                'status' => BatchStatus::Applied,
+                'total_rows' => $rows,
+                'valid_rows' => $rows,
+                'processed_rows' => $rows,
+                'updated_rows' => $updated,
+                'unchanged_rows' => $rows - $updated,
+                'uploaded_by' => $admin->getKey(),
+                'applied_by' => $admin->getKey(),
+                'applied_at' => now(),
+            ]);
+            $batch->id = $batch->newUniqueId();
+            $batch->file_path = "{$batch->id}.csv";
+            $batch->save();
+
+            $counts = ['created' => 0, 'updated' => $updated, 'unchanged' => $rows - $updated, 'skipped' => 0, 'deactivated' => 0];
+
+            activity()
+                ->performedOn($batch)
+                ->causedBy($admin)
+                ->event('applied')
+                ->withProperties($counts)
+                ->log("Aplicó {$name} de Kárdex: {$updated} cambios y ".($rows - $updated).' sin cambios');
+
+            BatchApplied::dispatch($batch, $counts);
+
+            return $batch;
+        });
     }
 
     /**
@@ -296,13 +383,26 @@ final class ReanalysisDemoSeeder extends Seeder
         app(RefreshStudentProgress::class)->handle();
     }
 
-    private function batchExists(string $name): bool
+    private function batch(string $name): ?ImportBatch
     {
-        return ImportBatch::query()->where('template', 'kardex')->where('status', BatchStatus::Applied->value)->where('original_name', $name)->exists();
+        return ImportBatch::query()->where('template', 'kardex')->where('status', BatchStatus::Applied->value)->where('original_name', $name)->first();
     }
 
-    private function gradedRows(string $termCode): int
+    /**
+     * Si toda la proyección del periodo se calculó después del lote (la condición 4 de RA-02): si no, falta recalcular.
+     */
+    private function forecastsAfter(Term $term, ImportBatch $batch): bool
     {
-        return KardexRecord::query()->where('term_code', $termCode)->whereIn('result', [KardexResult::Aprobada, KardexResult::Reprobada])->count();
+        $oldest = DemandForecast::query()->where('term_id', $term->getKey())->min('computed_at');
+
+        return $oldest !== null && $batch->applied_at !== null && (new CarbonImmutable($oldest))->greaterThan($batch->applied_at);
+    }
+
+    /**
+     * @return Builder<KardexRecord>
+     */
+    private function gradedRows(string $termCode): Builder
+    {
+        return KardexRecord::query()->where('term_code', $termCode)->whereIn('result', [KardexResult::Aprobada, KardexResult::Reprobada]);
     }
 }

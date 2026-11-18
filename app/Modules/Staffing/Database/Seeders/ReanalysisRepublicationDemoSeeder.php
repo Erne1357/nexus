@@ -27,6 +27,7 @@ use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\RefreshTeacherTermLoads;
 use App\Modules\Staffing\Actions\UnassignTeacher;
+use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
@@ -56,7 +57,9 @@ use Throwable;
  *    asignación, cambia unos salones y un docente, la cierra y la publica.
  *
  * Cada parte revisa el estado de la carga antes de escribir (una carga que ya salió de re-análisis o ya va en su versión
- * 3 no se toca), así que se puede volver a correr. Mientras cambia docentes y salones descarta los eventos de recálculo y
+ * 3 no se toca), así que se puede volver a correr, y una corrida que se cayó a la mitad sigue desde donde se quedó: la
+ * devolución tiene su pasada, la corrección sigue desde el estado de la carga y los cambios de docente cuentan los que ya
+ * hizo (por su motivo, desde el inicio del re-análisis o la reapertura). Mientras cambia docentes y salones descarta los eventos de recálculo y
  * al final recalcula una vez los choques y `teacher_term_loads`. Un veto detiene la demo con su motivo.
  */
 final class ReanalysisRepublicationDemoSeeder extends Seeder
@@ -66,6 +69,9 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
     private const string TEACHER_REASON = 'Re-análisis: se reparten los grupos del departamento con la demanda nueva.';
 
     private const string OPENED_REASON = 'Grupo abierto en el re-análisis: no tiene ranking propio, se elige entre los de la misma materia.';
+
+    /** Cuántos grupos prueba por cada cambio que busca, para que el masivo no recorra la carga entera. */
+    private const int MAX_ATTEMPTS = 5;
 
     private const string CANCEL_REASON = 'Se cierra el grupo en el re-análisis: sobran lugares con las calificaciones nuevas.';
 
@@ -98,9 +104,14 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         foreach ($open as $load) {
             $this->validator->forget();
             app(CloseLoad::class)->handle($load->fresh(), ReanalysisDemoSeeder::headOf($load), 'Re-análisis terminado: grupos y cupos ajustados a la demanda nueva.');
+        }
 
-            if ($plan[$load->getKey()] === ReanalysisDemoSeeder::CASE_CHANGED) {
-                app(ReopenLoad::class)->handle($load->fresh(), ReanalysisDemoSeeder::subdireccion(), self::RETURN_REASON);
+        // La devolución va en una pasada aparte: una corrida que se cayó entre el cierre y la devolución la retoma aquí.
+        foreach ($loads as $load) {
+            $load->refresh();
+
+            if ($plan[$load->getKey()] === ReanalysisDemoSeeder::CASE_CHANGED && $load->status === LoadStatus::Closed && app(ReanalysisCycleQuery::class)->closedFromReanalysis($load)) {
+                app(ReopenLoad::class)->handle($load, ReanalysisDemoSeeder::subdireccion(), self::RETURN_REASON);
             }
         }
 
@@ -126,7 +137,8 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         foreach ($loads as $load) {
             $load->refresh();
 
-            if ($plan[$load->getKey()] === ReanalysisDemoSeeder::CASE_CORRECTED && $load->status === LoadStatus::Published && $load->current_version === 2) {
+            if ($plan[$load->getKey()] === ReanalysisDemoSeeder::CASE_CORRECTED && $load->current_version === 2
+                && in_array($load->status, [LoadStatus::Published, LoadStatus::Adjusting, LoadStatus::Staffing, LoadStatus::Closed], true)) {
                 $this->correct($load, $termModel, $modalityModel);
                 $corrected[] = $load->department->code;
             }
@@ -180,7 +192,7 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
             return;
         }
 
-        foreach ($changes->surplusCandidates($load)->whereNotNull('teacher_id') as $group) {
+        foreach ($changes->surplusCandidates($load)->whereNotNull('teacher_id')->take(self::MAX_ATTEMPTS) as $group) {
             DB::beginTransaction();
 
             try {
@@ -200,28 +212,43 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
     }
 
     /**
-     * Versión 3 por corrección: Subdirección la reabre a ajustes, el jefe la regresa a asignación, cambia unos salones y
-     * un docente, justifica lo que falte, la cierra y la publica. Espera al segundo siguiente para que la versión sea
-     * posterior a la reimportación del kárdex (la pantalla dice «Sin kárdex nuevo»).
+     * Versión 3 por corrección, desde el estado en que esté la carga en su versión 2 (una corrida que se cayó a la mitad
+     * sigue desde ahí): publicada, Subdirección la reabre a ajustes; en ajustes, el jefe la regresa a asignación; en
+     * asignación, si todavía no cambió nada desde la versión 2, cambia unos salones y un docente, justifica lo que falte y
+     * la cierra; cerrada, la publica. La versión 3 sale después de la reimportación del kárdex, así que la pantalla dice
+     * «Sin kárdex nuevo».
      */
     private function correct(AcademicLoad $load, Term $term, Modality $modality): void
     {
         $head = ReanalysisDemoSeeder::headOf($load);
 
-        app(ReopenLoad::class)->handle($load, ReanalysisDemoSeeder::subdireccion(), self::CORRECTION_REASON);
-        app(ReturnToStaffing::class)->handle($load->fresh(), $head, 'Se corrigen los salones');
+        if ($load->fresh()->status === LoadStatus::Published) {
+            app(ReopenLoad::class)->handle($load->fresh(), ReanalysisDemoSeeder::subdireccion(), self::CORRECTION_REASON);
+        }
 
-        Event::fakeFor(function () use ($load, $head): void {
-            app(ReanalysisChangesDemoSeeder::class)->change($load->fresh(), $head, ['rooms'], round: 1);
-            $this->reassign($load, $head, 1);
-        }, [...ReanalysisChangesDemoSeeder::FAKED_EVENTS, GroupTeacherChanged::class]);
+        if ($load->fresh()->status === LoadStatus::Adjusting) {
+            app(ReturnToStaffing::class)->handle($load->fresh(), $head, 'Se corrigen los salones');
+        }
 
-        $this->recompute($term, $modality);
-        $this->justifyMissing($load, $head);
-        $this->validator->forget();
-        app(CloseLoad::class)->handle($load->fresh(), $head, 'Salones corregidos');
-        $this->validator->forget();
-        app(PublishLoad::class)->handle($load->fresh(), $head, self::CORRECTION_REASON);
+        if ($load->fresh()->status === LoadStatus::Staffing) {
+            if (! app(ReanalysisChangesQuery::class)->hasChanges($load->fresh())) {
+                Event::fakeFor(function () use ($load, $head): void {
+                    app(ReanalysisChangesDemoSeeder::class)->change($load->fresh(), $head, ['rooms'], round: 1);
+                    $this->reassign($load, $head, 1);
+                }, [...ReanalysisChangesDemoSeeder::FAKED_EVENTS, GroupTeacherChanged::class]);
+
+                $this->recompute($term, $modality);
+            }
+
+            $this->justifyMissing($load, $head);
+            $this->validator->forget();
+            app(CloseLoad::class)->handle($load->fresh(), $head, 'Salones corregidos');
+        }
+
+        if ($load->fresh()->status === LoadStatus::Closed) {
+            $this->validator->forget();
+            app(PublishLoad::class)->handle($load->fresh(), $head, self::CORRECTION_REASON);
+        }
     }
 
     /**
@@ -230,13 +257,17 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
      */
     private function reassign(AcademicLoad $load, User $head, int $wanted): int
     {
-        $done = 0;
+        $groups = $this->groups($load);
+        $done = GroupTeacherAssignment::query()->whereIn('group_id', $groups->modelKeys())->where('reason', self::TEACHER_REASON)
+            ->where('assigned_at', '>=', $this->since($load))->count();
+        $attempts = 0;
 
-        foreach ($this->groups($load)->whereNotNull('teacher_id')->sortByDesc('id') as $group) {
-            if ($done === $wanted) {
+        foreach ($groups->whereNotNull('teacher_id')->sortByDesc('id') as $group) {
+            if ($done >= $wanted || $attempts === self::MAX_ATTEMPTS * $wanted) {
                 break;
             }
 
+            $attempts++;
             $candidates = StaffingRanking::query()->where('group_id', $group->getKey())->where('teacher_id', '!=', $group->teacher_id)->orderBy('rank')->limit(15)->pluck('teacher_id')->all();
 
             if ($this->assignFirstFitting($group, $candidates, $head, self::TEACHER_REASON)) {
@@ -245,6 +276,15 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         }
 
         return $done;
+    }
+
+    /**
+     * Desde cuándo cuentan los cambios de docente de esta vuelta: el último inicio del re-análisis o, en la corrección, la
+     * última reapertura.
+     */
+    private function since(AcademicLoad $load): string
+    {
+        return (string) $load->transitions()->whereIn('to_status', [LoadStatus::Reanalysis->value, LoadStatus::Adjusting->value])->max('created_at');
     }
 
     /**
