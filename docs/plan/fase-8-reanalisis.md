@@ -96,15 +96,18 @@ Se escribió con la fase 5 y el contrato del motor ya en `develop` (#567, #568),
 - **8.10, tablero de versiones:** extiende `LoadVersionsQuery` y el componente `publish-load`. Con el `diff` y el `motivo` guardados (8.4), solo lee.
 - **8.11, ensayo:** corre con la carga de `20273` y las calificaciones de `20271`, como dice el plan. Necesita la publicación real de R1 (4.10) o, en la demo, `--hasta=reanalisis`.
 
-### Preguntas abiertas
+### Respuestas del usuario (18 de noviembre de 2026, segunda ronda)
 
-1. **¿Presencial exige ahora el visto bueno de Subdirección?** La respuesta 2 dice «una modalidad que exige el visto bueno (Presencial)», pero las reglas dicen que Presencial no lo exige y que el jefe cierra y publica (confirmado el 10 de noviembre de 2026, «Cierre y reapertura de la carga»; `requires_subdireccion_approval` es `false` por omisión). El código ya sigue el perfil de la modalidad. Si cambió, se cambia el parámetro en «Modalidades» y esta regla; si no, la republicación de Presencial va de `closed` directo a `published`. Supuesto mientras tanto: manda el perfil.
-2. **Docentes sin acceso.** Los avisos son solo de la campana y un docente sin contraseña no la ve. ¿Se manda correo a los docentes afectados al republicar, o basta la campana y lo que ven en «Mi carga»? Supuesto: solo campana.
-3. **Ventana del calendario.** ¿Iniciar el re-análisis exige estar dentro de la ventana de la etapa `reanalysis` del periodo, o basta que haya calificaciones nuevas? Supuesto: basta que las haya; la ventana solo se muestra.
-4. **Quién ajusta dentro del re-análisis.** El jefe lo inicia. En la asignación el coordinador es quien acomoda horarios (3.11) y el jefe asigna salones y docente. ¿En `reanalysis` el coordinador ve el diff de sus carreras y aplica sugerencias de horario, o todo lo hace el jefe? Supuesto: el jefe aplica, y el coordinador solo ve el diff de sus carreras.
-5. **Devolver a un re-análisis.** Cuando Subdirección devuelve una carga re-analizada, ¿vuelve a `reanalysis` (la propuesta de arriba) o a `adjusting`, como cualquier reapertura? Supuesto: a `reanalysis`.
-6. **Dónde viven las alternativas del motor (decisión de arquitectura, no de negocio).** Staffing y Solver no pueden depender uno del otro; ver 8.7. Hay que decidir la arista del mapa o el contrato antes de la 8.7, y con ella la 8.6 si usa el evaluador de Solver.
-7. **Primer semestre en el diff.** Sus grupos salen de paquetes (DM-09) y el nuevo ingreso no cambia con las calificaciones del semestre. ¿Esas materias entran a la clasificación de la 8.2 o solo se muestran sin clasificar? Supuesto: se muestran sin clasificar.
+1. **Visto bueno al republicar:** la respuesta «como la primera vez» se aplica según el perfil de la modalidad (RA-03). La pregunta mencionó Presencial por error del Riel A: hoy Presencial no exige visto bueno (`requires_subdireccion_approval = false`, reglas del 10 de noviembre), así que su versión nueva se republica como la 1.
+2. **Avisos:** por la campana y también por correo institucional, sobre todo a los docentes, que se tienen que enterar aunque no entren a Nexus (confirmado).
+3. **Ventana del calendario:** el calendario solo informa y nada se rechaza por fecha (regla del 1 de noviembre), así que iniciar el re-análisis no exige estar en la ventana de la etapa.
+4. **El coordinador solo ve el diff de su carrera.** Los ajustes (abrir, cerrar o mover grupos, cupos y salones) los hace el jefe del departamento dueño de la carga (confirmado).
+5. **Devolver una carga re-analizada la regresa a `reanalysis`.** Mientras tanto sigue vigente la versión publicada anterior (confirmado).
+6. **Primer semestre:** sus materias se muestran con el nuevo ingreso capturado, pero no se clasifican como sobrante, faltante o ajustada, porque el kárdex nuevo no dice nada de los que van a entrar (confirmado).
+
+### Pregunta abierta (arquitectura)
+
+- **Dónde viven las alternativas del motor (8.6 y 8.7).** Staffing y Solver son hermanos en el mapa y no pueden depender uno del otro. Hay que decidir si se agrega la arista `Solver --> Staffing`, o si Staffing pide las alternativas con un evento o un contrato de Scheduling. Se decide al empezar la 8.6 (Riel C) y se registra en `docs/decisiones/`.
 
 ### Reparto propuesto
 
