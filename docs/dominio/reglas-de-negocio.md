@@ -171,6 +171,10 @@ Con la carga de un departamento ya publicada, llegan las calificaciones del seme
 - **RA-03.** Republicar una carga re-analizada en una modalidad que exige el visto bueno de Subdirección lo vuelve a pedir, igual que con la versión 1 (confirmado el 18 de noviembre de 2026). El usuario nombró Presencial; hoy Presencial no lo exige («Cierre y reapertura de la carga»), y mientras no se cambie su perfil la republicación de Presencial sigue el perfil (supuesto por confirmar).
 - **RA-04.** Una materia se clasifica como **sobrante**, **faltante** o **ajustada** con el mismo umbral de diferencia de la proyección, `demand.highlight_threshold` (20 % por omisión), que Subdirección y el admin editan en «Parámetros» (confirmado el 18 de noviembre de 2026).
 - **RA-05.** Al republicar, Nexus avisa a los docentes afectados, con exactamente lo que cambió para cada uno; a los coordinadores de las carreras afectadas; y a los jefes de otros departamentos cuando se tocan grupos compartidos o préstamos de salón. No avisa a Servicios Escolares (confirmado el 18 de noviembre de 2026).
+- **RA-06.** Los avisos de la republicación van por la campana y por correo institucional (confirmado el 18 de noviembre de 2026).
+- **RA-07.** Durante el re-análisis, el coordinador solo ve el diff de su carrera. Los ajustes los hace el jefe del departamento dueño de la carga (confirmado el 18 de noviembre de 2026).
+- **RA-08.** Subdirección devuelve una carga re-analizada a `reanalysis`, no a `adjusting`, y mientras tanto sigue vigente la versión publicada anterior (confirmado el 18 de noviembre de 2026).
+- **RA-09.** Las materias de primer semestre se muestran en el re-análisis con su nuevo ingreso capturado, pero no se clasifican como sobrante, faltante o ajustada (confirmado el 18 de noviembre de 2026).
 
 Supuestos por confirmar: mientras la carga está en re-análisis, el público y los docentes siguen viendo la última versión publicada (la misma regla de la reapertura); y el diff de demanda se calcula al leer, sin guardarse. El resto de las preguntas está en «Punto de partida» de la fase 8.
 
