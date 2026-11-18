@@ -74,7 +74,7 @@ it('HC-03: un grupo con paquete lleva la clave del plan y la del paquete, en ese
         ->group(States::group('B', subject: 'QUI', campus: 'c2-id', package: 'PK', packageNumber: 1))
         ->build();
 
-    expect(cohortsOf($state, ['A', 'B']))->toBe(['A' => ['plan:P1:1:C2', 'package:PK:1'], 'B' => ['plan:P1:1:C2', 'package:PK:1']]);
+    expect(cohortsOf($state, ['A', 'B']))->toBe(['A' => ['plan:P1:1:C2', 'package:PK:C2:1'], 'B' => ['plan:P1:1:C2', 'package:PK:C2:1']]);
 });
 
 it('HC-03: dos instancias del mismo paquete son cohortes distintas', function () {
@@ -84,7 +84,7 @@ it('HC-03: dos instancias del mismo paquete son cohortes distintas', function ()
         ->build();
 
     // La materia tiene dos grupos: no hay cohorte de plan, solo la de cada instancia.
-    expect(cohortsOf($state, ['A1', 'A2']))->toBe(['A1' => ['package:PK:1'], 'A2' => ['package:PK:2']]);
+    expect(cohortsOf($state, ['A1', 'A2']))->toBe(['A1' => ['package:PK:C2:1'], 'A2' => ['package:PK:C2:2']]);
 });
 
 it('HC-03: un grupo cancelado con paquete no lleva la cohorte del paquete, y sin paquete no cambia nada', function () {

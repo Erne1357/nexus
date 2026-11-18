@@ -11,7 +11,7 @@ use App\Modules\Scheduling\Validation\State\StateGroup;
  * TypicalStudentSchedule de quién cuenta: un grupo activo que es el único grupo activo de su materia en su plan,
  * semestre reticular, campus y modalidad (donde la materia tiene otro grupo hay combinación que elegir, y el alumno
  * tipo no queda atado a uno). Su clave es `plan:<study_plan_id>:<semestre>:<campus_code>`. Además, cada grupo activo
- * con paquete (DM-09) lleva `package:<package_id>:<número>` (un grupo puede llevar las dos). Puro: solo lee la foto.
+ * con paquete (DM-09) lleva `package:<package_id>:<campus_code>:<número>` (un grupo puede llevar las dos). Puro: solo lee la foto.
  */
 final class Cohorts
 {
@@ -33,7 +33,7 @@ final class Cohorts
             }
 
             if ($group->isActive && $group->packageId !== null && $group->packageNumber !== null) {
-                $keys[] = self::packageKey($group);
+                $keys[] = self::packageKey($state, $group);
             }
 
             $cohorts[$group->id] = $keys;
@@ -43,12 +43,12 @@ final class Cohorts
     }
 
     /**
-     * `package:<package_id>:<número>` (DM-09): la instancia n de un paquete; sus grupos toman los mismos alumnos de
-     * nuevo ingreso. El número se cuenta por campus, así que quien agrupa por esta clave también separa por campus.
+     * `package:<package_id>:<campus_code>:<número>` (DM-09): la instancia n de un paquete; sus grupos toman los mismos alumnos de
+     * nuevo ingreso. El número se cuenta por campus, así que la clave lleva el código del campus.
      */
-    public static function packageKey(StateGroup $group): string
+    public static function packageKey(ScheduleState $state, StateGroup $group): string
     {
-        return "package:{$group->packageId}:{$group->packageNumber}";
+        return "package:{$group->packageId}:{$state->campusCode($group->campusId)}:{$group->packageNumber}";
     }
 
     private static function isSoleGroupOfSubject(ScheduleState $state, StateGroup $group): bool

@@ -22,7 +22,7 @@ use App\Modules\Scheduling\Validation\Violation;
  * lo explica, reporta en los grupos de las materias del núcleo mínimo sin combinación.
  *
  * También incluye cada paquete (DM-09; supuesto por confirmar): dos grupos de la misma instancia de un paquete en un
- * campus (la cohorte `package:<id>:<n>` de Cohorts) toman los mismos alumnos de nuevo ingreso, así que no deben
+ * campus (la cohorte `package:<id>:<campus>:<n>` de Cohorts) toman los mismos alumnos de nuevo ingreso, así que no deben
  * empalmarse, sin importar si hay otro grupo de su materia. También rige en el editor manual.
  */
 final class TypicalStudentSchedule implements Constraint
@@ -83,7 +83,7 @@ final class TypicalStudentSchedule implements Constraint
             }
 
             foreach ($active as $other) {
-                if ($other->id === $group->id || $other->campusId !== $group->campusId || ! in_array(Cohorts::packageKey($group), $cohorts[$other->id], true) || ! in_array(Cohorts::packageKey($group), $cohorts[$group->id], true)) {
+                if ($other->id === $group->id || $other->campusId !== $group->campusId || ! in_array(Cohorts::packageKey($state, $group), $cohorts[$other->id], true) || ! in_array(Cohorts::packageKey($state, $group), $cohorts[$group->id], true)) {
                     continue;
                 }
 
