@@ -40,7 +40,7 @@ final readonly class ApplyPlan
      * (grupo ofertable). No retienen al grupo: se escriben sus sesiones y la violación se reporta como `inputProblems`
      * por corregir. Todo lo demás retiene (HC-01 a HC-06 y HC-09 a HC-12 dependen del acomodo) y también una regla
      * desconocida, que es lo seguro: no se escribe una sesión con un choque que no conocemos (supuesto por confirmar;
-     * acordado entre rieles el 18 de noviembre de 2026).
+     * acordado entre rieles el 17 de noviembre de 2026).
      */
     public const array INPUT_RULES = ['HC-07', 'HC-08', 'HC-13'];
 
