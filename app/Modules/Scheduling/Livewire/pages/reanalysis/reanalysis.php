@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
@@ -164,6 +165,13 @@ new #[Title('Re-análisis de la carga')] class extends Component
         $this->resetFilters();
         $this->success('Re-análisis cancelado', e("La carga sigue publicada en la versión {$load->current_version}."));
     }
+
+    /**
+     * El drawer de sugerencias aplicó una (tarea 8.3a): vuelve a pintar los bloques con lo ya ajustado. Lo de pintar ya
+     * vuelve a autorizar en with().
+     */
+    #[On('reanalysis-adjusted')]
+    public function refreshAdjusted(): void {}
 
     /**
      * Abre «Lo que ya cambiaste»: solo quien ve toda la carga.

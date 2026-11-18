@@ -257,7 +257,7 @@ describe('jefe del departamento', function () {
             ->and($link->getAttribute('data-confirm-button'))->toBe('Ir a Cierre de la carga');
     });
 
-    it('cada bloque abre el drawer de sugerencias con la demanda por carrera y el espacio de la tarea 8.3', function () {
+    it('cada bloque abre el drawer de sugerencias con la demanda por carrera y las sugerencias de la tarea 8.3a', function () {
         $this->world->published()->gradesArrived()->inReanalysis($this->jefe);
 
         reanalysisPage($this->jefe)->assertSeeHtml('data-testid="block-suggestions"');
@@ -269,7 +269,7 @@ describe('jefe del departamento', function () {
             ->assertSee('Cálculo Integral')
             ->assertSee('Demanda por carrera')
             ->assertSeeHtml('data-testid="suggestions-evidence"')
-            ->assertSee('Las sugerencias llegan con la tarea 8.3');
+            ->assertSee('Ampliar el cupo de ISIC en el grupo A de 40 a 50');
     });
 });
 
