@@ -115,6 +115,7 @@ new class extends Component
         $this->subjectId = $subjectId;
         $this->campusId = $campusId;
         $this->editing = null;
+        $this->placements = array_filter($this->placements, fn (string $key): bool => str_starts_with($key, $this->discardKey('')), ARRAY_FILTER_USE_KEY);
         $this->show = true;
     }
 
@@ -162,7 +163,8 @@ new class extends Component
 
     /**
      * Busca con el motor el horario y el salón del grupo nuevo de «Abrir un grupo» y los guarda en la pantalla: se calcula
-     * aquí, una vez, nunca al pintar.
+     * aquí, una vez, nunca al pintar. Pide lo mismo que aplicarla (ajustar la carga y GroupPolicy sobre el grupo que va a
+     * nacer), porque buscar cuesta casi un segundo. Al abrir otro bloque se olvidan los lugares de los demás.
      */
     public function findPlacement(string $key, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query, NewGroupPlacementQuery $placements): void
     {
@@ -176,6 +178,11 @@ new class extends Component
         }
 
         abort_unless($suggestion->kind === ReanalysisSuggestionKind::OpenGroup && $suggestion->newGroup !== null, 403);
+        $draft = OpenReanalysisGroup::draft($load, $suggestion->newGroup);
+
+        foreach (OpenReanalysisGroup::ABILITIES as $ability) {
+            Gate::authorize($ability, $draft);
+        }
 
         $placement = $placements->place($load, $suggestion->newGroup);
 
@@ -209,7 +216,14 @@ new class extends Component
 
         if ($suggestion->kind === ReanalysisSuggestionKind::OpenGroup) {
             $placement = $this->placementOf($suggestion);
-            abort_unless($placement !== null && $placement->isEditable(), 403);
+
+            if ($placement === null) {
+                $this->error('No se puede editar', 'Las sugerencias cambiaron desde que buscaste el lugar: vuelve a buscar horario y salón.');
+
+                return;
+            }
+
+            abort_unless($placement->isEditable(), 403);
             $rooms = $placements->freeRooms($load, $suggestion->newGroup, $placement);
 
             if ($rooms === []) {

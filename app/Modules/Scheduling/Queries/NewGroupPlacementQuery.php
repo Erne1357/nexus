@@ -19,7 +19,6 @@ use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
 use App\Modules\Scheduling\Validation\Minutes;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
 
 /**
@@ -140,28 +139,31 @@ final class NewGroupPlacementQuery
     private function occupancy(AcademicLoad $load, string $campusId, array $roomIds, NewGroupPlacement $placement): Closure
     {
         $days = array_values(array_unique(array_column($placement->sessions, 'day')));
-        $sessions = $this->byRoom(GroupSession::query()
+        $sessions = GroupSession::query()
             ->where('term_id', $load->term_id)
             ->where('campus_id', $campusId)
             ->where('is_active', true)
             ->whereIn('room_id', $roomIds)
             ->whereIn('day', $days)
             ->toBase()
-            ->get(['room_id', 'day', 'starts_at', 'ends_at']));
-        $blocks = $this->byRoom(RoomBlock::query()
+            ->get(['room_id', 'day', 'starts_at', 'ends_at'])
+            ->groupBy('room_id');
+        $blocks = RoomBlock::query()
             ->whereIn('room_id', $roomIds)
             ->whereIn('day', $days)
             ->where(fn (Builder $query) => $query->whereNull('term_id')->orWhere('term_id', $load->term_id))
             ->toBase()
-            ->get(['room_id', 'day', 'starts_at', 'ends_at']));
-        $loans = $this->byRoom(InterdepartmentalAgreement::query()
+            ->get(['room_id', 'day', 'starts_at', 'ends_at'])
+            ->groupBy('room_id');
+        $loans = InterdepartmentalAgreement::query()
             ->where('kind', AgreementKind::RoomLoan->value)
             ->where('term_id', $load->term_id)
             ->whereIn('status', AgreementStatus::liveValues())
             ->whereIn('room_id', $roomIds)
             ->whereIn('day', $days)
             ->toBase()
-            ->get(['room_id', 'day', 'starts_at', 'ends_at']));
+            ->get(['room_id', 'day', 'starts_at', 'ends_at'])
+            ->groupBy('room_id');
 
         return function (string $roomId, array $session) use ($sessions, $blocks, $loans): ?string {
             $overlaps = fn (object $row): bool => (int) $row->day === $session['day']
@@ -174,14 +176,5 @@ final class NewGroupPlacementQuery
                 default => null,
             };
         };
-    }
-
-    /**
-     * @param  Collection<int, object>  $rows
-     * @return Collection<string, Collection<int, object>>
-     */
-    private function byRoom(Collection $rows): Collection
-    {
-        return $rows->groupBy('room_id');
     }
 }

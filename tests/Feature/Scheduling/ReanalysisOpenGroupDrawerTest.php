@@ -112,6 +112,20 @@ it('«Editar» cambia el salón del grupo nuevo por otro libre de la lista', fun
     expect(GroupSession::query()->where('group_id', $group->id)->pluck('room_id')->unique()->all())->toBe([$large->id]);
 });
 
+it('si la sugerencia cambió desde que se buscó el lugar, «Editar» pide buscar otra vez; abrir otro bloque olvida los lugares', function () {
+    $drawer = openGroupDrawer($this->jefe, $this->world)->call('findPlacement', $this->openKey);
+    $this->world->groups['A']->update(['capacity' => 45]);
+
+    $drawer->call('edit', $this->openKey)->assertSet('editing', null);
+
+    expect(lastToastOf($drawer)['description'])->toBe('Las sugerencias cambiaron desde que buscaste el lugar: vuelve a buscar horario y salón.')
+        ->and($drawer->get('placements'))->toHaveCount(1);
+
+    $drawer->dispatch('open-reanalysis-suggestions', subjectId: $this->world->integral->id, campusId: $this->world->c1->id);
+
+    expect($drawer->get('placements'))->toBe([]);
+});
+
 it('sin lugar posible lo dice, con la regla, y no ofrece aplicar', function () {
     Room::query()->where('campus_id', $this->world->c2->id)->update(['capacity' => 30]);
 

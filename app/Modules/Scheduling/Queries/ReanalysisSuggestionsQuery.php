@@ -45,7 +45,8 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  *
  * Para abrir un grupo (tarea 8.3b) le da al asesor la capacidad con la que nacería (GroupCapacity) y el plan vigente de
  * cada carrera del bloque con la materia y su semestre (NewGroupBase), en dos consultas más; el horario y el salón no
- * se calculan aquí sino al abrir la tarjeta (NewGroupPlacementQuery).
+ * se calculan aquí sino al abrir la tarjeta (NewGroupPlacementQuery). Un bloque sin grupos vivos (demanda sin oferta, o
+ * todos cancelados) también pasa por el asesor: lo único que puede proponer es abrir uno.
  */
 final class ReanalysisSuggestionsQuery
 {
@@ -72,10 +73,6 @@ final class ReanalysisSuggestionsQuery
             ->get();
 
         $settings = DemandSettings::fromSettings();
-
-        if ($groups->isEmpty()) {
-            return new ReanalysisSuggestions([], [], [], [], [], $settings->highlightThreshold);
-        }
 
         $held = InterdepartmentalAgreement::query()
             ->where('kind', AgreementKind::SharedGroup->value)
