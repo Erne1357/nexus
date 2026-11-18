@@ -71,7 +71,7 @@ final class ApproveChangeRequest
     }
 
     /**
-     * CR-01 (confirmado el 18 de noviembre de 2026): no se aprueba un cambio que deja choques duros. Se simula en el
+     * CR-01 (confirmado el 17 de noviembre de 2026): no se aprueba un cambio que deja choques duros. Se simula en el
      * momento, no con el impacto guardado, porque el horario pudo cambiar. Una solicitud que no se puede simular (solo
      * texto) se aprueba (supuesto por confirmar): al aplicarla, el validador de horarios sigue impidiendo los choques.
      *
