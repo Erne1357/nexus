@@ -11,7 +11,8 @@ use Illuminate\Database\Seeder;
 /**
  * Calificaciones tardías para la demo (tarea 5.10, pedido de la 5.5 y la 5.6): en las `$subjects` materias con más
  * alumnos cursándolas en el semestre ordinario anterior al de la demo, lo que se cursa pasa a aprobada o reprobada
- * (exactamente `$failureShare` de reprobadas, redondeado, elegidas de forma repetible con `$seed`). Después recalcula el avance de los
+ * (exactamente `$failureShare` de reprobadas, redondeado, elegidas de forma repetible con `$seed` por número de control y
+ * clave de materia, así que la misma semilla da las mismas reprobadas en cada siembra). Después recalcula el avance de los
  * alumnos, que avisa con StudentProgressRefreshed y vuelve a proyectar los periodos abiertos (tarea 5.4; `demo:seed`
  * corre con la cola síncrona). Así cambia la proyección de esas materias y de las que las piden de seriación, y la
  * propuesta ya armada tiene filas donde «la proyección cambió».
@@ -48,7 +49,8 @@ final class DemandRecalculationDemoSeeder extends Seeder
 
     /**
      * Las materias completas que hay que calificar para llevar capturada al menos `$share` (de 0 a 1) de las filas que
-     * se cursan en el semestre ordinario anterior a `$term`, en el orden de subjectsToGrade() (la de más alumnos primero).
+     * se cursan en el semestre ordinario anterior a `$term`: la de más alumnos primero y, entre iguales, por clave de materia
+     * (no por id, que cambia en cada siembra).
      * Las que ya están calificadas cuentan como capturadas: una segunda corrida no califica más.
      *
      * @return list<string>
@@ -58,12 +60,13 @@ final class DemandRecalculationDemoSeeder extends Seeder
         $inProgress = TermCode::previousRegular($term);
         $graded = KardexRecord::query()->where('term_code', $inProgress)->whereIn('result', [KardexResult::Aprobada, KardexResult::Reprobada])->count();
         $pending = KardexRecord::query()
-            ->where('term_code', $inProgress)
-            ->where('result', KardexResult::Cursando)
-            ->groupBy('subject_id')
+            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
+            ->where('kardex_records.term_code', $inProgress)
+            ->where('kardex_records.result', KardexResult::Cursando)
+            ->groupBy('kardex_records.subject_id', 'subjects.code')
             ->orderByRaw('count(*) desc')
-            ->orderBy('subject_id')
-            ->selectRaw('subject_id, count(*) as total')
+            ->orderBy('subjects.code')
+            ->selectRaw('kardex_records.subject_id, count(*) as total')
             ->toBase()
             ->get();
         $target = (int) ceil(($graded + $pending->sum('total')) * $share);
@@ -86,14 +89,22 @@ final class DemandRecalculationDemoSeeder extends Seeder
         $inProgress = TermCode::previousRegular($term);
         $subjectIds = $capturedShare === null ? self::subjectsToGrade($term, $subjects) : self::subjectsToCapture($term, $capturedShare);
 
+        // Reprobadas repetibles con la semilla: se ordenan por el número de control y la clave de la materia, que son los
+        // mismos en cada siembra, y no por el id, que es un uuid nuevo cada vez.
         $rows = KardexRecord::query()
-            ->where('term_code', $inProgress)
-            ->where('result', KardexResult::Cursando)
-            ->whereIn('subject_id', $subjectIds)
+            ->join('students', 'students.id', '=', 'kardex_records.student_id')
+            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
+            ->where('kardex_records.term_code', $inProgress)
+            ->where('kardex_records.result', KardexResult::Cursando)
+            ->whereIn('kardex_records.subject_id', $subjectIds)
+            ->toBase()
+            ->get(['kardex_records.id', 'students.control_number', 'subjects.code'])
+            ->map(fn (object $row): array => ['id' => (string) $row->id, 'key' => "{$row->control_number}|{$row->code}"])
+            ->sortBy(fn (array $row): array => [crc32($row['key'].'|'.$seed), $row['key']])
             ->pluck('id')
+            ->values()
             ->all();
 
-        usort($rows, fn (string $a, string $b): int => [crc32($a.$seed), $a] <=> [crc32($b.$seed), $b]);
         $failed = array_slice($rows, 0, (int) round(count($rows) * $failureShare));
         $passed = array_slice($rows, count($failed));
 

@@ -109,14 +109,20 @@ final class ReanalysisChangesDemoSeeder extends Seeder
         $termModel = Term::query()->where('code', $term)->firstOrFail();
         $modalityModel = Modality::query()->where('code', $modality)->firstOrFail();
         $done = [];
+        $plan = ReanalysisDemoSeeder::plan($termModel->getKey(), $modalityModel->getKey());
 
-        Event::fakeFor(function () use ($termModel, $modalityModel, &$done): void {
+        Event::fakeFor(function () use ($termModel, $modalityModel, $plan, &$done): void {
             foreach (ReanalysisDemoSeeder::loadsIn($termModel->getKey(), $modalityModel->getKey(), ReanalysisDemoSeeder::CHANGING) as $load) {
                 if ($load->status !== LoadStatus::Reanalysis || app(ReanalysisCycleQuery::class)->closedFromReanalysis($load) || app(ReanalysisChangesQuery::class)->hasChanges($load)) {
                     continue;
                 }
 
                 $counts = $this->change($load, ReanalysisDemoSeeder::headOf($load));
+
+                if ($plan[$load->getKey()] === ReanalysisDemoSeeder::CASE_CORRECTED) {
+                    $this->ensureEveryKind($load, $counts);
+                }
+
                 $done[] = $load->department->code.' ('.implode(', ', array_map(fn (string $kind, int $count): string => "{$kind} {$count}", array_keys($counts), $counts)).')';
             }
         }, self::FAKED_EVENTS);
@@ -170,13 +176,39 @@ final class ReanalysisChangesDemoSeeder extends Seeder
     }
 
     /**
+     * La carga «corregida» es la que siempre está (la primera del plan) y su versión 2 es la que la revisión del punto lee
+     * para «cada tipo de cambio»: si alguno no se pudo hacer, la demo se detiene aquí, con el tipo y por qué, en vez de
+     * fallar después en la revisión. El cierre de grupo puede quedar para Staffing (cancelTaught), que quita el docente
+     * antes.
+     *
+     * @param  array<string, int>  $counts
+     *
+     * @throws RuntimeException
+     */
+    private function ensureEveryKind(AcademicLoad $load, array $counts): void
+    {
+        $why = [
+            'quotas' => 'ningún grupo compartido ni de una carrera tiene lugares que ampliar (HC-07)',
+            'capacity' => 'ningún grupo tiene un salón más grande que su capacidad en todas sus sesiones (HC-05)',
+            'open' => 'ninguna fila faltante tiene un grupo de su materia que copiar y un acomodo sin choques duros',
+            'move' => 'ningún grupo de una carrera con docente tiene otro día libre para una sesión sin choques duros',
+            'rooms' => 'ninguna sesión tiene otro salón libre, propio o sin dueño, donde quepa el grupo',
+        ];
+        $missing = array_keys(array_filter($why, fn (string $reason, string $kind): bool => ($counts[$kind] ?? 0) === 0, ARRAY_FILTER_USE_BOTH));
+
+        if ($missing !== []) {
+            throw new RuntimeException("La carga corregida de {$load->department->code} no pudo hacer todos los ajustes del re-análisis: ".implode('; ', array_map(fn (string $kind): string => "{$kind}: {$why[$kind]}", $missing)).'.');
+        }
+    }
+
+    /**
      * Amplía el cupo de otra carrera en los grupos compartidos (los lugares libres o, si no hay, los toma de la dueña) y,
      * si no alcanzan, el de la dueña hasta la capacidad.
      */
     private function widenQuotas(AcademicLoad $load, User $head, int $wanted): int
     {
         $done = 0;
-        $groups = $this->groups($load)->load('quotas');
+        $groups = $this->groups($load)->load('quotas.career');
         $shared = $groups->filter(fn (Group $group): bool => $group->quotas->count() > 1);
         $owned = $groups->filter(fn (Group $group): bool => $group->quotas->count() === 1 && $group->quotas->sum('max_seats') < $group->capacity);
 
@@ -187,7 +219,8 @@ final class ReanalysisChangesDemoSeeder extends Seeder
 
             $seats = $group->quotas->mapWithKeys(fn (GroupQuota $quota): array => [$quota->career_id => $quota->max_seats])->all();
             $owner = $group->owner_career_id;
-            $other = $group->quotas->reject(fn (GroupQuota $quota): bool => $quota->is_owner)->sortBy('max_seats')->first()?->career_id ?? $owner;
+            $other = $group->quotas->reject(fn (GroupQuota $quota): bool => $quota->is_owner)
+                ->sortBy(fn (GroupQuota $quota): array => [$quota->max_seats, (string) $quota->career?->code])->first()?->career_id ?? $owner;
             $free = $group->capacity - array_sum($seats);
             $widen = min(self::WIDEN_SEATS, $free > 0 ? $free : ($other === $owner ? 0 : $seats[$owner] - 1));
 
@@ -436,8 +469,9 @@ final class ReanalysisChangesDemoSeeder extends Seeder
     /**
      * Los grupos que se pueden cerrar porque sobran lugares: de cada fila sobrante del diff (la de más sobrante primero)
      * cuya carrera tiene más de un grupo de la materia en ese campus, los de esa carrera que no son compartidos ni ocupan un
-     * salón de otro departamento (sus acuerdos se cancelarían), el último por clave primero. Con o sin docente: quien
-     * llama decide.
+     * salón de otro departamento (sus acuerdos se cancelarían), el último por clave primero. Nunca uno que ya cambió en
+     * este re-análisis (abierto, con cupo, capacidad, horario, salón o docente nuevos; ReanalysisChangesQuery::since()):
+     * cerrarlo borraría ese cambio del diff. Con o sin docente: quien llama decide.
      *
      * @return Collection<int, Group>
      */
@@ -447,7 +481,12 @@ final class ReanalysisChangesDemoSeeder extends Seeder
             ->filter(fn (ReanalysisRow $row): bool => $row->balance === DemandBalance::Surplus && $row->campusId !== null && $row->offeredGroups > 1)
             ->sortBy(fn (ReanalysisRow $row): array => [$row->gap(), $row->campusCode, $row->careerCode, $row->subjectCode])
             ->values();
-        $groups = $this->groups($load)->load(['quotas', 'sessions.room']);
+        $since = app(ReanalysisChangesQuery::class)->since($load)['groups'];
+        $touched = array_flip([
+            ...array_map(fn (array $group): string => $group['id'], $since['added']),
+            ...array_map(fn (array $changed): string => $changed['group']['id'], $since['changed']),
+        ]);
+        $groups = $this->groups($load)->load(['quotas', 'sessions.room'])->reject(fn (Group $group): bool => isset($touched[$group->getKey()]));
 
         return $rows->flatMap(function (ReanalysisRow $row) use ($groups): Collection {
             $mine = $groups->filter(fn (Group $group): bool => $group->subject_id === $row->subjectId && $group->campus_id === $row->campusId && $group->owner_career_id === $row->careerId);
@@ -513,7 +552,7 @@ final class ReanalysisChangesDemoSeeder extends Seeder
         $groups = $this->groups($load)->load(['quotas', 'sessions.room'])
             ->filter(fn (Group $group): bool => $group->sessions->isNotEmpty() && $group->sessions->every(fn (GroupSession $session): bool => $session->room !== null)
                 && $group->sessions->min(fn (GroupSession $session): int => $session->room->capacity) > $group->capacity)
-            ->sortBy(fn (Group $group): array => [isset($short[$group->subject_id]) ? 0 : 1, $group->id])
+            ->sortBy(fn (Group $group): array => [isset($short[$group->subject_id]) ? 0 : 1, ...self::stableKey($group)])
             ->values();
         $done = 0;
 
@@ -551,7 +590,7 @@ final class ReanalysisChangesDemoSeeder extends Seeder
         $groups = $this->groups($load)->load(['sessions.room', 'quotas'])
             ->filter(fn (Group $group): bool => $group->teacher_id !== null && $group->sessions->count() > 1 && $group->quotas->count() === 1
                 && $group->sessions->every(fn (GroupSession $session): bool => $session->room !== null && ($session->room->department_id === null || $session->room->department_id === $group->department_id)))
-            ->sortByDesc('id')
+            ->sortByDesc(fn (Group $group): array => self::stableKey($group))
             ->values();
 
         foreach ($groups as $group) {
@@ -603,9 +642,8 @@ final class ReanalysisChangesDemoSeeder extends Seeder
     {
         $done = 0;
         $placed = $this->groups($load)->load('sessions.room')
-            ->flatMap(fn (Group $group) => $group->sessions)
+            ->flatMap(fn (Group $group) => $group->sessions->sortBy(['day', 'starts_at'])->values())
             ->filter(fn (GroupSession $session): bool => $session->room !== null && ($session->room->department_id === null || $session->room->department_id === $load->department_id))
-            ->sortBy('id')
             ->values();
         $offset = intdiv($placed->count(), 2) * ($round % 2);
         $sessions = $placed->slice($offset)->concat($placed->take($offset));
@@ -648,7 +686,8 @@ final class ReanalysisChangesDemoSeeder extends Seeder
     }
 
     /**
-     * Los grupos activos de la carga, con sus sesiones, por id.
+     * Los grupos activos de la carga, con sus sesiones, en un orden que no cambia de una siembra a otra (stableKey()): los
+     * ids son uuid nuevos en cada siembra, así que ordenar por id elegiría otros grupos cada vez.
      *
      * @return Collection<int, Group>
      */
@@ -657,9 +696,20 @@ final class ReanalysisChangesDemoSeeder extends Seeder
         return Group::query()
             ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
             ->active()
-            ->with(['sessions', 'subject', 'modality'])
-            ->orderBy('id')
-            ->get();
+            ->with(['sessions', 'subject', 'modality', 'campus'])
+            ->get()
+            ->sortBy(fn (Group $group): array => self::stableKey($group))
+            ->values();
+    }
+
+    /**
+     * La llave estable de un grupo: clave de la materia, campus y clave del grupo.
+     *
+     * @return array{string, string, string}
+     */
+    public static function stableKey(Group $group): array
+    {
+        return [(string) $group->subject?->code, (string) $group->campus?->code, (string) $group->code];
     }
 
     /**

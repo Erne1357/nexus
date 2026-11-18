@@ -34,6 +34,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -98,7 +99,7 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
             return sprintf('%.1f s', $seconds);
         };
 
-        $this->changeTeachers($open, $termModel, $modalityModel);
+        $this->changeTeachers($open, $plan, $termModel, $modalityModel);
         $times = ['docentes' => $lap()];
 
         foreach ($open as $load) {
@@ -159,20 +160,39 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
      * Cambia unos docentes y da docente a los grupos abiertos de cada carga, con los eventos de recálculo descartados, y
      * recalcula una vez los choques y la carga de los docentes.
      *
+     * La carga «corregida» tiene que llevar a su versión 2 un grupo cerrado y un cambio de docente (la revisión del punto
+     * pide cada tipo de cambio): si no se pudo, se detiene con el motivo.
+     *
      * @param  Collection<int, AcademicLoad>  $loads
+     * @param  array<string, string>  $plan
+     *
+     * @throws RuntimeException
      */
-    private function changeTeachers(Collection $loads, Term $term, Modality $modality): void
+    private function changeTeachers(Collection $loads, array $plan, Term $term, Modality $modality): void
     {
         if ($loads->isEmpty()) {
             return;
         }
 
-        Event::fakeFor(function () use ($loads): void {
+        Event::fakeFor(function () use ($loads, $plan): void {
             foreach ($loads as $load) {
                 $head = ReanalysisDemoSeeder::headOf($load);
                 $this->cancelTaught($load, $head);
                 $this->staffOpened($load, $head);
-                $this->reassign($load, $head, min(3, max(2, intdiv($this->groups($load)->count(), 40))));
+                $reassigned = $this->reassign($load, $head, min(3, max(2, intdiv($this->groups($load)->count(), 40))));
+
+                if ($plan[$load->getKey()] !== ReanalysisDemoSeeder::CASE_CORRECTED) {
+                    continue;
+                }
+
+                $missing = array_keys(array_filter([
+                    'un grupo cerrado (ninguno de los que sobran deja combinación sin empalmes al alumno tipo, HC-03)' => app(ReanalysisChangesQuery::class)->since($load->fresh())['summary']['cancelled'] === 0,
+                    'un cambio de docente (ningún candidato del ranking pasa HC-01, HC-08 y HC-09)' => $reassigned === 0,
+                ]));
+
+                if ($missing !== []) {
+                    throw new RuntimeException("La carga corregida de {$load->department->code} no pudo hacer ".implode(' ni ', $missing).'.');
+                }
             }
         }, [...ReanalysisChangesDemoSeeder::FAKED_EVENTS, GroupTeacherChanged::class]);
 
@@ -262,7 +282,7 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
             ->where('assigned_at', '>=', $this->since($load))->count();
         $attempts = 0;
 
-        foreach ($groups->whereNotNull('teacher_id')->sortByDesc('id') as $group) {
+        foreach ($groups->whereNotNull('teacher_id')->sortByDesc(fn (Group $group): array => ReanalysisChangesDemoSeeder::stableKey($group)) as $group) {
             if ($done >= $wanted || $attempts === self::MAX_ATTEMPTS * $wanted) {
                 break;
             }
@@ -296,10 +316,13 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         $opened = $this->groups($load)->whereNull('teacher_id')->where('close_justification', ReanalysisChangesDemoSeeder::OPENED_JUSTIFICATION);
 
         foreach ($opened as $group) {
+            // Por lugar y, entre iguales de varios grupos, por RFC: un orden que no depende de los ids de la siembra.
             $candidates = StaffingRanking::query()
-                ->whereIn('group_id', Group::query()->where('term_id', $group->term_id)->where('subject_id', $group->subject_id)->select('id'))
-                ->orderBy('rank')
-                ->pluck('teacher_id')->unique()->take(25)->values()->all();
+                ->join('teachers', 'teachers.id', '=', 'staffing_rankings.teacher_id')
+                ->whereIn('staffing_rankings.group_id', Group::query()->where('term_id', $group->term_id)->where('subject_id', $group->subject_id)->select('id'))
+                ->orderBy('staffing_rankings.rank')
+                ->orderBy('teachers.rfc')
+                ->pluck('staffing_rankings.teacher_id')->unique()->take(25)->values()->all();
 
             if ($this->assignFirstFitting($group, $candidates, $head, self::OPENED_REASON)) {
                 app(JustifyGroup::class)->handle($group->fresh(), null, $head);
@@ -361,7 +384,7 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
     }
 
     /**
-     * Los grupos activos de la carga, con sus sesiones, por id.
+     * Los grupos activos de la carga, con sus sesiones, en el orden estable de ReanalysisChangesDemoSeeder::stableKey().
      *
      * @return Collection<int, Group>
      */
@@ -370,8 +393,9 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         return Group::query()
             ->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
             ->active()
-            ->with('sessions')
-            ->orderBy('id')
-            ->get();
+            ->with(['sessions', 'subject', 'campus'])
+            ->get()
+            ->sortBy(fn (Group $group): array => ReanalysisChangesDemoSeeder::stableKey($group))
+            ->values();
     }
 }
