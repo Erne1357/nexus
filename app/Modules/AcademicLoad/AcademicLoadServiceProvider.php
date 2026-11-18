@@ -58,6 +58,7 @@ use App\Modules\Core\Events\TermOpened;
 use App\Modules\Core\Events\TermOpeningPreviewing;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Demand\Events\DemandForecastsComputed;
@@ -208,10 +209,12 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
             // Después del kárdex de Students (que lleva a «catálogos»): el historial se arma con sus alumnos por materia y campus.
             new DemoStep(DemoCheckpoint::Catalogs, 'Historial de grupos por materia, coherente con el kárdex', fn (DemoContext $demo) => $demo->runSeeder(HistoricalGroupsDemoSeeder::class, ['seed' => $demo->seed])),
             // Después de los catálogos validados (CatalogValidation) y de la proyección (Demand), que van antes en el mapa.
-            new DemoStep(DemoCheckpoint::Proposal, 'Propuestas precargadas con todos los casos', fn (DemoContext $demo) => $demo->runSeederPerModality(ProposalForecastDemoSeeder::class, [
+            // Las modalidades juntas: el recálculo de la proyección es del kárdex y corre una sola vez.
+            new DemoStep(DemoCheckpoint::Proposal, 'Propuestas precargadas con todos los casos', fn (DemoContext $demo) => $demo->runSeeder(ProposalForecastDemoSeeder::class, [
                 'campuses' => $demo->campuses,
                 'term' => $demo->termCode,
                 'seed' => $demo->seed,
+                'modalities' => $demo->volume->modalities(),
             ])),
             new DemoStep(DemoCheckpoint::Scheduling, 'Propuestas de carrera enviadas y aceptadas', fn (DemoContext $demo) => $demo->runSeederPerModality(AcademicLoadDemoSeeder::class, [
                 'campuses' => $demo->campuses,
@@ -325,8 +328,11 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
                 array_keys($cases),
                 array_values($cases),
             ),
+            // Por cada modalidad abierta en el periodo, las carreras ofrecidas que no tienen su propuesta en ella.
             new DemoCheck([DemoCheckpoint::Proposal], 'Hay carreras ofrecidas sin propuesta', function (DemoContext $demo) use ($offeredCareerIds, $modalityIds, $proposals): true|string {
-                $missing = count($offeredCareerIds($demo)) * count($modalityIds($demo)) - $proposals($demo)->count();
+                $offered = $offeredCareerIds($demo);
+                $open = TermOpening::query()->where('term_id', $demo->term()->getKey())->whereIn('modality_id', $modalityIds($demo))->pluck('modality_id');
+                $missing = $open->sum(fn (string $modalityId): int => count($offered) - $proposals($demo)->where('modality_id', $modalityId)->count());
 
                 return $missing > 0 ? true : 'Todas las carreras ofrecidas tienen propuesta.';
             }),

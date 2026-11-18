@@ -131,9 +131,21 @@ it('recalcula la proyección, resuelve y revisa como el coordinador de cada camp
     ];
     $before = $snapshot();
 
-    DemoContext::for(DemoVolume::Demo)->runSeederPerModality(ProposalForecastDemoSeeder::class, ['campuses' => ['C2']]);
+    DemoContext::for(DemoVolume::Demo)->runSeeder(ProposalForecastDemoSeeder::class, ['campuses' => ['C2']]);
 
     expect($snapshot())->toBe($before);
+
+    // Una corrida que solo completa lo que falta (aquí, la propuesta sin tocar) la arma sin volver a calificar el kárdex.
+    $untouched = proposalDemoOf('ILOG');
+    ProposalItem::query()->where('career_proposal_id', $untouched->id)->delete();
+    ProposalIntake::query()->where('career_proposal_id', $untouched->id)->delete();
+    $untouched->delete();
+    $cursando = KardexRecord::query()->where('result', KardexResult::Cursando)->count();
+
+    DemoContext::for(DemoVolume::Demo)->runSeeder(ProposalForecastDemoSeeder::class, ['campuses' => ['C2']]);
+
+    expect(proposalDemoOf('ILOG'))->not->toBeNull()
+        ->and(KardexRecord::query()->where('result', KardexResult::Cursando)->count())->toBe($cursando);
 });
 
 it('no corre en producción', function () {

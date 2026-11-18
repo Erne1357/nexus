@@ -65,7 +65,7 @@
                 </span>
             @endforeach
             @if ($anomalies !== [])
-                <span class="flex items-start gap-1 font-medium text-warning" data-testid="anomaly-{{ $row->subject->code }}">
+                <span class="flex items-start gap-1 text-warning" data-testid="anomaly-{{ $row->subject->code }}">
                     <x-icon name="o-exclamation-triangle" class="mt-px h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span><span class="sr-only">Revisar: </span>{{ implode('; ', $anomalies) }}</span>
                 </span>
             @endif

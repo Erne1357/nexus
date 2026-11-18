@@ -114,9 +114,9 @@
                             </x-slot:icon>
                             @if ($multi)
                                 <x-slot:requisites class="flex items-baseline" data-testid="figures-{{ $row->subject->code }}" title="Alumnos posibles por campus: {{ collect($columns)->map(fn ($column, $key) => ($column['campus']?->code ?? '—').' '.(($row->cells[$key] ?? null)?->eligible_students ?? 0))->implode(' · ') }}"><span class="truncate">Pos. <span class="font-mono">{{ $eligibleText }}</span></span></x-slot:requisites>
-                                <x-slot:start><span class="flex items-center gap-1.5" data-testid="groups-{{ $row->subject->code }}">
+                                <x-slot:start><span class="flex items-center gap-1" data-testid="groups-{{ $row->subject->code }}">
                                     @foreach ($columns as $key => $column)
-                                        <span @class(['inline-flex items-center gap-0.5', 'text-neutral' => (($row->cells[$key] ?? null)?->requested_groups ?? 0) === 0])><x-academic-load::campus-tag :campus="$column['campus']" size="xs" /><span class="text-[13px] font-semibold">{{ ($row->cells[$key] ?? null)?->requested_groups ?? '—' }}</span></span>
+                                        <span @class(['inline-flex items-center gap-px', 'text-neutral' => (($row->cells[$key] ?? null)?->requested_groups ?? 0) === 0])><x-academic-load::campus-tag :campus="$column['campus']" size="xs" /><span class="text-[13px] font-semibold">{{ ($row->cells[$key] ?? null)?->requested_groups ?? '—' }}</span></span>
                                     @endforeach
                                 </span></x-slot:start>
                             @else
@@ -132,8 +132,13 @@
                                 @endif
                                 @if ($anomalies !== [])
                                     <span class="inline-flex items-center gap-0.5 font-semibold text-warning" data-testid="anomaly-{{ $row->subject->code }}">
-                                        <x-icon name="o-exclamation-triangle" class="w-4 h-4" aria-hidden="true" />
-                                        <span data-anomaly-count>{{ count($anomalies) }}</span>
+                                        <x-icon name="o-exclamation-triangle" @class(['shrink-0', 'w-3.5 h-3.5' => $multi, 'w-4 h-4' => ! $multi]) aria-hidden="true" />
+                                        {{-- Con varios campus el pie no da para la cuenta: queda el icono, y la cuenta para el lector de pantalla y en el title del mosaico. --}}
+                                        @if ($multi)
+                                            <span data-anomaly-count class="sr-only">{{ count($anomalies) }}</span>
+                                        @else
+                                            <span data-anomaly-count>{{ count($anomalies) }}</span>
+                                        @endif
                                         <span class="sr-only">Revisar: {{ implode('; ', $anomalies) }}</span>
                                     </span>
                                 @endif

@@ -13,7 +13,7 @@
         <caption class="sr-only">Grupos pedidos contra sugeridos por materia y carrera{{ $shownCampus ? ' en '.$shownCampus->name : '' }}</caption>
         <thead>
             <tr>
-                <th scope="col" class="sticky left-0 z-10 min-w-56 max-w-72 border-e border-base-300 bg-base-200 px-4 py-2.5 text-start align-bottom text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Materia</th>
+                <th scope="col" class="sticky left-0 z-10 min-w-44 desktop:min-w-56 max-w-72 shadow-[8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-e border-base-300 bg-base-200 px-4 py-2.5 text-start align-bottom text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Materia</th>
                 @foreach ($board->careers as $column)
                     @php($mine = $column['career']->getKey() === $lensId)
                     <th scope="col" title="{{ $column['career']->name }} · {{ $column['state']->label() }}"
@@ -26,7 +26,7 @@
                         @include('academic-load::demand.state', ['state' => $column['state'], 'short' => true])
                     </th>
                 @endforeach
-                <th scope="col" class="sticky right-0 z-10 min-w-32 border-s border-base-300 bg-base-200 px-3 py-2.5 text-end align-bottom font-semibold">Todo el Tec</th>
+                <th scope="col" class="sticky right-0 z-10 min-w-24 desktop:min-w-32 shadow-[-8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-s border-base-300 bg-base-200 px-3 py-2.5 text-end align-bottom font-semibold">Todo el Tec</th>
             </tr>
         </thead>
         <tbody>
@@ -35,10 +35,10 @@
                 @php($open = $drawer !== null && $drawer->subject->getKey() === $subject->getKey())
                 @php($total = $row->total($campusId))
                 <tr wire:key="demand-row-{{ $subject->id }}" wire:click="open(@js($subject->code))" class="group cursor-pointer" data-testid="demand-row-{{ $subject->code }}">
-                    <th scope="row" @class(['sticky left-0 z-10 min-w-56 max-w-72 border-e border-t border-base-300 px-4 py-2 text-start align-middle font-normal', $stickyBody => ! $open, $stickyOpen => $open])>
+                    <th scope="row" @class(['sticky left-0 z-10 min-w-44 desktop:min-w-56 max-w-72 shadow-[8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-e border-t border-base-300 px-4 py-2 text-start align-middle font-normal', $stickyBody => ! $open, $stickyOpen => $open])>
                         <button type="button" wire:click.stop="open(@js($subject->code))" class="group/name block text-start" aria-label="Abrir el detalle de {{ $subject->code }} {{ $subject->name }}">
                             <span class="block font-mono text-[15px] font-semibold">{{ $subject->code }}</span>
-                            <span class="leading-snug underline decoration-transparent underline-offset-4 group-hover/name:decoration-current group-focus-visible/name:decoration-current">{{ $subject->name }}</span>
+                            <span class="leading-snug underline decoration-transparent max-desktop:line-clamp-2 underline-offset-4 group-hover/name:decoration-current group-focus-visible/name:decoration-current">{{ $subject->name }}</span>
                             @if ($subject->needs_lab)
                                 <x-icon name="o-beaker" class="ms-1 inline h-4 w-4 align-[-3px] text-neutral" aria-hidden="true" /><span class="sr-only">, requiere laboratorio</span>
                             @endif
@@ -65,13 +65,13 @@
                         </td>
                     @endforeach
                     <td @class([
-                        'sticky right-0 z-10 min-w-32 border-s border-t border-base-300 px-3 py-2 text-end align-middle',
+                        'sticky right-0 z-10 min-w-24 desktop:min-w-32 shadow-[-8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-s border-t border-base-300 px-3 py-2 text-end align-middle',
                         'bg-[color-mix(in_oklab,var(--color-warning)_12%,var(--color-base-200))] text-warning' => $total->large,
                         'bg-base-200' => ! $total->large,
                     ]) data-testid="demand-total-{{ $subject->code }}" @if ($total->large) data-large @endif>
                         @include('academic-load::demand.cell', ['cell' => $total, 'label' => 'Todo el Tec'])
                         @if ($shownCampus === null && count($board->campuses) > 1)
-                            <span class="mt-0.5 flex justify-end gap-2 text-[11.5px] text-neutral">
+                            <span class="mt-0.5 flex justify-end gap-2 text-[11.5px] text-neutral max-desktop:hidden">
                                 @foreach ($row->byCampus() as $split)
                                     <span class="inline-flex items-center gap-1"><x-core::campus-tag :campus="$split['campus']" size="xs" /><span class="font-mono tabular-nums" aria-hidden="true">{{ $split['cell']->counted }}/{{ $split['cell']->suggested }}</span><span class="sr-only">{{ $split['cell']->counted }} pedidos de {{ $split['cell']->suggested }}</span></span>
                                 @endforeach
@@ -83,7 +83,7 @@
         </tbody>
         <tfoot data-testid="demand-footer">
             <tr class="font-semibold">
-                <th scope="row" class="sticky left-0 z-10 border-e border-t border-base-300 bg-base-200 px-4 py-2.5 text-start">Todo el Tec · <span class="font-mono tabular-nums">{{ count($visible) }}</span> {{ count($visible) === 1 ? 'materia' : 'materias' }}</th>
+                <th scope="row" class="sticky left-0 z-10 shadow-[8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-e border-t border-base-300 bg-base-200 px-4 py-2.5 text-start">Todo el Tec · <span class="font-mono tabular-nums">{{ count($visible) }}</span> {{ count($visible) === 1 ? 'materia' : 'materias' }}</th>
                 @foreach ($board->careers as $column)
                     @php($sum = $footer['careers'][$column['career']->getKey()])
                     <td class="border-t border-base-300 bg-base-200 px-2.5 py-2.5 text-end whitespace-nowrap">
@@ -91,7 +91,7 @@
                         <span class="sr-only">{{ $column['career']->code }}: {{ $sum->counted }} de {{ $sum->suggested }}</span>
                     </td>
                 @endforeach
-                <td class="sticky right-0 z-10 border-s border-t border-base-300 bg-base-200 px-3 py-2.5 text-end whitespace-nowrap">
+                <td class="sticky right-0 z-10 shadow-[-8px_0_8px_-8px_color-mix(in_oklab,var(--color-base-content)_30%,transparent)] border-s border-t border-base-300 bg-base-200 px-3 py-2.5 text-end whitespace-nowrap">
                     <span aria-hidden="true"><span class="font-mono tabular-nums">{{ $footer['total']->counted }}</span><span class="font-mono font-normal tabular-nums text-neutral">/{{ $footer['total']->suggested }}</span></span>
                     <span class="sr-only">Todo el Tec: {{ $footer['total']->counted }} de {{ $footer['total']->suggested }}</span>
                 </td>

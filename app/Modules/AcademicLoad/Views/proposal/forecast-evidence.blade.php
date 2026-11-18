@@ -59,12 +59,12 @@
             @if ($withRates)
                 <div class="{{ $evidenceRow }}">
                     <dt class="{{ $evidenceLabel }}">Repetidores</dt>
-                    <dd><span class="font-mono">{{ $forecastData->current_students }}</span> cursando hoy <span class="font-mono">× {{ $decimal($forecastData->failure_rate) }} × (1 − {{ $nonEnrollment }})</span> = <span class="font-mono font-semibold">{{ $forecastData->expected_repeaters }}</span></dd>
+                    <dd><span class="font-mono">{{ $forecastData->current_students }}</span> cursando hoy <span class="font-mono"><span class="whitespace-nowrap">× {{ $decimal($forecastData->failure_rate) }}</span> <span class="whitespace-nowrap">× (1 − {{ $nonEnrollment }})</span></span> = <span class="font-mono font-semibold">{{ $forecastData->expected_repeaters }}</span></dd>
                 </div>
             @endif
             <div class="{{ $evidenceRow }}">
                 <dt class="{{ $evidenceLabel }}">Esperados</dt>
-                <dd class="font-medium"><span class="font-mono">{{ $forecastData->eligible_students }}@if ($withRates) × (1 − {{ $nonEnrollment }}) + {{ $forecastData->expected_repeaters }}@endif @if ($forecastData->new_students !== null)+ {{ $forecastData->new_students }}@endif</span>@if ($forecastData->new_students !== null) <span class="text-neutral">de nuevo ingreso</span>@endif = <span class="font-mono font-semibold">{{ $forecastData->expected_students }}</span></dd>
+                <dd class="font-medium"><span class="font-mono">{{ $forecastData->eligible_students }}@if ($withRates) <span class="whitespace-nowrap">× (1 − {{ $nonEnrollment }})</span> <span class="whitespace-nowrap">+ {{ $forecastData->expected_repeaters }}</span>@endif @if ($forecastData->new_students !== null)<span class="whitespace-nowrap">+ {{ $forecastData->new_students }}</span>@endif</span>@if ($forecastData->new_students !== null) <span class="text-neutral">de nuevo ingreso</span>@endif = <span class="font-mono font-semibold">{{ $forecastData->expected_students }}</span></dd>
             </div>
             <div class="{{ $evidenceRow }}">
                 <dt class="{{ $evidenceLabel }}">Grupos</dt>

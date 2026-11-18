@@ -1331,7 +1331,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         foreach ($selected->items() as $item) {
             if (isset($this->form[$item->id])) {
                 $suggested[$item->id] = $this->suggestedRowGroups($item, max(0, (int) ($this->form[$item->id]['expected_students'] ?? 0)), (bool) $selected->subject->needs_lab, $rule, $newStudents,
-                    $methods[$item->id] ?? $item->forecast_method);
+                    $methods[$item->id]);
             }
         }
 

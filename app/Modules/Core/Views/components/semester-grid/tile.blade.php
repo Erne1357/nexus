@@ -50,8 +50,9 @@
             <span {{ $requisites->attributes->class('truncate text-[11.5px] leading-4 text-neutral') }}>{{ $requisites }}</span>
         @endisset
         <span class="flex h-4 items-center justify-between gap-1.5 whitespace-nowrap font-mono text-xs leading-4">
-            <span>{{ $start ?? '' }}</span>
-            <span class="flex gap-1.5">{{ $end ?? '' }}</span>
+            {{-- Si no cabe, se recorta el inicio (cifras) y nunca el final, que lleva las señales de estado. --}}
+            <span class="min-w-0 overflow-hidden">{{ $start ?? '' }}</span>
+            <span class="flex shrink-0 gap-1.5">{{ $end ?? '' }}</span>
         </span>
     </span>
 </{{ $tag }}>

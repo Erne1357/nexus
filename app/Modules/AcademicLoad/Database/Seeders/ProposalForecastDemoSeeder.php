@@ -37,11 +37,11 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Demand\Database\Seeders\DemandRecalculationDemoSeeder;
+use App\Modules\Demand\Models\DemandForecast;
 use App\Modules\Demand\Rules\DemandSettings;
 use App\Modules\Demand\Rules\TermCode;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Models\KardexRecord;
-use App\Modules\Students\Models\Student;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -58,10 +58,11 @@ use RuntimeException;
  * con las Actions reales, como cada usuario (FindsProposalActors: el coordinador que cubre el campus de cada fila o columna,
  * M7, y el jefe de cada departamento), para que dejen bitácora y avisos como en el uso normal.
  *
- * En la modalidad `$modality`, por cada carrera ofrecida en los campus `$campuses`, en orden de clave:
+ * En cada modalidad de `$modalities` abierta en el periodo, por cada carrera ofrecida en los campus `$campuses`, en orden de
+ * clave:
  *
  * - **Estado.** La última se queda sin propuesta; una carrera ofrecida por primera vez en un campus sin alumnos (el caso raro
- *   de Demand) se queda en borrador con correcciones; de las demás, la primera se envía y la regresa un departamento después
+ *   de Demand: una columna de su proyección con cero elegibles y cero de nuevo ingreso) se queda en borrador con correcciones; de las demás, la primera se envía y la regresa un departamento después
  *   de que otro aceptó su parte, la segunda se envía con una parte aceptada, la tercera queda en borrador sin tocar y las
  *   siguientes alternan borrador con correcciones, enviada, borrador con correcciones y aceptada completa (supuesto por
  *   confirmar, para que el tablero y la bandeja tengan cada estado).
@@ -82,8 +83,9 @@ use RuntimeException;
  * - **Envíos y decisiones:** SubmitCareerProposal, AcceptProposalReview y ReturnProposalReview según el estado de la carrera.
  *
  * Quien corrige una columna que no coordina nadie (la oferta nueva) es el admin. Determinista con `$seed`. Idempotente: una
- * carrera que ya tiene propuesta no se toca y el recálculo solo corre si se armó alguna, así que volver a correrlo no duplica
- * ni recalcula otra vez. Se niega a correr en producción.
+ * carrera que ya tiene propuesta no se toca, y el recálculo, que califica el kárdex, corre una sola vez para todas las
+ * modalidades y solo si el periodo no tenía propuestas; volver a correrlo no duplica ni recalcula, y si falta alguna, solo
+ * la completa. Se niega a correr en producción.
  */
 final class ProposalForecastDemoSeeder extends Seeder
 {
@@ -149,36 +151,44 @@ final class ProposalForecastDemoSeeder extends Seeder
 
     private Term $term;
 
-    private Modality $modality;
-
     /** @var Collection<int, Campus> */
     private Collection $campuses;
 
     /**
+     * Las modalidades van juntas (`$modalities`, las del volumen) porque el recálculo es del kárdex, de todas: corre una vez,
+     * después de las correcciones de todas y antes de revisarlas.
+     *
      * @param  list<string>  $campuses  claves de los campus de la demo
+     * @param  list<string>  $modalities  claves de las modalidades de la carga (DemoVolume::modalities())
      *
      * @throws RuntimeException en producción o si el periodo no existe
      */
-    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, string $modality = 'PRES'): void
+    public function run(array $campuses = ['C2'], string $term = '20271', int $seed = 2027, array $modalities = ['PRES']): void
     {
         $this->refuseProduction();
         $started = hrtime(true);
         $this->random = new Randomizer(new Mt19937($seed));
         $this->term = Term::query()->where('code', $term)->first() ?? throw new RuntimeException("El periodo {$term} no existe: corre antes DemoTermSeeder.");
-        $this->modality = Modality::query()->where('code', $modality)->firstOrFail();
         $this->campuses = Campus::query()->whereIn('code', $campuses)->orderBy('code')->get();
+        $open = Modality::query()
+            ->whereIn('code', $modalities)
+            ->whereIn('id', TermOpening::query()->where('term_id', $this->term->getKey())->select('modality_id'))
+            ->orderBy('code')
+            ->get();
 
-        if (! TermOpening::query()->where('term_id', $this->term->getKey())->where('modality_id', $this->modality->getKey())->exists()) {
-            $this->command?->warn("El periodo {$term} no está abierto en {$this->modality->name}: no se arman propuestas.");
+        if ($open->isEmpty()) {
+            $this->command?->warn("El periodo {$term} no está abierto en ".implode(', ', $modalities).': no se arman propuestas.');
 
             return;
         }
 
+        // El recálculo califica el kárdex: solo en la primera corrida, para no mover lo que ya se revisó y decidió.
+        $firstRun = ! CareerProposal::query()->where('term_id', $this->term->getKey())->whereIn('modality_id', $open->modelKeys())->exists();
         $previousQueue = config('queue.default');
         config(['queue.default' => 'sync']);
 
         try {
-            $proposals = $this->startProposals();
+            $proposals = $open->flatMap(fn (Modality $modality): array => $this->startProposals($modality))->all();
 
             if ($proposals === []) {
                 $this->command?->info('Propuestas precargadas: ya estaban, no se tocan.');
@@ -187,14 +197,19 @@ final class ProposalForecastDemoSeeder extends Seeder
             }
 
             $corrected = array_filter($proposals, fn (array $entry): bool => $entry['role'] !== self::UNTOUCHED);
+            $graded = $this->subjectsToGrade();
             $variant = 0;
 
             foreach ($corrected as $entry) {
                 $this->packages($entry, $entry['firstOffering'] === null ? $variant++ : null);
-                $this->correctRows($entry['proposal']);
+                $this->correctRows($entry['proposal'], $graded);
             }
 
-            $this->callWith(DemandRecalculationDemoSeeder::class, ['term' => $term, 'subjects' => self::RECALCULATED_SUBJECTS, 'seed' => $seed]);
+            if ($firstRun) {
+                $this->callWith(DemandRecalculationDemoSeeder::class, ['term' => $term, 'subjects' => self::RECALCULATED_SUBJECTS, 'seed' => $seed]);
+            } else {
+                $this->command?->warn('Ya había propuestas en el periodo: no se vuelve a recalcular la proyección.');
+            }
 
             foreach ($corrected as $entry) {
                 $this->review($entry['proposal']);
@@ -249,38 +264,40 @@ final class ProposalForecastDemoSeeder extends Seeder
     }
 
     /**
-     * Arma la propuesta de cada carrera que la lleva y no la tiene todavía, con el estado que le toca (roles()).
+     * Arma, en una modalidad, la propuesta de cada carrera que la lleva y no la tiene todavía, con el estado que le toca
+     * (roles()).
      *
-     * @return list<array{career: Career, proposal: CareerProposal, role: string, coordinator: User, firstOffering: ?Campus}>
+     * @return list<array{career: Career, modality: Modality, proposal: CareerProposal, role: string, coordinator: User, firstOffering: ?Campus}>
      */
-    private function startProposals(): array
+    private function startProposals(Modality $modality): array
     {
         $careers = Career::query()
             ->whereIn('id', CareerCampus::query()->whereIn('campus_id', $this->campuses->modelKeys())->where('is_active', true)->select('career_id'))
             ->orderBy('code')
             ->get();
-        $firstOfferings = $this->firstOfferings($careers);
+        $firstOfferings = $this->firstOfferings($modality, $careers);
         $roles = $this->roles($careers, $firstOfferings);
         $proposals = [];
 
         foreach ($careers as $career) {
             $role = $roles[$career->getKey()];
 
-            if ($role === self::MISSING || app(CareerProposalQuery::class)->findFor($this->term, $this->modality, $career) !== null) {
+            if ($role === self::MISSING || app(CareerProposalQuery::class)->findFor($this->term, $modality, $career) !== null) {
                 continue;
             }
 
-            $coordinator = $this->coordinatorOf($this->modality, $career, $this->campuses);
+            $coordinator = $this->coordinatorOf($modality, $career, $this->campuses);
 
             if ($coordinator === null) {
-                $this->command?->warn("{$career->code} no tiene coordinador en {$this->modality->name}: se queda sin propuesta.");
+                $this->command?->warn("{$career->code} no tiene coordinador en {$modality->name}: se queda sin propuesta.");
 
                 continue;
             }
 
             $proposals[] = [
                 'career' => $career,
-                'proposal' => app(StartCareerProposal::class)->handle($this->term, $this->modality, $career, $coordinator),
+                'modality' => $modality,
+                'proposal' => app(StartCareerProposal::class)->handle($this->term, $modality, $career, $coordinator),
                 'role' => $role,
                 'coordinator' => $coordinator,
                 'firstOffering' => $firstOfferings[$career->getKey()] ?? null,
@@ -291,25 +308,34 @@ final class ProposalForecastDemoSeeder extends Seeder
     }
 
     /**
-     * El campus de cada carrera ofrecida por primera vez en un campus sin alumnos (el caso raro de Demand: Nexus sugiere 0 de
-     * nuevo ingreso), por id de carrera.
+     * El campus de cada carrera ofrecida por primera vez en un campus sin alumnos, por id de carrera: el caso raro de Demand
+     * (DemandRareCasesDemoSeeder::CASE_FIRST_OFFERING), una columna de la proyección del periodo y la modalidad con cero
+     * elegibles y cero de nuevo ingreso.
      *
      * @param  Collection<int, Career>  $careers
      * @return array<string, Campus>
      */
-    private function firstOfferings(Collection $careers): array
+    private function firstOfferings(Modality $modality, Collection $careers): array
     {
+        $columns = DemandForecast::query()
+            ->where('term_id', $this->term->getKey())
+            ->where('modality_id', $modality->getKey())
+            ->whereIn('career_id', $careers->modelKeys())
+            ->whereNotNull('campus_id')
+            ->groupBy('career_id', 'campus_id')
+            ->havingRaw('sum(eligible_students) = 0 and coalesce(sum(new_students), 0) = 0')
+            ->orderBy('career_id')
+            ->orderBy('campus_id')
+            ->toBase()
+            ->get(['career_id', 'campus_id']);
+        $campuses = Campus::query()->whereIn('id', $columns->pluck('campus_id'))->get()->keyBy('id');
         $found = [];
 
-        foreach (CareerCampus::query()->whereIn('career_id', $careers->modelKeys())->where('is_active', true)->with('campus')->orderBy('id')->get() as $offering) {
-            $hasStudents = Student::query()->where('career_id', $offering->career_id)->where('campus_id', $offering->campus_id)->exists();
-
-            if (! $hasStudents && $offering->campus !== null && ! isset($found[$offering->career_id])) {
-                $found[$offering->career_id] = $offering->campus;
-            }
+        foreach ($columns as $column) {
+            $found[$column->career_id] ??= $campuses->get($column->campus_id);
         }
 
-        return $found;
+        return array_filter($found);
     }
 
     /**
@@ -342,7 +368,7 @@ final class ProposalForecastDemoSeeder extends Seeder
      * El nuevo ingreso y los paquetes de una propuesta. `$variant` es su lugar entre las que no son oferta nueva (null si lo
      * es): 0 corrige el nuevo ingreso, 1 abre un paquete menos que el sugerido y las pares desde 2 arman «P2».
      *
-     * @param  array{career: Career, proposal: CareerProposal, role: string, coordinator: User, firstOffering: ?Campus}  $entry
+     * @param  array{career: Career, modality: Modality, proposal: CareerProposal, role: string, coordinator: User, firstOffering: ?Campus}  $entry
      */
     private function packages(array $entry, ?int $variant): void
     {
@@ -419,13 +445,14 @@ final class ProposalForecastDemoSeeder extends Seeder
      * Las correcciones de una propuesta en las filas de los campus de la demo (ver el docblock de la clase). Las filas de otros
      * campus que piden grupos quedan en cero, como en AcademicLoadDemoSeeder.
      */
-    private function correctRows(CareerProposal $proposal): void
+    /**
+     * @param  list<string>  $graded  las materias que va a calificar el recálculo (subjectsToGrade())
+     */
+    private function correctRows(CareerProposal $proposal, array $graded): void
     {
         foreach ($this->rows($proposal, outside: true)->where('requested_groups', '>', 0)->where('package_groups', 0) as $item) {
             $this->correct($proposal, $item, $item->expected_students, 0, $item->notes);
         }
-
-        $graded = $this->subjectsToGrade();
 
         foreach ($this->rows($proposal)->filter(fn (ProposalItem $item): bool => in_array($item->subject_id, $graded, true)) as $item) {
             $this->correct($proposal, $item, $this->nudged($item->expected_students), $item->requested_groups, $item->notes);
@@ -535,7 +562,8 @@ final class ProposalForecastDemoSeeder extends Seeder
         $proposal->refresh();
         $overview = app(CareerProposalQuery::class)->overview($proposal, withPendingCatalogs: false);
         $review = app(ProposalForecastQuery::class)->review($overview, DemandSettings::fromSettings());
-        $keys = array_map(fn (Campus $campus): string => ProposalOverview::columnKey($campus), $this->campuses->all());
+        // Las columnas de la demo y, en una modalidad sin salones, la columna sin campus (MS5).
+        $keys = [...array_map(fn (Campus $campus): string => ProposalOverview::columnKey($campus), $this->campuses->all()), ProposalOverview::columnKey(null)];
         $changed = collect($review->pending($keys, ForecastReason::Changed));
         // «Usar N» deja los grupos en lo sugerido nuevo, que no puede bajar de los que salen de paquetes.
         $use = $changed->count() >= 2 ? $changed->first(fn (ProposalForecastRow $row): bool => $row->forecast->suggested_groups >= $row->item->package_groups) : null;
@@ -572,7 +600,7 @@ final class ProposalForecastDemoSeeder extends Seeder
      * Envía y decide según el estado de la carrera: enviada; con una parte aceptada; regresada por un departamento después de
      * que otro aceptó (si hay dos), o aceptada completa.
      *
-     * @param  array{career: Career, proposal: CareerProposal, role: string, coordinator: User, firstOffering: ?Campus}  $entry
+     * @param  array{career: Career, modality: Modality, proposal: CareerProposal, role: string, coordinator: User, firstOffering: ?Campus}  $entry
      */
     private function decide(array $entry): void
     {
@@ -598,15 +626,15 @@ final class ProposalForecastDemoSeeder extends Seeder
         };
 
         foreach ($accept as $part) {
-            $head = $this->headOf($this->modality, $part->department);
+            $head = $this->headOf($entry['modality'], $part->department);
 
-            if ($head !== null && app(CatalogReviewQuery::class)->pendingFor($this->term, $this->modality, $part->department) === []) {
+            if ($head !== null && app(CatalogReviewQuery::class)->pendingFor($this->term, $entry['modality'], $part->department) === []) {
                 $this->orWarn(fn () => app(AcceptProposalReview::class)->handle($part, $head), "parte de {$part->department->code} en {$entry['career']->code}");
             }
         }
 
         $returning = $entry['role'] === self::RETURNED ? $parts->skip($accept->count())->first() : null;
-        $head = $returning === null ? null : $this->headOf($this->modality, $returning->department);
+        $head = $returning === null ? null : $this->headOf($entry['modality'], $returning->department);
 
         if ($returning !== null && $head !== null) {
             $comment = self::RETURN_COMMENTS[$this->random->getInt(0, count(self::RETURN_COMMENTS) - 1)];
@@ -623,7 +651,8 @@ final class ProposalForecastDemoSeeder extends Seeder
     }
 
     /**
-     * Corre una Action y, si la rechaza, lo avisa y sigue: la demo se queda sin ese caso, que las revisiones del punto notan.
+     * Corre una Action y, si la rechaza (ValidationException), lo avisa y sigue: la demo se queda sin ese caso, que las
+     * revisiones del punto notan. Cualquier otro error detiene el paso con su motivo, como debe.
      *
      * @template T
      *

@@ -34,7 +34,7 @@
                             <span @class([
                                 'inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-[13px]',
                                 'border-warning/40 bg-warning/12 text-warning' => $cell->large,
-                                'border-dashed border-base-content/35 text-neutral' => $cell->pending,
+                                'border-dashed border-base-content/20 text-neutral' => $cell->pending,
                                 'border-base-300' => ! $cell->large && ! $cell->pending,
                                 'bg-info/8' => $column['career']->getKey() === $lensId && ! $cell->large,
                             ])><span class="font-mono text-xs font-bold text-base-content" aria-hidden="true">{{ $column['career']->code }}</span>@include('academic-load::demand.cell', ['cell' => $cell, 'label' => $column['career']->code, 'bare' => true])</span>

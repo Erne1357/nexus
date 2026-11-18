@@ -99,7 +99,7 @@
                                     wire:model="form.{{ $item->id }}.requested_groups" class="text-right font-mono" data-testid="field-groups" />
                             </div>
                             <x-button icon="o-sparkles" class="btn-sm mb-1" wire:click="useSuggested('{{ $item->id }}')" spinner="useSuggested('{{ $item->id }}')" data-testid="use-suggested">@php
-                                $rowNewStudents = ($panelMethods[$item->id] ?? $item->forecast_method) === \App\Modules\Demand\Enums\ForecastMethod::FirstSemester ? ($panelNewStudents[$item->campus_id ?? ''] ?? 0) : 0;
+                                $rowNewStudents = $panelMethods[$item->id] === \App\Modules\Demand\Enums\ForecastMethod::FirstSemester ? ($panelNewStudents[$item->campus_id ?? ''] ?? 0) : 0;
                             @endphp<span x-text="'Usar sugerido: ' + ((expected) => {{ $item->package_groups }} > 0 ? {{ $item->package_groups }} + Math.ceil(Math.max(0, expected - {{ $rowNewStudents }}) / {{ $suggestedSize }}) : Math.ceil(expected / {{ $suggestedSize }}))(Math.max(0, parseInt($wire.form[{{ \Illuminate\Support\Js::from($item->id) }}]?.expected_students) || 0)) + ' ({{ $suggestedSize }} por grupo)'">Usar sugerido: {{ $suggested[$item->id] ?? 0 }} ({{ $suggestedSize }} por grupo)</span></x-button>
                         </div>
                         @if ($item->package_groups > 0)
@@ -150,7 +150,7 @@
                             @if ($forecastState === \App\Modules\AcademicLoad\Enums\SuggestionState::Changed)
                                 <x-alert icon="o-arrow-path" class="alert-info alert-soft items-start text-sm" data-testid="panel-forecast-change">
                                     <div class="space-y-2">
-                                        <p>Ahora sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newGroups }}</span> grupos; cuando corregiste sugería <span class="font-mono">{{ $item->suggested_expected_students }}</span> y <span class="font-mono">{{ $item->suggested_groups }}</span>.</p>
+                                        <p>Ahora sugiere <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newExpected }}</span> esperados y <span class="font-mono font-semibold">{{ $forecastRow->suggestion->newGroups }}</span> grupos; {{ $editing ? 'cuando corregiste' : 'cuando se corrigió' }} sugería <span class="font-mono">{{ $item->suggested_expected_students }}</span> y <span class="font-mono">{{ $item->suggested_groups }}</span>.</p>
                                         @if ($editing)
                                             <div class="flex flex-wrap gap-2">
                                                 <x-button :label="'Usar '.$forecastRow->suggestion->newExpected.' · '.$forecastRow->suggestion->newGroups" class="btn-sm btn-outline max-md:min-h-11" wire:click="resolveChange('{{ $item->id }}', 'use')" spinner="resolveChange('{{ $item->id }}', 'use')" data-testid="panel-use-{{ $item->id }}" />

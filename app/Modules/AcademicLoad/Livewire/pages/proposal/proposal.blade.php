@@ -81,11 +81,10 @@
                         <x-icon name="o-users" class="h-4 w-4 shrink-0" aria-hidden="true" />
                         <span>{{ count($coordinators) > 1 ? 'Coordinan:' : 'Coordina:' }}</span>
                         @foreach ($coordinators as $coordinator)
-                            <span class="inline-flex items-center gap-1.5">
+                            {{-- «(tú)» y lo que cubre van en el mismo texto que el nombre: al partirse no quedan sueltos. --}}
+                            <span class="inline-flex items-start gap-1.5">
                                 <x-academic-load::campus-tag :campus="$coordinator['campusKey'] === null ? null : $columns[$coordinator['campusKey']]['campus']" />
-                                <span class="text-base-content">{{ $coordinator['name'] }}</span>
-                                @if ($coordinator['me'])<span>(tú)</span>@endif
-                                @if ($coordinator['covers'])<span>· {{ $coordinator['covers'] }}</span>@endif
+                                <span><span class="text-base-content">{{ $coordinator['name'] }}</span>@if ($coordinator['me']) (tú)@endif @if ($coordinator['covers'])· {{ $coordinator['covers'] }}@endif</span>
                             </span>
                             {{-- En el celular cada coordinador ya va en su renglón: el «·» quedaría solo. --}}
                             @if (! $loop->last)<span aria-hidden="true" class="max-sm:hidden">·</span>@endif
@@ -97,12 +96,9 @@
                     <span class="min-w-0">{{ $forecastLine }}</span>
                 </p>
                 @if ($sent)
-                    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-neutral" data-testid="proposal-sent">
-                        <x-icon name="o-paper-airplane" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                        <span>Enviada por <span class="font-medium text-base-content">{{ $sent['name'] }}</span>@if ($sent['campus']) ({{ $sent['campus'] }})@endif el {{ $sent['at'] }}</span>
-                        @if ($sent['returned'])
-                            <span aria-hidden="true">·</span><span>{{ $sent['returned'] }}</span>
-                        @endif
+                    <p class="mt-1 flex items-start gap-x-2 text-sm text-neutral" data-testid="proposal-sent">
+                        <x-icon name="o-paper-airplane" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                        <span class="min-w-0">Enviada por <span class="font-medium text-base-content">{{ $sent['name'] }}</span>@if ($sent['campus']) ({{ $sent['campus'] }})@endif el {{ $sent['at'] }}@if ($sent['returned']) · {{ $sent['returned'] }}@endif</span>
                     </p>
                 @endif
             </div>
@@ -125,7 +121,7 @@
         </div>
 
         @if ($scopeNote)
-            <x-alert icon="o-lock-closed" class="alert-info alert-soft text-sm" data-testid="proposal-scope">
+            <x-alert icon="o-lock-closed" class="alert-info alert-soft min-h-0 items-center py-1.5 text-sm" data-testid="proposal-scope">
                 <span>Coordinas <span class="font-mono">{{ $scopeNote['career'] }}</span> en {{ $scopeNote['campuses'] }}: cambias los alumnos esperados, los grupos y los paquetes de <span class="font-semibold">{{ $scopeNote['codes'] }}</span>. {{ $scopeNote['others'] }} Lo ves para comparar. Cualquiera de los coordinadores envía la propuesta y Nexus avisa a los demás.</span>
             </x-alert>
         @endif
@@ -174,11 +170,11 @@
         @if ($projection->hasForecast())
             <div role="tablist" aria-label="Propuesta y proyección" class="tabs tabs-border flex-nowrap overflow-x-auto" data-testid="forecast-tabs">
                 <button type="button" role="tab" id="tab-proposal" aria-controls="proposal-panel" aria-selected="{{ $view !== 'revisar' ? 'true' : 'false' }}" wire:click="showProposal" data-testid="tab-proposal"
-                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view !== 'revisar'])>
+                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view !== 'revisar', 'text-neutral!' => $view === 'revisar'])>
                     <x-icon name="o-table-cells" class="h-4 w-4" aria-hidden="true" />Propuesta
                 </button>
                 <button type="button" role="tab" id="tab-review" aria-controls="proposal-panel" aria-selected="{{ $view === 'revisar' ? 'true' : 'false' }}" wire:click="setView('revisar')" data-testid="tab-review"
-                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view === 'revisar'])>
+                    @class(['tab shrink-0 gap-2', 'tab-active font-bold' => $view === 'revisar', 'text-neutral!' => $view !== 'revisar'])>
                     <x-icon name="o-sparkles" class="h-4 w-4" aria-hidden="true" />Revisar proyección
                     @if ($reviewCounts[''] > 0)
                         <span class="badge badge-info badge-soft badge-sm font-mono" data-testid="review-count">{{ $reviewCounts[''] }}</span>
@@ -192,13 +188,14 @@
                 @include('academic-load::proposal.review')
             @else
                 <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
-                    <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
                         <div role="group" aria-label="Vista" class="join">
                             <button type="button" wire:click="setView('reticula')" aria-pressed="{{ $view === 'reticula' ? 'true' : 'false' }}" data-testid="view-grid"
                                 @class(['btn btn-sm join-item', 'btn-primary' => $view === 'reticula'])><x-icon name="o-squares-2x2" class="w-4 h-4" />Retícula</button>
                             <button type="button" wire:click="setView('tabla')" aria-pressed="{{ $view === 'tabla' ? 'true' : 'false' }}" data-testid="view-table"
                                 @class(['btn btn-sm join-item', 'btn-primary' => $view === 'tabla'])><x-icon name="o-table-cells" class="w-4 h-4" />Tabla</button>
                         </div>
+                        <span class="h-6 border-s border-base-300" aria-hidden="true"></span>
                         <div role="group" aria-label="Materias" class="join" data-testid="groups-filter">
                             @foreach (['' => 'Todas', 'con' => 'Con grupos', 'sin' => 'Sin grupos'] as $filter => $filterLabel)
                                 <button type="button" wire:click="filterGroups('{{ $filter }}')" aria-pressed="{{ $groupsFilter === $filter ? 'true' : 'false' }}" data-testid="filter-{{ $filter === '' ? 'todas' : $filter }}"

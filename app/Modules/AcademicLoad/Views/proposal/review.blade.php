@@ -28,13 +28,13 @@
 
     <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
         <div role="group" aria-label="Motivo" data-testid="reason-filter"
-            class="max-md:grid max-md:w-full max-md:grid-cols-2 max-md:gap-1 md:join">
+            class="max-desktop:grid max-desktop:w-full max-desktop:grid-cols-3 max-desktop:gap-1 desktop:join">
             @foreach ($filterOptions as $filter => $filterLabel)
                 @php
     $testKey = $filter === '' ? 'todas' : $filter;
 @endphp
                 <button type="button" wire:click="filterReason('{{ $filter }}')" aria-pressed="{{ $reason === $filter ? 'true' : 'false' }}" data-testid="reason-{{ $testKey }}"
-                    @class(['btn btn-sm md:join-item max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-col max-md:gap-0 max-md:py-1 max-md:whitespace-normal', 'btn-primary' => $reason === $filter])>
+                    @class(['btn btn-sm desktop:join-item max-desktop:h-auto max-desktop:min-h-11 max-desktop:min-w-0 max-desktop:flex-col max-desktop:gap-0 max-desktop:py-1 max-desktop:whitespace-normal', 'btn-primary' => $reason === $filter])>
                     <span>{{ $filterLabel }}</span>
                     <span class="font-mono text-[12.5px] opacity-85" data-testid="reason-count-{{ $testKey }}">{{ $reviewCounts[$filter] }}</span>
                 </button>
