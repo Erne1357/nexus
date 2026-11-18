@@ -4,6 +4,7 @@
             "students.my_record.view"
         ],
         "coordinador": [
+            "academic_load.demand.view_career",
             "academic_load.proposal.create",
             "academic_load.proposal.submit",
             "academic_load.proposal.update",
@@ -25,6 +26,7 @@
             "academic_load.agreement.decide",
             "academic_load.agreement.request",
             "academic_load.agreement.view",
+            "academic_load.demand.view_department",
             "academic_load.load.close",
             "academic_load.load.export",
             "academic_load.load.export_sii",
@@ -66,6 +68,7 @@
         ],
         "jefe_proyecto_docente": [
             "academic_load.agreement.view",
+            "academic_load.demand.view_department",
             "academic_load.load.export",
             "academic_load.load.view",
             "academic_load.proposal_review.view",
@@ -86,6 +89,7 @@
         ],
         "subdireccion": [
             "academic_load.agreement.view",
+            "academic_load.demand.view_department",
             "academic_load.load.approve",
             "academic_load.load.close",
             "academic_load.load.export",
@@ -173,6 +177,8 @@
             "academic_load.agreement.decide",
             "academic_load.agreement.request",
             "academic_load.agreement.view",
+            "academic_load.demand.view_career",
+            "academic_load.demand.view_department",
             "academic_load.load.approve",
             "academic_load.load.close",
             "academic_load.load.propose",
