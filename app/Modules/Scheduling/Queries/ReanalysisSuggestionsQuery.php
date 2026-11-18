@@ -45,13 +45,14 @@ final class ReanalysisSuggestionsQuery
     public function for(AcademicLoad $load, ReanalysisBlock $block): ReanalysisSuggestions
     {
         $withTrashed = fn (Relation $query) => $query->withTrashed();
+        $campusId = $block->rows[0]->campusId ?? null;
         $groups = Group::query()
             ->active()
             ->where('term_id', $load->term_id)
             ->where('modality_id', $load->modality_id)
             ->where('department_id', $load->department_id)
             ->where('subject_id', $block->subjectId)
-            ->when($block->campus === null, fn (Builder $query) => $query->whereNull('campus_id'), fn (Builder $query) => $query->where('campus_id', $block->campus->getKey()))
+            ->when($campusId === null, fn (Builder $query) => $query->whereNull('campus_id'), fn (Builder $query) => $query->where('campus_id', $campusId))
             ->with([
                 'quotas' => fn ($quotas) => $quotas->orderByDesc('is_owner')->orderBy('id'),
                 'sessions' => fn ($sessions) => $sessions->orderBy('day')->orderBy('starts_at'),
@@ -78,7 +79,7 @@ final class ReanalysisSuggestionsQuery
             ->whereIn('id', $groups->flatMap(fn (Group $group) => $group->quotas->pluck('career_id'))->unique()->values()->all())
             ->pluck('code', 'id')
             ->all();
-        $larger = $this->largerRooms($load, $block, $groups);
+        $larger = $this->largerRooms($load, $block, $campusId, $groups);
 
         $advisorGroups = $groups->map(fn (Group $group): AdvisorGroup => new AdvisorGroup(
             id: $group->id,
@@ -123,15 +124,13 @@ final class ReanalysisSuggestionsQuery
      * @param  Collection<int, Group>  $groups
      * @return array<string, list<AdvisorRoom>>
      */
-    private function largerRooms(AcademicLoad $load, ReanalysisBlock $block, Collection $groups): array
+    private function largerRooms(AcademicLoad $load, ReanalysisBlock $block, ?string $campusId, Collection $groups): array
     {
         $roomed = $groups->filter(fn (Group $group): bool => $group->sessions->isNotEmpty() && $group->sessions->every(fn (GroupSession $session): bool => $session->room_id !== null));
 
-        if ($block->campus === null || $roomed->isEmpty()) {
+        if ($campusId === null || $roomed->isEmpty()) {
             return [];
         }
-
-        $campusId = $block->campus->getKey();
         $days = $roomed->flatMap(fn (Group $group) => $group->sessions->pluck('day'))->unique()->values()->all();
         $needsLab = (bool) Subject::withTrashed()->whereKey($block->subjectId)->value('needs_lab');
         $rooms = Room::query()

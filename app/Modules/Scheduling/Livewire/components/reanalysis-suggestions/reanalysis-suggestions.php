@@ -54,7 +54,7 @@ new class extends Component
     public bool $show = false;
 
     /**
-     * Las sugerencias descartadas en esta pantalla, por llave.
+     * Las sugerencias descartadas en esta pantalla, por materia, campus y llave (discardKey()).
      *
      * @var list<string>
      */
@@ -155,11 +155,11 @@ new class extends Component
             $this->cancelEdit();
         }
 
-        $this->discarded = array_values(array_unique([...$this->discarded, $key]));
+        $this->discarded = array_values(array_unique([...$this->discarded, $this->discardKey($key)]));
     }
 
     /**
-     * Vuelve a mostrar las sugerencias descartadas.
+     * Vuelve a mostrar las sugerencias descartadas de la materia en el campus.
      */
     public function restoreDiscarded(Actor $context, ReanalysisLoadsQuery $loads): void
     {
@@ -171,7 +171,7 @@ new class extends Component
             return;
         }
 
-        $this->discarded = [];
+        $this->discarded = array_values(array_filter($this->discarded, fn (string $discarded): bool => ! str_starts_with($discarded, $this->discardKey(''))));
     }
 
     /**
@@ -193,7 +193,7 @@ new class extends Component
         }
 
         $advice = $this->suggestions($load, $block, $query);
-        $visible = array_values(array_filter($advice->suggestions, fn (ReanalysisSuggestion $suggestion): bool => ! in_array($suggestion->key, $this->discarded, true)));
+        $visible = array_values(array_filter($advice->suggestions, fn (ReanalysisSuggestion $suggestion): bool => ! in_array($this->discardKey($suggestion->key), $this->discarded, true)));
 
         return [
             'block' => $block,
@@ -224,11 +224,20 @@ new class extends Component
         $block = $this->block($load, $context, $loads, $boards);
         $suggestion = $block === null ? null : $this->suggestions($load, $block, $query)->find($key);
 
-        if ($suggestion === null || in_array($key, $this->discarded, true)) {
+        if ($suggestion === null || in_array($this->discardKey($key), $this->discarded, true)) {
             throw ValidationException::withMessages(['suggestion' => 'Esa sugerencia ya no aplica: la demanda o los grupos cambiaron. Revisa las de ahora.']);
         }
 
         return $suggestion;
+    }
+
+    /**
+     * La llave de una sugerencia descartada, con la materia y el campus del bloque: «Hace falta abrir un grupo» tiene la
+     * misma llave en todos.
+     */
+    private function discardKey(string $key): string
+    {
+        return "{$this->subjectId}|{$this->campusId}|{$key}";
     }
 
     private function block(AcademicLoad $load, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards): ?ReanalysisBlock
