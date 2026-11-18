@@ -43,7 +43,7 @@
                         <tr @class(['bg-[color-mix(in_oklab,var(--color-secondary)_55%,var(--color-base-100))]' => $each['run']->id === $run->id]) wire:key="history-{{ $each['run']->id }}">
                             <td><button type="button" class="link font-semibold whitespace-nowrap link-hover" wire:click="selectRun('{{ $each['run']->id }}')" aria-current="{{ $each['run']->id === $run->id ? 'true' : 'false' }}">Corrida <span class="font-mono">{{ $each['number'] }}</span></button></td>
                             <td class="whitespace-nowrap">{{ $scopeText($each['run']) }}</td>
-                            <td class="whitespace-nowrap max-[1535px]:hidden">{{ $engines[$each['run']->engine] ?? $each['run']->engine }}</td>
+                            <td class="whitespace-nowrap max-[1535px]:hidden">{{ $engineNames[$each['run']->engine] ?? $each['run']->engine }}</td>
                             <td><x-core::status-badge :tone="$each['run']->status->tone()" :icon="$each['run']->status->icon()" :label="$each['run']->status->label()" /></td>
                             <td>
                                 @if ($hard === null)
@@ -86,7 +86,7 @@
                                 <span class="ms-auto font-mono font-semibold">{{ number_format($each['run']->metrics['soft_score']) }}</span>
                             @endisset
                         </span>
-                        <span class="text-sm">{{ $scopeText($each['run']) }} · {{ $engines[$each['run']->engine] ?? $each['run']->engine }}</span>
+                        <span class="text-sm">{{ $scopeText($each['run']) }} · {{ $engineNames[$each['run']->engine] ?? $each['run']->engine }}</span>
                         <span class="text-sm text-neutral">{{ $when($each['run']->created_at) }} · {{ $each['run']->creator->name ?? '—' }}</span>
                     </button>
                 </li>
