@@ -16,7 +16,9 @@ use RuntimeException;
  *   no queda, cada sesión a la hora que quepa, porque con un semestre lleno la misma hora deja huecos sueltos;
  * - dentro de la ventana del campus y alineadas a sus bloques desde `dayStart` (HC-04);
  * - sin encimarse con los grupos del mismo plan y semestre que son su misma opción (el primer grupo de cada materia
- *   con los primeros, el segundo con los segundos), así el alumno tipo siempre tiene combinación (HC-03);
+ *   con los primeros, el segundo con los segundos), así el alumno tipo siempre tiene combinación (HC-03), ni con los
+ *   de sus otras cohortes (`cohorts`: la instancia de su paquete de primer semestre, DM-09), que no deben empalmarse
+ *   aunque sean de otro plan o semestre (HC-03);
  * - con un salón posible para cada sesión presencial, del tipo y la capacidad que pide (HC-02, HC-05, HC-06; los
  *   bloqueos HC-11 los trae `RoomSupply`), que se aparta pero no se guarda: el salón lo asigna el punto «cierre»;
  * - sin pasar del tope de grupos simultáneos de su departamento (`$departmentCaps`), contado sobre todos los campus
@@ -68,7 +70,7 @@ final class CleanSchedulePlanner
      * Un grupo que ya trae sesiones (`sessions`) no se mueve: cuenta en su plan y semestre, en su departamento y, si
      * alguna no tiene salón, aparta uno para ella; no sale en el resultado.
      *
-     * @param  list<array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>, sessions?: list<array{day: int, start: int, end: int, kind: SessionKind, roomId: ?string}>}>  $groups
+     * @param  list<array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>, sessions?: list<array{day: int, start: int, end: int, kind: SessionKind, roomId: ?string}>, cohorts?: list<string>}>  $groups
      * @param  list<int>  $days
      * @param  RoomSupply|null  $supply  la oferta de salones del campus; sin ella (campus sin salones) no se revisan
      * @return array<string, list<array{day: int, start: int, end: int, kind: SessionKind}>> por id de grupo
@@ -87,10 +89,12 @@ final class CleanSchedulePlanner
             $cohort = $group['cohort'];
             $ordinals[$cohort][$group['subject']] ??= count($ordinals[$cohort] ?? []);
             $variant = $variants[$cohort][$group['subject']] = ($variants[$cohort][$group['subject']] ?? -1) + 1;
-            $option = "{$cohort}|{$variant}";
+            $keys = ["option:{$cohort}|{$variant}", ...array_map(fn (string $key): string => "cohort:{$key}", $group['cohorts'] ?? [])];
+            $occupied = $this->occupied($taken, $keys);
 
             if (isset($group['sessions'])) {
-                $this->keep($group, $group['sessions'], $taken[$option], $blockMinutes, $supply);
+                $this->keep($group, $group['sessions'], $occupied, $blockMinutes, $supply);
+                $this->occupy($taken, $keys, $group['sessions']);
 
                 continue;
             }
@@ -100,17 +104,54 @@ final class CleanSchedulePlanner
             }
 
             $ordinal = $ordinals[$cohort][$group['subject']];
-            $plan[$group['id']] = $this->placeGroup($group, $this->rotate($starts, $cohort, $ordinal, $variant), $days, $ordinal, $dayEnd, $blockMinutes, $taken[$option], $supply);
+            $plan[$group['id']] = $this->placeGroup($group, $this->rotate($starts, $cohort, $ordinal, $variant), $days, $ordinal, $dayEnd, $blockMinutes, $occupied, $supply);
+            $this->occupy($taken, $keys, $plan[$group['id']]);
         }
 
         return $plan;
     }
 
     /**
+     * Lo que ya ocupan, por día, la opción del grupo en su plan y semestre y sus otras cohortes, juntos.
+     *
+     * @param  array<string, array<int, list<array{int, int}>>>  $taken
+     * @param  list<string>  $keys
+     * @return array<int, list<array{int, int}>>
+     */
+    private function occupied(array $taken, array $keys): array
+    {
+        $occupied = [];
+
+        foreach ($keys as $key) {
+            foreach ($taken[$key] ?? [] as $day => $ranges) {
+                $occupied[$day] = [...($occupied[$day] ?? []), ...$ranges];
+            }
+        }
+
+        return $occupied;
+    }
+
+    /**
+     * Las sesiones del grupo pasan a ocupar su opción y cada una de sus otras cohortes.
+     *
+     * @param  array<string, array<int, list<array{int, int}>>>  $taken
+     * @param  list<string>  $keys
+     * @param  list<array{day: int, start: int, end: int}>  $sessions
+     */
+    private function occupy(array &$taken, array $keys, array $sessions): void
+    {
+        foreach ($keys as $key) {
+            foreach ($sessions as $session) {
+                $taken[$key][$session['day']][] = [$session['start'], $session['end']];
+            }
+        }
+    }
+
+    /**
      * @param  array{id: string, label: string, cohort: string, subject: string, department: ?string, capacity: int, pieces: list<array{minutes: int, kind: SessionKind, practiceSpace: bool}>}  $group
      * @param  list<int>  $starts
      * @param  list<int>  $days
-     * @param  array<int, list<array{int, int}>>|null  $taken  lo que ya ocupa esta opción del plan y semestre, por día
+     * @param  array<int, list<array{int, int}>>|null  $taken  lo que ya ocupan esta opción del plan y semestre y las otras cohortes del grupo, por día
      * @return list<array{day: int, start: int, end: int, kind: SessionKind}>
      */
     private function placeGroup(array $group, array $starts, array $days, int $ordinal, int $dayEnd, int $blockMinutes, ?array &$taken, ?RoomSupply $supply): array

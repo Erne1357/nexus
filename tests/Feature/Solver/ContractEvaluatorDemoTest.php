@@ -55,7 +55,11 @@ function demoEquivalenceShake(Term $term, Modality $modality): void
 
 it('con la demo y su horario movido a propósito, cada carga presencial da en memoria las mismas reglas duras por grupo que la base', function () {
     $demo = DemoContext::for(DemoVolume::Demo);
-    app(DemoRunner::class)->run(DemoCheckpoint::Closing, $demo);
+    $report = app(DemoRunner::class)->run(DemoCheckpoint::Closing, $demo);
+    $failed = array_map(fn (array $check): string => "{$check['checkpoint']->value}: {$check['label']} ({$check['reason']})", array_values(array_filter($report->checks, fn (array $check): bool => ! $check['passed'])));
+
+    expect($failed)->toBe([], 'La demo no llegó al cierre: sin docentes ni salones no hay qué comparar.')
+        ->and(array_column($report->checks, 'checkpoint'))->toContain(DemoCheckpoint::Closing);
     $term = $demo->term();
     $pres = modalityOf('PRES');
 
