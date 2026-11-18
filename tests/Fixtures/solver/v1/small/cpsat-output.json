@@ -221,7 +221,7 @@
     },
     "relaxed_rules": [],
     "metrics": {
-        "elapsed_seconds": 0.178,
+        "elapsed_seconds": 0.157,
         "engine": "cpsat",
         "engine_version": "7.6"
     },
