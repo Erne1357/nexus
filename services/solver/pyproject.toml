@@ -1,0 +1,36 @@
+[project]
+name = "nexus-solver"
+version = "0.1.0"
+description = "Servicio del motor de horarios de Nexus (FastAPI + OR-Tools CP-SAT)."
+requires-python = ">=3.12,<3.13"
+# Versiones exactas: ver docs/decisiones/0027-servicio-del-motor-en-python.md. El Dockerfile instala estas listas
+# (no instala el proyecto como paquete), así que aquí vive la única fuente de dependencias.
+dependencies = [
+    "fastapi==0.163.2",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.3",
+    "ortools==9.15.6755",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "httpx2==2.16.2",
+    "ruff==0.17.5",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# Fuera del volumen montado en desarrollo (el usuario del contenedor no escribe en el host).
+cache_dir = "/tmp/solver-pytest-cache"
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+cache-dir = "/tmp/solver-ruff-cache"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "N", "C4", "PT", "RUF"]
+ignore = ["N818"]

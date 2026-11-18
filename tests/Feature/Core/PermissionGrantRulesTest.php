@@ -55,7 +55,8 @@ it('CF-04: las concesiones de fábrica que se bloquearían sin la excepción de 
     // CF-04 «departamento o carrera» (confirmado el 14 de noviembre de 2026): las once que declaran unidad y carrera a la
     // vez ya pasan sin la excepción. La propuesta declara la carrera sin la unidad, y la Subdirección acota la unidad:
     // esa sigue valiendo solo por ser de fábrica.
-    expect($blocked)->toBe(['subdireccion → academic_load.proposal.view']);
+    // Lo mismo pasa con ver las corridas del motor de una carrera (tarea 6.2): Subdirección las ve todas, de fábrica.
+    expect($blocked)->toBe(['subdireccion → academic_load.proposal.view', 'subdireccion → solver.career_run.view']);
 });
 
 it('CF-04: con unidad y carrera basta acotar una; lo que declara solo la unidad sigue bloqueado para el coordinador', function () {

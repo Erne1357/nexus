@@ -39,6 +39,8 @@ enum AcademicLoadPermission: string implements Permission
     case ProposalView = 'academic_load.proposal.view';
     case ProposalReviewView = 'academic_load.proposal_review.view';
     case ProposalReviewDecide = 'academic_load.proposal_review.decide';
+    case ForecastEvaluationView = 'academic_load.forecast_evaluation.view';
+    case ForecastEvaluationRun = 'academic_load.forecast_evaluation.run';
 
     public function label(): string
     {
@@ -64,6 +66,8 @@ enum AcademicLoadPermission: string implements Permission
             self::ProposalView => 'Ver la propuesta de una carrera',
             self::ProposalReviewView => 'Ver la bandeja de un departamento',
             self::ProposalReviewDecide => 'Aceptar o regresar la parte del departamento en una propuesta',
+            self::ForecastEvaluationView => 'Ver la precisión de la proyección de demanda',
+            self::ForecastEvaluationRun => 'Evaluar la proyección de demanda contra un periodo ya cursado',
         };
     }
 
@@ -78,6 +82,7 @@ enum AcademicLoadPermission: string implements Permission
             self::AgreementRequest => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ProposalUpdate => [Dimension::Modality, Dimension::Career, Dimension::Campus],
             self::AgreementView, self::AgreementDecide, self::DemandViewDepartment, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
+            self::ForecastEvaluationView, self::ForecastEvaluationRun => [],
             self::ProposalCreate, self::ProposalSubmit, self::ProposalView, self::DemandViewCareer => [Dimension::Modality, Dimension::Career],
         };
     }

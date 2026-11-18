@@ -1,0 +1,527 @@
+{
+    "version": 1,
+    "run_id": "fixture-medium",
+    "term": {
+        "code": "20271"
+    },
+    "modality": {
+        "code": "PRES"
+    },
+    "campuses": [
+        {
+            "code": "C1",
+            "block_minutes": 60,
+            "day_start": "07:00",
+            "day_end": "15:00",
+            "days": [
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "uses_rooms": true
+        },
+        {
+            "code": "C2",
+            "block_minutes": 60,
+            "day_start": "07:00",
+            "day_end": "14:00",
+            "days": [
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "uses_rooms": true
+        }
+    ],
+    "time_limit_seconds": 30,
+    "scope": {
+        "kind": "department",
+        "id": "d001"
+    },
+    "travel_minutes": 60,
+    "groups": [
+        {
+            "id": "g001",
+            "campus_code": "C1",
+            "subject_code": "MED-0001",
+            "department_id": "d002",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 1,
+            "weekly_hours": 4,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 40,
+            "teacher_id": "t007",
+            "cohorts": [
+                "plan:p001:1:C1",
+                "plan:p002:1:C1"
+            ],
+            "fixed_sessions": [
+                {
+                    "day": 1,
+                    "starts_at": "07:00",
+                    "ends_at": "09:00",
+                    "room_id": "r001",
+                    "kind": "teoria"
+                },
+                {
+                    "day": 3,
+                    "starts_at": "07:00",
+                    "ends_at": "09:00",
+                    "room_id": "r001",
+                    "kind": "teoria"
+                }
+            ],
+            "candidate_room_ids": [],
+            "movable": false,
+            "current_sessions": []
+        },
+        {
+            "id": "g002",
+            "campus_code": "C1",
+            "subject_code": "MED-0002",
+            "department_id": "d001",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 1,
+            "weekly_hours": 5,
+            "practice_hours": 2,
+            "needs_lab": true,
+            "capacity": 28,
+            "teacher_id": "t001",
+            "cohorts": [
+                "plan:p001:1:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g003",
+            "campus_code": "C1",
+            "subject_code": "MED-0003",
+            "department_id": "d001",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 1,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 40,
+            "teacher_id": "t002",
+            "cohorts": [
+                "plan:p001:1:C1",
+                "plan:p002:1:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g004",
+            "campus_code": "C1",
+            "subject_code": "MED-0004",
+            "department_id": "d001",
+            "owner_career_id": "c002",
+            "study_plan_id": "p002",
+            "semester": 1,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 35,
+            "teacher_id": "t002",
+            "cohorts": [
+                "plan:p002:1:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g005",
+            "campus_code": "C1",
+            "subject_code": "MED-0005",
+            "department_id": "d001",
+            "owner_career_id": "c002",
+            "study_plan_id": "p002",
+            "semester": 1,
+            "weekly_hours": 5,
+            "practice_hours": 2,
+            "needs_lab": true,
+            "capacity": 30,
+            "teacher_id": "t003",
+            "cohorts": [
+                "plan:p002:1:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g006",
+            "campus_code": "C1",
+            "subject_code": "MED-0006",
+            "department_id": "d001",
+            "owner_career_id": "c002",
+            "study_plan_id": "p002",
+            "semester": 1,
+            "weekly_hours": 2,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 30,
+            "cohorts": [
+                "plan:p002:1:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g007",
+            "campus_code": "C1",
+            "subject_code": "MED-0007",
+            "department_id": "d001",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 1,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 45,
+            "teacher_id": "t005",
+            "cohorts": [
+                "package:k001:1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g008",
+            "campus_code": "C1",
+            "subject_code": "MED-0008",
+            "department_id": "d001",
+            "owner_career_id": "c002",
+            "study_plan_id": "p002",
+            "semester": 1,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 35,
+            "teacher_id": "t005",
+            "cohorts": [
+                "package:k001:1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g009",
+            "campus_code": "C2",
+            "subject_code": "MED-0009",
+            "department_id": "d001",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 3,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 30,
+            "teacher_id": "t004",
+            "cohorts": [
+                "plan:p001:3:C2"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g010",
+            "campus_code": "C1",
+            "subject_code": "MED-0010",
+            "department_id": "d001",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 3,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 35,
+            "teacher_id": "t004",
+            "cohorts": [
+                "plan:p001:3:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g011",
+            "campus_code": "C2",
+            "subject_code": "MED-0011",
+            "department_id": "d001",
+            "owner_career_id": "c002",
+            "study_plan_id": "p002",
+            "semester": 3,
+            "weekly_hours": 4,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 25,
+            "teacher_id": "t006",
+            "cohorts": [
+                "plan:p002:3:C2"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        },
+        {
+            "id": "g012",
+            "campus_code": "C1",
+            "subject_code": "MED-0012",
+            "department_id": "d001",
+            "owner_career_id": "c001",
+            "study_plan_id": "p001",
+            "semester": 1,
+            "weekly_hours": 3,
+            "practice_hours": 0,
+            "needs_lab": false,
+            "capacity": 38,
+            "teacher_id": "t001",
+            "cohorts": [
+                "plan:p001:1:C1"
+            ],
+            "fixed_sessions": [],
+            "candidate_room_ids": [],
+            "movable": true,
+            "current_sessions": []
+        }
+    ],
+    "teachers": [
+        {
+            "id": "t001",
+            "remaining_hours": 10,
+            "honorarios": false,
+            "unavailable": [
+                {
+                    "day": 5,
+                    "starts_at": "07:00",
+                    "ends_at": "15:00"
+                }
+            ],
+            "preferred": [],
+            "busy": []
+        },
+        {
+            "id": "t002",
+            "remaining_hours": 8,
+            "honorarios": true,
+            "unavailable": [],
+            "preferred": [
+                {
+                    "day": 1,
+                    "starts_at": "07:00",
+                    "ends_at": "12:00"
+                },
+                {
+                    "day": 2,
+                    "starts_at": "07:00",
+                    "ends_at": "12:00"
+                },
+                {
+                    "day": 3,
+                    "starts_at": "07:00",
+                    "ends_at": "12:00"
+                }
+            ],
+            "busy": []
+        },
+        {
+            "id": "t003",
+            "remaining_hours": 8,
+            "honorarios": false,
+            "unavailable": [
+                {
+                    "day": 1,
+                    "starts_at": "07:00",
+                    "ends_at": "10:00"
+                }
+            ],
+            "preferred": [],
+            "busy": []
+        },
+        {
+            "id": "t004",
+            "remaining_hours": 6,
+            "honorarios": false,
+            "unavailable": [],
+            "preferred": [],
+            "busy": [
+                {
+                    "day": 1,
+                    "starts_at": "07:00",
+                    "ends_at": "09:00",
+                    "campus_code": "C2"
+                }
+            ]
+        },
+        {
+            "id": "t005",
+            "remaining_hours": 6,
+            "honorarios": false,
+            "unavailable": [],
+            "preferred": [],
+            "busy": []
+        },
+        {
+            "id": "t006",
+            "remaining_hours": 4,
+            "honorarios": false,
+            "unavailable": [],
+            "preferred": [],
+            "busy": []
+        },
+        {
+            "id": "t007",
+            "remaining_hours": 4,
+            "honorarios": false,
+            "unavailable": [],
+            "preferred": [],
+            "busy": []
+        }
+    ],
+    "rooms": [
+        {
+            "id": "r001",
+            "campus_code": "C1",
+            "type": "aula",
+            "capacity": 40,
+            "building_id": "b001",
+            "blocks": [
+                {
+                    "day": 5,
+                    "starts_at": "07:00",
+                    "ends_at": "09:00"
+                }
+            ],
+            "busy": []
+        },
+        {
+            "id": "r002",
+            "campus_code": "C1",
+            "type": "aula",
+            "capacity": 50,
+            "building_id": "b001",
+            "blocks": [],
+            "busy": []
+        },
+        {
+            "id": "r003",
+            "campus_code": "C1",
+            "type": "laboratorio",
+            "capacity": 30,
+            "building_id": "b002",
+            "owner_department_id": "d003",
+            "blocks": [],
+            "busy": [
+                {
+                    "day": 2,
+                    "starts_at": "10:00",
+                    "ends_at": "11:00"
+                }
+            ]
+        },
+        {
+            "id": "r004",
+            "campus_code": "C2",
+            "type": "aula",
+            "capacity": 45,
+            "building_id": "b003",
+            "blocks": [],
+            "busy": []
+        },
+        {
+            "id": "r005",
+            "campus_code": "C2",
+            "type": "aula",
+            "capacity": 30,
+            "building_id": "b003",
+            "owner_department_id": "d001",
+            "blocks": [],
+            "busy": []
+        },
+        {
+            "id": "r006",
+            "campus_code": "C1",
+            "type": "aula",
+            "capacity": 35,
+            "building_id": "b001",
+            "owner_department_id": "d003",
+            "blocks": [],
+            "busy": []
+        }
+    ],
+    "agreements": [
+        {
+            "room_id": "r003",
+            "to_department_id": "d001",
+            "day": 2,
+            "starts_at": "07:00",
+            "ends_at": "13:00"
+        }
+    ],
+    "subject_room_defaults": [
+        {
+            "subject_code": "MED-0002",
+            "campus_code": "C1",
+            "room_id": "r003",
+            "priority": 1
+        }
+    ],
+    "hard_rules": [
+        "HC-01",
+        "HC-02",
+        "HC-03",
+        "HC-04",
+        "HC-05",
+        "HC-06",
+        "HC-07",
+        "HC-08",
+        "HC-09",
+        "HC-10",
+        "HC-11",
+        "HC-12",
+        "HC-13"
+    ],
+    "soft_weights": {
+        "SC-01": 10,
+        "SC-02": 6,
+        "SC-03": 5,
+        "SC-04": 4,
+        "SC-05": 3,
+        "SC-06": 2,
+        "SC-07": 3,
+        "SC-08": 2,
+        "SC-09": 2
+    },
+    "options": {
+        "suggest_teachers": false,
+        "return_intermediate": false
+    }
+}

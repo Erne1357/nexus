@@ -55,6 +55,32 @@ services:
     healthcheck:
       disable: true
 
+  # Motor de horarios (fase 7, tarea 7.2): servicio Python con OR-Tools. Solo lo llama `queue` por la red `backend`
+  # (http://solver:8000, con SOLVER_TOKEN); no publica puertos y el navegador nunca lo ve. Sin estado: las corridas
+  # en curso viven en memoria. Detalle: services/solver/README.md y docs/arquitectura/solver.md.
+  solver:
+    image: ${SOLVER_IMAGE:-nexus-solver}:${SOLVER_IMAGE_TAG:-latest}
+    build:
+      context: ./services/solver
+      target: runtime
+    restart: unless-stopped
+    environment:
+      # Vacío = el servicio no arranca (falla cerrado). Producción lo exige en compose.prod.yaml.
+      SOLVER_TOKEN: ${SOLVER_TOKEN:-}
+      SOLVER_THREADS: ${SOLVER_THREADS:-2}
+      SOLVER_MAX_CONCURRENT_RUNS: ${SOLVER_MAX_CONCURRENT_RUNS:-2}
+      SOLVER_DEFAULT_TIME_LIMIT: ${SOLVER_DEFAULT_TIME_LIMIT:-60}
+    # CPU y memoria acotadas: una corrida grande no debe quitarle recursos a la app ni a PostgreSQL.
+    cpus: ${SOLVER_CPUS:-2}
+    mem_limit: ${SOLVER_MEMORY:-2g}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [backend]
+
   postgres:
     image: postgres:18.6-alpine3.24@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
     restart: unless-stopped

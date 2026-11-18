@@ -1,0 +1,120 @@
+"""Una entrada rota se rechaza con la ruta del campo, igual que `ContractValidationTest` en PHP."""
+
+from collections.abc import Callable
+from typing import Any
+
+import pytest
+
+from app.contract import ContractError, parse_input, parse_output
+
+Data = dict[str, Any]
+
+
+def _set(path: list[str | int], value: Any) -> Callable[[Data], None]:
+    def change(data: Data) -> None:
+        target: Any = data
+        for part in path[:-1]:
+            target = target[part]
+        target[path[-1]] = value
+
+    return change
+
+
+def _repeat_group_id(data: Data) -> None:
+    data["groups"][2]["id"] = data["groups"][0]["id"]
+
+
+def _drop_required(data: Data) -> None:
+    del data["groups"][0]["capacity"]
+
+
+BROKEN = {
+    "versión distinta de 1": (_set(["version"], 2), "version", "versión no soportada"),
+    "campus desconocido en un grupo": (
+        _set(["groups", 1, "campus_code"], "C9"),
+        "groups[1].campus_code",
+        "no está en campuses",
+    ),
+    "id de grupo repetido": (_repeat_group_id, "groups[2].id", "repetido"),
+    "docente que no está en teachers": (
+        _set(["groups", 0, "teacher_id"], "no-existe"),
+        "groups[0].teacher_id",
+        "teachers",
+    ),
+    "alcance campus": (_set(["scope", "kind"], "campus"), "scope.kind", "department, career"),
+    "día 7": (_set(["teachers", 0, "preferred", 0, "day"], 7), "teachers[0].preferred[0].day", "entre 1 y 6"),
+    "fin antes del inicio": (
+        _set(["rooms", 1, "blocks", 0, "ends_at"], "12:00"),
+        "rooms[1].blocks[0].ends_at",
+        "posterior",
+    ),
+    "peso blando negativo": (_set(["soft_weights", "SC-03"], -1), "soft_weights.SC-03", "entero de 0 en adelante"),
+    "peso blando desconocido": (_set(["soft_weights", "SC-10"], 1), "soft_weights.SC-10", "desconocida"),
+    "regla dura mal escrita": (_set(["hard_rules", 2], "HC-3"), "hard_rules[2]", "HC-"),
+    "salón candidato inexistente": (
+        _set(["groups", 0, "candidate_room_ids"], ["no-existe"]),
+        "groups[0].candidate_room_ids[0]",
+        "rooms",
+    ),
+    "horas semanales en cero": (
+        _set(["groups", 2, "weekly_hours"], 0),
+        "groups[2].weekly_hours",
+        "entero de 1 en adelante",
+    ),
+    "horas semanales como cadena": (_set(["groups", 0, "weekly_hours"], "3"), "groups[0].weekly_hours", "entero"),
+    "booleano como entero": (_set(["groups", 0, "needs_lab"], 1), "groups[0].needs_lab", "verdadero o falso"),
+    "hora mal escrita": (_set(["campuses", 0, "day_start"], "7:00"), "campuses[0].day_start", "HH:MM"),
+    "campo obligatorio ausente": (_drop_required, "groups[0].capacity", "es obligatorio"),
+    "campus sin días": (_set(["campuses", 0, "days"], []), "campuses[0].days", "al menos un día"),
+    "campo obligatorio nulo": (_set(["run_id"], None), "run_id", "es obligatorio"),
+    "lista que no es lista": (_set(["groups"], {"a": 1}), "groups", "lista"),
+}
+
+
+@pytest.mark.parametrize(("change", "path", "fragment"), list(BROKEN.values()), ids=list(BROKEN))
+def test_una_entrada_rota_se_rechaza_con_la_ruta_del_campo(
+    tiny_input: Data, change: Callable[[Data], None], path: str, fragment: str
+):
+    change(tiny_input)
+
+    with pytest.raises(ContractError) as raised:
+        parse_input(tiny_input)
+
+    paths = [problem_path for problem_path, _ in raised.value.problems]
+    assert path in paths
+    message = dict(raised.value.problems)[path]
+    assert fragment in message
+    assert str(raised.value).startswith(f"{paths[0]}: ")
+
+
+def test_las_llaves_desconocidas_se_ignoran_salvo_en_los_pesos(tiny_input: Data):
+    tiny_input["extra"] = {"cualquier": "cosa"}
+    tiny_input["groups"][0]["nota"] = "ignorada"
+
+    parsed = parse_input(tiny_input)
+
+    assert "extra" not in parsed.model_dump()
+
+
+def test_los_pesos_ausentes_valen_cero(tiny_input: Data):
+    del tiny_input["soft_weights"]["SC-09"]
+
+    assert parse_input(tiny_input).soft_weights.as_dict()["SC-09"] == 0
+
+
+def test_una_salida_feasible_con_violaciones_duras_se_rechaza(tiny_output: Data):
+    tiny_output["hard_violations"] = [
+        {"rule": "HC-01", "group_ids": [tiny_output["sessions"][0]["group_id"]], "message": "Docente empalmado."}
+    ]
+
+    with pytest.raises(ContractError) as raised:
+        parse_output(tiny_output)
+
+    assert raised.value.problems[0][0] == "hard_violations"
+
+
+def test_una_salida_partial_admite_violaciones_duras(tiny_output: Data):
+    tiny_output["status"] = "partial"
+    tiny_output["hard_violations"] = [{"rule": "HC-01", "group_ids": ["g"], "message": "Docente empalmado."}]
+
+    assert parse_output(tiny_output).hard_violations[0].rule == "HC-01"

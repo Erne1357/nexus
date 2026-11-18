@@ -8,6 +8,7 @@ use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Staffing\Rules\RankingWeights;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Validation\ValidationException;
+use Tests\Fixtures\Authorization\FakePermission;
 use Tests\TestCase;
 
 /*
@@ -114,10 +115,18 @@ it('CF-S7: el catálogo real de los módulos se arma y cada valor por omisión e
         ->and(ProposalAnomalies::fromValue($registry->get(ProposalAnomalies::SETTING)->default))->toEqual(new ProposalAnomalies);
 });
 
-it('CF-S7: Asignación docente, Horarios y Proyección de demanda declaran sus parámetros', function () {
+it('CF-S7: Asignación docente, Horarios, Proyección de demanda y Motor de horarios declaran sus parámetros', function () {
     expect(array_map(fn (SettingDefinition $d): string => $d->key, app(SettingRegistry::class)->all()))->toEqualCanonicalizing([
         'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
-        'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold',
+        'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits', 'solver.soft_weights',
     ]);
+});
+
+it('CF-S7: un parámetro puede declarar el permiso de su módulo y un aviso al guardarlo, y por omisión no trae ninguno', function () {
+    $plain = demoIntSetting();
+    $owned = new SettingDefinition('demo.owned', 'demo', 'Demo', 'Tamaño', 'Ayuda', SettingType::Integer, 5, ['min:1'], permission: FakePermission::ViewAny, savedNotice: 'Se recalcula.');
+
+    expect($plain->permission)->toBeNull()->and($plain->savedNotice)->toBeNull()
+        ->and($owned->permission)->toBe(FakePermission::ViewAny)->and($owned->savedNotice)->toBe('Se recalcula.');
 });

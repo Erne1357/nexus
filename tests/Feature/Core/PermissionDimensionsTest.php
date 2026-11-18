@@ -8,10 +8,12 @@ use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Demand\Enums\DemandPermission;
 use App\Modules\Facilities\Enums\FacilitiesPermission;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
+use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Students\Enums\StudentsPermission;
 use Illuminate\Support\Facades\DB;
@@ -59,6 +61,8 @@ function dimensionTables(): array
         'core.login_notice' => 'login_notices',
         'core.login_shortcut' => 'login_shortcuts',
         'core.setting' => 'settings',
+        'demand.setting' => 'settings',
+        'solver.setting' => 'settings',
         // La bitácora (1.22-D) es de toda la instalación: no lleva campus.
         'core.activity' => 'activity_log',
         'core.queue' => 'failed_jobs',
@@ -85,6 +89,7 @@ function dimensionTables(): array
         'academic_load.agreement' => 'interdepartmental_agreements',
         // «Demanda por materia» (5.7) compara la proyección con lo pedido: su tabla con campus es la proyección.
         'academic_load.demand' => 'demand_forecasts',
+        'academic_load.forecast_evaluation' => 'forecast_evaluations',
         'scheduling.schedule' => 'groups',
         'scheduling.group' => 'groups',
         'scheduling.session' => 'group_sessions',
@@ -94,6 +99,8 @@ function dimensionTables(): array
         'staffing.teacher' => 'group_teacher_assignments',
         'staffing.teacher_load' => 'teacher_term_loads',
         'staffing.change_request' => 'change_requests',
+        'solver.department_run' => 'solver_runs',
+        'solver.career_run' => 'solver_runs',
     ];
 }
 
@@ -115,6 +122,8 @@ function dimensionExceptions(): array
         'imports.batch.view' => $admin,
         'imports.batch.create' => $admin,
         'imports.batch.apply' => $admin,
+        'academic_load.forecast_evaluation.view' => $tec,
+        'academic_load.forecast_evaluation.run' => $tec,
         'catalog_validation.progress.view' => $tec,
         'catalog_validation.progress.remind' => $tec,
         'catalog_validation.review.open' => $admin,
@@ -193,6 +202,8 @@ function modalityDimensionExceptions(): array
         'core.assignment.appoint' => $admin,
         'core.assignment.end' => $admin,
         'core.term.manage_calendar' => $tec,
+        'academic_load.forecast_evaluation.view' => $tec,
+        'academic_load.forecast_evaluation.run' => $tec,
     ];
 }
 
@@ -236,7 +247,9 @@ $enums = [
     ImportsPermission::class,
     CatalogValidationPermission::class,
     AcademicLoadPermission::class,
+    DemandPermission::class,
     SchedulingPermission::class,
+    SolverPermission::class,
     StaffingPermission::class,
 ];
 

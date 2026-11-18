@@ -37,6 +37,8 @@ function campusPlaceTables(): array
         'role_assignments' => 'el límite de un nombramiento con campus (M5, M9): su lugar de trabajo, no el de la carga',
         'catalog_reviews' => 'siempre nulo (CHECK `catalog_reviews_campus_check`): las revisiones son del departamento',
         'department_heads' => 'tabla vieja de solo lectura, reemplazada por role_assignments (ADR-0018)',
+        'forecast_evaluations' => 'el campus que se evaluó en la precisión de la proyección (nulo = todos los campus, DM-25)',
+        'forecast_evaluation_rows' => 'el campus de la fila evaluada: dónde se cursó la materia (nulo en una modalidad sin salones)',
     ];
 }
 

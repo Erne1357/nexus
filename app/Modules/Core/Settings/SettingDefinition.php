@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Settings;
 
+use App\Modules\Core\Authorization\Permission;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -27,6 +28,8 @@ final readonly class SettingDefinition
      * @param  list<string>  $rules  reglas de Laravel del valor (o de cada campo de una tabla), además de las del tipo
      * @param  array<string, string>  $fields  campo => etiqueta, solo en las tablas
      * @param  string|null  $unit  «horas», «minutos», «semestres»…
+     * @param  Permission|null  $permission  permiso del módulo que, además de `core.setting.update`, deja cambiar este parámetro (CF-S7); sin él solo lo cambia quien tiene `core.setting.update`
+     * @param  string|null  $savedNotice  aviso que se suma al de «Parámetros guardados» cuando este parámetro cambia (por ejemplo, que se recalcula en segundo plano)
      */
     public function __construct(
         public string $key,
@@ -40,6 +43,8 @@ final readonly class SettingDefinition
         public array $fields = [],
         public ?string $unit = null,
         public bool $nullable = false,
+        public ?Permission $permission = null,
+        public ?string $savedNotice = null,
     ) {
         if (preg_match('/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/', $key) !== 1) {
             throw new InvalidArgumentException("La llave de parámetro «{$key}» no tiene la forma modulo.nombre.");

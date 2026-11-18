@@ -384,7 +384,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
 
     expect(navigationGroupsFor($admin, NavigationArea::Academico))->toBe([
         'validacion' => ['Validación de catálogos', 'Avance de validación'],
-        'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia'],
+        'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
         'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Horarios publicados'],
@@ -613,7 +613,7 @@ describe('menú', function () {
 
         expect(menuRowsIn($page, 'academico'))->toBe([
             'Validación', 'Validación de catálogos', 'Avance de validación',
-            'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia',
+            'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección',
             'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
             'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
             'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados',

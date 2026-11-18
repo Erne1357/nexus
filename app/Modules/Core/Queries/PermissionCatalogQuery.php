@@ -42,9 +42,11 @@ final class PermissionCatalogQuery
         'students' => 'Alumnos',
         'imports' => 'Importaciones',
         'catalog_validation' => 'Validación de catálogos',
+        'demand' => 'Proyección de demanda',
         'academic_load' => 'Carga académica',
         'scheduling' => 'Horarios',
         'staffing' => 'Asignación docente',
+        'solver' => 'Motor de horarios',
     ];
 
     /**

@@ -1,6 +1,6 @@
 # Motor de horarios (solver)
 
-Arquitectura del componente que sugiere horarios y salones para los grupos de un periodo. Dos implementaciones bajo una sola interfaz y un solo contrato: una heurística en PHP (fase 6) y un servicio en Python con OR-Tools CP-SAT (fase 7). Las reglas que ambas respetan están en `docs/dominio/reglas-de-negocio.md`; las tablas, en `docs/dominio/modelo-de-datos.md`.
+Arquitectura del componente que sugiere horarios y salones para los grupos de un periodo. Desde el 17 de noviembre de 2026 una corrida abarca la carga de un departamento en una modalidad, en todos sus campus a la vez (decisión del usuario; «Punto de partida» de la fase 6). Dos implementaciones bajo una sola interfaz y un solo contrato: una heurística en PHP (fase 6) y un servicio en Python con OR-Tools CP-SAT (fase 7). Las reglas que ambas respetan están en `docs/dominio/reglas-de-negocio.md`; las tablas, en `docs/dominio/modelo-de-datos.md`.
 
 ## Propósito
 
@@ -25,12 +25,12 @@ Cada corrida es una fila en `solver_runs` con su entrada y salida completas (en 
 
 ## Interfaz `SolverEngine`
 
-Una interfaz en `app/Modules/Solver/Engines/` con tres responsabilidades: resolver (recibe el contrato de entrada, devuelve el contrato de salida), reportar progreso (porcentaje y mejor puntaje intermedio para `wire:poll`) y cancelar. El registro de motores disponibles vive en `settings` (`solver.engines`) y el motor predeterminado por campus en `solver.default_engine`.
+Una interfaz en `app/Modules/Solver/Engines/` con tres responsabilidades: resolver (recibe el contrato de entrada, devuelve el contrato de salida), reportar progreso (porcentaje y mejor puntaje intermedio para `wire:poll`) y cancelar. El registro de motores disponibles vive en `settings` (`solver.engines`) y el motor predeterminado por modalidad en `solver.default_engine`.
 
 | Implementación | Dónde corre | Cuándo usarla |
 |---|---|---|
 | `PhpHeuristicEngine` | Contenedor `queue`, en PHP | Rápida, sin dependencias externas; buena para corridas por carrera, re-análisis y alternativas de solicitudes de cambio |
-| `CpSatEngine` | Cliente en PHP que llama al servicio `solver` (Python) | Instancias grandes o muy restringidas, campus completo, mejor puntaje blando |
+| `CpSatEngine` | Cliente en PHP que llama al servicio `solver` (Python) | Cargas grandes o muy restringidas (departamentos con muchos grupos en varios campus), mejor puntaje blando |
 
 La pantalla de corridas (fase 6) no distingue entre ambas: elige motor, lanza, compara, acepta.
 
@@ -45,17 +45,26 @@ Versión actual: `1`. El contrato es la frontera entre Nexus y cualquier motor; 
 | `version` | entero | sí | Versión del contrato. Un motor rechaza versiones que no soporte. |
 | `run_id` | cadena | sí | Identificador de la corrida (`solver_runs.id`) para correlación en logs. |
 | `term` | objeto | sí | `code` del periodo. Solo informativo para el motor. |
-| `campus` | objeto | sí | `code`, `block_minutes`, `day_start`, `day_end`, `days` (lista de 1 a 6). Define la rejilla de bloques. |
+| `modality` | objeto | sí | `code` de la modalidad de la carga. Solo informativo. |
+| `campuses[]` | lista | sí | Un objeto por campus de la corrida: `code`, `block_minutes`, `day_start`, `day_end` (`HH:MM`), `days` (lista de 1 a 6) y `uses_rooms`. Cada campus tiene su rejilla de bloques. |
 | `time_limit_seconds` | entero | sí | Tiempo máximo de resolución. El motor devuelve la mejor solución encontrada al vencer. |
-| `scope` | objeto | sí | `kind` (`campus`, `department`, `career`) e `id`. Para logs y para que la pantalla sepa qué se programó. |
-| `groups[]` | lista | sí | Grupos a programar. Por grupo: `id`, `subject_code`, `department_id`, `owner_career_id`, `study_plan_id`, `semester` (reticular), `weekly_hours` (teoría más práctica), `practice_hours`, `needs_lab`, `capacity`, `teacher_id` (opcional), `fixed_sessions[]` (sesiones que no se mueven), `candidate_room_ids[]` (opcional, para acotar el dominio), `movable` (si es `false` el grupo entra solo como ocupación). |
-| `teachers[]` | lista | sí | Docentes referidos por los grupos. Por docente: `id`, `remaining_hours`, `unavailable[]` (día, inicio, fin), `preferred[]` (día, inicio, fin), `busy[]` (sesiones ya asignadas en cualquier campus, como ocupación fija). |
-| `rooms[]` | lista | sí si `campus.uses_rooms` | Por salón: `id`, `type`, `capacity`, `building_id`, `owner_department_id` (opcional), `blocks[]` (día, inicio, fin bloqueados), `busy[]` (sesiones de grupos fuera del alcance). |
+| `scope` | objeto | sí | `kind` (`department`: la carga del departamento en la modalidad; `career`: exploración del coordinador) e `id`. Para logs y para que la pantalla sepa qué se programó. |
+| `travel_minutes` | entero | sí | Minutos mínimos para que un docente cambie de campus entre dos sesiones seguidas (`staffing.min_campus_travel_minutes`, SC-09). |
+| `groups[]` | lista | sí | Grupos a programar. Por grupo: `id`, `campus_code`, `subject_code`, `department_id`, `owner_career_id`, `study_plan_id`, `semester` (reticular), `weekly_hours` (teoría más práctica), `practice_hours`, `needs_lab`, `capacity`, `teacher_id` (opcional), `cohorts[]` (claves de cohorte: conjuntos de grupos que un mismo alumno toma juntos y que no se empalman; ver HC-03), `fixed_sessions[]` (sesiones que no se mueven), `candidate_room_ids[]` (opcional, para acotar el dominio), `movable` (si es `false` el grupo entra solo como ocupación), `current_sessions[]` (opcional; las sesiones que un grupo movible ya tiene, con la forma de `fixed_sessions[]`, para que el motor marque `changed` en la salida; vacía si no tenía horario). |
+| `teachers[]` | lista | sí | Docentes referidos por los grupos. Por docente: `id`, `remaining_hours`, `honorarios` (si es de honorarios, para SC-08), `unavailable[]` (día, inicio, fin), `preferred[]` (día, inicio, fin), `busy[]` (sesiones ya asignadas fuera de la corrida, con su `campus_code`, como ocupación fija). |
+| `rooms[]` | lista | sí si `campus.uses_rooms` | Por salón: `id`, `campus_code`, `type`, `capacity`, `building_id`, `owner_department_id` (opcional), `blocks[]` (día, inicio, fin bloqueados), `busy[]` (sesiones de grupos fuera del alcance). |
 | `agreements[]` | lista | no | Préstamos aceptados: `room_id`, `to_department_id`, `day`, `starts_at`, `ends_at`. Sin acuerdo, un salón con dueño solo lo usa su departamento (HC-10). |
-| `subject_room_defaults[]` | lista | no | `subject_code`, `room_id`, `priority`. Alimenta SC-03. |
+| `subject_room_defaults[]` | lista | no | `subject_code`, `campus_code`, `room_id`, `priority`. Alimenta SC-03. |
 | `hard_rules[]` | lista de cadenas | sí | Identificadores HC activos (por defecto HC-01 a HC-13). Permite desactivar una regla para una corrida exploratoria; la salida la reporta como desactivada. |
-| `soft_weights` | objeto | sí | Peso por SC-01 a SC-08. Cero desactiva la regla blanda. |
+| `soft_weights` | objeto | sí | Peso por SC-01 a SC-09. Cero desactiva la regla blanda. Salen del parámetro `solver.soft_weights` (campos `sc_01`…`sc_09`, que `BuildSolverInput` pasa a `SC-01`…), que la Subdirección edita en «Parámetros»; sin valor válido, los de la tabla SC. |
 | `options` | objeto | no | `threads`, `seed`, `suggest_teachers` (si el motor puede sugerir docente para grupos sin él), `return_intermediate` (si reporta soluciones intermedias). |
+
+**Cohortes.** Una cohorte es un conjunto de grupos que un mismo alumno toma juntos; sus sesiones no se empalman (HC-03). Quien arma la entrada pone las claves en cada grupo:
+
+- `plan:<study_plan_id>:<semestre>:<campus_code>` en los grupos de una materia que es el único grupo de su materia para la carrera en ese plan, semestre y campus (el alumno tipo de HC-03);
+- `package:<package_id>:<número>` en cada grupo de la instancia *n* de un paquete de primer semestre (DM-09; `groups.package_id` y `groups.package_number`, tarea 5.6).
+
+El motor no sabe de dónde viene cada cohorte: solo garantiza que los grupos con una misma clave no se empalmen.
 
 ### Salida
 
@@ -68,7 +77,7 @@ Versión actual: `1`. El contrato es la frontera entre Nexus y cualquier motor; 
 | `teacher_suggestions[]` | lista | no | `group_id`, `teacher_id`, `reason`. Solo si `options.suggest_teachers`. Es sugerencia; la asignación sigue el ranking de la fase 3. |
 | `unscheduled[]` | lista | sí | Grupos que no se pudieron colocar: `group_id`, `reasons[]` (identificadores HC y texto). |
 | `hard_violations[]` | lista | sí | Violaciones duras residuales en la solución devuelta: `rule`, `group_ids[]`, `teacher_id`, `room_id`, `message`. Debe estar vacía para `optimal` y `feasible`. |
-| `soft_score` | objeto | sí | `total` y desglose por SC-01 a SC-08 (penalización por regla). Menor es mejor. |
+| `soft_score` | objeto | sí | `total` y desglose por SC-01 a SC-09 (penalización por regla). Menor es mejor. |
 | `relaxed_rules[]` | lista | no | Reglas que el motor relajó para encontrar solución en una instancia infactible, con los grupos afectados. |
 | `metrics` | objeto | sí | `elapsed_seconds`, `engine`, `engine_version`, `variables`, `constraints`, `iterations` o `branches`, `intermediate_solutions`. |
 | `log` | lista de cadenas | no | Mensajes informativos para la pantalla de corridas. |
@@ -86,7 +95,7 @@ Versión actual: `1`. El contrato es la frontera entre Nexus y cualquier motor; 
 |---|---|---|
 | HC-01 docente sin empalme | Al colocar, el evaluador rechaza bloques ocupados por el docente (incluye `busy` de otros campus) | Suma de variables del docente por bloque ≤ 1, con `busy` como constantes |
 | HC-02 salón sin empalme | Rechaza salones ocupados en el bloque (incluye `busy` y bloqueos) | Suma de variables del salón por bloque ≤ 1 |
-| HC-03 alumno tipo sin empalme | Rechaza bloques ocupados por otro grupo del mismo plan y semestre cuando es el único grupo de esa materia | Suma por (plan, semestre, bloque) ≤ 1 sobre los grupos únicos de su materia |
+| HC-03 alumno tipo sin empalme | Rechaza bloques ocupados por otro grupo de la misma cohorte (`cohorts[]`) | Suma por (cohorte, bloque) ≤ 1 |
 | HC-04 ventana y bloques | El dominio de bloques se construye solo dentro de la ventana y alineado | Solo se crean variables dentro de la ventana y alineadas |
 | HC-05 capacidad del salón | Filtro de salones candidatos por capacidad | Solo se crean variables con `room.capacity >= group.capacity` |
 | HC-06 laboratorio | Filtro de tipo de salón para sesiones prácticas | Solo se crean variables de salones del tipo requerido para horas prácticas |
@@ -105,39 +114,54 @@ Versión actual: `1`. El contrato es la frontera entre Nexus y cualquier motor; 
 | SC-06 cambio de edificio | Penaliza edificios distintos en horas consecutivas del docente | Penalización por par de sesiones consecutivas con edificio distinto |
 | SC-07 semestres consecutivos | Penaliza empalmes entre semestre N y N+1 de la misma carrera | Penalización por (plan, semestre, semestre+1, bloque) ocupados a la vez |
 | SC-08 turnos para honorarios | Penaliza sesiones fuera de la disponibilidad declarada de docentes de honorarios | Penalización por sesión fuera de `preferred` cuando el docente es de honorarios |
+| SC-09 traslado entre campus | Penaliza dos sesiones seguidas del docente en campus distintos con menos de `travel_minutes` entre ellas | Penalización por par de sesiones del docente en campus distintos demasiado cerca |
 
 HC-14 a HC-18 son reglas del flujo (validación de catálogos, cierre, motivo de asignación, visibilidad, bitácora) y no entran al motor.
 
 ## Descomposición del problema
 
-Un campus presencial completo (estimado: 400 grupos, 60 salones, 70 bloques semanales) es grande para resolverlo de una vez con garantías. Se resuelve por partes, en este orden:
+La unidad de corrida es la carga: un departamento en una modalidad, con sus grupos de todos sus campus (decisión del usuario, 17 de noviembre de 2026). Lo que no es de la carga entra fijo: los grupos de otras cargas que comparten docentes, salones o cohortes, como `busy` o como grupos con `movable = false`, y las sesiones ya aceptadas, como `fixed_sessions`.
 
-1. **Tronco común primero.** Las materias compartidas entre varias carreras y departamentos (Cálculo Diferencial, Álgebra Lineal, Taller de Ética, etc.) son las que más restricciones cruzan: distintos planes y semestres reticulares, cupos por carrera, salones de otro departamento. Se programan primero sobre el campus completo.
-2. **Luego, un departamento a la vez.** Con las sesiones del tronco común fijadas (`fixed_sessions` y `busy`), cada departamento programa sus grupos; sus docentes y salones ya saben qué bloques están ocupados.
-3. **Por carrera** cuando el coordinador quiere explorar solo su retícula; el resto del campus entra fijo.
+1. **Por departamento.** El jefe lanza la corrida de su carga y la acepta. Es la corrida normal.
+2. **Por carrera.** El coordinador lanza corridas de los grupos de su carrera dentro de las cargas que toca, para explorar y comparar. No las acepta.
+3. **Tronco común primero, sugerido.** Las materias compartidas entre carreras (Cálculo, Álgebra, Ética…) cruzan más restricciones, así que conviene programarlas primero. No se exige: cada departamento corre cuando quiere, y la pantalla avisa cuando los grupos con los que comparte cohorte todavía no tienen horario aceptado. `PlanRun` (fase 6) propone el orden y deja la decisión al jefe.
 
-`PlanRun` (fase 6) orquesta la secuencia y el usuario acepta cada parte antes de seguir; una parte aceptada se vuelve fija para la siguiente. Si una parte queda `partial`, se puede relanzar con más tiempo o con otra regla relajada antes de continuar.
+Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte queda `partial`, se puede relanzar con más tiempo o con otra regla relajada.
 
 ## Límites de tiempo y soluciones parciales
 
-- Toda corrida tiene `time_limit_seconds`; por defecto 60 por carrera, 300 por departamento, 600 para tronco común (parámetros en `settings`).
+- Toda corrida tiene `time_limit_seconds`; por defecto 60 por carrera y 300 por departamento (parámetros en `settings`).
 - El motor devuelve siempre la mejor solución encontrada, con `status` honesto: `feasible` si no violó nada pero no probó óptimo, `partial` si dejó grupos sin colocar.
 - Las soluciones intermedias se reportan para progreso; la pantalla muestra el mejor puntaje hasta el momento y permite cancelar y quedarse con lo que hay.
 - Una instancia `infeasible` no se devuelve vacía: el motor relaja reglas en un orden fijo (SC primero, después HC-09 preferencias convertidas, nunca HC-01, HC-02 ni HC-05) y reporta en `relaxed_rules` qué relajó y qué grupos lo necesitaron, para que la persona decida.
 
 ## Fixtures compartidos y pruebas
 
-- `tests/Fixtures/solver/v1/` contiene instancias del contrato con su resultado esperado: `tiny` (3 grupos, solución única conocida a mano), `small` (una carrera, un semestre), `medium` (laboratorios, tronco común entre dos carreras, un préstamo de salón), `infeasible` (docente sin bloques suficientes), `campus-ii` (tamaño real estimado, generado desde el seeder).
-- Una suite parametrizada en PHP corre cualquier `SolverEngine` sobre todos los fixtures y verifica: cero `hard_violations` donde hay solución, `unscheduled` correcto donde no, puntaje blando dentro de un rango y respeto del tiempo límite.
+- `tests/Fixtures/solver/v1/<nombre>/` trae `input.json` (instancia del contrato, válida para `SolverInput::fromArray`) y `expected.json`, que describe lo que logra un motor correcto y no una salida exacta: `feasible` (`true`, `false` o `null` si no se sabe), `must_schedule` (grupos que deben quedar completos, con sus horas semanales), `may_leave_unscheduled`, `min_unscheduled` (en las infactibles), `max_soft_score` (`null` hasta tener línea base) y `notes`.
+  - `tiny`: 3 grupos, 2 campus, un laboratorio ajeno con préstamo; `output.json` es una solución de referencia.
+  - `small`: una carrera, un semestre, un campus; 6 grupos de una cohorte, 2 docentes, 3 salones (uno de laboratorio). Factible.
+  - `medium`: 12 grupos movibles y uno fijo, 2 campus, 2 carreras con tronco común (claves de cohorte compartidas), laboratorio con préstamo aceptado, paquete (`package:<id>:1`), docente en dos campus con traslado y salón ajeno sin préstamo. Factible.
+  - `infeasible`: un docente cuyos bloques `unavailable` dejan menos horas libres que las de sus grupos (HC-09); al menos dos de sus tres grupos deben salir en `unscheduled`.
+  - `department-multicampus`: la carga de Ciencias Económico-Administrativas (1 139 grupos movibles, 2 708 con los fijos, 657 docentes, 426 salones, C1 y C2) en PRES, Ene-Jun 2027, generada de la demo masiva y anonimizada (fichas `g001`, `t001`, `r001`…). No lleva resultado esperado; se mide en el benchmark. Grupo `solver-slow` en la suite.
+- Para regenerar una instancia real: `docker compose exec -e DB_DATABASE=<base demo> app php artisan solver:export-fixture <periodo> <modalidad> <clave de departamento> <nombre> [--career=<clave>]` (por ejemplo `20271 PRES CEA department-multicampus`). Escribe solo `input.json`; `expected.json` se escribe a mano.
+- `tests/Feature/Solver/SolverFixturesTest.php` corre cada motor registrado sobre cada fixture. A todos les exige una salida válida del contrato, el `run_id` de la entrada, el tiempo límite y sesiones de grupos de la entrada, dentro de la rejilla de su campus, alineadas a bloques y en un salón de ese campus. Solo a los motores que declaran `checksHardRules()` les exige además lo de `expected.json`: cero `hard_violations` y todo programado donde hay solución, `unscheduled` correcto donde no, y las horas semanales de `must_schedule` (HC-12). El motor de prueba (`FixedEngine`) corre solo las revisiones estructurales.
 - El servicio Python lee los mismos archivos y corre la misma verificación con pytest.
-- Los fixtures grandes corren fuera del CI de PR (job nocturno o manual); `tiny`, `small` y `medium` corren en cada PR.
+- Los fixtures grandes corren fuera del CI de PR (job nocturno o manual; el CI de PR los salta con `--exclude-group=solver-slow`); `tiny`, `small`, `medium` e `infeasible` corren en cada PR.
 - El comando de benchmark reporta tiempo, violaciones y puntaje por motor y fixture; los resultados se registran aquí al cierre de las fases 6 y 7.
 
 ### Línea base (se llena al cerrar cada fase)
 
-| Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando |
-|---|---|---|---|---|
-| pendiente | | | | |
+`php artisan solver:benchmark [--engine=*] [--fixture=*] [--markdown]` corre cada motor registrado (o los de `--engine`) sobre cada fixture (o los de `--fixture`) y mide el tiempo con `hrtime`. La tabla de consola trae motor, fixture, grupos movibles, sesiones propuestas, sin programar, violaciones duras, puntaje blando, estado, segundos y «Cumple» (✓/✗ contra `expected.json` en los motores que declaran `checksHardRules()`; «—» en los demás). Con `--markdown` imprime la tabla con las columnas de abajo para pegarla aquí. Un motor o fixture desconocido termina con error.
+
+Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reglas duras ni calcula puntaje, así que sus ceros no miden nada y solo muestran que el comando corre. Las filas de la heurística llegan con la 6.7.
+
+| Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando | Sin programar |
+|---|---|---|---|---|---|
+| tiny | fixed | 0.00 s | 0 | 0 | 0 |
+| small | fixed | 0.00 s | 0 | 0 | 0 |
+| medium | fixed | 0.00 s | 0 | 0 | 0 |
+| infeasible | fixed | 0.00 s | 0 | 0 | 0 |
+| department-multicampus | fixed | 0.01 s | 0 | 0 | 0 |
 
 ## Despliegue del servicio Python
 
@@ -162,5 +186,5 @@ Un campus presencial completo (estimado: 400 grupos, 60 salones, 70 bloques sema
 
 - Asignar docentes de forma automática como decisión final: el motor sugiere; el ranking y el jefe deciden.
 - Programar modalidades sin bloques fijos (EnLínea): entran en la fase 10 con su propio perfil; el contrato ya admite campus sin salones.
-- Optimizar entre campus a la vez: cada corrida es de un campus; los docentes con carga en otro campus entran como `busy`.
+- Optimizar todo el Tec a la vez: cada corrida es la carga de un departamento en una modalidad (todos sus campus); lo de otras cargas entra como `busy` o como grupos fijos.
 - Un motor comercial o en la nube: todo corre en el stack de Docker de la institución.
