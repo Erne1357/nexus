@@ -1,7 +1,11 @@
 <?php
 
 use App\Modules\Core\Models\User;
+use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
+use App\Modules\Staffing\Actions\ChangeRequests\RejectChangeRequest;
+use App\Modules\Staffing\Enums\ChangeRequestStatus;
+use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 
 require_once __DIR__.'/ChangeRequestScreensSupport.php';
@@ -62,4 +66,42 @@ it('el docente que la pidió ve el impacto pero no puede recalcularlo', function
     $request = crRequest($this->g1, $this->w->teacherUser, 'pending', ['proposed' => ['description' => 'Al viernes', 'sessions' => [['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00']]]]);
 
     impactPage($this->w->teacherUser, $request->id)->assertDontSeeHtml('data-testid="recalculate-impact"')->call('recalculateImpact')->assertForbidden();
+});
+
+it('aprobar un cambio con choques duros se bloquea y la solicitud sigue pendiente', function () {
+    $request = crRequest($this->g1, $this->w->teacherUser, 'pending', ['proposed' => ['description' => 'Pasar al martes', 'sessions' => [['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00']]]]);
+
+    expect(fn () => app(ApproveChangeRequest::class)->handle($request, $this->w->jefeSc))
+        ->toThrow(ValidationException::class, 'No se puede aprobar: el cambio deja 1 choque duro.');
+    expect($request->fresh()->status)->toBe(ChangeRequestStatus::Pending);
+});
+
+it('rechazar un cambio con choques duros sí se puede', function () {
+    $request = crRequest($this->g1, $this->w->teacherUser, 'pending', ['proposed' => ['description' => 'Pasar al martes', 'sessions' => [['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00']]]]);
+
+    app(RejectChangeRequest::class)->handle($request, $this->w->jefeSc, 'Choca con otro grupo');
+
+    expect($request->fresh()->status)->toBe(ChangeRequestStatus::Rejected);
+});
+
+it('aprobar un cambio sin choques o uno que no se puede simular funciona', function () {
+    $clear = crRequest($this->g1, $this->w->teacherUser, 'pending', ['proposed' => ['description' => 'Al viernes', 'sessions' => [['day' => 5, 'starts_at' => '07:00', 'ends_at' => '09:00']]]]);
+    $text = crRequest($this->busy, $this->w->teacherUser, 'pending', ['teacher_id' => null]);
+
+    app(ApproveChangeRequest::class)->handle($clear, $this->w->jefeSc);
+    app(ApproveChangeRequest::class)->handle($text, $this->w->jefeSc);
+
+    expect($clear->fresh()->status)->toBe(ChangeRequestStatus::Approved)->and($text->fresh()->status)->toBe(ChangeRequestStatus::Approved);
+});
+
+it('el botón «Aprobar» queda deshabilitado con su motivo cuando el impacto guardado trae choques duros', function () {
+    $request = crRequest($this->g1, $this->w->teacherUser, 'pending', ['proposed' => ['description' => 'Pasar al martes', 'sessions' => [['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00']]]]);
+    app(AssessChangeImpact::class)->handle($request);
+
+    impactPage($this->w->jefeSc, $request->id)
+        ->assertSeeHtml('data-testid="approve-blocked"')
+        ->assertSee('No se puede aprobar: el cambio deja 1 choque duro.')
+        ->assertSeeHtml('data-testid="reject-request"')
+        ->call('approve');
+    expect($request->fresh()->status)->toBe(ChangeRequestStatus::Pending);
 });

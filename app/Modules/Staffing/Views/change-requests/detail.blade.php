@@ -183,9 +183,13 @@
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
+                @php($blockedClashes = array_sum(array_map(fn ($rule) => count($rule['messages'] ?? []), $request->impact['hard'] ?? [])))
+                @if ($blockedClashes > 0)
+                    <p class="text-sm text-error" data-testid="approve-blocked">No se puede aprobar: el cambio deja {{ $blockedClashes }} {{ $blockedClashes === 1 ? 'choque duro' : 'choques duros' }}. Recházalo o pide alternativas al motor.</p>
+                @endif
                 <div class="flex flex-wrap justify-end gap-2">
                     <x-button label="Rechazar" icon="o-x-circle" class="btn-outline btn-error max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="reject" spinner="reject" data-testid="reject-request" />
-                    <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" data-testid="approve-request" />
+                    <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" :disabled="$blockedClashes > 0" data-testid="approve-request" />
                 </div>
             @else
                 <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />La revisa el jefe del departamento.</p>

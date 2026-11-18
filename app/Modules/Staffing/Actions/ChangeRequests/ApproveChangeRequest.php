@@ -21,7 +21,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class ApproveChangeRequest
 {
-    public function __construct(private readonly StartAdjusting $startAdjusting, private readonly NotifyChangeRequest $notify) {}
+    public function __construct(private readonly StartAdjusting $startAdjusting, private readonly NotifyChangeRequest $notify, private readonly AssessChangeImpact $assess) {}
 
     /**
      * @throws ValidationException
@@ -36,6 +36,8 @@ final class ApproveChangeRequest
             if ($request->status !== ChangeRequestStatus::Pending) {
                 throw ValidationException::withMessages(['status' => 'La solicitud ya no está pendiente.']);
             }
+
+            $this->blockHardClashes($request);
 
             $request->update(['status' => ChangeRequestStatus::Approved, 'decided_by' => $actor->getKey(), 'decided_at' => now(), 'decision_comment' => $comment]);
 
@@ -67,5 +69,22 @@ final class ApproveChangeRequest
         $this->notify->appliers($request);
 
         return $request;
+    }
+
+    /**
+     * CR-01 (confirmado el 18 de noviembre de 2026): no se aprueba un cambio que deja choques duros. Se simula en el
+     * momento, no con el impacto guardado, porque el horario pudo cambiar. Una solicitud que no se puede simular (solo
+     * texto) se aprueba (supuesto por confirmar): al aplicarla, el validador de horarios sigue impidiendo los choques.
+     *
+     * @throws ValidationException
+     */
+    private function blockHardClashes(ChangeRequest $request): void
+    {
+        $impact = $this->assess->simulate($request);
+        $clashes = array_sum(array_map(fn (array $rule): int => count($rule['messages']), $impact['hard']));
+
+        if ($clashes > 0) {
+            throw ValidationException::withMessages(['status' => "No se puede aprobar: el cambio deja {$clashes} ".($clashes === 1 ? 'choque duro' : 'choques duros').'. Recházalo o pide alternativas al motor.']);
+        }
     }
 }
