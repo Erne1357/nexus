@@ -318,7 +318,7 @@ class _Builder:
             if first not in self.variables.groups and second not in self.variables.groups:
                 continue
             terms: list[tuple[int, cp_model.LinearExprT]] = []
-            for day in set(self._days(first)) & set(self._days(second)):
+            for day in sorted(set(self._days(first)) & set(self._days(second))):
                 for start, end in _pieces(self._intervals(first, day) + self._intervals(second, day)):
                     a, b = self._covering(first, day, start, end), self._covering(second, day, start, end)
                     if a is None or b is None:
@@ -340,7 +340,7 @@ class _Builder:
         """Los pares de `ConsecutiveSemesters`: un grupo del alcance con una cohorte `plan:` y los de la misma cohorte
         en el semestre de antes o de después, una vez por par."""
         pairs: dict[tuple[str, str], None] = {}
-        for group_id in self.in_scope:
+        for group_id in sorted(self.in_scope):
             for key in self.scorer.groups[group_id].cohorts:
                 parts = key.split(":")
                 if parts[0] != "plan" or len(parts) != 4:
@@ -416,8 +416,8 @@ class _Builder:
                 starts[(campus_of[span.group_id], span.start)].extend(span.literals)
             fixed_ends = {(item.campus, item.end) for item in constants}
             fixed_starts = {(item.campus, item.start) for item in constants}
-            for origin, end in set(ends) | fixed_ends:
-                for target, start in set(starts) | fixed_starts:
+            for origin, end in sorted(set(ends) | fixed_ends):
+                for target, start in sorted(set(starts) | fixed_starts):
                     if origin == target or not 0 <= start - end < travel:
                         continue
                     leaving = 1 if (origin, end) in fixed_ends else None

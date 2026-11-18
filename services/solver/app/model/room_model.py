@@ -251,7 +251,7 @@ def _solve_day(
             if window not in involved or (isinstance(other, _Window) and other in involved and id(other) < id(window)):
                 continue
             change = model.new_bool_var("")
-            for building in {scorer.buildings[room_id] for room_id in window.candidates}:
+            for building in sorted({scorer.buildings[room_id] for room_id in window.candidates}):
                 mine = [literal for room_id, literal in window.choice.items() if scorer.buildings[room_id] == building]
                 if isinstance(other, _Window) and other in involved:
                     theirs = [lit for room, lit in other.choice.items() if scorer.buildings[room] == building]

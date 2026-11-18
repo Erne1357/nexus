@@ -234,3 +234,26 @@ def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_dur
     assert reports
     assert [best for best, _ in reports] == sorted((best for best, _ in reports), reverse=True)
     assert [progress for _, progress in reports] == sorted(progress for _, progress in reports)
+
+
+def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(tmp_path):
+    """`scripts/objective.py` (7.6) da una fila por fase con el puntaje de `score.py` y, con `--output`, la salida
+    del contrato con ese mismo puntaje."""
+    import importlib.util
+    from pathlib import Path
+
+    from app.contract import parse_output
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "objective.py"
+    spec = importlib.util.spec_from_file_location("objective_script", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    target = tmp_path / "salida.json"
+
+    table = script.main(["small", "--time-limit", "5", "--threads", "1", "--output", str(target)])
+
+    rows = table.splitlines()[2:]
+    assert [row.split(" | ")[0] for row in rows] == ["| lns", "| improve", "| improve_rooms"]
+    output = parse_output(json.loads(target.read_text()))
+    assert output.unscheduled == []
+    assert f"| {output.soft_score.total:,} |" in rows[-1]
