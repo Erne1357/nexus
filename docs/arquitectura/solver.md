@@ -14,14 +14,19 @@ Arquitectura del componente que sugiere horarios y salones para los grupos de un
 stateDiagram-v2
     [*] --> queued : el usuario lanza una corrida
     queued --> running : el job la toma del worker queue
+    queued --> cancelled : se cancela antes de correr
     running --> done : salida válida según el contrato
     running --> failed : error, tiempo agotado sin solución, servicio caído
+    running --> cancelled : se pidió cancelar y el motor avisó avance
     done --> applied : el usuario acepta; se escribe en group_sessions
-    done --> [*] : el usuario descarta
+    done --> discarded : el usuario descarta
     failed --> [*]
+    cancelled --> [*]
 ```
 
-Cada corrida es una fila en `solver_runs` con su entrada y salida completas (en JSON o en archivo bajo `storage/solver` si es grande), métricas y autor. Una corrida en `done` puede consultarse y compararse cuantas veces haga falta; `applied` es terminal y deja en `activity_log` qué sesiones cambiaron.
+Cada corrida es una fila en `solver_runs` con su entrada y salida completas, métricas y autor. La entrada y la salida van en la fila (jsonb) si su JSON cabe en 1 MiB y si no, en un archivo `solver/runs/<id>/input.json` u `output.json` del disco `local` (`storage/app`, compartido por la aplicación y la cola), con la ruta en la fila (`Solver\Support\RunPayloads`). Una corrida en `done` puede consultarse y compararse cuantas veces haga falta; `applied` es terminal y deja en `activity_log` qué sesiones cambiaron.
+
+**Lanzar y correr (tarea 6.8).** `Actions\LaunchSolverRun` valida el motor y el límite de tiempo (10 a 600 s, SV-04), revisa que el departamento no tenga otra corrida en curso (SV-01), arma la entrada con `BuildSolverInput`, guarda su huella (`input_hash`, SV-02) y despacha `Jobs\RunSolver` después del commit. El job toma la corrida solo si sigue en cola, la pasa a `running` y llama a `solve()`; su aviso de avance guarda `progress` y `best_score` a lo más una vez por segundo y, si se pidió cancelar (`cancel_requested_at`, `Actions\CancelSolverRun`, SV-03), corta al motor y deja la corrida `cancelled`. Al terminar guarda la salida validada, las métricas con un resumen y la deja `done` aunque la salida sea `partial` o `infeasible` (la pantalla decide qué mostrar); una salida `error` o una excepción la dejan `failed` con el mensaje, sin traza. Lista o fallida, avisa a quien la lanzó (`Notifications\SolverRunFinished`, que lleva a `solver.runs?corrida=<id>`). Su `timeout` es el límite de la corrida más un minuto, con un solo intento.
 
 ## Interfaz `SolverEngine`
 
