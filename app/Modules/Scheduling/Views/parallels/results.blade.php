@@ -5,7 +5,7 @@
     lo libre en rayas y, si los cupos pasan la capacidad, la barra en `error` con «Pasa la capacidad por N» y HC-07 (color,
     icono y texto); «Poco lleno» si sus esperados no llegan a la mitad de la capacidad (de la maqueta C; supuesto por
     confirmar). Al final, si algún grupo pasa su capacidad o ninguno. Los cupos de un mixto son los esperados de cada
-    carrera en exclusiva (confirmado el 18 de noviembre de 2026); el de un grupo de una sola carrera, toda su capacidad.
+    carrera en exclusiva (confirmado el 17 de noviembre de 2026); el de un grupo de una sola carrera, toda su capacidad.
 --}}
 @php
     $fullIndexes = array_keys(array_filter($draft->slots, fn ($slot): bool => $slot->full));

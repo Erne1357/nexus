@@ -238,5 +238,10 @@ it('la bandeja y Paralelos son pestañas de la misma pantalla, con la modalidad 
         ->assertSeeHtml('data-testid="inbox-tabs"')
         ->assertSeeHtml('href="'.e(route('academic-load.inbox', $query)).'"');
 
+    Livewire::withQueryParams($query)->actingAs($this->jefe)->test('academic-load::pages.inbox')
+        ->call('openParallels', $this->world->subject->id, $this->world->campus->id)
+        ->assertSeeHtml('data-testid="parallels-arm-link"')
+        ->assertSeeHtml('href="'.e(route('scheduling.parallels', [...$query, 'campus' => 'C1', 'buscar' => 'ACF-0902'])).'"');
+
     expect(app(Navigation::class)->forRoute('scheduling.parallels')?->route)->toBe('academic-load.inbox');
 });

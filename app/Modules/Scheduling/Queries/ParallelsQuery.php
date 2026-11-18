@@ -19,6 +19,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Enums\ForecastMethod;
 use App\Modules\Demand\Rules\SuggestedGroups;
+use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
 use App\Modules\Scheduling\Events\GroupsCancelling;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
@@ -26,10 +27,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\GroupCapacity;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\ParallelPlacement;
-use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
-use Spatie\Activitylog\Models\Activity;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * Lecturas de la pestaña «Paralelos» de la bandeja (tarea 8.8, opción B; reglas-de-negocio.md, «Paralelos»): el jefe del

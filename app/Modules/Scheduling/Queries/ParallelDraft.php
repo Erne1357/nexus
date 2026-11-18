@@ -15,7 +15,7 @@ use App\Modules\Scheduling\Rules\QuotaRules;
  * - Los grupos van como los arma ParallelGroups::layout(): primero los completos de cada carrera, en el orden de las
  *   carreras, con el tamaño objetivo de esperados; luego los mixtos, en el orden de sus columnas, sin las vacías. En cada
  *   mixto, la carrera con más esperados primero (la dueña de uno nuevo, como en ArmParallelGroups).
- * - Cupos (confirmado el 18 de noviembre de 2026): en un mixto, cada carrera recibe sus esperados en exclusiva y lo demás
+ * - Cupos (confirmado el 17 de noviembre de 2026): en un mixto, cada carrera recibe sus esperados en exclusiva y lo demás
  *   queda libre; en un grupo de una sola carrera, su cupo es toda la capacidad (supuesto por confirmar, como ParallelSlot).
  *   La capacidad es la del grupo que se queda o la de uno nuevo (`ParallelSubject::$newCapacity`).
  * - `left`: por carrera, sus esperados que no quedan en ningún grupo (negativo si se le dieron de más).

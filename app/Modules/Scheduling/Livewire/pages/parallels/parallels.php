@@ -26,7 +26,7 @@ use Mary\Traits\Toast;
 
 /**
  * La pestaña «Paralelos» de la bandeja del departamento (tarea 8.8, maqueta B «Pestaña Paralelos», elegida por el usuario
- * el 18 de noviembre de 2026; DESIGN.md, «Paralelos»). Es una pantalla de Scheduling, porque AcademicLoad no puede llamar
+ * el 17 de noviembre de 2026; DESIGN.md, «Paralelos»). Es una pantalla de Scheduling, porque AcademicLoad no puede llamar
  * a Scheduling, que se presenta como la segunda pestaña de la bandeja: la misma modalidad (`?modalidad=`), el mismo
  * departamento (`?depto=`) y el mismo campus (`?campus=`, filtro) en la URL, y en el menú cuenta como la bandeja.
  *

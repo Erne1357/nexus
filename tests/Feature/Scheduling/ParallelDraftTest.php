@@ -191,6 +191,24 @@ it('lo que muestra es lo que la Action acepta aunque dos grupos de la carrera te
         ->and($large->fresh()->quotas()->pluck('max_seats')->all())->toBe([30]);
 });
 
+it('HC-07: la sugerencia de Nexus se arma tal cual aunque dos grupos de la carrera tengan 30 y 45 lugares', function () {
+    $isic = $this->world->request($this->isic, 70, 2);
+    $this->world->request($this->iind, 5, 1);
+    [$small] = $this->world->groupsOf($isic, 1, ['capacity' => 30]);
+    $this->world->groupsOf($isic, 1, ['capacity' => 45]);
+    $this->world->withTeacher($small);
+
+    $row = parallelDraftRow();
+
+    expect(array_filter($row->suggestion, fn ($slot): bool => $slot->over() > 0))->toBe([])
+        ->and($row->arrangeBlockedReason())->toBeNull()
+        ->and($row->short)->toBe([$this->isic->id => 10]);
+
+    parallelDraftArm(array_map(fn ($slot): array => $slot->quotas, $row->suggestion));
+
+    expect(parallelDraftRow()->arranged())->toBeTrue();
+});
+
 it('una materia armada se lee como está: sus completos y sus mixtos con sus cupos', function () {
     $this->world->request($this->isic, 60, 2);
     $this->world->request($this->iind, 40, 2);
@@ -202,4 +220,16 @@ it('una materia armada se lee como está: sus completos y sus mixtos con sus cup
         ->and($draft->mixed)->toBe([[$this->isic->id => 22, $this->iind->id => 8]])
         ->and($draft->cancelled)->toBe([])
         ->and($draft->isSuggestion())->toBeFalse();
+});
+
+it('una materia armada solo con completos y restos de una carrera cuenta como armada', function () {
+    $this->world->request($this->isic, 60, 2);
+    $this->world->request($this->iind, 40, 2);
+
+    expect(parallelDraftRow()->arranged())->toBeFalse();
+
+    parallelDraftArm([[$this->iind->id => 35], [$this->iind->id => 35], [$this->isic->id => 35], [$this->isic->id => 35]]);
+
+    expect(parallelDraftRow()->arranged())->toBeTrue()
+        ->and(ParallelDraft::current(parallelDraftRow())->full)->toBe([$this->iind->id => 2, $this->isic->id => 2]);
 });
