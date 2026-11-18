@@ -29,7 +29,7 @@ use Illuminate\Validation\ValidationException;
  * - sus cupos se quedan como estaban, de historia: un grupo cancelado no cuenta en ningún lado (supuesto por confirmar).
  *
  * Deja la bitácora `cancelled` con las sesiones que perdió y, después del commit, avisa con GroupCancelled y, si tenía
- * horario, con GroupScheduleChanged. Devuelve cuántas sesiones y minutos perdió.
+ * horario, con GroupScheduleChanged. Devuelve el grupo ya cancelado y cuántas sesiones y minutos perdió.
  */
 final class CancelGroup
 {
@@ -39,7 +39,7 @@ final class CancelGroup
     ) {}
 
     /**
-     * @return array{sessions: int, minutes: int}
+     * @return array{group: Group, sessions: int, minutes: int}
      *
      * @throws ValidationException
      */
@@ -79,7 +79,7 @@ final class CancelGroup
                 GroupScheduleChanged::dispatch($group);
             }
 
-            return ['sessions' => $sessions->count(), 'minutes' => (int) $sessions->sum('minutes')];
+            return ['group' => $group, 'sessions' => $sessions->count(), 'minutes' => (int) $sessions->sum('minutes')];
         }), 'group');
     }
 }

@@ -51,11 +51,13 @@ use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
+use App\Modules\Scheduling\Events\ParallelGroupsArranged;
 use App\Modules\Scheduling\Listeners\AssignCodeOnScheduleChange;
 use App\Modules\Scheduling\Listeners\BlockClosingWithPendingGroups;
 use App\Modules\Scheduling\Listeners\BlockStaffingWithHardConflicts;
 use App\Modules\Scheduling\Listeners\ConfirmGroupsOnLoadClosing;
 use App\Modules\Scheduling\Listeners\CreateGroupsOnPartAccepted;
+use App\Modules\Scheduling\Listeners\NotifyCareersOnParallelGroupsArranged;
 use App\Modules\Scheduling\Listeners\NotifyDeciderOnAgreementRequested;
 use App\Modules\Scheduling\Listeners\NotifyOwnerOnLoanCancelled;
 use App\Modules\Scheduling\Listeners\NotifyRequesterOnAgreementDecided;
@@ -65,6 +67,8 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
+use App\Modules\Scheduling\Policies\ParallelsPolicy;
+use App\Modules\Scheduling\Queries\Parallels;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Database\Eloquent\Builder;
@@ -81,6 +85,13 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
      * Lo que dispara el recálculo de choques: sesiones, docentes y grupos de Scheduling, salones y bloqueos de
      * Facilities, disponibilidad, horas externas y plazas de Faculty, y el perfil de una modalidad de Core.
      */
+    /**
+     * La pestaña «Paralelos» (Parallels) no es un modelo: su policy se registra a mano.
+     *
+     * @var array<class-string, class-string>
+     */
+    protected array $policies = [Parallels::class => ParallelsPolicy::class];
+
     private const array RECOMPUTE_ON = [
         GroupsCreated::class,
         GroupScheduleChanged::class,
@@ -128,6 +139,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         Event::listen(AgreementAccepted::class, NotifyRequesterOnAgreementDecided::class);
         Event::listen(AgreementRejected::class, NotifyRequesterOnAgreementDecided::class);
         Event::listen(AgreementCancelled::class, NotifyOwnerOnLoanCancelled::class);
+        Event::listen(ParallelGroupsArranged::class, NotifyCareersOnParallelGroupsArranged::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([RecomputeConflicts::class]);
@@ -165,7 +177,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     /**
      * Quienes ven la carga ven los horarios y el tablero, y el coordinador los de su carrera, de toda la modalidad
      * aunque el puesto tenga un campus (MS6; confirmado el 7 de noviembre de 2026). Crear grupos y editar sesiones es del coordinador de la carrera dueña y del jefe del
-     * departamento; asignar salón y repartir cupos, del jefe del departamento que imparte.
+     * departamento; asignar salón, repartir cupos y armar paralelos (tarea 8.8), del jefe del departamento que imparte.
      */
     /**
      * El parámetro de `settings` que lee Horarios (CF-S7): la tolerancia de las horas semanales de un grupo (HC-12), que usan
@@ -194,6 +206,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 SchedulingPermission::SessionEdit,
                 SchedulingPermission::RoomAssign,
                 SchedulingPermission::QuotaManage,
+                SchedulingPermission::ParallelsArrange,
             ],
             Role::JefeProyectoDocente->value => [
                 SchedulingPermission::ScheduleView,
