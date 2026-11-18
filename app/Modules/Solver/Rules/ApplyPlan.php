@@ -19,8 +19,8 @@ use App\Modules\Solver\Contract\SolverOutput;
  * - `write`: lo propuesto es distinto de lo de hoy y se escribe;
  * - `same`: lo propuesto es igual a lo de hoy y no se toca;
  * - `kept`: se queda como está, con sus motivos. Son los que el motor dejó sin acomodar (`unscheduled`, con sus motivos),
- *   los de una violación dura de acomodo (`hard_violations[].group_ids` de las reglas de PLACEMENT_RULES, con la regla y
- *   el mensaje; las demás son `inputProblems` y no retienen), los que no recibieron ninguna
+ *   los de una violación dura de acomodo (`hard_violations[].group_ids` que no son de INPUT_RULES, con la regla y
+ *   el mensaje; las de INPUT_RULES son `inputProblems` y no retienen), los que no recibieron ninguna
  *   sesión y los que chocarían con lo que se queda (supuesto por confirmar): si las sesiones nuevas de un grupo se
  *   empalman con las de su docente (HC-01) o de su salón (HC-02) en lo que no se mueve (las sesiones fijas de la
  *   entrada, la ocupación de docentes y salones fuera de la corrida y las de hoy de los grupos que se quedan) o con las
@@ -36,14 +36,13 @@ final readonly class ApplyPlan
     public const string KEPT = 'kept';
 
     /**
-     * Las reglas duras que dependen de dónde quedan las sesiones: HC-01 a HC-06 (empalme de docente, de salón y del
-     * alumno tipo, ventana, capacidad del salón, tipo de salón) y HC-09 a HC-12 (disponibilidad del docente, salón de
-     * otro departamento, salón bloqueado, horas semanales). Solo una violación de estas retiene un grupo: acomodarlo
-     * distinto la corrige. Las demás (HC-07 cupos, HC-08 horas del docente, HC-13 grupo ofertable) no dependen del
-     * acomodo: se escriben las sesiones y se reportan como `inputProblems` por corregir (supuesto por confirmar;
+     * Las reglas duras que NO dependen de dónde quedan las sesiones: HC-07 (cupos), HC-08 (horas del docente) y HC-13
+     * (grupo ofertable). No retienen al grupo: se escriben sus sesiones y la violación se reporta como `inputProblems`
+     * por corregir. Todo lo demás retiene (HC-01 a HC-06 y HC-09 a HC-12 dependen del acomodo) y también una regla
+     * desconocida, que es lo seguro: no se escribe una sesión con un choque que no conocemos (supuesto por confirmar;
      * acordado entre rieles el 18 de noviembre de 2026).
      */
-    public const array PLACEMENT_RULES = ['HC-01', 'HC-02', 'HC-03', 'HC-04', 'HC-05', 'HC-06', 'HC-09', 'HC-10', 'HC-11', 'HC-12'];
+    public const array INPUT_RULES = ['HC-07', 'HC-08', 'HC-13'];
 
     /**
      * @param  array<string, array{status: string, current: list<array{day: int, starts_at: string, ends_at: string, kind: string, room_id: ?string}>, proposed: list<array{day: int, starts_at: string, ends_at: string, kind: string, room_id: ?string}>, reasons: list<string>}>  $groups
@@ -68,7 +67,7 @@ final readonly class ApplyPlan
         $inputProblems = [];
 
         foreach ($output->hardViolations as $violation) {
-            if (! in_array($violation->rule, self::PLACEMENT_RULES, true)) {
+            if (in_array($violation->rule, self::INPUT_RULES, true)) {
                 $inputProblems[] = ['rule' => $violation->rule, 'group_ids' => array_values($violation->groupIds), 'message' => $violation->message];
 
                 continue;

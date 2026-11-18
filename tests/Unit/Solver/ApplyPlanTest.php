@@ -194,3 +194,12 @@ it('SV-06: un grupo con HC-08 y HC-02 se retiene solo por la de acomodo', functi
     expect($plan->kept())->toBe(['g-0001' => ['HC-02: Salón empalmado.']])
         ->and(array_column($plan->inputProblems, 'rule'))->toBe(['HC-08']);
 });
+
+it('SV-06: una violación dura de una regla desconocida (HC-99) retiene el grupo, que es lo seguro', function () {
+    $plan = ApplyPlan::of(planInput([planGroup('g-0001')]), planOutput(
+        ['g-0001' => [planSlot(1, '07:00', '09:00')]],
+        ['hard_violations' => [['rule' => 'HC-99', 'group_ids' => ['g-0001'], 'message' => 'Regla nueva.']]],
+    ));
+
+    expect($plan->kept())->toBe(['g-0001' => ['HC-99: Regla nueva.']])->and($plan->inputProblems)->toBe([]);
+});
