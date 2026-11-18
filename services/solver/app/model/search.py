@@ -116,13 +116,14 @@ def lns(
 
     pending = [(group_id, 0) for group_id in search.unplaced]
     while pending and time.perf_counter() < deadline:
-        target, level = pending.pop(0)
-        movable = _neighbourhood(data, search, target, level)
+        target, attempt = pending.pop(0)
+        movable = _neighbourhood(data, search, target, min(attempt, MAX_LEVEL))
         sub = ModelData.of(_sub_input(data.source, search, set(movable)))
         before = sum(group in search.sessions for group in movable)
-        step_deadline = min(deadline, time.perf_counter() + step_seconds)
+        # Cada intento, más tiempo y otra semilla: el vecindario grande no siempre se resuelve en el primero.
+        step_deadline = min(deadline, time.perf_counter() + step_seconds * (attempt + 1))
         options = DomainOptions(extra_tiers=movable, long_window_rooms=LONG_WINDOW_ROOMS)
-        variables, solved = _place_most(sub, options, search, step_deadline, workers, seed)
+        variables, solved = _place_most(sub, options, search, step_deadline, workers, seed + attempt)
         placed = (
             0
             if solved is None
@@ -130,8 +131,8 @@ def lns(
         )
         if solved is not None and placed > before:
             _keep(search, solved, variables, sub, replace=False)
-        elif level < MAX_LEVEL:
-            pending.append((target, level + 1))
+        elif attempt < MAX_ATTEMPTS:
+            pending.append((target, attempt + 1))
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
     if not search.unplaced:
         search.first_feasible_seconds = time.perf_counter() - started
@@ -141,6 +142,9 @@ def lns(
 
 #: Cuántas veces se agranda el vecindario de un grupo que no se pudo programar.
 MAX_LEVEL = 2
+
+#: Cuántas veces se vuelve a intentar un grupo: las de más son con el vecindario más grande, más tiempo y otra semilla.
+MAX_ATTEMPTS = 5
 
 #: Todos los niveles del patrón (`DomainOptions.extra_tiers`).
 ALL_TIERS = 99
