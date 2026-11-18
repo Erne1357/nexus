@@ -182,11 +182,11 @@ final readonly class LoadClosing
     }
 
     /**
-     * Lista para cerrar: en asignación, con grupos y sin nada que falte (sin grupos, headline() lo dice).
+     * Lista para cerrar: en asignación o en re-análisis, con grupos y sin nada que falte (sin grupos, headline() lo dice).
      */
     public function isReady(): bool
     {
-        return $this->load->status === LoadStatus::Staffing && $this->activeGroups > 0 && $this->blockers !== null && $this->missing() === 0;
+        return in_array($this->load->status, [LoadStatus::Staffing, LoadStatus::Reanalysis], true) && $this->activeGroups > 0 && $this->blockers !== null && $this->missing() === 0;
     }
 
     /**
@@ -271,7 +271,9 @@ final readonly class LoadClosing
             LoadStatus::Closed => ['tone' => 'success', 'icon' => 'o-lock-closed', 'title' => "Cerrada{$on}", 'detail' => $by.($load->modality->profile->requiresSubdireccionApproval ? 'espera el visto bueno de Subdirección' : 'falta publicarla')],
             LoadStatus::Approved => ['tone' => 'success', 'icon' => 'o-check-badge', 'title' => "Con visto bueno{$on}", 'detail' => "{$by}falta publicarla"],
             LoadStatus::Published => ['tone' => 'success', 'icon' => 'o-check-circle', 'title' => self::statusLabel($load).$on, 'detail' => $reached === null ? 'Ya se consulta y se exporta.' : "Por {$reached['by']}"],
-            LoadStatus::Reanalysis => ['tone' => 'warning', 'icon' => 'o-arrow-path', 'title' => 'En re-análisis', 'detail' => 'Al terminar se publica otra versión.'],
+            LoadStatus::Reanalysis => $missing > 0
+                ? ['tone' => $this->hasHardConflicts() ? 'error' : 'warning', 'icon' => $this->hasHardConflicts() ? 'o-x-circle' : 'o-arrow-path', 'title' => 'En re-análisis · '.mb_strtolower($this->missingLabel()), 'detail' => $this->shortList()]
+                : ['tone' => 'warning', 'icon' => 'o-arrow-path', 'title' => 'En re-análisis', 'detail' => 'Se ajusta, se cierra y se publica otra versión; mientras tanto sigue vigente la anterior.'],
         };
     }
 
@@ -336,7 +338,7 @@ final readonly class LoadClosing
     }
 
     /**
-     * El título de un paso del historial: «Cerrada», «Reabierta», «Volvió a Asignación», «Pasó a Ajustes»…
+     * El título de un paso del historial: «Cerrada», «Reabierta», «Volvió a Asignación», «Re-análisis cancelado», «Pasó a Ajustes»…
      *
      * @param  array{from: LoadStatus, to: LoadStatus, by: string, at: CarbonImmutable, comment: ?string}  $entry
      */
@@ -345,6 +347,7 @@ final readonly class LoadClosing
         return match (true) {
             $entry['to'] === LoadStatus::Closed => 'Cerrada',
             $entry['to'] === LoadStatus::Approved => 'Visto bueno de Subdirección',
+            $entry['to'] === LoadStatus::Published && $entry['from'] === LoadStatus::Reanalysis => 'Re-análisis cancelado',
             $entry['to'] === LoadStatus::Published => 'Publicada',
             $entry['to'] === LoadStatus::Adjusting && in_array($entry['from'], [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published], true) => 'Reabierta',
             $entry['to'] === LoadStatus::Staffing && $entry['from'] === LoadStatus::Adjusting => 'Volvió a Asignación',
@@ -353,7 +356,7 @@ final readonly class LoadClosing
     }
 
     /**
-     * El tono del punto de un paso del historial: success al cerrar, aprobar o publicar; warning al reabrir; neutral lo
+     * El tono del punto de un paso del historial: success al cerrar, aprobar o publicar (cancelar un re-análisis es neutral); warning al reabrir; neutral lo
      * demás.
      *
      * @param  array{from: LoadStatus, to: LoadStatus, by: string, at: CarbonImmutable, comment: ?string}  $entry
@@ -361,6 +364,7 @@ final readonly class LoadClosing
     public static function stepTone(array $entry): string
     {
         return match (true) {
+            $entry['to'] === LoadStatus::Published && $entry['from'] === LoadStatus::Reanalysis => 'neutral',
             in_array($entry['to'], [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published], true) => 'success',
             $entry['to'] === LoadStatus::Adjusting && in_array($entry['from'], [LoadStatus::Closed, LoadStatus::Approved, LoadStatus::Published], true) => 'warning',
             default => 'neutral',

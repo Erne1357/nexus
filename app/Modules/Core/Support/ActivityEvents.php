@@ -59,6 +59,7 @@ final class ActivityEvents
         'failed-job-forgotten' => 'Trabajo descartado',
         'groups_confirmed' => 'Grupos confirmados',
         'quotas_updated' => 'Cupos',
+        'capacity_updated' => 'Capacidad del grupo',
         'session_placed' => 'Sesión acomodada',
         'session_updated' => 'Sesión cambiada',
         'session_removed' => 'Sesión quitada',
@@ -72,6 +73,7 @@ final class ActivityEvents
         'launched' => 'Lanzado',
         'cancel_requested' => 'Cancelación pedida',
         'discarded' => 'Descartado',
+        'impact_assessed' => 'Impacto calculado',
     ];
 
     public static function knows(string $event): bool

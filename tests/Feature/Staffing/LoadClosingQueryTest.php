@@ -183,6 +183,30 @@ it('una carga publicada o en borrador no calcula lo que falta', function (LoadSt
         ->and($closing->isReady())->toBeFalse();
 })->with([LoadStatus::Draft, LoadStatus::Published]);
 
+it('RA-01: una carga en re-análisis calcula lo que falta como en asignación', function () {
+    $this->world->load->update(['status' => LoadStatus::Reanalysis]);
+    $this->world->group();
+    $this->world->group(teacher: false);
+
+    $closing = loadClosingOf();
+
+    expect($closing->blockers)->not->toBeNull()
+        ->and(loadClosingCounts($closing)['teacher'])->toBe(1)
+        ->and($closing->missing())->toBe(1)
+        ->and($closing->isReady())->toBeFalse()
+        ->and($closing->headline()['title'])->toBe('En re-análisis · falta 1 grupo');
+});
+
+it('RA-01: una carga completa en re-análisis está lista para cerrar', function () {
+    $this->world->load->update(['status' => LoadStatus::Reanalysis]);
+    $this->world->group();
+
+    $closing = loadClosingOf();
+
+    expect($closing->isReady())->toBeTrue()
+        ->and($closing->headline()['title'])->toBe('En re-análisis');
+});
+
 it('cuenta solo los grupos activos de la carga', function () {
     $this->world->group();
     $this->world->group(['status' => 'cancelled']);
@@ -205,6 +229,18 @@ it('da el historial con nombres, del más reciente al más antiguo', function ()
         'Cerrada · Laura Ramos',
         'Pasó a Asignación · Laura Ramos',
     ])->and($history[0]['comment'])->toBe('Falta el grupo vespertino');
+});
+
+it('RA-10: cancelar un re-análisis se rotula «Re-análisis cancelado» en el historial, no «Publicada», y sin tono de éxito', function () {
+    $jefe = $this->world->head();
+    $this->world->transition(LoadStatus::Closed, LoadStatus::Published, $jefe, at: now()->subDays(2));
+    $this->world->transition(LoadStatus::Published, LoadStatus::Reanalysis, $jefe, at: now()->subDay());
+    $this->world->transition(LoadStatus::Reanalysis, LoadStatus::Published, $jefe, 'Re-análisis cancelado sin cambios', now());
+
+    $history = loadClosingOf()->history;
+
+    expect(array_map(fn (array $entry): string => LoadClosing::stepTitle($entry), $history))->toBe(['Re-análisis cancelado', 'Pasó a Re-análisis', 'Publicada'])
+        ->and(array_map(fn (array $entry): string => LoadClosing::stepTone($entry), $history))->toBe(['neutral', 'neutral', 'success']);
 });
 
 it('da las cargas del departamento con grupos, una por modalidad con los grupos de todos sus campus, y deja fuera la que no tiene grupos (M1)', function () {

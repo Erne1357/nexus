@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Models;
 
 use App\Modules\AcademicLoad\Database\Factories\LoadSnapshotFactory;
+use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\Core\Models\User;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
@@ -16,9 +17,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Una versión publicada de una carga: la foto que leen la consulta publicada y los exportes. Inmutable (HC-18). La
  * forma del `payload` la fija `Rules\SnapshotPayload` y la documenta docs/dominio/modelo-de-datos.md («Contenido del
- * snapshot»).
+ * snapshot»). Desde la tarea 8.4 lleva también lo que cambió contra la versión anterior (`diff`, forma en
+ * `Rules\SnapshotDiff`; nulo en la versión 1) y de dónde salió (`reason`); los dos se escriben al crearla y son nulos en
+ * las versiones de antes.
  */
-#[Fillable(['academic_load_id', 'version', 'payload', 'created_by'])]
+#[Fillable(['academic_load_id', 'version', 'payload', 'diff', 'reason', 'created_by'])]
 #[UseFactory(LoadSnapshotFactory::class)]
 class LoadSnapshot extends Model
 {
@@ -35,6 +38,8 @@ class LoadSnapshot extends Model
         return [
             'version' => 'integer',
             'payload' => 'array',
+            'diff' => 'array',
+            'reason' => SnapshotReason::class,
             'created_at' => 'immutable_datetime',
         ];
     }
