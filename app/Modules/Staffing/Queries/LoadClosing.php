@@ -271,7 +271,7 @@ final readonly class LoadClosing
             LoadStatus::Closed => ['tone' => 'success', 'icon' => 'o-lock-closed', 'title' => "Cerrada{$on}", 'detail' => $by.($load->modality->profile->requiresSubdireccionApproval ? 'espera el visto bueno de Subdirección' : 'falta publicarla')],
             LoadStatus::Approved => ['tone' => 'success', 'icon' => 'o-check-badge', 'title' => "Con visto bueno{$on}", 'detail' => "{$by}falta publicarla"],
             LoadStatus::Published => ['tone' => 'success', 'icon' => 'o-check-circle', 'title' => self::statusLabel($load).$on, 'detail' => $reached === null ? 'Ya se consulta y se exporta.' : "Por {$reached['by']}"],
-            LoadStatus::Reanalysis => ['tone' => 'warning', 'icon' => 'o-arrow-path', 'title' => 'En re-análisis', 'detail' => 'Al terminar se publica otra versión.'],
+            LoadStatus::Reanalysis => ['tone' => 'warning', 'icon' => 'o-arrow-path', 'title' => 'En re-análisis', 'detail' => 'Se ajusta, se cierra y se publica otra versión; mientras tanto sigue vigente la anterior.'],
         };
     }
 

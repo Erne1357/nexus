@@ -131,7 +131,7 @@ trait ClosesLoads
             return;
         }
 
-        $this->warning('Carga reabierta', e("{$load->department->code} en {$load->modality->name} regresó a Ajustes."));
+        $this->warning('Carga reabierta', e("{$load->department->code} en {$load->modality->name} regresó a {$load->fresh()->status->label()}."));
     }
 
     public function returnToStaffing(LoadClosingQuery $query, ReturnToStaffing $action): void

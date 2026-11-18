@@ -25,6 +25,7 @@ enum AcademicLoadPermission: string implements Permission
     case LoadStartStaffing = 'academic_load.load.start_staffing';
     case LoadClose = 'academic_load.load.close';
     case LoadReopen = 'academic_load.load.reopen';
+    case LoadStartReanalysis = 'academic_load.load.start_reanalysis';
     case LoadApprove = 'academic_load.load.approve';
     case LoadExport = 'academic_load.load.export';
     case LoadPublish = 'academic_load.load.publish';
@@ -50,6 +51,7 @@ enum AcademicLoadPermission: string implements Permission
             self::LoadStartStaffing => 'Pasar la carga a asignación docente',
             self::LoadClose => 'Cerrar la carga de un departamento',
             self::LoadReopen => 'Reabrir una carga cerrada, aprobada o publicada',
+            self::LoadStartReanalysis => 'Iniciar el re-análisis de una carga publicada',
             self::LoadApprove => 'Dar el visto bueno a una carga cerrada',
             self::LoadExport => 'Descargar el PDF por departamento y el Excel de lo publicado',
             self::LoadPublish => 'Publicar la carga cerrada de una modalidad sin visto bueno',
@@ -76,7 +78,7 @@ enum AcademicLoadPermission: string implements Permission
         return match ($this) {
             self::AgreementRequest => [Dimension::Modality, Dimension::Campus, Dimension::Unit],
             self::ProposalUpdate => [Dimension::Modality, Dimension::Career, Dimension::Campus],
-            self::AgreementView, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
+            self::AgreementView, self::AgreementDecide, self::LoadView, self::LoadPropose, self::LoadStartStaffing, self::LoadClose, self::LoadReopen, self::LoadStartReanalysis, self::LoadApprove, self::LoadPublish, self::LoadPublishApproved, self::LoadExport, self::LoadExportSii, self::ProposalReviewView, self::ProposalReviewDecide => [Dimension::Modality, Dimension::Unit],
             self::ForecastEvaluationView, self::ForecastEvaluationRun => [],
             self::ProposalCreate, self::ProposalSubmit, self::ProposalView => [Dimension::Modality, Dimension::Career],
         };

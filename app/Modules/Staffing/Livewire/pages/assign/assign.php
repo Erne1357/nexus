@@ -416,7 +416,7 @@ new #[Title('Asignación docente')] class extends Component
             ? ($selected === null ? [] : [$selected->group->id])
             : array_values(array_intersect($this->expanded, $visibleIds));
         $load = $board->load;
-        $assignable = $load !== null && in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true);
+        $assignable = $load !== null && $load->status->acceptsTeacherAssignment();
         $campusCounts = $counts->of((string) $this->termId, (string) $this->modalityId, $this->departmentId);
         $writable = $assignable ? $this->assignableCampuses($scope['campusOptions']) : [];
         $canAssign = $writable !== [];
@@ -571,7 +571,7 @@ new #[Title('Asignación docente')] class extends Component
 
         $load = $query->load((string) $this->termId, (string) $this->modalityId, $this->departmentId);
 
-        if (in_array($load?->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) && $query->hasGroupWithoutTeacher((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->campusId)) {
+        if (($load?->status->acceptsTeacherAssignment() ?? false) && $query->hasGroupWithoutTeacher((string) $this->termId, (string) $this->modalityId, $this->departmentId, $this->campusId)) {
             $this->state = 'sin';
         }
     }
@@ -797,7 +797,7 @@ new #[Title('Asignación docente')] class extends Component
             $load === null => "{$board->department->code} no tiene carga en {$board->modality->name} para este periodo.",
             $load->status === LoadStatus::Proposed => 'La carga está en Propuesta. Los docentes se asignan cuando pasa a Asignación.',
             $load->status === LoadStatus::Draft => 'La carga está en Borrador: los docentes se asignan cuando pasa a Asignación.',
-            in_array($load->status, [LoadStatus::Staffing, LoadStatus::Adjusting], true) => null,
+            $load->status->acceptsTeacherAssignment() => null,
             default => "La carga está en {$load->status->label()}: ya no se asignan docentes.",
         };
     }

@@ -119,13 +119,13 @@ it('coloca la sesión sin salón, con el periodo y el campus del grupo, y la dev
         ->campus_id->toBe($this->campus->id);
 });
 
-it('acepta la carga en propuesta, asignación o ajustes', function (LoadStatus $status) {
+it('acepta la carga en propuesta, asignación, ajustes o re-análisis (tarea 8.1)', function (LoadStatus $status) {
     $this->load->update(['status' => $status]);
 
     placeSession($this->group, 1, '07:00', '08:00');
 
     expect($this->group->sessions()->count())->toBe(1);
-})->with([LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting]);
+})->with([LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis]);
 
 it('rechaza con la carga en cualquier otro estado, sin escribir', function (LoadStatus $status, string $label) {
     $this->load->update(['status' => $status]);
@@ -140,7 +140,6 @@ it('rechaza con la carga en cualquier otro estado, sin escribir', function (Load
     'cerrada' => [LoadStatus::Closed, 'cerrada'],
     'aprobada' => [LoadStatus::Approved, 'aprobada'],
     'publicada' => [LoadStatus::Published, 'publicada'],
-    're-análisis' => [LoadStatus::Reanalysis, 're-análisis'],
 ]);
 
 it('rechaza si el departamento no tiene carga en el campus y el periodo', function () {
