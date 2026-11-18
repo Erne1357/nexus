@@ -45,11 +45,19 @@ class RuleModel:
     add: AddRule | None = None
 
 
-def add_assignment(model: cp_model.CpModel, variables: Variables) -> None:
+def add_assignment(model: cp_model.CpModel, variables: Variables, relaxed: bool = False) -> None:
     """Cada grupo movible toma exactamente una opción: se programa completo, con sus horas (HC-12). Un grupo sin
-    opciones vuelve infactible el modelo duro (`Variables.unplaceable` dice cuáles)."""
+    opciones vuelve infactible el modelo duro (`Variables.unplaceable` dice cuáles).
+
+    Con `relaxed`, a lo más una: un grupo puede quedar sin programar (completo o nada, nunca a medias) y quien arma el
+    modelo maximiza los programados. Un grupo sin opciones no agrega nada."""
     for domain in variables.groups.values():
-        model.add_exactly_one([option.literal for option in domain.options])
+        literals = [option.literal for option in domain.options]
+        if relaxed:
+            if literals:
+                model.add_at_most_one(literals)
+        else:
+            model.add_exactly_one(literals)
 
 
 def add_hc01(model: cp_model.CpModel, variables: Variables, data: ModelData) -> None:
@@ -162,9 +170,9 @@ RULES: dict[str, RuleModel] = {
 }
 
 
-def add_hard_constraints(model: cp_model.CpModel, variables: Variables, data: ModelData) -> None:
-    """La asignación y las restricciones de las reglas activas de la entrada."""
-    add_assignment(model, variables)
+def add_hard_constraints(model: cp_model.CpModel, variables: Variables, data: ModelData, relaxed: bool = False) -> None:
+    """La asignación (exacta, o a lo más una con `relaxed`) y las restricciones de las reglas activas de la entrada."""
+    add_assignment(model, variables, relaxed)
     for rule in HARD_RULES:
         add = RULES[rule].add
         if add is not None and data.active(rule):

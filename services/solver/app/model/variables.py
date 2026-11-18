@@ -31,7 +31,7 @@ Para que quepa la carga de un departamento (`DomainOptions`, por omisión):
 import time
 from bisect import bisect_right
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
@@ -57,6 +57,9 @@ class DomainOptions:
     pool_rooms: bool = True
     #: Todos los niveles del patrón; si no, cada grupo hasta el primer nivel donde alguna opción cabe.
     all_tiers: bool = False
+    #: Niveles de más, por grupo, después del primero donde alguna opción cabe (la segunda vuelta de los que no
+    #: quedaron; PS-04).
+    extra_tiers: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(eq=False, slots=True)
@@ -388,11 +391,15 @@ def _domain(
     # Los niveles siguen de una cantidad de unidades a la otra: el patrón de las horas más cercanas va antes que el de
     # las otras.
     first_tier = 0
+    first_with_options: int | None = None
+    extra = variables.options.extra_tiers.get(group.id, 0)
     for units in unit_counts(group, grid, data):
         practice = practice_units(group, grid, units) if lab_practice else 0
         unit_tiers = tiers(units, grid.days)
         for tier, spreads in enumerate(unit_tiers, start=first_tier):
-            if domain.options and not variables.options.all_tiers:
+            if first_with_options is None and domain.options:
+                first_with_options = tier - 1
+            if not variables.options.all_tiers and first_with_options is not None and tier > first_with_options + extra:
                 domain.truncated = True
                 break
             for spread in spreads:
