@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
@@ -387,7 +388,7 @@ it('MN-01: el admin ve Académico por etapas y Administración por propósito', 
         'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Precisión de la proyección'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
-        'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Horarios publicados'],
+        'cierre_publicacion' => ['Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Horarios publicados'],
     ])
         ->and(navigationGroupsFor($admin, NavigationArea::Administracion))->toBe([
             'institucion' => ['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos'],
@@ -485,11 +486,13 @@ function menuRowsIn(HTMLDocument $page, string $area): array
 
 describe('menú', function () {
     beforeEach(function () {
-        // Validación abierta y carga en curso (MN-03 y MN-04): así el menú depende solo del permiso de cada puesto y
-        // no lleva la insignia «Oculta»; lo oculto para los demás lo prueba MenuHiddenMarkTest.
+        // Validación abierta, carga en curso y otra ya publicada (MN-03, MN-04 y la de «Re-análisis de la carga»): así el
+        // menú depende solo del permiso de cada puesto y no lleva la insignia «Oculta»; lo oculto para los demás lo prueba
+        // MenuHiddenMarkTest.
         $term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
         CatalogReview::factory()->for($term)->create();
         AcademicLoad::factory()->for($term)->create();
+        AcademicLoad::factory()->for($term)->inStatus(LoadStatus::Published)->create(['current_version' => 1]);
     });
 
     it('muestra al coordinador sus entradas con su enlace, y no las del admin', function () {
@@ -498,7 +501,7 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
+        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
@@ -616,7 +619,7 @@ describe('menú', function () {
             'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Precisión de la proyección',
             'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos',
             'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
-            'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Horarios publicados',
+            'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Horarios publicados',
         ])
             ->and(array_map(fn (Element $heading): string => $heading->getAttribute('data-menu-group'), iterator_to_array($page->querySelectorAll('[data-menu-area="administracion"] [data-menu-group]'))))
             ->toBe(['institucion', 'catalogos', 'datos', 'configuracion'])
@@ -629,7 +632,7 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation'));
 
         expect($page->querySelector('#nexus-menu [data-menu-group]'))->toBeNull()
-            ->and(menuRowsIn($page, 'academico'))->toBe(['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Horarios publicados']);
+            ->and(menuRowsIn($page, 'academico'))->toBe(['Propuesta de carrera', 'Horarios', 'Choques y avance', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados']);
     });
 
     it('marca la entrada de la pantalla actual con aria-current y solo a ella', function () {

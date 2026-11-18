@@ -28,6 +28,14 @@ final class ReanalysisAvailable extends LoadClosingNotification
         return 'o-arrow-path';
     }
 
+    /**
+     * El aviso lleva a la pantalla del re-análisis, donde el jefe ve el avance de las calificaciones y lo inicia.
+     */
+    protected function route(): string
+    {
+        return 'scheduling.reanalysis';
+    }
+
     protected function tone(): string
     {
         return 'warning';

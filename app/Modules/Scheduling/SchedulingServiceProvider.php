@@ -65,6 +65,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
+use App\Modules\Scheduling\Queries\ReanalysisLoadsQuery;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use Illuminate\Database\Eloquent\Builder;
@@ -136,6 +137,8 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
     /**
      * «Horarios», el editor de horarios (tarea 3.5), y «Choques y avance», el tablero (3.4), para quien ve los horarios.
+     * «Re-análisis de la carga» (tarea 8.2, pantalla) en «Cierre y publicación», para quien ve la carga o la propuesta de
+     * una carrera (RA-07), mientras el periodo tenga alguna carga publicada (ReanalysisLoadsQuery::menuCondition).
      *
      * @return list<NavigationItem>
      */
@@ -151,6 +154,10 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
             new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
+            // Después de «Cierre de la carga» y «Avance del cierre» (Staffing, orden 0) y antes de «Horarios publicados» (orden 2).
+            new NavigationItem('Re-análisis de la carga', 'scheduling.reanalysis', 'o-arrow-path', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
+                whyUnavailable: ReanalysisLoadsQuery::menuCondition(),
+                visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
     }
 

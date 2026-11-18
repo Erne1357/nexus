@@ -35,4 +35,28 @@ enum DemandBalance: string
             self::Adjusted => StatusTone::Success,
         };
     }
+
+    /**
+     * El icono de su insignia y de su filtro (el color nunca va solo): lo que falta sube, lo que sobra baja.
+     */
+    public function icon(): string
+    {
+        return match ($this) {
+            self::Shortfall => 'o-arrow-trending-up',
+            self::Surplus => 'o-arrow-trending-down',
+            self::Adjusted => 'o-check-circle',
+        };
+    }
+
+    /**
+     * En plural, para los filtros del re-análisis («Faltantes 9»).
+     */
+    public function plural(): string
+    {
+        return match ($this) {
+            self::Shortfall => 'Faltantes',
+            self::Surplus => 'Sobrantes',
+            self::Adjusted => 'Ajustadas',
+        };
+    }
 }
