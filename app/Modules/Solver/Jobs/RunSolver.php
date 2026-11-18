@@ -14,6 +14,7 @@ use App\Modules\Solver\Support\RunPayloads;
 use Closure;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -22,15 +23,20 @@ use Throwable;
  *
  * - Solo corre una corrida que sigue en cola, y la toma con una actualización condicional a `running`: un job repetido
  *   o el de una corrida cancelada no hace nada.
- * - Lee la entrada (RunPayloads), llama al motor de la corrida y le pasa un aviso de avance que guarda `progress` y
- *   `best_score` a lo más una vez por PROGRESS_INTERVAL_MS. En esa misma revisión, si se pidió cancelar (SV-03), lanza
- *   SolverRunCancelled, que corta al motor y deja la corrida cancelada, sin salida y sin aviso. Si el motor termina antes
- *   de notar la cancelación, la corrida queda terminada con su salida (supuesto por confirmar).
+ * - Lee la entrada (RunPayloads), llama al motor de la corrida y le pasa un aviso de avance que, a lo más una vez por
+ *   PROGRESS_INTERVAL_MS y en una sola consulta, guarda `progress` y `best_score` y lee `cancel_requested_at`. Si se
+ *   pidió cancelar (SV-03), o si la corrida ya no está corriendo (se dio por perdida), lanza SolverRunCancelled para
+ *   cortar al motor.
+ * - Si el motor lanza cualquier excepción y se pidió cancelar, la corrida queda cancelada, sin salida y sin aviso: así
+ *   un motor que envuelve el aviso en su propio `catch` no convierte la cancelación en una falla. Si el motor termina
+ *   antes de notar la cancelación, la corrida queda terminada con su salida (supuesto por confirmar).
  * - Al terminar guarda la salida, validada contra el contrato, en la fila o en archivo; las métricas del motor con un
  *   resumen (`result`, `sessions`, `changed_sessions`, `unscheduled`, `hard_violations`, `soft_score`) para la
  *   pantalla y el aviso sin leer la salida, y la deja terminada aunque el motor diga `partial` o `infeasible`: la
  *   pantalla decide qué mostrar. Si el motor responde `error`, queda fallida con su salida y el primer renglón del log.
- * - Si algo lanza, failed() la deja fallida con el mensaje, sin la traza.
+ *   Ese guardado revisa la fila bloqueada: si la corrida ya no está corriendo (LaunchSolverRun o failed() la dieron por
+ *   perdida, o se canceló), no la pisa, borra el archivo de salida y no avisa.
+ * - Si algo lanza, failed() deja fallida, con el mensaje y sin la traza, la corrida que siga en curso.
  * - Terminada o fallida, avisa en la campana a quien la lanzó (SolverRunFinished).
  *
  * Un solo intento: si falla, se vuelve a lanzar. `timeout` es el límite de la corrida más TIMEOUT_MARGIN, por debajo
@@ -43,6 +49,12 @@ final class RunSolver implements ShouldQueue
     public const int TIMEOUT_MARGIN = 60;
 
     public const int PROGRESS_INTERVAL_MS = 1000;
+
+    /**
+     * Una corrida en curso que no se movió en este tiempo se da por perdida (SV-01 y SV-03): el doble del límite más
+     * largo, y ningún job pasa de ese límite más TIMEOUT_MARGIN.
+     */
+    public const int STALE_AFTER = 2 * LaunchSolverRun::MAX_TIME_LIMIT;
 
     public int $tries = 1;
 
@@ -71,29 +83,34 @@ final class RunSolver implements ShouldQueue
 
         try {
             $output = $engine->solve(RunPayloads::input($run), $this->progress($run->getKey()));
-        } catch (SolverRunCancelled) {
-            SolverRun::query()
-                ->whereKey($run->getKey())
-                ->where('status', SolverRunStatus::Running)
-                ->update(['status' => SolverRunStatus::Cancelled, 'finished_at' => now()]);
+        } catch (Throwable $exception) {
+            if ($exception instanceof SolverRunCancelled || $this->cancelRequested()) {
+                $this->markCancelled();
+
+                return;
+            }
+
+            throw $exception;
+        }
+
+        $output = SolverOutput::fromArray($output->toArray());
+        $stored = RunPayloads::attributes($this->runId, 'output', $output->toArray());
+
+        try {
+            $finished = $this->finish($output, $stored);
+        } catch (Throwable $exception) {
+            RunPayloads::discard($stored);
+
+            throw $exception;
+        }
+
+        if ($finished === null) {
+            RunPayloads::discard($stored);
 
             return;
         }
 
-        $output = SolverOutput::fromArray($output->toArray());
-        $failed = $output->status === RunStatus::Error;
-
-        $run->refresh()->forceFill([
-            ...RunPayloads::attributes($run->getKey(), 'output', $output->toArray()),
-            'metrics' => $this->metrics($output),
-            'status' => $failed ? SolverRunStatus::Failed : SolverRunStatus::Done,
-            'error' => $failed ? Str::limit($output->log[0] ?? 'El motor terminó con error.', 1000) : null,
-            'progress' => 100,
-            'best_score' => $output->softScore->total,
-            'finished_at' => now(),
-        ])->save();
-
-        $run->creator?->notify(new SolverRunFinished($run));
+        $finished->creator?->notify(new SolverRunFinished($finished));
     }
 
     /**
@@ -102,49 +119,97 @@ final class RunSolver implements ShouldQueue
      */
     public function failed(?Throwable $exception): void
     {
-        $run = SolverRun::query()->whereKey($this->runId)->first();
-
-        if ($run === null || ! $run->status->isInProgress()) {
-            return;
-        }
-
         $message = trim((string) $exception?->getMessage());
 
-        $run->forceFill([
-            'status' => SolverRunStatus::Failed,
-            'finished_at' => now(),
-            'error' => Str::limit($message === '' ? 'La corrida no terminó.' : $message, 1000),
-        ])->save();
+        $changed = SolverRun::query()
+            ->whereKey($this->runId)
+            ->whereIn('status', [SolverRunStatus::Queued, SolverRunStatus::Running])
+            ->update([
+                'status' => SolverRunStatus::Failed,
+                'finished_at' => now(),
+                'error' => Str::limit($message === '' ? 'La corrida no terminó.' : $message, 1000),
+            ]);
 
-        $run->creator?->notify(new SolverRunFinished($run));
+        if ($changed === 1) {
+            $run = SolverRun::query()->findOrFail($this->runId);
+            $run->creator?->notify(new SolverRunFinished($run));
+        }
     }
 
     /**
-     * El aviso de avance para el motor: guarda el avance (de 0 a 100) y el mejor puntaje, si lo trae, y revisa si se
-     * pidió cancelar, a lo más una vez por PROGRESS_INTERVAL_MS.
+     * Guarda la salida si la corrida sigue corriendo, con la fila bloqueada; si no, no toca nada y devuelve null.
+     *
+     * @param  array<string, mixed>  $stored  las columnas de la salida (RunPayloads::attributes)
+     */
+    private function finish(SolverOutput $output, array $stored): ?SolverRun
+    {
+        $failed = $output->status === RunStatus::Error;
+
+        return DB::transaction(function () use ($output, $stored, $failed): ?SolverRun {
+            $run = SolverRun::query()->lockForUpdate()->find($this->runId);
+
+            if ($run?->status !== SolverRunStatus::Running) {
+                return null;
+            }
+
+            $run->forceFill([
+                ...$stored,
+                'metrics' => $this->metrics($output),
+                'status' => $failed ? SolverRunStatus::Failed : SolverRunStatus::Done,
+                'error' => $failed ? Str::limit($output->log[0] ?? 'El motor terminó con error.', 1000) : null,
+                'progress' => 100,
+                'best_score' => $output->softScore->total,
+                'finished_at' => now(),
+            ])->save();
+
+            return $run;
+        });
+    }
+
+    private function cancelRequested(): bool
+    {
+        return SolverRun::query()->whereKey($this->runId)->whereNotNull('cancel_requested_at')->exists();
+    }
+
+    /**
+     * SV-03: la corrida que sigue corriendo queda cancelada; una que ya no corre no se toca.
+     */
+    private function markCancelled(): void
+    {
+        SolverRun::query()
+            ->whereKey($this->runId)
+            ->where('status', SolverRunStatus::Running)
+            ->update(['status' => SolverRunStatus::Cancelled, 'finished_at' => now()]);
+    }
+
+    /**
+     * El aviso de avance para el motor: a lo más una vez por PROGRESS_INTERVAL_MS, guarda el avance (de 0 a 100) y el
+     * mejor puntaje, si lo trae, y lee si se pidió cancelar, todo en una consulta. Corta al motor si se pidió cancelar o
+     * si la corrida ya no está corriendo.
      *
      * @return Closure(int, ?int): void
      */
     private function progress(string $runId): Closure
     {
         $lastCheck = null;
+        $table = (new SolverRun)->getTable();
 
-        return function (int $percent, ?int $bestScore) use ($runId, &$lastCheck): void {
-            $now = now()->getTimestampMs();
+        return function (int $percent, ?int $bestScore) use ($runId, $table, &$lastCheck): void {
+            $now = now();
 
-            if ($lastCheck !== null && $now - $lastCheck < self::PROGRESS_INTERVAL_MS) {
+            if ($lastCheck !== null && $now->getTimestampMs() - $lastCheck < self::PROGRESS_INTERVAL_MS) {
                 return;
             }
 
-            $lastCheck = $now;
+            $lastCheck = $now->getTimestampMs();
 
-            SolverRun::query()->whereKey($runId)->update([
-                'progress' => max(0, min(100, $percent)),
-                ...($bestScore === null ? [] : ['best_score' => $bestScore]),
-            ]);
+            $row = DB::selectOne(
+                "update {$table} set progress = ?, best_score = coalesce(?, best_score), updated_at = ? where id = ? and status = ? returning cancel_requested_at",
+                [max(0, min(100, $percent)), $bestScore, $now, $runId, SolverRunStatus::Running->value],
+            );
 
-            if (SolverRun::query()->whereKey($runId)->whereNotNull('cancel_requested_at')->exists()) {
-                throw new SolverRunCancelled("Se canceló la corrida {$runId}.");
+            if ($row === null || $row->cancel_requested_at !== null) {
+                throw new SolverRunCancelled("Se detuvo la corrida {$runId}.");
             }
         };
     }

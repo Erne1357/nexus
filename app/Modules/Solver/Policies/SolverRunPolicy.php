@@ -18,6 +18,10 @@ use App\Modules\Solver\Models\SolverRun;
  * - El coordinador lanza corridas de su carrera para explorar y comparar; no las acepta.
  * - Subdirección ve todas.
  * - Solo se acepta una corrida terminada de un departamento: la de carrera no escribe el horario.
+ * - Cancela (SV-03) o descarta una corrida quien la lanzó o quien puede lanzar ese alcance (tarea 6.8, revisión del
+ *   Riel A en #587): el jefe, las de la carga de su departamento; el coordinador, las de su carrera. Estas dos solo
+ *   dicen quién: el estado (en curso para cancelar, terminada para descartar) lo revisan CancelSolverRun y la Action de
+ *   descartar (6.10), y la pantalla lo pregunta aparte.
  *
  * El admin pasa por la concesión implícita del registro.
  */
@@ -42,10 +46,27 @@ final class SolverRunPolicy
         return $this->actor($user)->allows(SolverPermission::CareerRunLaunch, Target::of(modality: $modalityId, career: $careerId));
     }
 
+    public function cancel(User $user, SolverRun $run): bool
+    {
+        return $run->created_by === $user->getKey() || $this->canLaunchScopeOf($user, $run);
+    }
+
+    public function discard(User $user, SolverRun $run): bool
+    {
+        return $this->cancel($user, $run);
+    }
+
     public function apply(User $user, SolverRun $run): bool
     {
         return $run->scope_kind === RunScope::Department
             && $run->status === SolverRunStatus::Done
             && $this->actor($user)->allows(SolverPermission::DepartmentRunApply, Target::of(modality: $run->modality_id, unit: $run->department_id));
+    }
+
+    private function canLaunchScopeOf(User $user, SolverRun $run): bool
+    {
+        return $run->scope_kind === RunScope::Department
+            ? $this->launchForDepartment($user, $run->modality_id, $run->department_id)
+            : $this->launchForCareer($user, $run->modality_id, $run->career_id);
     }
 }

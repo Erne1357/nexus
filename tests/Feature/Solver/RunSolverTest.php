@@ -223,6 +223,72 @@ it('SV-03: una corrida que corre se cancela en el siguiente aviso de avance y no
     Notification::assertNothingSent();
 });
 
+it('un job tardío no pisa una corrida que ya se dio por perdida: sigue fallida, sin salida y sin aviso', function () {
+    $run = queuedSolverRun('tardio');
+
+    scriptedSolverEngine('tardio', function () use ($run): ?SolverOutput {
+        SolverRun::query()->whereKey($run->id)->update(['status' => SolverRunStatus::Failed, 'error' => 'Se dio por perdida.', 'finished_at' => now()]);
+
+        return null;
+    });
+
+    RunSolver::dispatchSync($run->id);
+
+    expect($run->fresh())
+        ->status->toBe(SolverRunStatus::Failed)
+        ->error->toBe('Se dio por perdida.')
+        ->output->toBeNull()
+        ->output_path->toBeNull()
+        ->metrics->toBeNull();
+
+    Notification::assertNothingSent();
+});
+
+it('un motor que sigue después de que su corrida se dio por perdida se detiene en su siguiente aviso de avance', function () {
+    $run = queuedSolverRun('perdido');
+
+    scriptedSolverEngine('perdido', function (SolverInput $input, ?Closure $progress) use ($run): never {
+        SolverRun::query()->whereKey($run->id)->update(['status' => SolverRunStatus::Failed, 'error' => 'Se dio por perdida.']);
+        $progress(40, 500);
+
+        throw new LogicException('El motor no debió seguir.');
+    });
+
+    RunSolver::dispatchSync($run->id);
+
+    expect($run->fresh())
+        ->status->toBe(SolverRunStatus::Failed)
+        ->error->toBe('Se dio por perdida.')
+        ->progress->toBe(0);
+
+    Notification::assertNothingSent();
+});
+
+it('SV-03: si el motor se traga la cancelación y lanza otro error, la corrida queda cancelada', function () {
+    $run = queuedSolverRun('traga');
+
+    scriptedSolverEngine('traga', function (SolverInput $input, ?Closure $progress) use ($run): never {
+        app(CancelSolverRun::class)->handle(SolverRun::query()->findOrFail($run->id), $run->creator);
+
+        try {
+            $progress(10, null);
+        } catch (Throwable) {
+            // Un cliente HTTP que envuelve todo en su propio catch.
+        }
+
+        throw new RuntimeException('El servicio respondió 499.');
+    });
+
+    RunSolver::dispatchSync($run->id);
+
+    expect($run->fresh())
+        ->status->toBe(SolverRunStatus::Cancelled)
+        ->error->toBeNull()
+        ->finished_at->not->toBeNull();
+
+    Notification::assertNothingSent();
+});
+
 it('no corre una corrida que ya no está en cola, ni toca una terminada si el job falla después', function (SolverRunStatus $status) {
     $run = queuedSolverRun(attributes: ['status' => $status]);
 
