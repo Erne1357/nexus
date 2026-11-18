@@ -659,7 +659,7 @@ La pantalla del re-análisis de una carga publicada (`scheduling::pages.reanalys
 - **Coordinador** (RA-07): los mismos bloques con solo sus carreras, sin acciones ni «Sugerencias», y un aviso `info` «Solo consulta: los ajustes los hace la jefatura de <departamento>.».
 
 ### Sugerencias del re-análisis
-Lo que llena la tarea 8.3a en el drawer de sugerencias de un bloque (`scheduling::components.reanalysis-suggestions`, #604), con la opción B de `.impeccable/mocks/reanalisis/b.html`. Las piezas son [`Views/reanalysis/suggestions.blade.php`](app/Modules/Scheduling/Views/reanalysis/suggestions.blade.php) y `suggestion.blade.php`; lo que pinta sale de `Scheduling\Queries\ReanalysisSuggestionsQuery` y `Rules\ReanalysisAdvisor`.
+Lo que llena la tarea 8.3a en el drawer de sugerencias de un bloque (`scheduling::components.reanalysis-suggestions`, #619), con la opción B de `.impeccable/mocks/reanalisis/b.html`. Las piezas son [`Views/reanalysis/suggestions.blade.php`](app/Modules/Scheduling/Views/reanalysis/suggestions.blade.php) y `suggestion.blade.php`; lo que pinta sale de `Scheduling\Queries\ReanalysisSuggestionsQuery` y `Rules\ReanalysisAdvisor`.
 
 - **Demanda por carrera:** a la tabla de la pantalla se suma «Ahora», los lugares de los grupos de ahora (Mono). Si ya no son los de la versión vigente van en `info` con `o-pencil-square` y «ya ajustado» para lectores de pantalla: el color nunca va solo.
 - **«Sugerencias N»:** una línea que dice contra qué se compara (los lugares de ahora y el umbral de RA-04) y que aplicar pasa por las reglas del horario. Luego una lista en una superficie blanca con filete, un renglón por sugerencia, sin tarjetas dentro de tarjetas:
