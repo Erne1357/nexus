@@ -86,3 +86,8 @@ it('reparte aprobadas y reprobadas de forma repetible con la semilla', function 
     expect($counts)->toBe(['aprobada' => 4, 'reprobada' => 4])
         ->and(KardexRecord::query()->where('result', KardexResult::Cursando)->count())->toBe(0);
 });
+
+it('dice de antemano qué materias va a calificar, sin depender de la semilla', function () {
+    expect(DemandRecalculationDemoSeeder::subjectsToGrade('20271', 1))->toBe([$this->a->id])
+        ->and(DemandRecalculationDemoSeeder::subjectsToGrade('20271', 2))->toBe([$this->a->id, $this->c->id]);
+});
