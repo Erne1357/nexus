@@ -101,18 +101,18 @@ El motor no sabe de dónde viene cada cohorte: solo garantiza que los grupos con
 
 | Regla | Heurística en PHP | CP-SAT |
 |---|---|---|
-| HC-01 docente sin empalme | Al colocar, el evaluador rechaza bloques ocupados por el docente (incluye `busy` de otros campus) | Suma de variables del docente por bloque ≤ 1, con `busy` como constantes |
-| HC-02 salón sin empalme | Rechaza salones ocupados en el bloque (incluye `busy` y bloqueos) | Suma de variables del salón por bloque ≤ 1 |
-| HC-03 alumno tipo sin empalme | Rechaza bloques ocupados por otro grupo de la misma cohorte (`cohorts[]`) | Suma por (cohorte, bloque) ≤ 1 |
+| HC-01 docente sin empalme | Al colocar, el evaluador rechaza bloques ocupados por el docente (incluye `busy` de otros campus) | A lo más una ventana del docente en cada inicio de ventana, en minutos; lo fijo y `busy` no entran al dominio |
+| HC-02 salón sin empalme | Rechaza salones ocupados en el bloque (incluye `busy` y bloqueos) | A lo más un `z` del salón en cada inicio de ventana; lo fijo y `busy` no entran al dominio |
+| HC-03 alumno tipo sin empalme | Rechaza bloques ocupados por otro grupo de la misma cohorte (`cohorts[]`) | Como HC-01, por clave de cohorte |
 | HC-04 ventana y bloques | El dominio de bloques se construye solo dentro de la ventana y alineado | Solo se crean variables dentro de la ventana y alineadas |
 | HC-05 capacidad del salón | Filtro de salones candidatos por capacidad | Solo se crean variables con `room.capacity >= group.capacity` |
-| HC-06 laboratorio | Filtro de tipo de salón para sesiones prácticas | Solo se crean variables de salones del tipo requerido para horas prácticas |
+| HC-06 laboratorio | Filtro de tipo de salón para sesiones prácticas | Las unidades del grupo en laboratorio, taller o sala de cómputo alcanzan las de práctica de su opción |
 | HC-07 suma de cupos | No aplica al motor (se valida al editar cupos); se verifica en la entrada | Igual: verificación previa, no restricción del modelo |
 | HC-08 horas del docente | Verificación previa con `remaining_hours`; el motor no cambia docentes salvo sugerencia | Igual; si `suggest_teachers`, suma de horas sugeridas ≤ `remaining_hours` |
-| HC-09 disponibilidad | Rechaza bloques `unavailable` del docente | Variables en bloques `unavailable` fijadas en cero |
+| HC-09 disponibilidad | Rechaza bloques `unavailable` del docente | No se crean ventanas en bloques `unavailable` |
 | HC-10 préstamo de salón | Salón con dueño ajeno solo si hay acuerdo que cubra el bloque | Variables de salón ajeno existen solo en bloques cubiertos por un acuerdo |
-| HC-11 bloqueos de salón | Rechaza bloques en `blocks` | Variables en bloques bloqueados fijadas en cero |
-| HC-12 horas semanales | El constructor coloca exactamente `weekly_hours` horas por grupo | Suma de horas de las sesiones del grupo = `weekly_hours` |
+| HC-11 bloqueos de salón | Rechaza bloques en `blocks` | No se crean `z` en bloques bloqueados |
+| HC-12 horas semanales | El constructor coloca exactamente `weekly_hours` horas por grupo | Cada opción lleva las horas exactas (o dentro de la tolerancia) y cada grupo toma exactamente una |
 | HC-13 grupos válidos | Verificación previa al armar la entrada | Igual |
 | SC-01 horas seguidas del alumno tipo | Penaliza huecos por (plan, semestre, día) en la búsqueda local | Variables auxiliares de primer y último bloque por (plan, semestre, día); penaliza su diferencia menos las horas ocupadas |
 | SC-02 reparto en días | Penaliza más de N horas del mismo grupo en un día | Penalización por grupo y día cuando excede el umbral |
@@ -289,6 +289,29 @@ Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_op
 | (b) `y[g, o]` + `z[g, w, s]` | 482 461 + 9 453 754 = 9 936 215 | El salón por día, como la heurística y el contrato. |
 
 (b) es más chica que (a) con todos los niveles y es la única que dice lo mismo que la heurística, así que es la elegida. Pero ninguna cabe entera en la instancia real: armar (b) toma 66 s y 5.2 GB, antes de resolver. Lo que multiplica es el salón: 130 salones para cada una de las 116 ventanas de cada grupo, porque casi todos los salones del campus le sirven a casi todos los grupos. Para `tiny`, `small` y `medium` son 446, 1 623 y 2 782 variables.
+
+### Restricciones duras (7.5)
+
+`add_hard_constraints` agrega la asignación y las reglas activas de la entrada. Cada regla dice lo mismo que su clase del evaluador (`Scheduling/Rules/Constraints/*` sobre la foto de `ContractState`) y entra al modelo de una de tres formas (`RULES` en `constraints.py`): como **restricción** sobre las variables, en el **dominio** (`variables.py` no crea lo que la rompe) o como problema de la **entrada**, que no depende del acomodo y no vuelve infactible el modelo (como `ApplyPlan::INPUT_RULES` y PS-08).
+
+| Regla | Forma | En el modelo |
+|---|---|---|
+| Asignación | — | Cada grupo movible toma exactamente una opción (`add_exactly_one`). Un grupo sin opciones vuelve infactible el modelo duro: es el gancho de la relajación (7.7), que lo cambia por «a lo más una» con una penalización y reporta el grupo en `unscheduled` con `main_reason()`. |
+| HC-01 | Restricción y dominio | En cada inicio de ventana de un docente, `add_at_most_one` de los `y` de las ventanas que lo cubren, en minutos (vale para grupos de campus con rejillas distintas). Su ocupación fija no entra al dominio. Sin traslado: en el evaluador `travel_minutes` solo cuenta en SC-09, un aviso que no bloquea, así que va al objetivo (7.6). |
+| HC-02 | Restricción y dominio | Igual con los `z` de cada salón; una ventana de 2 horas ocupa su salón completa (PS-05). |
+| HC-03 | Restricción y dominio | Igual por clave de cohorte: dos grupos con una misma clave nunca se empalman, como dice el contrato y hace la heurística. El evaluador busca una combinación del alumno tipo, pero la entrada solo pone `plan:` en el grupo único de su materia, así que dicen lo mismo; el modelo solo es más estricto en una entrada mal armada (dos grupos de una materia con la misma clave `plan:`). |
+| HC-04 | Dominio | Las ventanas salen de la rejilla: no hay variables fuera que desactivar, así que quitar HC-04 no cambia nada, como en la heurística. |
+| HC-05 | Dominio | Sin `z` en salones chicos. |
+| HC-06 | Restricción y dominio | Por grupo, `Σ unidades de sus ventanas × z` en laboratorio, taller o sala de cómputo ≥ las unidades de práctica de su opción. Las de teoría pueden quedar en laboratorio (HC-06 lo permite; PS-05 las prefiere en aula: término del objetivo, 7.6). Cuáles unidades son de práctica se decide al escribir la salida (`solution.py`, como `practiceDays` y `chooseRooms`). |
+| HC-07 | Entrada | El contrato no trae cupos: no se puede revisar, como en el evaluador. |
+| HC-08 | Entrada | `input_problems`: si los grupos movibles de un docente suman más que su `remaining_hours`, una violación en cada uno, con el mensaje de `TeacherHours`; los grupos se programan igual (PS-08). |
+| HC-09, HC-10, HC-11 | Dominio | Sin ventanas en la indisponibilidad del docente; sin `z` en salones ajenos donde la unión de sus préstamos no cubre la ventana, ni en bloqueos. |
+| HC-12 | Dominio | Cada opción lleva las horas exactas (o, si la rejilla no las da, dentro de la tolerancia) y cada grupo toma una. |
+| HC-13 | Entrada | El contrato no trae catálogos: no se puede revisar, como en el evaluador. |
+
+**Verificador.** `app/model/verify.py` revisa una salida del contrato contra la entrada con la definición del evaluador, regla por regla y solo las activas: empalmes en minutos, la ocupación de fuera y de los grupos fijos como contexto y cada choque de dos grupos una sola vez. Es la red de las pruebas del modelo y sirve para los fixtures (7.10); la autoridad sigue siendo el evaluador en PHP.
+
+**Pruebas** (`services/solver/tests/test_model_constraints.py`, `test_model_fixtures.py`, `test_model_verify.py`): por regla, una instancia mínima que la rompe es infactible y sin la regla, factible (HC-01 también entre dos campus con bloques de 60 y 30 min y con un grupo fijo; HC-02 con `busy`; HC-03 con un paquete fijo; HC-06 con un solo laboratorio para dos grupos); HC-04 no se desactiva; HC-07, HC-08 y HC-13 no cambian el modelo y HC-08 se reporta. Con `tiny`, `small` y `medium`, el modelo sin objetivo encuentra solución en menos de un segundo, la salida pasa los modelos pydantic y el verificador no encuentra duras; `infeasible` no tiene solución sin relajación. En `department-multicampus`, agregar las duras toma 17 s más que las variables: 158 779 restricciones (131 861 enlaces de ventana y salón, 25 756 cliques de docente, salón y cohorte, 23 de laboratorio y 1 139 asignaciones).
 
 ### Tamaño de la instancia real
 
