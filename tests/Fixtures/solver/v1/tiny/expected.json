@@ -1,0 +1,11 @@
+{
+    "feasible": true,
+    "must_schedule": [
+        "0190a000-0000-7000-8000-000000000101",
+        "0190a000-0000-7000-8000-000000000102",
+        "0190a000-0000-7000-8000-000000000103"
+    ],
+    "may_leave_unscheduled": [],
+    "max_soft_score": null,
+    "notes": "Tres grupos, dos campus, un laboratorio ajeno con préstamo (día 2 de 07:00 a 10:00) para las 2 horas prácticas de SCD-1008; output.json es una solución válida de referencia."
+}

@@ -41,6 +41,11 @@ final class FixedEngine implements SolverEngine
         return [SolverInput::VERSION];
     }
 
+    public function checksHardRules(): bool
+    {
+        return false;
+    }
+
     public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
     {
         $started = hrtime(true);

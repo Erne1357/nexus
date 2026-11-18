@@ -5,6 +5,8 @@ namespace App\Modules\Solver;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Solver\Console\ExportSolverFixture;
+use App\Modules\Solver\Console\SolverBenchmark;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Enums\SolverPermission;
@@ -28,6 +30,15 @@ final class SolverServiceProvider extends ModuleServiceProvider
 
         $this->app->tag([FixedEngine::class], 'solver.engines');
         $this->app->singleton(EngineRegistry::class, fn ($app): EngineRegistry => new EngineRegistry($app->tagged('solver.engines')));
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([ExportSolverFixture::class, SolverBenchmark::class]);
+        }
     }
 
     /**
