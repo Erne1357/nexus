@@ -123,6 +123,32 @@ it('arma los grupos, cierra el drawer y la lista marca la materia armada', funct
         ->toContain([$this->isic->id => 25, $this->iind->id => 5]);
 });
 
+it('una materia armada se vuelve a abrir con sus grupos, no con la sugerencia', function () {
+    $page = parallelsPageOpen(parallelsPageAs($this->jefe))
+        ->set("mixed.0.{$this->isic->id}", 22)
+        ->set("mixed.0.{$this->iind->id}", 8)
+        ->call('arm')
+        ->assertHasNoErrors();
+
+    parallelsPageOpen($page)
+        ->assertSet('mixed', [[$this->isic->id => 22, $this->iind->id => 8]])
+        ->assertSee('Usar lo de Nexus');
+});
+
+it('una materia con una parte pendiente se ve «Pendiente» con su motivo y «Ver», y no cuenta como por armar', function () {
+    $this->world->request($this->world->career('ILOG', null, $this->c2), 30, 1, 'pending', subject: $this->algebra, campus: $this->c2);
+
+    parallelsPageAs($this->jefe)
+        ->assertSeeHtml('data-testid="parallels-open-ACF-0903-C2">Ver</button>')
+        ->assertSeeHtml('data-testid="parallels-open-ACF-0902-C1">Armar</button>')
+        ->assertSee('Falta aceptar la parte de ILOG: sus lugares nacen al aceptarla.')
+        ->assertViewHas('filterCounts', ['' => 2, 'por-armar' => 1, 'pendientes' => 1, 'armadas' => 0])
+        ->assertViewHas('pendingCount', 1)
+        ->set('filter', 'pendientes')
+        ->assertSeeHtml('data-testid="parallels-row-ACF-0903-C2"')
+        ->assertDontSeeHtml('data-testid="parallels-row-ACF-0902-C1"');
+});
+
 it('al cancelar un grupo con horario dice qué horario se pierde', function () {
     $isic = $this->world->request($this->isic, 20, 1, subject: $this->chemistry, campus: $this->c2);
     $iind = $this->world->request($this->iind, 10, 1, subject: $this->chemistry, campus: $this->c2);

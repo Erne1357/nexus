@@ -1,7 +1,7 @@
 {{--
     Las cuatro cifras de «Paralelos» (maqueta B; Parallels::figures()), de las materias que se pueden juntar en el campus
-    del filtro, como las de «Demanda por materia»: dos por renglón debajo de 1024 px. Materias (cuántas por armar y cuántas
-    armadas), grupos pedidos (por cuántas carreras), los que bastan juntando y los de menos, con las horas a la semana de
+    del filtro, como las de «Demanda por materia»: dos por renglón debajo de 1024 px. Materias (cuántas por armar, pendientes
+    y armadas), grupos pedidos (por cuántas carreras), los que bastan juntando y los de menos, con las horas a la semana de
     docente que se ahorran (los de menos por las horas de teoría y práctica de cada materia). De menos va en `success`
     cuando se ahorra.
 --}}
@@ -10,7 +10,13 @@
     <div class="min-w-0 px-4 py-3.5" data-testid="figure-subjects">
         <p class="{{ $label }}">Materias</p>
         <p class="font-mono text-[26px] font-semibold leading-tight tabular-nums">{{ $figures['subjects'] }}</p>
-        <p class="text-[12.5px] text-neutral"><span class="font-mono tabular-nums">{{ $figures['subjects'] - $figures['arranged'] }}</span> por armar · <span class="font-mono tabular-nums">{{ $figures['arranged'] }}</span> {{ $figures['arranged'] === 1 ? 'armada' : 'armadas' }}</p>
+        <p class="text-[12.5px] text-neutral">
+            <span class="font-mono tabular-nums">{{ $filterCounts['por-armar'] }}</span> por armar ·
+            @if ($filterCounts['pendientes'] > 0)
+                <span class="font-mono tabular-nums">{{ $filterCounts['pendientes'] }}</span> {{ $filterCounts['pendientes'] === 1 ? 'pendiente' : 'pendientes' }} ·
+            @endif
+            <span class="font-mono tabular-nums">{{ $figures['arranged'] }}</span> {{ $figures['arranged'] === 1 ? 'armada' : 'armadas' }}
+        </p>
     </div>
 
     <div class="min-w-0 border-s border-base-300 px-4 py-3.5" data-testid="figure-requested">

@@ -1,6 +1,9 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
 use App\Modules\Scheduling\Queries\ParallelDraft;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
 use App\Modules\Scheduling\Queries\ParallelSubject;
@@ -17,6 +20,19 @@ beforeEach(function () {
     $this->isic = $this->world->career('ISIC');
     $this->iind = $this->world->career('IIND');
 });
+
+/**
+ * Arma con ArmParallelGroups, como el jefe de CB.
+ *
+ * @param  list<array<string, int>>  $arrangement
+ */
+function parallelDraftArm(array $arrangement): void
+{
+    $world = test()->world;
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $world->department->id])->create();
+
+    app(ArmParallelGroups::class)->handle($world->term, $world->modality, $world->department, $world->subject, $world->campus, $arrangement, $jefe);
+}
 
 function parallelDraftRow(): ParallelSubject
 {
@@ -154,4 +170,36 @@ it('sabe si es la sugerencia de Nexus', function () {
     expect(ParallelDraft::suggested($row)->isSuggestion())->toBeTrue()
         ->and(ParallelDraft::of($row, [$this->isic->id => 1, $this->iind->id => 1], [[$this->isic->id => 25, $this->iind->id => 5], []])->isSuggestion())->toBeTrue()
         ->and(ParallelDraft::of($row, [$this->isic->id => 1, $this->iind->id => 1], [[$this->isic->id => 24, $this->iind->id => 5]])->isSuggestion())->toBeFalse();
+});
+
+it('lo que muestra es lo que la Action acepta aunque dos grupos de la carrera tengan capacidades distintas', function () {
+    $isic = $this->world->request($this->isic, 70, 2);
+    $this->world->request($this->iind, 5, 1);
+    [$small] = $this->world->groupsOf($isic, 1, ['capacity' => 30]);
+    [$large] = $this->world->groupsOf($isic, 1, ['capacity' => 45]);
+    $this->world->withTeacher($small);
+
+    $draft = ParallelDraft::suggested(parallelDraftRow());
+
+    expect($draft->overs())->toBe([])
+        ->and($draft->blockedReason())->toBeNull()
+        ->and(array_slice(parallelDraftCodes($draft), 0, 2))->toBe([['ISIC' => 30], ['ISIC' => 30]]);
+
+    parallelDraftArm($draft->arrangement());
+
+    expect($small->fresh()->quotas()->pluck('max_seats')->all())->toBe([30])
+        ->and($large->fresh()->quotas()->pluck('max_seats')->all())->toBe([30]);
+});
+
+it('una materia armada se lee como está: sus completos y sus mixtos con sus cupos', function () {
+    $this->world->request($this->isic, 60, 2);
+    $this->world->request($this->iind, 40, 2);
+    parallelDraftArm([[$this->iind->id => 35], [$this->isic->id => 35], [$this->isic->id => 22, $this->iind->id => 8]]);
+
+    $draft = ParallelDraft::current(parallelDraftRow());
+
+    expect($draft->full)->toBe([$this->iind->id => 1, $this->isic->id => 1])
+        ->and($draft->mixed)->toBe([[$this->isic->id => 22, $this->iind->id => 8]])
+        ->and($draft->cancelled)->toBe([])
+        ->and($draft->isSuggestion())->toBeFalse();
 });

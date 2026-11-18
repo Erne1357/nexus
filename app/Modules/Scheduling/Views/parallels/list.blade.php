@@ -2,7 +2,8 @@
     La lista de «Paralelos» (maqueta B): un renglón por materia y campus que se puede juntar, con las carreras que cuentan
     (la de parte aceptada con su palomita), esperados (desde 1200 px), pedidos, bastan, de menos y su estado: «Armada»,
     «Pendiente» con su motivo (una parte sin aceptar o un grupo con docente sin lugar) o «Por armar» con los grupos que ya
-    existen. «Armar» abre el drawer; si ya está armada o el usuario solo consulta, «Ver». Desde 1024 px es tabla (debajo de
+    existen; el estado viene del componente (`$states`, el mismo del filtro, la pestaña y el drawer). «Armar» abre el drawer
+    de una que se puede armar; si ya está armada, pendiente, con la carga cerrada o el usuario solo consulta, «Ver». Desde 1024 px es tabla (debajo de
     1200 px el campus va junto a la clave y sin «Esperados»; si no cabe, se desplaza de lado dentro de su caja); debajo,
     renglones apilados, como la maqueta. Sin materias que juntar, el vacío lo explica.
 --}}
@@ -20,23 +21,6 @@
 @elseif ($visible === [])
     <p class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center font-semibold" data-testid="parallels-no-match">Ninguna materia con esos filtros.</p>
 @else
-    @php
-        $state = function ($subject): array {
-            if ($subject->arranged()) {
-                return ['tone' => 'success', 'label' => 'Armada', 'icon' => null, 'note' => null];
-            }
-
-            $reason = $subject->arrangeBlockedReason();
-
-            if ($reason !== null) {
-                return ['tone' => 'neutral', 'label' => 'Pendiente', 'icon' => 'o-lock-closed', 'note' => $reason];
-            }
-
-            $existing = count($subject->groups);
-
-            return ['tone' => 'warning', 'label' => 'Por armar', 'icon' => 'o-clock', 'note' => $existing === 0 ? null : ($existing === 1 ? '1 grupo ya creado' : "{$existing} grupos ya creados")];
-        };
-    @endphp
 
     <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100 max-lg:hidden" data-testid="parallels-table">
         <table class="table [&_td]:px-3 [&_th]:px-3">
@@ -57,8 +41,8 @@
             <tbody>
                 @foreach ($visible as $subject)
                     @php
-                        $rowState = $state($subject);
-                        $canOpenToArm = $canArrange && ! $subject->arranged();
+                        $rowState = $states[$key($subject)];
+                        $canOpenToArm = $canArrange && $parallels->blockedReason === null && $rowState['key'] === 'por-armar';
                     @endphp
                     <tr class="align-top" wire:key="parallels-row-{{ $key($subject) }}" data-testid="parallels-row-{{ $key($subject) }}">
                         <td class="min-w-44">
@@ -113,7 +97,7 @@
     <ul class="divide-y divide-base-300 overflow-hidden rounded-box border border-base-300 bg-base-100 lg:hidden" data-testid="parallels-stack">
         @foreach ($visible as $subject)
             @php
-                $rowState = $state($subject);
+                $rowState = $states[$key($subject)];
             @endphp
             <li wire:key="parallels-stack-{{ $key($subject) }}">
                 <button type="button" wire:click="open('{{ $subject->subject->id }}', '{{ $subject->campus->id }}')" data-opens="stack-{{ $key($subject) }}" class="grid w-full gap-1.5 px-4 py-3 text-left hover:bg-base-200/60">

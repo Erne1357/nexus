@@ -22,13 +22,7 @@
             <div class="flex flex-wrap items-center gap-2">
                 <span class="font-mono text-[15px] font-semibold">{{ $row->subject->code }}</span>
                 <x-core::campus-tag :campus="$row->campus" size="lg" />
-                @if ($row->arranged())
-                    <x-core::status-badge tone="success" label="Armada" />
-                @elseif ($row->arrangeBlockedReason() !== null)
-                    <x-core::status-badge tone="neutral" icon="o-lock-closed" label="Pendiente" />
-                @else
-                    <x-core::status-badge tone="warning" icon="o-clock" label="Por armar" />
-                @endif
+                <x-core::status-badge :tone="$rowState['tone']" :label="$rowState['label']" :icon="$rowState['icon']" />
             </div>
             <h2 id="parallels-drawer-title" tabindex="-1" class="mt-1 text-xl font-bold leading-tight">{{ $row->subject->name }} en {{ $row->campus->name }}</h2>
             <p class="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-sm text-neutral">
@@ -47,7 +41,7 @@
         <div class="flex flex-wrap items-end gap-x-6 gap-y-3" data-testid="parallels-saving">
             <p class="min-w-0"><b class="block font-mono text-[26px] font-semibold leading-tight tabular-nums">{{ $row->requested() }}</b><span class="text-[12.5px] text-neutral">grupos pedidos</span></p>
             <x-icon name="o-arrow-long-right" class="mb-5 h-5 w-5 text-neutral" aria-hidden="true" />
-            <p class="min-w-0"><b class="block font-mono text-[26px] font-semibold leading-tight tabular-nums">{{ $draft->size() }}</b><span class="text-[12.5px] text-neutral">{{ $draft->size() === $row->suggested() && $draft->isSuggestion() ? 'bastan juntando' : 'con tu armado · Nexus sugiere '.$row->suggested() }}</span></p>
+            <p class="min-w-0"><b class="block font-mono text-[26px] font-semibold leading-tight tabular-nums">{{ $draft->size() }}</b><span class="text-[12.5px] text-neutral">{{ $isSuggestion ? 'bastan juntando' : 'con este armado · Nexus sugiere '.$row->suggested() }}</span></p>
             <p class="min-w-0"><b @class(['block font-mono text-[26px] font-semibold leading-tight tabular-nums', 'text-success' => $draft->saved() > 0])>{{ $signed($draft->saved()) }}</b><span class="text-[12.5px] text-neutral">{{ $draft->saved() >= 0 ? 'grupos · ≈ '.($draft->saved() * $hours).' h de docente menos a la semana' : 'grupos más de lo pedido' }}</span></p>
         </div>
 
@@ -89,13 +83,13 @@
                 <p id="parallels-why" @class(['flex items-start gap-2', 'text-neutral' => $readOnlyRole, 'text-error' => ! $readOnlyRole]) data-testid="parallels-why">
                     <x-icon :name="$readOnlyRole ? 'o-lock-closed' : 'o-x-circle'" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span>{{ $armBlocked }}</span>
                 </p>
-            @elseif ($draft->warning() !== null)
-                <p class="flex items-start gap-2 text-warning" data-testid="parallels-warning"><x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span class="text-base-content">{{ $draft->warning() }}</span></p>
+            @elseif ($warning !== null)
+                <p class="flex items-start gap-2 text-warning" data-testid="parallels-warning"><x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /><span class="text-base-content">{{ $warning }}</span></p>
             @endif
         </div>
         <div class="flex flex-wrap items-center gap-2 max-sm:w-full">
             <button type="button" class="btn btn-ghost max-sm:h-11 max-sm:flex-1" @click="close()">Cancelar</button>
-            @if ($editable && ! $draft->isSuggestion())
+            @if ($editable && ! $isSuggestion)
                 <button type="button" class="btn max-lg:hidden" wire:click="useSuggestion" wire:loading.attr="disabled" data-testid="parallels-reset"><x-icon name="o-arrow-path" class="h-4 w-4" aria-hidden="true" />Usar lo de Nexus</button>
             @endif
             <button type="button" class="btn btn-primary max-lg:hidden" wire:click="arm" data-testid="parallels-arm" @disabled($armBlocked !== null) @if ($armBlocked !== null) aria-describedby="parallels-why" @endif

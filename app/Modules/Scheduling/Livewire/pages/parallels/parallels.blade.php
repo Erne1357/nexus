@@ -6,7 +6,9 @@
     juntar, plegado con su motivo. El drawer de una materia arma sus paralelos. Todo lo que se pinta viene de
     ParallelsQuery y ParallelDraft.
 --}}
-@php($label = 'text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral')
+@php
+    $label = 'text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral';
+@endphp
 <div class="space-y-5"
     x-on:click.capture="const trigger = $event.target.closest('[data-opens]'); if (trigger) { opener = trigger.dataset.opens }"
     x-data="{
@@ -81,8 +83,11 @@
             <div class="w-full md:w-64">
                 <x-input wire:model.live.debounce.300ms="search" icon="o-magnifying-glass" placeholder="Clave o materia" aria-label="Buscar por clave o materia" clearable class="max-md:h-11" data-testid="parallels-search" />
             </div>
-            <div role="group" aria-label="Estado" class="join grid w-full grid-cols-3 md:flex md:w-auto" data-testid="parallels-filter">
-                @foreach (['' => 'Todas', 'por-armar' => 'Por armar', 'armadas' => 'Armadas'] as $option => $optionLabel)
+            @php
+                $filterOptions = array_filter(['' => 'Todas', 'por-armar' => 'Por armar', 'pendientes' => 'Pendientes', 'armadas' => 'Armadas'], fn ($optionLabel, $option) => $option !== 'pendientes' || $filterCounts['pendientes'] > 0 || $filter === 'pendientes', ARRAY_FILTER_USE_BOTH);
+            @endphp
+            <div role="group" aria-label="Estado" class="join grid w-full md:flex md:w-auto" style="grid-template-columns: repeat({{ count($filterOptions) }}, minmax(0, 1fr))" data-testid="parallels-filter">
+                @foreach ($filterOptions as $option => $optionLabel)
                     <button type="button" wire:click="$set('filter', '{{ $option }}')" aria-pressed="{{ $filter === $option ? 'true' : 'false' }}" data-testid="parallels-filter-{{ $option ?: 'todas' }}"
                         @class([
                             'btn join-item px-2 max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-col max-md:gap-0 max-md:py-1 max-md:leading-tight md:gap-1.5 md:whitespace-nowrap md:px-3',

@@ -32,7 +32,7 @@ final readonly class ParallelDraft
      * @param  array<int, int>  $columns  por índice de un grupo mixto, su columna
      * @param  list<ParallelExisting>  $cancelled  los grupos que ya existen y se cancelarían
      * @param  list<ParallelExisting>  $blocked  los que se cancelarían sin poder cancelarse (con docente o con una solicitud de
-     *   cambio abierta): no se arma así
+     *                                           cambio abierta): no se arma así
      * @param  array<string, int>  $left  por carrera, esperados sin lugar (negativo: de más)
      */
     private function __construct(
@@ -60,6 +60,30 @@ final readonly class ParallelDraft
                 $full[$owner] = ($full[$owner] ?? 0) + 1;
             } else {
                 $mixed[] = $slot->expected;
+            }
+        }
+
+        return self::of($row, $full, $mixed);
+    }
+
+    /**
+     * El armado que ya existe, para una materia armada: cada grupo suelto con cupos de una sola carrera de las que cuentan es
+     * un completo de ella, y cada uno con cupos de varias es un mixto con sus cupos como esperados (supuesto por confirmar:
+     * el grupo no guarda sus esperados, y en un mixto los cupos son los esperados en exclusiva).
+     */
+    public static function current(ParallelSubject $row): self
+    {
+        $counting = array_flip(array_map(fn (ParallelCareer $career): string => $career->career->getKey(), $row->careers));
+        $full = [];
+        $mixed = [];
+
+        foreach ($row->groups as $group) {
+            $quotas = array_intersect_key($group->quotas, $counting);
+
+            if (count($quotas) > 1) {
+                $mixed[] = $quotas;
+            } elseif (count($quotas) === 1) {
+                $full[(string) array_key_first($quotas)] = ($full[(string) array_key_first($quotas)] ?? 0) + 1;
             }
         }
 
@@ -149,9 +173,14 @@ final readonly class ParallelDraft
     }
 
     /**
-     * Coloca los grupos que ya existen sobre el arreglo que se mandaría, como ArmParallelGroups. El cupo de un grupo de una
-     * sola carrera depende de qué grupo se queda en él, y qué grupo se queda, del arreglo: se coloca hasta que el arreglo ya
-     * no cambia (dos vueltas en la práctica).
+     * Coloca los grupos que ya existen sobre el arreglo que se mandaría, como ArmParallelGroups, y devuelve los dos juntos:
+     * lo que se ve es lo que hace la Action con ese mismo arreglo. El cupo de un grupo de una sola carrera es la capacidad
+     * del grupo que se queda en él, y qué grupo se queda depende del arreglo: primero se coloca con la capacidad de uno nuevo
+     * y se ponen las capacidades de los que se quedaron; si al colocar otra vez sobre ese arreglo se queda lo mismo, ese es.
+     * Si no (dos grupos de la misma carrera con capacidades distintas pueden ir y venir entre sus completos), los grupos de una
+     * sola carrera de cada carrera llevan el mismo cupo, el más chico que cabe en cualquiera de sus grupos (la capacidad de
+     * uno nuevo o la de los suyos que ya existen): así la colocación no depende del cupo y ninguno pasa su capacidad (HC-07;
+     * supuesto por confirmar: se pierden lugares de los grupos más grandes antes que proponer un arreglo que no se arma).
      *
      * @param  list<array<string, int>>  $expected
      * @return array{0: ParallelPlacement, 1: list<array<string, int>>}
@@ -160,32 +189,30 @@ final readonly class ParallelDraft
     {
         $groups = array_map(fn (ParallelExisting $group): array => $group->forPlacement(), $row->groups);
         $capacities = [];
+        $smallest = [];
 
         foreach ($row->groups as $group) {
             $capacities[$group->id] = $group->capacity;
+            $smallest[$group->ownerCareerId] = min($smallest[$group->ownerCareerId] ?? $row->newCapacity, $group->capacity);
         }
 
-        $quotas = fn (array $kept): array => array_map(
-            fn (array $shares, int $index): array => count($shares) > 1 ? $shares : [(string) array_key_first($shares) => isset($kept[$index]) ? $capacities[$kept[$index]] : $row->newCapacity],
+        $quotas = fn (callable $seats): array => array_map(
+            fn (array $shares, int $index): array => count($shares) > 1 ? $shares : [(string) array_key_first($shares) => $seats($index, (string) array_key_first($shares))],
             $expected,
             array_keys($expected),
         );
 
-        $arrangement = $quotas([]);
+        $first = ParallelPlacement::place($quotas(fn (): int => $row->newCapacity), $groups);
+        $arrangement = $quotas(fn (int $index): int => isset($first->kept[$index]) ? $capacities[$first->kept[$index]] : $row->newCapacity);
         $placement = ParallelPlacement::place($arrangement, $groups);
 
-        for ($round = 0; $round < 3; $round++) {
-            $next = $quotas($placement->kept);
-
-            if ($next === $arrangement) {
-                break;
-            }
-
-            $arrangement = $next;
-            $placement = ParallelPlacement::place($arrangement, $groups);
+        if ($placement->kept === $first->kept) {
+            return [$placement, $arrangement];
         }
 
-        return [$placement, $arrangement];
+        $arrangement = $quotas(fn (int $index, string $career): int => $smallest[$career] ?? $row->newCapacity);
+
+        return [ParallelPlacement::place($arrangement, $groups), $arrangement];
     }
 
     /**
@@ -260,7 +287,7 @@ final readonly class ParallelDraft
         }
 
         if ($this->pending() !== []) {
-            return 'Falta aceptar la parte de '.self::list($this->pending()).': sus lugares nacen al aceptarla.';
+            return 'Falta aceptar la parte de '.collect($this->pending())->join(', ', ' y ').': sus lugares nacen al aceptarla.';
         }
 
         if ($this->blocked !== []) {
@@ -291,7 +318,7 @@ final readonly class ParallelDraft
 
         $parts = array_map(fn (int $left, string $id): string => "{$left} de {$this->code($id)}", $short, array_keys($short));
 
-        return self::list($parts).' sin lugar: puedes armar así, pero esos alumnos no tendrán grupo.';
+        return collect($parts)->join(', ', ' y ').' sin lugar: puedes armar así, pero esos alumnos no tendrán grupo.';
     }
 
     /**
@@ -317,15 +344,5 @@ final readonly class ParallelDraft
         }
 
         return 'otra carrera';
-    }
-
-    /**
-     * @param  list<string>  $items
-     */
-    private static function list(array $items): string
-    {
-        $last = array_pop($items);
-
-        return $items === [] ? (string) $last : implode(', ', $items)." y {$last}";
     }
 }

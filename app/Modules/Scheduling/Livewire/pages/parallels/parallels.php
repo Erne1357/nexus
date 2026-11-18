@@ -47,7 +47,7 @@ new #[Title('Paralelos')] class extends Component
     use Toast;
     use WithModalityCampusFilter;
 
-    private const array FILTERS = ['por-armar', 'armadas'];
+    private const array FILTERS = ['por-armar', 'pendientes', 'armadas'];
 
     /** Código del departamento; '' es el primero que puede ver. */
     #[Url(as: 'depto', except: '')]
@@ -56,7 +56,7 @@ new #[Title('Paralelos')] class extends Component
     #[Url(as: 'buscar', except: '')]
     public string $search = '';
 
-    /** '' (todas), 'por-armar' o 'armadas'. */
+    /** '' (todas), 'por-armar', 'pendientes' o 'armadas'. */
     #[Url(as: 'filtro', except: '')]
     public string $filter = '';
 
@@ -101,6 +101,9 @@ new #[Title('Paralelos')] class extends Component
     /** @var list<array<string, mixed>> */
     public array $mixed = [];
 
+    /** La pestaña leída en esta petición (ParallelsQuery corre una vez por petición, no por método). */
+    private ?Parallels $loaded = null;
+
     public function mount(Actor $context, DepartmentInboxQuery $inbox, CareerProposalQuery $proposals): void
     {
         abort_unless($context->allowsAny(AcademicLoadPermission::ProposalReviewView), 403);
@@ -139,7 +142,8 @@ new #[Title('Paralelos')] class extends Component
     }
 
     /**
-     * Abre el drawer de una materia en un campus con el armado que sugiere Nexus. Una que no es de la pestaña es 404.
+     * Abre el drawer de una materia en un campus: una armada, con los grupos que ya tiene; si no, con lo que sugiere Nexus.
+     * Una que no es de la pestaña es 404.
      */
     public function open(string $subjectId, string $campusId, ParallelsQuery $query): void
     {
@@ -147,7 +151,7 @@ new #[Title('Paralelos')] class extends Component
 
         $this->subjectId = $row->subject->getKey();
         $this->subjectCampusId = $row->campus->getKey();
-        $this->useDraft(ParallelDraft::suggested($row));
+        $this->useDraft($row->arranged() ? ParallelDraft::current($row) : ParallelDraft::suggested($row));
         $this->showDrawer = true;
     }
 
@@ -233,6 +237,7 @@ new #[Title('Paralelos')] class extends Component
         }
 
         $this->closeDrawer();
+        $this->loaded = null;
         $title = "Armaste los paralelos de {$row->subject->code} en {$row->campus->code}";
 
         match (true) {
@@ -258,10 +263,11 @@ new #[Title('Paralelos')] class extends Component
         $parallels = $this->parallels($query);
         $campusId = $scope['shownCampus']?->getKey();
         $joinable = $parallels->joinable($campusId);
+        $states = $this->states($joinable);
         $row = $this->showDrawer && $this->subjectId !== null ? $parallels->subject($this->subjectId, (string) $this->subjectCampusId) : null;
         $draft = $row === null ? null : ParallelDraft::of($row, $this->full, $this->mixed);
         $canArrange = Gate::allows('arrange', [Parallels::class, $parallels->modality, $parallels->department]);
-        $arranged = count(array_filter($joinable, fn (ParallelSubject $subject): bool => $subject->arranged()));
+        $count = fn (string $state): int => count(array_filter($states, fn (array $rowState): bool => $rowState['key'] === $state));
 
         return [
             ...$scope,
@@ -272,9 +278,10 @@ new #[Title('Paralelos')] class extends Component
             'careerCount' => collect($joinable)->flatMap(fn (ParallelSubject $subject): array => $subject->careers)->map(fn ($career): string => $career->career->getKey())->unique()->count(),
             'campusCounts' => collect($parallels->joinable())->countBy(fn (ParallelSubject $subject): string => $subject->campus->code)->all(),
             'campusTotal' => count($parallels->joinable()),
-            'filterCounts' => ['' => count($joinable), 'por-armar' => count($joinable) - $arranged, 'armadas' => $arranged],
-            'pendingCount' => count($joinable) - $arranged,
-            'visible' => $this->visible($joinable),
+            'filterCounts' => ['' => count($joinable), 'por-armar' => $count('por-armar'), 'pendientes' => $count('pendientes'), 'armadas' => $count('armadas')],
+            'pendingCount' => $count('por-armar'),
+            'states' => $states,
+            'visible' => $this->visible($joinable, $states),
             'nothing' => $parallels->nothingToJoin($campusId),
             'canArrange' => $canArrange,
             'row' => $row,
@@ -285,6 +292,9 @@ new #[Title('Paralelos')] class extends Component
                 default => $draft->blockedReason(),
             },
             'editable' => $draft !== null && $canArrange && $parallels->blockedReason === null,
+            'rowState' => $row === null ? null : $this->states([$row])[$this->keyOf($row)],
+            'isSuggestion' => $draft?->isSuggestion() ?? true,
+            'warning' => $draft?->warning(),
             'confirm' => $draft === null ? null : $this->confirmLine($draft),
             'hours' => $row === null ? 0 : $this->weeklyHours($row),
             'duration' => $this->duration(...),
@@ -309,6 +319,7 @@ new #[Title('Paralelos')] class extends Component
     {
         $this->termId = $this->modalityId = $this->departmentId = null;
         $this->departments = [];
+        $this->loaded = null;
 
         $modality = $this->requiredModality();
         $this->modalidad = $modality->code;
@@ -354,10 +365,45 @@ new #[Title('Paralelos')] class extends Component
     {
         abort_if($this->termId === null || $this->modalityId === null || $this->departmentId === null, 403);
 
+        if ($this->loaded !== null) {
+            return $this->loaded;
+        }
+
         [$modality, $department] = app(DepartmentInboxQuery::class)->scopeOf($this->modalityId, $this->departmentId);
         $this->authorize('view', [Parallels::class, $modality, $department]);
 
-        return $query->for(KeyLookup::findOrFail(Term::query(), $this->termId), $modality, $department);
+        return $this->loaded = $query->for(KeyLookup::findOrFail(Term::query(), $this->termId), $modality, $department);
+    }
+
+    /**
+     * El estado de cada materia, por `clave-campus` (la misma regla en la lista, la cuenta de la pestaña, el filtro y el
+     * drawer): «Armada»; «Pendiente» si lo que sugiere Nexus no se puede armar todavía (una parte sin aceptar, un grupo que
+     * no se puede cancelar o HC-07), con su motivo; si no, «Por armar», con los grupos que ya existen.
+     *
+     * @param  list<ParallelSubject>  $subjects
+     * @return array<string, array{key: string, tone: string, label: string, icon: ?string, note: ?string}>
+     */
+    private function states(array $subjects): array
+    {
+        $states = [];
+
+        foreach ($subjects as $subject) {
+            $reason = $subject->arranged() ? null : ParallelDraft::suggested($subject)->blockedReason();
+            $existing = count($subject->groups);
+
+            $states[$this->keyOf($subject)] = match (true) {
+                $subject->arranged() => ['key' => 'armadas', 'tone' => 'success', 'label' => 'Armada', 'icon' => null, 'note' => null],
+                $reason !== null => ['key' => 'pendientes', 'tone' => 'neutral', 'label' => 'Pendiente', 'icon' => 'o-lock-closed', 'note' => $reason],
+                default => ['key' => 'por-armar', 'tone' => 'warning', 'label' => 'Por armar', 'icon' => 'o-clock', 'note' => $existing === 0 ? null : ($existing === 1 ? '1 grupo ya creado' : "{$existing} grupos ya creados")],
+            };
+        }
+
+        return $states;
+    }
+
+    private function keyOf(ParallelSubject $subject): string
+    {
+        return $subject->subject->code.'-'.$subject->campus->code;
     }
 
     /**
@@ -375,17 +421,15 @@ new #[Title('Paralelos')] class extends Component
      * menos, y luego por clave y campus.
      *
      * @param  list<ParallelSubject>  $joinable
+     * @param  array<string, array{key: string}>  $states
      * @return list<ParallelSubject>
      */
-    private function visible(array $joinable): array
+    private function visible(array $joinable, array $states): array
     {
         $needle = Str::of($this->search)->ascii()->lower()->trim()->toString();
 
-        $rows = array_filter($joinable, fn (ParallelSubject $subject): bool => match ($this->filter) {
-            'por-armar' => ! $subject->arranged(),
-            'armadas' => $subject->arranged(),
-            default => true,
-        } && ($needle === '' || Str::contains(Str::of("{$subject->subject->code} {$subject->subject->name}")->ascii()->lower()->toString(), $needle)));
+        $rows = array_filter($joinable, fn (ParallelSubject $subject): bool => ($this->filter === '' || $states[$this->keyOf($subject)]['key'] === $this->filter)
+            && ($needle === '' || Str::contains(Str::of("{$subject->subject->code} {$subject->subject->name}")->ascii()->lower()->toString(), $needle)));
 
         usort($rows, fn (ParallelSubject $a, ParallelSubject $b): int => [$a->arranged(), $b->saved(), $a->subject->code, $a->campus->code] <=> [$b->arranged(), $a->saved(), $b->subject->code, $b->campus->code]);
 
@@ -413,10 +457,10 @@ new #[Title('Paralelos')] class extends Component
             $created > 0 ? ($created === 1 ? 'nace 1 nuevo' : "nacen {$created} nuevos") : null,
             $cancelled > 0 ? ($cancelled === 1 ? 'se cancela 1' : "se cancelan {$cancelled}") : null,
         ]);
-        $line = ($draft->size() === 1 ? 'Queda 1 grupo' : "Quedan {$draft->size()} grupos").': '.self::listOf(array_values($parts)).'.';
+        $line = ($draft->size() === 1 ? 'Queda 1 grupo' : "Quedan {$draft->size()} grupos").': '.collect($parts)->join(', ', ' y ').'.';
 
         if ($lost !== []) {
-            $line .= ' Se pierde el horario de '.self::listOf(array_map(fn ($group): string => "{$group->code} ({$this->duration($group->minutes)})", $lost)).'.';
+            $line .= ' Se pierde el horario de '.collect($lost)->map(fn ($group): string => "{$group->code} ({$this->duration($group->minutes)})")->join(', ', ' y ').'.';
         }
 
         return $line.' Los cupos de cada carrera se escriben directo y se avisa a las carreras cuyos lugares cambian.';
@@ -428,18 +472,18 @@ new #[Title('Paralelos')] class extends Component
         $created = count($result->created);
         $cancelled = count($result->cancelled);
 
-        return self::listOf(array_values(array_filter([
+        return collect([
             $kept > 0 ? ($kept === 1 ? '1 grupo se quedó' : "{$kept} grupos se quedaron") : null,
             $created > 0 ? ($created === 1 ? '1 nació' : "{$created} nacieron") : null,
             $cancelled > 0 ? ($cancelled === 1 ? '1 se canceló' : "{$cancelled} se cancelaron") : null,
-        ]))).'. Se avisó a las carreras cuyos lugares cambiaron.';
+        ])->filter()->join(', ', ' y ').'. Se avisó a las carreras cuyos lugares cambiaron.';
     }
 
     private function lostLine(ParallelArrangement $result): string
     {
-        $lost = array_map(fn (array $row): string => "{$row['group']->code} ({$this->duration($row['minutes'])})", $result->lostSchedules());
+        $lost = collect($result->lostSchedules())->map(fn (array $row): string => "{$row['group']->code} ({$this->duration($row['minutes'])})");
 
-        return 'Se perdió el horario de '.self::listOf($lost).': sus sesiones quedan en la bitácora.';
+        return 'Se perdió el horario de '.$lost->join(', ', ' y ').': sus sesiones quedan en la bitácora.';
     }
 
     /**
@@ -455,15 +499,5 @@ new #[Title('Paralelos')] class extends Component
             $rest === 0 => "{$hours} h",
             default => "{$hours} h {$rest} min",
         };
-    }
-
-    /**
-     * @param  list<string>  $items
-     */
-    private static function listOf(array $items): string
-    {
-        $last = array_pop($items);
-
-        return $items === [] ? (string) $last : implode(', ', $items)." y {$last}";
     }
 };
