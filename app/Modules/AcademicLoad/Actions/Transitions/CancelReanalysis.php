@@ -17,7 +17,8 @@ use Illuminate\Validation\ValidationException;
  *
  * La guarda se evalúa con la carga ya bloqueada (TransitionLoad: la modalidad FOR SHARE y la carga FOR UPDATE, el estado que
  * vale es el de la base): la carga tiene que seguir en `reanalysis` y los grupos de ahora, comparados con la última versión
- * publicada con SnapshotDiff (ReanalysisChangesQuery), no deben traer diferencias. Si el jefe ya cambió algo, se rechaza
+ * publicada de forma estricta (ReanalysisChangesQuery: sesiones con su tipo, docente, cupos, justificación, grupos nuevos y
+ * cancelados), no deben traer diferencias. Si el jefe ya cambió algo, se rechaza
  * con cuántos grupos cambiaron: tiene que cerrarla y republicar la versión n + 1.
  *
  * No toca la foto ni la carga publicada: no crea versión, ni cambia `current_version`, `published_by` ni `published_at`, ni

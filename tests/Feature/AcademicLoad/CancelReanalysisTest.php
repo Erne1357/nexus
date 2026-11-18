@@ -6,10 +6,11 @@ use App\Modules\AcademicLoad\Actions\Transitions\CancelReanalysis;
 use App\Modules\AcademicLoad\Actions\Transitions\PublishLoad;
 use App\Modules\AcademicLoad\Actions\Transitions\TransitionLoad;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Events\LoadTransitioned;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\LoadTransition;
+use App\Modules\AcademicLoad\Notifications\LoadRepublished;
+use App\Modules\AcademicLoad\Queries\LoadVersionsQuery;
 use App\Modules\AcademicLoad\Queries\ReanalysisChangesQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
@@ -17,10 +18,11 @@ use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
+use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -101,29 +103,65 @@ it('RA-10: sin cambios desde la última versión, cancelar devuelve la carga a p
     expect(Activity::query()->where('event', 'transitioned')->latest('id')->first()->attribute_changes['attributes'])->toBe(['status' => 'published']);
 });
 
-it('RA-10: cancelar el re-análisis no avisa una republicación ni crea otra versión aunque la carga ya tenga la 2', function () {
+/**
+ * Lleva la carga a su versión 2 como lo haría su ciclo (re-análisis, cambio de un horario, cierre y publicación) y la deja
+ * otra vez en re-análisis, con el docente del grupo A con usuario para que una republicación real le avise.
+ *
+ * @return User el usuario del docente del grupo A
+ */
+function cancelReanalysisAtVersionTwo(): User
+{
+    $user = User::factory()->create();
+    test()->teacher->update(['user_id' => $user->id]);
     $transition = app(TransitionLoad::class);
-    $transition->handle($this->load->fresh(), LoadStatus::Closed, $this->admin, null, fn (): array => []);
-    $this->session->update(['day' => 3]);
-    app(PublishLoad::class)->handle($this->load->fresh(), $this->admin);
-    $transition->handle($this->load->fresh(), LoadStatus::Reanalysis, $this->admin, 'Otra vez', fn (): array => []);
+
+    $transition->handle(test()->load->fresh(), LoadStatus::Closed, test()->admin, null, fn (): array => []);
+    test()->session->update(['day' => 3]);
+    app(PublishLoad::class)->handle(test()->load->fresh(), test()->admin);
+    $transition->handle(test()->load->fresh(), LoadStatus::Reanalysis, test()->admin, 'Otra vez', fn (): array => []);
+
+    return $user;
+}
+
+it('RA-10: cancelar el re-análisis de una carga en versión 2 no avisa una republicación ni crea otra versión', function () {
+    Notification::fake();
+    $teacherUser = cancelReanalysisAtVersionTwo();
+    Notification::assertSentTo($teacherUser, LoadRepublished::class);
 
     Notification::fake();
-    Event::fake([LoadTransitioned::class]);
     app(CancelReanalysis::class)->handle($this->load->fresh(), $this->admin);
 
     Notification::assertNothingSent();
-    Event::assertDispatched(LoadTransitioned::class, fn (LoadTransitioned $event): bool => $event->from === LoadStatus::Reanalysis && $event->to === LoadStatus::Published);
-    expect($this->load->fresh()->current_version)->toBe(2)
+    expect($this->load->fresh()->status)->toBe(LoadStatus::Published)
+        ->and($this->load->fresh()->current_version)->toBe(2)
         ->and(LoadSnapshot::query()->where('academic_load_id', $this->load->id)->count())->toBe(2);
 });
 
-it('RA-10: el listener de la republicación no avisa al salir de re-análisis', function () {
-    Notification::fake();
+it('RA-10: cancelar no vuelve a llevar los grupos al historial por materia (no hay versión nueva que llevar)', function () {
+    cancelReanalysisAtVersionTwo();
+    $recorded = fn (): array => DB::table('historical_groups')->where('source', 'nexus')->pluck('id')->sort()->values()->all();
+    DB::table('historical_groups')->where('source', 'nexus')->update(['capacity' => 99]);
+    $before = $recorded();
 
     app(CancelReanalysis::class)->handle($this->load->fresh(), $this->admin);
 
-    Notification::assertNothingSent();
+    expect($before)->not->toBeEmpty()
+        ->and($recorded())->toBe($before)
+        ->and(DB::table('historical_groups')->where('source', 'nexus')->pluck('capacity')->unique()->all())->toBe([99]);
+});
+
+it('RA-10: cada versión conserva su comentario aunque haya una cancelación entre ellas', function () {
+    $transition = app(TransitionLoad::class);
+    app(CancelReanalysis::class)->handle($this->load->fresh(), cancelReanalysisHead());
+    $transition->handle($this->load->fresh(), LoadStatus::Reanalysis, $this->admin, 'Otra vez', fn (): array => []);
+    $this->session->update(['day' => 3]);
+    $transition->handle($this->load->fresh(), LoadStatus::Closed, $this->admin, null, fn (): array => []);
+    app(PublishLoad::class)->handle($this->load->fresh(), $this->admin, 'Segunda versión');
+
+    $versions = app(LoadVersionsQuery::class)->versions($this->load->fresh());
+
+    expect(array_column($versions, 'version'))->toBe([1, 2])
+        ->and(array_column($versions, 'comment'))->toBe(['Carga lista', 'Segunda versión']);
 });
 
 it('RA-10: la consulta compara el estado actual contra la última versión con SnapshotDiff', function () {
@@ -172,6 +210,58 @@ it('RA-10: cambiar el docente o quitar un grupo cuenta como cambio', function (C
         $t->other->update(['teacher_id' => null]);
     }, 2],
 ]);
+
+it('RA-10: la comparación es estricta: cambiar el tipo de una sesión impide cancelar aunque el diff de la publicación no lo cuente', function () {
+    $this->session->update(['kind' => SessionKind::Practica]);
+
+    expect(app(ReanalysisChangesQuery::class)->since($this->load->fresh())['summary']['changed'])->toBe(0)
+        ->and(app(ReanalysisChangesQuery::class)->changedGroups($this->load->fresh()))->toBe(1);
+
+    expect(fn () => app(CancelReanalysis::class)->handle($this->load->fresh(), cancelReanalysisHead()))->toThrow(
+        fn (ValidationException $e) => expect($e->errors()['status'])->toBe(['Ya cambiaste 1 grupo desde la versión 1: ciérralo y publica la versión 2.']),
+    );
+    expect($this->load->fresh()->status)->toBe(LoadStatus::Reanalysis);
+});
+
+it('RA-10: cambiar la justificación de un grupo sin docente o sin salón impide cancelar', function () {
+    $transition = app(TransitionLoad::class);
+    $transition->handle($this->load->fresh(), LoadStatus::Closed, $this->admin, null, fn (): array => []);
+    $this->other->update(['teacher_id' => null, 'close_justification' => 'Falta contratar']);
+    app(PublishLoad::class)->handle($this->load->fresh(), $this->admin);
+    $transition->handle($this->load->fresh(), LoadStatus::Reanalysis, $this->admin, 'Otra vez', fn (): array => []);
+
+    expect(app(ReanalysisChangesQuery::class)->hasChanges($this->load->fresh()))->toBeFalse();
+
+    $this->other->update(['close_justification' => 'Sigue sin docente']);
+
+    expect(app(ReanalysisChangesQuery::class)->changedGroups($this->load->fresh()))->toBe(1);
+    expect(fn () => app(CancelReanalysis::class)->handle($this->load->fresh(), cancelReanalysisHead()))->toThrow(
+        fn (ValidationException $e) => expect($e->errors()['status'][0])->toContain('Ya cambiaste 1 grupo'),
+    );
+});
+
+it('RA-10: cambiar el cupo del grupo y el de su carrera (que suman igual, HC-07) impide cancelar', function () {
+    DB::transaction(function () {
+        DB::statement('set constraints all deferred');
+        $this->taught->quotas()->update(['max_seats' => 25]);
+        $this->taught->update(['capacity' => 25]);
+    });
+
+    expect(app(ReanalysisChangesQuery::class)->since($this->load->fresh())['summary']['changed'])->toBe(1)
+        ->and(app(ReanalysisChangesQuery::class)->changedGroups($this->load->fresh()))->toBe(1);
+});
+
+it('RA-10: renombrar la materia, el docente o la carrera en el catálogo no es una edición de la carga: se puede cancelar', function () {
+    $this->taught->subject->update(['name' => 'Materia con otro nombre']);
+    $this->teacher->update(['name' => 'Docente Renombrado']);
+    $this->taught->ownerCareer->update(['name' => 'Carrera con otro nombre']);
+
+    expect(app(ReanalysisChangesQuery::class)->hasChanges($this->load->fresh()))->toBeFalse();
+
+    app(CancelReanalysis::class)->handle($this->load->fresh(), cancelReanalysisHead());
+
+    expect($this->load->fresh()->status)->toBe(LoadStatus::Published);
+});
 
 it('RA-10: lo que se editó y se revirtió no cuenta: sin diferencias contra la versión, se cancela', function () {
     $this->session->update(['day' => 3]);
