@@ -61,8 +61,8 @@ it('reparte las cargas entre los casos por clave de departamento y da otra vuelt
     expect($plan)->not->toHaveKey($draft->id)
         ->and(collect($codes)->sort()->values()->map(fn (string $code): string => $plan[$loads[$code]->id])->all())->toBe([
             ReanalysisDemoSeeder::CASE_CORRECTED, ReanalysisDemoSeeder::CASE_CHANGED, ReanalysisDemoSeeder::CASE_RESTARTED,
-            ReanalysisDemoSeeder::CASE_AVAILABLE, ReanalysisDemoSeeder::CASE_REPUBLISHED, ReanalysisDemoSeeder::CASE_CLOSED,
-            ReanalysisDemoSeeder::CASE_UNCHANGED, ReanalysisDemoSeeder::CASE_AVAILABLE, ReanalysisDemoSeeder::CASE_CHANGED,
+            ReanalysisDemoSeeder::CASE_AVAILABLE, ReanalysisDemoSeeder::CASE_REPUBLISHED, ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS,
+            ReanalysisDemoSeeder::CASE_CLOSED, ReanalysisDemoSeeder::CASE_UNCHANGED, ReanalysisDemoSeeder::CASE_AVAILABLE,
         ]);
 });
 
