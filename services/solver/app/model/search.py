@@ -98,31 +98,95 @@ def lns(data: ModelData, time_limit: float, workers: int = 0, seed: int = 0, ste
     started = time.perf_counter()
     deadline = started + time_limit
     search = Search()
+    search.chosen = _current_options(data)
     variables, solved = _place_most(data, DomainOptions(), search, deadline, workers, seed)
     if solved is None:
         return search
     _keep(search, solved, variables, data, replace=True)
 
-    pending = list(search.unplaced)
+    pending = [(group_id, 0) for group_id in search.unplaced]
     while pending and time.perf_counter() < deadline:
-        target = pending.pop(0)
-        neighbourhood = [target, *(group for group in _neighbours(data, target) if group in search.sessions)]
-        sub = ModelData.of(_sub_input(data.source, search, set(neighbourhood)))
-        before = sum(group in search.sessions for group in neighbourhood)
+        target, level = pending.pop(0)
+        movable = _neighbourhood(data, search, target, level)
+        sub = ModelData.of(_sub_input(data.source, search, set(movable)))
+        before = sum(group in search.sessions for group in movable)
         step_deadline = min(deadline, time.perf_counter() + step_seconds)
-        # El grupo que no quedó, con todos sus niveles; sus vecinos, con los de una hora por día.
-        options = DomainOptions(extra_tiers={target: 99}, long_window_rooms=LONG_WINDOW_ROOMS)
+        options = DomainOptions(extra_tiers=movable, long_window_rooms=LONG_WINDOW_ROOMS)
         variables, solved = _place_most(sub, options, search, step_deadline, workers, seed)
-        if solved is None:
-            continue
-        placed = sum(chosen_option(solved, domain) is not None for domain in variables.groups.values())
-        if placed > before:
+        placed = (
+            0
+            if solved is None
+            else sum(chosen_option(solved, domain) is not None for domain in variables.groups.values())
+        )
+        if solved is not None and placed > before:
             _keep(search, solved, variables, sub, replace=False)
+        elif level < MAX_LEVEL:
+            pending.append((target, level + 1))
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
     if not search.unplaced:
         search.first_feasible_seconds = time.perf_counter() - started
 
     return search
+
+
+#: Cuántas veces se agranda el vecindario de un grupo que no se pudo programar.
+MAX_LEVEL = 2
+
+#: Todos los niveles del patrón (`DomainOptions.extra_tiers`).
+ALL_TIERS = 99
+
+
+def _neighbourhood(data: ModelData, search: Search, target: str, level: int) -> dict[str, int]:
+    """Los grupos que se mueven para programar `target`, con los niveles de más de cada uno.
+
+    - 0: el grupo con todos sus niveles y los programados que comparten docente o cohorte con él, con los de una hora
+      por día (otros días, sin días de 2 horas);
+    - 1: esos vecinos también con todos sus niveles;
+    - 2: además, los vecinos de los vecinos con los de una hora por día y, si el grupo lleva laboratorio, los demás
+      grupos con laboratorio de su campus, que compiten por los mismos salones.
+    """
+    first = [group for group in _neighbours(data, target) if group in search.sessions]
+    movable = {target: ALL_TIERS, **dict.fromkeys(first, ALL_TIERS if level >= 1 else 0)}
+    if level >= 2:
+        for group in first:
+            for other in _neighbours(data, group):
+                if other in search.sessions:
+                    movable.setdefault(other, 0)
+        group = data.groups[target]
+        if group.needs_lab and group.practice_hours > 0:
+            for other in data.movable:
+                if other.campus_code == group.campus_code and other.needs_lab and other.id in search.sessions:
+                    movable.setdefault(other.id, 0)
+
+    return movable
+
+
+def _current_options(data: ModelData) -> dict[str, OptionKey]:
+    """La opción de cada grupo movible que ya tiene un horario con el patrón (`current_sessions`): la pista de la
+    primera vuelta (PS-07). Un horario que no es una opción del patrón (sesiones de 2 horas, horas distintas cada día)
+    no da pista."""
+    chosen: dict[str, OptionKey] = {}
+    for group in data.movable:
+        grid = data.grids[group.campus_code]
+        if not group.current_sessions:
+            continue
+        by_day: dict[int, list[int]] = defaultdict(list)
+        for slot in group.current_sessions:
+            start, end = _minutes(slot.starts_at), _minutes(slot.ends_at)
+            if (start - grid.start) % grid.block_minutes or (end - start) % grid.unit_minutes:
+                break
+            by_day[slot.day].extend(range(start, end, grid.unit_minutes))
+        else:
+            starts = {min(minutes) for minutes in by_day.values()}
+            if len(starts) == 1:
+                block = (starts.pop() - grid.start) // grid.block_minutes
+                chosen[group.id] = (tuple((day, len(by_day[day])) for day in sorted(by_day)), block)
+
+    return chosen
+
+
+def _minutes(clock: str) -> int:
+    return int(clock[:2]) * 60 + int(clock[3:])
 
 
 def _place_most(
@@ -136,10 +200,10 @@ def _place_most(
     add_hard_constraints(model, variables, data, relaxed=True)
     literals = []
     for domain in variables.groups.values():
+        literals.extend(option.literal for option in domain.options)
         hint = search.chosen.get(domain.id)
-        for option in domain.options:
-            literals.append(option.literal)
-            if hint is not None:
+        if hint is not None and any((option.spread, option.block) == hint for option in domain.options):
+            for option in domain.options:
                 model.add_hint(option.literal, (option.spread, option.block) == hint)
     model.maximize(cp_model.LinearExpr.sum(literals))
     solve_at = time.perf_counter()
