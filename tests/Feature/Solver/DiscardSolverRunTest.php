@@ -40,6 +40,7 @@ it('SV-07: el jefe descarta una corrida terminada de su carga, con bitácora y s
         ->and(Activity::query()->where('subject_id', $this->departmentRun->id)->sole())
         ->event->toBe('discarded')
         ->causer_id->toBe($this->jefe->id)
+        ->attribute_changes->toArray()->toBe(['attributes' => ['status' => 'discarded'], 'old' => ['status' => 'done']])
         ->and($this->jefe->can('apply', $this->departmentRun->fresh()))->toBeFalse();
 });
 

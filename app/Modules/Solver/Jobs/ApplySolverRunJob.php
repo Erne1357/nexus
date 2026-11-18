@@ -4,6 +4,7 @@ namespace App\Modules\Solver\Jobs;
 
 use App\Modules\Core\Models\User;
 use App\Modules\Solver\Actions\ApplySolverRun;
+use App\Modules\Solver\Actions\ApplyTokenMismatch;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Models\SolverRun;
 use App\Modules\Solver\Notifications\SolverRunApplied;
@@ -17,7 +18,9 @@ use Throwable;
 
 /**
  * Escribe en la cola el horario de una corrida que aceptó el jefe (SV-05; tarea 6.10): RequestApplySolverRun la dejó en
- * `applying` y despachó este job. Un solo intento.
+ * `applying` con una ficha (`apply_token`) y despachó este job con ella. Un solo intento. Un job viejo, que encuentra la
+ * corrida otra vez en `applying` con otra ficha (se liberó por vieja y se volvió a pedir), no la aplica ni la regresa:
+ * revisa la ficha al leerla y ApplySolverRun la vuelve a revisar con la fila bloqueada (ApplyTokenMismatch).
  *
  * - Llama a ApplySolverRun, que bloquea la carga y revisa otra vez la vigencia (SV-02). No autoriza de nuevo: ya lo hizo
  *   la petición, y la policy `apply` pide `done` (supuesto por confirmar: un permiso quitado entre la petición y el job no
@@ -35,14 +38,17 @@ final class ApplySolverRunJob implements ShouldQueue
 
     public int $timeout = 300;
 
-    public function __construct(public readonly string $runId, public readonly string $userId) {}
+    /**
+     * @param  string|null  $token  la ficha que RequestApplySolverRun puso al pasar la corrida a `applying`
+     */
+    public function __construct(public readonly string $runId, public readonly string $userId, public readonly ?string $token = null) {}
 
     public function handle(ApplySolverRun $apply): void
     {
         $run = SolverRun::query()->find($this->runId);
         $user = User::query()->find($this->userId);
 
-        if ($run?->status !== SolverRunStatus::Applying) {
+        if ($run?->status !== SolverRunStatus::Applying || $run->apply_token !== $this->token) {
             return;
         }
 
@@ -54,6 +60,8 @@ final class ApplySolverRunJob implements ShouldQueue
 
         try {
             $summary = $apply->handle($run, $user);
+        } catch (ApplyTokenMismatch) {
+            return;
         } catch (ValidationException $exception) {
             $this->revert((string) collect($exception->errors())->flatten()->first(), $user);
 
@@ -73,14 +81,14 @@ final class ApplySolverRunJob implements ShouldQueue
     /**
      * Regresa a `done`, con el error guardado, una corrida que sigue aplicándose, y avisa a quien la aceptó. No toca una
      * que ya cambió de estado. Con `$before`, solo si no se movió desde entonces (LaunchSolverRun da por perdido un
-     * job que no terminó).
+     * job que no terminó); con `$token`, solo si se está aplicando con esa ficha.
      */
-    public static function release(string $runId, string $message, ?CarbonInterface $before = null, ?User $notify = null): bool
+    public static function release(string $runId, string $message, ?CarbonInterface $before = null, ?User $notify = null, ?string $token = null): bool
     {
-        $released = DB::transaction(function () use ($runId, $message, $before): ?SolverRun {
+        $released = DB::transaction(function () use ($runId, $message, $before, $token): ?SolverRun {
             $run = SolverRun::query()->lockForUpdate()->find($runId);
 
-            if ($run?->status !== SolverRunStatus::Applying || ($before !== null && ! $run->updated_at->lt($before))) {
+            if ($run?->status !== SolverRunStatus::Applying || ($before !== null && ! $run->updated_at->lt($before)) || ($token !== null && $run->apply_token !== $token)) {
                 return null;
             }
 
@@ -101,6 +109,6 @@ final class ApplySolverRunJob implements ShouldQueue
 
     private function revert(string $message, ?User $user = null): void
     {
-        self::release($this->runId, $message, null, $user);
+        self::release($this->runId, $message, null, $user, $this->token ?? '');
     }
 }

@@ -21,8 +21,8 @@ use Illuminate\Validation\ValidationException;
  *   pasa directo a cancelada; si el job sigue vivo, su guardado final ve que ya no corre y no la pisa;
  * - en otro estado, ValidationException en `run`.
  *
- * Deja bitácora («cancelled» o «cancel_requested»). Autoriza a `$by` con SolverRunPolicy::cancel (quien la lanzó o quien
- * puede lanzar ese alcance): una AuthorizationException (403) si no.
+ * Deja bitácora («cancelled» o «cancel_requested», con el estado de antes y el nuevo). Autoriza a `$by` con
+ * SolverRunPolicy::cancel (quien la lanzó o quien puede lanzar ese alcance): una AuthorizationException (403) si no.
  */
 final class CancelSolverRun
 {
@@ -42,6 +42,7 @@ final class CancelSolverRun
                 return;
             }
 
+            $previous = $locked->status;
             $event = match ($locked->status) {
                 SolverRunStatus::Queued => 'cancelled',
                 SolverRunStatus::Running => $stalled ? 'cancelled' : 'cancel_requested',
@@ -57,7 +58,7 @@ final class CancelSolverRun
                 ->performedOn($locked)
                 ->causedBy($by)
                 ->event($event)
-                ->withChanges(['attributes' => ['status' => $locked->status->value, 'cancel_requested_at' => $locked->cancel_requested_at->toIso8601String()]])
+                ->withChanges(['attributes' => ['status' => $locked->status->value, 'cancel_requested_at' => $locked->cancel_requested_at->toIso8601String()], 'old' => ['status' => $previous->value]])
                 ->log($event === 'cancelled' ? 'Canceló la corrida del motor' : 'Pidió cancelar la corrida del motor que corre');
         });
     }

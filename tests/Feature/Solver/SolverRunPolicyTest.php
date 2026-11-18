@@ -107,3 +107,15 @@ it('el coordinador no ve la corrida de una carga con grupos de su carrera solo e
     expect($coordinador->can('view', $this->departmentRun))->toBeFalse()
         ->and(app(CareerLoadsQuery::class)->careersOf($this->departmentRun->term_id, $this->presencial->id, departmentKey(10)))->toBe([careerKey(21)]);
 });
+
+it('el coordinador no ve la corrida de una carga de otro departamento sin grupos de su carrera, aunque su carrera tenga grupos en otra carga', function () {
+    $coordinador = solverUser(Role::Coordinador, ['career_id' => careerKey(20)]);
+    Group::factory()->create([
+        'term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'owner_career_id' => careerKey(20),
+        'subject_id' => Subject::factory()->create(['department_id' => departmentKey(11)])->id,
+    ]);
+    $otherLoad = SolverRun::factory()->done()->create(['term_id' => $this->departmentRun->term_id, 'modality_id' => $this->presencial->id, 'department_id' => departmentKey(11)]);
+
+    expect($coordinador->can('view', $this->departmentRun))->toBeFalse()
+        ->and($coordinador->can('view', $otherLoad))->toBeTrue();
+});

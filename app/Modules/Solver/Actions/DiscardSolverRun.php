@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
  * SV-07: descarta una corrida terminada (tarea 6.10; docs/dominio/reglas-de-negocio.md, «Corridas del motor»). Autoriza
  * a `$by` con SolverRunPolicy::discard (quien la lanzó o quien puede lanzar ese alcance: el jefe, las de su carga; el
  * coordinador, las de su carrera). Revisa el estado de la fila bloqueada: solo una terminada pasa a descartada; ya no
- * se puede aceptar. No toca ninguna sesión. Deja bitácora («discarded»).
+ * se puede aceptar. No toca ninguna sesión. Deja bitácora («discarded», con el estado de antes y el nuevo).
  */
 final class DiscardSolverRun
 {

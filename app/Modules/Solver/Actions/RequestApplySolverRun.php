@@ -8,6 +8,7 @@ use App\Modules\Solver\Jobs\ApplySolverRunJob;
 use App\Modules\Solver\Models\SolverRun;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -17,9 +18,9 @@ use Throwable;
  *
  * 1. Revisa que sea una corrida de departamento terminada y autoriza `apply` a `$by` (el jefe de la carga).
  * 2. Revisa la vigencia (SV-02) con ApplySolverRun::isCurrent: si la carga cambió, lanza ya el mensaje de vencida.
- * 3. Pasa la corrida de `done` a `applying` con una actualización condicional (dos peticiones no despachan dos jobs) y
- *    quita el error de un intento anterior; despacha el job. Si el despacho falla, la corrida vuelve a `done` y la
- *    excepción se vuelve a lanzar.
+ * 3. Pasa la corrida de `done` a `applying` con una actualización condicional (dos peticiones no despachan dos jobs),
+ *    le pone una ficha nueva (`apply_token`) y quita el error de un intento anterior; despacha el job con esa ficha. Si
+ *    el despacho falla, la corrida vuelve a `done` y la excepción se vuelve a lanzar.
  *
  * Mientras está `applying` no se lanza otra corrida del departamento (SV-01).
  */
@@ -39,17 +40,18 @@ final class RequestApplySolverRun
             throw ValidationException::withMessages(['run' => ApplySolverRun::STALE_MESSAGE]);
         }
 
+        $token = (string) Str::uuid7();
         $claimed = SolverRun::query()
             ->whereKey($run->getKey())
             ->where('status', SolverRunStatus::Done)
-            ->update(['status' => SolverRunStatus::Applying, 'metrics' => DB::raw("metrics - 'apply_error'")]);
+            ->update(['status' => SolverRunStatus::Applying, 'apply_token' => $token, 'metrics' => DB::raw("metrics - 'apply_error'")]);
 
         if ($claimed === 0) {
             throw ValidationException::withMessages(['run' => 'Solo se acepta una corrida terminada.']);
         }
 
         try {
-            ApplySolverRunJob::dispatch($run->getKey(), $by->getKey());
+            ApplySolverRunJob::dispatch($run->getKey(), $by->getKey(), $token);
         } catch (Throwable $exception) {
             SolverRun::query()->whereKey($run->getKey())->where('status', SolverRunStatus::Applying)->update(['status' => SolverRunStatus::Done]);
 

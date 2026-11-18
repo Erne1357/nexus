@@ -19,6 +19,7 @@ use App\Modules\Scheduling\Events\ScheduleConflictsSynced;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Actions\ApplySolverRun;
+use App\Modules\Solver\Actions\ApplyTokenMismatch;
 use App\Modules\Solver\Actions\LaunchSolverRun;
 use App\Modules\Solver\Actions\RequestApplySolverRun;
 use App\Modules\Solver\Enums\RunScope;
@@ -32,6 +33,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
@@ -156,7 +158,9 @@ it('SV-05: escribe solo lo diferente, con bitácora por grupo, deja la corrida a
         ->status->toBe(SolverRunStatus::Applied)
         ->applied_by->toBe($this->jefe->id)
         ->applied_at->not->toBeNull()
-        ->and(Activity::query()->where('subject_id', $run->id)->where('event', 'applied')->sole()->causer_id)->toBe($this->jefe->id)
+        ->and(Activity::query()->where('subject_id', $run->id)->where('event', 'applied')->sole())
+        ->causer_id->toBe($this->jefe->id)
+        ->attribute_changes->toArray()->toBe(['attributes' => ['status' => 'applied'], 'old' => ['status' => 'done']])
         ->and(Cache::get(SyncScheduleConflicts::stampKey($this->term->id, $this->pres->id)))->not->toBeNull();
 });
 
@@ -228,7 +232,7 @@ it('SV-05: el job deja la corrida aplicada, escribe y avisa a quien aceptó', fu
     app(RequestApplySolverRun::class)->handle($run, $this->jefe);
     Notification::fake();
 
-    (new ApplySolverRunJob($run->id, $this->jefe->id))->handle(app(ApplySolverRun::class));
+    (new ApplySolverRunJob($run->id, $this->jefe->id, $run->fresh()->apply_token))->handle(app(ApplySolverRun::class));
 
     expect($run->fresh()->status)->toBe(SolverRunStatus::Applied)
         ->and($this->placing->sessions()->count())->toBeGreaterThan(0);
@@ -242,7 +246,7 @@ it('SV-02: con la entrada vencida el request avisa y el job regresa la corrida a
     GroupSession::factory()->for($this->unplaced)->inRoom($this->room)->on(5, '13:00', '14:00')->create();
     Notification::fake();
 
-    (new ApplySolverRunJob($run->id, $this->jefe->id))->handle(app(ApplySolverRun::class));
+    (new ApplySolverRunJob($run->id, $this->jefe->id, $run->fresh()->apply_token))->handle(app(ApplySolverRun::class));
 
     $fresh = $run->fresh();
     expect($fresh->status)->toBe(SolverRunStatus::Done)
@@ -307,4 +311,38 @@ it('si el recálculo de choques falla después de escribir, la corrida queda apl
     expect($summary['conflicts_pending'])->toBeTrue()
         ->and($run->fresh()->status)->toBe(SolverRunStatus::Applied)
         ->and(appliedSessionsOf($this->placing))->toBe(['3 10:00-12:00']);
+});
+
+it('SV-05: un job con una ficha vieja no aplica la corrida que se volvió a pedir; el de la ficha nueva sí', function () {
+    $run = standardRun();
+    Queue::fake();
+    Notification::fake();
+    app(RequestApplySolverRun::class)->handle($run, $this->jefe);
+    $old = $run->fresh()->apply_token;
+    ApplySolverRunJob::release($run->id, 'Se perdió el job.');
+    app(RequestApplySolverRun::class)->handle($run->fresh(), $this->jefe);
+    $new = $run->fresh()->apply_token;
+
+    (new ApplySolverRunJob($run->id, $this->jefe->id, $old))->handle(app(ApplySolverRun::class));
+    (new ApplySolverRunJob($run->id, $this->jefe->id, $old))->failed(new RuntimeException('Se acabó el tiempo.'));
+
+    expect($new)->not->toBe($old)
+        ->and($run->fresh()->status)->toBe(SolverRunStatus::Applying)
+        ->and($this->placing->sessions()->count())->toBe(0);
+
+    (new ApplySolverRunJob($run->id, $this->jefe->id, $new))->handle(app(ApplySolverRun::class));
+
+    expect($run->fresh()->status)->toBe(SolverRunStatus::Applied)
+        ->and(Activity::query()->where('subject_id', $run->id)->where('event', 'applied')->sole()->attribute_changes['old']['status'])->toBe('applying');
+});
+
+it('SV-05: con la fila bloqueada, una corrida que se aplica con otra ficha no se toca', function () {
+    $run = standardRun();
+    Queue::fake();
+    app(RequestApplySolverRun::class)->handle($run, $this->jefe);
+    $seen = $run->fresh()->forceFill(['apply_token' => (string) Str::uuid7()]);
+
+    expect(fn () => applySolverRun($seen))->toThrow(ApplyTokenMismatch::class)
+        ->and($run->fresh()->status)->toBe(SolverRunStatus::Applying)
+        ->and($this->placing->sessions()->count())->toBe(0);
 });

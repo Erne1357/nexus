@@ -15,8 +15,10 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Solver\Actions\ReleaseStaleApplyingRun;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverRunStatus;
+use App\Modules\Solver\Jobs\RunSolver;
 use App\Modules\Solver\Models\SolverRun;
 use Illuminate\Support\Facades\Queue;
 use Livewire\Livewire;
@@ -259,4 +261,21 @@ it('el componente de avance también cubre «Aplicando…» y avisa a la página
     $run->update(['status' => SolverRunStatus::Applied]);
 
     $progress->call('$refresh')->assertDispatched('run-finished')->assertDontSeeHtml('wire:poll');
+});
+
+it('al abrir, una corrida que se quedó aplicándose más del límite vuelve a estar lista con su motivo; una reciente no', function () {
+    $stale = SolverRun::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'status' => SolverRunStatus::Applying, 'output' => null]);
+    SolverRun::query()->whereKey($stale->id)->update(['updated_at' => now()->subSeconds(RunSolver::STALE_AFTER + 60)]);
+
+    runsPage($this->jefe, ['corrida' => $stale->id]);
+
+    expect($stale->fresh())
+        ->status->toBe(SolverRunStatus::Done)
+        ->metrics->toBe(['apply_error' => ReleaseStaleApplyingRun::MESSAGE]);
+
+    $recent = SolverRun::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'status' => SolverRunStatus::Applying, 'output' => null]);
+
+    runsPage($this->jefe);
+
+    expect($recent->fresh()->status)->toBe(SolverRunStatus::Applying);
 });

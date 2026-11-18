@@ -15,6 +15,7 @@ use App\Modules\Solver\Actions\ApplySolverRun;
 use App\Modules\Solver\Actions\CancelSolverRun;
 use App\Modules\Solver\Actions\DiscardSolverRun;
 use App\Modules\Solver\Actions\LaunchSolverRun;
+use App\Modules\Solver\Actions\ReleaseStaleApplyingRun;
 use App\Modules\Solver\Actions\RequestApplySolverRun;
 use App\Modules\Solver\Contract\SoftWeights;
 use App\Modules\Solver\Engines\EngineRegistry;
@@ -163,6 +164,35 @@ new #[Title('Corridas del motor')] class extends Component
         $this->view = array_key_exists($this->view, RunComparison::VIEWS) ? $this->view : 'tipo';
         $this->mode = array_key_exists($this->mode, RunComparison::MODES) ? $this->mode : 'despues';
         $this->resolve($context, $screen, $run);
+        $this->releaseStale($run ?? $this->newestRun($context));
+    }
+
+    /**
+     * La corrida que la página abre sin `?corrida=`: la más nueva que ve quien entra.
+     */
+    private function newestRun(Actor $context): ?SolverRun
+    {
+        if ($this->scopeId === null) {
+            return null;
+        }
+
+        [$term, $modality] = $this->context();
+        $runs = $this->scopeKind === 'department'
+            ? app(SolverRunsQuery::class)->forDepartment($term, $modality, KeyLookup::findOrFail(Department::withTrashed(), $this->scopeId), $context->user())
+            : app(SolverRunsQuery::class)->forCareer($term, $modality, KeyLookup::findOrFail(Career::withTrashed(), $this->scopeId), $context->user());
+
+        return $runs[0]['run'] ?? null;
+    }
+
+    /**
+     * Al abrir, una corrida que se quedó «Aplicando» más de RunSolver::STALE_AFTER segundos (su job se perdió) vuelve a
+     * estar lista, con su motivo (ReleaseStaleApplyingRun).
+     */
+    private function releaseStale(?SolverRun $run): void
+    {
+        if ($run !== null) {
+            app(ReleaseStaleApplyingRun::class)->handle($run);
+        }
     }
 
     /**
@@ -205,7 +235,9 @@ new #[Title('Corridas del motor')] class extends Component
      */
     public function selectRun(string $id): void
     {
-        $this->runId = $this->runOrFail($id)->getKey();
+        $run = $this->runOrFail($id);
+        $this->releaseStale($run);
+        $this->runId = $run->getKey();
         $this->lens = '';
         $this->selected = '';
         $this->showScore = $this->showAccept = $this->showStale = false;

@@ -60,7 +60,8 @@ use Throwable;
  * cuántos grupos y sesiones cambió y cuáles se quedaron como estaban, con sus motivos.
  *
  * Una corrida `done` se autoriza aquí; una `applying` ya la autorizó RequestApplySolverRun al pasarla a ese estado, y el
- * job no vuelve a autorizar (la policy `apply` pide `done`).
+ * job no vuelve a autorizar (la policy `apply` pide `done`). Una `applying` solo se aplica con su ficha: si la fila
+ * bloqueada trae otra (`apply_token`, la de una aceptación pedida después), lanza ApplyTokenMismatch y no toca nada.
  */
 final class ApplySolverRun
 {
@@ -90,6 +91,11 @@ final class ApplySolverRun
         [$summary, $term, $modality] = $this->editability->guard(fn (): array => DB::transaction(function () use ($run, $by): array {
             $locked = SolverRun::query()->lockForUpdate()->findOrFail($run->getKey());
             self::ensureAppliable($locked, SolverRunStatus::Done, SolverRunStatus::Applying);
+            $previous = $locked->status;
+
+            if ($locked->status === SolverRunStatus::Applying && $locked->apply_token !== $run->apply_token) {
+                throw new ApplyTokenMismatch("La corrida {$locked->getKey()} se está aplicando con otra ficha.");
+            }
 
             $term = Term::query()->findOrFail($locked->term_id);
             $modality = Modality::query()->withTrashed()->findOrFail($locked->modality_id);
@@ -128,7 +134,7 @@ final class ApplySolverRun
                 ->performedOn($locked)
                 ->causedBy($by)
                 ->event('applied')
-                ->withChanges(['attributes' => ['status' => SolverRunStatus::Applied->value], 'old' => ['status' => SolverRunStatus::Done->value]])
+                ->withChanges(['attributes' => ['status' => SolverRunStatus::Applied->value], 'old' => ['status' => $previous->value]])
                 ->withProperties(['summary' => [...$summary, 'kept' => array_keys($summary['kept'])]])
                 ->log("Aceptó la corrida del motor de {$department->name} en {$modality->name}: {$summary['sessions']} sesiones en {$summary['groups']} grupos");
 
