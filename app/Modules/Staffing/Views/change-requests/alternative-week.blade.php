@@ -65,7 +65,7 @@
                         @endif
                         @if ($mark)
                             <span @class(['flex min-w-0', 'mt-px' => $item['span'] > 1])>
-                                <span class="inline-flex h-[14px] max-w-full items-center gap-[3px] overflow-hidden rounded-[4px] border px-1 text-[11px] leading-none font-semibold whitespace-nowrap @max-[30rem]:px-0.5 {{ $mark['tone'] }}">
+                                <span class="inline-flex h-[14px] max-w-full items-center gap-px overflow-hidden rounded-[3px] border px-0.5 text-[11px] leading-none font-semibold whitespace-nowrap {{ $mark['tone'] }}">
                                     <x-icon :name="$mark['icon']" class="h-[11px] w-[11px] shrink-0" />
                                     <span @class(['truncate @max-[30rem]:hidden', 'font-mono' => $mark['mono']])>{{ $mark['text'] }}</span>
                                 </span>
@@ -78,7 +78,9 @@
     </div>
 
     @if ($week['changed'] !== [])
-        <ul class="mt-2 hidden gap-1.5 @max-[30rem]:grid" data-testid="alternative-week-list">
+        {{-- En una caja angosta, la lista de lo que cambia se ve debajo; en una ancha queda para los lectores de pantalla,
+             porque los bloques solo lo dicen en `title`. --}}
+        <ul class="sr-only mt-2 gap-1.5 @max-[30rem]:not-sr-only @max-[30rem]:grid" data-testid="alternative-week-list">
             @foreach ($week['changed'] as $item)
                 <li class="flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[13px] [word-spacing:-0.25em]">
                     <span @class(['font-sans text-xs font-semibold [word-spacing:normal]', 'text-error' => $item['state'] === 'hard', 'text-info' => $item['state'] === 'new', 'text-warning' => $item['state'] === 'moved'])>{{ match ($item['state']) { 'hard' => 'Choca', 'new' => 'Nueva', default => 'Movida' } }}</span>
@@ -90,7 +92,9 @@
     @endif
 
     <div class="mt-2 flex flex-wrap gap-x-3.5 gap-y-1 text-[12.5px] text-neutral" aria-hidden="true">
-        <span class="inline-flex items-center gap-1.5"><span class="h-3.5 w-5 shrink-0 rounded-[4px] border-[1.5px] border-warning bg-warning/10"></span>Movida <x-icon name="o-arrow-uturn-left" class="h-3 w-3" /> de dónde viene</span>
+        @if ($week['hasMoved'])
+            <span class="inline-flex items-center gap-1.5"><span class="h-3.5 w-5 shrink-0 rounded-[4px] border-[1.5px] border-warning bg-warning/10"></span>Movida <x-icon name="o-arrow-uturn-left" class="h-3 w-3" /> de dónde viene</span>
+        @endif
         @if ($week['hasNew'])
             <span class="inline-flex items-center gap-1.5"><span class="h-3.5 w-5 shrink-0 rounded-[4px] border-[1.5px] border-info bg-info/10"></span>Nueva</span>
         @endif

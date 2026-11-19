@@ -11,6 +11,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\SessionCandidate;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
+use App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives;
 use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
@@ -102,7 +103,9 @@ final class ChangeAlternativesQuery
             'tabs' => $tabs,
             'selected' => $option === null ? null : [...$option, 'key' => $key],
             'pedidoHard' => $pedidoHard,
-            'engineLine' => $computedAt === null || $items === [] ? null : $this->engineLine($computedAt, $moved),
+            'engineLine' => $computedAt === null || $items === [] ? null : $this->engineLine($computedAt, $moved).' '.(($items[0]['kind'] ?? null) === ProposeChangeAlternatives::CHAIN
+                ? (count($items) > 1 ? 'La A deja lo pedido y mueve a los grupos con los que choca; las demás mueven solo este grupo.' : 'La A deja lo pedido y mueve a los grupos con los que choca.')
+                : 'Todas mueven solo este grupo, en el orden en que las dio el motor.'),
             'moved' => $moved,
         ];
     }
@@ -122,7 +125,7 @@ final class ChangeAlternativesQuery
             foreach (SessionLabels::snapshot($entry['sessions']) as $line) {
                 $lines[] = [
                     'label' => $entry['requested'] ? null : (isset($groups[$entry['group_id']]) ? ChangeAlternatives::label($groups[$entry['group_id']]) : $entry['code']),
-                    'line' => trim("{$line['days']} {$line['time']}".($line['room'] === null ? '' : " · {$line['room']}")),
+                    'line' => self::unbroken(trim("{$line['days']} {$line['time']}".($line['room'] === null ? '' : " · {$line['room']}"))),
                 ];
             }
         }
@@ -376,10 +379,10 @@ final class ChangeAlternativesQuery
             'moves' => array_values(array_map(fn (array $move): array => [
                 'tag' => $move['tag'],
                 'tone' => $move['tone'],
-                'was' => $move['from'] === [] ? null : ChangeAlternatives::line($move['from']),
-                'now' => $move['to'] === [] ? null : ChangeAlternatives::line($move['to']),
+                'was' => $move['from'] === [] ? null : self::unbroken(ChangeAlternatives::line($move['from'])),
+                'now' => $move['to'] === [] ? null : self::unbroken(ChangeAlternatives::line($move['to'])),
             ], $moves)),
-            'same' => $same === [] ? null : ChangeAlternatives::line($same),
+            'same' => $same === [] ? null : self::unbroken(ChangeAlternatives::line($same)),
         ];
     }
 
@@ -492,7 +495,11 @@ final class ChangeAlternativesQuery
                         default => 'moved',
                     },
                     'mark' => null,
-                    'prev' => $unchanged || $was === null ? null : SessionLabels::DAYS[$was['day']].' '.WeekTime::clock($was['starts_at']).($was['room_id'] !== $session['room_id'] && $was['day'] === $slot['day'] && $was['starts_at'] === $slot['starts_at'] ? ' · '.($was['room'] ?? 'sin salón') : ''),
+                    'prev' => match (true) {
+                        $unchanged || $was === null => null,
+                        $was['day'] === $slot['day'] && $was['starts_at'] === $slot['starts_at'] => $was['room'] ?? 'Sin salón',
+                        default => SessionLabels::DAYS[$was['day']].' '.WeekTime::clock($was['starts_at']),
+                    },
                 ];
             }
         }
@@ -516,6 +523,7 @@ final class ChangeAlternativesQuery
             'blocks' => $blocks,
             'laid' => $laid,
             'changed' => $changed,
+            'hasMoved' => collect($items)->contains('state', 'moved'),
             'hasHard' => collect($items)->contains('state', 'hard'),
             'hasNew' => collect($items)->contains('state', 'new'),
             'hasFixed' => collect($items)->contains('state', 'fixed'),
@@ -565,6 +573,15 @@ final class ChangeAlternativesQuery
         }
 
         return $rows;
+    }
+
+    /**
+     * Un horario para la pantalla en el que ningún rango se parte en dos renglones («15:00–⏎16:00»): un word joiner
+     * después de cada guion de rango. Solo para lo que se pinta; los avisos usan ChangeAlternatives::line() tal cual.
+     */
+    private static function unbroken(string $line): string
+    {
+        return str_replace('–', "–\u{2060}", $line);
     }
 
     /**
