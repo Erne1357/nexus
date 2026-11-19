@@ -9,6 +9,9 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use Livewire\Features\SupportTesting\Testable;
@@ -98,6 +101,25 @@ it('el drawer muestra la matriz con la sugerencia y su vista previa recalcula al
         ->assertSee('Mixto 2')
         ->call('removeMixed', 1)
         ->assertDontSee('Mixto 2');
+});
+
+it('E-08: «Completos de» y lo que llevan los completos usan la capacidad real del grupo, no el tamaño objetivo', function () {
+    $lab = Subject::factory()->create(['code' => 'AEC-1059', 'name' => 'Química Aplicada', 'department_id' => $this->world->department->id, 'needs_lab' => true]);
+    $room = Room::factory()->capacity(23)->create(['building_id' => Building::factory()->create(['campus_id' => $this->world->campus->id])->id]);
+    SubjectRoomDefault::factory()->create(['subject_id' => $lab->id, 'campus_id' => $this->world->campus->id, 'room_id' => $room->id, 'priority' => 1]);
+    $ieme = $this->world->career('IEME');
+    $this->world->request($this->isic, 74, 3, subject: $lab);
+    $this->world->request($ieme, 56, 3, subject: $lab);
+
+    parallelsPageAs($this->jefe)
+        ->call('open', $lab->id, $this->world->campus->id)
+        ->assertSet('full', [$ieme->id => 2, $this->isic->id => 3])
+        ->assertSet('mixed', [[$ieme->id => 10, $this->isic->id => 5]])
+        ->assertSeeHtml('de 23</span>')
+        ->assertDontSeeHtml('de 25</span>')
+        ->assertSeeHtml('data-testid="parallels-full-seats-ISIC">69<')
+        ->assertSeeHtml('data-testid="parallels-full-seats-IEME">46<')
+        ->assertDontSeeHtml('data-testid="parallels-over-0"');
 });
 
 it('HC-07: un mixto que pasa su capacidad se marca en su columna y no deja armar', function () {

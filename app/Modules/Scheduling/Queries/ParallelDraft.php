@@ -13,7 +13,8 @@ use App\Modules\Scheduling\Rules\QuotaRules;
  * cuáles se cancelan, con ParallelPlacement como ArmParallelGroups, y el arreglo que se le manda. Pura: no lee la base.
  *
  * - Los grupos van como los arma ParallelGroups::layout(): primero los completos de cada carrera, en el orden de las
- *   carreras, con el tamaño objetivo de esperados; luego los mixtos, en el orden de sus columnas, sin las vacías. En cada
+ *   carreras, con el tamaño de un completo de esperados (ParallelSubject::size(): el objetivo sin pasar la capacidad de
+ *   un grupo nuevo); luego los mixtos, en el orden de sus columnas, sin las vacías. En cada
  *   mixto, la carrera con más esperados primero (la dueña de uno nuevo, como en ArmParallelGroups).
  * - Cupos (confirmado el 17 de noviembre de 2026): en un mixto, cada carrera recibe sus esperados en exclusiva y lo demás
  *   queda libre; en un grupo de una sola carrera, su cupo es toda la capacidad (supuesto por confirmar, como ParallelSlot).
@@ -206,7 +207,7 @@ final readonly class ParallelDraft
 
     /**
      * Por carrera, sus esperados que no quedan en ningún grupo: los de cada grupo, hasta su cupo (un completo no recibe más
-     * que su cupo aunque el tamaño objetivo sea mayor). Negativo si se le dieron de más.
+     * que su cupo aunque el tamaño de un completo sea mayor). Negativo si se le dieron de más.
      *
      * @param  list<ParallelSlot>  $slots
      * @return array<string, int>
@@ -279,6 +280,18 @@ final readonly class ParallelDraft
     public function size(): int
     {
         return count($this->slots);
+    }
+
+    /**
+     * Los esperados de una carrera que llevan sus completos: los de cada uno hasta su cupo, que es la capacidad del grupo
+     * (E-08 del ensayo 8.11: no los completos por el tamaño objetivo).
+     */
+    public function expectedInFull(string $careerId): int
+    {
+        return array_sum(array_map(
+            fn (ParallelSlot $slot): int => $slot->full ? min($slot->expected[$careerId] ?? 0, $slot->quotas[$careerId] ?? 0) : 0,
+            $this->slots,
+        ));
     }
 
     /**

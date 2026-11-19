@@ -2,6 +2,7 @@
 
 namespace App\Modules\Scheduling\Rules\Soft;
 
+use App\Modules\Scheduling\Rules\Cohorts;
 use App\Modules\Scheduling\Rules\Timeline;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ValidationScope;
@@ -9,7 +10,8 @@ use App\Modules\Scheduling\Validation\ValidationScope;
 /**
  * SC-01: las materias de un mismo semestre reticular quedan en horas consecutivas, sin huecos, para el alumno tipo. El
  * alumno tipo es cada cohorte (las de Rules/Cohorts o las del contrato del motor, en SoftContext): los grupos que un
- * mismo alumno toma juntos.
+ * mismo alumno toma juntos. La clave `combination:` no cuenta (Cohorts::forStudentGaps()): sus grupos únicos ya cuentan
+ * en `plan:`.
  *
  * Unidad (supuesto por confirmar): una hora de hueco entre las sesiones de los grupos activos de una cohorte en un día,
  * junto a una sesión de un grupo del alcance (lo que se programa); una fracción de hora cuenta como hora.
@@ -26,7 +28,7 @@ final class StudentGaps implements SoftRule
         $scored = [];
 
         foreach ($scope->groupIds() as $groupId) {
-            foreach ($context->cohorts[$groupId] ?? [] as $key) {
+            foreach (Cohorts::forStudentGaps($context->cohorts[$groupId] ?? []) as $key) {
                 $scored[$key] = true;
             }
         }

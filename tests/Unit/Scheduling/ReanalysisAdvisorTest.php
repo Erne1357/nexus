@@ -134,14 +134,16 @@ describe('faltante', function () {
         expect($room->moves[0]['to']->code)->toBe('L-60')
             ->and($room->seats)->toBe(15)
             ->and($room->maxSeats)->toBe(20)
-            ->and($room->effect)->not->toContain('Pide el préstamo de L-60 a Sistemas (HC-10).');
+            ->and($room->effect)->not->toContain('Pide el préstamo de L-60 a Sistemas (HC-10).')
+            ->and($room->asksLoan())->toBeFalse();
     });
 
     it('HC-10: un salón de otro departamento se sugiere diciendo que pide préstamo', function () {
         $sessions = [advisorSession('s-A', advisorRoom('R-A', 40), [advisorRoom('L-60', 60, 'Sistemas')])];
         $suggestions = adviseBlock([advisorRow('ISIC', 55)], [advisorGroup('A', 40, ['ISIC' => 40], $sessions)]);
 
-        expect($suggestions['change_room:group-A:ISIC']->effect)->toContain('Pide el préstamo de L-60 a Sistemas (HC-10).');
+        expect($suggestions['change_room:group-A:ISIC']->effect)->toContain('Pide el préstamo de L-60 a Sistemas (HC-10).')
+            ->and($suggestions['change_room:group-A:ISIC']->asksLoan())->toBeTrue();
     });
 
     it('si nada de lo anterior alcanza, propone abrir un grupo para cada carrera que sigue faltante, con lo que le falta como cupo', function () {

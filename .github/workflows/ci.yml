@@ -52,6 +52,8 @@ jobs:
       - name: Ruff (lint y formato)
         run: docker run --rm nexus-solver-dev sh -c "ruff check . && ruff format --check ."
 
+      # Sin la carga real (marcador `realsize`, ~1 min): `pyproject.toml` la excluye por omisión y se corre a mano
+      # con `pytest -m realsize` (docs/operacion/motor.md).
       - name: Pytest
         run: docker run --rm -e SOLVER_TOKEN=ci -v "$PWD/tests/Fixtures/solver:/fixtures:ro" nexus-solver-dev pytest -q
 

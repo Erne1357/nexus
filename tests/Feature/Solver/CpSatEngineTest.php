@@ -12,6 +12,7 @@ use App\Modules\Solver\Engines\CpSat\SolverServiceUnavailable;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
+use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Jobs\RunSolver;
 use App\Modules\Solver\Jobs\SolverRunCancelled;
@@ -23,6 +24,7 @@ use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Sleep;
 
@@ -103,9 +105,93 @@ function cpsatFakeService(array $polls, string|array $submit = 'submitted', ?Clo
     });
 }
 
-function cpsatEngine(): CpSatEngine
+/**
+ * Por omisión, con una heurística que falla: las pruebas del ciclo con el servicio no llevan pista. Las de la pista dan
+ * su propia heurística.
+ */
+function cpsatEngine(?SolverEngine $heuristic = null): CpSatEngine
 {
-    return new CpSatEngine(new CpSatClient('http://solver.test', 'secreto-de-prueba'));
+    return new CpSatEngine(new CpSatClient('http://solver.test', 'secreto-de-prueba'), 1000, $heuristic ?? new class implements SolverEngine
+    {
+        public function key(): string
+        {
+            return 'broken';
+        }
+
+        public function label(): string
+        {
+            return 'broken';
+        }
+
+        public function supportedVersions(): array
+        {
+            return [SolverInput::VERSION];
+        }
+
+        public function checksHardRules(): bool
+        {
+            return true;
+        }
+
+        public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
+        {
+            throw new RuntimeException('sin heurística');
+        }
+    });
+}
+
+/**
+ * Una heurística de prueba: devuelve `$output` (o lanza `$failure`), guarda la entrada que recibió y avanza el reloj
+ * `$spendSeconds`.
+ */
+function cpsatHeuristic(?SolverOutput $output, ?Throwable $failure = null, int $spendSeconds = 0, ?Closure $progressCall = null): SolverEngine
+{
+    return new class($output, $failure, $spendSeconds, $progressCall) implements SolverEngine
+    {
+        public ?SolverInput $received = null;
+
+        public function __construct(private ?SolverOutput $output, private ?Throwable $failure, private int $spend, private ?Closure $progressCall) {}
+
+        public function key(): string
+        {
+            return 'double';
+        }
+
+        public function label(): string
+        {
+            return 'double';
+        }
+
+        public function supportedVersions(): array
+        {
+            return [SolverInput::VERSION];
+        }
+
+        public function checksHardRules(): bool
+        {
+            return true;
+        }
+
+        public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
+        {
+            $this->received = $input;
+            Carbon::setTestNow(now()->addSeconds($this->spend));
+
+            if ($this->progressCall !== null && $progress !== null) {
+                ($this->progressCall)($progress);
+            }
+
+            return $this->failure === null ? $this->output : throw $this->failure;
+        }
+    };
+}
+
+/**
+ * La solución de referencia de tiny, con `$groupId` fuera de ella si es un grupo fijo.
+ */
+function cpsatHeuristicOutput(): SolverOutput
+{
+    return SolverOutput::fromArray(cpsatRecording('done')['body']['output']);
 }
 
 function cpsatTinyInput(): SolverInput
@@ -308,6 +394,31 @@ it('un servicio lleno, con el token rechazado o con un error interno lanza que n
     'error interno (500)' => [['status' => 500, 'body' => 'Internal Server Error'], 'El servicio del motor no está disponible.'],
 ]);
 
+it('si una consulta de avance falla (5xx, sin conexión o respuesta rara), cancela la corrida en el servicio antes de lanzar el error', function (array|string $failure, string $exception) {
+    cpsatFakeService(['running', $failure]);
+
+    expect(fn () => cpsatEngine()->solve(cpsatTinyInput()))->toThrow($exception);
+
+    $runId = cpsatRecording('submitted')['body']['run_id'];
+    $requests = cpsatSentRequests();
+
+    expect(end($requests))->toBe("DELETE /runs/{$runId}");
+})->with([
+    'error interno (500)' => [['status' => 500, 'body' => 'Internal Server Error'], SolverServiceUnavailable::class],
+    'puerta de enlace (502)' => [['status' => 502, 'body' => 'Bad Gateway'], SolverServiceUnavailable::class],
+    'respuesta sin estado' => [['status' => 200, 'body' => ['progress' => 10]], SolverServiceUnavailable::class],
+    'estado desconocido' => [['status' => 200, 'body' => ['run_id' => 'x', 'status' => 'paused']], CpSatRunFailed::class],
+    'sin conexión en todos los intentos' => ['connection-lost', SolverServiceUnavailable::class],
+]);
+
+it('una corrida que ya terminó en el servicio (fallida o cancelada allá) no se vuelve a cancelar', function (string $recording) {
+    cpsatFakeService(['running', $recording]);
+
+    expect(fn () => cpsatEngine()->solve(cpsatTinyInput()))->toThrow(CpSatRunFailed::class);
+
+    expect(cpsatSentRequests())->not->toContain('DELETE /runs/'.cpsatRecording('submitted')['body']['run_id']);
+})->with(['failed', 'cancelled']);
+
 it('una corrida que el servicio ya no tiene (404, se reinició) lanza que hay que volver a lanzarla', function () {
     cpsatFakeService(['running', 'not-found']);
 
@@ -372,4 +483,99 @@ it('SV-03: cancelar una corrida de cpsat que corre la cancela también en el ser
         ->and(cpsatSentRequests())->toContain('DELETE /runs/'.cpsatRecording('submitted')['body']['run_id']);
 
     Notification::assertNothingSent();
+});
+
+it('manda hint_sessions solo de los grupos movibles, el límite menos lo que gastó la heurística y deja intactas las sesiones actuales', function () {
+    cpsatFakeService(['done']);
+    $data = $input = json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/input.json'), true, flags: JSON_THROW_ON_ERROR);
+    $data['time_limit_seconds'] = 60;
+    $fixedId = $data['groups'][0]['id'];
+    $data['groups'][0]['movable'] = false;
+    $input = SolverInput::fromArray($data);
+    $heuristic = cpsatHeuristic(cpsatHeuristicOutput(), spendSeconds: 8);
+
+    cpsatEngine($heuristic)->solve($input);
+
+    $movableSessions = array_values(array_filter(cpsatHeuristicOutput()->sessions, fn ($session): bool => $session->groupId !== $fixedId));
+    Http::assertSent(function (Request $request) use ($input, $fixedId, $movableSessions): bool {
+        $hints = $request['hint_sessions'] ?? [];
+
+        return $request->method() === 'POST'
+            && $request['time_limit_seconds'] === 52
+            && $hints !== []
+            && count($hints) === count($movableSessions)
+            && collect($hints)->every(fn (array $hint): bool => $hint['group_id'] !== $fixedId && ! array_key_exists('changed', $hint))
+            && collect($request['groups'])->pluck('current_sessions')->all() === collect($input->toArray()['groups'])->pluck('current_sessions')->all();
+    });
+});
+
+it('la búsqueda local de la heurística lleva el tope del 15 % del límite: 9 s a 60 s y 45 s a 300 s', function (int $limit, int $cap) {
+    cpsatFakeService(['done']);
+    $data = json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/input.json'), true, flags: JSON_THROW_ON_ERROR);
+    $data['time_limit_seconds'] = $limit;
+    $heuristic = cpsatHeuristic(cpsatHeuristicOutput());
+
+    cpsatEngine($heuristic)->solve(SolverInput::fromArray($data));
+
+    expect($heuristic->received->timeLimitSeconds)->toBe($cap);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request['time_limit_seconds'] === $limit);
+})->with([[60, 9], [300, 45]]);
+
+it('nunca baja el límite del servicio de 10 s, ni lo sube del original', function (int $limit, int $spent, int $sent) {
+    cpsatFakeService(['done']);
+    $data = json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/input.json'), true, flags: JSON_THROW_ON_ERROR);
+    $data['time_limit_seconds'] = $limit;
+
+    cpsatEngine(cpsatHeuristic(cpsatHeuristicOutput(), spendSeconds: $spent))->solve(SolverInput::fromArray($data));
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request['time_limit_seconds'] === $sent);
+})->with([[60, 58, 10], [5, 3, 5]]);
+
+it('si la heurística falla, la corrida sigue sin pista, con el límite completo y deja una advertencia en el log', function () {
+    cpsatFakeService(['done']);
+    Log::spy();
+    $data = json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/input.json'), true, flags: JSON_THROW_ON_ERROR);
+    $data['time_limit_seconds'] = 60;
+    $input = SolverInput::fromArray($data);
+
+    $output = cpsatEngine(cpsatHeuristic(null, new RuntimeException('se rompió'), spendSeconds: 5))->solve($input);
+
+    expect($output->runId)->toBe($input->runId);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && ! array_key_exists('hint_sessions', $request->data()) && $request['time_limit_seconds'] === 60);
+    Log::shouldHaveReceived('warning')->once();
+});
+
+it('SV-03: si el aviso de avance corta la corrida mientras corre la heurística, la cancelación sale y no se manda nada al servicio', function () {
+    Http::fake();
+    $heuristic = cpsatHeuristic(cpsatHeuristicOutput(), progressCall: fn (Closure $progress) => $progress(30, 99));
+
+    expect(fn () => cpsatEngine($heuristic)->solve(cpsatTinyInput(), function (): void {
+        throw new SolverRunCancelled;
+    }))->toThrow(SolverRunCancelled::class);
+
+    Http::assertNothingSent();
+});
+
+it('reporta el puntaje de la heurística como avance 0 mientras corre', function () {
+    cpsatFakeService(['done']);
+    $reported = [];
+    $heuristic = cpsatHeuristic(cpsatHeuristicOutput(), progressCall: fn (Closure $progress) => $progress(100, 77));
+
+    cpsatEngine($heuristic)->solve(cpsatTinyInput(), function (int $percent, ?int $score) use (&$reported): void {
+        $reported[] = [$percent, $score];
+    });
+
+    expect($reported[0])->toBe([0, 77]);
+});
+
+it('con la heurística real sobre tiny, manda una pista de cada grupo movible', function () {
+    cpsatFakeService(['done']);
+    $input = cpsatTinyInput();
+
+    (new CpSatEngine(new CpSatClient('http://solver.test', 'secreto-de-prueba')))->solve($input);
+
+    Http::assertSent(function (Request $request) use ($input): bool {
+        return $request->method() === 'POST' && collect($request['hint_sessions'] ?? [])->pluck('group_id')->unique()->sort()->values()->all()
+            === collect($input->groups)->pluck('id')->sort()->values()->all();
+    });
 });

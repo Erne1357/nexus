@@ -101,6 +101,32 @@ final class ApplyReanalysisSuggestion
     }
 
     /**
+     * Lo que GroupPolicy pide sobre cada grupo que toca la sugerencia, por id: ampliar, `manageQuotas` (y `manage` si sube
+     * la capacidad); cambiar salón, además `assignRoom`; cerrar, `cancel` y `manageQuotas` en el suyo y `manageQuotas` en
+     * los que reciben sus lugares. Abrir un grupo no toca ninguno (OpenReanalysisGroup::ABILITIES, sobre el que nace). La
+     * pantalla lo usa para el motivo de lo que no se puede y el lote para autorizar todo antes de escribir.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function abilities(ReanalysisSuggestion $suggestion): array
+    {
+        $capacity = $suggestion->raisesCapacity ? ['manage'] : [];
+        $own = match ($suggestion->kind) {
+            ReanalysisSuggestionKind::ExpandQuota => ['manageQuotas', ...$capacity],
+            ReanalysisSuggestionKind::ChangeRoom => ['assignRoom', 'manageQuotas', ...$capacity],
+            ReanalysisSuggestionKind::CloseGroup => ['cancel', 'manageQuotas'],
+            ReanalysisSuggestionKind::OpenGroup => [],
+        };
+        $abilities = [];
+
+        foreach ($suggestion->groupIds() as $groupId) {
+            $abilities[$groupId] = $groupId === $suggestion->groupId ? $own : ['manageQuotas'];
+        }
+
+        return $abilities;
+    }
+
+    /**
      * Los grupos que toca la sugerencia, vivos y de la carga, bloqueados (FOR UPDATE, por id, después de la carga: el orden
      * de LoadEditability) para que sus cupos y su capacidad no cambien entre que se leen y se escriben.
      *

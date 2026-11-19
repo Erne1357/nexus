@@ -30,7 +30,7 @@ final readonly class ReanalysisSuggestion
     /**
      * @param  list<string>  $evidence
      * @param  list<string>  $effect
-     * @param  list<array{sessionId: string, when: string, from: string, fromId: string, to: AdvisorRoom}>  $moves
+     * @param  list<array{sessionId: string, when: string, from: string, fromId: string, to: AdvisorRoom, day: int, startsAt: string, endsAt: string}>  $moves
      * @param  list<array{groupId: string, groupCode: string, careerId: string, careerCode: string, seats: int}>  $relocations
      * @param  array<string, array{capacity: int, quotas: array<string, int>}>  $expected
      */
@@ -60,6 +60,14 @@ final readonly class ReanalysisSuggestion
     public function isApplicable(): bool
     {
         return $this->kind !== ReanalysisSuggestionKind::OpenGroup || $this->newGroup !== null;
+    }
+
+    /**
+     * Si pide el préstamo de un salón de otro departamento (HC-10): cambiar salón a uno ajeno, como lo dice «Qué cambia».
+     */
+    public function asksLoan(): bool
+    {
+        return array_any($this->moves, fn (array $move): bool => $move['to']->loanFrom !== null);
     }
 
     /**

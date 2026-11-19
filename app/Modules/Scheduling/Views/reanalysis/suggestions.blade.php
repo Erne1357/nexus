@@ -7,7 +7,8 @@
     `$block` (ReanalysisBlock), `$load`, `$suggestions` (las visibles), `$advice` (ReanalysisSuggestions: grupos, lugares de
     ahora, claves y umbral), `$adjustReason` (por qué no ajusta, o null), `$blocked` (por llave, la sugerencia que la
     jefatura no puede aplicar en ese grupo), `$discardedCount`, `$editing` (la que se edita), `$placements` (por llave, el lugar
-    que encontró el motor para «Abrir un grupo», tarea 8.3b) y `$roomOptions` (los salones para editarlo).
+    que encontró el motor para «Abrir un grupo», tarea 8.3b), `$roomOptions` (los salones para editarlo) y `$choice` (lo que
+    se elige para aplicar junto, solo a quien ajusta; null si no).
 --}}
 <section class="space-y-2.5" aria-labelledby="suggestions-list-title" data-testid="suggestions-slot">
     <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -50,7 +51,7 @@
     @else
         <ul class="grid rounded-box border border-base-300 bg-base-100" data-testid="suggestions-list">
             @foreach ($suggestions as $suggestion)
-                @include('scheduling::reanalysis.suggestion', ['suggestion' => $suggestion, 'reason' => $adjustReason ?? ($blocked[$suggestion->key] ?? null), 'placement' => $placements[$suggestion->key] ?? null])
+                @include('scheduling::reanalysis.suggestion', ['suggestion' => $suggestion, 'reason' => $adjustReason ?? ($blocked[$suggestion->key] ?? null), 'placement' => $placements[$suggestion->key] ?? null, 'choice' => $choice])
             @endforeach
         </ul>
     @endif

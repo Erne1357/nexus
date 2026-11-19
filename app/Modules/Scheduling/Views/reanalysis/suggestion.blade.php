@@ -1,6 +1,7 @@
 {{--
-    Una sugerencia del re-análisis (tarea 8.3a) en la lista del drawer: el icono de su tipo y su título; debajo el tipo y
-    a quién toca; «Por qué» (la evidencia, en Mono) y «Qué cambia» (el efecto); la advertencia, si la hay (el docente que
+    Una sugerencia del re-análisis (tarea 8.3a) en la lista del drawer: el icono de su tipo y su título; debajo el tipo,
+    a quién toca y, si pide un salón de otro departamento, la insignia «Pide préstamo» (HC-10, la del préstamo en el
+    panel del salón); «Por qué» (la evidencia, en Mono) y «Qué cambia» (el efecto); la advertencia, si la hay (el docente que
     deja de impartir un grupo, en `warning` con su icono); y las acciones. «Editar» abre aquí los lugares que suma, de 1 al
     máximo. Cerrar un grupo pide confirmar con el diálogo de Nexus (ADR-0023). `$reason` es por qué no se puede aplicar (la
     carga o el grupo), o null. En celular, todo apilado y las acciones a lo ancho.
@@ -9,6 +10,13 @@
     fijo; «Buscando lugar…» mientras tanto); con lugar (`$placement`), los días y horas en Mono, cada salón con su
     capacidad y la evidencia del motor en «Por qué», con «Aplicar», «Editar» (otro salón libre de la lista, solo si todas
     sus sesiones van en uno) y «Descartar»; sin lugar, por qué, con la regla al frente, y «Buscar otra vez».
+
+    Quien ajusta (`$choice`, null si no) ve a la izquierda la casilla para elegirla y aplicarla con las demás («Aplicar las
+    N elegidas», al pie del drawer), en un blanco de 44 × 40 px centrado con el icono del tipo; la elegida lleva
+    `bg-primary/5`. La que no se puede elegir lleva la casilla deshabilitada con su motivo en `title` y para lectores de
+    pantalla (el de una bloqueada es el que ya está escrito bajo sus botones); la que choca con una elegida lo escribe
+    además bajo sus botones, con `o-no-symbol`; y la que se desmarcó porque cambió desde que se eligió lo dice ahí, en
+    `text-warning` con `o-arrow-path`.
 --}}
 @php($slug = 'suggestion-'.substr(md5($suggestion->key), 0, 10))
 @php($editingThis = $editing === $suggestion->key)
@@ -17,14 +25,41 @@
 @php($findTarget = "findPlacement('{$suggestion->key}')")
 @php($careerCode = $suggestion->careerId === null ? null : ($advice->careerCodes[$suggestion->careerId] ?? $suggestion->newGroup?->careerCode))
 @php($describedBy = $reason === null ? null : $slug.'-why')
-<li wire:key="{{ $slug }}" class="grid gap-2.5 border-t border-base-300 px-4 py-3.5 first:border-t-0" aria-labelledby="{{ $slug }}-title" data-testid="suggestion" data-kind="{{ $suggestion->kind->value }}" data-key="{{ $suggestion->key }}">
+@php($choice ??= null)
+@php($chosen = in_array($suggestion->key, $choice['chosen'] ?? [], true))
+@php($clash = $choice['clashes'][$suggestion->key] ?? null)
+@php($notChoosable = $choice['reasons'][$suggestion->key] ?? $clash)
+@php($changedNote = $choice['changed'][$suggestion->key] ?? null)
+<li wire:key="{{ $slug }}" @class(['relative grid gap-2.5 border-t border-base-300 py-3.5 pe-4 first:border-t-0', 'ps-12' => $choice !== null, 'ps-4' => $choice === null, 'bg-primary/5' => $chosen]) aria-labelledby="{{ $slug }}-title" data-testid="suggestion" data-kind="{{ $suggestion->kind->value }}" data-key="{{ $suggestion->key }}" @if ($chosen) data-chosen @endif>
+    @if ($choice !== null)
+        <label @class(['absolute start-1 top-2.5 flex h-11 w-10 items-center justify-center', 'cursor-pointer' => $notChoosable === null, 'cursor-not-allowed' => $notChoosable !== null]) @if ($notChoosable !== null) title="{{ $notChoosable }}" @endif>
+            <input
+                type="checkbox"
+                class="checkbox checkbox-sm"
+                value="{{ $suggestion->key }}"
+                wire:model.live="chosen"
+                aria-label="Elegir: {{ $suggestion->title }}"
+                @disabled($notChoosable !== null)
+                @if ($notChoosable !== null) title="{{ $notChoosable }}" aria-describedby="{{ $clash !== null ? $slug.'-clash' : ($reason !== null ? $slug.'-why' : $slug.'-unchoosable') }}" @endif
+                data-testid="suggestion-choose"
+            />
+            @if ($notChoosable !== null && $clash === null && $reason === null)
+                <span id="{{ $slug }}-unchoosable" class="sr-only">{{ $notChoosable }}</span>
+            @endif
+        </label>
+    @endif
     <div class="flex items-start gap-3">
         <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[6px] border border-base-300 bg-base-200 text-base-content" aria-hidden="true">
             <x-icon :name="$suggestion->kind->icon()" class="h-4 w-4" />
         </span>
         <div class="grid min-w-0 gap-0.5">
             <h4 id="{{ $slug }}-title" class="font-bold leading-snug">{{ $suggestion->title }}</h4>
-            <p class="text-[12.5px] text-neutral">{{ $suggestion->kind->label() }}@if ($careerCode) · <span class="font-mono font-semibold">{{ $careerCode }}</span>@endif</p>
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-neutral">
+                <span>{{ $suggestion->kind->label() }}@if ($careerCode) · <span class="font-mono font-semibold">{{ $careerCode }}</span>@endif</span>
+                @if ($suggestion->asksLoan())
+                    <x-core::status-badge tone="warning" icon="o-arrows-right-left" label="Pide préstamo" data-testid="suggestion-loan" />
+                @endif
+            </p>
         </div>
     </div>
 
@@ -186,6 +221,12 @@
             <p id="{{ $slug }}-why" class="flex items-start gap-1.5 text-[13px] text-neutral md:ps-11"><x-icon name="o-lock-closed" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $reason }}</p>
         @elseif ($reason !== null)
             <span id="{{ $slug }}-why" class="sr-only">{{ $reason }}</span>
+        @endif
+        @if ($clash !== null)
+            <p id="{{ $slug }}-clash" class="flex items-start gap-1.5 text-[13px] text-neutral md:ps-11" data-testid="suggestion-clash"><x-icon name="o-no-symbol" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $clash }}</p>
+        @endif
+        @if ($changedNote !== null)
+            <p class="flex items-start gap-1.5 text-[13px] text-warning md:ps-11" data-testid="suggestion-changed"><x-icon name="o-arrow-path" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $changedNote }}</p>
         @endif
     @endif
 </li>
