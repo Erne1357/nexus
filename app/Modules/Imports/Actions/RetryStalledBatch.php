@@ -5,7 +5,6 @@ namespace App\Modules\Imports\Actions;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Models\ImportBatch;
-use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Queries\ImportBatchQuery;
 use Illuminate\Support\Facades\DB;
 
@@ -16,16 +15,24 @@ use Illuminate\Support\Facades\DB;
  * vieja, y quita la corrida (`run_id`): si la cola llega a dar por fallido el job muerto, InterruptImportBatch ya no lo
  * reconoce y no lo toca. Según la etapa (supuesto por confirmar):
  *
- * - Validando: borra las filas que alcanzó a leer y lo deja `uploaded`, para validar otra vez el mismo archivo desde
- *   el principio. La validación solo escribe staging, así que repetirla es seguro.
+ * - Validando: lo deja `uploaded`, para validar otra vez el mismo archivo desde el principio. No borra las filas que
+ *   alcanzó a leer: con un kárdex son cientos de miles y tardaría en la petición; las borra el job al empezar
+ *   (ValidateImportBatch::start()). La validación solo escribe staging, así que repetirla es seguro.
  * - Aplicando: lo deja `validated` para reanudar. Cada bloque escribe sus filas y las marca `applied` en la misma
  *   transacción, y ApplyImportBatch solo toma las que siguen válidas o con advertencia: lo escrito no se repite y las
- *   cuentas del lote siguen sumando desde ahí. Quien reanuda queda como quien aplica.
+ *   cuentas del lote siguen sumando desde ahí. El lote sigue siendo de quien lo empezó a aplicar (`applied_by`, que
+ *   ApplyImportBatch anota al empezar y no cambia); quien reanuda queda en la bitácora `retried` y escribe a su nombre
+ *   lo que falta.
  * - Aplicando con «desactivar faltantes»: no se reanuda, porque desactivar pide la cifra que el admin confirmó y el lote
- *   no la guarda. Queda fallido con FailImportBatch, que conserva lo escrito y lo dice en su bitácora y en BatchApplied.
+ *   no la guarda. Tampoco vuelve a `validated` para confirmarla otra vez: solo queda fallido, con FailImportBatch, que
+ *   conserva lo escrito y lo dice en su bitácora y en BatchApplied (supuesto por confirmar).
  *
- * No encola nada: la página encola la validación o la aplicación según el estado que devuelve. No autoriza: la página
- * lo hace con ImportBatchPolicy.
+ * Solo actúa sobre un lote atorado. Una aplicación que ya quedó fallida (InterruptImportBatch, cuando la cola sí corrió
+ * el failed() del job) no se reanuda aunque lo escrito se pudiera reanudar: se vuelve a subir el archivo (supuesto por
+ * confirmar).
+ *
+ * No encola nada: la página encola la validación, la aplicación o, si quedó fallido, el archivo de errores, según el
+ * estado que devuelve. No autoriza: la página lo hace con ImportBatchPolicy.
  */
 final class RetryStalledBatch
 {
@@ -66,7 +73,6 @@ final class RetryStalledBatch
     {
         $read = $batch->processed_rows;
 
-        ImportRow::query()->where('batch_id', $batch->id)->delete();
         $batch->update(['status' => BatchStatus::Uploaded, 'run_id' => null, 'processed_rows' => 0]);
 
         activity()
@@ -87,7 +93,7 @@ final class RetryStalledBatch
             ->performedOn($batch)
             ->causedBy($user)
             ->event('retried')
-            ->withProperties(['stage' => BatchStatus::Applying->value, 'processed_rows' => $reviewed, 'valid_rows' => $batch->valid_rows])
+            ->withProperties(['stage' => BatchStatus::Applying->value, 'processed_rows' => $reviewed, 'valid_rows' => $batch->valid_rows, 'started_by' => $batch->applied_by])
             ->log("Reanudó la aplicación de {$batch->original_name}: se atoró con {$reviewed} de {$batch->valid_rows} filas revisadas");
     }
 }

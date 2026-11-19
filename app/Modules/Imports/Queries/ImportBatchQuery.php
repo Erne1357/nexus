@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * Lecturas de lotes de importación para el asistente y el archivo de errores. Quién las ve lo decide
@@ -65,6 +66,28 @@ final class ImportBatchQuery
         };
 
         return $timeout !== null && $batch->updated_at->lt(now()->subSeconds($timeout)->subMinutes(self::STALL_MARGIN_MINUTES));
+    }
+
+    /**
+     * Quienes escribieron la aplicación del lote: quien la empezó (`applied_by`) y quien la reanudó después de atorarse
+     * (la bitácora `retried` de la aplicación, RetryStalledBatch), sin repetir. Cada uno escribió a su nombre su parte,
+     * así que lo que salió de ella (las invitaciones de los correos) se busca a nombre de todos.
+     *
+     * @return list<string>
+     */
+    public function appliers(ImportBatch $batch): array
+    {
+        return Activity::query()
+            ->where('subject_type', $batch->getMorphClass())
+            ->where('subject_id', $batch->getKey())
+            ->where('event', 'retried')
+            ->where('properties->stage', BatchStatus::Applying->value)
+            ->pluck('causer_id')
+            ->prepend($batch->applied_by)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

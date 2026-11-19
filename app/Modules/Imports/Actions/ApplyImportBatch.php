@@ -75,7 +75,7 @@ final class ApplyImportBatch
     {
         $template = $this->templates->get($batch->template);
 
-        $this->start($batch, $run, $template, $confirmedMissing !== null);
+        $this->start($batch, $user, $run, $template, $confirmedMissing !== null);
 
         $context = new ImportContext($user, $batch->campus);
         $current = null;
@@ -239,11 +239,13 @@ final class ApplyImportBatch
      * lo aplican dos veces. El avance cuenta las filas válidas que ya no esperan: cero en un lote recién
      * validado (al validar contó las filas leídas), y las ya revisadas en uno que se reanuda después de
      * atorarse (RetryStalledBatch). Queda en el lote si el admin eligió desactivar faltantes, que la
-     * plantilla tiene que ofrecer.
+     * plantilla tiene que ofrecer, y quién aplica (`applied_by`), desde ya: un lote que se corta a la mitad
+     * dice quién lo aplicaba. Al reanudar no se cambia: el lote sigue siendo de quien lo empezó, y quien lo
+     * reanudó queda en la bitácora (`retried`, y `resumed_by` en la de `applied`).
      */
-    private function start(ImportBatch $batch, ?string $run, ImportTemplate $template, bool $deactivateMissing): void
+    private function start(ImportBatch $batch, User $user, ?string $run, ImportTemplate $template, bool $deactivateMissing): void
     {
-        DB::transaction(function () use ($batch, $run, $template, $deactivateMissing): void {
+        DB::transaction(function () use ($batch, $user, $run, $template, $deactivateMissing): void {
             $locked = ImportBatch::query()->lockForUpdate()->findOrFail($batch->id);
 
             if ($locked->status !== BatchStatus::Validated) {
@@ -263,6 +265,7 @@ final class ApplyImportBatch
                 'processed_rows' => max(0, $locked->valid_rows - $pending),
                 'errors_exported_at' => null,
                 'deactivate_missing' => $deactivateMissing,
+                'applied_by' => $locked->applied_by ?? $user->id,
             ]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
         });
@@ -270,6 +273,8 @@ final class ApplyImportBatch
 
     /**
      * Cierra el lote con las cuentas que sumó cada bloque, leídas de la base: no pasaron por este modelo.
+     * La bitácora es de quien lo empezó a aplicar (`applied_by`); si lo terminó otro al reanudarlo, lo dice
+     * `resumed_by`.
      */
     private function finish(ImportBatch $batch, User $user, ImportTemplate $template): ImportBatch
     {
@@ -278,9 +283,12 @@ final class ApplyImportBatch
 
             $batch->update([
                 'status' => BatchStatus::Applied,
-                'applied_by' => $user->id,
+                // Un lote que empezó a aplicarse antes de que start() anotara quién, lo toma de quien lo termina.
+                'applied_by' => $batch->applied_by ?? $user->id,
                 'applied_at' => now(),
             ]);
+            $applier = $batch->applier()->first() ?? $user;
+            $resumed = $applier->isNot($user);
 
             $summary = "{$counts['created']} altas, {$counts['updated']} cambios, {$counts['unchanged']} sin cambios";
             $summary .= $batch->deactivate_missing
@@ -289,10 +297,16 @@ final class ApplyImportBatch
 
             activity()
                 ->performedOn($batch)
-                ->causedBy($user)
+                ->causedBy($applier)
                 ->event('applied')
-                ->withProperties(['template' => $batch->template, 'campus_id' => $batch->campus_id, 'deactivate_missing' => $batch->deactivate_missing, ...$counts])
-                ->log("Aplicó {$batch->original_name} en {$template->label()}: {$summary}");
+                ->withProperties([
+                    'template' => $batch->template,
+                    'campus_id' => $batch->campus_id,
+                    'deactivate_missing' => $batch->deactivate_missing,
+                    ...$counts,
+                    ...($resumed ? ['resumed_by' => $user->id] : []),
+                ])
+                ->log("Aplicó {$batch->original_name} en {$template->label()}: {$summary}".($resumed ? "; la reanudó {$user->name}" : ''));
 
             BatchApplied::dispatch($batch, $counts);
 

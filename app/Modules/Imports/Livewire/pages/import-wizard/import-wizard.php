@@ -10,6 +10,7 @@ use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\RowIssue;
 use App\Modules\Imports\Jobs\ApplyQueuedBatch;
+use App\Modules\Imports\Jobs\ExportQueuedBatchErrors;
 use App\Modules\Imports\Jobs\ValidateQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
@@ -460,7 +461,7 @@ new #[Title('Importaciones')] class extends Component
         match ($status) {
             BatchStatus::Uploaded => $this->queueValidation($batch),
             BatchStatus::Validated => $this->queueApplication($batch, $context->user()),
-            default => null,
+            default => $this->queueErrorsExport($batch),
         };
     }
 
@@ -628,7 +629,7 @@ new #[Title('Importaciones')] class extends Component
                 'label' => 'Reanudar la aplicación',
                 'icon' => 'o-play',
                 'title' => '¿Reanudar la aplicación?',
-                'message' => "Se escriben en {$template} las filas que faltan; las ya escritas no se repiten. Al terminar, el lote queda aplicado a tu nombre.",
+                'message' => "Se escriben en {$template} las filas que faltan; las ya escritas no se repiten. El lote sigue siendo de quien lo empezó a aplicar, y tú quedas en la bitácora como quien lo reanudó.",
                 'tone' => 'warning',
             ],
         ];
@@ -650,6 +651,19 @@ new #[Title('Importaciones')] class extends Component
         }
 
         $this->applyQueued = true;
+    }
+
+    /**
+     * Una aplicación que se marcó fallida no tiene archivo de errores (ApplyImportBatch lo borró al empezar): la cola lo
+     * rehace. Si no responde, la página deja de esperarlo a los diez minutos, como siempre.
+     */
+    private function queueErrorsExport(ImportBatch $batch): void
+    {
+        try {
+            ExportQueuedBatchErrors::dispatch($batch);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
     }
 
     private function queueValidation(ImportBatch $batch): void

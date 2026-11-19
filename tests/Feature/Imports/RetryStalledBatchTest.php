@@ -44,9 +44,10 @@ function storedCampusBatch(User $admin, string $csv = "code,name,modality\nC9,Ca
 }
 
 /**
- * Un lote validado de dos filas cuya aplicación escribió la primera (C9) y se atoró: `$minutes` sin avanzar.
+ * Un lote validado de dos filas cuya aplicación, empezada por `$applier`, escribió la primera (C9) y se atoró:
+ * `$minutes` sin avanzar.
  */
-function stalledApplication(User $admin, int $minutes = 41, bool $deactivateMissing = false): ImportBatch
+function stalledApplication(User $admin, int $minutes = 41, bool $deactivateMissing = false, ?User $applier = null): ImportBatch
 {
     $batch = app(ValidateImportBatch::class)->handle(storedCampusBatch($admin));
     $campus = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus Nueve']);
@@ -59,6 +60,7 @@ function stalledApplication(User $admin, int $minutes = 41, bool $deactivateMiss
         'processed_rows' => 1,
         'created_rows' => 1,
         'deactivate_missing' => $deactivateMissing,
+        'applied_by' => ($applier ?? $admin)->id,
     ]);
 
     test()->travel($minutes)->minutes();
@@ -93,19 +95,20 @@ it('una validación atorada se vuelve a validar desde el principio, con el mismo
     $batch = storedCampusBatch($this->admin);
     $deadJob = new ValidateQueuedBatch($batch);
     $batch->update(['status' => BatchStatus::Validating, 'run_id' => $deadJob->run, 'processed_rows' => 500]);
-    ImportRow::factory()->for($batch, 'batch')->count(2)->create();
+    $leftover = ImportRow::factory()->for($batch, 'batch')->count(2)->create()->modelKeys();
     $this->travel(41)->minutes();
 
     $status = app(RetryStalledBatch::class)->handle($batch, $this->admin);
 
     $entry = Activity::where('event', 'retried')->sole();
 
+    // La petición solo cambia el estado: lo leído lo borra el job, que puede tardar con un kárdex completo.
     expect($status)->toBe(BatchStatus::Uploaded)
         ->and($batch->fresh())
         ->status->toBe(BatchStatus::Uploaded)
         ->processed_rows->toBe(0)
         ->run_id->toBeNull()
-        ->and(ImportRow::count())->toBe(0)
+        ->and(ImportRow::count())->toBe(2)
         ->and($entry->subject->is($batch))->toBeTrue()
         ->and($entry->causer->is($this->admin))->toBeTrue()
         ->and($entry->properties['processed_rows'])->toBe(500);
@@ -120,29 +123,40 @@ it('una validación atorada se vuelve a validar desde el principio, con el mismo
         ->status->toBe(BatchStatus::Validated)
         ->total_rows->toBe(2)
         ->processed_rows->toBe(2)
-        ->and(ImportRow::where('batch_id', $batch->id)->count())->toBe(2);
+        ->and(ImportRow::where('batch_id', $batch->id)->count())->toBe(2)
+        ->and(ImportRow::whereKey($leftover)->exists())->toBeFalse();
 });
 
 it('una aplicación atorada se reanuda: escribe solo las filas que faltan, sin repetir las escritas, y queda aplicada', function () {
-    $batch = stalledApplication($this->admin);
+    $first = User::factory()->admin()->create();
+    $batch = stalledApplication($this->admin, applier: $first);
 
     $status = app(RetryStalledBatch::class)->handle($batch, $this->admin);
 
+    $retried = Activity::where('event', 'retried')->sole();
+
     expect($status)->toBe(BatchStatus::Validated)
         ->and($batch->fresh())->status->toBe(BatchStatus::Validated)->run_id->toBeNull()
-        ->and(Activity::where('event', 'retried')->sole()->causer->is($this->admin))->toBeTrue();
+        ->and($retried->causer->is($this->admin))->toBeTrue()
+        ->and($retried->properties['started_by'])->toBe($first->id);
 
     ApplyQueuedBatch::dispatch($batch, $this->admin);
 
+    $applied = Activity::where('event', 'applied')->sole();
+
+    // El lote sigue siendo de quien empezó a aplicarlo; quien lo reanudó queda en la bitácora.
     expect($batch->fresh())
         ->status->toBe(BatchStatus::Applied)
         ->applied_at->not->toBeNull()
+        ->applied_by->toBe($first->id)
         ->created_rows->toBe(2)
         // El avance sigue desde lo que ya se había revisado.
         ->processed_rows->toBe(2)
         ->and(Campus::where('code', 'C9')->count())->toBe(1)
         ->and(Campus::where('code', 'C7')->exists())->toBeTrue()
-        ->and(Activity::where('event', 'applied')->sole()->properties['created'])->toBe(2);
+        ->and($applied->causer->is($first))->toBeTrue()
+        ->and($applied->properties['created'])->toBe(2)
+        ->and($applied->properties['resumed_by'])->toBe($this->admin->id);
 });
 
 it('una aplicación atorada que desactivaba faltantes no se reanuda: queda fallida con el motivo y lo escrito se queda', function () {

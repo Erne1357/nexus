@@ -192,7 +192,7 @@ describe('admin', function () {
             ->assertSee("La aplicación se atoró: no avanza desde el {$since}, con 1 de 2 filas revisadas.")
             ->assertDontSee('Aplicando…')
             ->assertDontSeeHtml('wire:poll')
-            ->assertSeeHtml('x-confirm="Se escriben en Campus (prueba) las filas que faltan; las ya escritas no se repiten. Al terminar, el lote queda aplicado a tu nombre."')
+            ->assertSeeHtml('x-confirm="Se escriben en Campus (prueba) las filas que faltan; las ya escritas no se repiten. El lote sigue siendo de quien lo empezó a aplicar, y tú quedas en la bitácora como quien lo reanudó."')
             ->call('retryStalled')
             ->assertHasNoErrors();
 
@@ -205,8 +205,7 @@ describe('admin', function () {
         $page->assertSet('step', 4)->assertSeeInOrder(['Altas', '1', 'Cambios', '1', 'Sin cambios', '0']);
     });
 
-    it('una aplicación atorada que desactivaba faltantes no se reanuda: se marca fallida y dice por qué', function () {
-        Queue::fake();
+    it('una aplicación atorada que desactivaba faltantes no se reanuda: se marca fallida, dice por qué y rehace el archivo de errores', function () {
         stallAfterFirstRow($this->batch, deactivateMissing: true);
         $this->travel(41)->minutes();
 
@@ -214,10 +213,13 @@ describe('admin', function () {
             ->assertSee('no se reanuda: márcalo como fallido y vuelve a subir el archivo.')
             ->assertSeeHtml('data-confirm-title="¿Marcar como fallido?"')
             ->call('retryStalled')
-            ->assertSee(RetryStalledBatch::DEACTIVATING_REASON);
+            ->assertSee(RetryStalledBatch::DEACTIVATING_REASON)
+            // La cola rehace el archivo de errores: la página no se queda esperándolo.
+            ->assertSee(route('imports.batch-errors', $this->batch->id))
+            ->assertDontSee('Preparando el archivo de errores…');
 
-        expect($this->batch->fresh()->status)->toBe(BatchStatus::Failed);
-        Queue::assertNothingPushed();
+        // No siguió aplicando: la fila de C1 se habría escrito como cambio.
+        expect($this->batch->fresh())->status->toBe(BatchStatus::Failed)->updated_rows->toBe(0);
     });
 });
 
@@ -237,6 +239,7 @@ function stallAfterFirstRow(ImportBatch $batch, bool $deactivateMissing = false)
         'created_rows' => 1,
         'errors_exported_at' => null,
         'deactivate_missing' => $deactivateMissing,
+        'applied_by' => $batch->uploaded_by,
     ]);
 }
 
