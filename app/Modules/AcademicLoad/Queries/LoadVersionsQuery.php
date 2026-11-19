@@ -17,6 +17,8 @@ use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
+use Closure;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Cache;
@@ -163,32 +165,58 @@ final class LoadVersionsQuery
     }
 
     /**
-     * Por dónde salió el aviso de la republicación a los docentes de una versión (RA-06; ensayo 8.11, E-04): `bell` si se
-     * guardó alguna campana y `mail` si salió algún correo (el registro de correos, CF-S8, con estado «enviado»). Se
-     * reconocen por el título del aviso al docente (LoadRepublished::teacherTitle(), que también es el asunto del correo)
-     * entre la publicación de la versión y la de la siguiente (`$until`); la campana, además, por el periodo y la modalidad
-     * de la carga. El correo no guarda la modalidad: dos cargas del mismo departamento republicadas a la vez se confunden
-     * (supuesto por confirmar). El correo sale de la cola: recién publicada, puede no haber salido todavía.
+     * Si ya salió el aviso de la republicación de una versión y por dónde les llegó a los docentes (RA-05, RA-06; ensayo
+     * 8.11, E-04 y F-04). Lo leen el resumen de la versión y el drawer «Ver por docente o carrera», con una sola lectura:
      *
-     * @return array{bell: bool, mail: bool}
+     * - `bell` y `mail`: el aviso al docente, reconocido por su título (LoadRepublished::teacherTitle(), que también es el
+     *   asunto del correo): `bell` si se guardó alguna campana y `mail` si salió algún correo (el registro de correos,
+     *   CF-S8, con estado «enviado»). Es el canal que dice el drawer;
+     * - `sent`: si ya salió algún aviso, al docente o a la coordinación de una carrera o a los jefes de otro departamento
+     *   (los títulos que empiezan con LoadRepublished::othersTitlePrefix()). El resumen dice «Se avisó a» o, si no,
+     *   «Por avisar a». Los avisos salen de la cola (NotifyAffectedOnRepublication): recién publicada, o con la cola
+     *   detenida, no ha salido ninguno.
+     *
+     * Cuentan los de entre la publicación de la versión y la de la siguiente (`$until`); la campana, además, por el
+     * periodo y la modalidad de la carga. El correo no guarda la modalidad: dos cargas del mismo departamento republicadas
+     * a la vez se confunden (supuesto por confirmar).
+     *
+     * @return array{bell: bool, mail: bool, sent: bool}
      */
-    public function teacherNoticeChannels(AcademicLoad $load, CarbonImmutable $from, ?CarbonImmutable $until): array
+    public function noticeChannels(AcademicLoad $load, CarbonImmutable $from, ?CarbonImmutable $until): array
     {
         $load->loadMissing(['department' => fn ($query) => $query->withTrashed()]);
-        $title = LoadRepublished::teacherTitle((string) $load->department?->name);
+        $department = (string) $load->department?->name;
+        $teacher = $this->channels($load, $from, $until, fn (Builder $query, string $column): Builder => $query->where($column, LoadRepublished::teacherTitle($department)));
 
+        if ($teacher['bell'] || $teacher['mail']) {
+            return [...$teacher, 'sent' => true];
+        }
+
+        $prefix = addcslashes(LoadRepublished::othersTitlePrefix($department), '\\%_').'%';
+        $others = $this->channels($load, $from, $until, fn (Builder $query, string $column): Builder => $query->whereLike($column, $prefix, caseSensitive: true));
+
+        return [...$teacher, 'sent' => $others['bell'] || $others['mail']];
+    }
+
+    /**
+     * Si hay campana y correo enviado del aviso de la republicación de la carga entre `$from` y `$until` con el título que
+     * pide `$title` (que recibe la consulta y la columna del título: `data->title` en la campana y `subject` en el correo).
+     *
+     * @param  Closure(Builder, string): Builder  $title
+     * @return array{bell: bool, mail: bool}
+     */
+    private function channels(AcademicLoad $load, CarbonImmutable $from, ?CarbonImmutable $until, Closure $title): array
+    {
         return [
-            'bell' => DatabaseNotification::query()
+            'bell' => $title(DatabaseNotification::query(), 'data->title')
                 ->where('type', LoadRepublished::class)
-                ->where('data->title', $title)
                 ->where('data->term_id', $load->term_id)
                 ->where('data->modality_id', $load->modality_id)
                 ->where('created_at', '>=', $from)
                 ->when($until !== null, fn ($query) => $query->where('created_at', '<', $until))
                 ->exists(),
-            'mail' => MailLog::query()
+            'mail' => $title(MailLog::query(), 'subject')
                 ->where('kind', class_basename(LoadRepublished::class))
-                ->where('subject', $title)
                 ->where('status', MailStatus::Sent)
                 ->where('sent_at', '>=', $from)
                 ->when($until !== null, fn ($query) => $query->where('sent_at', '<', $until))

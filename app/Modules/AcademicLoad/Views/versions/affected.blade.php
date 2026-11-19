@@ -2,8 +2,9 @@
     «Ver por docente o carrera» (drawer): la versión elegida, su motivo y contra cuál se compara; el filtro segmentado
     Docente | Carrera (en el navegador) y, para cada docente o carrera afectado (VersionChanges::byTeacher() y
     byCareer()), las líneas que le dijo el aviso de la republicación (RA-05, RA-06), y por dónde les llegó a los docentes:
-    la campana y el correo que de verdad salieron (LoadVersionsQuery::teacherNoticeChannels(); ensayo 8.11, E-04). Una
-    versión de antes de la tarea 8.4 no avisó: lo dice. Al pie, cuándo la vieron docentes y alumnos.
+    la campana y el correo que de verdad salieron (LoadVersionsQuery::noticeChannels(); ensayo 8.11, E-04). A la
+    coordinación, si el aviso ya salió, con el mismo criterio que «Se avisó a» del resumen (F-04). Una versión de antes
+    de la tarea 8.4 no avisó: lo dice. Al pie, cuándo la vieron docentes y alumnos.
 --}}
 @php
     $number = $selected['version'];
@@ -14,6 +15,11 @@
         $channels === [] => 'Lo que cambió para cada docente afectado. No ha salido ningún aviso por la campana ni por correo.',
         count($channels) === 2 => 'Lo que se le avisó a cada docente afectado, por la campana y el correo.',
         default => 'Lo que se le avisó a cada docente afectado, '.$channels[0].'.',
+    };
+    $careersNote = match (true) {
+        $selected['legacy'] => 'Lo que cambió para cada carrera. Esta versión se publicó antes de los avisos: nadie lo recibió.',
+        ! $affected['channels']['sent'] => 'Lo que cambió para cada carrera afectada. No ha salido ningún aviso a su coordinación.',
+        default => 'Lo que se le avisó a la coordinación de cada carrera afectada.',
     };
     $views = [
         'docente' => ['Docente', count($affected['teachers'])],
@@ -59,7 +65,7 @@
         </section>
 
         <section x-show="by === 'carrera'" x-cloak class="grid gap-2" aria-label="Por carrera" data-testid="affected-careers">
-            <p class="text-[12.5px] text-neutral">{{ $selected['legacy'] ? 'Lo que cambió para cada carrera. Esta versión se publicó antes de los avisos: nadie lo recibió.' : 'Lo que se le avisó a la coordinación de cada carrera afectada.' }}</p>
+            <p class="text-[12.5px] text-neutral" data-testid="affected-careers-note">{{ $careersNote }}</p>
             @forelse ($affected['careers'] as $career)
                 <article class="grid gap-1.5 border-b border-base-300 pb-3 last:border-b-0" wire:key="affected-career-{{ $loop->index }}">
                     <h3 class="flex flex-wrap items-baseline gap-x-2 font-semibold">

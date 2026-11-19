@@ -144,11 +144,21 @@ final class LoadRepublished extends NexusNotification implements RoutesMailAddre
 
     /**
      * El título (y el asunto del correo) del aviso al docente; el tablero de versiones lo busca en la campana y en el
-     * registro de correos para decir por dónde salió (LoadVersionsQuery::teacherNoticeChannels()).
+     * registro de correos para decir por dónde salió (LoadVersionsQuery::noticeChannels()).
      */
     public static function teacherTitle(string $department): string
     {
         return "Cambiaron tus grupos en la carga de {$department}";
+    }
+
+    /**
+     * El principio del título (y del asunto del correo) del aviso a la coordinación de una carrera y a los jefes de otro
+     * departamento («La carga de <depto> cambió …»); el tablero de versiones lo busca para saber si el aviso ya salió
+     * (LoadVersionsQuery::noticeChannels()).
+     */
+    public static function othersTitlePrefix(string $department): string
+    {
+        return "La carga de {$department} cambió ";
     }
 
     private function title(): string
@@ -157,8 +167,8 @@ final class LoadRepublished extends NexusNotification implements RoutesMailAddre
 
         return match ($this->audience) {
             RepublicationAudience::Teacher => self::teacherTitle($department),
-            RepublicationAudience::Career => "La carga de {$department} cambió grupos de {$this->recipientLabel}",
-            RepublicationAudience::Department => "La carga de {$department} cambió préstamos de salón o grupos compartidos de {$this->recipientLabel}",
+            RepublicationAudience::Career => self::othersTitlePrefix($department)."grupos de {$this->recipientLabel}",
+            RepublicationAudience::Department => self::othersTitlePrefix($department)."préstamos de salón o grupos compartidos de {$this->recipientLabel}",
         };
     }
 

@@ -21,7 +21,8 @@ use Livewire\Attributes\Locked;
 
 /**
  * Las acciones de una carga en «Cierre de la carga» y en el detalle de «Avance del cierre» (tareas 4.1 y 4.2): cerrar
- * con confirmación y comentario opcional (CloseLoad), reabrir con motivo (ReopenLoad), volver a asignación
+ * con confirmación y comentario opcional (CloseLoad), reabrir con motivo (ReopenLoad; el diálogo dice a dónde vuelve,
+ * ajustes o re-análisis, y el toast a dónde volvió), volver a asignación
  * (ReturnToStaffing) y, solo si el perfil de la modalidad exige el visto bueno, aprobar (ApproveLoad) o regresar con
  * comentarios (que es reabrir). Publicar es aparte: la pantalla monta academic-load::components.publish-load. Cada
  * método vuelve a autorizar con su ability (close, reopen, startStaffing, approve): la petición puede llegar de una
@@ -70,6 +71,13 @@ trait ClosesLoads
 
     public string $reopenReason = '';
 
+    /**
+     * A dónde vuelve la carga si se reabre (ReopenLoad::destination(): ajustes o, si su cierre salió de un re-análisis,
+     * re-análisis, RA-08), leído al abrir el diálogo para decirlo en él (ensayo 8.11, F-03).
+     */
+    #[Locked]
+    public ?LoadStatus $reopenTo = null;
+
     public bool $showApprove = false;
 
     public string $approveComment = '';
@@ -105,13 +113,14 @@ trait ClosesLoads
         $this->success('Carga cerrada', e("{$load->department->code} en {$load->modality->name} · {$groups} ".($groups === 1 ? 'grupo confirmado.' : 'grupos confirmados.')));
     }
 
-    public function askReopen(LoadClosingQuery $query): void
+    public function askReopen(LoadClosingQuery $query, ReopenLoad $action): void
     {
         $load = $this->closingLoad($query);
         Gate::authorize('reopen', $load);
 
         $this->resetValidation();
         $this->reset('reopenReason');
+        $this->reopenTo = $action->destination($load);
         $this->showReopen = true;
     }
 
@@ -300,7 +309,7 @@ trait ClosesLoads
      */
     protected function showLoad(?AcademicLoad $load, LoadClosingQuery $query): void
     {
-        $this->reset('vetoReasons', 'vetoTitle', 'showClose', 'showReopen', 'showApprove');
+        $this->reset('vetoReasons', 'vetoTitle', 'showClose', 'showReopen', 'reopenTo', 'showApprove');
         $this->loadId = $load?->getKey();
 
         if ($load === null) {

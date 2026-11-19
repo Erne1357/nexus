@@ -49,15 +49,16 @@ final class ReopenLoad
                 ]);
             }
 
-            return $this->transition->handle($load, $this->target($locked), $actor, $reason, $this->reopenable(...));
+            return $this->transition->handle($load, $this->destination($locked), $actor, $reason, $this->reopenable(...));
         });
     }
 
     /**
      * A dónde vuelve: a re-análisis si la carga cerrada o aprobada viene de uno (el último cierre salió de `reanalysis`,
-     * RA-08); a ajustes en cualquier otro caso.
+     * RA-08); a ajustes en cualquier otro caso. handle() lo decide con la carga bloqueada; las pantallas lo preguntan sin
+     * bloquearla para decir el destino en el diálogo de reabrir (ensayo 8.11, F-03), con esta misma regla.
      */
-    private function target(AcademicLoad $load): LoadStatus
+    public function destination(AcademicLoad $load): LoadStatus
     {
         if (! in_array($load->status, [LoadStatus::Closed, LoadStatus::Approved], true)) {
             return LoadStatus::Adjusting;

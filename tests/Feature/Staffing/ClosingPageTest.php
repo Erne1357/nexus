@@ -462,6 +462,27 @@ describe('reabrir y volver a asignación', function () {
             ->and(lastToastOf($page)['title'])->toBe('Carga reabierta');
     });
 
+    it('RA-08: el diálogo de reabrir y el toast dicen a dónde vuelve de verdad la carga cerrada (ensayo 8.11, F-03)', function (LoadStatus $closedFrom, string $label, bool $published) {
+        $this->world->load->update(['current_version' => 1]);
+        $this->world->transition($closedFrom, LoadStatus::Closed, $this->jefe, 'Todo asignado');
+
+        $page = closingPage($this->subdireccion, ['departamento' => $this->world->department->id])
+            ->call('askReopen')
+            ->assertSee("La carga regresa a {$label} y la jefatura del departamento vuelve a editarla.");
+
+        $published
+            ? $page->assertSee('Mientras tanto se sigue viendo la versión publicada (v1).')
+            : $page->assertDontSee('Mientras tanto se sigue viendo la versión publicada');
+
+        $page->set('reopenReason', 'Falta el grupo vespertino de Cálculo')->call('reopen')->assertHasNoErrors();
+
+        expect($this->world->load->fresh()->status->label())->toBe($label)
+            ->and(lastToastOf($page)['description'])->toContain("regresó a {$label}.");
+    })->with([
+        'cerrada en asignación: a ajustes' => [LoadStatus::Staffing, 'Ajustes', false],
+        'cerrada en re-análisis: a re-análisis, con la versión publicada vigente' => [LoadStatus::Reanalysis, 'Re-análisis', true],
+    ]);
+
     it('el jefe vuelve a asignación y la carga se puede cerrar otra vez', function () {
         $this->world->load->update(['status' => LoadStatus::Adjusting]);
 
