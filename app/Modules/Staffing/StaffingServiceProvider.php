@@ -365,39 +365,24 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 
     /**
      * Lo que deja ChangeRequestsDemoSeeder en `reanalisis-casos`: la carga reservada para las solicitudes de cambio
-     * (ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS) en ajustes, con solicitudes en cada estado de la lista, una pendiente
-     * con sus alternativas del motor listas y una aprobada y una aplicada con una alternativa. Una consulta por carga; un
-     * volumen sin carga reservada (el demo) no tiene qué revisar y pasa.
+     * (ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS) en ajustes y cada escenario en su estado
+     * (ChangeRequestsDemoSeeder::problems()), con las alternativas listas y la elegida sin aplicar vigentes según la huella
+     * barata que compara la pantalla. Un volumen sin carga reservada (el demo) no tiene qué revisar y pasa.
      */
     private function changeRequestsCheck(): DemoCheck
     {
-        return new DemoCheck([DemoCheckpoint::ReanalysisCases], 'La carga reservada tiene solicitudes de cambio en cada estado, con alternativas del motor listas, aprobadas y aplicadas', function (DemoContext $demo): true|string {
+        return new DemoCheck([DemoCheckpoint::ReanalysisCases], 'La carga reservada tiene solicitudes de cambio en cada estado de la pantalla, con sus alternativas vigentes', function (DemoContext $demo): true|string {
             $missing = [];
 
             foreach (Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->get() as $modality) {
                 foreach (ReanalysisDemoSeeder::loadsIn($demo->term()->getKey(), $modality->getKey(), [ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS]) as $load) {
-                    $rows = ChangeRequest::query()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
-                        ->selectRaw("status, coalesce(alternatives ->> 'status', '') as alternatives_status, (alternatives -> 'chosen' ->> 'id') is not null as chosen")
-                        ->distinct()->get();
-                    $has = fn (ChangeRequestStatus $status, ?string $alternatives = null, ?bool $chosen = null): bool => $rows->contains(fn (ChangeRequest $row): bool => $row->status === $status
-                        && ($alternatives === null || $row->getAttribute('alternatives_status') === $alternatives)
-                        && ($chosen === null || (bool) $row->getAttribute('chosen') === $chosen));
-                    $lacks = array_keys(array_filter([
-                        ...array_combine(array_map(fn (ChangeRequestStatus $status): string => mb_strtolower($status->label()), ChangeRequestStatus::cases()),
-                            array_map(fn (ChangeRequestStatus $status): bool => ! $has($status), ChangeRequestStatus::cases())),
-                        'pendiente con alternativas listas' => ! $has(ChangeRequestStatus::Pending, 'ready'),
-                        'aprobada con alternativa' => ! $has(ChangeRequestStatus::Approved, chosen: true),
-                        'aplicada con alternativa' => ! $has(ChangeRequestStatus::Applied, chosen: true),
-                        'la carga en ajustes' => $load->status !== LoadStatus::Adjusting,
-                    ]));
-
-                    if ($lacks !== []) {
-                        $missing[] = "{$load->department->code} en {$modality->code}: ".implode(', ', $lacks);
+                    if (($problems = ChangeRequestsDemoSeeder::problems($load)) !== []) {
+                        $missing[] = "{$load->department->code} en {$modality->code}: ".implode(', ', $problems);
                     }
                 }
             }
 
-            return $missing === [] ? true : 'Falta: '.implode('; ', $missing).'.';
+            return $missing === [] ? true : implode('; ', $missing).'.';
         });
     }
 

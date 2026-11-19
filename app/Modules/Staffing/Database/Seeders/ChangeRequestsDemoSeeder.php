@@ -27,7 +27,9 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\SessionCandidate;
+use App\Modules\Scheduling\Validation\State\StateSession;
 use App\Modules\Scheduling\Validation\Violation;
+use App\Modules\Solver\Enums\PlacementStop;
 use App\Modules\Staffing\Actions\ChangeRequests\ApplyChosenAlternative;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
@@ -44,36 +46,54 @@ use App\Modules\Staffing\Jobs\ComputeChangeAlternatives;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Support\ChangeAlternatives;
 use App\Modules\Staffing\Support\SessionLabels;
+use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 
 /**
  * Demo de las solicitudes de cambio de la fase 8 (tareas 8.6 y 8.7) en el punto `reanalisis-casos`, para que «Solicitudes
- * de cambio» salga llena: en la carga que ReanalysisDemoSeeder reserva (CASE_CHANGE_REQUESTS; con el masivo, SC, y con
- * el volumen demo ninguna), publicada en su versión 1, Subdirección la reabre a ajustes con su motivo (ReopenLoad) y los
- * docentes y las coordinaciones piden cambios de horario y de salón en sus grupos de los dos campus (RequestChange), unos
- * con el horario o el salón propuesto (8.6: el impacto se calcula al pedirla) y otros solo con texto. El jefe del
- * departamento (`jefe.<clave>`) los decide y quien aplica según el tipo (la coordinación de la carrera dueña con
- * nombramiento en el campus del grupo, o el jefe) los aplica, todo por las Actions reales. Cada escenario de SCENARIOS
- * termina en un estado, en este orden (aprobar pasa la carga a ajustes y aplicar la última la regresa a asignación):
+ * de cambio» salga llena con cada estado de su pantalla: en la carga que ReanalysisDemoSeeder reserva
+ * (CASE_CHANGE_REQUESTS; con el masivo, SC, y con el volumen demo ninguna), publicada en su versión 1, Subdirección la
+ * reabre a ajustes con su motivo (ReopenLoad) y los docentes y las coordinaciones piden cambios de horario y de salón en
+ * sus grupos de los dos campus (RequestChange), unos con el horario o el salón propuesto (8.6: el impacto se calcula al
+ * pedirla) y otros solo con texto. El jefe del departamento (`jefe.<clave>`) los decide y quien aplica según el tipo (la
+ * coordinación de la carrera dueña con nombramiento en el campus del grupo, o el jefe) los aplica, todo por las Actions
+ * reales. Cada escenario de SCENARIOS termina en un estado, en este orden (aprobar pasa la carga a ajustes y aplicar la
+ * última aprobada la regresa a asignación):
  *
  * 1. **Lo que ya pasó:** cuatro rechazadas con comentario y cuatro aprobadas como se pidieron (las que traen horario o
  *    salón, quien las aplica las escribe con ReplaceGroupSessions, como el editor).
- * 2. **La alternativa aplicada:** una con choque duro y otra que choca con el grupo de esa; el motor calcula las
+ * 2. **A mano:** una con choque duro aprobada con una alternativa del motor que la coordinación acomoda en el editor
+ *    (ReplaceGroupSessions con las sesiones de la elegida) y marca aplicada: «Aprobada con la alternativa A · aplicada a
+ *    mano».
+ * 3. **La alternativa aplicada:** una con choque duro y otra que choca con el grupo de esa; el motor calcula las
  *    alternativas de las dos (ProposeChangeAlternatives, con el job en la cola síncrona), el jefe aprueba la primera con
  *    una (ChooseChangeAlternative), se marcan aplicadas las cuatro de antes y al final se aplica la alternativa
  *    (ApplyChosenAlternative), que regresa la carga a asignación y avisa a los docentes. Como su grupo se movió, las
  *    alternativas de la otra ya no valen: al elegir una, el jefe ve «Esto cambió…».
- * 3. **Después:** pendientes sin choques (de horario y de salón), con solo avisos blandos (SC-09, traslado justo entre
- *    campus, si un docente del departamento tiene clases en otro campus), con choque duro y sus alternativas listas (de
- *    horario y de salón; si el motor no encuentra ninguna, queda «sin alternativa»), con choque duro sin pedir
- *    alternativas y solo con texto; y al final, para que la carga se quede en ajustes, dos aprobadas como se pidieron sin
- *    aplicar y una aprobada con una alternativa sin aplicar (la coordinación ve «Aplicar la alternativa» y «Abrir en el
- *    editor»).
+ * 4. **Después:** pendientes sin choques (de horario y de salón), con solo el aviso de traslado entre campus (SC-09, si
+ *    un docente del departamento tiene clases en otro campus), con choque duro y sus alternativas listas (de horario y de
+ *    salón), con
+ *    choque duro sin pedir alternativas, solo con texto, con el cálculo en la cola («En cola»; pasados
+ *    ComputeChangeAlternatives::QUEUE_STALE_AFTER segundos se ve colgado), con el cálculo empezado y sin terminar
+ *    («Calculando…»; a los STALE_AFTER segundos, «no terminó a tiempo») y con el cálculo fallido (lo que deja el job
+ *    cuando se cae, ProposeChangeAlternatives::fail()); y al final, para que la carga se quede en ajustes, dos aprobadas
+ *    como se pidieron sin aplicar y una aprobada con una alternativa sin aplicar (la coordinación ve «Aplicar la
+ *    alternativa» y «Abrir en el editor»).
+ *
+ * Las alternativas se calculan y se eligen después de la última escritura de sesiones y de reasignar las claves de los
+ * grupos movidos (AssignGroupCode cambia su `updated_at`, que entra en la huella de GroupsScheduleFingerprintQuery): así
+ * las pendientes con alternativas listas y la aprobada sin aplicar siguen vigentes al terminar. Las de la cola, la
+ * empezada y la fallida no corren su job: se piden con la cola retenida (Bus::fake de ComputeChangeAlternatives), y la
+ * empezada lleva `started_at` como lo marcaría el job al empezar (supuesto por confirmar: es el único dato que la demo
+ * escribe sin Action).
  *
  * El horario o salón que se propone lo busca la demo con el validador sobre la foto de la modalidad, sin escribir: corre
  * las horas del grupo, lo cambia de día o le da otro salón del campus, y se queda con el primero que deja lo que el
@@ -83,10 +103,12 @@ use InvalidArgumentException;
  * los docentes con clases en otro campus se guardan para el aviso de traslado.
  *
  * Se puede volver a correr y retoma una corrida que se cayó a la mitad: cada escenario tiene su propio motivo (`reason`),
- * con el que se reconoce su solicitud, y cada paso mira su estado antes de escribir (una pendiente con las alternativas
- * calculándose cuando se cayó vuelve a correr su job). Mientras escribe sesiones descarta GroupScheduleChanged y al final
- * hace lo que harían sus oyentes una sola vez: la clave de los grupos que cambiaron de hora (AssignGroupCode) y los choques
- * de la modalidad (SyncScheduleConflicts); el ranking no se recalcula (supuesto por confirmar: la carga queda en ajustes).
+ * con el que se reconoce su solicitud, y cada paso mira su estado en la base antes de escribir (una pendiente con las
+ * alternativas calculándose cuando se cayó vuelve a correr su job). Mientras escribe sesiones descarta
+ * GroupScheduleChanged y hace lo que harían sus oyentes: reasigna la clave de los grupos movidos
+ * (los saca de la base: lo escrito como se pidió y las alternativas aplicadas) después de cada fase que escribe, y al final
+ * recalcula los choques de la modalidad si el último recálculo es de antes de la última escritura en la carga. El ranking
+ * no se recalcula (supuesto por confirmar: la carga queda en ajustes).
  *
  * En la demo mezclada (`todo`, modo `showcase`, detrás de `demo.showcase`) solo agrega una pendiente con choque duro y sus
  * alternativas listas en la carga en asignación o ajustes con más pendientes: las de StaffingDemoSeeder son solo texto y
@@ -117,13 +139,25 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
     public const string APPLIED_ALTERNATIVE = 'applied_alternative';
 
+    /** Aprobada con una alternativa que la coordinación acomoda en el editor y marca aplicada. */
+    public const string APPLIED_BY_HAND = 'applied_by_hand';
+
     /** Pendiente con alternativas calculadas que dejaron de valer cuando se aplicó la de `applied_alternative`. */
     public const string STALE = 'stale';
 
     public const string PENDING = 'pending';
 
-    /** Pendiente con las alternativas del motor calculadas. */
+    /** Pendiente con las alternativas del motor calculadas y vigentes. */
     public const string READY = 'ready';
+
+    /** Pendiente con el cálculo en la cola, sin empezar. */
+    public const string QUEUED = 'queued';
+
+    /** Pendiente con el cálculo empezado que no terminó. */
+    public const string STARTED = 'started';
+
+    /** Pendiente con el cálculo fallido. */
+    public const string FAILED = 'failed';
 
     public const string APPROVED = 'approved';
 
@@ -141,13 +175,13 @@ final class ChangeRequestsDemoSeeder extends Seeder
     private const int MAX_ROOMS = 40;
 
     /**
-     * Los escenarios, en el orden en que se siembran. `phase` es lo que ya pasó (`history`), la alternativa aplicada y
-     * la pendiente que choca con ella (`alternative`) o lo de después (`after`); `by`, quién pide; `campus`, el campus que
-     * prefiere entre los de la carga por clave (el primero o el último: con el masivo C1 o C2, con un solo campus el
-     * mismo); `description`, lo que pide cuando es solo texto (con horario o salón, se escribe con lo propuesto);
-     * `reason` es único y es como se reconoce la solicitud al volver a correr.
+     * Los escenarios, en el orden en que se siembran. `phase` es lo que ya pasó (`history`), la aplicada a mano
+     * (`manual`), la alternativa aplicada y la pendiente que choca con ella (`alternative`) o lo de después (`after`);
+     * `by`, quién pide; `campus`, el campus que prefiere entre los de la carga por clave (el primero o el último: con el
+     * masivo C1 o C2, con un solo campus el mismo); `description`, lo que pide cuando es solo texto (con horario o salón,
+     * se escribe con lo propuesto); `reason` es único y es como se reconoce la solicitud al volver a correr.
      *
-     * @var array<string, array{phase: 'history'|'alternative'|'after', kind: 'schedule'|'room', shape: string, by: 'teacher'|'coordinator', campus: 'first'|'last', target: string, description: ?string, reason: string, comment: ?string}>
+     * @var array<string, array{phase: 'history'|'manual'|'alternative'|'after', kind: 'schedule'|'room', shape: string, by: 'teacher'|'coordinator', campus: 'first'|'last', target: string, description: ?string, reason: string, comment: ?string}>
      */
     public const array SCENARIOS = [
         'r1' => ['phase' => 'history', 'kind' => 'schedule', 'shape' => self::HARD, 'by' => 'teacher', 'campus' => 'first', 'target' => self::REJECTED, 'description' => null,
@@ -178,6 +212,9 @@ final class ChangeRequestsDemoSeeder extends Seeder
             'description' => 'Un laboratorio de cómputo para las sesiones de práctica.',
             'reason' => 'Las prácticas usan el simulador que solo está instalado en los laboratorios.',
             'comment' => 'De acuerdo; se cambia el salón de las prácticas.'],
+        'm' => ['phase' => 'manual', 'kind' => 'schedule', 'shape' => self::HARD, 'by' => 'teacher', 'campus' => 'first', 'target' => self::APPLIED_BY_HAND, 'description' => null,
+            'reason' => 'A esa hora tengo la reunión semanal del cuerpo académico.',
+            'comment' => 'Se aprueba con la alternativa del motor; la coordinación la acomoda en el editor.'],
         'y' => ['phase' => 'alternative', 'kind' => 'schedule', 'shape' => self::HARD, 'by' => 'teacher', 'campus' => 'last', 'target' => self::APPLIED_ALTERNATIVE, 'description' => null,
             'reason' => 'Me cambiaron el horario de mi plaza en la preparatoria y a la hora actual ya no llego.',
             'comment' => 'La hora que pediste choca; se aprueba con la alternativa del motor, que no deja choques.'],
@@ -214,6 +251,15 @@ final class ChangeRequestsDemoSeeder extends Seeder
             'description' => 'Juntar las sesiones en martes y jueves, de 11:00 a 13:00.',
             'reason' => 'Los alumnos del semestre tienen prácticas en planta los lunes y miércoles.',
             'comment' => null],
+        'q' => ['phase' => 'after', 'kind' => 'schedule', 'shape' => self::HARD, 'by' => 'teacher', 'campus' => 'first', 'target' => self::QUEUED, 'description' => null,
+            'reason' => 'A esa hora recojo a mis hijos de la escuela.',
+            'comment' => null],
+        's' => ['phase' => 'after', 'kind' => 'schedule', 'shape' => self::HARD, 'by' => 'teacher', 'campus' => 'last', 'target' => self::STARTED, 'description' => null,
+            'reason' => 'Me asignaron una comisión sindical en ese horario.',
+            'comment' => null],
+        'f' => ['phase' => 'after', 'kind' => 'schedule', 'shape' => self::HARD, 'by' => 'coordinator', 'campus' => 'first', 'target' => self::FAILED, 'description' => null,
+            'reason' => 'Los alumnos llevan otra materia del semestre a esa hora en el otro edificio.',
+            'comment' => null],
         'a1' => ['phase' => 'after', 'kind' => 'room', 'shape' => self::CLEAN, 'by' => 'teacher', 'campus' => 'first', 'target' => self::APPROVED, 'description' => null,
             'reason' => 'El salón asignado no tiene proyector y la materia es con presentaciones.',
             'comment' => 'Aprobada: el salón que pides está libre a esas horas.'],
@@ -247,10 +293,8 @@ final class ChangeRequestsDemoSeeder extends Seeder
     /** @var array<string, true> docentes de la carga con clases del periodo en más de un campus */
     private array $travellers = [];
 
-    /** @var array<string, true> grupos cuyas horas cambiaron en esta corrida */
-    private array $moved = [];
-
-    private bool $wrote = false;
+    /** @var array<string, array<string, true>> grupo => llaves de lo que ya tenía mal, con la foto de este escenario */
+    private array $existing = [];
 
     public function __construct(
         private readonly ScheduleValidator $validator,
@@ -268,12 +312,80 @@ final class ChangeRequestsDemoSeeder extends Seeder
         $termModel = Term::query()->where('code', $term)->firstOrFail();
         $modalityModel = Modality::query()->where('code', $modality)->firstOrFail();
 
-        match ($mode) {
-            'cases' => ReanalysisDemoSeeder::loadsIn($termModel->getKey(), $modalityModel->getKey(), [ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS])
-                ->each(fn (AcademicLoad $load) => $this->seedLoad($load, $termModel, $modalityModel)),
-            'showcase' => $this->showcase($termModel, $modalityModel),
-            default => throw new InvalidArgumentException("Modo desconocido de la demo de solicitudes de cambio: {$mode}."),
-        };
+        if ($mode === 'showcase') {
+            $this->showcase($termModel, $modalityModel);
+
+            return;
+        }
+
+        if ($mode !== 'cases') {
+            throw new InvalidArgumentException("Modo desconocido de la demo de solicitudes de cambio: {$mode}.");
+        }
+
+        $loads = ReanalysisDemoSeeder::loadsIn($termModel->getKey(), $modalityModel->getKey(), [ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS]);
+
+        if ($loads->isEmpty()) {
+            $this->command?->info("Solicitudes de cambio: ninguna carga reservada en {$modality} (con el volumen demo no la hay).");
+        }
+
+        $loads->each(fn (AcademicLoad $load) => $this->seedLoad($load, $termModel, $modalityModel));
+    }
+
+    /**
+     * Lo que falta o no vale en la carga reservada según SCENARIOS, para la revisión del punto (StaffingServiceProvider):
+     * la carga en ajustes y cada escenario en su estado (las alternativas listas y la elegida sin aplicar, vigentes según
+     * la huella barata que compara la pantalla; la de `x`, vencida). Vacío si todo está.
+     *
+     * @return list<string>
+     */
+    public static function problems(AcademicLoad $load): array
+    {
+        $choose = app(ChooseChangeAlternative::class);
+        $requests = ChangeRequest::query()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
+            ->whereIn('reason', array_column(self::SCENARIOS, 'reason'))->get()->keyBy('reason');
+        $problems = $load->status === LoadStatus::Adjusting ? [] : ["la carga está en {$load->status->label()}"];
+
+        foreach (self::SCENARIOS as $key => $scenario) {
+            $request = $requests[$scenario['reason']] ?? null;
+
+            if ($request === null) {
+                $problems[] = "{$key} sin pedir";
+
+                continue;
+            }
+
+            $alternatives = $request->alternatives;
+            $status = ChangeAlternativesStatus::of($alternatives);
+            $chosen = ChangeAlternatives::chosen($alternatives);
+            $items = $status === ChangeAlternativesStatus::Ready ? ($alternatives['items'] ?? []) : [];
+            $fresh = fn (array $item): bool => $choose->sessionsUnchanged($item);
+            $expected = match ($scenario['target']) {
+                self::REJECTED => ChangeRequestStatus::Rejected,
+                self::APPLIED, self::APPLIED_ALTERNATIVE, self::APPLIED_BY_HAND => ChangeRequestStatus::Applied,
+                self::APPROVED, self::APPROVED_ALTERNATIVE => ChangeRequestStatus::Approved,
+                default => ChangeRequestStatus::Pending,
+            };
+            $wrong = match (true) {
+                $request->status !== $expected => "está {$request->status->label()}",
+                $scenario['target'] === self::APPLIED_ALTERNATIVE => $chosen === null || ! isset($alternatives['applied']) ? 'sin alternativa aplicada' : null,
+                $scenario['target'] === self::APPLIED_BY_HAND => $chosen === null || isset($alternatives['applied']) ? 'sin alternativa acomodada a mano' : null,
+                $scenario['target'] === self::APPROVED_ALTERNATIVE => $chosen === null || ! $fresh($chosen) ? 'sin alternativa elegida vigente' : null,
+                $scenario['target'] === self::READY => $items === [] || ! array_all($items, $fresh) ? 'sin alternativas listas y vigentes' : null,
+                $scenario['target'] === self::STALE => $items === [] || array_all($items, $fresh) ? 'sin alternativas vencidas' : null,
+                $scenario['target'] === self::QUEUED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Computing->value || isset($alternatives['started_at']) ? 'sin cálculo en la cola' : null,
+                $scenario['target'] === self::STARTED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Computing->value || ! isset($alternatives['started_at']) ? 'sin cálculo empezado' : null,
+                $scenario['target'] === self::FAILED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Failed->value ? 'sin cálculo fallido' : null,
+                $scenario['shape'] === self::SOFT => ($request->impact['hard'] ?? null) !== [] || array_column($request->impact['soft'] ?? [], 'rule') !== ['SC-09'] ? 'sin solo el aviso de traslado' : null,
+                $scenario['target'] === self::PENDING && $scenario['shape'] === self::HARD => ($request->impact['hard'] ?? []) === [] || $alternatives !== null ? 'sin choque duro y sin alternativas' : null,
+                default => null,
+            };
+
+            if ($wrong !== null) {
+                $problems[] = "{$key} {$wrong}";
+            }
+        }
+
+        return $problems;
     }
 
     /**
@@ -294,12 +406,21 @@ final class ChangeRequestsDemoSeeder extends Seeder
             return;
         }
 
-        $history = $this->requestPhase('history');
-        $this->decideHistory($history);
-        $alternative = $this->requestPhase('alternative');
-        $this->decideAlternative($history, $alternative);
-        $this->decideAfter($this->requestPhase('after'));
-        $this->settle($term, $modality);
+        $requests = $this->requestPhase('history');
+        $this->decideHistory($requests);
+        $this->settleCodes();
+
+        $requests += $this->requestPhase('manual');
+        $this->applyByHand($requests['m'] ?? null);
+        $this->settleCodes();
+
+        $requests += $this->requestPhase('alternative');
+        $this->decideAlternative($requests);
+        $this->settleCodes();
+
+        $requests += $this->requestPhase('after');
+        $this->decideAfter($requests);
+        $this->syncConflicts($term, $modality);
 
         $counts = $this->requests()->get(['status'])->countBy(fn (ChangeRequest $request): string => $request->status->value);
         $this->command?->info(sprintf('Solicitudes de cambio de %s (%s): %s; la carga queda en %s (%.1f s).',
@@ -312,7 +433,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
      * Las solicitudes de los escenarios de una fase, por clave (null si ningún grupo sirvió). La de `x` (CLASH) choca con
      * el grupo de `y`, que va antes en la misma fase.
      *
-     * @param  'history'|'alternative'|'after'  $phase
+     * @param  'history'|'manual'|'alternative'|'after'  $phase
      * @return array<string, ?ChangeRequest>
      */
     private function requestPhase(string $phase): array
@@ -329,8 +450,8 @@ final class ChangeRequestsDemoSeeder extends Seeder
     }
 
     /**
-     * Lo que ya pasó antes de la alternativa: el jefe rechaza con su comentario y aprueba lo pedido de las que se aplican;
-     * quien las aplica escribe lo que traen horario o salón, como en el editor (las marca aplicadas decideAlternative()).
+     * Lo que ya pasó: el jefe rechaza con su comentario y aprueba lo pedido de las que se aplican; quien las aplica
+     * escribe lo que traen horario o salón, como en el editor (las marca aplicadas decideAlternative()).
      *
      * @param  array<string, ?ChangeRequest>  $requests
      */
@@ -350,9 +471,40 @@ final class ChangeRequestsDemoSeeder extends Seeder
                     app(ApproveChangeRequest::class)->handle($request->fresh(), $this->head, self::SCENARIOS[$key]['comment']);
                 }
 
-                $this->writeRequested($request);
+                if ($request->fresh()->status === ChangeRequestStatus::Approved && AssessChangeImpact::isAssessable($request)) {
+                    $sessions = array_map(fn (SessionCandidate $session): SessionCandidate => new SessionCandidate($session->day, $session->startsAt, $session->endsAt, $session->roomId, $session->kind),
+                        $this->assess->proposal($request->fresh()));
+                    $this->write([$request->group_id => $sessions], $request, 'con la solicitud de cambio');
+                }
             });
         }
+    }
+
+    /**
+     * La aplicada a mano: el jefe la aprueba con la primera alternativa del motor y la coordinación la acomoda en el
+     * editor (escribe las sesiones de la elegida) y la marca aplicada. Las cuatro de antes siguen aprobadas, así que la
+     * carga no regresa todavía a asignación.
+     */
+    private function applyByHand(?ChangeRequest $request): void
+    {
+        if ($request === null) {
+            return;
+        }
+
+        $this->ensureAlternatives('m', $request, ChangeAlternativesStatus::Ready);
+        $this->choose('m', $request);
+
+        $chosen = ChangeAlternatives::chosen($request->fresh()->alternatives);
+
+        if ($request->fresh()->status !== ChangeRequestStatus::Approved || $chosen === null) {
+            return;
+        }
+
+        $this->attempt('m', function () use ($request, $chosen): void {
+            $letter = ChangeAlternatives::letter($request->fresh()->alternatives, $chosen['id']);
+            $this->write(ChangeAlternatives::candidates($chosen, replacing: false), $request, "a mano en el editor, con la alternativa {$letter} de la solicitud de cambio");
+            $this->warnVeto(app(MarkChangeRequestApplied::class)->handle($request->fresh(), $this->applier($request))->vetoReasons);
+        });
     }
 
     /**
@@ -361,18 +513,15 @@ final class ChangeRequestsDemoSeeder extends Seeder
      * `y` al final, que es la que regresa la carga a asignación. `x` choca con el grupo de `y`: al moverse, sus
      * alternativas dejan de valer («Esto cambió…»).
      *
-     * @param  array<string, ?ChangeRequest>  $history
-     * @param  array<string, ?ChangeRequest>  $alternative
+     * @param  array<string, ?ChangeRequest>  $requests
      */
-    private function decideAlternative(array $history, array $alternative): void
+    private function decideAlternative(array $requests): void
     {
-        foreach ($alternative as $key => $request) {
-            $this->ensureAlternatives($key, $request);
-        }
+        $this->ensureAlternatives('y', $requests['y'] ?? null, ChangeAlternativesStatus::Ready);
+        $this->ensureAlternatives('x', $requests['x'] ?? null, ChangeAlternativesStatus::Ready);
+        $this->choose('y', $requests['y'] ?? null);
 
-        $this->choose('y', $alternative['y'] ?? null);
-
-        foreach (self::having($history, self::APPLIED) as $key => $request) {
+        foreach (self::having($requests, self::APPLIED) as $key => $request) {
             $this->attempt($key, function () use ($request): void {
                 if ($request->fresh()->status === ChangeRequestStatus::Approved) {
                     $this->warnVeto(app(MarkChangeRequestApplied::class)->handle($request->fresh(), $this->applier($request))->vetoReasons);
@@ -380,19 +529,23 @@ final class ChangeRequestsDemoSeeder extends Seeder
             });
         }
 
-        $this->applyAlternative($alternative['y'] ?? null);
+        $this->applyAlternative($requests['y'] ?? null);
     }
 
     /**
-     * Después: las alternativas de las pendientes que las piden y de `z`, y al final las aprobadas sin aplicar, que dejan
-     * la carga en ajustes.
+     * Después: las alternativas de las que las piden (las listas y la de `z`) y las tres del cálculo que no
+     * termina (en la cola, empezado y fallido), y al final las aprobadas sin aplicar, que dejan la carga en ajustes.
      *
      * @param  array<string, ?ChangeRequest>  $requests
      */
     private function decideAfter(array $requests): void
     {
         foreach ([...self::having($requests, self::READY), ...self::having($requests, self::APPROVED_ALTERNATIVE)] as $key => $request) {
-            $this->ensureAlternatives($key, $request);
+            $this->ensureAlternatives($key, $request, ChangeAlternativesStatus::Ready);
+        }
+
+        foreach ([...self::having($requests, self::QUEUED), ...self::having($requests, self::STARTED), ...self::having($requests, self::FAILED)] as $key => $request) {
+            $this->unfinished($key, $request);
         }
 
         foreach (self::having($requests, self::APPROVED) as $key => $request) {
@@ -405,6 +558,38 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
         foreach (self::having($requests, self::APPROVED_ALTERNATIVE) as $key => $request) {
             $this->choose($key, $request);
+        }
+    }
+
+    /**
+     * Un cálculo de alternativas que no termina: el jefe las pide con la cola retenida (el job no corre). En la cola se
+     * queda así; empezado, lleva `started_at` como lo marca el job al empezar (ProposeChangeAlternatives::compute) y se
+     * queda sin terminar; fallido, termina como lo deja el job cuando se cae (ProposeChangeAlternatives::fail()).
+     */
+    private function unfinished(string $key, ChangeRequest $request): void
+    {
+        $target = self::SCENARIOS[$key]['target'];
+
+        if (! $this->pending($request)) {
+            return;
+        }
+
+        if ($request->fresh()->alternatives === null) {
+            $this->attempt($key, fn () => $this->holdingQueue(fn () => app(ProposeChangeAlternatives::class)->handle($request->fresh(), $this->head)));
+        }
+
+        $alternatives = $request->fresh()->alternatives;
+
+        if (ChangeAlternativesStatus::of($alternatives) !== ChangeAlternativesStatus::Computing) {
+            return;
+        }
+
+        if ($target === self::STARTED && ! isset($alternatives['started_at'])) {
+            $request->forceFill(['alternatives' => [...$alternatives, 'started_at' => now()->toIso8601String()]])->save();
+        }
+
+        if ($target === self::FAILED) {
+            app(ProposeChangeAlternatives::class)->fail($request->id, (string) $alternatives['calculation_id'], ComputeChangeAlternatives::FAILED_MESSAGE);
         }
     }
 
@@ -478,6 +663,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
         if ($shape !== self::TEXT) {
             // Lo escrito o pedido antes cambió la foto: se lee otra vez una sola vez por escenario.
             $this->validator->forget();
+            $this->existing = [];
         }
 
         $used = $this->requests()->pluck('group_id')->flip();
@@ -556,7 +742,6 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
             if ($this->fits($group, $candidates, $shape, $target)) {
                 $lines = array_map(fn (array $line): string => "{$line['days']} {$line['time']}", SessionLabels::snapshot($sessions));
-
                 $rooms = $group->sessions->pluck('room_id')->filter()->unique()->count();
 
                 return [['sessions' => $sessions], 'Mover el grupo a '.self::join($lines).($rooms > 1 ? ', en los mismos salones.' : ($rooms === 1 ? ', en el mismo salón.' : '.'))];
@@ -616,19 +801,14 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
     /**
      * Lo que agregan las sesiones propuestas al grupo, duro y blando, como AssessChangeImpact (menos lo que el grupo ya
-     * tenía mal), sobre la foto que el validador ya leyó.
+     * tenía mal, que se calcula una vez por grupo y escenario), sobre la foto que el validador ya leyó.
      *
      * @param  list<SessionCandidate>  $candidates
      * @return array{0: list<Violation>, 1: list<Violation>}
      */
     private function added(Group $group, array $candidates): array
     {
-        $existing = [];
-
-        foreach ($this->validator->validateGroup($group)->violations() as $violation) {
-            $existing[$violation->key()] = true;
-        }
-
+        $existing = $this->existing[$group->id] ??= array_fill_keys(array_map(fn (Violation $violation): string => $violation->key(), $this->validator->validateGroup($group)->violations()), true);
         $added = array_values(array_filter($this->validator->checkGroupSessions($group, $candidates)->violations(), fn (Violation $violation): bool => ! isset($existing[$violation->key()])));
 
         return [
@@ -658,7 +838,8 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
     /**
      * Una sesión del grupo seguida (sin minutos libres) de una del mismo docente en otro campus, antes o después: el
-     * traslado justo es un aviso (SC-09) y no bloquea.
+     * traslado justo es un aviso (SC-09) y no bloquea. Las del docente van por día, hora y clave de su grupo, para que la
+     * misma semilla dé la misma propuesta.
      *
      * @return iterable<list<array{day: int, starts_at: string, ends_at: string}>>
      */
@@ -670,12 +851,11 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
         $state = $this->validator->stateFor($group->term_id, $group->modality_id);
         $live = $this->live($group);
+        $others = collect($state->teacherSessions($group->teacher_id))
+            ->reject(fn (StateSession $other): bool => $state->group($other->groupId)?->campusId === $group->campus_id)
+            ->sortBy(fn (StateSession $other): array => [$other->day, $other->start, $state->group($other->groupId)?->code]);
 
-        foreach ($state->teacherSessions($group->teacher_id) as $other) {
-            if ($state->group($other->groupId)?->campusId === $group->campus_id) {
-                continue;
-            }
-
+        foreach ($others as $other) {
             foreach ($live as $index => $session) {
                 $length = $session['end'] - $session['start'];
 
@@ -790,8 +970,10 @@ final class ChangeRequestsDemoSeeder extends Seeder
     /**
      * Pide las alternativas del motor de una pendiente que no las tiene (el job corre en la cola síncrona). Retoma una
      * corrida que se cayó: un cálculo que se quedó en `computing` vuelve a correr su job, y uno fallido se pide otra vez.
+     * Avisa si no queda como `$expected`, y si el motor paró por tiempo (la primera alternativa puede cambiar de una
+     * máquina a otra).
      */
-    private function ensureAlternatives(string $key, ?ChangeRequest $request): void
+    private function ensureAlternatives(string $key, ?ChangeRequest $request, ChangeAlternativesStatus $expected): void
     {
         if ($request === null || ! $this->pending($request)) {
             return;
@@ -808,10 +990,15 @@ final class ChangeRequestsDemoSeeder extends Seeder
             $this->attempt($key, fn () => app(ProposeChangeAlternatives::class)->handle($request->fresh(), $this->head));
         }
 
-        $status = ChangeAlternativesStatus::of($request->fresh()->alternatives);
+        $alternatives = $request->fresh()->alternatives;
+        $status = ChangeAlternativesStatus::of($alternatives);
 
-        if ($status !== ChangeAlternativesStatus::Ready) {
-            $this->command?->warn("Solicitudes de cambio: el motor dejó «{$key}» en ".($status?->value ?? 'sin pedir').': '.ChangeAlternativesStatus::messageOf($request->fresh()->alternatives));
+        if ($status !== $expected) {
+            $this->command?->warn("Solicitudes de cambio: el motor dejó «{$key}» en ".($status?->value ?? 'sin pedir').': '.ChangeAlternativesStatus::messageOf($alternatives));
+        }
+
+        if (($alternatives['stop'] ?? null) === PlacementStop::TimeLimit->value) {
+            $this->command?->warn("Solicitudes de cambio: el motor paró por tiempo en «{$key}»; sus alternativas pueden cambiar de una máquina a otra.");
         }
     }
 
@@ -840,12 +1027,9 @@ final class ChangeRequestsDemoSeeder extends Seeder
         $request->refresh();
 
         if ($request->status === ChangeRequestStatus::Approved && ChangeAlternatives::chosen($request->alternatives) !== null) {
-            $groups = array_column(ChangeAlternatives::chosen($request->alternatives)['groups'], 'group_id');
-
-            $this->attempt('y', function () use ($request, $groups): void {
+            $this->attempt('y', function () use ($request): void {
                 $result = Event::fakeFor(fn () => app(ApplyChosenAlternative::class)->handle($request, $this->applier($request)), [GroupScheduleChanged::class]);
-                $this->wrote = true;
-                $this->moved += array_fill_keys($groups, true);
+                $this->validator->forget();
                 $this->warnVeto($result->vetoReasons);
             });
         }
@@ -858,46 +1042,65 @@ final class ChangeRequestsDemoSeeder extends Seeder
     }
 
     /**
-     * Quien aplica una aprobada como se pidió escribe antes lo que trae horario o salón, como en el editor (las solicitudes
-     * de solo texto no tienen qué escribir). Si ya está escrito, ReplaceGroupSessions no cambia nada.
+     * Quien aplica escribe sesiones como en el editor (ReplaceGroupSessions, con GroupScheduleChanged descartado; sus
+     * oyentes los hacen settleCodes() y syncConflicts()). Si ya están escritas, no cambia nada.
+     *
+     * @param  array<string, list<SessionCandidate>>  $schedules
      */
-    private function writeRequested(ChangeRequest $request): void
+    private function write(array $schedules, ChangeRequest $request, string $origin): void
     {
-        $request->refresh();
-
-        if ($request->status !== ChangeRequestStatus::Approved || ! AssessChangeImpact::isAssessable($request)) {
-            return;
-        }
-
-        $sessions = array_map(fn (SessionCandidate $session): SessionCandidate => new SessionCandidate($session->day, $session->startsAt, $session->endsAt, $session->roomId, $session->kind),
-            $this->assess->proposal($request));
-
-        $written = Event::fakeFor(fn () => app(ReplaceGroupSessions::class)->handle([$request->group_id => $sessions], $this->applier($request), 'con la solicitud de cambio', ['change_request_id' => $request->id]), [GroupScheduleChanged::class]);
-
-        if ($written['groups'] !== []) {
-            $this->wrote = true;
-            $this->validator->forget();
-
-            if ($request->kind === ChangeRequestKind::Schedule) {
-                $this->moved[$request->group_id] = true;
-            }
-        }
+        Event::fakeFor(fn () => app(ReplaceGroupSessions::class)->handle($schedules, $this->applier($request), $origin, ['change_request_id' => $request->id]), [GroupScheduleChanged::class]);
+        $this->validator->forget();
     }
 
     /**
-     * Lo que harían una vez los oyentes de GroupScheduleChanged que se descartaron: la clave de los grupos que cambiaron
-     * de hora y los choques de la modalidad.
+     * Lo que haría AssignCodeOnScheduleChange, descartado al escribir: la clave de los grupos que la demo movió de hora
+     * sigue a su hora de inicio más temprana. Los saca de la base (las aplicadas o aprobadas de horario con lo que pedían
+     * y los grupos de las alternativas elegidas que ya se escribieron), así también lo hace al retomar; AssignGroupCode
+     * no escribe si la clave no cambia. Va después de cada fase que escribe y antes de calcular o elegir alternativas: la
+     * clave toca el `updated_at` del grupo, que entra en la huella de las alternativas.
      */
-    private function settle(Term $term, Modality $modality): void
+    private function settleCodes(): void
     {
-        foreach (Group::query()->whereKey(array_keys($this->moved))->get() as $group) {
+        $byHand = array_column(array_filter(self::SCENARIOS, fn (array $scenario): bool => $scenario['target'] === self::APPLIED_BY_HAND), 'reason');
+        $ids = [];
+
+        foreach ($this->requests()->whereIn('status', [ChangeRequestStatus::Approved, ChangeRequestStatus::Applied])->whereIn('reason', array_column(self::SCENARIOS, 'reason'))->get() as $request) {
+            $chosen = ChangeAlternatives::chosen($request->alternatives);
+
+            if ($chosen !== null && (isset($request->alternatives['applied']) || in_array($request->reason, $byHand, true))) {
+                array_push($ids, ...array_column($chosen['groups'], 'group_id'));
+            } elseif ($chosen === null && $request->kind === ChangeRequestKind::Schedule && AssessChangeImpact::isAssessable($request)) {
+                $ids[] = $request->group_id;
+            }
+        }
+
+        foreach (Group::query()->whereKey(array_unique($ids))->orderBy('id')->get() as $group) {
             app(AssignGroupCode::class)->handle($group);
         }
 
-        if ($this->wrote) {
-            $this->validator->forget();
-            app(SyncScheduleConflicts::class)->handle($term, $modality);
+        $this->validator->forget();
+        $this->existing = [];
+    }
+
+    /**
+     * Lo que haría QueueConflictRecompute, descartado al escribir: los choques de la modalidad, una vez, si el último
+     * recálculo (SyncScheduleConflicts::stampKey) no es posterior a la última escritura en los grupos de la carga o en sus
+     * sesiones. Así una corrida que se cayó antes de recalcular lo hace al retomar, y una que no escribió nada no lo repite.
+     */
+    private function syncConflicts(Term $term, Modality $modality): void
+    {
+        $groups = Group::query()->where('term_id', $this->load->term_id)->where('modality_id', $this->load->modality_id)->where('department_id', $this->load->department_id);
+        $written = collect([(clone $groups)->max('updated_at'), GroupSession::query()->whereIn('group_id', (clone $groups)->select('id'))->max('updated_at')])->filter()->max();
+        $stamp = Cache::get(SyncScheduleConflicts::stampKey($term->id, $modality->id));
+
+        // Las fechas de la base son al segundo, redondeadas: un segundo de margen.
+        if ($written !== null && $stamp !== null && CarbonImmutable::parse($stamp)->greaterThanOrEqualTo(CarbonImmutable::parse($written)->subSecond())) {
+            return;
         }
+
+        $this->validator->forget();
+        app(SyncScheduleConflicts::class)->handle($term, $modality);
     }
 
     /**
@@ -920,7 +1123,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
         $this->prepare($load, $modality);
         $scenario = [...self::SCENARIOS['p4'], 'reason' => self::SHOWCASE_REASON, 'campus' => 'last'];
         $request = $this->ensureRequested('showcase', $scenario);
-        $this->ensureAlternatives('showcase', $request);
+        $this->ensureAlternatives('showcase', $request, ChangeAlternativesStatus::Ready);
 
         if ($request !== null) {
             $this->command?->info("Solicitud de cambio con alternativas del motor en {$load->department->code}: el grupo {$request->group->code}.");
@@ -936,8 +1139,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
         $this->travellers = array_fill_keys(Group::query()->active()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->whereNotNull('teacher_id')
             ->whereIn('teacher_id', Group::query()->active()->where('term_id', $load->term_id)->where('department_id', $load->department_id)->select('teacher_id'))
             ->groupBy('teacher_id')->havingRaw('count(distinct campus_id) > 1')->pluck('teacher_id')->all(), true);
-        $this->moved = [];
-        $this->wrote = false;
+        $this->existing = [];
         $this->validator->forget();
     }
 
@@ -995,6 +1197,27 @@ final class ChangeRequestsDemoSeeder extends Seeder
         }
 
         return $this->holders[$key];
+    }
+
+    /**
+     * Pide alternativas con la cola retenida: ComputeChangeAlternatives no se despacha (como con el worker ocupado), así
+     * que el cálculo se queda en `computing`.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     */
+    private function holdingQueue(Closure $work): mixed
+    {
+        $dispatcher = Bus::getFacadeRoot();
+        Bus::fake([ComputeChangeAlternatives::class]);
+
+        try {
+            return $work();
+        } finally {
+            Bus::swap($dispatcher);
+        }
     }
 
     /**
