@@ -1,6 +1,6 @@
-{{-- La cabecera de la pantalla de acceso (DESIGN.md, "Pantalla de acceso"): los logos del TecNM (azul espacio) y del
-ITCJ (rojo Tec) pegados arriba y, debajo, la marca Nexus centrada. La usan el login y la activación del acceso; el
-movimiento del login lo hace resources/js/login.js con data-login-logos y data-login-mark. --}}
+{{-- La cabecera de la activación del acceso (DESIGN.md, "Pantalla de acceso"): los logos del TecNM (azul espacio) y del
+ITCJ (rojo Tec) pegados arriba y, debajo, la marca Nexus centrada. El login lleva los logos en placas
+(core::login.plates) y la marca en la cabecera de su credencial (tarea 1.23). --}}
 <div data-login-logos class="flex items-center justify-between gap-5">
     <span
         role="img"
