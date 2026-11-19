@@ -355,7 +355,7 @@ final readonly class ParallelDraft
         }
 
         if ($this->blocked !== []) {
-            return $this->blocked[0]->lockReason($this->code($this->blocked[0]->ownerCareerId));
+            return ParallelExisting::lockReasonOf($this->blocked, $this->code(...));
         }
 
         $over = $this->overs()[0] ?? null;
@@ -367,6 +367,22 @@ final readonly class ParallelDraft
         }
 
         return null;
+    }
+
+    /**
+     * Los grupos con docente que no se pueden cancelar, cuando son lo que dice blockedReason() (antes no falta aceptar una
+     * parte ni el armado está vacío o pasa de los grupos que se permiten): a quiénes quitarles el docente en Asignación
+     * docente (G-05 del recorrido final del ensayo 8.11). Vacío si no.
+     *
+     * @return list<ParallelExisting>
+     */
+    public function teacherBlocked(): array
+    {
+        if ($this->slots === [] || $this->size() > ArmParallelGroups::MAX_GROUPS || $this->pending() !== []) {
+            return [];
+        }
+
+        return array_values(array_filter($this->blocked, fn (ParallelExisting $group): bool => $group->hasTeacher()));
     }
 
     /**

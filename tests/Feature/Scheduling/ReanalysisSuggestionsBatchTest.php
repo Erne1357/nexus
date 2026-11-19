@@ -115,7 +115,9 @@ describe('jefe del departamento', function () {
         $drawer->call('applyChosen')->assertDispatched('reanalysis-adjusted');
 
         expect(lastToastOf($drawer)['title'])->toBe('Se aplicó 1; 1 no')
-            ->and(lastToastOf($drawer)['description'])->toBe(e("«Cerrar el grupo E»: Primero quita a {$teacher->name} del grupo E en Asignación docente; luego lo puedes cerrar. Lo aplicado entra en la versión 2 al publicar."))
+            ->and(lastToastOf($drawer)['description'])->toBe(e("«Cerrar el grupo E»: Primero quita a {$teacher->name} del grupo E en Asignación docente; luego lo puedes cerrar.")
+                .' <a href="'.e(route('staffing.assign', ['grupo' => $this->e->id, 'materia' => $this->world->integral->code])).'" class="link font-semibold">Ir a Asignación docente</a> '
+                .e('Lo aplicado entra en la versión 2 al publicar.'))
             ->and($this->a->fresh()->capacity)->toBe(50)
             ->and($this->e->fresh()->status)->toBe(GroupStatus::Planned);
     });

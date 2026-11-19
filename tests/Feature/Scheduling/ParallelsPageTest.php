@@ -201,6 +201,39 @@ it('el grupo con docente sin lugar se dice en lo que pasa y no deja armar', func
         ->assertSeeHtml('data-testid="parallels-arm" disabled');
 });
 
+it('G-05: el renglón pendiente nombra todos los grupos con docente que estorban y enlaza a Asignación docente, en la materia y el grupo', function () {
+    $isic = $this->world->request($this->isic, 20, 2, subject: $this->algebra);
+    $iind = $this->world->request($this->iind, 10, 1, subject: $this->algebra);
+    [$first, $second] = $this->world->groupsOf($isic, 2);
+    [$third] = $this->world->groupsOf($iind);
+    array_map(fn (Group $group) => $this->world->withTeacher($group), [$first, $second, $third]);
+    $toSecond = e(route('staffing.assign', ['grupo' => $second->id, 'materia' => 'ACF-0903']));
+    $toThird = e(route('staffing.assign', ['grupo' => $third->id, 'materia' => 'ACF-0903']));
+
+    parallelsPageAs($this->jefe)
+        ->assertSee("Los grupos {$second->code} de ISIC y {$third->code} de IIND tienen docente y el arreglo no les deja lugar")
+        ->assertSeeHtml("href=\"{$toSecond}\"")
+        ->call('open', $this->algebra->id, $this->world->campus->id)
+        ->assertSeeHtml("href=\"{$toThird}\"");
+
+    parallelsPageAs(User::factory()->withRole(Role::Subdireccion)->create(), ['depto' => 'CB'])
+        ->assertSee("Los grupos {$second->code} de ISIC y {$third->code} de IIND tienen docente")
+        ->assertDontSeeHtml('/staffing/assign');
+});
+
+it('G-05: el botón y su confirmación usan el mismo verbo: «Armar» sin grupos y «Reorganizar» si ya existen', function () {
+    parallelsPageOpen(parallelsPageAs($this->jefe))
+        ->assertSeeHtml('data-confirm-title="¿Armar los paralelos de Cálculo Integral en Campus I?" data-confirm-button="Armar grupos"');
+
+    $isic = $this->world->request($this->isic, 20, 1, subject: $this->chemistry, campus: $this->c2);
+    $this->world->request($this->iind, 10, 1, subject: $this->chemistry, campus: $this->c2);
+    $this->world->groupsOf($isic);
+
+    parallelsPageAs($this->jefe)->call('open', $this->chemistry->id, $this->c2->id)
+        ->assertSeeHtml('data-confirm-title="¿Reorganizar los grupos de Química en Campus II?" data-confirm-button="Reorganizar grupos"')
+        ->assertSee('Reorganizar grupos');
+});
+
 it('el error de la Action se muestra en su lugar', function () {
     CareerCampus::query()->where('career_id', $this->iind->id)->where('campus_id', $this->world->campus->id)->update(['is_active' => false]);
 

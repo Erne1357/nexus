@@ -16,7 +16,8 @@
     `bg-primary/5`. La que no se puede elegir lleva la casilla deshabilitada con su motivo en `title` y para lectores de
     pantalla (el de una bloqueada es el que ya está escrito bajo sus botones); la que choca con una elegida lo escribe
     además bajo sus botones, con `o-no-symbol`; y la que se desmarcó porque cambió desde que se eligió lo dice ahí, en
-    `text-warning` con `o-arrow-path`.
+    `text-warning` con `o-arrow-path`. Un «Cerrar grupo» bloqueado porque el grupo tiene docente lleva, bajo su motivo y solo
+    para quien ajusta, «Ir a Asignación docente» (`$assignUrl`; G-05 del recorrido 8.11).
 --}}
 @php($slug = 'suggestion-'.substr(md5($suggestion->key), 0, 10))
 @php($editingThis = $editing === $suggestion->key)
@@ -219,6 +220,9 @@
         </div>
         @if ($reason !== null && $adjustReason === null)
             <p id="{{ $slug }}-why" class="flex items-start gap-1.5 text-[13px] text-neutral md:ps-11"><x-icon name="o-lock-closed" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $reason }}</p>
+            @if (($assignUrl ?? null) !== null)
+                <a href="{{ $assignUrl }}" wire:navigate class="link -mt-1 inline-flex min-h-11 items-center gap-1 justify-self-start text-[13px] font-semibold no-underline hover:underline md:ms-11 md:min-h-0" data-testid="suggestion-assign">Ir a Asignación docente<x-icon name="o-arrow-right" class="h-3.5 w-3.5" aria-hidden="true" /></a>
+            @endif
         @elseif ($reason !== null)
             <span id="{{ $slug }}-why" class="sr-only">{{ $reason }}</span>
         @endif

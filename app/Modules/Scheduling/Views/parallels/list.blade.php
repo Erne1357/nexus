@@ -1,7 +1,8 @@
 {{--
     La lista de «Paralelos» (maqueta B): un renglón por materia y campus que se puede juntar, con las carreras que cuentan
     (la de parte aceptada con su palomita), esperados (desde 1200 px), pedidos, bastan, de menos y su estado: «Armada»,
-    «Pendiente» con su motivo (una parte sin aceptar, un grupo que no se puede cancelar sin lugar o HC-07) o «Por armar» con
+    «Pendiente» con su motivo (una parte sin aceptar, los grupos que no se pueden cancelar sin lugar, todos nombrados, o HC-07;
+    a quien arma, si son grupos con docente, «Ir a Asignación docente» en el primero) o «Por armar» con
     los grupos que ya existen y los alumnos que quedan de menos; el estado viene del componente (`$states`, el mismo del filtro, la pestaña y el drawer). «Armar» abre el drawer
     de una que se puede armar; si ya está armada, pendiente, con la carga cerrada o el usuario solo consulta, «Ver». Desde 1024 px es tabla (debajo de
     1200 px el campus va junto a la clave y sin «Esperados»; si no cabe, se desplaza de lado dentro de su caja); debajo,
@@ -70,6 +71,9 @@
                             @if ($rowState['note'] !== null)
                                 <p class="mt-1 max-w-64 text-[12.5px] leading-snug text-neutral">{{ $rowState['note'] }}</p>
                             @endif
+                            @if ($canArrange && $rowState['assignUrl'] !== null)
+                                <a href="{{ $rowState['assignUrl'] }}" wire:navigate class="link mt-0.5 inline-flex items-center gap-1 text-[12.5px] font-semibold no-underline hover:underline" data-testid="parallels-assign-{{ $key($subject) }}">Ir a Asignación docente<x-icon name="o-arrow-right" class="h-3.5 w-3.5" aria-hidden="true" /></a>
+                            @endif
                         </td>
                         <td class="text-right">
                             <button type="button" wire:click="open('{{ $subject->subject->id }}', '{{ $subject->campus->id }}')" data-opens="{{ $key($subject) }}"
@@ -120,6 +124,9 @@
                         @endforeach
                     </span>
                 </button>
+                @if ($canArrange && $rowState['assignUrl'] !== null)
+                    <a href="{{ $rowState['assignUrl'] }}" wire:navigate class="link -mt-2 flex min-h-11 items-center gap-1 px-4 text-[12.5px] font-semibold no-underline hover:underline">Ir a Asignación docente<x-icon name="o-arrow-right" class="h-3.5 w-3.5" aria-hidden="true" /></a>
+                @endif
             </li>
         @endforeach
     </ul>
