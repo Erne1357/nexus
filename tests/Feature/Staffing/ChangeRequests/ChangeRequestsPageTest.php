@@ -159,7 +159,10 @@ describe('lista', function () {
             return count(DB::getQueryLog());
         };
 
+        // La abierta (la primera de la lista) es una pendiente en los dos conteos: su detalle con «Impacto y
+        // alternativas» (tarea 8.7) hace las mismas consultas sin importar cuántas haya en la lista.
         crRequest($this->g1, $this->w->teacherUser, 'applied');
+        crRequest($this->g2, $this->w->otherTeacherUser, 'pending');
         $count();
         $few = $count();
 

@@ -69,7 +69,9 @@ use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Models\ScheduleConflict;
 use App\Modules\Scheduling\Policies\ParallelsPolicy;
+use App\Modules\Scheduling\Queries\NoPendingPlacements;
 use App\Modules\Scheduling\Queries\Parallels;
+use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Queries\ReanalysisLoadsQuery;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
@@ -119,6 +121,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
 
         $this->app->scoped(ScheduleValidator::class);
         $this->app->scoped(ScheduleEditorQuery::class);
+
+        // Lo que el editor muestra «por colocar» con `?solicitud=`; Staffing lo reemplaza con la alternativa elegida.
+        $this->app->bindIf(PendingPlacements::class, NoPendingPlacements::class);
     }
 
     public function boot(): void

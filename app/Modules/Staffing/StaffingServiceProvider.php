@@ -38,6 +38,7 @@ use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
+use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
@@ -61,6 +62,7 @@ use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -95,6 +97,17 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     protected array $policies = [
         ChangeRequest::class => ChangeRequestPolicy::class,
     ];
+
+    /**
+     * El editor de horarios muestra «por colocar» la alternativa del motor elegida en una solicitud de cambio
+     * (`?solicitud=`, tarea 8.7).
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->bind(PendingPlacements::class, ChosenAlternativePlacementsQuery::class);
+    }
 
     public function boot(): void
     {

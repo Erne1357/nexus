@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
@@ -220,6 +221,22 @@ it('CR-02: en un cambio de salón, la cadena deja las horas con el salón nuevo 
         ->and(array_unique(array_column($mine, 'room')))->toBe(['A-2'])
         ->and(array_column($mine, 'replaces_session_id'))->toEqualCanonicalizing(GroupSession::query()->where('group_id', $s['group']->id)->pluck('id')->all())
         ->and(array_column($chain['affected_groups'], 'code'))->toBe(['J']);
+});
+
+it('CR-02: la cadena solo mueve grupos del campus de la solicitud: uno de otro campus queda fijo (confirmado el 18 de noviembre de 2026)', function () {
+    $s = alternativesScenario();
+    $campus = Campus::factory()->create();
+    CareerCampus::factory()->create(['career_id' => $s['career']->id, 'campus_id' => $campus->id]);
+    $room = Room::factory()->create(['building_id' => Building::factory()->create(['campus_id' => $campus->id])->id, 'code' => 'B-1', 'capacity' => 40]);
+    GroupSession::query()->where('group_id', $s['other']->id)->update(['room_id' => null]);
+    $s['other']->update(['campus_id' => $campus->id]);
+    GroupSession::query()->where('group_id', $s['other']->id)->update(['room_id' => $room->id]);
+
+    $request = alternativesPropose(alternativesRequest($s), $s['jefe']);
+
+    expect($request->alternatives['items'])->not->toBe([])
+        ->and(collect($request->alternatives['items'])->pluck('kind')->unique()->all())->toBe(['alone'])
+        ->and(collect($request->alternatives['items'])->flatMap(fn (array $item): array => $item['movable_group_ids'])->unique()->values()->all())->toBe([$s['group']->id]);
 });
 
 it('CR-02: los grupos de otro departamento nunca se mueven: sin cadena, solo el grupo pedido', function () {

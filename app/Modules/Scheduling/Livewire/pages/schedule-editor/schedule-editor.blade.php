@@ -1,6 +1,7 @@
 {{--
     Editor de horarios (tarea 3.5; maqueta A «Semana con bandeja», `.impeccable/mocks/horarios/a.html`; DESIGN.md,
     "Editor de horarios"):
+    - Con `?solicitud=`, la franja «Por colocar» (scheduling::editor.pending, tarea 8.7) debajo del encabezado.
     - Encabezado: «Horarios» con el periodo, y el resumen (la modalidad con una sola y el campus con uno solo, la
       retícula, los grupos, las horas colocadas y las insignias de choques y avisos, que llevan al panel).
     - Selectores (maqueta U2, opción A): Modalidad (con más de una), Carrera, Retícula (la vigente con «Vigente», las viejas con «Prioridad» y sus grupos sin acomodar),
@@ -66,6 +67,10 @@
             </div>
         @endisset
     </div>
+
+    @if ($placements)
+        @include('scheduling::editor.pending', ['placements' => $placements])
+    @endif
 
     @if ($career || $careers !== [])
         @include('scheduling::editor.controls')
