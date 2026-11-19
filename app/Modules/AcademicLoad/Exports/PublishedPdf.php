@@ -101,11 +101,22 @@ abstract class PublishedPdf implements PublishedExport
         [$view, $data, $orientation] = $this->document($schedule, $term, $modality);
 
         $pdf = new Dompdf(self::options());
-        $pdf->loadHtml(view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus])->render(), 'UTF-8');
+        $pdf->loadHtml(self::withoutIndentation(view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus])->render()), 'UTF-8');
         $pdf->setPaper('letter', $orientation);
         $pdf->render();
 
         return (string) $pdf->output();
+    }
+
+    /**
+     * El HTML sin los saltos de línea y la sangría de la plantilla entre etiquetas (E-05 del ensayo 8.11): DomPDF arma un
+     * objeto por cada nodo de texto, también los que solo traen espacios, y en el PDF de un departamento eran cuatro de
+     * cada diez nodos. Los espacios dentro de una línea («</b> <span>») se quedan: separan palabras. El texto escapado
+     * de la plantilla no trae `<` ni `>`, así que nunca se toca.
+     */
+    public static function withoutIndentation(string $html): string
+    {
+        return preg_replace('/>\s*\n\s*</', '><', $html) ?? $html;
     }
 
     /**

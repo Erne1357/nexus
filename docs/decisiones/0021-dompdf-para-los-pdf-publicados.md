@@ -16,6 +16,7 @@ El servidor del ITCJ es on-premise ([ADR-0013](0013-despliegue-on-premise-itcj.m
 ## Consecuencias
 - La licencia es LGPL-2.1: se usa como librería sin modificarla, lo que la licencia permite en una aplicación propia.
 - DomPDF es lento con tablas grandes: el PDF de un departamento con cientos de grupos se mide con la demo masiva. Si pasa del `timeout` del job, se parte por carrera.
+- DomPDF tiene en memoria todo el documento, un objeto por nodo, y una tabla partida entre páginas no suelta las que ya imprimió. Medido en el ensayo 8.11 (incidencia E-05, 19 de noviembre de 2026), el PDF de un departamento en una sola tabla pedía 206 MB con 237 grupos y 544 MB con 671, y daba 500 con los 128 MB del contenedor. Por eso la plantilla lleva una tabla por materia, sin la sangría entre etiquetas (`PublishedPdf::withoutIndentation`), y el job sube su tope a 512 MB (`GeneratePublishedExport::MEMORY_LIMIT`): quedan 133, 157 y 243 MB con 237, 356 y 671 grupos.
 - Cambiar de librería solo toca la clase que arma el PDF y las plantillas: los exportes, la cola y las descargas no dependen de DomPDF.
 
 ## Alternativas descartadas
