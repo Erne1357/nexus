@@ -28,10 +28,17 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
  * (CEA presencial, 1 139 grupos de C1 y C2: 403 s, 12 de noviembre de 2026), y menos que el `retry_after` de Redis
  * (1 860 s, config/queue.php), para que la cola no entregue otra vez un job que sigue corriendo. El candado de
  * WithoutOverlapping vence a la par.
+ *
+ * Va en la cola `bulk` (QUEUE): un recálculo del masivo tarda minutos, y el worker toma `default` antes que `bulk`
+ * (`--queue=default,bulk` en compose), así que los avisos, los correos y los PDF de una publicación no esperan detrás
+ * de él (incidencia G-04 del ensayo 8.11, 19 de noviembre de 2026).
  */
 final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueue
 {
     use Queueable;
+
+    /** La cola de lo pesado, que el worker atiende después de `default`. */
+    public const string QUEUE = 'bulk';
 
     public int $maxExceptions = 1;
 
@@ -45,7 +52,9 @@ final class ComputeRankings implements ShouldBeUniqueUntilProcessing, ShouldQueu
         public string $termId,
         public string $modalityId,
         public string $departmentId,
-    ) {}
+    ) {
+        $this->onQueue(self::QUEUE);
+    }
 
     public function uniqueId(): string
     {
