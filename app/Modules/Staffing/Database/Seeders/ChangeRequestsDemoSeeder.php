@@ -16,6 +16,9 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Actions\SetTeacherAvailability;
+use App\Modules\Faculty\Enums\AvailabilityKind;
+use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Scheduling\Actions\AssignGroupCode;
 use App\Modules\Scheduling\Actions\Sessions\ReplaceGroupSessions;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
@@ -51,6 +54,7 @@ use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
@@ -78,7 +82,9 @@ use InvalidArgumentException;
  *    una (ChooseChangeAlternative), se marcan aplicadas las cuatro de antes y al final se aplica la alternativa
  *    (ApplyChosenAlternative), que regresa la carga a asignación y avisa a los docentes. Como su grupo se movió, las
  *    alternativas de la otra ya no valen: al elegir una, el jefe ve «Esto cambió…».
- * 4. **Después:** pendientes sin choques (de horario y de salón), con solo el aviso de traslado entre campus (SC-09, si
+ * 4. **Después:** primero una que la coordinación pide en el grupo de un docente que acaba de dejar disponibles solo las
+ *    horas en que ya da clase (SetTeacherAvailability; la materia, de un solo tipo de sesión): el motor no encuentra otro
+ *    acomodo («sin alternativa», `none`; CR-02: dejarlo como está no cuenta). Luego pendientes sin choques (de horario y de salón), con solo el aviso de traslado entre campus (SC-09, si
  *    un docente del departamento tiene clases en otro campus), con choque duro y sus alternativas listas (de horario y de
  *    salón), con
  *    choque duro sin pedir alternativas, solo con texto, con el cálculo en la cola («En cola»; pasados
@@ -105,7 +111,7 @@ use InvalidArgumentException;
  * Se puede volver a correr y retoma una corrida que se cayó a la mitad: cada escenario tiene su propio motivo (`reason`),
  * con el que se reconoce su solicitud, y cada paso mira su estado en la base antes de escribir (una pendiente con las
  * alternativas calculándose cuando se cayó vuelve a correr su job). Mientras escribe sesiones descarta
- * GroupScheduleChanged y hace lo que harían sus oyentes: reasigna la clave de los grupos movidos
+ * GroupScheduleChanged (y AvailabilityChanged) y hace lo que harían sus oyentes: reasigna la clave de los grupos movidos
  * (los saca de la base: lo escrito como se pidió y las alternativas aplicadas) después de cada fase que escribe, y al final
  * recalcula los choques de la modalidad si el último recálculo es de antes de la última escritura en la carga. El ranking
  * no se recalcula (supuesto por confirmar: la carga queda en ajustes).
@@ -132,6 +138,9 @@ final class ChangeRequestsDemoSeeder extends Seeder
     /** Choque duro con el grupo del escenario que se aprueba con una alternativa y se aplica (`applied_alternative`). */
     private const string CLASH = 'clash';
 
+    /** Choque duro en el grupo de un docente que deja disponibles solo las horas en que ya da clase: sin otro acomodo. */
+    private const string LOCKED = 'locked';
+
     /** En qué termina. */
     public const string REJECTED = 'rejected';
 
@@ -149,6 +158,9 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
     /** Pendiente con las alternativas del motor calculadas y vigentes. */
     public const string READY = 'ready';
+
+    /** Pendiente en la que el motor no encontró otro acomodo. */
+    public const string NONE = 'none';
 
     /** Pendiente con el cálculo en la cola, sin empezar. */
     public const string QUEUED = 'queued';
@@ -220,6 +232,9 @@ final class ChangeRequestsDemoSeeder extends Seeder
             'comment' => 'La hora que pediste choca; se aprueba con la alternativa del motor, que no deja choques.'],
         'x' => ['phase' => 'alternative', 'kind' => 'schedule', 'shape' => self::CLASH, 'by' => 'teacher', 'campus' => 'last', 'target' => self::STALE, 'description' => null,
             'reason' => 'Así la clase queda seguida de mi otra materia y no tengo horas muertas ese día.',
+            'comment' => null],
+        'n' => ['phase' => 'after', 'kind' => 'schedule', 'shape' => self::LOCKED, 'by' => 'coordinator', 'campus' => 'last', 'target' => self::NONE, 'description' => null,
+            'reason' => 'Así el grupo no se empalma con las prácticas de laboratorio del semestre.',
             'comment' => null],
         'p1' => ['phase' => 'after', 'kind' => 'schedule', 'shape' => self::CLEAN, 'by' => 'teacher', 'campus' => 'first', 'target' => self::PENDING, 'description' => null,
             'reason' => 'Esos días doy asesorías de residencia profesional a la hora actual.',
@@ -372,6 +387,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
                 $scenario['target'] === self::APPROVED_ALTERNATIVE => $chosen === null || ! $fresh($chosen) ? 'sin alternativa elegida vigente' : null,
                 $scenario['target'] === self::READY => $items === [] || ! array_all($items, $fresh) ? 'sin alternativas listas y vigentes' : null,
                 $scenario['target'] === self::STALE => $items === [] || array_all($items, $fresh) ? 'sin alternativas vencidas' : null,
+                $scenario['target'] === self::NONE => $status !== ChangeAlternativesStatus::None ? 'el motor no la dejó sin alternativa' : null,
                 $scenario['target'] === self::QUEUED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Computing->value || isset($alternatives['started_at']) ? 'sin cálculo en la cola' : null,
                 $scenario['target'] === self::STARTED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Computing->value || ! isset($alternatives['started_at']) ? 'sin cálculo empezado' : null,
                 $scenario['target'] === self::FAILED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Failed->value ? 'sin cálculo fallido' : null,
@@ -533,13 +549,17 @@ final class ChangeRequestsDemoSeeder extends Seeder
     }
 
     /**
-     * Después: las alternativas de las que las piden (las listas y la de `z`) y las tres del cálculo que no
+     * Después: las alternativas de las que las piden (la que no tiene otro acomodo, las listas y la de `z`) y las tres del cálculo que no
      * termina (en la cola, empezado y fallido), y al final las aprobadas sin aplicar, que dejan la carga en ajustes.
      *
      * @param  array<string, ?ChangeRequest>  $requests
      */
     private function decideAfter(array $requests): void
     {
+        foreach (self::having($requests, self::NONE) as $key => $request) {
+            $this->ensureAlternatives($key, $request, ChangeAlternativesStatus::None);
+        }
+
         foreach ([...self::having($requests, self::READY), ...self::having($requests, self::APPROVED_ALTERNATIVE)] as $key => $request) {
             $this->ensureAlternatives($key, $request, ChangeAlternativesStatus::Ready);
         }
@@ -674,6 +694,10 @@ final class ChangeRequestsDemoSeeder extends Seeder
         $groups = $this->groups()
             ->reject(fn (Group $group): bool => $used->has($group->id) || $group->sessions->isEmpty())
             ->when($shape === self::CLASH, fn (Collection $groups) => $groups->where('campus_id', $target->campus_id))
+            // Un docente que cierra su disponibilidad necesita grupo, y la materia, un solo tipo de sesión: si no, el motor da
+            // como alternativa las mismas horas con la teoría y la práctica cambiadas de lugar.
+            ->when($shape === self::LOCKED, fn (Collection $groups) => $groups->filter(fn (Group $group): bool => $group->teacher_id !== null
+                && ((int) $group->subject?->theory_hours === 0 || (int) $group->subject?->practice_hours === 0)))
             // Los docentes con clases en otro campus se guardan para el aviso de traslado (SOFT) y van al final en los demás.
             ->sortBy(fn (Group $group): array => [isset($this->travellers[$group->teacher_id]) !== ($shape === self::SOFT), $group->campus->code !== $preferred,
                 crc32($key.'|'.implode('|', ReanalysisChangesDemoSeeder::stableKey($group)))])
@@ -695,6 +719,10 @@ final class ChangeRequestsDemoSeeder extends Seeder
                 break;
             }
 
+            if ($shape === self::LOCKED) {
+                $this->closeAvailability($group);
+            }
+
             $option = $kind === ChangeRequestKind::Room ? $this->roomOption($key, $group, $shape) : $this->scheduleOption($group, $shape, $target);
 
             if ($option !== null) {
@@ -703,6 +731,37 @@ final class ChangeRequestsDemoSeeder extends Seeder
         }
 
         return null;
+    }
+
+    /**
+     * El docente del grupo deja disponibles solo las horas en que ya da clase en el periodo (SetTeacherAvailability, en
+     * los bloques del perfil, como en su ficha): ningún grupo suyo cambia, pero el grupo ya no se puede mover a otra hora.
+     * Si ya lo había hecho, no escribe nada.
+     */
+    private function closeAvailability(Group $group): void
+    {
+        $teacher = $group->teacher;
+        $busy = GroupSession::query()->whereIn('group_id', Group::query()->active()->where('term_id', $group->term_id)->where('teacher_id', $teacher->id)->select('id'))
+            ->get(['day', 'starts_at', 'ends_at'])
+            ->map(fn (GroupSession $session): array => [$session->day, Minutes::of((string) $session->starts_at), Minutes::of((string) $session->ends_at)]);
+        $cells = [];
+
+        foreach ($this->profile->days as $day) {
+            for ($start = Minutes::of($this->profile->dayStart); $start + $this->profile->blockMinutes <= Minutes::of($this->profile->dayEnd); $start += $this->profile->blockMinutes) {
+                $end = $start + $this->profile->blockMinutes;
+
+                if (! $busy->contains(fn (array $session): bool => $session[0] === $day && Minutes::overlap($start, $end, $session[1], $session[2]))) {
+                    $cells[] = ['day' => $day, 'starts_at' => Minutes::format($start), 'kind' => AvailabilityKind::Unavailable];
+                }
+            }
+        }
+
+        $this->actingAs($teacher->user ?? $this->head, fn () => Event::fakeFor(
+            fn () => app(SetTeacherAvailability::class)->handle($teacher, $this->load->term, $cells, $this->profile),
+            [AvailabilityChanged::class],
+        ));
+        $this->validator->forget();
+        $this->existing = [];
     }
 
     /**
@@ -780,7 +839,8 @@ final class ChangeRequestsDemoSeeder extends Seeder
     }
 
     /**
-     * Si las sesiones propuestas dejan lo que pide `$shape`, contando solo lo que agregan.
+     * Si las sesiones propuestas dejan lo que pide `$shape`, contando solo lo que agregan. Con LOCKED, el choque incluye
+     * la falta de disponibilidad del docente (HC-09).
      *
      * @param  list<SessionCandidate>  $candidates
      */
@@ -793,6 +853,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
             self::CLEAN => $hard === [] && $soft === [],
             self::SOFT => $hard === [] && $soft !== [],
             self::HARD => $hard !== [] && array_diff($rules, self::CLASH_RULES) === [],
+            self::LOCKED => in_array('HC-09', $rules, true) && array_diff($rules, [...self::CLASH_RULES, 'HC-09']) === [],
             self::CLASH => $hard !== [] && array_diff($rules, self::CLASH_RULES) === []
                 && array_any($hard, fn (Violation $violation): bool => in_array($target?->id, [$violation->groupId, $violation->related['other_group_id'] ?? null], true)),
             default => false,
@@ -1160,7 +1221,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
     {
         return Group::query()->active()
             ->where('term_id', $this->load->term_id)->where('modality_id', $this->load->modality_id)->where('department_id', $this->load->department_id)
-            ->with(['teacher.user', 'subject:id,code', 'campus:id,code', 'sessions'])
+            ->with(['teacher.user', 'subject:id,code,theory_hours,practice_hours', 'campus:id,code', 'sessions'])
             ->get();
     }
 
@@ -1217,6 +1278,27 @@ final class ChangeRequestsDemoSeeder extends Seeder
             return $work();
         } finally {
             Bus::swap($dispatcher);
+        }
+    }
+
+    /**
+     * Corre `$work` con `$user` autenticado (la bitácora de algunas Actions toma a quien está en sesión) y deja el que
+     * había.
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     */
+    private function actingAs(User $user, Closure $work): mixed
+    {
+        $previous = Auth::user();
+        Auth::setUser($user);
+
+        try {
+            return $work();
+        } finally {
+            $previous === null ? Auth::forgetUser() : Auth::setUser($previous);
         }
     }
 

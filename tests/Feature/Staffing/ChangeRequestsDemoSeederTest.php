@@ -208,8 +208,13 @@ it('deja en la carga reservada una solicitud de cambio en cada estado de la pant
     expect(collect(['p7', 'p8', 'p9'])->map(fn (string $key): bool => $request($key)->impact['assessable'])->all())->toBe([false, false, false])
         ->and($request('p9')->teacher_id)->toBeNull();
 
-    // El cálculo del motor en la cola, empezado y fallido.
-    expect(ChangeAlternativesStatus::isQueued($request('q')->alternatives))->toBeTrue()
+    // El motor: sin otro acomodo (el docente solo está disponible a sus horas de clase), en la cola, empezado y fallido.
+    $locked = TeacherAvailability::query()->where('teacher_id', $request('n')->group->teacher_id)->where('kind', AvailabilityKind::Unavailable->value)->count();
+
+    expect($alternatives('n'))->toBe(ChangeAlternativesStatus::None)
+        ->and(collect($request('n')->impact['hard'])->pluck('rule')->all())->toContain('HC-09')
+        ->and($locked)->toBeGreaterThan(0)
+        ->and(ChangeAlternativesStatus::isQueued($request('q')->alternatives))->toBeTrue()
         ->and($alternatives('s'))->toBe(ChangeAlternativesStatus::Computing)
         ->and(ChangeAlternativesStatus::isQueued($request('s')->alternatives))->toBeFalse()
         ->and($alternatives('f'))->toBe(ChangeAlternativesStatus::Failed)
@@ -280,7 +285,7 @@ it('retoma tras caerse a la mitad y deja lo mismo: claves, choques y alternativa
         ->and(collect(['r1', 'r2', 'r3', 'r4'])->map($status)->all())->toBe(array_fill(0, 4, ChangeRequestStatus::Rejected))
         ->and(collect(['ap1', 'ap2', 'ap3', 'ap4', 'm'])->map($status)->all())->toBe(array_fill(0, 5, ChangeRequestStatus::Applied))
         ->and($status('y'))->toBe(ChangeRequestStatus::Approved)
-        ->and($status('p1'))->toBeNull();
+        ->and($status('n'))->toBeNull();
     $recover(ApplyChosenAlternative::class);
 
     // Aplica `y` (la carga regresa a asignación), pide lo de después y se cae al pedir las primeras alternativas.
@@ -289,6 +294,7 @@ it('retoma tras caerse a la mitad y deja lo mismo: claves, choques y alternativa
     expect($status('y'))->toBe(ChangeRequestStatus::Applied)
         ->and($w->sc->fresh()->status)->toBe(LoadStatus::Staffing)
         ->and($status('p1'))->toBe(ChangeRequestStatus::Pending)
+        ->and($request('n')->alternatives)->toBeNull()
         ->and($request('p4')->alternatives)->toBeNull()
         ->and($status('a1'))->toBe(ChangeRequestStatus::Pending);
     $recover(ProposeChangeAlternatives::class);
