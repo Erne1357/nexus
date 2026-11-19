@@ -70,6 +70,8 @@ services:
       SOLVER_THREADS: ${SOLVER_THREADS:-2}
       SOLVER_MAX_CONCURRENT_RUNS: ${SOLVER_MAX_CONCURRENT_RUNS:-2}
       SOLVER_DEFAULT_TIME_LIMIT: ${SOLVER_DEFAULT_TIME_LIMIT:-60}
+      # CP-SAT por omisión desde la 7.10; `trivial` (el motor de prueba) solo para pruebas y CI.
+      SOLVER_ENGINE: ${SOLVER_ENGINE:-cpsat}
     # CPU y memoria acotadas: una corrida grande no debe quitarle recursos a la app ni a PostgreSQL.
     cpus: ${SOLVER_CPUS:-2}
     mem_limit: ${SOLVER_MEMORY:-2g}

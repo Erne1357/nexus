@@ -1,13 +1,16 @@
 """La resolución con el modelo CP-SAT de punta a punta: lo que corre el motor `cpsat` del servicio (tarea 7.7;
 docs/arquitectura/solver.md, «Resolución»).
 
+0. La pista de la entrada (`hint.read_hint`, `hint_sessions`): los grupos con pista válida entran ya programados; la
+   de los demás se ignora y el `log` lo dice.
 1. `search.lns` programa a la mayor cantidad de grupos, sin objetivo blando (con su asignación relajada: un grupo que
    no cabe queda fuera y la corrida sigue).
 2. `search.improve` busca por vecindarios con el objetivo (7.6) hasta el plazo menos la reserva final.
 3. Con la reserva (`_complete`): un solo modelo con todos los que no quedaron y lo demás fijo da, de cada uno, las
    opciones que le quitó cada regla. Los que no tienen ninguna van a `unscheduled` con sus reglas (la primera es la de
-   `main_reason`); los que sí, se intentan uno por uno, cada uno con su parte del tiempo que queda, primero con el
-   menor nivel del patrón (PS-10). Luego la fase B con objetivo ajusta los salones (`room_model.py`).
+   `main_reason`); los que sí, se programan juntos (`_together`), primero con sus niveles por necesidad y los que
+   sobran otra vez con todos sus niveles, y solo los que quedan se intentan uno por uno (`_alone`), siempre primero con
+   el menor nivel del patrón (PS-10). Luego la fase B con objetivo ajusta los salones (`room_model.py`).
 4. La salida lleva el puntaje de `score.py` (el de PHP), las duras que revise `verify.py` (que ya trae HC-08 de la
    entrada, PS-08) y el estado: `feasible` si todo quedó sin duras; `infeasible` si no quedó ningún grupo y a todos
    los que faltan se lo impiden sus reglas; si no, `partial`, también cuando lo que faltó fue tiempo. Nunca `optimal`:
@@ -31,6 +34,7 @@ from app.contract.output import ProposedSession, RunMetrics, UnscheduledGroup
 
 from .constraints import add_hard_constraints
 from .data import ModelData
+from .hint import Hint, read_hint
 from .objective import add_objective
 from .phases import FEASIBLE, SearchLimits, solve_until
 from .room_model import improve_rooms_scored
@@ -146,7 +150,8 @@ def solve(
 
         return score
 
-    # El plazo de `lns` se mide desde ahora: armar los datos y el puntaje ya tomó parte del de la corrida.
+    hint = read_hint(model_data)
+    # El plazo de `lns` se mide desde ahora: armar los datos, el puntaje y la pista ya tomó parte del de la corrida.
     search = lns(
         model_data,
         time_limit=max(0.0, deadline - reserve - time.perf_counter()),
@@ -154,6 +159,7 @@ def solve(
         seed=seed,
         first_share=first_share(time_limit),
         report=lambda placed: progress(PLACED_PERCENT * placed / total),
+        hint=hint,
     )
     placed_score = mark("lns", search, search.all_sessions)
     progress(PLACED_PERCENT, _best(search, placed_score))
@@ -177,7 +183,7 @@ def solve(
     score = mark("improve_rooms", search, sessions, score)
     progress(99, _best(search, score))
 
-    output = _output(data, model_data, search, sessions, score, improvement, unplaced, started, engine, version)
+    output = _output(data, model_data, search, sessions, score, improvement, unplaced, hint, started, engine, version)
 
     return Resolution(output, phases)
 
@@ -205,7 +211,10 @@ def _complete(
     3. A los que sí, otro modelo con los niveles por necesidad, como la primera vuelta de `lns`, los programa juntos
        (`_together`) con una parte chica de la reserva. Con todos los niveles el modelo era de 6 618 variables con 10
        grupos y no se resolvía en su parte; por necesidad son 306 (revisión del Riel A).
-    4. Si CP-SAT probó que no caben más y sus dominios ya tenían todos los niveles, los que quedan no caben con los
+    4. Si CP-SAT no probó que no caben más (porque no terminó o porque algún dominio quedó recortado), una segunda
+       ronda de `_together` con todos los niveles, solo para los que sobraron y con lo de la primera fijo: los que
+       necesitan otros días o un día de 2 horas. Son pocos, así que su modelo es chico (Riel A, segunda pasada).
+    5. Si CP-SAT probó que no caben más y sus dominios ya tenían todos los niveles, los que quedan no caben con los
        programados; si no, se intentan uno por uno (`_alone`, con todos los niveles) con lo que queda hasta
        `deadline`.
 
@@ -233,7 +242,11 @@ def _complete(
     candidates = [group_id for group_id in pending if domains[group_id].options]
     proven = False
     if candidates and time.perf_counter() < deadline:
-        proven = _together(shared, search, scope, deadline, limits, seed)
+        proven = _together(shared, search, scope, deadline, limits, seed, DomainOptions())
+        rest = {group_id for group_id in candidates if group_id not in search.sessions}
+        if rest and not proven and time.perf_counter() < deadline:
+            again = ModelData.of(_sub_input(data.source, search, rest))
+            proven = _together(again, search, scope, deadline, limits, seed, DomainOptions(all_tiers=True))
     left = [group_id for group_id in candidates if group_id not in search.sessions]
     for index, group_id in enumerate(left):
         limits.tick()
@@ -277,17 +290,24 @@ TOGETHER_SHARE = 0.25
 
 
 def _together(
-    shared: ModelData, search: Search, scope: set[str], deadline: float, limits: SearchLimits, seed: int
+    shared: ModelData,
+    search: Search,
+    scope: set[str],
+    deadline: float,
+    limits: SearchLimits,
+    seed: int,
+    options: DomainOptions,
 ) -> bool:
-    """Programa juntos a los que no quedaron, con sus niveles por necesidad (`DomainOptions()`), la asignación relajada
-    y en orden lexicográfico (PS-10): una resolución maximiza los programados y, con los mismos, el menor nivel (como
-    `lns`); otra, con esos programados y ese nivel como cotas, minimiza el objetivo. Cada una tiene la cuarta parte de
-    lo que queda de la reserva. Guarda lo que programó en la búsqueda. Devuelve si CP-SAT probó que no caben más con
-    todos sus niveles (ningún dominio quedó recortado)."""
+    """Programa juntos a los movibles de `shared` (los que no quedaron), con el dominio de `options` (sus niveles por
+    necesidad, `DomainOptions()`, o todos), la asignación relajada y en orden lexicográfico (PS-10): una resolución
+    maximiza los programados y, con los mismos, el menor nivel (como `lns`); otra, con esos programados y ese nivel
+    como cotas, minimiza el objetivo. Cada una tiene la cuarta parte de lo que queda de la reserva. Guarda lo que
+    programó en la búsqueda. Devuelve si CP-SAT probó que no caben más con todos sus niveles (ningún dominio quedó
+    recortado)."""
     model = cp_model.CpModel()
     budget = limits.budget(deadline)
     try:
-        variables = build_variables(model, shared, DomainOptions(), budget)
+        variables = build_variables(model, shared, options, budget)
     except (BuildTimeout, ModelTooLarge):
         return False
     add_hard_constraints(model, variables, shared, relaxed=True)
@@ -425,6 +445,7 @@ def _output(
     score: Score,
     improvement: Improvement,
     unplaced: dict[str, Unplaced],
+    hint: Hint,
     started: float,
     engine: str,
     version: str,
@@ -444,6 +465,7 @@ def _output(
         f"({improvement.lowered} regresaron grupos hacia su patrón); el puntaje blando pasó de "
         f"{improvement.initial.total} a {improvement.best.total} y, con los salones, a {score.total}.",
         "No se probó el óptimo: la búsqueda por vecindarios no da una cota, así que la salida nunca es «optimal».",
+        *hint.log(),
     ]
     if unscheduled:
         by_rules = sum(entry.by_rules for entry in entries.values())

@@ -17,8 +17,17 @@ Para escribirlas, los fixtures van sin `:ro` y con el usuario de la máquina; `s
         nexus-solver-dev python scripts/objective.py medium --threads 1 \\
         --output /fixtures/v1/medium/cpsat-output.json
 
-Las fases: `lns` programa a todos (sin objetivo blando), `improve` busca por vecindarios con el objetivo y
-`improve_rooms` (la fase B con objetivo) ajusta los salones con la reserva final.
+Con `--hint` la entrada lleva como `hint_sessions` las sesiones de los movibles de una salida guardada, como las manda
+`CpSatEngine` en PHP. Así se mide la carga real con la pista de la heurística (`heuristic-output.json`: la heurística
+con 9 s, el 15 % de 60 s) y los 52 s que le quedan a CP-SAT (docs/arquitectura/solver.md, «Pista de la heurística»):
+
+    docker run --rm --cpus 2 --memory 2g -e PYTHONPATH=/srv/solver \\
+        -v "$PWD/services/solver:/srv/solver:ro" -v "$PWD/tests/Fixtures/solver:/fixtures:ro" \\
+        nexus-solver-dev python scripts/objective.py department-multicampus --time-limit 52 --threads 2 \\
+        --hint /fixtures/v1/department-multicampus/heuristic-output.json
+
+Las fases: `lns` programa a todos (sin objetivo blando; con la pista completa no arma nada), `improve` busca por
+vecindarios con el objetivo y `improve_rooms` (la fase B con objetivo) ajusta los salones con la reserva final.
 """
 
 import argparse
@@ -27,13 +36,19 @@ import os
 import sys
 from pathlib import Path
 
-from app.contract import parse_input, to_dict
+from app.contract import parse_input, parse_output, to_dict
+from app.contract.input import HintSession
 from app.model.phases import SearchLimits
 from app.model.solve import Phase, Resolution, solve
 
 
-def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> Resolution:
+def run(fixture: Path, time_limit: float | None, threads: int, seed: int, hint: Path | None = None) -> Resolution:
     data = parse_input(json.loads((fixture / "input.json").read_text()))
+    if hint is not None:
+        movable = {group.id for group in data.groups if group.movable}
+        sessions = parse_output(json.loads(hint.read_text())).sessions
+        hints = [HintSession(**session.model_dump(exclude={"changed"})) for session in sessions]
+        data = data.model_copy(update={"hint_sessions": [entry for entry in hints if entry.group_id in movable]})
 
     return solve(
         data,
@@ -65,10 +80,11 @@ def main(argv: list[str] | None = None) -> str:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--output", help="archivo donde escribir la salida del contrato")
     parser.add_argument("--compact", action="store_true", help="la salida en una línea, sin sangría")
+    parser.add_argument("--hint", help="salida guardada cuyas sesiones van como pista (`hint_sessions`)")
     args = parser.parse_args(argv)
 
     root = Path(os.environ.get("SOLVER_FIXTURES_DIR", "/fixtures")) / "v1" / args.fixture
-    resolution = run(root, args.time_limit, args.threads, args.seed)
+    resolution = run(root, args.time_limit, args.threads, args.seed, Path(args.hint) if args.hint else None)
     if args.output:
         indent = None if args.compact else 4
         Path(args.output).write_text(json.dumps(to_dict(resolution.output), indent=indent, ensure_ascii=False) + "\n")
