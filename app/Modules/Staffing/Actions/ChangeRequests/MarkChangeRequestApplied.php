@@ -9,6 +9,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Notifications\ChangeRequestApplied;
+use Closure;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -21,6 +22,9 @@ use Illuminate\Validation\ValidationException;
  * departamento está en ajustes y no queda otra solicitud aprobada sin aplicar de esa carga, la regresa a asignación con
  * ReturnToStaffing. Si Scheduling la veta (choques duros), la solicitud queda aplicada y la carga en ajustes
  * (supuesto por confirmar): los motivos vuelven en el resultado para que la pantalla los muestre. Avisa al solicitante.
+ *
+ * Aplicar la alternativa elegida del motor (CR-04, ApplyChosenAlternative) es este mismo flujo con la escritura de sus
+ * sesiones antes de marcarla: apply() con la suya.
  */
 final class MarkChangeRequestApplied
 {
@@ -31,12 +35,27 @@ final class MarkChangeRequestApplied
      */
     public function handle(ChangeRequest $request, User $actor): AppliedChangeRequest
     {
-        $request = $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor): ChangeRequest {
+        return $this->apply($request, $actor, fn (): null => null);
+    }
+
+    /**
+     * El flujo de marcarla aplicada con `$write` antes: corre con los candados tomados y la solicitud aprobada, en la
+     * misma transacción; lanza ValidationException para no marcarla (y deshace lo que haya escrito).
+     *
+     * @param  Closure(ChangeRequest): mixed  $write
+     *
+     * @throws ValidationException
+     */
+    public function apply(ChangeRequest $request, User $actor, Closure $write): AppliedChangeRequest
+    {
+        $request = $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor, $write): ChangeRequest {
             $this->locks->lock($request);
 
             if ($request->status !== ChangeRequestStatus::Approved) {
                 throw ValidationException::withMessages(['status' => 'La solicitud no está aprobada.']);
             }
+
+            $write($request);
 
             $request->update(['status' => ChangeRequestStatus::Applied, 'applied_by' => $actor->getKey(), 'applied_at' => now()]);
 

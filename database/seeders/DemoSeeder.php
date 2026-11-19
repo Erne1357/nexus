@@ -24,6 +24,7 @@ use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Solver\Database\Seeders\SolverRunsDemoSeeder;
+use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
@@ -81,6 +82,7 @@ class DemoSeeder extends Seeder
         $this->callWith(LoadClosingDemoSeeder::class, ['profile' => 'demo', 'campuses' => ['C2'], 'keepOpen' => ['SC']]);
         $this->showcase();
         $this->solverRuns();
+        $this->changeAlternatives();
         $this->call(LoginScreenDemoSeeder::class);
     }
 
@@ -110,5 +112,22 @@ class DemoSeeder extends Seeder
         $started = hrtime(true);
         $this->callWith(SolverRunsDemoSeeder::class, ['campuses' => ['C2'], 'apply' => true]);
         $this->command?->info(sprintf('Corridas del motor: %.1f s.', (hrtime(true) - $started) / 1e9));
+    }
+
+    /**
+     * Una solicitud de cambio pendiente con choque duro y sus alternativas del motor listas (tarea 8.7), al final, para
+     * que «Impacto y alternativas» también se vea en la demo mezclada: las solicitudes de StaffingDemoSeeder son solo
+     * texto y el motor no tiene qué acomodar en ellas (ChangeRequestsDemoSeeder, modo `showcase`). Solo con
+     * `demo:seed --hasta=todo`, que prende `demo.showcase`.
+     */
+    public function changeAlternatives(): void
+    {
+        if (! config('demo.showcase', false)) {
+            return;
+        }
+
+        $started = hrtime(true);
+        $this->callWith(ChangeRequestsDemoSeeder::class, ['mode' => 'showcase']);
+        $this->command?->info(sprintf('Solicitud de cambio con alternativas del motor: %.1f s.', (hrtime(true) - $started) / 1e9));
     }
 }

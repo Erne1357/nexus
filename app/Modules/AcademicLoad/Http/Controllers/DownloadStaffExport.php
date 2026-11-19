@@ -6,6 +6,7 @@ use App\Modules\AcademicLoad\Exports\StaffExports;
 use App\Modules\AcademicLoad\Http\Controllers\Concerns\DeliversPublishedExports;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
 use App\Modules\Core\Authorization\Actor;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -21,7 +22,7 @@ final class DownloadStaffExport
 
     public function __construct(private readonly PublishedScheduleQuery $published) {}
 
-    public function __invoke(Request $request, Actor $actor, string $periodo, string $modalidad, string $tipo): Response|StreamedResponse
+    public function __invoke(Request $request, Actor $actor, string $periodo, string $modalidad, string $tipo): Response|StreamedResponse|RedirectResponse
     {
         $class = StaffExports::TYPES[$tipo] ?? null;
         abort_if($class === null, 404);

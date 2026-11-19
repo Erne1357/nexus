@@ -4,6 +4,7 @@ namespace App\Modules\AcademicLoad\Exports;
 
 use App\Modules\AcademicLoad\Enums\ExportState;
 use App\Modules\AcademicLoad\Jobs\GeneratePublishedExport;
+use Illuminate\Bus\UniqueLock;
 use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
@@ -16,8 +17,12 @@ use Throwable;
  * Los archivos de lo publicado (tareas 4.5 y 4.6): los pide, dice en qué van y los entrega. El archivo vive en el disco
  * `exports`, nombrado por `PublishedExport::key()`, así que un exporte ya hecho se descarga sin volver a armarse hasta
  * que una versión nueva cambia la llave. Armarlo es de la cola (GeneratePublishedExport): una sola vez a la vez por
- * llave. Mientras, la marca «en camino» vive en la caché, y la de «fallido» se queda unos minutos con un mensaje para
- * quien lo pidió, nunca el error interno, que va al registro.
+ * llave. Mientras, la marca «en camino» vive en la caché con la hora en que se pidió, y la de «fallido» se queda unos
+ * minutos con un mensaje para quien lo pidió, nunca el error interno, que va al registro.
+ *
+ * Si la cola no lo deja listo en WAIT_SECONDS (el worker caído o atorado; incidencia F-05 del ensayo 8.11), el exporte
+ * queda «tardando más de lo normal» (ExportState::Stalled) y retry() lo vuelve a encolar aunque sigan la marca y el
+ * candado de job único, que duran 35 minutos.
  *
  * Sin estado propio, para Octane.
  */
@@ -30,13 +35,35 @@ final class PublishedExports
 
     private const int FAILED_MINUTES = 10;
 
+    /**
+     * Cuánto se espera un exporte en camino antes de decir que tarda más de lo normal y dejar reintentar (supuesto por
+     * confirmar). Armar el más grande tarda segundos (el PDF de un departamento con la forma de la demo masiva, medido en
+     * desarrollo el 19 de noviembre de 2026: 2.7 s con 252 grupos y 11.2 s con 672, como Ciencias Económico-
+     * Administrativas) y el worker toma un job nuevo en un segundo, así que dos minutos solo se pasan con el worker caído o
+     * atorado en un job largo (un lote de importación o una corrida del motor).
+     */
+    public const int WAIT_SECONDS = 120;
+
+    /**
+     * En qué va: listo, fallido, en camino (Stalled si se pidió hace más de WAIT_SECONDS) o sin pedir. Una marca «en
+     * camino» sin la hora en que se pidió (de antes de la F-05) cuenta como vencida.
+     */
     public function state(PublishedExport $export): ExportState
     {
+        if ($this->disk()->exists($this->path($export))) {
+            return ExportState::Ready;
+        }
+
+        if (Cache::has($this->failedKey($export))) {
+            return ExportState::Failed;
+        }
+
+        $requestedAt = Cache::get($this->pendingKey($export));
+
         return match (true) {
-            $this->disk()->exists($this->path($export)) => ExportState::Ready,
-            Cache::has($this->failedKey($export)) => ExportState::Failed,
-            Cache::has($this->pendingKey($export)) => ExportState::Pending,
-            default => ExportState::Missing,
+            $requestedAt === null => ExportState::Missing,
+            ! is_int($requestedAt) || now()->getTimestamp() - $requestedAt > self::WAIT_SECONDS => ExportState::Stalled,
+            default => ExportState::Pending,
         };
     }
 
@@ -52,7 +79,7 @@ final class PublishedExports
             return $state;
         }
 
-        Cache::put($this->pendingKey($export), true, now()->addMinutes(self::PENDING_MINUTES));
+        Cache::put($this->pendingKey($export), now()->getTimestamp(), now()->addMinutes(self::PENDING_MINUTES));
 
         try {
             GeneratePublishedExport::dispatch($export);
@@ -63,6 +90,24 @@ final class PublishedExports
         }
 
         return $this->state($export);
+    }
+
+    /**
+     * Vuelve a encolar un exporte que tarda más de lo normal (Stalled): suelta el candado de job único del que sigue en la
+     * cola, porque si no la cola se traga el nuevo, y lo pide otra vez, con una espera nueva. Si el viejo llega a correr,
+     * el primero que termine lo deja listo y el otro ya no lo arma (GeneratePublishedExport::handle()). En cualquier otro
+     * estado no hace nada. Devuelve en qué quedó.
+     */
+    public function retry(PublishedExport $export): ExportState
+    {
+        if ($this->state($export) !== ExportState::Stalled) {
+            return $this->state($export);
+        }
+
+        (new UniqueLock(Cache::store()))->release(new GeneratePublishedExport($export));
+        Cache::forget($this->pendingKey($export));
+
+        return $this->request($export);
     }
 
     /**

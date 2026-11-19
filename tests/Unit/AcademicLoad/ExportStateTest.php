@@ -8,5 +8,5 @@ use App\Modules\AcademicLoad\Enums\ExportState;
 
 it('nombra cada estado del exporte', function () {
     expect(array_map(fn (ExportState $state): string => $state->label(), ExportState::cases()))
-        ->toBe(['Sin generar', 'Preparando', 'Listo', 'No se pudo generar']);
+        ->toBe(['Sin generar', 'Preparando', 'Tardando más de lo normal', 'Listo', 'No se pudo generar']);
 });

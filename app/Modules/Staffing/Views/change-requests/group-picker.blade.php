@@ -24,7 +24,7 @@
                         'cursor-pointer hover:bg-base-200 has-checked:bg-secondary has-checked:text-secondary-content' => $option['reason'] === null,
                         'cursor-not-allowed text-neutral' => $option['reason'] !== null,
                     ])>
-                    <input type="radio" name="request-group" value="{{ $option['id'] }}" wire:model="requestGroupId" class="radio radio-sm mt-0.5 shrink-0" @disabled($option['reason'] !== null) />
+                    <input type="radio" name="request-group" value="{{ $option['id'] }}" wire:model.live="requestGroupId" class="radio radio-sm mt-0.5 shrink-0" @disabled($option['reason'] !== null) />
                     <span class="min-w-0">
                         <span class="block font-medium"><span class="font-mono font-semibold">{{ $option['code'] }}</span> · {{ $option['subject'] }}</span>
                         <span class="block text-neutral">{{ $option['detail'] }}@if ($option['reason']) · <span class="font-medium">{{ $option['reason'] }}</span>@endif</span>

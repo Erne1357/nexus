@@ -32,9 +32,14 @@
                     <section class="space-y-2" aria-labelledby="suggestions-demand">
                         <h3 id="suggestions-demand" class="text-base font-bold">Demanda por carrera</h3>
                         <p class="text-[13px] text-neutral">Esperados con las calificaciones del semestre actual contra los cupos de la versión {{ $load->current_version }} y los de ahora, con lo que ya ajustaste.</p>
+                        {{-- Desde 768 px, la tabla. En celular (F-07 del ensayo 8.11), sin desplazarse de lado: cada carrera apilada en dos
+                             columnas, la clave y su clase arriba y debajo sus cifras en dos líneas, cada una con su etiqueta (como el
+                             encabezado de la tabla): Esperados y Cupos, Ahora y Dif.; un filete entre carreras. La clase va arriba a la
+                             derecha y, si no cabe con lo que cambió, baja alineada a la derecha; la acomoda el renglón
+                             (`[&>td:last-child]`). --}}
                         <div class="overflow-x-auto rounded-box border border-base-300">
-                            <table class="table table-sm" data-testid="suggestions-evidence">
-                                <thead>
+                            <table class="table table-sm max-md:block" data-testid="suggestions-evidence">
+                                <thead class="max-md:hidden">
                                     <tr class="bg-base-200 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">
                                         <th>Carrera</th>
                                         <th class="text-end">Esperados</th>
@@ -44,26 +49,40 @@
                                         <th>Clase</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody class="max-md:block">
                                     @foreach ($block->rows as $row)
-                                        <tr>
-                                            <td><span class="font-mono font-semibold" title="{{ $row->careerName }}">{{ $row->careerCode }}</span></td>
-                                            <td class="text-end">
+                                        <tr class="max-md:grid max-md:grid-cols-2 max-md:items-center max-md:gap-x-5 max-md:gap-y-1.5 max-md:border-t max-md:border-base-300 max-md:px-3 max-md:py-3 max-md:first:border-t-0 max-md:*:border-0 max-md:*:p-0 max-md:[&>td:last-child]:col-start-2 max-md:[&>td:last-child]:row-start-1 max-md:[&>td:last-child]:text-end max-md:[&>td:last-child>span]:justify-end" data-testid="suggestions-career" data-career="{{ $row->careerCode }}">
+                                            <td class="max-md:col-start-1 max-md:row-start-1">
+                                                <span class="font-mono font-semibold" title="{{ $row->careerName }}">{{ $row->careerCode }}</span>
                                                 @if ($row->balance === null)
-                                                    <span class="text-[12.5px] text-neutral">Nuevo ingreso</span>
+                                                    <span class="ms-1 text-[12.5px] text-neutral md:hidden">Nuevo ingreso</span>
                                                 @endif
-                                                <span class="font-mono font-semibold tabular-nums">{{ number_format(\App\Modules\Scheduling\Queries\ReanalysisBoard::shownStudents($row)) }}</span>
                                             </td>
-                                            <td class="text-end"><span class="font-mono tabular-nums">{{ number_format($row->offeredSeats) }}</span> <span class="text-[12.5px] text-neutral">en {{ $row->offeredGroups }}</span></td>
+                                            <td class="text-end max-md:col-start-1 max-md:row-start-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-2">
+                                                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral md:hidden">Esperados</span>
+                                                <span>
+                                                    @if ($row->balance === null)
+                                                        <span class="text-[12.5px] text-neutral max-md:hidden">Nuevo ingreso</span>
+                                                    @endif
+                                                    <span class="font-mono font-semibold tabular-nums">{{ number_format(\App\Modules\Scheduling\Queries\ReanalysisBoard::shownStudents($row)) }}</span>
+                                                </span>
+                                            </td>
+                                            <td class="text-end max-md:col-start-2 max-md:row-start-2 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-2">
+                                                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral md:hidden">Cupos v{{ $load->current_version }}</span>
+                                                <span class="whitespace-nowrap"><span class="font-mono tabular-nums">{{ number_format($row->offeredSeats) }}</span> <span class="text-[12.5px] text-neutral">en {{ $row->offeredGroups }}</span></span>
+                                            </td>
                                             @php($now = $advice?->seats[$row->careerId] ?? 0)
-                                            <td class="text-end" data-testid="suggestions-now" data-career="{{ $row->careerCode }}">
-                                                @if ($now !== $row->offeredSeats)
-                                                    <span class="inline-flex items-center gap-1 font-mono font-semibold tabular-nums text-info"><x-icon name="o-pencil-square" class="h-3.5 w-3.5" aria-hidden="true" />{{ number_format($now) }}<span class="sr-only">, ya ajustado</span></span>
-                                                @else
-                                                    <span class="font-mono tabular-nums">{{ number_format($now) }}</span>
-                                                @endif
+                                            <td class="text-end max-md:col-start-1 max-md:row-start-3 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-2">
+                                                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral md:hidden">Ahora</span>
+                                                <span data-testid="suggestions-now" data-career="{{ $row->careerCode }}">
+                                                    @if ($now !== $row->offeredSeats)
+                                                        <span class="inline-flex items-center gap-1 font-mono font-semibold tabular-nums text-info"><x-icon name="o-pencil-square" class="h-3.5 w-3.5" aria-hidden="true" />{{ number_format($now) }}<span class="sr-only">, ya ajustado</span></span>
+                                                    @else
+                                                        <span class="font-mono tabular-nums">{{ number_format($now) }}</span>
+                                                    @endif
+                                                </span>
                                             </td>
-                                            <td class="text-end font-mono font-semibold tabular-nums">{{ $row->balance === null ? '—' : ($row->gap() > 0 ? '+' : ($row->gap() < 0 ? '−' : '')).number_format(abs($row->gap())) }}</td>
+                                            <td class="text-end font-mono font-semibold tabular-nums max-md:col-start-2 max-md:row-start-3 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-2"><span class="font-sans text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral md:hidden">Dif.</span><span>{{ $row->balance === null ? '—' : ($row->gap() > 0 ? '+' : ($row->gap() < 0 ? '−' : '')).number_format(abs($row->gap())) }}</span></td>
                                             <td data-testid="suggestions-class" data-career="{{ $row->careerCode }}">
                                                 @if ($row->balance === null)
                                                     <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] text-neutral"><x-icon name="o-minus-circle" class="h-3.5 w-3.5" aria-hidden="true" />Sin clasificar</span>

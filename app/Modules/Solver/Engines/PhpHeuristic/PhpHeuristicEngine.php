@@ -11,6 +11,7 @@ use App\Modules\Solver\Contract\SoftWeights;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
 use App\Modules\Solver\Contract\UnscheduledGroup;
+use App\Modules\Solver\Engines\AcceptsClock;
 use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Evaluation\ContractEvaluation;
 use Closure;
@@ -43,7 +44,7 @@ use Closure;
  *
  * Sin estado entre corridas (Octane): todo vive en solve().
  */
-final class PhpHeuristicEngine implements SolverEngine
+final class PhpHeuristicEngine implements AcceptsClock, SolverEngine
 {
     public const string KEY = 'heuristic';
 
@@ -61,6 +62,11 @@ final class PhpHeuristicEngine implements SolverEngine
         private readonly ?Closure $clock = null,
         private readonly ?LocalSearch $search = new LocalSearch,
     ) {}
+
+    public function withClock(Closure $clock): static
+    {
+        return new self($this->order, $clock, $this->search);
+    }
 
     public function key(): string
     {

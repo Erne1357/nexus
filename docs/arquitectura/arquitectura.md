@@ -172,7 +172,7 @@ La migración repetible del SII (`imports:migrate-sii`, tarea 1.16) pasa la expo
 | `CatalogValidation` | Revisión y validación de catálogos por jefes de departamento cada periodo | R1 |
 | `AcademicLoad` | Orquestación del flujo: propuestas, estados, acuerdos, solicitudes de cambio, cierre, aprobación, publicación, snapshots, re-análisis | R1 (base), R2 (re-análisis e impacto) |
 | `Scheduling` | Grupos, sesiones, cupos por carrera, salones, validador de restricciones, editor de horarios, tablero de choques | R1 (manual + validador), R2 (heurística) |
-| `Staffing` | Ranking docente, asignación, historial, carga por docente | R1 |
+| `Staffing` | Ranking docente, asignación, historial, carga por docente, solicitudes de cambio con su impacto y las alternativas del motor (lee Solver, [ADR-0029](../decisiones/0029-staffing-depende-de-solver.md)) | R1 (base), R2 (impacto y alternativas) |
 | `Demand` | Proyección de demanda y grupos sugeridos | R2 |
 | `Solver` | Cliente del motor, corridas, contrato; servicio Python en `services/solver/` | R2 |
 | `Enrollment` | Orden de inscripción, citas, auto-inscripción, listas de espera | R3 |

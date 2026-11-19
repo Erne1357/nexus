@@ -2,9 +2,12 @@
 
 namespace App\Modules\Solver\Console;
 
+use App\Modules\Solver\Contract\SoftWeights;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
 use App\Modules\Solver\Engines\EngineRegistry;
+use App\Modules\Solver\Evaluation\ContractEvaluator;
+use App\Modules\Solver\Rules\SolverSettings;
 use Illuminate\Console\Command;
 
 /**
@@ -12,13 +15,22 @@ use Illuminate\Console\Command;
  * docs/arquitectura/solver.md, «Fixtures compartidos y pruebas» y «Línea base»). La columna «Cumple» compara con
  * `expected.json` solo en los motores que declaran `checksHardRules()`; en los demás va «—».
  *
+ * Para el benchmark de la 7.11: `--time-limit` corre todas las entradas con el mismo límite, `--input` agrega entradas
+ * fuera de los fixtures, solo de `storage/app` (una carga real exportada con `solver:export-fixture --path`; si no se da
+ * `--fixture`, solo esas; su nombre es su carpeta desde `storage/app`, con « (2)» si se repite) y `--breakdown` agrega el límite, el estado, las violaciones duras que encuentra el evaluador
+ * en PHP sobre las sesiones de la salida (la misma vara para los dos motores) y el puntaje de SC-01 a SC-09.
+ *
  *     docker compose exec app php artisan solver:benchmark --engine=fixed --fixture=tiny --markdown
+ *     docker compose exec app php artisan solver:benchmark --engine=heuristic --engine=cpsat --time-limit=60 --breakdown --markdown
  */
 final class SolverBenchmark extends Command
 {
     protected $signature = 'solver:benchmark
         {--engine=* : Claves de motor; todos si no se da}
-        {--fixture=* : Nombres de fixture; todos si no se da}
+        {--fixture=* : Nombres de fixture; todos si no se da (ninguno si se da --input)}
+        {--input=* : Archivos input.json dentro de storage/app; su nombre es su carpeta desde storage/app}
+        {--time-limit= : Segundos de cada corrida, de 10 a 600; si no se da, los de cada entrada}
+        {--breakdown : Agrega el límite, el estado, las duras según el evaluador en PHP y el puntaje de SC-01 a SC-09}
         {--markdown : Imprime la tabla en Markdown para la línea base de solver.md}';
 
     protected $description = 'Mide cada motor sobre los fixtures de tests/Fixtures/solver/v1 (tiempo, violaciones y puntaje)';
@@ -36,24 +48,32 @@ final class SolverBenchmark extends Command
             }
         }
 
-        $directory = base_path('tests/Fixtures/solver/v1');
-        $all = array_map('basename', glob($directory.'/*', GLOB_ONLYDIR) ?: []);
-        sort($all);
-        $fixtures = $this->option('fixture') ?: $all;
+        $limit = $this->option('time-limit');
 
-        foreach ($fixtures as $name) {
-            if (! in_array($name, $all, true)) {
-                $this->error("No hay un fixture «{$name}». Disponibles: ".implode(', ', $all).'.');
+        if ($limit !== null && (filter_var($limit, FILTER_VALIDATE_INT) === false || (int) $limit < SolverSettings::MIN_SECONDS || (int) $limit > SolverSettings::MAX_SECONDS)) {
+            $this->error('El límite de --time-limit va de '.SolverSettings::MIN_SECONDS.' a '.SolverSettings::MAX_SECONDS.' segundos.');
 
-                return self::FAILURE;
-            }
+            return self::FAILURE;
         }
 
+        $instances = $this->instances();
+
+        if ($instances === null) {
+            return self::FAILURE;
+        }
+
+        $breakdown = (bool) $this->option('breakdown');
         $rows = [];
 
-        foreach ($fixtures as $name) {
-            $input = SolverInput::fromArray($this->json($directory.'/'.$name.'/input.json'));
-            $expected = is_file($directory.'/'.$name.'/expected.json') ? $this->json($directory.'/'.$name.'/expected.json') : null;
+        foreach ($instances as $name => [$path, $expectedPath]) {
+            $data = $this->json($path);
+
+            if ($limit !== null) {
+                $data['time_limit_seconds'] = (int) $limit;
+            }
+
+            $input = SolverInput::fromArray($data);
+            $expected = $expectedPath !== null && is_file($expectedPath) ? $this->json($expectedPath) : null;
             $movable = count(array_filter($input->groups, fn ($group): bool => $group->movable));
 
             foreach ($engines as $key) {
@@ -79,27 +99,120 @@ final class SolverBenchmark extends Command
                     'status' => $output->status->value,
                     'seconds' => number_format($seconds, 2, '.', ''),
                     'complies' => $complies,
+                    ...($breakdown ? [
+                        'limit' => $input->timeLimitSeconds,
+                        'evaluated' => count((new ContractEvaluator)->evaluate($input, $output->sessions)->hardViolations),
+                        'by_rule' => array_map(fn (string $rule): int => (int) ($output->softScore->byRule[$rule] ?? 0), SoftWeights::RULES),
+                    ] : []),
                 ];
             }
         }
 
         if ($this->option('markdown')) {
-            $this->line('| Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando | Sin programar |');
-            $this->line('|---|---|---|---|---|---|');
-
-            foreach ($rows as $row) {
-                $this->line(sprintf('| %s | %s | %s s | %d | %d | %d |', $row['fixture'], $row['engine'], $row['seconds'], $row['violations'], $row['score'], $row['unscheduled']));
-            }
+            $breakdown ? $this->breakdownMarkdown($rows) : $this->baselineMarkdown($rows);
 
             return self::SUCCESS;
         }
 
+        $headers = ['Motor', 'Fixture', 'Grupos', 'Sesiones', 'Sin programar', 'Violaciones duras', 'Puntaje blando', 'Estado', 'Segundos', 'Cumple'];
+
         $this->table(
-            ['Motor', 'Fixture', 'Grupos', 'Sesiones', 'Sin programar', 'Violaciones duras', 'Puntaje blando', 'Estado', 'Segundos', 'Cumple'],
-            array_map(fn (array $row): array => array_values($row), $rows),
+            $breakdown ? [...$headers, 'Límite', 'Duras (evaluador PHP)', ...SoftWeights::RULES] : $headers,
+            array_map(fn (array $row): array => $breakdown
+                ? [...array_values(array_slice($row, 0, 10)), $row['limit'], $row['evaluated'], ...$row['by_rule']]
+                : array_values($row), $rows),
         );
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Las entradas a medir, por nombre: [ruta de input.json, ruta de expected.json o null]. Null si alguna no existe
+     * (ya dijo cuál).
+     *
+     * @return array<string, array{string, ?string}>|null
+     */
+    private function instances(): ?array
+    {
+        $directory = base_path('tests/Fixtures/solver/v1');
+        $all = array_map('basename', glob($directory.'/*', GLOB_ONLYDIR) ?: []);
+        sort($all);
+        $inputs = $this->option('input');
+        $fixtures = $this->option('fixture') ?: ($inputs === [] ? $all : []);
+        $instances = [];
+
+        foreach ($fixtures as $name) {
+            if (! in_array($name, $all, true)) {
+                $this->error("No hay un fixture «{$name}». Disponibles: ".implode(', ', $all).'.');
+
+                return null;
+            }
+
+            $instances[$name] = [$directory.'/'.$name.'/input.json', $directory.'/'.$name.'/expected.json'];
+        }
+
+        $storage = (string) realpath(storage_path('app'));
+
+        foreach ($inputs as $path) {
+            $real = realpath($path);
+
+            if ($real === false || ! is_file($real)) {
+                $this->error("No hay una entrada en «{$path}».");
+
+                return null;
+            }
+
+            if ($storage === '' || ! str_starts_with($real, $storage.'/')) {
+                $this->error('La entrada de --input debe estar dentro de storage/app.');
+
+                return null;
+            }
+
+            $name = substr(dirname($real), strlen($storage) + 1);
+            $unique = $name;
+
+            for ($copy = 2; isset($instances[$unique]); $copy++) {
+                $unique = "{$name} ({$copy})";
+            }
+
+            $instances[$unique] = [$real, null];
+        }
+
+        return $instances;
+    }
+
+    /**
+     * La tabla de la línea base de solver.md (6.12).
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function baselineMarkdown(array $rows): void
+    {
+        $this->line('| Fixture | Motor | Tiempo | Violaciones duras | Puntaje blando | Sin programar |');
+        $this->line('|---|---|---|---|---|---|');
+
+        foreach ($rows as $row) {
+            $this->line(sprintf('| %s | %s | %s s | %d | %d | %d |', $row['fixture'], $row['engine'], $row['seconds'], $row['violations'], $row['score'], $row['unscheduled']));
+        }
+    }
+
+    /**
+     * La tabla del benchmark de la 7.11, con el desglose por regla blanda.
+     *
+     * @param  list<array<string, mixed>>  $rows
+     */
+    private function breakdownMarkdown(array $rows): void
+    {
+        $this->line('| Instancia | Motor | Límite | Tiempo | Estado | Duras | Duras (evaluador PHP) | Sin programar | Puntaje blando | '.implode(' | ', SoftWeights::RULES).' |');
+        $this->line('|'.str_repeat('---|', 9 + count(SoftWeights::RULES)));
+
+        foreach ($rows as $row) {
+            $this->line(sprintf(
+                '| %s | %s | %d s | %s s | %s | %d | %d | %d | %d | %s |',
+                $row['fixture'], $row['engine'], $row['limit'], $row['seconds'], $row['status'], $row['violations'], $row['evaluated'], $row['unscheduled'], $row['score'],
+                implode(' | ', $row['by_rule']),
+            ));
+        }
     }
 
     /**
