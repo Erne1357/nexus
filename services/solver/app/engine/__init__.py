@@ -1,9 +1,10 @@
-"""Motores del servicio. Hoy solo el de prueba; el modelo CP-SAT (7.4 a 7.7) se registra aquí."""
+"""Motores del servicio: el de prueba (`trivial`) y el modelo CP-SAT (`cpsat`, 7.7). `SOLVER_ENGINE` elige uno."""
 
 from .base import Engine, RunCancelled, RunContext
+from .cpsat import CpSatEngine
 from .trivial import TrivialEngine
 
-ENGINES: dict[str, type[Engine]] = {TrivialEngine.key: TrivialEngine}
+ENGINES: dict[str, type[Engine]] = {TrivialEngine.key: TrivialEngine, CpSatEngine.key: CpSatEngine}
 
 
 def make_engine(key: str) -> Engine:
@@ -15,4 +16,4 @@ def make_engine(key: str) -> Engine:
         raise ValueError(f"Motor desconocido: {key!r} (disponibles: {known}).") from None
 
 
-__all__ = ["ENGINES", "Engine", "RunCancelled", "RunContext", "TrivialEngine", "make_engine"]
+__all__ = ["ENGINES", "CpSatEngine", "Engine", "RunCancelled", "RunContext", "TrivialEngine", "make_engine"]
