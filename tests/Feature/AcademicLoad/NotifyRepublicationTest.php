@@ -278,6 +278,27 @@ it('RA-05: quien es docente afectado y coordinador de una carrera afectada recib
         ->and($titles)->toContain('La carga de '.$this->load->department->name.' cambió grupos de ISC');
 });
 
+it('RA-05: el aviso al coordinador abre el semestre del primer cambio que se ve en la consulta pública, no el de un cambio solo de cupos (ensayo 8.11, G-06)', function () {
+    Notification::fake();
+    $placement = fn (int $semester, int $seats): array => LoadSnapshotFactory::placement([
+        'career' => ['id' => $this->isc->id, 'code' => $this->isc->code, 'name' => $this->isc->name],
+        'study_plan' => ['id' => fakeKey(800 + $semester), 'code' => 'ISIC-2010-224'],
+        'semester' => $semester,
+        'seats' => $seats,
+    ]);
+    $quotaOnly = LoadSnapshotFactory::group(['id' => fakeKey(1), 'code' => 'A', 'teacher' => republicationTeacher($this->kept), 'placements' => [$placement(1, 30)], 'sessions' => [LoadSnapshotFactory::session(['day' => 1])]]);
+    $scheduled = LoadSnapshotFactory::group(['id' => fakeKey(2), 'code' => 'B', 'teacher' => republicationTeacher($this->kept), 'placements' => [$placement(3, 30)], 'sessions' => [LoadSnapshotFactory::session(['day' => 2])]]);
+
+    republicationVersions([$quotaOnly, $scheduled], [
+        array_replace($quotaOnly, ['placements' => [$placement(1, 35)]]),
+        array_replace($scheduled, ['sessions' => [LoadSnapshotFactory::session(['day' => 5])]]),
+    ]);
+
+    app(NotifyRepublication::class)->handle($this->load, 2);
+
+    Notification::assertSentTo($this->iscCoordinator, LoadRepublished::class, fn (LoadRepublished $notice): bool => $notice->message($this->iscCoordinator)->parameters === ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => '3']);
+});
+
 it('RA-05: el aviso al coordinador abre el semestre y la retícula del primer grupo cambiado de su carrera, también si se canceló (ensayo 8.11, E-15)', function () {
     Notification::fake();
     $placement = fn (Career $career, int $semester, string $plan): array => LoadSnapshotFactory::placement([
