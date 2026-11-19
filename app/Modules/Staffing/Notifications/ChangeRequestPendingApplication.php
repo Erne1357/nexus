@@ -23,7 +23,7 @@ final class ChangeRequestPendingApplication extends ChangeRequestNotification
 
     protected function content(): array
     {
-        return ['Hay un cambio aprobado por aplicar', 'o-wrench-screwdriver', 'info'];
+        return [$this->chosenAlternative() === null ? 'Hay un cambio aprobado por aplicar' : 'Hay un cambio aprobado por aplicar, con otro acomodo', 'o-wrench-screwdriver', 'info'];
     }
 
     protected function route(): string

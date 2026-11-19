@@ -52,10 +52,11 @@
                         <span class="col-span-2 line-clamp-2 text-sm">{{ $request->proposed['description'] ?? '' }}</span>
                         @php
                             $chosenLetter = ($request->alternatives['chosen']['id'] ?? null) === null ? null : \App\Modules\Staffing\Support\ChangeAlternatives::letter($request->alternatives, $request->alternatives['chosen']['id']);
-                            $alternativeCount = count($request->alternatives['items'] ?? []);
+                            $alternativesStatus = \App\Modules\Staffing\Enums\ChangeAlternativesStatus::of($request->alternatives);
+                            $alternativeCount = $alternativesStatus === \App\Modules\Staffing\Enums\ChangeAlternativesStatus::Ready ? count($request->alternatives['items'] ?? []) : 0;
                             $flag = match (true) {
                                 $chosenLetter !== null => "Con la alternativa {$chosenLetter}",
-                                $request->status === \App\Modules\Staffing\Enums\ChangeRequestStatus::Pending && ($request->alternatives['status'] ?? null) === 'computing' => 'Buscando alternativas…',
+                                $request->status === \App\Modules\Staffing\Enums\ChangeRequestStatus::Pending && $alternativesStatus === \App\Modules\Staffing\Enums\ChangeAlternativesStatus::Computing => 'Buscando alternativas…',
                                 $request->status === \App\Modules\Staffing\Enums\ChangeRequestStatus::Pending && $alternativeCount > 0 => $alternativeCount === 1 ? '1 alternativa del motor' : "{$alternativeCount} alternativas del motor",
                                 default => null,
                             };

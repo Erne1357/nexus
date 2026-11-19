@@ -11,6 +11,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\SessionCandidate;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
+use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -42,7 +43,7 @@ final class ChangeAlternativesQuery
      * Las opciones de la solicitud y la elegida para el panel (`$selected`: 'pedido', el id de una alternativa o '' para
      * la de omisión: la primera alternativa si lo pedido deja choques duros, si no lo pedido; ya decidida, la elegida).
      *
-     * @return array{assessable: bool, searched: bool, items: int, message: ?string, computedAt: ?Carbon, chosen: ?array<string, mixed>, tabs: list<array<string, mixed>>, selected: ?array<string, mixed>, pedidoHard: int, engineLine: ?string, moved: list<string>}
+     * @return array{assessable: bool, status: ?string, searched: bool, items: int, message: ?string, computedAt: ?Carbon, chosen: ?array<string, mixed>, tabs: list<array<string, mixed>>, selected: ?array<string, mixed>, pedidoHard: int, engineLine: ?string, moved: list<string>}
      */
     public function for(ChangeRequest $request, string $selected = ''): array
     {
@@ -50,7 +51,8 @@ final class ChangeAlternativesQuery
             ->with(['subject:id,code,name', 'teacher:id,name', 'department:id,code', 'ownerCareer:id,code', 'campus:id,code,name', 'sessions.room:id,code'])
             ->whereKey($request->group_id)->firstOrFail());
         $alternatives = $request->alternatives;
-        $items = array_values($alternatives['items'] ?? []);
+        $status = ChangeAlternativesStatus::of($alternatives);
+        $items = $status === ChangeAlternativesStatus::Ready ? array_values($alternatives['items'] ?? []) : [];
         $impact = $request->impact ?? [];
         $assessable = (bool) ($impact['assessable'] ?? AssessChangeImpact::isAssessable($request));
         $pedidoHard = array_sum(array_map(fn (array $rule): int => count($rule['messages'] ?? []), $impact['hard'] ?? []));
@@ -83,9 +85,10 @@ final class ChangeAlternativesQuery
 
         return [
             'assessable' => $assessable,
-            'searched' => $alternatives !== null,
+            'status' => $status?->value,
+            'searched' => $status !== null,
             'items' => count($items),
-            'message' => $alternatives['message'] ?? null,
+            'message' => ChangeAlternativesStatus::messageOf($alternatives),
             'computedAt' => $computedAt,
             'chosen' => $chosen === null ? null : [...$tabs[array_search($chosen['id'], array_column($tabs, 'key'), true)] ?? [], 'option' => $chosen],
             'tabs' => $tabs,
@@ -202,6 +205,7 @@ final class ChangeAlternativesQuery
             'near' => null,
             'chain' => [$this->chainRow($request, $group, $entry, $hard > 0, $colors)],
             'teachers' => [],
+            'inputProblems' => [],
             'week' => $this->week($request, [$group->id => $sessions], $hard > 0, $colors),
             'assessedAt' => isset($impact['assessed_at']) ? Carbon::parse($impact['assessed_at']) : null,
         ];
@@ -242,6 +246,7 @@ final class ChangeAlternativesQuery
             'near' => $this->near($request, $item),
             'chain' => $chain,
             'teachers' => $teachers,
+            'inputProblems' => $item['input_problems'] ?? [],
             'week' => $this->week($request, collect($item['groups'])->mapWithKeys(fn (array $entry): array => [$entry['group_id'] => $entry['sessions']])->all(), false, $colors),
             'assessedAt' => null,
         ];

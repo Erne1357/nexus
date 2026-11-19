@@ -15,6 +15,7 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Actions\ProposePlacements;
 use App\Modules\Solver\Contract\GroupInput;
 use App\Modules\Solver\Contract\ProposedSession;
+use App\Modules\Solver\Contract\RunStatus;
 use App\Modules\Solver\Contract\SessionKind;
 use App\Modules\Solver\Contract\SessionSlot;
 use App\Modules\Solver\Contract\SolverInput;
@@ -23,14 +24,17 @@ use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Engines\SolverEngine;
+use App\Modules\Solver\Enums\PlacementStop;
 use App\Modules\Solver\Evaluation\ContractEvaluator;
 use App\Modules\Solver\Models\SolverRun;
 use App\Modules\Solver\Queries\BuildSolverInput;
+use App\Modules\Solver\Rules\InputFingerprint;
 
 /*
-| ProposePlacements (tareas 8.7 y 8.3b; docs/arquitectura/solver.md, «Acomodos en la petición»): pide al motor, en la
-| petición, acomodos alternativos para unos grupos con todo lo demás fijo. Cada alternativa es completa, sin violaciones
-| duras, distinta de las demás y cambia algo. Las siguientes apartan las horas de las anteriores. Tiene un plazo.
+| ProposePlacements (tareas 8.7 y 8.3b; docs/arquitectura/solver.md, «Acomodos de unos grupos»): pide al motor, directo
+| y con un tope chico, acomodos alternativos para unos grupos con todo lo demás fijo. Cada alternativa es completa, sin
+| violaciones duras nuevas, distinta de las demás y cambia algo; las siguientes apartan las horas de las anteriores. Dice
+| por qué paró (todas, sin más acomodos o el tiempo).
 */
 
 /**
@@ -124,16 +128,21 @@ function placementsOverlap(array $a, array $b): bool
 it('da acomodos distintos, completos y sin choques duros, que cambian algo y no repiten la hora del grupo', function () {
     $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')])]);
 
-    $outputs = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 3);
+    $fingerprint = InputFingerprint::of($base);
+    $result = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 3);
+    $outputs = $result->alternatives;
     $current = array_map(fn (array $slot): string => "{$slot['day']}|{$slot['starts_at']}", placementsWeek('07:00'));
 
-    expect($outputs)->toHaveCount(3);
+    expect($result)->toHaveCount(3)
+        ->and($result->stop)->toBe(PlacementStop::Complete)
+        ->and($result->message())->toBeNull();
 
     foreach ($outputs as $i => $output) {
         $sessions = placementsOf($output, 'g1');
         $evaluation = (new ContractEvaluator)->evaluate($base, $output->sessions);
 
         expect($output->hardViolations)->toBe([])
+            ->and($output->status)->toBe(RunStatus::Feasible)
             ->and($evaluation->hardViolations)->toBe([])
             ->and($output->softScore->total)->toBe($evaluation->softScore->total)
             ->and(array_sum(array_map(fn (ProposedSession $s): int => (int) substr($s->endsAt, 0, 2) - (int) substr($s->startsAt, 0, 2), $sessions)))->toBe(4)
@@ -145,6 +154,23 @@ it('da acomodos distintos, completos y sin choques duros, que cambian algo y no 
     }
 });
 
+it('nada de las horas apartadas (avoid:) sale en la salida, el log, las métricas ni la huella de la entrada', function () {
+    $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')])]);
+    $fingerprint = InputFingerprint::of($base);
+
+    $outputs = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 3)->alternatives;
+
+    expect($outputs)->toHaveCount(3)
+        ->and(InputFingerprint::of($base))->toBe($fingerprint)
+        ->and(collect($base->groups)->pluck('id')->all())->toBe(['g1'])
+        ->and($base->groups[0]->cohorts)->toBe([]);
+
+    foreach ($outputs as $output) {
+        expect(json_encode($output->toArray()))->not->toContain(ProposePlacements::AVOID_PREFIX)
+            ->and(collect($output->sessions)->pluck('groupId')->unique()->all())->toBe(['g1']);
+    }
+});
+
 it('fija las sesiones propuestas de un grupo y mueve a los demás para dejarlo sin choques (la cadena)', function () {
     $base = placementsInput([
         placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')]),
@@ -152,7 +178,7 @@ it('fija las sesiones propuestas de un grupo y mueve a los demás para dejarlo s
     ]);
     $pinned = array_map(fn (array $slot): SessionSlot => SessionSlot::fromArray($slot), placementsWeek('09:00'));
 
-    $outputs = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 1, ['g1' => $pinned]);
+    $outputs = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 1, ['g1' => $pinned])->alternatives;
 
     expect($outputs)->toHaveCount(1)
         ->and(array_map(fn (ProposedSession $s): array => [$s->day, $s->startsAt, $s->roomId, $s->changed], placementsOf($outputs[0], 'g1')))
@@ -169,7 +195,11 @@ it('sin alternativa: lo fijado choca con un grupo que no se mueve', function () 
     ]);
     $pinned = array_map(fn (array $slot): SessionSlot => SessionSlot::fromArray($slot), placementsWeek('09:00'));
 
-    expect(placementsAction()->propose($base, PhpHeuristicEngine::KEY, 2, ['g1' => $pinned]))->toBe([]);
+    $result = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 2, ['g1' => $pinned]);
+
+    expect($result->alternatives)->toBe([])
+        ->and($result->stop)->toBe(PlacementStop::NoPlacement)
+        ->and($result->message())->toBe('El motor no encontró acomodos sin choques.');
 });
 
 it('sin alternativa: el único lugar posible es el actual', function () {
@@ -179,7 +209,9 @@ it('sin alternativa: el único lugar posible es el actual', function () {
     );
     $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')])], ['unavailable' => $blocked]);
 
-    expect(placementsAction()->propose($base, PhpHeuristicEngine::KEY, 3))->toBe([]);
+    $result = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 3);
+
+    expect($result->alternatives)->toBe([])->and($result->stop)->toBe(PlacementStop::NoPlacement);
 });
 
 it('respeta el plazo: cada vuelta le da al motor los segundos que quedan y no empieza otra con menos de uno', function () {
@@ -222,24 +254,68 @@ it('respeta el plazo: cada vuelta le da al motor los segundos que quedan y no em
     };
     $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')])]);
 
-    $outputs = placementsAction([$engine], $clock)->propose($base, 'reloj', 5);
+    $result = placementsAction([$engine], $clock)->propose($base, 'reloj', 5);
 
     expect(ProposePlacements::TIME_LIMIT_SECONDS)->toBe(5)
         ->and($time->limits)->toBe([5, 3, 1])
-        ->and(count($outputs))->toBeLessThanOrEqual(3);
+        ->and($result->stop)->toBe(PlacementStop::TimeLimit)
+        ->and(count($result))->toBeGreaterThanOrEqual(2)
+        ->and($result->message())->toBe('Se acabó el tiempo del motor antes de encontrar más acomodos sin choques.');
 });
 
-it('rechaza un motor que no revisa reglas duras y fijar un grupo que no se mueve', function (string $case) {
+it('plazo con el motor real: el reloj de la Action llega a la heurística y, si vence a mitad de una vuelta, lo dice', function () {
+    $time = new stdClass;
+    $time->now = 0.0;
+    $clock = function () use ($time): float {
+        $time->now += 0.5;
+
+        return $time->now;
+    };
+    $groups = array_map(fn (int $n): array => placementsGroup("g{$n}", ['current_sessions' => placementsWeek(sprintf('%02d:00', 7 + $n % 6), $n % 2 === 0 ? 'r1' : 'r2')]), range(1, 10));
+
+    $result = placementsAction(null, $clock)->propose(placementsInput($groups), PhpHeuristicEngine::KEY, 3);
+
+    expect(placementsAction()->propose(placementsInput($groups), PhpHeuristicEngine::KEY, 3)->alternatives)->not->toBeEmpty()
+        ->and($result->alternatives)->toBe([])
+        ->and($result->stop)->toBe(PlacementStop::TimeLimit)
+        ->and($result->message())->toBe('Se acabó el tiempo del motor antes de encontrar un acomodo sin choques.');
+});
+
+it('duras previas de la base: HC-08 (no depende del acomodo) no descarta las alternativas y sale como problema de la entrada', function () {
+    $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')])], ['remaining_hours' => 2]);
+
+    $outputs = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 2)->alternatives;
+
+    expect($outputs)->toHaveCount(2);
+
+    foreach ($outputs as $output) {
+        expect($output->status)->toBe(RunStatus::Partial)
+            ->and(array_unique(array_map(fn ($violation) => $violation->rule, $output->hardViolations)))->toBe(['HC-08']);
+    }
+});
+
+it('rechaza un motor que no revisa reglas duras, varias alternativas sin HC-03 y fijar mal', function (string $case) {
     $base = placementsInput([
         placementsGroup('g1', ['teacher_id' => 't1']),
         placementsGroup('otro', ['movable' => false, 'fixed_sessions' => placementsWeek('09:00', 'r2')]),
     ]);
+    $slots = fn (array $days): array => array_map(fn (array $slot): SessionSlot => SessionSlot::fromArray($slot), placementsWeek('10:00', 'r1', $days));
 
     match ($case) {
         'motor' => placementsAction([new FixedEngine])->propose($base, 'fixed'),
-        'fijar' => placementsAction()->propose($base, PhpHeuristicEngine::KEY, 1, ['otro' => []]),
+        'sin HC-03' => placementsAction()->propose(SolverInput::fromArray([...$base->toArray(), 'hard_rules' => ['HC-01', 'HC-02']]), PhpHeuristicEngine::KEY, 2),
+        'fijar un fijo' => placementsAction()->propose($base, PhpHeuristicEngine::KEY, 1, ['otro' => $slots([1, 2, 3, 4])]),
+        'fijar vacío' => placementsAction()->propose($base, PhpHeuristicEngine::KEY, 1, ['g1' => []]),
+        'fijar otras horas' => placementsAction()->propose($base, PhpHeuristicEngine::KEY, 1, ['g1' => $slots([1, 2, 3])]),
     };
-})->with(['motor', 'fijar'])->throws(InvalidArgumentException::class);
+})->with(['motor', 'sin HC-03', 'fijar un fijo', 'fijar vacío', 'fijar otras horas'])->throws(InvalidArgumentException::class);
+
+it('sin HC-03 se puede pedir una sola alternativa', function () {
+    $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => placementsWeek('07:00')])]);
+
+    expect(placementsAction()->propose(SolverInput::fromArray([...$base->toArray(), 'hard_rules' => ['HC-01', 'HC-02']]), PhpHeuristicEngine::KEY, 1)->stop)
+        ->not->toBe(PlacementStop::TimeLimit);
+});
 
 it('desde la base: arma la entrada de los grupos pedidos, propone para un grupo virtual y no escribe nada', function () {
     $term = Term::factory()->create(['starts_on' => '2027-01-18']);
@@ -260,7 +336,7 @@ it('desde la base: arma la entrada de los grupos pedidos, propone para un grupo 
 
     $virtual = new GroupInput("new:SCC-1:P1:{$career->id}", 'P1', 'SCC-1', $department->id, $career->id, $plan->id, 1, 4, 0, false, 30, $teacher->id, [], [], [], true);
 
-    $outputs = app(ProposePlacements::class)->handle($term, modalityOf('PRES'), [], PhpHeuristicEngine::KEY, 2, [$virtual]);
+    $outputs = app(ProposePlacements::class)->handle($term, modalityOf('PRES'), [], PhpHeuristicEngine::KEY, 2, [$virtual])->alternatives;
 
     expect($outputs)->not->toBeEmpty()
         ->and(placementsOf($outputs[0], $virtual->id))->toHaveCount(4)

@@ -11,9 +11,10 @@
     Lo arma ChangeAlternativesQuery; recibe `$alternatives`, `$request`, `$canDecide` y `$staleAlternatives`.
 --}}
 @php
-    $status = $request->alternatives['status'] ?? null;
+    $status = $alternatives['status'];
     $computing = $status === 'computing';
     $failed = $status === 'failed';
+    $none = $status === 'none';
     $items = $alternatives['items'];
     $selectedKey = $alternatives['selected']['key'] ?? 'pedido';
     $stale = $staleAlternatives && $items > 0;
@@ -101,7 +102,7 @@
                             <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-arrow-path" class="h-4 w-4 shrink-0 motion-safe:animate-spin" />Buscando…</span>
                             <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">El motor está buscando</span>
                         </div>
-                    @elseif ($items === 0 && $alternatives['searched'] && ! $failed)
+                    @elseif ($none)
                         <div class="{{ $slot }} border-base-content/25 bg-base-100 text-neutral" data-testid="alternatives-none-slot">
                             <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-no-symbol" class="h-4 w-4 shrink-0" aria-hidden="true" />Sin alternativa</span>
                             <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">Ninguna sin choques duros</span>
@@ -144,18 +145,18 @@
                     <x-icon name="o-x-circle" class="h-5 w-5 shrink-0" aria-hidden="true" />
                     <div class="min-w-0">
                         <p class="font-semibold">El motor no pudo buscar alternativas.</p>
-                        <p class="break-words">{{ $request->alternatives['message'] ?? $request->alternatives['reason'] ?? 'Algo falló al correrlo.' }}</p>
+                        <p class="break-words">{{ $alternatives['message'] ?? 'Algo falló al correrlo.' }}</p>
                     </div>
                     @if ($canSearch)
                         <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-sm max-md:h-11 max-md:min-h-11" wire:click="searchAlternatives" spinner="searchAlternatives" />
                     @endif
                 </div>
-            @elseif ($items === 0 && $alternatives['searched'] && ! $computing)
+            @elseif ($none)
                 <div class="flex items-start gap-3 rounded-field border border-base-300 bg-base-200/60 px-3.5 py-3 text-sm" role="status" data-testid="alternatives-none">
                     <x-icon name="o-no-symbol" class="mt-0.5 h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
                     <div class="grid min-w-0 gap-1">
                         <p class="font-semibold">El motor no encontró un acomodo sin choques duros.</p>
-                        <p>Buscó {{ $alternatives['computedAt']?->isToday() ? 'hoy a las '.$alternatives['computedAt']->format('G:i') : '' }} y {{ $movingText }}.</p>
+                        <p>{{ $alternatives['message'] && $alternatives['message'] !== \App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives::NONE_FOUND ? $alternatives['message'].' ' : '' }}Buscó {{ $alternatives['computedAt']?->isToday() ? 'hoy a las '.$alternatives['computedAt']->format('G:i') : '' }} y {{ $movingText }}.</p>
                         <p class="text-neutral">Puedes rechazarla con un comentario para que pidan otro horario, o liberar el lugar en el editor de horarios y volver a buscar.</p>
                         @if ($canSearch)
                             <div class="mt-1 flex flex-wrap gap-2">
@@ -168,7 +169,7 @@
 
             @if ($items > 0 && $alternatives['engineLine'])
                 <p class="text-[13px] text-neutral" data-testid="alternatives-engine">
-                    {{ $alternatives['engineLine'] }}
+                    {{ $alternatives['engineLine'] }}@if ($alternatives['message']) {{ $alternatives['message'] }}@endif
                     @if ($canSearch && ! $stale)
                         <button type="button" class="link link-primary ms-1 font-medium whitespace-nowrap" wire:click="searchAlternatives" wire:loading.attr="disabled" wire:target="searchAlternatives" data-testid="search-again-quiet">Buscar otra vez</button>
                     @endif

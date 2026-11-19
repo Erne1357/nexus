@@ -35,7 +35,7 @@ it('sin buscar: el jefe ve «Lo pedido» con sus choques, «Buscar alternativas�
         ->assertSee('Lo pedido')
         ->assertSee('HC-02')
         ->assertSeeHtml('data-testid="search-alternatives"')
-        ->assertDontSeeHtml('data-testid="tab-chain-1"')
+        ->assertDontSee('Alternativa A')
         ->assertSeeHtml('data-testid="approve-blocked"')
         ->assertSee('Recházala o busca alternativas.');
 });
@@ -43,10 +43,9 @@ it('sin buscar: el jefe ve «Lo pedido» con sus choques, «Buscar alternativas�
 it('buscar trae las alternativas como pestañas A, B y C, con su veredicto y la cadena de movimientos', function () {
     $request = altRequest($this->w);
 
-    altPage($this->w->jefe, $request)
-        ->call('searchAlternatives')
-        ->assertHasNoErrors()
-        ->assertSeeHtml('data-testid="tab-chain-1"')
+    $page = altPage($this->w->jefe, $request)->call('searchAlternatives')->assertHasNoErrors();
+
+    $page->assertSeeHtml('data-testid="tab-'.altId($request->fresh()).'"')
         ->assertSee('Alternativa A')
         ->assertSee('Alternativa B')
         ->assertSee('Sin choques duros')
@@ -108,12 +107,30 @@ it('«Esto cambió…»: si el horario cambió, no aprueba, marca las alternativ
 
 it('sin alternativa: dice que el motor no encontró un acomodo sin choques duros', function () {
     $request = altRequest($this->w);
-    $request->forceFill(['alternatives' => ['computed_at' => now()->toIso8601String(), 'engine' => 'php-heuristic', 'items' => [], 'message' => 'El motor no encontró acomodos sin choques.', 'chosen' => null]])->save();
+    $request->forceFill(['alternatives' => ['status' => 'none', 'calculation_id' => 'c1', 'requested_at' => now()->toIso8601String(), 'computed_at' => now()->toIso8601String(), 'engine' => 'php-heuristic', 'items' => [], 'message' => 'El motor no encontró acomodos sin choques.', 'chosen' => null]])->save();
 
     altPage($this->w->jefe, $request)
         ->assertSeeHtml('data-testid="alternatives-none"')
         ->assertSee('El motor no encontró un acomodo sin choques duros.')
         ->assertSee('Sin alternativa');
+});
+
+it('buscando: mientras el motor corre en la cola la pantalla pregunta cada 2 segundos, y un cálculo colgado sale como fallido', function () {
+    $request = altRequest($this->w);
+    $request->forceFill(['alternatives' => ['status' => 'computing', 'calculation_id' => 'c1', 'requested_at' => now()->toIso8601String(), 'requested_by' => $this->w->jefe->id]])->save();
+
+    altPage($this->w->jefe, $request)
+        ->assertSeeHtml('data-testid="alternatives-computing"')
+        ->assertSeeHtml('wire:poll.2s="pollAlternatives"')
+        ->assertSee('Buscando alternativas…')
+        ->assertDontSeeHtml('data-testid="search-alternatives"');
+
+    $request->forceFill(['alternatives' => [...$request->alternatives, 'requested_at' => now()->subHour()->toIso8601String()]])->save();
+
+    altPage($this->w->jefe, $request)
+        ->assertDontSeeHtml('wire:poll.2s="pollAlternatives"')
+        ->assertSeeHtml('data-testid="alternatives-failed"')
+        ->assertSee('vuelve a pedirlas');
 });
 
 it('solo avisos: lo pedido sin choques duros se aprueba como se pidió y no se buscan alternativas', function () {
@@ -133,7 +150,7 @@ it('el coordinador ve las pestañas de solo lectura: sin buscar ni aprobar', fun
     $request = altProposed($this->w);
 
     altPage($this->w->coordIsc, $request)
-        ->assertSeeHtml('data-testid="tab-chain-1"')
+        ->assertSeeHtml('data-testid="tab-'.altId($request).'"')
         ->assertDontSeeHtml('data-testid="search-alternatives"')
         ->assertDontSeeHtml('data-testid="approve-alternative"')
         ->call('searchAlternatives')

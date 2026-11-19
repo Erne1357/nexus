@@ -15,6 +15,7 @@ use App\Modules\Staffing\Actions\ChangeRequests\MarkChangeRequestApplied;
 use App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives;
 use App\Modules\Staffing\Actions\ChangeRequests\RejectChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
+use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
@@ -313,16 +314,14 @@ new #[Title('Solicitudes de cambio')] class extends Component
      */
     private function announceAlternatives(ChangeRequest $request): void
     {
-        $alternatives = $request->alternatives ?? [];
-        $count = count($alternatives['items'] ?? []);
+        $count = count($request->alternatives['items'] ?? []);
 
-        if (($alternatives['status'] ?? null) === 'computing') {
-            return;
-        }
-
-        $count > 0
-            ? $this->success($count === 1 ? 'Una alternativa sin choques duros' : "{$count} alternativas sin choques duros", 'Revísalas en sus pestañas y aprueba la que prefieras.')
-            : $this->warning('El motor no encontró un acomodo sin choques duros', 'Puedes rechazarla o liberar el lugar en el editor y buscar otra vez.');
+        match (ChangeAlternativesStatus::of($request->alternatives)) {
+            ChangeAlternativesStatus::Ready => $this->success($count === 1 ? 'Una alternativa sin choques duros' : "{$count} alternativas sin choques duros", 'Revísalas en sus pestañas y aprueba la que prefieras.'),
+            ChangeAlternativesStatus::None => $this->warning('El motor no encontró un acomodo sin choques duros', 'Puedes rechazarla o liberar el lugar en el editor y buscar otra vez.'),
+            ChangeAlternativesStatus::Failed => $this->error('No se encontraron alternativas', e((string) ChangeAlternativesStatus::messageOf($request->alternatives))),
+            default => null,
+        };
     }
 
     /**
@@ -332,7 +331,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
     {
         $request = $this->selectedOrFail($context, $query);
 
-        if (($request->alternatives['status'] ?? null) !== 'computing') {
+        if (ChangeAlternativesStatus::of($request->alternatives) !== ChangeAlternativesStatus::Computing) {
             $this->announceAlternatives($request);
         }
     }
@@ -347,7 +346,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $this->authorize('decide', $request);
         $this->validateComment(required: false);
 
-        if (! collect($request->alternatives['items'] ?? [])->contains('id', $this->alternative)) {
+        if (ChangeAlternativesStatus::of($request->alternatives) !== ChangeAlternativesStatus::Ready || ! collect($request->alternatives['items'] ?? [])->contains('id', $this->alternative)) {
             $this->addError('alternative', 'Elige una de las alternativas del motor.');
 
             return;
