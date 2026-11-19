@@ -103,7 +103,11 @@ final class ValidateImportBatch
 
     /**
      * Pasa el lote de `uploaded` a `validating` con el registro bloqueado: dos corridas del mismo lote
-     * no validan dos veces.
+     * no validan dos veces. Antes borra las filas que haya dejado una validación anterior: la de un lote
+     * que se atoró y se manda a validar de nuevo (RetryStalledBatch, que no borra en la petición porque un
+     * kárdex deja cientos de miles). En un lote nuevo no hay ninguna. El borrado y el cambio de estado van
+     * en la misma transacción: si el job muere a la mitad, el lote se queda subido con sus filas y el
+     * siguiente intento las vuelve a borrar.
      */
     private function start(ImportBatch $batch, ?string $run): void
     {
@@ -114,7 +118,8 @@ final class ValidateImportBatch
                 throw new BatchNotReady("El lote {$batch->id} ya no está subido: está {$locked->status->label()}.");
             }
 
-            $locked->update(['status' => BatchStatus::Validating, 'run_id' => $run]);
+            ImportRow::query()->where('batch_id', $locked->id)->delete();
+            $locked->update(['status' => BatchStatus::Validating, 'run_id' => $run, 'processed_rows' => 0]);
             $batch->setRawAttributes($locked->getAttributes(), sync: true);
         });
     }

@@ -10,6 +10,7 @@ use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportRow;
+use App\Modules\Imports\Queries\ImportBatchQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -143,7 +144,7 @@ class TeacherEmailsTemplate extends ImportTemplate
     /**
      * Lo que el resumen del lote cuenta aparte (D4): los RFC que no están en Nexus, los correos fuera del dominio, los
      * repetidos (en el archivo o ya de otro docente), los que ya tenían otro correo (D14) y, ya aplicado, las
-     * invitaciones que salieron por la importación: las que se mandaron a nombre de quien la aplicó, desde que se
+     * invitaciones que salieron por la importación: las que se mandaron a nombre de quien la aplicó (o la reanudó), desde que se
      * subió el archivo, a los docentes de sus filas aplicadas. Salen de la cola en unos segundos (`live`).
      */
     public function summaryGroups(ImportBatch $batch): array
@@ -186,7 +187,8 @@ class TeacherEmailsTemplate extends ImportTemplate
                     ->whereColumn('teachers.id', 'import_rows.target_id')
                     ->where('invitation.subject_type', (new User)->getMorphClass())
                     ->where('invitation.event', 'access-invited')
-                    ->where('invitation.causer_id', $batch->applied_by)
+                    // A nombre de quien aplicó el lote, y de quien lo reanudó si se atoró (ImportBatchQuery::appliers()).
+                    ->whereIn('invitation.causer_id', app(ImportBatchQuery::class)->appliers($batch))
                     ->where('invitation.created_at', '>=', $batch->created_at)),
         ];
 
