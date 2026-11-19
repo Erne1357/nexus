@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -16,7 +17,7 @@ beforeEach(function () {
     Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
 });
 
-it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y a dónde ir', function () {
+it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y a dónde ir con su ruta', function () {
     $coordinador = User::factory()
         ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
         ->create(['name' => 'Carla Cota Ruiz', 'username' => '19110001']);
@@ -26,6 +27,7 @@ it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y
         ->assertExactJson([
             'redirect' => url('/'),
             'band' => true,
+            'page' => ['area' => null, 'title' => 'Inicio'],
             'credential' => [
                 'name' => 'Carla Cota Ruiz',
                 'username' => '19110001',
@@ -39,14 +41,15 @@ it('con JSON entra y responde la ficha de la credencial, la misma de la banda, y
     $this->assertAuthenticatedAs($coordinador);
 });
 
-it('con JSON lleva a la página que se había pedido antes de entrar', function () {
+it('con JSON lleva a la página que se había pedido antes de entrar, con el área y el título que muestra la banda', function () {
     User::factory()->admin()->create(['username' => 'admin2']);
 
     $this->get(route('core.campuses'))->assertRedirect(route('login'));
 
     $this->postJson('/login', ['username' => 'admin2', 'password' => 'password'])
         ->assertOk()
-        ->assertJsonPath('redirect', route('core.campuses'));
+        ->assertJsonPath('redirect', route('core.campuses'))
+        ->assertJsonPath('page', ['area' => NavigationArea::Administracion->label(), 'title' => 'Campus']);
 });
 
 it('con el cambio de contraseña pendiente no lleva la credencial a la banda', function () {
@@ -54,7 +57,8 @@ it('con el cambio de contraseña pendiente no lleva la credencial a la banda', f
 
     $this->postJson('/login', ['username' => 'nuevo', 'password' => 'password'])
         ->assertOk()
-        ->assertJsonPath('band', false);
+        ->assertJsonPath('band', false)
+        ->assertJsonPath('page', null);
 });
 
 it('con una descarga pendiente lleva a ella sin pasar la credencial a la banda', function () {
@@ -66,7 +70,8 @@ it('con una descarga pendiente lleva a ella sin pasar la credencial a la banda',
     $this->postJson('/login', ['username' => 'admin2', 'password' => 'password'])
         ->assertOk()
         ->assertJsonPath('redirect', $download)
-        ->assertJsonPath('band', false);
+        ->assertJsonPath('band', false)
+        ->assertJsonPath('page', null);
 });
 
 it('con JSON una contraseña incorrecta responde el mismo mensaje genérico y no entra', function () {

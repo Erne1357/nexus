@@ -275,9 +275,9 @@ document.addEventListener('alpine:init', () => {
             const header = document.querySelector('header');
             // Lo que no voló: todo menos la liebre, «Nexus» y la credencial.
             const bandItems = header ? [...header.children].filter((element) => element.id !== 'nexus-hare' && element.tagName !== 'A' && !element.querySelector('#nexus-credential-toggle')) : [];
-            bandItems.forEach((element, index) => element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, delay: index * 30, easing: settleEasing(), fill: 'backwards' }));
-            document.getElementById('nexus-menu')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 60, easing: settleEasing(), fill: 'backwards' });
-            document.getElementById('nexus-content')?.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 420, delay: 80, easing: openEasing(), fill: 'backwards' });
+            bandItems.forEach((element, index) => element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: index * 25, easing: settleEasing(), fill: 'backwards' }));
+            document.getElementById('nexus-menu')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 240, delay: 40, easing: settleEasing(), fill: 'backwards' });
+            document.getElementById('nexus-content')?.animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 300, delay: 60, easing: openEasing(), fill: 'backwards' });
         },
 
         destroy() {
