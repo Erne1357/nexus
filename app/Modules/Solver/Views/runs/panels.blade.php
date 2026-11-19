@@ -16,7 +16,7 @@
             <header class="flex items-start gap-3 border-b border-base-300 px-5 pt-5 pb-4">
                 <div class="min-w-0">
                     <h2 id="score-title" class="text-xl font-bold">Puntaje de la corrida <span class="font-mono">{{ $number }}</span></h2>
-                    <p class="text-sm text-neutral">{{ $scopeText($run) }} · {{ $engines[$run->engine] ?? $run->engine }} · menos es mejor</p>
+                    <p class="text-sm text-neutral">{{ $scopeText($run) }} · {{ $engineNames[$run->engine] ?? $run->engine }} · menos es mejor</p>
                 </div>
                 <button type="button" class="btn btn-ghost btn-sm btn-square ms-auto" wire:click="$set('showScore', false)" aria-label="Cerrar"><x-icon name="o-x-mark" class="h-5 w-5" aria-hidden="true" /></button>
             </header>
@@ -134,6 +134,9 @@
                 <div class="grid gap-4 md:grid-cols-2">
                     <fieldset class="grid gap-2">
                         <legend class="mb-2 font-semibold">Motor</legend>
+                        @if ($unavailableEngine)
+                            <p class="text-sm text-neutral" data-testid="launch-engine-unavailable">{{ $unavailableEngine }} no está disponible ahora; se propone {{ $engines[$launchEngine] ?? $launchEngine }}.</p>
+                        @endif
                         <div class="join w-full" role="radiogroup" aria-label="Motor">
                             @foreach ($engines as $key => $label)
                                 <button type="button" role="radio" aria-checked="{{ $launchEngine === $key ? 'true' : 'false' }}" wire:click="$set('launchEngine', '{{ $key }}')"

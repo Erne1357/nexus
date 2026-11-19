@@ -7,25 +7,36 @@ use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
+use App\Modules\Scheduling\Events\GroupsCancelling;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\SessionRules;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 
 /**
  * Cancela un grupo (reglas-de-negocio.md, «Grupos y horarios»: un grupo no se borra, se cancela). La fase 3 dejó el estado,
  * el evento GroupCancelled y la ability GroupPolicy::cancel, pero no la Action; esta es la que usa armar paralelos (tarea
- * 8.8) para los grupos que sobran. No sabe de puestos: quién cancela lo decide quien la llama.
+ * 8.8) para los grupos que sobran. Autoriza adentro, con el grupo releído: GroupPolicy::cancel (`scheduling.group.manage`
+ * sobre el grupo; M16 para un campus inactivo), si no AuthorizationException. El jefe del departamento lo tiene en todos los
+ * campus y modalidades activos, porque su nombramiento no fija ninguno, así que quien arma paralelos de fábrica puede
+ * cancelar cada grupo suelto que sobra; un rol editable con `scheduling.parallels.arrange` y sin `scheduling.group.manage`
+ * no arma un arreglo que cancele grupos.
  *
  * En una transacción toma la carga (FOR SHARE), relee el grupo con bloqueo y exige la carga editable y el grupo sin
- * cancelar (LoadEditability). Un grupo con docente no se cancela: primero se le quita (confirmado el 18 de noviembre de
- * 2026 para los paralelos; para todo grupo, supuesto por confirmar). Al cancelarlo:
+ * cancelar (LoadEditability). Un grupo con docente no se cancela: primero se le quita (confirmado el 17 de noviembre de
+ * 2026 para los paralelos; para todo grupo, supuesto por confirmar). Antes de escribir pregunta con el evento con veto
+ * GroupsCancelling: Staffing lo bloquea si el grupo tiene una solicitud de cambio pendiente o aprobada (supuesto por
+ * confirmar). Al cancelarlo:
  * - sus sesiones se borran (como RemoveGroupSession, no son catálogo): un grupo cancelado pierde su horario y lo que tenía
  *   queda en su bitácora;
- * - sus acuerdos vivos (préstamos de salón y grupos compartidos) se cancelan con CancelAgreement, que avisa al dueño del salón;
+ * - sus acuerdos vivos (préstamos de salón y grupos compartidos) se cancelan con CancelAgreement; el de un préstamo avisa al
+ *   dueño del salón por la vía de siempre (AgreementCancelled → NotifyOwnerOnLoanCancelled; confirmado el 8 de noviembre
+ *   de 2026: se avisa también cuando Nexus lo cancela solo);
  * - sus cupos se quedan como estaban, de historia: un grupo cancelado no cuenta en ningún lado (supuesto por confirmar).
  *
  * Deja la bitácora `cancelled` con las sesiones que perdió y, después del commit, avisa con GroupCancelled y, si tenía
@@ -42,6 +53,7 @@ final class CancelGroup
      * @param  string  $key  la llave de los errores (`groups` cuando lo llama ArmParallelGroups)
      * @return array{group: Group, sessions: int, minutes: int}
      *
+     * @throws AuthorizationException si el actor no puede cancelar el grupo (GroupPolicy::cancel)
      * @throws ValidationException
      */
     public function handle(Group $group, User $actor, string $key = 'group'): array
@@ -49,10 +61,18 @@ final class CancelGroup
         return $this->editability->guard(fn (): array => DB::transaction(function () use ($group, $actor, $key): array {
             $this->editability->lockLoad($group);
             $group = Group::query()->lockForUpdate()->findOrFail($group->getKey());
+            Gate::forUser($actor)->authorize('cancel', $group);
             $this->editability->ensure($group, 'grupos', $key);
 
             if ($group->teacher_id !== null) {
                 throw ValidationException::withMessages([$key => "El grupo {$group->code} tiene docente: quítalo antes de cancelarlo."]);
+            }
+
+            $veto = new GroupsCancelling([$group->getKey() => SessionRules::label($group)]);
+            event($veto);
+
+            if ($veto->reasonsFor($group->getKey()) !== []) {
+                throw ValidationException::withMessages([$key => $veto->reasonsFor($group->getKey())]);
             }
 
             $sessions = GroupSession::query()->where('group_id', $group->getKey())->orderBy('day')->orderBy('starts_at')->lockForUpdate()->get();

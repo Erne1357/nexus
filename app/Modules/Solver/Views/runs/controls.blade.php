@@ -86,7 +86,7 @@
 </div>
 
 <div class="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-neutral" data-testid="run-facts">
-    <span>{{ $engines[$run->engine] ?? $run->engine }} · {{ $when($run->created_at) }} · {{ $run->creator->name ?? '—' }}@if ($output) · tardó {{ $output->metrics->elapsedSeconds < 60 ? round($output->metrics->elapsedSeconds, 1).' s' : intdiv((int) $output->metrics->elapsedSeconds, 60).' min '.((int) $output->metrics->elapsedSeconds % 60).' s' }}@endif</span>
+    <span>{{ $engineNames[$run->engine] ?? $run->engine }} · {{ $when($run->created_at) }} · {{ $run->creator->name ?? '—' }}@if ($output) · tardó {{ $output->metrics->elapsedSeconds < 60 ? round($output->metrics->elapsedSeconds, 1).' s' : intdiv((int) $output->metrics->elapsedSeconds, 60).' min '.((int) $output->metrics->elapsedSeconds % 60).' s' }}@endif</span>
     <x-core::status-badge :tone="$run->status->tone()" :icon="$run->status->icon()" :label="$run->status->label()" />
     @if ($output)
         <button type="button" wire:click="openScore" class="inline-flex items-center rounded-selector leading-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" data-testid="hard-badge">

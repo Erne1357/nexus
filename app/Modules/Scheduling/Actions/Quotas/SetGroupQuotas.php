@@ -5,7 +5,9 @@ namespace App\Modules\Scheduling\Actions\Quotas;
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Actions\Agreements\CancelAgreement;
+use App\Modules\AcademicLoad\Actions\Agreements\ChangeAgreementSeats;
 use App\Modules\AcademicLoad\Enums\AgreementKind;
+use App\Modules\AcademicLoad\Enums\AgreementStatus;
 use App\Modules\AcademicLoad\Models\InterdepartmentalAgreement;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Events\GroupQuotasChanged;
@@ -25,8 +27,9 @@ use Illuminate\Validation\ValidationException;
  * Solo maneja cupos que ya existen y carreras del mismo departamento que imparte (que además deben estar activas y
  * ofrecerse en el campus del grupo): se crean, cambian o quitan directo. Una carrera de otro departamento sin cupo no
  * se agrega aquí, sino que se propone con ProposeGroupQuota (error `quotas.<id>`: «Propón primero el cupo a
- * <depto>.»). Si de otro departamento ya tiene cupo, cambia sus lugares directo y, si deja de venir, su cupo se borra
- * y su acuerdo aceptado se cancela (supuesto por confirmar). Las propuestas no se tocan: se retiran con
+ * <depto>.»). Si de otro departamento ya tiene cupo, cambia sus lugares directo y su acuerdo aceptado toma la cifra nueva
+ * (ChangeAgreementSeats: la vigente es la del cupo; supuesto por confirmar); si deja de venir, su cupo se borra y su acuerdo
+ * aceptado se cancela (supuesto por confirmar). Las propuestas no se tocan: se retiran con
  * WithdrawGroupQuotaProposal.
  *
  * HC-07: la suma de los cupos que quedan más los lugares que apartan las propuestas vivas del grupo
@@ -46,6 +49,7 @@ final class SetGroupQuotas
     public function __construct(
         private readonly QuotaRules $rules,
         private readonly CancelAgreement $cancel,
+        private readonly ChangeAgreementSeats $agreementSeats,
     ) {}
 
     /**
@@ -87,6 +91,12 @@ final class SetGroupQuotas
                 }
 
                 $this->write($group, $seatsByCareer, $quotas);
+
+                foreach ($accepted as $careerId => $agreement) {
+                    if ($agreement->status === AgreementStatus::Accepted && array_key_exists($careerId, $seatsByCareer)) {
+                        $this->agreementSeats->handle($agreement, $seatsByCareer[$careerId], $actor);
+                    }
+                }
 
                 if ($before == $seatsByCareer) {
                     return;
