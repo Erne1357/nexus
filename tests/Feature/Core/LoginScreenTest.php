@@ -89,6 +89,11 @@ it('la banda a la que llega la credencial tiene las medidas de la banda de la ap
         ['header > a', '[data-arrival="wordmark"]', null],
         ['#nexus-credential-toggle', '[data-arrival="avatar"]', 'parent'],
         ['#nexus-credential-toggle > span', '[data-arrival="avatar"]', null],
+        // Lo que no vuela pero ocupa su lugar, para que la credencial caiga donde estará.
+        ['nav[aria-label="Ruta"]', '[data-arrival="route"]', null],
+        ['[data-testid="menu-search-trigger"]', '[data-arrival="search"]', null],
+        ['button[aria-label="Buscar"]', '[data-arrival="search-icon"]', null],
+        ['[data-testid="bell-placeholder"]', '[data-arrival="bell"]', null],
     ];
 
     foreach ($pairs as [$real, $copy, $parent]) {
