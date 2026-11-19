@@ -408,6 +408,7 @@ it('si una consulta de avance falla (5xx, sin conexión o respuesta rara), cance
     'puerta de enlace (502)' => [['status' => 502, 'body' => 'Bad Gateway'], SolverServiceUnavailable::class],
     'respuesta sin estado' => [['status' => 200, 'body' => ['progress' => 10]], SolverServiceUnavailable::class],
     'estado desconocido' => [['status' => 200, 'body' => ['run_id' => 'x', 'status' => 'paused']], CpSatRunFailed::class],
+    'sin conexión en todos los intentos' => ['connection-lost', SolverServiceUnavailable::class],
 ]);
 
 it('una corrida que ya terminó en el servicio (fallida o cancelada allá) no se vuelve a cancelar', function (string $recording) {
