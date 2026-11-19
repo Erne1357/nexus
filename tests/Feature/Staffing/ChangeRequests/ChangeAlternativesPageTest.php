@@ -6,6 +6,7 @@ use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\ChooseChangeAlternative;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 
 require_once __DIR__.'/ChangeAlternativesSupport.php';
@@ -137,6 +138,34 @@ it('buscando: mientras el motor corre en la cola la pantalla pregunta cada 2 seg
         ->assertSee('vuelve a pedirlas');
 });
 
+it('el poll lee solo las alternativas mientras siguen calculándose y, al terminar, pinta y avisa solo a quien decide', function () {
+    $request = altProposed($this->w);
+    $ready = $request->alternatives;
+    $computing = ['status' => 'computing', 'calculation_id' => 'c1', 'requested_at' => now()->toIso8601String(), 'started_at' => now()->toIso8601String(), 'requested_by' => $this->w->jefe->id];
+    $request->forceFill(['alternatives' => $computing])->save();
+    $jefe = altPage($this->w->jefe, $request)->assertSee('Calculando alternativas…');
+    $coord = altPage($this->w->coordIsc, $request)->assertSee('Calculando alternativas…');
+
+    $this->actingAs($this->w->jefe);
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $jefe->call('pollAlternatives');
+    DB::disableQueryLog();
+
+    expect(collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'change_requests'))->count())->toBe(1)
+        ->and(collect(DB::getQueryLog())->filter(fn (array $query): bool => str_contains($query['query'], 'group_sessions'))->count())->toBe(0);
+
+    $request->forceFill(['alternatives' => $ready])->save();
+
+    $this->actingAs($this->w->coordIsc);
+    $coord->call('pollAlternatives')->assertSee('Alternativa A')->assertDontSeeHtml('wire:poll.2s="pollAlternatives"');
+    expect(lastToastOf($coord))->toBeNull();
+
+    $this->actingAs($this->w->jefe);
+    $jefe->call('pollAlternatives')->assertSee('Alternativa A');
+    expect(lastToastOf($jefe)['title'] ?? '')->toContain('sin choques duros');
+});
+
 it('solo avisos: lo pedido sin choques duros se aprueba como se pidió y no se buscan alternativas', function () {
     $request = altRequest($this->w, '11:00');
 
@@ -171,7 +200,10 @@ it('aprobada con una alternativa, la coordinación la aplica de una vez y la sol
         ->assertSeeHtml('data-testid="open-editor"')
         ->assertSee('solicitud='.$request->id, false)
         ->call('applyAlternative')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertSee('Lo aplicado · alternativa A')
+        ->assertSee('Movida')
+        ->assertDontSee('Quitada');
 
     expect($request->fresh()->status)->toBe(ChangeRequestStatus::Applied)
         ->and(altLiveStarts($this->w->group))->toBe(['09:00']);
@@ -182,7 +214,10 @@ it('aprobada sin alternativa, el pie es el de siempre: abrir en el editor y marc
 
     altPage($this->w->coordIsc, $request)
         ->assertDontSeeHtml('data-testid="apply-alternative"')
-        ->assertSeeHtml('data-testid="apply-request"');
+        ->assertSeeHtml('data-testid="apply-request"')
+        ->assertSeeHtml('data-testid="request-impact"')
+        ->assertSee('Sin choques duros')
+        ->assertSee('Lo que se mueve');
 });
 
 it('alcance: el jefe de otro departamento no ve la solicitud, y el docente que la pidió no busca, no aprueba ni aplica', function () {
@@ -213,8 +248,25 @@ it('«Abrir en el editor» lleva al grupo con la alternativa elegida por colocar
         ->assertSee('Alternativa A')
         ->assertSee('Investigación de Operaciones');
 
-    Livewire::withQueryParams(['grupo' => $this->w->group->id, 'solicitud' => $request->id, 'modalidad' => 'PRES', 'campus' => 'C2'])
-        ->actingAs($this->w->jefeCb)
-        ->test('scheduling::pages.schedule-editor')
+    $editor = fn (User $user, string $groupId, array $extra = []) => Livewire::withQueryParams(['grupo' => $groupId, 'modalidad' => 'PRES', 'campus' => 'C2', ...$extra])
+        ->actingAs($user)->test('scheduling::pages.schedule-editor');
+    $count = function (Closure $render): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $render();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $plain = $count(fn () => $editor($this->w->coordIsc, $this->w->group->id));
+    $withStrip = $count(fn () => $editor($this->w->coordIsc, $this->w->group->id, ['solicitud' => $request->id]));
+
+    expect($withStrip - $plain)->toBeLessThanOrEqual(10);
+
+    $editor($this->w->coordIind, $this->w->other->id, ['solicitud' => $request->id])
+        ->assertOk()
         ->assertDontSeeHtml('data-testid="pending-placements"');
+
+    $editor($this->w->jefeCb, $this->w->group->id, ['solicitud' => $request->id])->assertForbidden();
 });
