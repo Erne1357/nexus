@@ -5,8 +5,8 @@
     clasificar, RA-09); y las sugerencias de la tarea 8.3a con los grupos de ahora (scheduling::reanalysis.suggestions).
     Al pie fijo, a quien no ajusta, por qué; a quien ajusta, cuántas eligió y «Aplicar las N elegidas» (`btn-primary`,
     deshabilitado sin ninguna), que confirma con el diálogo de Nexus (tono `error` si cierra un grupo) lo que pasa: cuántas
-    de cada tipo, qué grupos se cierran y qué horario pierden. En celular, «Cerrar» y «Aplicar» en dos columnas de 44 px
-    bajo la cuenta. `close()` es del x-drawer.
+    de cada tipo, qué grupos se cierran y qué horario pierden. En celular, la cuenta arriba y debajo «Cerrar» y «Aplicar»
+    (el resto del ancho), de 44 px. `close()` es del x-drawer.
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-[860px] p-0!" role="dialog" aria-modal="true" aria-labelledby="suggestions-title" data-testid="suggestions-drawer">
@@ -95,7 +95,7 @@
                         </p>
                     @endif
                     @if ($batch)
-                        <div class="grid grid-cols-2 gap-2 max-md:w-full md:flex md:items-center">
+                        <div class="grid grid-cols-[auto_minmax(0,1fr)] gap-2 max-md:w-full md:flex md:items-center">
                             <button type="button" class="btn btn-ghost max-md:h-11" @click="close()">Cerrar</button>
                             <button
                                 type="button"
