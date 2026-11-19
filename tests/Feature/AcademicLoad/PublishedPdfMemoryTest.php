@@ -149,3 +149,28 @@ it('el job sube su tope de memoria mientras arma el exporte, sin bajar uno mayor
     'mayor que el del job' => ['3G', '3G'],
     'sin tope' => ['-1', '-1'],
 ]);
+
+it('al terminar, el job regresa el tope de memoria al de antes, también si el exporte falla', function (bool $fails) {
+    Storage::fake(PublishedExports::DISK);
+    $previous = (string) ini_get('memory_limit');
+    $start = (string) (memory_get_usage(true) + 32 * 1048576);
+    ini_set('memory_limit', $start);
+
+    try {
+        if ($fails) {
+            Storage::shouldReceive('disk')->andThrow(new RuntimeException('el disco no responde'));
+        }
+
+        try {
+            (new GeneratePublishedExport(publishedPdfMemoryProbe()))->handle(app(PublishedExports::class));
+        } catch (RuntimeException) {
+            // El fallo sale tal cual; lo que importa es el tope después.
+        }
+
+        $after = (string) ini_get('memory_limit');
+    } finally {
+        ini_set('memory_limit', $previous);
+    }
+
+    expect($after)->toBe($start);
+})->with(['termina bien' => [false], 'el exporte falla' => [true]]);
