@@ -58,6 +58,14 @@
                 <span class="flex items-center justify-center text-neutral" aria-hidden="true">
                     <x-icon name="o-arrow-right" class="h-5 w-5 @max-[34rem]:rotate-90" />
                 </span>
+                @if ($approvedLines !== [])
+                    <div class="rounded-field border border-success/40 bg-success/7 px-3.5 py-3" data-testid="request-approved-box">
+                        <span class="text-xs font-medium text-neutral">{{ $request->status === ChangeRequestStatus::Applied ? 'Aplicada' : 'Aprobada' }} · alternativa {{ $alternatives['chosen']['letter'] }}</span>
+                        @foreach ($approvedLines as $line)
+                            <p class="mt-0.5 font-mono text-sm [word-spacing:-0.25em]">@if ($line['label'])<span class="font-semibold">{{ $line['label'] }}</span> · @endif{{ $line['line'] }}</p>
+                        @endforeach
+                    </div>
+                @else
                 <div class="rounded-field border border-info/40 bg-info/10 px-3.5 py-3">
                     <span class="text-xs font-medium text-neutral">Propuesta</span>
                     <p class="mt-0.5 break-words font-semibold">{{ $request->proposed['description'] ?? '' }}</p>
@@ -68,71 +76,25 @@
                         <p class="mt-0.5 text-sm">Salón <span class="font-mono font-semibold">{{ $request->proposed['room'] }}</span></p>
                     @endif
                 </div>
+                @endif
             </div>
         </section>
 
-        @if ($request->status->isOpen())
-            @php
-                $impact = $request->impact;
-                $assessable = (bool) ($impact['assessable'] ?? false);
-                $hard = $impact['hard'] ?? [];
-                $soft = $impact['soft'] ?? [];
-                $impactGroups = collect($impact['affected_groups'] ?? [])->keyBy('id');
-            @endphp
-            <section aria-labelledby="request-impact-title" data-testid="request-impact">
-                <div class="mb-2 flex items-center justify-between gap-2">
-                    <h3 id="request-impact-title" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Impacto</h3>
-                    @if ($canDecide)
-                        <x-button label="Recalcular impacto" icon="o-arrow-path" class="btn-ghost btn-sm max-md:h-11 max-md:min-h-11" wire:click="recalculateImpact" spinner="recalculateImpact" data-testid="recalculate-impact" />
-                    @endif
-                </div>
-                @if ($impact === null)
-                    <p class="text-sm text-neutral" data-testid="impact-none">Todavía no se calcula.</p>
-                @elseif (! $assessable)
-                    <p class="text-sm text-neutral" data-testid="impact-unassessable">La propuesta no trae un horario o un salón concretos: no se pudo simular.</p>
-                @else
-                    @if ($hard === [])
-                        <x-core::status-badge tone="success" label="Sin choques" icon="o-check-circle" data-testid="impact-clear" />
-                    @else
-                        <ul class="space-y-2" data-testid="impact-hard">
-                            @foreach ($hard as $rule)
-                                <li class="rounded-field border border-error/40 bg-error/10 px-3.5 py-3" data-testid="impact-rule">
-                                    <div class="flex items-start gap-2">
-                                        <span class="badge badge-error badge-soft h-6.5 shrink-0 font-mono font-medium">{{ $rule['rule'] }}</span>
-                                        <div class="min-w-0 space-y-0.5 text-sm">
-                                            @foreach ($rule['messages'] as $message)
-                                                <p class="break-words">{{ $message }}</p>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                    @php($ruleGroups = collect($rule['groups'])->map(fn ($id) => $impactGroups->get($id))->filter())
-                                    @if ($ruleGroups->isNotEmpty())
-                                        <ul class="mt-2 flex flex-wrap gap-1.5">
-                                            @foreach ($ruleGroups as $other)
-                                                <li class="badge badge-neutral badge-soft h-auto min-h-6.5 max-w-full gap-1.5 py-0.5 text-start font-medium"><span class="font-mono">{{ $other['code'] }}</span> {{ $other['subject'] }}@if ($other['teacher']) <span class="text-neutral">· {{ $other['teacher'] }}</span>@endif</li>
-                                            @endforeach
-                                        </ul>
-                                    @endif
-                                </li>
-                            @endforeach
-                        </ul>
-                    @endif
-                    @if ($soft !== [])
-                        <details class="mt-2 rounded-field border border-base-300 px-3.5 py-2.5 text-sm" data-testid="impact-soft">
-                            <summary class="cursor-pointer font-medium max-md:py-1.5">{{ count($soft) }} {{ count($soft) === 1 ? 'aviso' : 'avisos' }}</summary>
-                            <ul class="mt-2 space-y-1">
-                                @foreach ($soft as $rule)
-                                    @foreach ($rule['messages'] as $message)
-                                        <li class="break-words"><span class="font-mono text-neutral">{{ $rule['rule'] }}</span> {{ $message }}</li>
-                                    @endforeach
-                                @endforeach
-                            </ul>
-                        </details>
-                    @endif
-                    @if (($impact['affected_teachers'] ?? []) !== [])
-                        <p class="mt-2 text-sm text-neutral" data-testid="impact-teachers">Docentes afectados: <span class="text-base-content">{{ collect($impact['affected_teachers'])->pluck('name')->implode(', ') }}</span></p>
-                    @endif
+        @if ($request->status === ChangeRequestStatus::Pending && $alternatives !== null)
+            @include('staffing::change-requests.alternatives', ['alternatives' => $alternatives])
+        @elseif ($alternatives !== null && $alternatives['chosen'] !== null && $alternatives['selected'] !== null)
+            <section aria-labelledby="request-chosen-title" data-testid="request-chosen" class="min-w-0">
+                <h3 id="request-chosen-title" class="mb-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $request->status === ChangeRequestStatus::Applied ? 'Lo aplicado' : 'Lo aprobado' }} · alternativa {{ $alternatives['chosen']['letter'] }}</h3>
+                @if ($staleAlternatives && $request->status === ChangeRequestStatus::Approved)
+                    <div class="mb-3 alert alert-warning alert-soft items-start text-sm" role="alert" data-testid="alternatives-stale">
+                        <x-icon name="o-exclamation-triangle" class="h-5 w-5 shrink-0" aria-hidden="true" />
+                        <div class="min-w-0">
+                            <p class="font-semibold">Esto cambió desde que se aprobó la alternativa.</p>
+                            <p>El horario de esos grupos o lo que los rodea ya no es el mismo: no se puede escribir tal cual. Acomódala a mano en el editor de horarios y luego márcala como aplicada.</p>
+                        </div>
+                    </div>
                 @endif
+                @include('staffing::change-requests.alternative-panel', ['option' => $alternatives['selected'], 'stale' => $staleAlternatives && $request->status === ChangeRequestStatus::Approved, 'tabbed' => false])
             </section>
         @endif
 
@@ -152,7 +114,7 @@
                 @if ($request->decided_at !== null)
                     <li class="relative">
                         <span aria-hidden="true" @class(['absolute -start-[1.4rem] top-1.5 h-2.5 w-2.5 rounded-full', 'bg-error' => $request->status === ChangeRequestStatus::Rejected, 'bg-primary' => $request->status !== ChangeRequestStatus::Rejected])></span>
-                        <p class="text-sm"><span class="font-semibold">{{ $request->status === ChangeRequestStatus::Rejected ? 'Rechazó' : 'Aprobó' }}</span> {{ $request->decidedBy?->name }}</p>
+                        <p class="text-sm"><span class="font-semibold">{{ $request->status === ChangeRequestStatus::Rejected ? 'Rechazó' : 'Aprobó' }}</span> {{ $request->decidedBy?->name }}@if ($alternatives !== null && $alternatives['chosen'] !== null) · con la alternativa {{ $alternatives['chosen']['letter'] }} del motor (puntaje {{ $alternatives['chosen']['score'] }})@endif</p>
                         <p class="text-xs text-neutral tabular-nums">{{ $when($request->decided_at) }}</p>
                         @if ($request->decision_comment)
                             <blockquote class="mt-1.5 max-w-[65ch] break-words rounded-field bg-base-200 px-3 py-2 text-sm" data-testid="request-comment">{{ $request->decision_comment }}</blockquote>
@@ -177,27 +139,75 @@
     </div>
 
     @if ($request->status === ChangeRequestStatus::Pending)
-        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4" data-testid="request-decision">
+        @php
+            $option = $alternatives['selected'] ?? null;
+            $withAlternative = $option !== null && $option['letter'] !== null;
+            $hasAlternatives = ($alternatives['items'] ?? 0) > 0;
+            $staleChoice = $withAlternative && $staleAlternatives;
+            $blockedClashes = $alternatives['pedidoHard'] ?? array_sum(array_map(fn ($rule) => count($rule['messages'] ?? []), $request->impact['hard'] ?? []));
+            $softCount = count($request->impact['soft'] ?? []);
+            $plural = fn (int $n) => $n === 1 ? 'choque duro' : 'choques duros';
+        @endphp
+        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4 max-md:px-4" data-testid="request-decision">
             @if ($canDecide)
+                @if (! $withAlternative && $blockedClashes === 0 && $softCount > 0 && $alternatives !== null && $alternatives['assessable'])
+                    <p class="text-[12.5px] text-neutral">Lo pedido deja {{ $softCount }} {{ $softCount === 1 ? 'aviso' : 'avisos' }}; se puede aprobar así.</p>
+                @endif
                 <x-textarea label="Comentario" wire:model="comment" rows="2" maxlength="{{ $maxText }}" placeholder="Opcional al aprobar" data-testid="decision-comment" />
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
-                @php($blockedClashes = array_sum(array_map(fn ($rule) => count($rule['messages'] ?? []), $request->impact['hard'] ?? [])))
-                @if ($blockedClashes > 0)
-                    <p class="text-sm text-error" data-testid="approve-blocked">No se puede aprobar: el cambio deja {{ $blockedClashes }} {{ $blockedClashes === 1 ? 'choque duro' : 'choques duros' }}. Recházalo o pide alternativas al motor.</p>
+                @error('alternative')
+                    @unless ($staleChoice)
+                        <p class="text-sm text-error">{{ $message }}</p>
+                    @endunless
+                @enderror
+                @if ($withAlternative && $staleChoice)
+                    <p class="text-sm text-error" id="approve-why" data-testid="approve-stale">Las alternativas son de antes de un cambio en el horario: busca otra vez.</p>
+                @elseif (! $withAlternative && $blockedClashes > 0)
+                    <p class="text-sm text-error" id="approve-why" data-testid="approve-blocked">{{ $hasAlternatives
+                        ? "No se puede aprobar lo pedido: deja {$blockedClashes} {$plural($blockedClashes)}. Elige una alternativa o recházala."
+                        : "No se puede aprobar: el cambio deja {$blockedClashes} {$plural($blockedClashes)}. Recházala o busca alternativas." }}</p>
                 @endif
                 <div class="flex flex-wrap justify-end gap-2">
                     <x-button label="Rechazar" icon="o-x-circle" class="btn-outline btn-error max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="reject" spinner="reject" data-testid="reject-request" />
-                    <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" :disabled="$blockedClashes > 0" data-testid="approve-request" />
+                    @if ($withAlternative)
+                        <x-button :label="'Aprobar con la alternativa '.$option['letter']" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approveWithAlternative" spinner="approveWithAlternative" :disabled="$staleChoice" aria-describedby="{{ $staleChoice ? 'approve-why' : '' }}" data-testid="approve-alternative" />
+                    @else
+                        <x-button :label="$hasAlternatives ? 'Aprobar lo pedido' : 'Aprobar'" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" :disabled="$blockedClashes > 0" aria-describedby="{{ $blockedClashes > 0 ? 'approve-why' : '' }}" data-testid="approve-request" />
+                    @endif
                 </div>
             @else
                 <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />La revisa el jefe del departamento.</p>
             @endif
         </footer>
     @elseif ($request->status === ChangeRequestStatus::Approved)
-        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4" data-testid="request-application">
-            @if ($canApply)
+        @php
+            $chosenLetter = $alternatives['chosen']['letter'] ?? null;
+            $chosenGroups = $chosenLetter === null ? 0 : count($alternatives['chosen']['option']['groups']);
+        @endphp
+        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4 max-md:px-4" data-testid="request-application">
+            @if ($canApply && $chosenLetter !== null)
+                <p class="text-sm">«Aplicar la alternativa» escribe de una vez el horario de {{ $chosenGroups === 1 ? 'su grupo' : "los {$chosenGroups} grupos de su cadena" }} y la deja aplicada. Si prefieres acomodarla a mano, ábrela en el editor con sus sesiones por colocar y luego márcala como aplicada.</p>
+                @error('status')
+                    <p class="text-sm text-error">{{ $message }}</p>
+                @enderror
+                @error('alternative')
+                    @unless ($staleAlternatives)
+                        <p class="text-sm text-error">{{ $message }}</p>
+                    @endunless
+                @enderror
+                @if ($staleAlternatives)
+                    <p class="text-sm text-error" id="apply-why" data-testid="apply-stale">La alternativa ya no se puede escribir tal cual: acomódala en el editor.</p>
+                @endif
+                <div class="flex flex-wrap justify-end gap-2">
+                    @if ($editorUrl !== null)
+                        <a href="{{ $editorUrl }}" wire:navigate class="btn btn-outline max-md:h-11 max-md:min-h-11 max-md:flex-1" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" aria-hidden="true" />Abrir en el editor</a>
+                    @endif
+                    <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-ghost max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
+                    <x-button :label="'Aplicar la alternativa '.$chosenLetter" icon="o-bolt" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="applyAlternative" spinner="applyAlternative" :disabled="$staleAlternatives" aria-describedby="{{ $staleAlternatives ? 'apply-why' : '' }}" data-testid="apply-alternative" />
+                </div>
+            @elseif ($canApply)
                 <p class="text-sm">{{ $isSchedule ? 'Acomoda el cambio en el editor de horarios y luego márcala como aplicada.' : 'Asigna el salón y luego márcala como aplicada.' }}</p>
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
@@ -209,8 +219,13 @@
                     <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
                 </div>
             @else
-                <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />
-                    {{ $isSchedule ? "La aplica la coordinación de {$career?->code} en el editor de horarios." : 'La aplica el jefe del departamento al asignar salones.' }}
+                <p class="flex items-start gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span>{{ match (true) {
+                        $chosenLetter !== null && $isSchedule => "La aplica la coordinación de {$career?->code}: escribe la alternativa {$chosenLetter} de una vez o la acomoda en el editor de horarios.",
+                        $chosenLetter !== null => "La aplica el jefe del departamento: escribe la alternativa {$chosenLetter} de una vez o la acomoda en el editor.",
+                        $isSchedule => "La aplica la coordinación de {$career?->code} en el editor de horarios.",
+                        default => 'La aplica el jefe del departamento al asignar salones.',
+                    } }}</span>
                 </p>
             @endif
         </footer>
