@@ -13,8 +13,9 @@
 | - Entrar: el formulario se manda pidiendo JSON (LoginResponse). Si no coincide, el aviso sale arriba del formulario y
 |   la credencial se mece. Si entra, la ficha se llena, la cabecera se vuelve la banda, la liebre salta a su esquina, la
 |   ficha sube a la credencial de arriba a la derecha y la página cambia; nexus.entrada en sessionStorage le dice a la
-|   siguiente (nexusShell, app.js) que su contenido llegue. Cualquier otra respuesta (419, error, sin red) manda el
-|   formulario como siempre.
+|   siguiente (nexusShell, app.js) que su contenido llegue. Si la sesión del formulario venció (419), la página se carga
+|   de nuevo; si el servidor falla o no hay red, sale un aviso. El formulario nunca se manda dos veces. Sin JavaScript
+|   entra como siempre.
 | Con prefers-reduced-motion nada se anima ni avanza solo.
 */
 
@@ -363,31 +364,42 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
 
-            if (response && (response.status === 422 || response.status === 429) && data) {
-                this.busy = false;
-                this.error = data.errors?.username?.[0] ?? data.errors?.password?.[0] ?? data.message ?? '';
-                this.markInvalid(true);
-                this.sway();
-                const password = form.querySelector('[name="password"]');
-                password?.focus();
-                password?.select();
+            // La página se quedó abierta más que la sesión: con una nueva, la persona vuelve a escribir.
+            if (response?.status === 419) {
+                window.location.reload();
                 return;
             }
 
-            // Sesión vencida (419), error o sin red: el formulario se manda como siempre y el servidor responde.
-            form.submit();
+            const refused = response && (response.status === 422 || response.status === 429) && data;
+            this.busy = false;
+            this.error = refused
+                ? (data.errors?.username?.[0] ?? data.errors?.password?.[0] ?? data.message ?? '')
+                : 'No se pudo entrar. Revisa tu conexión e intenta de nuevo en un momento.';
+            this.markInvalid(Boolean(refused));
+            this.sway();
+            if (refused) {
+                const password = form.querySelector('[name="password"]');
+                password?.focus();
+                password?.select();
+            }
         },
 
+        /* La sesión ya está abierta: pase lo que pase con el movimiento, la página cambia. */
         async enter({ redirect, band, credential }) {
             this.leaving = true;
-            this.credential = credential;
-            await this.$nextTick();
-            await this.reveal();
-            if (band && !reducedMotion()) {
-                await this.arrive();
-                storage.set(ARRIVAL_KEY, '1', 'sessionStorage');
+            try {
+                this.credential = credential;
+                await this.$nextTick();
+                await this.reveal();
+                if (band && !reducedMotion()) {
+                    await this.arrive();
+                    storage.set(ARRIVAL_KEY, '1', 'sessionStorage');
+                }
+            } catch {
+                // Sin la animación completa: la página siguiente llega sin ella.
+            } finally {
+                window.location.assign(redirect);
             }
-            window.location.assign(redirect);
         },
 
         /** Entrar 1: los datos aparecen en la ficha como recién impresos y los renglones vacíos se van. */

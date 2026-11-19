@@ -276,7 +276,7 @@ final class FortifyServiceProvider extends ServiceProvider
     {
         $message = __('auth.throttle', ['seconds' => $headers['Retry-After'] ?? 60]);
 
-        if ($request->expectsJson()) {
+        if ($request->wantsJson()) {
             return new JsonResponse(['message' => $message, 'errors' => [Fortify::username() => [$message]]], Response::HTTP_TOO_MANY_REQUESTS, $headers);
         }
 

@@ -57,6 +57,18 @@ it('con el cambio de contraseña pendiente no lleva la credencial a la banda', f
         ->assertJsonPath('band', false);
 });
 
+it('con una descarga pendiente lleva a ella sin pasar la credencial a la banda', function () {
+    User::factory()->admin()->create(['username' => 'admin2']);
+    $download = url('/horarios/20271/PRES/exportes/plantilla');
+
+    $this->get($download)->assertRedirect(route('login'));
+
+    $this->postJson('/login', ['username' => 'admin2', 'password' => 'password'])
+        ->assertOk()
+        ->assertJsonPath('redirect', $download)
+        ->assertJsonPath('band', false);
+});
+
 it('con JSON una contraseña incorrecta responde el mismo mensaje genérico y no entra', function () {
     User::factory()->create(['username' => '19110001']);
 
