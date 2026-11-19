@@ -30,7 +30,7 @@ final readonly class ReanalysisSuggestion
     /**
      * @param  list<string>  $evidence
      * @param  list<string>  $effect
-     * @param  list<array{sessionId: string, when: string, from: string, fromId: string, to: AdvisorRoom}>  $moves
+     * @param  list<array{sessionId: string, when: string, from: string, fromId: string, to: AdvisorRoom, day: int, startsAt: string, endsAt: string}>  $moves
      * @param  list<array{groupId: string, groupCode: string, careerId: string, careerCode: string, seats: int}>  $relocations
      * @param  array<string, array{capacity: int, quotas: array<string, int>}>  $expected
      */
