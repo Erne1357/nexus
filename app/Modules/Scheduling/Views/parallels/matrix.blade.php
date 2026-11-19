@@ -1,6 +1,7 @@
 {{--
     La matriz carrera × grupo del drawer de «Paralelos» (maqueta B), desde 1024 px. Un renglón por carrera que cuenta: su
-    clave y el estado de su parte, sus esperados, sus completos (con − y + si se edita; debajo, los esperados que llevan) y
+    clave y el estado de su parte, sus esperados, sus completos (con − y + si se edita; al lado, los esperados que llevan,
+    hasta la capacidad de cada uno; el encabezado dice el tamaño de un completo, ParallelSubject::size(), E-08) y
     un campo por mixto con cuántos de sus esperados van ahí; al final, si le quedan esperados de menos (no caben en ningún
     grupo) o de más. Cada mixto
     dice en su encabezado si es un grupo que ya existe («es 2 de ISIC») o nuevo, y se quita con su ×. Al pie, por grupo,
@@ -68,7 +69,7 @@
                             @if ($editable)
                                 <button type="button" wire:click="step('{{ $id }}', 1)" class="btn btn-ghost btn-xs btn-square" aria-label="Un completo más de {{ $career->career->code }}"><x-icon name="o-plus" class="h-3.5 w-3.5" aria-hidden="true" /></button>
                             @endif
-                            <span class="inline-block min-w-8 text-right font-mono text-[12.5px] text-neutral tabular-nums">{{ $draft->full[$id] > 0 ? $draft->full[$id] * $row->size() : '' }}</span>
+                            <span class="inline-block min-w-8 text-right font-mono text-[12.5px] text-neutral tabular-nums" data-testid="parallels-full-seats-{{ $career->career->code }}">{{ $draft->full[$id] > 0 ? $draft->expectedInFull($id) : '' }}</span>
                         </span>
                     </td>
                     @foreach ($draft->mixed as $column => $shares)

@@ -275,6 +275,12 @@ final class ParallelsQuery
     }
 
     /**
+     * La cuenta de paralelos va con el tamaño de un completo: el objetivo de la materia (SuggestedGroups), sin pasar la
+     * capacidad con que nace un grupo (GroupCapacity, la del salón por defecto). Con laboratorio (25) y un salón de 23, los
+     * completos son de 23: el encabezado del drawer, la sugerencia y lo que lleva cada completo dicen los lugares que de
+     * verdad tiene el grupo (incidencia E-08 del ensayo 8.11; supuesto por confirmar). Un salón más grande que el objetivo
+     * no agranda los completos.
+     *
      * @param  Collection<int, ParallelCareer>  $entries
      * @param  list<ParallelExisting>  $existing
      * @param  array<string, array<string, int>>|null  $lastArrangement  la foto del último armado (lastArrangements())
@@ -285,7 +291,8 @@ final class ParallelsQuery
         [$careers, $withoutStudents] = $counting->partition(fn (ParallelCareer $career): bool => $career->expected > 0);
         $careers = $careers->values();
 
-        $parallels = ParallelGroups::suggest($sizes->sizeFor((bool) $item->subject->needs_lab), $careers
+        $target = $sizes->sizeFor((bool) $item->subject->needs_lab);
+        $parallels = ParallelGroups::suggest($newCapacity > 0 ? min($target, $newCapacity) : $target, $careers
             ->mapWithKeys(fn (ParallelCareer $career): array => [$career->career->getKey() => ['expected' => $career->expected, 'requested' => $career->requested]])
             ->all());
         $byId = collect($existing)->keyBy('id');
@@ -354,7 +361,8 @@ final class ParallelsQuery
      * Los grupos de la sugerencia con sus cupos, sin pasar la capacidad real de cada uno (la del grupo que se queda o la de
      * uno nuevo, GroupCapacity), y los esperados que no caben en ninguno (supuesto por confirmar):
      *
-     * - un grupo de una sola carrera le da toda su capacidad; lo que pasa de ella sobra;
+     * - un grupo de una sola carrera le da toda su capacidad y lleva sus esperados hasta ella; lo que pasa sobra (y se cuenta
+     *   una sola vez: E-08 del ensayo 8.11);
      * - en un mixto cada carrera recibe sus esperados en exclusiva y lo demás queda libre (confirmado el 17 de noviembre de
      *   2026); si suman más que la capacidad, sobra lo de la carrera con más lugares;
      * - lo que sobra de cada carrera se acomoda en los lugares libres de otros mixtos, primero donde ya va la carrera, y lo que
@@ -389,6 +397,7 @@ final class ParallelsQuery
                 $expected = array_filter($expected);
             } else {
                 $overflow[$owner] = ($overflow[$owner] ?? 0) + max(0, $expected[$owner] - $capacity);
+                $expected[$owner] = min($expected[$owner], $capacity);
             }
 
             $slots[$index] = ['expected' => $expected, 'owner' => $owner, 'capacity' => $capacity, 'mixed' => $mixed, 'keeps' => $keeps];
