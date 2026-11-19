@@ -164,12 +164,14 @@
             $softCount = count($request->impact['soft'] ?? []);
             $plural = fn (int $n) => $n === 1 ? 'choque duro' : 'choques duros';
         @endphp
-        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4 max-md:px-4" data-testid="request-decision">
+        {{-- El pie fijo es compacto (el comentario en un renglón que crece, los botones en uno) y deja de ser fijo en
+             pantallas bajas, para no comerse el panel. --}}
+        <footer class="sticky bottom-0 z-10 space-y-2.5 border-t border-base-300 bg-base-100 px-5 py-3 max-md:px-4 [@media(max-height:44rem)]:static" data-testid="request-decision">
             @if ($canDecide)
                 @if (! $withAlternative && $blockedClashes === 0 && $softCount > 0 && $alternatives !== null && $alternatives['assessable'])
                     <p class="text-[12.5px] text-neutral">Lo pedido deja {{ $softCount }} {{ $softCount === 1 ? 'aviso' : 'avisos' }}; se puede aprobar así.</p>
                 @endif
-                <x-textarea label="Comentario" wire:model="comment" rows="2" maxlength="{{ $maxText }}" placeholder="Opcional al aprobar" data-testid="decision-comment" />
+                <x-textarea wire:model="comment" rows="1" maxlength="{{ $maxText }}" placeholder="Comentario: opcional al aprobar, obligatorio al rechazar" aria-label="Comentario" class="field-sizing-content min-h-10 max-h-32 resize-none" data-testid="decision-comment" />
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
@@ -183,12 +185,18 @@
                 @elseif (! $withAlternative && $blockedClashes > 0)
                     <p class="text-sm text-error" id="approve-why" data-testid="approve-blocked">{{ $hasAlternatives
                         ? "No se puede aprobar lo pedido: deja {$blockedClashes} {$plural($blockedClashes)}. Elige una alternativa o recházala."
-                        : "No se puede aprobar: el cambio deja {$blockedClashes} {$plural($blockedClashes)}. ".(($alternatives['status'] ?? null) === 'computing' ? 'Recházala o espera las alternativas del motor.' : 'Recházala o busca alternativas.') }}</p>
+                        : "No se puede aprobar: el cambio deja {$blockedClashes} {$plural($blockedClashes)}. ".match ($alternatives['status'] ?? null) {
+                            'computing' => 'Recházala o espera las alternativas del motor.',
+                            'none' => 'Recházala, o libera el lugar en el editor y busca otra vez.',
+                            default => 'Recházala o busca alternativas.',
+                        } }}</p>
                 @endif
                 <div class="flex flex-wrap justify-end gap-2">
-                    <x-button label="Rechazar" icon="o-x-circle" :class="'btn-outline btn-error max-md:h-11 max-md:min-h-11 '.($withAlternative ? 'max-md:w-full' : 'max-md:flex-1')" wire:click="reject" spinner="reject" data-testid="reject-request" />
+                    <x-button label="Rechazar" icon="o-x-circle" class="btn-outline btn-error max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="reject" spinner="reject" data-testid="reject-request" />
                     @if ($withAlternative)
-                        <x-button :label="'Aprobar con la alternativa '.$option['letter']" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="chooseAlternative('{{ $option['key'] }}')" spinner="chooseAlternative" :disabled="$staleChoice" aria-describedby="{{ $staleChoice ? 'approve-why' : '' }}" data-testid="approve-alternative" />
+                        <x-button icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-[2]" wire:click="chooseAlternative('{{ $option['key'] }}')" spinner="chooseAlternative" :disabled="$staleChoice" aria-describedby="{{ $staleChoice ? 'approve-why' : '' }}" data-testid="approve-alternative">
+                            <span class="md:hidden">Aprobar la {{ $option['letter'] }}</span><span class="max-md:hidden">Aprobar con la alternativa {{ $option['letter'] }}</span>
+                        </x-button>
                     @else
                         <x-button :label="$hasAlternatives ? 'Aprobar lo pedido' : 'Aprobar'" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" :disabled="$blockedClashes > 0" aria-describedby="{{ $blockedClashes > 0 ? 'approve-why' : '' }}" data-testid="approve-request" />
                     @endif
@@ -202,9 +210,9 @@
             $chosenLetter = $alternatives['chosen']['letter'] ?? null;
             $chosenGroups = $chosenLetter === null ? 0 : count($alternatives['chosen']['option']['groups']);
         @endphp
-        <footer class="sticky bottom-0 z-10 space-y-3 border-t border-base-300 bg-base-100 px-5 py-4 max-md:px-4" data-testid="request-application">
+        <footer class="sticky bottom-0 z-10 space-y-2.5 border-t border-base-300 bg-base-100 px-5 py-3 max-md:px-4 [@media(max-height:44rem)]:static" data-testid="request-application">
             @if ($canApply && $chosenLetter !== null)
-                <p class="text-sm">«Aplicar la alternativa» escribe de una vez el horario de {{ $chosenGroups === 1 ? 'su grupo' : "los {$chosenGroups} grupos de su cadena" }} y la deja aplicada. Si prefieres acomodarla a mano, ábrela en el editor con sus sesiones por colocar y luego márcala como aplicada.</p>
+                <p class="text-sm">Escribe de una vez el horario de {{ $chosenGroups === 1 ? 'su grupo' : "los {$chosenGroups} grupos de su cadena" }}, o ábrela en el editor con sus sesiones por colocar.</p>
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
@@ -218,10 +226,13 @@
                 @endif
                 <div class="flex flex-wrap justify-end gap-2">
                     @if ($editorUrl !== null)
-                        <a href="{{ $editorUrl }}" wire:navigate class="btn btn-outline max-md:h-11 max-md:min-h-11 max-md:flex-1" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" aria-hidden="true" />Abrir en el editor</a>
+                        <a href="{{ $editorUrl }}" wire:navigate class="btn btn-outline max-md:h-11 max-md:min-h-11 max-md:w-full" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" aria-hidden="true" />Abrir en el editor</a>
                     @endif
-                    <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-ghost max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
                     <x-button :label="'Aplicar la alternativa '.$chosenLetter" icon="o-bolt" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="applyAlternative" spinner="applyAlternative" :disabled="$staleAlternatives" aria-describedby="{{ $staleAlternatives ? 'apply-why' : '' }}" data-testid="apply-alternative" />
+                </div>
+                <div class="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm text-neutral">
+                    <span>¿La acomodaste a mano?</span>
+                    <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-ghost btn-sm max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
                 </div>
             @elseif ($canApply)
                 <p class="text-sm">{{ $isSchedule ? 'Acomoda el cambio en el editor de horarios y luego márcala como aplicada.' : 'Asigna el salón y luego márcala como aplicada.' }}</p>
