@@ -71,7 +71,11 @@ def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> tup
 
     search = lns(data, time_limit=time_limit, limits=limits, seed=seed, first_share=first_share(time_limit))
     mark("lns", search.all_sessions)
-    improve(data, search, deadline - room_reserve(time_limit), limits=limits, seed=seed)
+    improvement = improve(data, search, deadline - room_reserve(time_limit), limits=limits, seed=seed)
+    print(
+        f"Mejora: {improvement.steps} vecindarios, {improvement.accepted} aceptados, {improvement.lowered} bajaron "
+        f"los niveles ({improvement.tiers} en total)."
+    )
     mark("improve", search.all_sessions)
     sessions = improve_rooms(data, search.all_sessions, deadline, limits=limits)
     mark("improve_rooms", sessions)
