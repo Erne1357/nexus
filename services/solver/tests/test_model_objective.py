@@ -128,6 +128,35 @@ def test_sc01_en_un_vecindario_cuentan_los_huecos_de_los_fijos_del_alcance():
     assert best.by_rule["SC-01"] == best.score.by_rule["SC-01"] == 20
 
 
+def test_sc01_una_cohorte_combination_no_suma_huecos_y_si_impide_el_empalme():
+    """Las cohortes `combination:` (núcleo sin combinación) son como cualquier cohorte para HC-03, pero SC-01 no las
+    cuenta, como `StudentGaps` de PHP. Con f1 fijo el lunes de 07:00 a 08:00 y g1 el lunes a las 10:00: con una cohorte
+    `plan:` son 2 horas de hueco (20 con peso 10); con una `combination:`, 0, en el modelo y en `score.py`. Y g1 no
+    tiene ninguna opción el lunes a las 07:00, que choca con f1."""
+
+    def data_with(key: str) -> dict[str, Any]:
+        return instance(
+            campuses=DAY,
+            groups=[
+                group("f1", 1, movable=False, cohorts=[key], fixed_sessions=[session(1, "07:00", "08:00")]),
+                group("g1", 1, cohorts=[key]),
+            ],
+            rooms=ROOMS,
+            soft_weights=weights(sc_01=10),
+        )
+
+    plan = solve(data_with("plan:p1:1:C1"), g1=[(1, "10:00")])
+    assert plan.by_rule["SC-01"] == plan.score.by_rule["SC-01"] == 20
+    combination = solve(data_with("combination:p1:1:C1"), g1=[(1, "10:00")])
+    assert combination.by_rule["SC-01"] == combination.score.by_rule["SC-01"] == 0
+
+    model_data = ModelData.of(parse_input(data_with("combination:p1:1:C1")))
+    variables = build_variables(cp_model.CpModel(), model_data, DomainOptions(pool_rooms=False, all_tiers=True))
+    domain = variables.groups["g1"]
+    assert (1, 7 * 60) not in {(window.day, window.start) for window in domain.windows.values()}
+    assert domain.rejected_options["HC-03"] >= 1
+
+
 def test_sc02_horas_de_mas_en_un_dia():
     """SC-02: 2 horas en lunes y martes; el docente no puede el martes, así que van las dos el lunes: 1 hora de más."""
     data = instance(
