@@ -1,8 +1,8 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Queries\CredentialQuery;
+use App\Modules\Core\Queries\PageTrailQuery;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 
@@ -12,7 +12,8 @@ use Livewire\Component;
  * como tarjeta con el selector de perfil y periodo, el tema, el cambio de contraseña y el cierre de
  * sesión. Abrir y cerrar lo hace el componente Alpine `nexusShell` (resources/js/app.js).
  *
- * El área de la ruta es la de la entrada del menú de la pantalla (Navigation::forRoute). La
+ * El área y la pantalla de la ruta salen de PageTrailQuery (el área de la entrada del menú de la pantalla y el título de
+ * la página o, sin él, el nombre de la entrada), que el login también lee para su banda de llegada. La
  * credencial muestra el perfil activo (Actor::activeRole()) con su nombre para quien lo ocupa (CredentialQuery con
  * RoleTitleQuery: el jefe de Servicios Escolares, «Jefe del Departamento de Servicios Escolares», AZ-02) y el periodo
  * activo: «Rol · Periodo». La credencial del login lee lo mismo para llegar a la banda (tarea 1.23).
@@ -41,14 +42,14 @@ new class extends Component
     /**
      * @return array{areaLabel: ?string, pageTitle: ?string, name: string, username: string, initials: string, roleLabel: ?string, summary: string}
      */
-    public function with(Actor $context, Navigation $navigation, CredentialQuery $credentials): array
+    public function with(Actor $context, PageTrailQuery $trails, CredentialQuery $credentials): array
     {
         $credential = $credentials->of($context);
-        $item = $this->route === null ? null : $navigation->forRoute($this->route, $context);
+        $trail = $trails->of($this->route, $this->title, $context);
 
         return [
-            'areaLabel' => $item?->area->label(),
-            'pageTitle' => $this->title ?? $item?->label,
+            'areaLabel' => $trail['area'],
+            'pageTitle' => $trail['title'],
             'name' => $credential['name'],
             'username' => $credential['username'],
             'initials' => $credential['initials'],

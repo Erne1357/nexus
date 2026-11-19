@@ -187,7 +187,16 @@
                             <span class="block size-[46px] bg-accent-content mask-(--hare) mask-contain mask-center mask-no-repeat max-md:size-[38px]"></span>
                         </span>
                         <span data-arrival="wordmark" class="text-xl font-bold tracking-[-0.01em] max-md:text-lg">Nexus</span>
+                        {{-- Lo que no vuela ocupa su lugar sin verse (la página siguiente lo hace aparecer): así la credencial cae donde estará --}}
+                        <span data-arrival="route" class="invisible flex min-w-0 items-center gap-2 text-[15px] whitespace-nowrap text-band-muted max-md:hidden">
+                            <span data-arrival="area" class="max-desktop:hidden"></span>
+                            <x-icon name="o-chevron-right" class="w-4 h-4 max-desktop:hidden" />
+                            <span data-arrival="title" class="truncate font-medium text-band-content"></span>
+                        </span>
                         <span class="flex-1"></span>
+                        <span data-arrival="search" class="invisible flex h-10 w-[clamp(260px,26vw,520px)] flex-none items-center gap-2.5 px-3 text-band-muted max-desktop:w-[226px] max-md:hidden"></span>
+                        <span data-arrival="search-icon" class="invisible hidden size-11 flex-none max-md:grid"></span>
+                        <span data-arrival="bell" class="invisible block size-11 flex-none text-band-content/70"></span>
                         <span class="flex h-[46px] max-w-full min-w-0 items-center gap-2.5 rounded-full border border-band-content/20 ps-1.5 pe-3 text-start max-md:h-11 max-md:px-[5px]">
                             <span data-arrival="avatar" class="grid size-[34px] flex-none place-items-center rounded-full bg-secondary text-[13px] font-bold text-secondary-content"></span>
                             <span class="flex min-w-0 flex-col leading-tight max-md:sr-only">

@@ -28,6 +28,9 @@ const PEN = 'cubic-bezier(.45,.05,.35,1)';
 const MOVE = 'cubic-bezier(.6,0,.2,1)';
 const DROP = 'cubic-bezier(.25,.8,.35,1)';
 const SKEW = 'skewX(-14deg)';
+/** La entrada: lo que tarda la cabecera en volverse banda y el brinco de la liebre al llegar (ms). */
+const ARRIVE = 500;
+const HOP = 180;
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const desktop = () => window.matchMedia('(min-width: 1024px)').matches;
@@ -385,14 +388,14 @@ document.addEventListener('alpine:init', () => {
         },
 
         /* La sesión ya está abierta: pase lo que pase con el movimiento, la página cambia. */
-        async enter({ redirect, band, credential }) {
+        async enter({ redirect, band, page, credential }) {
             this.leaving = true;
             try {
                 this.credential = credential;
                 await this.$nextTick();
                 await this.reveal();
                 if (band && !reducedMotion()) {
-                    await this.arrive();
+                    await this.arrive(page);
                     storage.set(ARRIVAL_KEY, '1', 'sessionStorage');
                 }
             } catch {
@@ -410,23 +413,28 @@ document.addEventListener('alpine:init', () => {
                 return;
             }
             const animations = [...card.querySelectorAll('[data-value]')].map((element, index) =>
-                element.animate([{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'none' }], { duration: 460, delay: index * 40, easing: SETTLE, fill: 'both' }),
+                element.animate([{ opacity: 0, transform: 'translateY(3px)' }, { opacity: 1, transform: 'none' }], { duration: 260, delay: index * 25, easing: SETTLE, fill: 'both' }),
             );
-            card.querySelectorAll('[data-ghost]').forEach((element) => animations.push(element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 280, easing: SETTLE, fill: 'both' })));
+            card.querySelectorAll('[data-ghost]').forEach((element) => animations.push(element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, easing: SETTLE, fill: 'both' })));
             await settled(animations);
             this.revealed = true;
             await this.$nextTick();
             animations.forEach((animation) => animation.cancel());
-            await wait(260);
+            await wait(80);
         },
 
         /**
-         * Entrar 2: el azul y la franja de la cabecera se extienden hasta ser la banda, la marca vuela a «Nexus», la liebre
-         * salta a su esquina y la foto, el nombre y el puesto suben a la credencial. Las piezas vuelan en una capa encima;
+         * Entrar 2: la cabecera de la credencial se extiende hasta ser la banda y lleva pegada a la liebre, que al llegar
+         * a su esquina da un brinco; la marca se apaga al arrancar y «Nexus» aparece cuando la liebre ya pasó por su lugar. La
+         * foto se vuelve el avatar y el nombre y el puesto suben a su texto en la banda. Las piezas vuelan en una capa encima;
          * al final queda la banda (la de la plantilla x-ref="band", con la forma de core::components.band) sobre el fondo de
          * la aplicación, que es lo primero que pinta la página siguiente.
+         *
+         * Lo que llega a la banda (el texto y el avatar) vuela dos veces: la copia de la credencial se va y la de la banda,
+         * con su letra y su tamaño, llega encogida o crecida desde el mismo lugar; las dos se mueven juntas y se cruzan a
+         * medio camino. Así la pieza termina idéntica a la banda y el cambio final no se nota.
          */
-        async arrive() {
+        async arrive(page) {
             const W = document.documentElement.clientWidth;
             const H = window.innerHeight;
             const from = {
@@ -435,12 +443,11 @@ document.addEventListener('alpine:init', () => {
                 hare: box(this.$refs.hare),
                 photo: box(this.$refs.photo),
                 mark: box(this.$refs.mark),
-                name: box(this.$refs.name),
-                role: box(this.$refs.role),
             };
 
-            // La capa no lleva tema: lo que sale de la credencial es del login (claro); el fondo, el azul, la franja y la banda
-            // a los que llega llevan el de la aplicación (daisyUI pinta el fondo de todo lo que tiene data-theme).
+            // La capa no lleva tema: lo que sale de la credencial es del login (claro); el fondo, el azul, la franja y lo
+            // que llega a la banda llevan el de la aplicación (daisyUI pinta el fondo de todo lo que tiene data-theme, así
+            // que solo lo llevan piezas con fondo propio; el texto copia su color).
             const theme = appTheme();
             const layer = document.createElement('div');
             layer.setAttribute('aria-hidden', 'true');
@@ -458,6 +465,10 @@ document.addEventListener('alpine:init', () => {
                 element.dataset.theme = theme;
                 return piece(element, rect);
             };
+            const lettering = (element) => {
+                const style = getComputedStyle(element);
+                return `font-family:${style.fontFamily};font-size:${style.fontSize};font-weight:${style.fontWeight};line-height:${style.lineHeight};letter-spacing:${style.letterSpacing};color:${style.color}`;
+            };
 
             // La banda de llegada: invisible mientras se mide adónde va cada pieza.
             const band = this.$refs.band.content.firstElementChild.cloneNode(true);
@@ -466,6 +477,19 @@ document.addEventListener('alpine:init', () => {
             const summary = band.querySelector('[data-arrival="summary"]');
             summary.textContent = this.credential.summary;
             summary.hidden = !this.credential.summary;
+            // La ruta de la página siguiente no se ve, pero ocupa lo mismo que ocupará: lo que quede para la credencial es igual.
+            const trail = band.querySelector('[data-arrival="route"]');
+            if (page?.title) {
+                trail.querySelector('[data-arrival="title"]').textContent = page.title;
+                if (page.area) {
+                    trail.querySelector('[data-arrival="area"]').textContent = page.area;
+                } else {
+                    trail.querySelector('[data-arrival="area"]').remove();
+                    trail.querySelector('svg')?.remove();
+                }
+            } else {
+                trail.remove();
+            }
             band.style.visibility = 'hidden';
             band.dataset.theme = theme;
 
@@ -476,105 +500,114 @@ document.addEventListener('alpine:init', () => {
             document.body.append(layer);
             layer.append(band);
             const target = (name) => band.querySelector(`[data-arrival="${name}"]`);
-            const at = (name) => box(target(name));
-            const to = { hare: at('hare'), wordmark: at('wordmark'), avatar: at('avatar') };
+            const to = { hare: box(target('hare')), avatar: box(target('avatar')), wordmark: box(target('wordmark')) };
             const bandHeight = to.hare.h;
+            const along = { duration: ARRIVE, easing: MOVE, fill: 'both' };
+            const crossing = { duration: ARRIVE, fill: 'both' };
+            const leave = [{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0, offset: 0.6 }, { opacity: 0 }];
+            const come = [{ opacity: 0 }, { opacity: 0, offset: 0.25 }, { opacity: 1, offset: 0.6 }, { opacity: 1 }];
             const moves = [];
 
-            moves.push(backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 220, easing: SETTLE, fill: 'both' }));
-            moves.push(navy.animate([{ clipPath: clipTo(from.header, W, H, '12px 12px 0 0') }, { clipPath: clipTo({ x: 0, y: 0, w: W, h: bandHeight }, W, H) }], { duration: 640, easing: MOVE, fill: 'both' }));
-            moves.push(red.animate([{ clipPath: clipTo(from.stripe, W, H) }, { clipPath: clipTo({ x: 0, y: bandHeight, w: W, h: 3 }, W, H) }], { duration: 640, easing: MOVE, fill: 'both' }));
+            moves.push(backdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 100, easing: SETTLE, fill: 'both' }));
+            moves.push(navy.animate([{ clipPath: clipTo(from.header, W, H, '12px 12px 0 0') }, { clipPath: clipTo({ x: 0, y: 0, w: W, h: bandHeight }, W, H) }], along));
+            moves.push(red.animate([{ clipPath: clipTo(from.stripe, W, H) }, { clipPath: clipTo({ x: 0, y: bandHeight, w: W, h: 3 }, W, H) }], along));
 
-            // La marca vuela al lugar de «Nexus» y se funde.
+            // La marca arranca con la cabecera y se apaga en seguida.
             const mark = plain(this.$refs.mark.cloneNode(true));
             mark.querySelector('defs')?.remove();
             mark.querySelector('g')?.removeAttribute('mask');
-            piece(mark, from.mark, 'transform-origin:0 50%');
-            const markScale = (to.wordmark.h / from.mark.h) * 1.25;
+            piece(mark, from.mark);
+            moves.push(mark.animate([{ transform: 'none' }, { transform: `translate(${-from.header.x}px, ${-from.header.y}px)` }], along));
+            moves.push(mark.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: SETTLE, fill: 'both' }));
+
+            // «Nexus» de la banda aparece cuando la liebre ya pasó por su lugar.
+            const wordmark = piece(plain(target('wordmark').cloneNode(true)), to.wordmark, lettering(target('wordmark')));
+            moves.push(wordmark.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: ARRIVE * 0.8, easing: SETTLE, fill: 'both' }));
+
+            // La liebre va pegada a la cabecera (mismo paso que el azul) y al llegar a su esquina brinca dentro de su cuadro.
+            // El cuadro cambia de medidas, no de escala: en celular pasa de 9:8 a cuadrado y la liebre no se estira.
+            const hare = piece(plain(this.$refs.hare.cloneNode(true)), from.hare);
+            const landed = { transform: `translate(${to.hare.x - from.hare.x}px, ${to.hare.y - from.hare.y}px)`, width: `${to.hare.w}px`, height: `${to.hare.h}px` };
+            const hareTime = ARRIVE + HOP;
+            const landing = ARRIVE / hareTime;
             moves.push(
-                mark.animate(
+                hare.animate([{ transform: 'none', width: `${from.hare.w}px`, height: `${from.hare.h}px`, easing: MOVE }, { ...landed, offset: landing }, landed], { duration: hareTime, fill: 'both' }),
+            );
+            moves.push(
+                hare.firstElementChild.animate(
                     [
-                        { transform: 'none', opacity: 1 },
-                        { transform: `translate(${to.wordmark.x - from.mark.x}px, ${to.wordmark.y + to.wordmark.h / 2 - (from.mark.y + from.mark.h / 2)}px) scale(${markScale})`, opacity: 0 },
+                        { transform: 'none', easing: 'ease-out' },
+                        { transform: 'rotate(-8deg)', offset: landing * 0.5, easing: 'ease-in-out' },
+                        { transform: 'none', offset: landing, easing: 'cubic-bezier(.2,0,.4,1)' },
+                        { transform: 'translateY(-4px)', offset: landing + (1 - landing) * 0.45, easing: 'cubic-bezier(.6,0,.8,1)' },
+                        { transform: 'none' },
                     ],
-                    { duration: 560, delay: 20, easing: MOVE, fill: 'both' },
+                    { duration: hareTime, fill: 'both' },
                 ),
             );
-
-            // «Nexus» de la banda aparece donde la marca se funde.
-            const wordmark = piece(plain(target('wordmark').cloneNode(true)), to.wordmark, `line-height:${to.wordmark.h}px`);
-            wordmark.classList.add('text-band-content');
-            moves.push(wordmark.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 300, delay: 320, easing: SETTLE, fill: 'both' }));
-
-            // La liebre se acomoda: sube primero, luego se recorre a su esquina y se asienta con un brinco de 4 px.
-            const hare = piece(plain(this.$refs.hare.cloneNode(true)), from.hare, 'transform-origin:50% 50%');
-            const hop = travel(from.hare, to.hare);
-            const scaleX = to.hare.w / from.hare.w;
-            const scaleY = to.hare.h / from.hare.h;
-            moves.push(
-                hare.animate(
-                    [
-                        { transform: 'none', easing: 'cubic-bezier(.45,0,.55,1)' },
-                        { transform: `translate(${hop.dx * 0.3}px, ${hop.dy * 0.72}px) scale(${(1 + scaleX) / 2}, ${(1 + scaleY) / 2})`, offset: 0.46, easing: 'cubic-bezier(.3,0,.25,1)' },
-                        { transform: `translate(${hop.dx}px, ${hop.dy}px) scale(${scaleX}, ${scaleY})`, offset: 0.8, easing: 'ease-out' },
-                        { transform: `translate(${hop.dx}px, ${hop.dy - 4}px) scale(${scaleX}, ${scaleY})`, offset: 0.9, easing: 'ease-in' },
-                        { transform: `translate(${hop.dx}px, ${hop.dy}px) scale(${scaleX}, ${scaleY})` },
-                    ],
-                    { duration: 820, delay: 40, fill: 'both' },
-                ),
-            );
-            moves.push(hare.firstElementChild.animate([{ transform: 'none' }, { transform: 'rotate(-12deg)', offset: 0.4 }, { transform: 'rotate(3deg)', offset: 0.78 }, { transform: 'none' }], { duration: 820, delay: 40, easing: 'ease-in-out', fill: 'both' }));
 
             // La foto se vuelve el avatar.
-            const photo = piece(plain(this.$refs.photo.cloneNode(true)), from.photo, 'transform-origin:50% 50%');
             const lift = travel(from.photo, to.avatar);
+            const shrink = to.avatar.w / from.photo.w;
             const cut = (from.photo.h - from.photo.w) / 2;
+            const photo = piece(plain(this.$refs.photo.cloneNode(true)), from.photo, 'transform-origin:50% 50%');
             moves.push(
                 photo.animate(
                     [
                         { transform: 'none', clipPath: 'inset(0 round 8px)' },
-                        { transform: `translate(${lift.dx}px, ${lift.dy}px) scale(${to.avatar.w / from.photo.w})`, clipPath: `inset(${cut}px 0 round 50%)` },
+                        { transform: `translate(${lift.dx}px, ${lift.dy}px) scale(${shrink})`, clipPath: `inset(${cut}px 0 round 50%)` },
                     ],
-                    { duration: 720, easing: MOVE, fill: 'both' },
+                    along,
                 ),
+                photo.animate(leave, crossing),
             );
+            const avatar = piece(plain(target('avatar').cloneNode(true)), to.avatar, 'transform-origin:50% 50%');
+            avatar.dataset.theme = theme;
+            moves.push(avatar.animate([{ transform: `translate(${-lift.dx}px, ${-lift.dy}px) scale(${1 / shrink})` }, { transform: 'none' }], along), avatar.animate(come, crossing));
 
-            // El nombre y el puesto suben a su texto en la credencial de la banda y cambian de tinta; en celular, al avatar.
-            const words = (source, rect, goal, outText, outClass) => {
-                const holder = document.createElement('div');
-                const inside = document.createElement('span');
-                const outside = document.createElement('span');
-                inside.textContent = source.textContent;
-                outside.textContent = outText;
-                inside.className = 'absolute inset-0 text-primary';
-                outside.className = `absolute inset-0 opacity-0 ${outClass}`;
-                holder.append(inside, outside);
-                piece(holder, { ...rect, w: rect.w + 40 }, `transform-origin:0 0;white-space:nowrap;font:${getComputedStyle(source).font}`);
+            // El nombre y el puesto suben a su texto en la banda y cambian de tinta; en celular, donde la banda solo
+            // muestra el avatar, van hacia él y se apagan.
+            const words = (source, goal) => {
+                const start = box(source);
                 const end = box(goal);
-                const visible = end.w > 2;
-                const scale = visible ? parseFloat(getComputedStyle(goal).fontSize) / parseFloat(getComputedStyle(source).fontSize) : 0.4;
-                const x = visible ? end.x : to.avatar.x;
-                const y = visible ? end.y + end.h / 2 - (rect.h * scale) / 2 : to.avatar.y;
-                moves.push(holder.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${x - rect.x}px, ${y - rect.y}px) scale(${scale})`, opacity: visible ? 1 : 0 }], { duration: 700, delay: 30, easing: MOVE, fill: 'both' }));
-                moves.push(inside.animate([{ opacity: 1 }, { opacity: 1, offset: 0.25 }, { opacity: 0, offset: 0.6 }, { opacity: 0 }], { duration: 700, delay: 30, fill: 'both' }));
-                moves.push(outside.animate([{ opacity: 0 }, { opacity: 0, offset: 0.25 }, { opacity: 1, offset: 0.6 }, { opacity: 1 }], { duration: 700, delay: 30, fill: 'both' }));
+                const leaving = piece(plain(source.cloneNode(true)), start, `transform-origin:0 0;${lettering(source)}`);
+                if (end.w <= 2) {
+                    moves.push(leaving.animate([{ transform: 'none', opacity: 1 }, { transform: `translate(${to.avatar.x - start.x}px, ${to.avatar.y - start.y}px) scale(.4)`, opacity: 0 }], along));
+                    return;
+                }
+                const scale = parseFloat(getComputedStyle(goal).fontSize) / parseFloat(getComputedStyle(source).fontSize);
+                const dx = end.x - start.x;
+                const middle = { from: start.y + start.h / 2, to: end.y + end.h / 2 };
+                const arriving = piece(plain(goal.cloneNode(true)), end, `transform-origin:0 0;${lettering(goal)}`);
+                moves.push(
+                    leaving.animate([{ transform: 'none' }, { transform: `translate(${dx}px, ${middle.to - start.y - (start.h * scale) / 2}px) scale(${scale})` }], along),
+                    leaving.animate(leave, crossing),
+                    arriving.animate([{ transform: `translate(${-dx}px, ${middle.from - end.y - end.h / scale / 2}px) scale(${1 / scale})` }, { transform: 'none' }], along),
+                    arriving.animate(come, crossing),
+                );
             };
-            words(this.$refs.name, from.name, target('name'), this.credential.name, 'text-band-content');
-            words(this.$refs.role, from.role, target('summary'), this.credential.summary, 'text-band-muted');
+            words(this.$refs.name, target('name'));
+            words(this.$refs.role, target('summary'));
 
             // Lo demás del login se va: la cinta sube; la credencial, las placas y la foto se desvanecen.
             const rise = -(this.$refs.badge.getBoundingClientRect().top + 60);
-            [this.$refs.strap, this.$refs.clip].forEach((element) => element.animate([{ transform: 'none' }, { transform: `translateY(${rise}px)` }], { duration: 420, easing: SETTLE, fill: 'forwards' }));
-            this.$refs.turn.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: SETTLE, fill: 'forwards' });
-            this.$root.querySelector('[data-login-logos]').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, fill: 'forwards' });
-            this.$root.querySelector('[data-login-photos]').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, delay: 100, easing: SETTLE, fill: 'forwards' });
+            [this.$refs.strap, this.$refs.clip].forEach((element) => element.animate([{ transform: 'none' }, { transform: `translateY(${rise}px)` }], { duration: 360, easing: SETTLE, fill: 'forwards' }));
+            this.$refs.turn.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: SETTLE, fill: 'forwards' });
+            this.$root.querySelector('[data-login-logos]').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, fill: 'forwards' });
+            this.$root.querySelector('[data-login-photos]').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 300, delay: 60, easing: SETTLE, fill: 'forwards' });
 
             await settled(moves);
 
-            // Queda la banda en su lugar; las piezas se funden en ella.
+            // Queda la banda en su lugar: lo que llegó ya es idéntico a ella; la liebre y lo que se apagó se funden desde
+            // donde quedaron (lo apagado no se vuelve a pintar) y el borde y la flecha de la credencial aparecen. La página
+            // siguiente puede llegar mientras tanto: pinta la misma banda.
             band.style.visibility = '';
-            const pieces = [...layer.children].filter((element) => element !== band && element !== backdrop && element !== navy && element !== red);
-            await settled(pieces.map((element) => element.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 140, easing: SETTLE, fill: 'forwards' })));
+            const pill = target('avatar').parentElement;
+            pill.animate([{ borderColor: 'transparent' }, { borderColor: getComputedStyle(pill).borderColor }], { duration: 200, easing: SETTLE, fill: 'backwards' });
+            pill.querySelector('svg')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: SETTLE, fill: 'backwards' });
+            [...layer.children]
+                .filter((element) => ![band, backdrop, navy, red].includes(element))
+                .forEach((element) => element.animate([{ opacity: getComputedStyle(element).opacity }, { opacity: 0 }], { duration: 140, easing: SETTLE, fill: 'forwards' }));
         },
     }));
 });
