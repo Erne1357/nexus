@@ -14,7 +14,8 @@ Dónde va cada regla:
   preferidos).
 - **Huecos** de cada cohorte (SC-01) y de cada docente (SC-05) por día, por tramos de tiempo: un tramo libre con algo
   ocupado antes y algo después es hueco, salvo entre dos sesiones fijas que no son del alcance si ninguna sesión del
-  modelo cae entre ellas (`ContractState` no cuenta esos huecos).
+  modelo cae entre ellas (`ContractState` no cuenta esos huecos). Las cohortes `combination:` no cuentan huecos: solo
+  impiden el empalme (HC-03), como en PHP.
 - **Empalmes** de pares de grupos de semestres seguidos (SC-07), por tramo de tiempo común a los dos.
 - **Traslados** (SC-09): un fin de sesión en un campus y un inicio en otro a menos de `travel_minutes`, sin otra sesión
   del docente en medio.
@@ -46,7 +47,7 @@ from app.contract.input import SOFT_RULES
 
 from .data import ModelData
 from .pattern import minutes
-from .score import Session, SoftScorer, hours, php_int, uncovered
+from .score import Session, SoftScorer, gap_cohorts, hours, php_int, uncovered
 from .variables import BuildBudget, GroupDomain, Option, Span, Variables
 
 #: Los minutos de penalización de una hora o de un evento (cambio de edificio, traslado).
@@ -199,7 +200,7 @@ class _Builder:
                 self._check("SC-05")
         if self.weights["SC-01"]:
             fixed = self._cohort_fixed()
-            touched = {key for group_id in self.in_scope for key in self.scorer.groups[group_id].cohorts}
+            touched = {key for group_id in self.in_scope for key in gap_cohorts(self.scorer.groups[group_id].cohorts)}
             for key, day in list(self.variables.cohorts.keys()):
                 if key not in touched:
                     continue

@@ -219,10 +219,15 @@ class _State:
         return any(group_id in self.in_scope for group_id in group_ids)
 
 
+#: El prefijo de las cohortes del núcleo sin combinación: cuentan para HC-03 (no empalme) pero no para SC-01, como en
+#: `StudentGaps` de PHP.
+COMBINATION = "combination:"
+
+
 def student_gaps(state: _State) -> int:
     """SC-01 (`StudentGaps`): las horas de hueco de cada cohorte de un grupo del alcance en cada día, junto a una sesión
-    de un grupo del alcance."""
-    keys = dict.fromkeys(key for group_id in state.scope for key in state.scorer.groups[group_id].cohorts)
+    de un grupo del alcance. Las cohortes `combination:` no cuentan (`gap_cohorts`)."""
+    keys = dict.fromkeys(key for group_id in state.scope for key in gap_cohorts(state.scorer.groups[group_id].cohorts))
     total = 0
     for key in keys:
         sessions = [session for member in state.scorer.members[key] for session in state.sessions_of(member)]
@@ -232,6 +237,12 @@ def student_gaps(state: _State) -> int:
                     total += hours(gap)
 
     return total
+
+
+def gap_cohorts(cohorts: Iterable[str]) -> list[str]:
+    """Las cohortes de un grupo que cuentan para SC-01: todas menos las `combination:`, que solo impiden el empalme
+    (HC-03)."""
+    return [key for key in cohorts if not key.startswith(COMBINATION)]
 
 
 def group_day_spread(state: _State) -> int:
