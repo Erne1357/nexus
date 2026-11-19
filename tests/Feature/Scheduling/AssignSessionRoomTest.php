@@ -271,3 +271,37 @@ it('asignar el mismo salón no escribe, no registra ni avisa', function () {
         ->and(Activity::count())->toBe(0);
     Event::assertNotDispatched(GroupScheduleChanged::class);
 });
+
+it('G-07: varias sesiones del grupo a la vez: cada una a su salón con su bitácora y un solo aviso del grupo', function () {
+    $second = GroupSession::factory()->for($this->group)->practica()->on(4, '15:00', '17:00')->create();
+    $other = assignRoomOf(['code' => 'CC-06', 'type' => RoomType::SalaComputo, 'capacity' => 32]);
+    Event::fake([GroupScheduleChanged::class]);
+
+    app(AssignSessionRoom::class)->handleMany($this->group, [$this->session->id => $this->room, $second->id => $other], $this->actor);
+
+    expect($this->session->fresh()->room_id)->toBe($this->room->id)
+        ->and($second->fresh()->room_id)->toBe($other->id)
+        ->and(Activity::query()->where('event', AssignSessionRoom::EVENT)->count())->toBe(2);
+    Event::assertDispatchedTimes(GroupScheduleChanged::class, 1);
+});
+
+it('G-07: varias sesiones a la vez: si una choca (HC-02) no cambia ninguna', function () {
+    $second = GroupSession::factory()->for($this->group)->practica()->on(4, '15:00', '17:00')->create();
+    GroupSession::factory()->for(otherGroupOfAssign(['code' => '3A', 'subject_id' => $this->subject->id]))->inRoom($this->room)->on(4, '16:00', '18:00')->create();
+
+    expect(fn () => app(AssignSessionRoom::class)->handleMany($this->group, [$this->session->id => $this->room, $second->id => $this->room], $this->actor))
+        ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
+            ->toBe(['El salón CC-05 ya está ocupado por Estructura de Datos, grupo 3A el jueves de 16:00 a 18:00.']))
+        ->and($this->session->fresh()->room_id)->toBeNull()
+        ->and($second->fresh()->room_id)->toBeNull()
+        ->and(Activity::count())->toBe(0);
+});
+
+it('G-07: varias sesiones a la vez: una sesión de otro grupo no se toca', function () {
+    $foreign = GroupSession::factory()->for(otherGroupOfAssign())->on(4, '15:00', '17:00')->create();
+
+    expect(fn () => app(AssignSessionRoom::class)->handleMany($this->group, [$this->session->id => $this->room, $foreign->id => $this->room], $this->actor))
+        ->toThrow(ValidationException::class, 'Una sesión ya no es del grupo I.')
+        ->and($this->session->fresh()->room_id)->toBeNull()
+        ->and($foreign->fresh()->room_id)->toBeNull();
+});

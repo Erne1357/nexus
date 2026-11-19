@@ -210,6 +210,13 @@ it('Ranking docente: espera uno solo por alcance en la cola, con 5 segundos de r
     Queue::assertPushed(ComputeRankings::class, fn (ComputeRankings $job): bool => $job->departmentId === $this->otherDepartment->id && $job->delay === 5);
 });
 
+it('el ranking va a la cola bulk, para que los avisos y los PDF de default no esperen detrás de un recálculo largo', function () {
+    GroupScheduleChanged::dispatch($this->ownGroup);
+
+    Queue::assertPushedOn(ComputeRankings::QUEUE, ComputeRankings::class);
+    expect(ComputeRankings::QUEUE)->toBe('bulk');
+});
+
 it('el job corre RankGroups sin encimar dos corridas del mismo alcance', function () {
     TeacherDepartment::factory()->create(['department_id' => $this->department->id]);
     $job = new ComputeRankings($this->term->id, $this->modalityId, $this->department->id);

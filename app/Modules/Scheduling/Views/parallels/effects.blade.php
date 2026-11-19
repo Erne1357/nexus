@@ -2,7 +2,7 @@
     Lo que pasa al armar o reorganizar (maqueta B, «Al reorganizar»), de la vista previa: cuántos grupos nacen; cada grupo
     que ya existe y se queda, como qué grupo, con su horario, su docente y sus cupos nuevos; cada uno que se cancela, con el
     horario que pierde (`warning`) o sin él; el que no se puede cancelar y no cabe (con docente o con una solicitud de cambio
-    abierta), en `error` con su motivo (no se arma así); las partes
+    abierta), en `error` con su motivo (no se arma así) y, a quien arma, «Ir a Asignación docente» en el grupo con docente; las partes
     pendientes, que se arman al aceptarlas; y a quién se avisa. Sin acuerdo que aceptar (confirmado el 18 de noviembre de
     2026).
 --}}
@@ -33,7 +33,12 @@
         @if (in_array($group->id, $blockedIds, true))
             <li class="flex items-start gap-2.5 text-error" wire:key="blocked-{{ $group->id }}" data-testid="parallels-blocked">
                 <x-icon name="o-x-circle" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>{{ $group->lockReason($draft->code($group->ownerCareerId)) }}@if ($group->hasTeacher()) <span class="text-neutral">(docente: {{ $group->teacher }})</span>@endif</span>
+                <span>{{ $group->lockReason($draft->code($group->ownerCareerId)) }}@if ($group->hasTeacher()) <span class="text-neutral">(docente: {{ $group->teacher }})</span>@endif
+                    @php($toAssign = $canArrange && $group->hasTeacher() ? $assignUrl($group) : null)
+                    @if ($toAssign !== null)
+                        <a href="{{ $toAssign }}" wire:navigate class="link inline-flex min-h-11 items-center gap-1 font-semibold text-base-content no-underline hover:underline md:min-h-0">Ir a Asignación docente<x-icon name="o-arrow-right" class="h-3.5 w-3.5" aria-hidden="true" /></a>
+                    @endif
+                </span>
             </li>
         @elseif ($group->minutes > 0)
             <li class="flex items-start gap-2.5" wire:key="cancel-{{ $group->id }}">

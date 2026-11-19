@@ -144,7 +144,9 @@ describe('jefe del departamento', function () {
         $drawer = suggestionsDrawer($this->jefe, $this->world, $this->world->c1)
             ->assertSee("Primero quita a {$teacher} del grupo {$e->code} en Asignación docente; luego lo puedes cerrar.");
 
-        expect(domOf($drawer)->querySelector("[data-key=\"close_group:{$e->id}\"] [data-testid=\"suggestion-apply\"]")->hasAttribute('disabled'))->toBeTrue();
+        expect(domOf($drawer)->querySelector("[data-key=\"close_group:{$e->id}\"] [data-testid=\"suggestion-apply\"]")->hasAttribute('disabled'))->toBeTrue()
+            ->and(domOf($drawer)->querySelector("[data-key=\"close_group:{$e->id}\"] [data-testid=\"suggestion-assign\"]")?->getAttribute('href'))
+            ->toBe(route('staffing.assign', ['grupo' => $e->id, 'materia' => $this->world->integral->code]));
 
         $e->update(['teacher_id' => null]);
         $drawer = suggestionsDrawer($this->jefe, $this->world, $this->world->c1);
@@ -215,6 +217,14 @@ describe('quien no ajusta (RA-07)', function () {
         suggestionsDrawer($subdireccion, $this->world)->call('discard', $this->expandKey)->assertForbidden();
 
         expect($this->a->fresh()->capacity)->toBe(40);
+    });
+
+    it('G-05: Subdirección ve por qué no se cierra el grupo con docente, sin el enlace a Asignación docente', function () {
+        $e = $this->world->group($this->world->integral, $this->world->isc, 20, $this->world->c1, 2, day: 2);
+        $drawer = suggestionsDrawer(User::factory()->withRole(Role::Subdireccion)->create(), $this->world, $this->world->c1);
+
+        expect(domOf($drawer)->querySelector("[data-key=\"close_group:{$e->id}\"]"))->not->toBeNull()
+            ->and(domOf($drawer)->querySelector('[data-testid="suggestion-assign"]'))->toBeNull();
     });
 
     it('el coordinador no abre el drawer ni aplica', function () {

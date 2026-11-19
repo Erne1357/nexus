@@ -139,6 +139,31 @@ it('coloca los grupos que ya existen como ArmParallelGroups y bloquea si uno con
         ->and($blocked->blockedReason())->toBe('El grupo 1 de ISIC tiene docente y el arreglo no le deja lugar: deja un grupo con lugares de ISIC o quítale primero el docente.');
 });
 
+it('G-05: varios grupos con docente sin lugar se nombran todos; de cuatro en adelante, los dos primeros y cuántos más', function (int $groups, string $reason) {
+    $isic = $this->world->request($this->isic, 30, $groups);
+    $this->world->request($this->iind, 5, 1);
+
+    foreach ($this->world->groupsOf($isic, $groups) as $group) {
+        $this->world->withTeacher($group);
+    }
+
+    expect(ParallelDraft::suggested(parallelDraftRow())->blockedReason())->toBe($reason);
+})->with([
+    'tres' => [3, 'Los grupos 2 y 3 de ISIC tienen docente y el arreglo no les deja lugar: deja grupos con lugares de ISIC o quítales primero el docente.'],
+    'cinco' => [5, 'Los grupos 2, 3 y 2 más de ISIC tienen docente y el arreglo no les deja lugar: deja grupos con lugares de ISIC o quítales primero el docente.'],
+]);
+
+it('G-05: los grupos con docente de varias carreras llevan cada uno su carrera', function () {
+    [$first] = $this->world->groupsOf($this->world->request($this->isic, 20, 1));
+    [$second] = $this->world->groupsOf($this->world->request($this->iind, 5, 1));
+    $ilog = $this->world->career('ILOG');
+    [$third] = $this->world->groupsOf($this->world->request($ilog, 5, 1));
+    array_map(fn ($group) => $this->world->withTeacher($group), [$first, $second, $third]);
+
+    expect(ParallelDraft::suggested(parallelDraftRow())->blockedReason())
+        ->toBe('Los grupos 2 de IIND y 3 de ILOG tienen docente y el arreglo no les deja lugar: deja grupos con lugares de IIND y ILOG o quítales primero el docente.');
+});
+
 it('un grupo de una sola carrera lleva toda la capacidad del grupo que se queda', function () {
     $isic = $this->world->request($this->isic, 60, 2);
     $this->world->request($this->iind, 40, 2);

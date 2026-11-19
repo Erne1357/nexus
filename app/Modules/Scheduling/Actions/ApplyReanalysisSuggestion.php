@@ -36,8 +36,9 @@ use Illuminate\Validation\ValidationException;
  * - **Ampliar cupo:** suma `$seats` (los de la sugerencia, o los que editó el jefe, de 1 a `maxSeats`) al cupo de la
  *   carrera en el grupo; si no caben, primero sube la capacidad a lo repartido más lo apartado (SetGroupCapacity: HC-05,
  *   HC-07) y luego reparte (SetGroupQuotas: HC-07).
- * - **Cambiar salón:** asigna a cada sesión de `moves` su salón (AssignSessionRoom: HC-02 no se guarda; uno de otro
- *   departamento pide su préstamo, HC-10) y luego amplía como arriba.
+ * - **Cambiar salón:** asigna a cada sesión de `moves` su salón, todas con una sola foto del validador
+ *   (AssignSessionRoom::handleMany(): HC-02 no se guarda; uno de otro departamento pide su préstamo, HC-10) y luego
+ *   amplía como arriba.
  * - **Cerrar grupo:** suma los lugares de `relocations` a los grupos que los reciben (SetGroupQuotas) y cancela el grupo
  *   (CancelGroup: pierde su horario y sus acuerdos vivos). Uno con docente no se cierra hasta quitárselo en Asignación
  *   docente (`blockedReason`; CancelGroup tampoco lo deja).
@@ -214,18 +215,19 @@ final class ApplyReanalysisSuggestion
     private function changeRoom(Group $group, ReanalysisSuggestion $suggestion, int $seats, User $actor, GateContract $gate): void
     {
         $gate->authorize('assignRoom', $group);
+        $rooms = [];
 
         foreach ($suggestion->moves as $move) {
-            $session = GroupSession::query()->whereKey($move['sessionId'])->where('group_id', $group->id)->first();
             $room = Room::query()->whereKey($move['to']->id)->where('is_active', true)->first();
 
-            if ($session === null || $room === null) {
+            if ($room === null || ! GroupSession::query()->whereKey($move['sessionId'])->where('group_id', $group->id)->exists()) {
                 throw ValidationException::withMessages(['suggestion' => 'La sesión o el salón de la sugerencia ya no están: vuelve a abrir las sugerencias.']);
             }
 
-            $this->rooms->handle($session, $room, $actor);
+            $rooms[$move['sessionId']] = $room;
         }
 
+        $this->rooms->handleMany($group, $rooms, $actor);
         $this->addSeats($group->fresh(), (string) $suggestion->careerId, $seats, $actor, $gate);
     }
 
