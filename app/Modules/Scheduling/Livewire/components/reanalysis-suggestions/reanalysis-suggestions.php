@@ -19,6 +19,7 @@ use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use App\Modules\Scheduling\Rules\Reanalysis\SuggestionBatch;
 use App\Modules\Scheduling\Rules\Reanalysis\SuggestionBatchResult;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -322,7 +323,7 @@ new class extends Component
         $this->seen = [];
         $this->advice = null;
         $this->preselect = true;
-        $this->batchToast($result, $gone, $load);
+        $this->batchToast($result, $gone, $load, $block);
 
         if ($result->applied !== []) {
             $this->dispatch('reanalysis-adjusted');
@@ -472,7 +473,7 @@ new class extends Component
      */
     public function with(Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query): array
     {
-        $empty = ['block' => null, 'load' => null, 'suggestions' => [], 'advice' => null, 'adjustReason' => null, 'blocked' => [], 'discardedCount' => 0, 'placements' => [], 'choice' => null];
+        $empty = ['block' => null, 'load' => null, 'suggestions' => [], 'advice' => null, 'adjustReason' => null, 'blocked' => [], 'discardedCount' => 0, 'placements' => [], 'choice' => null, 'assignUrls' => []];
 
         if (! $this->show || $this->subjectId === null) {
             return $empty;
@@ -501,6 +502,7 @@ new class extends Component
             'adjustReason' => $adjustReason,
             'blocked' => $blocked,
             'choice' => $choice,
+            'assignUrls' => $adjustReason === null ? $this->assignUrls($visible, $block) : [],
             'discardedCount' => count($advice->suggestions) - count($visible),
             'placements' => array_filter(array_combine(
                 array_map(fn (ReanalysisSuggestion $suggestion): string => $suggestion->key, $visible),
@@ -649,17 +651,21 @@ new class extends Component
 
     /**
      * El toast del lote: todas aplicadas (en qué versión entran y, si se abrió un grupo, que falta su docente), unas sí y
-     * otras no (`warning`, cuál no y por qué) o ninguna (`error`).
+     * otras no (`warning`, cuál no y por qué) o ninguna (`error`). Un «Cerrar grupo» que no se aplicó porque el grupo tiene
+     * docente lleva tras su motivo «Ir a Asignación docente» (G-05 del recorrido final del ensayo 8.11; quien aplica el
+     * lote ajusta la carga). El texto va escapado y solo el enlace, que arma el servidor, va como HTML.
      */
-    private function batchToast(SuggestionBatchResult $result, int $gone, AcademicLoad $load): void
+    private function batchToast(SuggestionBatchResult $result, int $gone, AcademicLoad $load, ?ReanalysisBlock $block): void
     {
         $applied = count($result->applied);
         $missed = count($result->failed) + $gone;
         $version = $load->current_version + 1;
-        $reasons = array_map(fn (array $failure): string => "«{$failure['suggestion']->title}»: {$failure['reason']}", $result->failed);
+        $links = $block === null ? [] : $this->assignUrls(array_map(fn (array $failure): ReanalysisSuggestion => $failure['suggestion'], $result->failed), $block);
+        $reasons = array_map(fn (array $failure): string => e("«{$failure['suggestion']->title}»: {$failure['reason']}")
+            .(isset($links[$failure['suggestion']->key]) ? ' <a href="'.e($links[$failure['suggestion']->key]).'" class="link font-semibold">Ir a Asignación docente</a>' : ''), $result->failed);
 
         if ($gone > 0) {
-            array_unshift($reasons, ($gone === 1 ? 'Una ya no se sugiere' : "{$gone} ya no se sugieren").': la demanda o los grupos cambiaron.');
+            array_unshift($reasons, e(($gone === 1 ? 'Una ya no se sugiere' : "{$gone} ya no se sugieren").': la demanda o los grupos cambiaron.'));
         }
 
         $teachers = [];
@@ -680,11 +686,11 @@ new class extends Component
         } elseif ($applied > 0) {
             $this->warning(
                 ($applied === 1 ? 'Se aplicó 1' : "Se aplicaron {$applied}")."; {$missed} no",
-                e(implode(' ', [...$reasons, "Lo aplicado entra en la versión {$version} al publicar.", ...$teachers])),
+                implode(' ', [...$reasons, e(implode(' ', ["Lo aplicado entra en la versión {$version} al publicar.", ...$teachers]))]),
                 timeout: 8000,
             );
         } else {
-            $this->error('No se aplicó ninguna', e(implode(' ', $reasons)), timeout: 8000);
+            $this->error('No se aplicó ninguna', implode(' ', $reasons), timeout: 8000);
         }
     }
 
@@ -854,6 +860,32 @@ new class extends Component
         }
 
         return $blocked;
+    }
+
+    /**
+     * «Ir a Asignación docente» de cada «Cerrar grupo» que no se aplica porque el grupo tiene docente (`blockedReason`), por
+     * llave: la pantalla en la materia y con el grupo abierto, donde se le quita (G-05 del recorrido final del ensayo 8.11).
+     * Quien llama decide que solo lo vea quien ajusta. Vacío si Staffing no está: va a la derecha de Scheduling en el mapa,
+     * así que el drawer lo conoce solo por el nombre de su ruta.
+     *
+     * @param  list<ReanalysisSuggestion>  $suggestions
+     * @return array<string, string>
+     */
+    private function assignUrls(array $suggestions, ReanalysisBlock $block): array
+    {
+        if (! Route::has('staffing.assign')) {
+            return [];
+        }
+
+        $urls = [];
+
+        foreach ($suggestions as $suggestion) {
+            if ($suggestion->kind === ReanalysisSuggestionKind::CloseGroup && $suggestion->blockedReason !== null && $suggestion->groupId !== null) {
+                $urls[$suggestion->key] = route('staffing.assign', ['grupo' => $suggestion->groupId, 'materia' => $block->subjectCode]);
+            }
+        }
+
+        return $urls;
     }
 
     private function authorizeLoad(Actor $context, ReanalysisLoadsQuery $loads): AcademicLoad
