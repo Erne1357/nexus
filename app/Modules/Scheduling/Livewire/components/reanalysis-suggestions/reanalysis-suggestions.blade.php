@@ -73,7 +73,7 @@
                         </div>
                     </section>
 
-                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing])
+                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing, 'placements' => $placements, 'roomOptions' => $roomOptions])
                 </div>
 
                 <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-base-300 bg-base-100 px-5 py-3">

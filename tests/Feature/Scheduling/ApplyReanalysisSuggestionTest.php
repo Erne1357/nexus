@@ -166,9 +166,9 @@ it('«Cerrar grupo» no se aplica a un grupo con docente: primero se le quita', 
 it('no se aplica con la carga fuera de re-análisis, ni «Abrir grupo»', function () {
     $a = $this->world->groups['A'];
     $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, "expand_quota:{$a->id}:{$this->isc}");
-    $open = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, 'open_group');
+    $open = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, "open_group:{$this->isc}");
 
-    expect(applyReanalysisErrors($this->world, $open, $this->jefe))->toBe(['suggestion' => ['Abrir un grupo llega con la sugerencia del motor: aquí todavía no se aplica.']]);
+    expect(applyReanalysisErrors($this->world, $open, $this->jefe))->toBe(['suggestion' => ['Abrir un grupo se aplica con el horario y el salón que encuentre el motor.']]);
 
     $this->world->load->update(['status' => LoadStatus::Closed]);
 
