@@ -30,7 +30,6 @@ from typing import Any
 
 from app.contract import RunStatus, SolverOutput, parse_input, to_dict
 from app.contract.output import RunMetrics, UnscheduledGroup
-from app.model.constraints import input_problems
 from app.model.data import ModelData
 from app.model.phases import SearchLimits
 from app.model.room_model import improve_rooms
@@ -76,7 +75,8 @@ def run(fixture: Path, time_limit: float | None, threads: int, seed: int) -> tup
     mark("improve", search.all_sessions)
     sessions = improve_rooms(data, search.all_sessions, deadline, limits=limits)
     mark("improve_rooms", sessions)
-    violations = hard_violations(source, sessions) + input_problems(data)
+    # `verify.py` ya trae HC-08, la de la entrada (PS-08).
+    violations = hard_violations(source, sessions)
     unscheduled = [
         UnscheduledGroup(group_id=group_id, reasons=["Sin lugar en el plazo."]) for group_id in search.unplaced
     ]
