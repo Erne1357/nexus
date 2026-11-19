@@ -18,7 +18,7 @@ def test_valores_por_defecto():
     assert settings.threads == 0
     assert settings.max_concurrent_runs == 2
     assert settings.max_model_variables == 1_500_000
-    assert settings.engine == "trivial"
+    assert settings.engine == "cpsat"
 
 
 def test_lee_las_variables_de_entorno():

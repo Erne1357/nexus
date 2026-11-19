@@ -25,8 +25,9 @@ class Settings:
     max_concurrent_runs: int = 2
     #: Corridas terminadas que se conservan en memoria (`SOLVER_MAX_STORED_RUNS`); las más viejas se descartan.
     max_stored_runs: int = 50
-    #: Motor que atiende las corridas (`SOLVER_ENGINE`): `trivial` (el de prueba, por omisión hasta la 7.10) o `cpsat`.
-    engine: str = "trivial"
+    #: Motor que atiende las corridas (`SOLVER_ENGINE`): `cpsat` (el modelo CP-SAT, por omisión desde la 7.10) o
+    #: `trivial` (el de prueba, solo si se pide, para pruebas y CI).
+    engine: str = "cpsat"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> "Settings":
