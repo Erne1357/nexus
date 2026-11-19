@@ -407,3 +407,34 @@ def test_si_cp_sat_prueba_que_no_caben_mas_los_que_quedan_no_caben_con_los_progr
         entry.reasons[0] == "No cabe con los grupos ya programados: ninguna de sus 1 opciones libres sirve con ellos."
     )
     assert entry.reasons[1].startswith("HC-09: el docente no está disponible en 5 de sus 6 opciones")
+
+
+@pytest.mark.parametrize("removed", [10, 40])
+def test_en_la_carga_real_la_reserva_vuelve_a_programar_los_grupos_que_se_quitan(removed: int):
+    """Revisión del Riel A, sobre la carga real: de la salida guardada de `department-multicampus` (los 1 139 grupos
+    programados, sin duras) se quitan `removed` grupos. Sus lugares quedan libres, así que todos caben. Con una reserva
+    de 3 s (la de una corrida de 60 s) y 2 hilos, la reserva los vuelve a programar a todos, sin duras. Con el modelo
+    de todos los niveles programaba 5 de 10 y 0 de 40."""
+    from app.model.data import ModelData
+    from app.model.phases import SearchLimits
+    from app.model.search import Search
+    from app.model.solve import _complete
+
+    folder = fixtures_dir() / "v1" / "department-multicampus"
+    source = parse_input(json.loads((folder / "input.json").read_text()))
+    saved = parse_output(json.loads((folder / "cpsat-output.json").read_text()))
+    by_group: dict[str, list] = defaultdict(list)
+    for session in saved.sessions:
+        by_group[session.group_id].append(session)
+    taken = sorted(by_group)[:: len(by_group) // removed][:removed]
+    search = Search(
+        sessions={group_id: sessions for group_id, sessions in by_group.items() if group_id not in taken},
+        unplaced=taken,
+    )
+    started = time.perf_counter()
+
+    found = _complete(ModelData.of(source), search, started + 3, started + 10, SearchLimits(workers=2), 0)
+
+    assert found == {}
+    assert set(taken) <= set(search.sessions)
+    assert hard_violations(source, search.all_sessions) == []

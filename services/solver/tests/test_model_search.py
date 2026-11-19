@@ -425,3 +425,50 @@ def test_el_aviso_de_lns_cuenta_los_programados_con_el_valor_del_objetivo(name):
     assert reports
     assert all(0 <= placed <= len(data.movable) for placed in reports)
     assert reports[-1] == len(found.sessions)
+
+
+def test_si_la_resolucion_de_nivel_no_termina_el_vecindario_sigue_con_las_reglas(monkeypatch):
+    """🔵 del Riel A en el #647: si la resolución que baja los niveles no termina (UNKNOWN), el vecindario no se
+    descarta: sigue con las reglas, con el nivel de cada grupo como tope. g está el lunes y el miércoles a las 09:00
+    (nivel 1) y su docente prefiere esos días a las 07:00. Aunque la resolución de nivel no termine nunca, la de las
+    reglas lo lleva a las 07:00 (SC-04 de 8 a 0) sin subir su nivel."""
+    import time
+
+    from app.contract.output import ProposedSession
+    from app.model import search as search_module
+    from app.model.phases import SearchLimits
+    from app.model.search import Search, improve
+    from tests.instances import slot, teacher
+
+    solve_until = search_module.solve_until
+
+    def level_never_ends(model, deadline, limits, seed, on_solution=None):
+        solver, status = solve_until(model, deadline, limits, seed, on_solution)
+        # La resolución de nivel minimiza los niveles: sus coeficientes son niveles (0 o 1 aquí), no minutos.
+        if max(abs(c) for c in model.proto.objective.coeffs) <= 1:
+            return solver, cp_model.UNKNOWN
+        return solver, status
+
+    monkeypatch.setattr(search_module, "solve_until", level_never_ends)
+    data = parse_input(
+        instance(
+            campuses=[campus(days=[1, 2, 3], day_end="14:00")],
+            groups=[group("g", 2, teacher_id="t1")],
+            teachers=[teacher("t1", preferred=[slot(1, "07:00", "08:00"), slot(3, "07:00", "08:00")])],
+            rooms=[room("r1"), room("r2")],
+            soft_weights={"SC-04": 4},
+        )
+    )
+    placed = [
+        ProposedSession(
+            group_id="g", day=day, starts_at="09:00", ends_at="10:00", room_id="r1", kind="teoria", changed=True
+        )
+        for day in (1, 3)
+    ]
+    search = Search(sessions={"g": placed}, chosen={"g": (((1, 1), (3, 1)), 2)}, tiers={"g": 1})
+
+    result = improve(ModelData.of(data), search, time.perf_counter() + 3, limits=SearchLimits(workers=1), seed=7)
+
+    assert (result.initial.total, result.best.total) == (8, 0)
+    assert search.tiers == {"g": 1}
+    assert {(session.day, session.starts_at) for session in search.sessions["g"]} == {(1, "07:00"), (3, "07:00")}

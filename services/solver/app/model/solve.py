@@ -43,7 +43,6 @@ from .variables import (
     BuildTimeout,
     DomainOptions,
     ModelTooLarge,
-    Variables,
     build_variables,
     unit_counts,
 )
@@ -127,7 +126,7 @@ def solve(
     seed: int = 0,
     report: Callable[[int, int | None], None] | None = None,
     engine: str = "cpsat",
-    version: str = "",
+    version: str = "dev",
 ) -> Resolution:
     """La mejor solución que se encuentra en `time_limit` segundos, como salida del contrato."""
     limits = limits or SearchLimits()
@@ -196,16 +195,19 @@ PLACED, NO_OPTIONS, DOES_NOT_FIT, NO_TIME = "placed", "no_options", "does_not_fi
 def _complete(
     data: ModelData, search: Search, deadline: float, run_deadline: float, limits: SearchLimits, seed: int
 ) -> dict[str, Unplaced]:
-    """Los que no quedaron, con lo demás fijo, en un solo modelo con todos ellos:
+    """Los que no quedaron, con lo demás fijo y todos en la misma entrada:
 
-    1. El dominio de cada uno solo depende de lo fijo, así que el modelo da las opciones que le quitó cada regla a
-       todos a la vez. Se arma con hasta el fin de la corrida (`run_deadline`: de él salen los motivos), con el tope de
-       variables y la cancelación; si no alcanza, los que faltan dicen que no hubo tiempo.
+    1. El dominio de cada uno solo depende de lo fijo, así que un modelo con todos sus niveles da las opciones que le
+       quitó cada regla a todos a la vez. Es solo para los motivos: se arma con hasta el fin de la corrida
+       (`run_deadline`), con el tope de variables y la cancelación, y no se resuelve; si no alcanza, los que faltan
+       dicen que no hubo tiempo.
     2. Los que no tienen opciones se quedan con sus reglas.
-    3. A los que sí, el mismo modelo los programa juntos (`_together`), sin armar una entrada por grupo: armar una
-       cuesta de 0.2 a 0.3 s en la carga real, y con 40 grupos la reserva no alcanzaba.
-    4. Si CP-SAT probó que no caben más, los que quedan no caben con los programados; si no lo probó, se intentan uno
-       por uno (`_alone`) con lo que queda hasta `deadline`.
+    3. A los que sí, otro modelo con los niveles por necesidad, como la primera vuelta de `lns`, los programa juntos
+       (`_together`) con una parte chica de la reserva. Con todos los niveles el modelo era de 6 618 variables con 10
+       grupos y no se resolvía en su parte; por necesidad son 306 (revisión del Riel A).
+    4. Si CP-SAT probó que no caben más y sus dominios ya tenían todos los niveles, los que quedan no caben con los
+       programados; si no, se intentan uno por uno (`_alone`, con todos los niveles) con lo que queda hasta
+       `deadline`.
 
     Todo grupo sin lugar lleva su motivo."""
     pending = list(search.unplaced)
@@ -216,15 +218,13 @@ def _complete(
     budget = BuildBudget(
         max_variables=limits.max_variables, deadline=run_deadline, check_cancelled=limits.check_cancelled
     )
-    model = cp_model.CpModel()
     try:
-        variables = build_variables(model, shared, DomainOptions(all_tiers=True), budget)
+        domains = build_variables(cp_model.CpModel(), shared, DomainOptions(all_tiers=True), budget).groups
     except (BuildTimeout, ModelTooLarge) as error:
         reason = "No se alcanzó a revisar por qué no cabe en el plazo de la corrida."
         if isinstance(error, ModelTooLarge):
             reason = f"No se pudo revisar por qué no cabe: {error}"
         return {group_id: Unplaced([reason], by_rules=False) for group_id in pending}
-    domains = variables.groups
     found: dict[str, Unplaced] = {}
     for group_id in pending:
         if not domains[group_id].options:
@@ -233,7 +233,7 @@ def _complete(
     candidates = [group_id for group_id in pending if domains[group_id].options]
     proven = False
     if candidates and time.perf_counter() < deadline:
-        proven = _together(shared, model, variables, search, scope, deadline, limits, seed)
+        proven = _together(shared, search, scope, deadline, limits, seed)
     left = [group_id for group_id in candidates if group_id not in search.sessions]
     for index, group_id in enumerate(left):
         limits.tick()
@@ -272,20 +272,24 @@ def _does_not_fit(options: int) -> str:
     return f"No cabe con los grupos ya programados: ninguna de sus {options} opciones libres sirve con ellos."
 
 
+#: La parte de lo que queda de la reserva para cada resolución de `_together`.
+TOGETHER_SHARE = 0.25
+
+
 def _together(
-    shared: ModelData,
-    model: cp_model.CpModel,
-    variables: Variables,
-    search: Search,
-    scope: set[str],
-    deadline: float,
-    limits: SearchLimits,
-    seed: int,
+    shared: ModelData, search: Search, scope: set[str], deadline: float, limits: SearchLimits, seed: int
 ) -> bool:
-    """Programa juntos a los que no quedaron, en el modelo de los motivos, con la asignación relajada y en orden
-    lexicográfico (PS-10): una resolución maximiza los programados y, con los mismos, el menor nivel (como `lns`), con
-    la mitad del tiempo; otra, con esos programados y ese nivel como cotas, minimiza el objetivo, con la mitad de lo que
-    queda. Guarda lo que programó en la búsqueda. Devuelve si CP-SAT probó que no caben más."""
+    """Programa juntos a los que no quedaron, con sus niveles por necesidad (`DomainOptions()`), la asignación relajada
+    y en orden lexicográfico (PS-10): una resolución maximiza los programados y, con los mismos, el menor nivel (como
+    `lns`); otra, con esos programados y ese nivel como cotas, minimiza el objetivo. Cada una tiene la cuarta parte de
+    lo que queda de la reserva. Guarda lo que programó en la búsqueda. Devuelve si CP-SAT probó que no caben más con
+    todos sus niveles (ningún dominio quedó recortado)."""
+    model = cp_model.CpModel()
+    budget = limits.budget(deadline)
+    try:
+        variables = build_variables(model, shared, DomainOptions(), budget)
+    except (BuildTimeout, ModelTooLarge):
+        return False
     add_hard_constraints(model, variables, shared, relaxed=True)
     options = [option for domain in variables.groups.values() for option in domain.options]
     literals = [option.literal for option in options]
@@ -294,13 +298,13 @@ def _together(
     per_group = 1 + sum(max((o.tier for o in d.options), default=0) for d in variables.groups.values())
     model.maximize(per_group * placed - tiers)
     now = time.perf_counter()
-    first, status = solve_until(model, now + (deadline - now) / 2, limits, seed)
+    first, status = solve_until(model, now + (deadline - now) * TOGETHER_SHARE, limits, seed)
     if status not in FEASIBLE:
         return False
-    proven = status == cp_model.OPTIMAL
+    proven = status == cp_model.OPTIMAL and not variables.truncated
     solver = first
     try:
-        objective = add_objective(model, variables, shared, scope=scope, budget=limits.budget(deadline))
+        objective = add_objective(model, variables, shared, scope=scope, budget=budget)
     except (BuildTimeout, ModelTooLarge):
         objective = None
     if objective is not None:
@@ -310,7 +314,7 @@ def _together(
         model.add(tiers <= round(first.value(tiers)))
         model.minimize(objective.expression())
         now = time.perf_counter()
-        second, status = solve_until(model, now + (deadline - now) / 2, limits, seed)
+        second, status = solve_until(model, now + (deadline - now) * TOGETHER_SHARE, limits, seed)
         if status in FEASIBLE:
             solver = second
 

@@ -582,15 +582,13 @@ def _improve_step(
         current = sum(search.tiers.get(group, 0) for group in variables.groups)
         model.minimize(tiers)
         now = time.perf_counter()
-        first, status = solve_until(model, now + (step_deadline - now) * LEVEL_SHARE, limits, seed)
-        if status not in FEASIBLE:
-            return _Step()
+        level, status = solve_until(model, now + (step_deadline - now) * LEVEL_SHARE, limits, seed)
         leveled = status == cp_model.OPTIMAL
-        lowest = round(first.value(tiers))
-        model.add(tiers <= lowest)
-        if lowest < current:
+        if status in FEASIBLE and round(level.value(tiers)) < current:
             # Bajó el nivel: la pista de las reglas es esa solución solo en los grupos que bajaron; los demás siguen
             # con lo que tenían, que tiene su mismo nivel y mejor puntaje que una solución que solo ve los niveles.
+            first = level
+            model.add(tiers <= round(level.value(tiers)))
             model.clear_hints()
             for domain in variables.groups.values():
                 lowered = chosen_option(first, domain)
@@ -598,8 +596,8 @@ def _improve_step(
                 hint = search.chosen.get(domain.id) if keep else (lowered.spread, lowered.block)
                 for option in domain.options:
                     model.add_hint(option.literal, (option.spread, option.block) == hint)
-        else:
-            first = None
+        # Si no bajó, o si no alcanzó el tiempo (UNKNOWN), sigue con las reglas: el tope de cada grupo
+        # (`keep_tiers`) ya impide que el nivel suba, y la pista es lo que había.
     model.minimize(objective.expression())
     solver, status = solve_until(model, step_deadline, limits, seed)
     if status not in FEASIBLE:
