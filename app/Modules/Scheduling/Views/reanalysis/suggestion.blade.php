@@ -1,6 +1,7 @@
 {{--
-    Una sugerencia del re-análisis (tarea 8.3a) en la lista del drawer: el icono de su tipo y su título; debajo el tipo y
-    a quién toca; «Por qué» (la evidencia, en Mono) y «Qué cambia» (el efecto); la advertencia, si la hay (el docente que
+    Una sugerencia del re-análisis (tarea 8.3a) en la lista del drawer: el icono de su tipo y su título; debajo el tipo,
+    a quién toca y, si pide un salón de otro departamento, la insignia «Pide préstamo» (HC-10, la del préstamo en el
+    panel del salón); «Por qué» (la evidencia, en Mono) y «Qué cambia» (el efecto); la advertencia, si la hay (el docente que
     deja de impartir un grupo, en `warning` con su icono); y las acciones. «Editar» abre aquí los lugares que suma, de 1 al
     máximo. Cerrar un grupo pide confirmar con el diálogo de Nexus (ADR-0023). `$reason` es por qué no se puede aplicar (la
     carga o el grupo), o null. En celular, todo apilado y las acciones a lo ancho.
@@ -53,7 +54,12 @@
         </span>
         <div class="grid min-w-0 gap-0.5">
             <h4 id="{{ $slug }}-title" class="font-bold leading-snug">{{ $suggestion->title }}</h4>
-            <p class="text-[12.5px] text-neutral">{{ $suggestion->kind->label() }}@if ($careerCode) · <span class="font-mono font-semibold">{{ $careerCode }}</span>@endif</p>
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-neutral">
+                <span>{{ $suggestion->kind->label() }}@if ($careerCode) · <span class="font-mono font-semibold">{{ $careerCode }}</span>@endif</span>
+                @if ($suggestion->asksLoan())
+                    <x-core::status-badge tone="warning" icon="o-arrows-right-left" label="Pide préstamo" data-testid="suggestion-loan" />
+                @endif
+            </p>
         </div>
     </div>
 

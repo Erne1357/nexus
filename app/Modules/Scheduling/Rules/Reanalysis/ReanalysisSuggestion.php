@@ -63,6 +63,14 @@ final readonly class ReanalysisSuggestion
     }
 
     /**
+     * Si pide el préstamo de un salón de otro departamento (HC-10): cambiar salón a uno ajeno, como lo dice «Qué cambia».
+     */
+    public function asksLoan(): bool
+    {
+        return array_any($this->moves, fn (array $move): bool => $move['to']->loanFrom !== null);
+    }
+
+    /**
      * Si el jefe puede cambiar cuántos lugares suma antes de aplicarla.
      */
     public function isEditable(): bool

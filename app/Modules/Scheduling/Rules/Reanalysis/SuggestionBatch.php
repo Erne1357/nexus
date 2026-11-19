@@ -27,8 +27,7 @@ final class SuggestionBatch
 {
     /**
      * Por qué dos sugerencias del mismo bloque no se aplican juntas, o null si sí.
-     */
-    /**
+     *
      * @param  array<string, NewGroupPlacement>  $placements  el lugar ya buscado de cada «Abrir un grupo», por llave
      */
     public static function clash(ReanalysisSuggestion $one, ReanalysisSuggestion $other, array $placements = []): ?string
