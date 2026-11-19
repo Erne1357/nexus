@@ -54,6 +54,11 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'soft_weights.SC-03', 'entero de 0 en adelante'],
+    'peso blando sobre el tope' => [function (array $d) {
+        $d['soft_weights']['SC-01'] = 10001;
+
+        return $d;
+    }, 'soft_weights.SC-01', 'debe estar entre 0 y 10 000'],
     'peso blando desconocido' => [function (array $d) {
         $d['soft_weights']['SC-10'] = 1;
 
@@ -74,6 +79,53 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'groups[2].weekly_hours', 'debe ser un entero de 1 en adelante'],
+    'combinación de otro semestre que el del grupo' => [function (array $d) {
+        $d['groups'][0]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:2:C1";
+
+        return $d;
+    }, 'groups[0].cohorts[1]', 'otro plan, semestre o campus'],
+    'combinación con dos grupos de la misma materia' => [function (array $d) {
+        $d['groups'][1]['subject_code'] = $d['groups'][0]['subject_code'];
+        $d['groups'][0]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:1:C1";
+        $d['groups'][1]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:1:C1";
+
+        return $d;
+    }, 'groups[1].cohorts[2]', 'dos grupos de ACF-0901'],
+    'combinación sin un grupo de cada materia de su semestre' => [function (array $d) {
+        $d['groups'][0]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:1:C1";
+
+        return $d;
+    }, 'groups[0].cohorts[1]', 'SCD-1008'],
+    'préstamo de un grupo que no está en groups' => [function (array $d) {
+        $d['agreements'][0]['group_id'] = '0190a000-0000-7000-8000-999999999999';
+
+        return $d;
+    }, 'agreements[0].group_id', 'groups'],
+    'pista de un grupo desconocido' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => 'no-existe', 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].group_id', 'groups'],
+    'pista de un salón desconocido' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room_id' => 'no-existe', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].room_id', 'rooms'],
+    'pista con fin antes del inicio' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 1, 'starts_at' => '11:00', 'ends_at' => '09:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].ends_at', 'posterior'],
+    'pista con hora mal escrita' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 1, 'starts_at' => '9:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].starts_at', 'HH:MM'],
+    'pista en el día 7' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 7, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].day', 'entre 1 y 6'],
 ]);
 
 test('una entrada rota se rechaza con la ruta del campo', function (Closure $break, string $path, string $fragment) {
