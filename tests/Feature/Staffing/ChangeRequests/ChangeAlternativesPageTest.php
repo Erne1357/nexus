@@ -115,7 +115,8 @@ it('sin alternativa: dice que el motor no encontró un acomodo sin choques duros
     altPage($this->w->jefe, $request)
         ->assertSeeHtml('data-testid="alternatives-none"')
         ->assertSee('El motor no encontró un acomodo sin choques duros.')
-        ->assertSee('Sin alternativa');
+        ->assertSee('Sin alternativa')
+        ->assertSee('Recházala, o libera el lugar en el editor y busca otra vez.');
 });
 
 it('buscando: mientras el motor corre en la cola la pantalla pregunta cada 2 segundos, y un cálculo colgado sale como fallido', function () {
@@ -137,6 +138,7 @@ it('buscando: mientras el motor corre en la cola la pantalla pregunta cada 2 seg
     altPage($this->w->jefe, $request)
         ->assertDontSeeHtml('wire:poll.2s="pollAlternatives"')
         ->assertSeeHtml('data-testid="alternatives-failed"')
+        ->assertDontSeeHtml('data-testid="search-alternatives"')
         ->assertSee('vuelve a pedirlas');
 });
 
@@ -209,6 +211,17 @@ it('solo avisos: lo pedido sin choques duros se aprueba como se pidió y no se b
         ->assertHasNoErrors();
 
     expect($request->fresh()->status)->toBe(ChangeRequestStatus::Approved);
+});
+
+it('al coordinador, buscar alternativas y recalcular salen deshabilitados con su motivo', function () {
+    $request = altRequest($this->w);
+
+    altPage($this->w->coordIsc, $request)
+        ->assertSeeHtml('data-testid="search-alternatives-readonly"')
+        ->assertSee('Las pide el jefe del departamento')
+        ->assertSee('Lo recalcula el jefe del departamento.')
+        ->assertDontSeeHtml('data-testid="search-alternatives"')
+        ->assertDontSeeHtml('data-testid="recalculate-impact"');
 });
 
 it('el coordinador ve las pestañas de solo lectura: sin buscar ni aprobar', function () {
