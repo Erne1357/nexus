@@ -7,7 +7,7 @@ Servicio `solver` (Python 3.12, FastAPI y OR-Tools; ADR-0027) que resuelve el co
 | Variable | Dónde | Para qué |
 |---|---|---|
 | `SOLVER_TOKEN` | `.env` del servicio y de `app`/`queue` | Token compartido: toda petición salvo `/health` lleva `Authorization: Bearer <token>`. Sin él, el servicio no arranca. En producción, uno largo y aleatorio. |
-| `SOLVER_URL` | `.env` de `app`/`queue` | `http://solver:8000` dentro de la red `backend`. |
+| `SOLVER_URL` | `.env` de `app`/`queue` | `http://solver:8000` dentro de la red `backend`. En producción es obligatorio, igual que `SOLVER_TOKEN`: `compose.prod.yaml` no arranca sin ellos, porque sin la dirección CP-SAT desaparecería sin aviso de la lista de motores (`CpSatClient::configured()`). |
 | `SOLVER_DEFAULT_TIME_LIMIT` | servicio | Segundos por corrida si la entrada no los trae. |
 | `SOLVER_THREADS` | servicio | Hilos de CP-SAT por corrida (0, los núcleos del contenedor; nunca más que esos). |
 | `SOLVER_ENGINE` | servicio | Motor que atiende las corridas: `cpsat` (el modelo CP-SAT, por omisión desde la 7.10; `docs/arquitectura/solver.md`, «Resolución») o `trivial` (el de prueba, solo para pruebas y CI). |
