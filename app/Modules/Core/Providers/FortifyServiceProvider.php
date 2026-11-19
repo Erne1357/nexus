@@ -7,6 +7,7 @@ use App\Modules\Core\Actions\RequirePasswordChange;
 use App\Modules\Core\Actions\UpdateUserPassword;
 use App\Modules\Core\Actions\UpgradePasswordHash;
 use App\Modules\Core\Enums\PasswordOrigin;
+use App\Modules\Core\Http\Responses\LoginResponse;
 use App\Modules\Core\Http\Responses\PasswordUpdateResponse;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\LoginScreenQuery;
@@ -15,6 +16,7 @@ use App\Modules\Core\Support\LoginThrottle;
 use App\Modules\Core\Support\SiiNip;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
@@ -25,8 +27,10 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Timebox;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use Laravel\Fortify\Contracts\PasswordUpdateResponse as PasswordUpdateResponseContract;
 use Laravel\Fortify\Fortify;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Login de Core con Fortify (ADR-0004): por username, sin registro público, con límite de
@@ -73,6 +77,7 @@ final class FortifyServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(PasswordUpdateResponseContract::class, PasswordUpdateResponse::class);
+        $this->app->singleton(LoginResponseContract::class, LoginResponse::class);
     }
 
     public function boot(): void
@@ -262,15 +267,22 @@ final class FortifyServiceProvider extends ServiceProvider
 
     /**
      * Respuesta al exceder el límite: de vuelta al formulario con el aviso en español, en lugar
-     * de la página de error 429.
+     * de la página de error 429. Al formulario que pide JSON (la credencial del login, tarea 1.23) le responde 429
+     * con el mismo aviso en el campo del usuario, como un error de validación.
      *
      * @param  array<string, int|string>  $headers
      */
-    private function lockedOut(Request $request, array $headers): RedirectResponse
+    private function lockedOut(Request $request, array $headers): Response
     {
+        $message = __('auth.throttle', ['seconds' => $headers['Retry-After'] ?? 60]);
+
+        if ($request->wantsJson()) {
+            return new JsonResponse(['message' => $message, 'errors' => [Fortify::username() => [$message]]], Response::HTTP_TOO_MANY_REQUESTS, $headers);
+        }
+
         return back()
             ->withInput($request->only(Fortify::username(), 'remember'))
-            ->withErrors([Fortify::username() => __('auth.throttle', ['seconds' => $headers['Retry-After'] ?? 60])]);
+            ->withErrors([Fortify::username() => $message]);
     }
 
     /**
