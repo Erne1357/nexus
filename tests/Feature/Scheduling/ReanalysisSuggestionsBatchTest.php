@@ -258,6 +258,17 @@ describe('jefe del departamento', function () {
         expect($drawer->get('chosen'))->toContain($this->closeKey);
     });
 
+    it('F-06: una casilla que no trae una llave no cuenta ni rompe la elección', function () {
+        $drawer = chosenDrawer($this->jefe, $this->world)->set('chosen', [['no-es-llave'], 7, $this->expandKey]);
+
+        expect($drawer->get('chosen'))->toBe([$this->expandKey])
+            ->and($drawer->get('unchecked'))->toBe([$this->closeKey]);
+
+        $drawer->call('findPlacement', $this->openKey);
+
+        expect($drawer->get('chosen'))->toBe([$this->expandKey, $this->openKey]);
+    });
+
     it('sin nada que se pueda elegir no hay casillas que marcar ni «Aplicar las elegidas»', function () {
         $closing = $this->world->group($this->world->integral, $this->world->isc, 20, $this->world->c1, 2, day: 2);
         $drawer = chosenDrawer($this->jefe, $this->world, $this->world->c1);

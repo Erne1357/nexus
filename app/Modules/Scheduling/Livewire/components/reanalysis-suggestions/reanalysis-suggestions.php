@@ -536,14 +536,15 @@ new class extends Component
         }
 
         $placements = $this->placementsOf(array_values($choosable));
+        $chosenKeys = array_values(array_filter($this->chosen, is_string(...)));
         $candidates = $this->preselect
-            ? [...$this->chosen, ...array_diff(array_keys($choosable), $this->chosen, $this->unchecked, array_keys($this->changedSinceChosen))]
-            : $this->chosen;
+            ? [...$chosenKeys, ...array_diff(array_keys($choosable), $chosenKeys, $this->unchecked, array_keys($this->changedSinceChosen))]
+            : $chosenKeys;
         $this->preselect = false;
         $chosen = [];
 
         foreach ($candidates as $key) {
-            $suggestion = is_string($key) ? ($choosable[$key] ?? null) : null;
+            $suggestion = $choosable[$key] ?? null;
 
             if ($suggestion === null) {
                 continue;
