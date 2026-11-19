@@ -266,6 +266,19 @@ it('una corrida lista con error de aplicación lo muestra con «Volver a correr�
         ->assertSee('Volver a correr');
 });
 
+it('una corrida de un motor que ya no está registrado muestra su nombre y «Volver a correr» propone el predeterminado', function () {
+    $run = SolverRun::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'engine' => 'cpsat', 'status' => SolverRunStatus::Failed, 'error' => 'El servicio del motor no está disponible.', 'input' => ['version' => 1, 'time_limit_seconds' => 120]]);
+
+    runsPage($this->jefe, ['corrida' => $run->id])
+        ->assertSee('CP-SAT (servicio)')
+        ->assertDontSee('cpsat ·')
+        ->call('openLaunch', $run->id)
+        ->assertSet('launchEngine', 'heuristic')
+        ->assertSet('launchLimit', 120)
+        ->assertSeeHtml('data-testid="launch-engine-unavailable"')
+        ->assertSee('CP-SAT (servicio) no está disponible ahora');
+});
+
 it('el componente de avance también cubre «Aplicando…» y avisa a la página cuando la corrida termina de aplicarse', function () {
     $run = SolverRun::factory()->done()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'status' => SolverRunStatus::Applying, 'input' => ['version' => 1, 'time_limit_seconds' => 60]]);
 
