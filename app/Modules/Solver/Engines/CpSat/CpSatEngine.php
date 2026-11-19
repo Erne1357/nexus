@@ -62,7 +62,9 @@ final readonly class CpSatEngine implements SolverEngine
 
     /**
      * Lo menos que se le manda a CP-SAT después de descontar a la heurística: con menos no alcanza a construir ni a
-     * mejorar la pista. Nunca pasa del límite original de la corrida.
+     * mejorar la pista. Nunca pasa del límite original de la corrida, pero la heurística más este piso sí pueden pasarlo
+     * por unos segundos en corridas de menos de unos 12 s; eso cabe en DEADLINE_MARGIN_SECONDS y muy lejos de
+     * RunSolver::STALE_AFTER, así que no vence la corrida.
      */
     public const int MIN_SOLVE_SECONDS = 10;
 
