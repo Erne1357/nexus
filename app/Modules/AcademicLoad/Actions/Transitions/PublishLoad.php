@@ -72,14 +72,16 @@ final class PublishLoad
             $diff = $previous === null ? null : SnapshotDiff::between($previous, $payload, self::careerDepartments($previous, $payload));
             $reason = $this->reason($load, $version);
 
-            $snapshot = $load->snapshots()->create([
+            $snapshot = $load->snapshots()->make([
                 'version' => $version,
                 'payload' => $payload,
                 'diff' => $diff,
                 'reason' => $reason,
                 'created_by' => $actor->getKey(),
-                'created_at' => $publishedAt,
             ]);
+            // `created_at` no es asignable en masa: se pone aparte para que la versión y la publicación lleven el mismo instante.
+            $snapshot->created_at = $publishedAt;
+            $snapshot->save();
 
             $load->update(['current_version' => $version, 'published_by' => $actor->getKey(), 'published_at' => $publishedAt]);
 
