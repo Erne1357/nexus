@@ -525,11 +525,14 @@ document.addEventListener('alpine:init', () => {
             moves.push(wordmark.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, delay: ARRIVE * 0.8, easing: SETTLE, fill: 'both' }));
 
             // La liebre va pegada a la cabecera (mismo paso que el azul) y al llegar a su esquina brinca dentro de su cuadro.
-            const hare = piece(plain(this.$refs.hare.cloneNode(true)), from.hare, 'transform-origin:0 0');
-            const landed = `translate(${to.hare.x - from.hare.x}px, ${to.hare.y - from.hare.y}px) scale(${to.hare.w / from.hare.w}, ${to.hare.h / from.hare.h})`;
+            // El cuadro cambia de medidas, no de escala: en celular pasa de 9:8 a cuadrado y la liebre no se estira.
+            const hare = piece(plain(this.$refs.hare.cloneNode(true)), from.hare);
+            const landed = { transform: `translate(${to.hare.x - from.hare.x}px, ${to.hare.y - from.hare.y}px)`, width: `${to.hare.w}px`, height: `${to.hare.h}px` };
             const hareTime = ARRIVE + HOP;
             const landing = ARRIVE / hareTime;
-            moves.push(hare.animate([{ transform: 'none', easing: MOVE }, { transform: landed, offset: landing }, { transform: landed }], { duration: hareTime, fill: 'both' }));
+            moves.push(
+                hare.animate([{ transform: 'none', width: `${from.hare.w}px`, height: `${from.hare.h}px`, easing: MOVE }, { ...landed, offset: landing }, landed], { duration: hareTime, fill: 'both' }),
+            );
             moves.push(
                 hare.firstElementChild.animate(
                     [

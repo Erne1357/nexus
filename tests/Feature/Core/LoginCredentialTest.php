@@ -52,6 +52,20 @@ it('con JSON lleva a la página que se había pedido antes de entrar, con el ár
         ->assertJsonPath('page', ['area' => NavigationArea::Administracion->label(), 'title' => 'Campus']);
 });
 
+it('con una página pedida que su puesto no ve en el menú no lleva la credencial a la banda', function () {
+    User::factory()
+        ->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])
+        ->create(['username' => '19110001']);
+
+    $this->get(route('core.campuses'))->assertRedirect(route('login'));
+
+    $this->postJson('/login', ['username' => '19110001', 'password' => 'password'])
+        ->assertOk()
+        ->assertJsonPath('redirect', route('core.campuses'))
+        ->assertJsonPath('band', false)
+        ->assertJsonPath('page', null);
+});
+
 it('con el cambio de contraseña pendiente no lleva la credencial a la banda', function () {
     User::factory()->admin()->create(['username' => 'nuevo', 'must_change_password' => true]);
 
