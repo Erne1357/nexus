@@ -61,7 +61,7 @@ use Throwable;
  *   (los de otro campus quedan fijos, confirmado el 18 de noviembre de 2026); una sola.
  *   No se pide si la propuesta no suma las horas semanales del grupo (ProposePlacements::pinnedProblem; HC-12).
  * - (b) el grupo solo: se mueve el grupo pedido con todo lo demás fijo; las que falten para llegar a ALTERNATIVES. Una
- *   que lo deje como está no cuenta, y dentro de esta llamada cada una lleva al grupo a horas distintas de las
+ *   que lo deje como está no cuenta (tampoco con sus sesiones partidas en horas sueltas), y dentro de esta llamada cada una lleva al grupo a horas distintas de las
  *   anteriores (ProposePlacements). La cadena y el grupo solo son llamadas aparte: el grupo solo puede repetir horas de
  *   la cadena.
  *
@@ -382,7 +382,8 @@ final class ProposeChangeAlternatives
     }
 
     /**
-     * Una alternativa para guardar, o null si el validador le encuentra un choque duro.
+     * Una alternativa para guardar, o null si el validador le encuentra un choque duro o si deja el grupo pedido como
+     * está hoy (CR-02: sus sesiones unidas, las contiguas del mismo tipo y salón, son las de hoy).
      *
      * @return array<string, mixed>|null
      */
@@ -403,7 +404,13 @@ final class ProposeChangeAlternatives
             $group = $groups[$groupId];
             $joined = ReplaceGroupSessions::joined($groupSlots);
 
-            if ($groupId !== $requested->id && self::sameAsLive($group->sessions, $joined)) {
+            if (self::sameAsLive($group->sessions, $joined)) {
+                // CR-02: una alternativa que deja el grupo pedido como está hoy no cuenta; un grupo de la cadena que no
+                // se mueve simplemente no va en ella.
+                if ($groupId === $requested->id) {
+                    return null;
+                }
+
                 continue;
             }
 
