@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Exports\SemesterPdf;
 use App\Modules\AcademicLoad\Exports\TeacherPdf;
 use App\Modules\AcademicLoad\Http\Controllers\Concerns\DeliversPublishedExports;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -30,7 +31,7 @@ final class DownloadPublishedPdf
         private readonly PublishedScheduleQuery $published,
     ) {}
 
-    public function semester(Request $request, string $periodo, string $modalidad, string $carrera): Response|StreamedResponse
+    public function semester(Request $request, string $periodo, string $modalidad, string $carrera): Response|StreamedResponse|RedirectResponse
     {
         [$term, $modality, $campus] = $this->context($periodo, $modalidad, $this->campusOf($request));
         $plan = $request->query('reticula');
@@ -39,14 +40,14 @@ final class DownloadPublishedPdf
         return $this->deliver($request, is_string($plan) && $semester !== false ? SemesterPdf::find($this->published, $term, $modality, $campus, $carrera, $plan, $semester) : null);
     }
 
-    public function teacher(Request $request, string $periodo, string $modalidad, string $docente): Response|StreamedResponse
+    public function teacher(Request $request, string $periodo, string $modalidad, string $docente): Response|StreamedResponse|RedirectResponse
     {
         [$term, $modality, $campus] = $this->context($periodo, $modalidad, $this->campusOf($request));
 
         return $this->deliver($request, TeacherPdf::find($this->published, $term, $modality, $campus, $docente));
     }
 
-    public function room(Request $request, string $periodo, string $modalidad, string $salon): Response|StreamedResponse
+    public function room(Request $request, string $periodo, string $modalidad, string $salon): Response|StreamedResponse|RedirectResponse
     {
         [$term, $modality, $campus] = $this->context($periodo, $modalidad, $this->campusOf($request));
 

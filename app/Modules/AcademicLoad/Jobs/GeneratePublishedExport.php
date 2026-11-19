@@ -2,6 +2,7 @@
 
 namespace App\Modules\AcademicLoad\Jobs;
 
+use App\Modules\AcademicLoad\Enums\ExportState;
 use App\Modules\AcademicLoad\Exports\PublishedExport;
 use App\Modules\AcademicLoad\Exports\PublishedExports;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -13,7 +14,8 @@ use Throwable;
  * Arma en la cola un exporte de lo publicado (PublishedExports::generate): un PDF de cientos de grupos o el Excel del
  * campus tardan más de un segundo (CLAUDE.md, arquitectura, punto 7). Único por llave mientras espera o corre, así
  * que muchos que piden el mismo PDF a la vez no lo arman dos veces. Un solo intento: si falla, failed() lo deja
- * fallido unos minutos y quien lo pidió puede volver a pedirlo.
+ * fallido unos minutos y quien lo pidió puede volver a pedirlo. Un reintento de quien esperó de más (PublishedExports::
+ * retry(), F-05 del ensayo 8.11) suelta el candado y encola otro: el que corra después del que lo dejó listo no lo arma.
  *
  * `timeout` queda por debajo del `retry_after` de la conexión (config/queue.php).
  *
@@ -48,6 +50,10 @@ final class GeneratePublishedExport implements ShouldBeUnique, ShouldQueue
 
     public function handle(PublishedExports $exports): void
     {
+        if ($exports->state($this->export) === ExportState::Ready) {
+            return;
+        }
+
         $previous = self::raiseMemoryLimit();
 
         try {

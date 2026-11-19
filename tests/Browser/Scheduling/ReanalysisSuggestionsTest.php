@@ -6,7 +6,7 @@ use Tests\Support\Scheduling\ReanalysisWorld;
 /*
 | Sugerencias del re-análisis en el navegador (tarea 8.3a; RA-07): el jefe abre el drawer de una materia faltante desde su
 | bloque, ve la sugerencia «Ampliar cupo» con su evidencia y la aplica; la sugerencia se va y la página lo marca como ya
-| ajustado.
+| ajustado. En celular, «Demanda por carrera» se lee completa sin desplazarse de lado (F-07 del ensayo 8.11).
 */
 
 beforeEach(function () {
@@ -36,4 +36,36 @@ it('el jefe abre las sugerencias de una materia faltante y aplica «Ampliar cupo
         ->assertNoJavaScriptErrors();
 
     expect($a->fresh()->capacity)->toBe(50);
+});
+
+it('F-07: en celular, «Demanda por carrera» apila cada carrera con todas sus cifras, sin desplazarse de lado; desde 768 px es la tabla', function () {
+    $wrapper = "document.querySelector('[data-testid=suggestions-evidence]').parentElement";
+    $allInside = "[...document.querySelectorAll('[data-testid=suggestions-career] > td')].every((cell) => { const box = cell.getBoundingClientRect(); return box.width > 0 && box.right <= window.innerWidth; })";
+    $header = "getComputedStyle(document.querySelector('[data-testid=suggestions-evidence] thead')).display";
+
+    $page = visit('/login')
+        ->fill('username', '19110061')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/');
+
+    foreach ([320, 375, 390] as $width) {
+        $page->resize($width, 844)
+            ->navigate('/scheduling/reanalysis')
+            ->click('[data-subject="ACF-0902"][data-campus="C2"] [data-testid="block-suggestions"]')
+            ->assertSeeIn('[data-testid="suggestions-career"][data-career="ISIC"]', 'AHORA')
+            ->assertSeeIn('[data-testid="suggestions-career"][data-career="ISIC"]', 'DIF.')
+            ->assertSeeIn('[data-testid="suggestions-career"][data-career="ISIC"]', 'Faltante')
+            ->assertScript("{$wrapper}.scrollWidth <= {$wrapper}.clientWidth")
+            ->assertScript($allInside)
+            ->assertScript($header, 'none');
+    }
+
+    $page->resize(768, 900)
+        ->navigate('/scheduling/reanalysis')
+        ->click('[data-subject="ACF-0902"][data-campus="C2"] [data-testid="block-suggestions"]')
+        ->assertSeeIn('[data-testid="suggestions-evidence"] thead', 'AHORA')
+        ->assertScript($header, 'table-header-group')
+        ->assertScript("{$wrapper}.scrollWidth <= {$wrapper}.clientWidth")
+        ->assertNoJavaScriptErrors();
 });

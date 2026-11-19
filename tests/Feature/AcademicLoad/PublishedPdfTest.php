@@ -89,6 +89,33 @@ it('mientras la cola lo arma responde una página que se recarga sola', function
     Queue::assertPushed(GeneratePublishedExport::class, 1);
 });
 
+it('F-05: si la cola no responde, la espera vence con un aviso y «Reintentar» vuelve a encolar el PDF', function () {
+    Queue::fake();
+    $url = publishedPdfUrl('published.teacher.pdf', ['docente' => $this->teacher['id']]);
+    $retry = $url.'&reintentar=1';
+
+    $this->get($url)->assertStatus(202)->assertSee('Preparando el archivo')->assertDontSee('tardando más de lo normal');
+    $this->get($retry)->assertRedirect($url);
+    Queue::assertPushed(GeneratePublishedExport::class, 1);
+
+    $this->travel(PublishedExports::WAIT_SECONDS + 1)->seconds();
+
+    $this->get($url)
+        ->assertStatus(202)
+        ->assertSee('El archivo está tardando más de lo normal')
+        ->assertSee('href="'.e($retry).'"', false)
+        ->assertDontSee('http-equiv="refresh"', false);
+
+    $this->get($retry)->assertRedirect($url);
+    Queue::assertPushed(GeneratePublishedExport::class, 2);
+
+    $this->get($url)
+        ->assertStatus(202)
+        ->assertSee('Preparando el archivo')
+        ->assertDontSee('tardando más de lo normal')
+        ->assertSee('<meta http-equiv="refresh" content="3">', false);
+});
+
 it('responde 404 sin encolar nada a lo que no está publicado', function (string $name, array $parameters) {
     Queue::fake();
 
