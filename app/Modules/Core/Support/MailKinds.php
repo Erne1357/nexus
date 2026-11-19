@@ -17,6 +17,8 @@ final class MailKinds
         'UserEmailChanged' => 'Aviso de cambio de correo',
         'CatalogReviewsPending' => 'Validación de catálogos pendiente',
         'LoadRepublished' => 'Carga republicada',
+        'ChangeAlternativeMovesCareerGroup' => 'Grupo movido por una solicitud de cambio',
+        'ChangeRequestMovedTeacherGroups' => 'Cambió el horario de tus grupos',
     ];
 
     public static function knows(string $kind): bool

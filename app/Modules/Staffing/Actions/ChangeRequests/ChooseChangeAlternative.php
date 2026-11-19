@@ -5,12 +5,11 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Scheduling\Enums\SessionKind;
-use App\Modules\Scheduling\Validation\SessionCandidate;
 use App\Modules\Solver\Actions\ProposePlacements;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Rules\InputFingerprint;
 use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Support\ChangeAlternatives;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -25,7 +24,11 @@ use InvalidArgumentException;
  * (BuildSolverInput::forGroups) y su huella tiene que ser la guardada (SV-02), y sus sesiones no pueden dejar choques
  * duros con el validador (AssessChangeImpact::simulateSessions). Si algo cambió, no aprueba: «Esto cambió…» y el jefe
  * vuelve a pedirlas. La elegida queda en `alternatives.chosen` (id, quién y cuándo), para que el editor de horarios la
- * precargue al aplicar la solicitud; no escribe sesiones.
+ * precargue al aplicar la solicitud; no escribe sesiones (las escribe ApplyChosenAlternative, CR-04).
+ *
+ * Después del commit, si la cadena mueve un grupo de otra carrera, avisa a su coordinación qué grupo se mueve, de dónde
+ * a dónde y por qué solicitud (NotifyChangeRequest::careerGroupsMoved; decidido por el usuario el 18 de noviembre de
+ * 2026: el jefe decide sin su visto bueno).
  */
 final class ChooseChangeAlternative
 {
@@ -35,6 +38,7 @@ final class ChooseChangeAlternative
         private readonly ApproveChangeRequest $approve,
         private readonly AssessChangeImpact $assess,
         private readonly BuildSolverInput $build,
+        private readonly NotifyChangeRequest $notify,
     ) {}
 
     /**
@@ -43,8 +47,9 @@ final class ChooseChangeAlternative
     public function handle(ChangeRequest $request, User $actor, string $alternativeId, ?string $comment = null): ChangeRequest
     {
         Gate::forUser($actor)->authorize('decide', $request);
+        $chosen = null;
 
-        return $this->approve->approve($request, $actor, $comment, function (ChangeRequest $locked) use ($actor, $alternativeId): void {
+        $request = $this->approve->approve($request, $actor, $comment, function (ChangeRequest $locked) use ($actor, $alternativeId, &$chosen): void {
             $alternatives = $locked->alternatives ?? [];
             $item = collect($alternatives['items'] ?? [])->firstWhere('id', $alternativeId);
 
@@ -58,6 +63,7 @@ final class ChooseChangeAlternative
 
             $alternatives['chosen'] = ['id' => $alternativeId, 'chosen_by' => $actor->getKey(), 'chosen_at' => now()->toIso8601String()];
             $locked->forceFill(['alternatives' => $alternatives]);
+            $chosen = $item;
 
             activity()
                 ->performedOn($locked)
@@ -66,12 +72,21 @@ final class ChooseChangeAlternative
                 ->withProperties(['alternative' => $alternativeId, 'kind' => $item['kind'], 'groups' => array_column($item['groups'], 'code')])
                 ->log('Eligió una alternativa del motor para la solicitud de cambio');
         });
+
+        if ($chosen !== null) {
+            $this->notify->careerGroupsMoved($request, $chosen);
+        }
+
+        return $request;
     }
 
     /**
+     * Si la alternativa sigue vigente (SV-02): la entrada de sus grupos, armada otra vez, tiene la huella guardada, y sus
+     * sesiones no dejan choques duros con el validador. La usa también ApplyChosenAlternative (CR-04).
+     *
      * @param  array<string, mixed>  $item
      */
-    private function isCurrent(ChangeRequest $request, array $item): bool
+    public function isCurrent(ChangeRequest $request, array $item): bool
     {
         try {
             $input = $this->build->forGroups(Term::query()->findOrFail($request->term_id), Modality::withTrashed()->findOrFail($request->modality_id),
@@ -84,13 +99,6 @@ final class ChooseChangeAlternative
             return false;
         }
 
-        $candidates = [];
-
-        foreach ($item['groups'] as $group) {
-            $candidates[$group['group_id']] = array_map(fn (array $session): SessionCandidate => new SessionCandidate($session['day'], $session['starts_at'], $session['ends_at'],
-                $session['room_id'], SessionKind::from($session['kind']), $session['replaces_session_id']), $group['sessions']);
-        }
-
-        return $this->assess->simulateSessions($request->term_id, $request->modality_id, $candidates)['hard'] === [];
+        return $this->assess->simulateSessions($request->term_id, $request->modality_id, ChangeAlternatives::candidates($item))['hard'] === [];
     }
 }
