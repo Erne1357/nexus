@@ -20,8 +20,9 @@ use App\Modules\Solver\Enums\SolverPermission;
  * campo por modalidad del catálogo (su clave en minúsculas, ADR-0025). De fábrica, CP-SAT en Presencial y la heurística en
  * PHP en las demás (decisión del usuario, 19 de noviembre de 2026). Un campo que falta o trae un motor que no es opción
  * usa su valor de fábrica, y una modalidad sin campo usa la heurística. Es lo que propone «Lanzar una corrida»
- * (EngineRegistry::default(), que propone la heurística si el motor elegido no está registrado); quien lanza puede
- * elegir otro.
+ * (EngineRegistry::default()); quien lanza puede elegir otro. El servicio de CP-SAT corre siempre en su contenedor: la
+ * heurística solo se propone como respaldo si no está configurado (`cpsat` no se registra), y si está configurado pero
+ * caído la corrida falla y avisa (SV-08).
  */
 final readonly class SolverSettings
 {
@@ -181,7 +182,7 @@ final readonly class SolverSettings
                     'sc_09' => 'SC-09 · Traslado entre campus',
                 ], unit: 'puntos', permission: SolverPermission::SettingUpdate, savedNotice: 'Los pesos aplican desde la siguiente corrida del motor.'),
             new SettingDefinition(self::DEFAULT_ENGINE_SETTING, 'solver', 'Motor de horarios', label: 'Motor predeterminado por modalidad',
-                help: 'El motor que propone «Lanzar una corrida» en cada modalidad; quien lanza puede elegir otro. Si CP-SAT no está disponible en el servidor, se propone la heurística.',
+                help: 'El motor que propone «Lanzar una corrida» en cada modalidad; quien lanza puede elegir otro. Si el servicio de CP-SAT no está configurado en el servidor, se propone la heurística.',
                 type: SettingType::ChoiceTable, default: self::DEFAULT_ENGINES, fields: self::ENGINE_MODALITIES, permission: SolverPermission::SettingUpdate,
                 savedNotice: 'El motor predeterminado aplica desde la siguiente corrida que se lance.', options: self::ENGINE_OPTIONS),
         ];

@@ -19,15 +19,16 @@ Al medir, el servicio todavía ignoraba `hint_sessions`, así que CP-SAT arranca
 ## Decisión
 Decisión del usuario, 19 de noviembre de 2026:
 
-1. **Presencial propone CP-SAT** por omisión, con la pista de la heurística, cuando el servicio de Python está desplegado. Con la pista, CP-SAT ya mejora a la heurística con 60 s en la carga grande y en todas las demás instancias, sin violaciones duras.
-2. **Las demás modalidades (EAD, En línea, TecNM Virtual) proponen la heurística.** No hay instancias suyas que medir (fase 10).
-3. **Sin servicio, la heurística.** Si `cpsat` no está registrado (sin `SOLVER_URL` o `SOLVER_TOKEN`), `EngineRegistry::default()` propone la heurística aunque el parámetro diga `cpsat`.
-4. **El parámetro.** `solver.default_engine` es una tabla de opciones en «Parámetros» (Motor de horarios): un campo por modalidad del catálogo (`pres`, `ead`, `enl`, `tnmv`) y una opción por motor elegible (`heuristic`, `cpsat`; el de prueba no). El valor de fábrica es `{"pres": "cpsat", "ead": "heuristic", "enl": "heuristic", "tnmv": "heuristic"}`. Lo cambia quien cambia los demás parámetros del motor (`solver.setting.update`, Subdirección). Quien lanza puede elegir otro motor en el drawer.
+1. **Presencial propone CP-SAT** por omisión, con la pista de la heurística. Con la pista, CP-SAT ya mejora a la heurística con 60 s en la carga grande y en todas las demás instancias, sin violaciones duras.
+2. **El servicio corre siempre.** El microservicio del motor vive en su contenedor de Docker (`solver`, `restart: unless-stopped`), arriba junto con `app` y `queue`, y producción exige `SOLVER_URL` y `SOLVER_TOKEN` (decisión del usuario, 19 de noviembre de 2026). No es un servicio opcional que se active después.
+3. **Las demás modalidades (EAD, En línea, TecNM Virtual) proponen la heurística.** No hay instancias suyas que medir (fase 10).
+4. **La heurística solo como respaldo de configuración.** Si el servicio no está configurado (`CpSatClient::configured()` falso: sin `SOLVER_URL` o `SOLVER_TOKEN`, como en las pruebas), `cpsat` no se registra y `EngineRegistry::default()` propone la heurística aunque el parámetro diga `cpsat`. No es el estado normal. Si el servicio está configurado pero caído, la corrida de CP-SAT falla y avisa (SV-08, confirmado el 17 de noviembre de 2026): no cambia sola a la heurística.
+5. **El parámetro.** `solver.default_engine` es una tabla de opciones en «Parámetros» (Motor de horarios): un campo por modalidad del catálogo (`pres`, `ead`, `enl`, `tnmv`) y una opción por motor elegible (`heuristic`, `cpsat`; el de prueba no). El valor de fábrica es `{"pres": "cpsat", "ead": "heuristic", "enl": "heuristic", "tnmv": "heuristic"}`. Lo cambia quien cambia los demás parámetros del motor (`solver.setting.update`, Subdirección). Quien lanza puede elegir otro motor en el drawer.
 
 ## Consecuencias
 - El catálogo de parámetros (CF-S7) gana un tipo, la tabla de opciones (`SettingType::ChoiceTable`, con `options` en la definición y un `x-select` por campo en la pantalla). Sirve para cualquier parámetro futuro que elija entre valores con nombre.
 - Los campos son las modalidades sembradas por ADR-0025; una modalidad nueva necesita su campo para elegirle otro motor y, mientras, usa la heurística (supuesto por confirmar).
-- Con el servicio desplegado, una corrida de Presencial tarda lo que su límite (`solver.time_limits`) y no lo que tarda la heurística (unos 25 s en la carga grande), y depende de un contenedor más: si cae, las corridas de CP-SAT fallan con «El servicio del motor no está disponible.» (SV-08), y si no está configurado, el registro vuelve a proponer la heurística.
+- Una corrida de Presencial tarda lo que su límite (`solver.time_limits`) y no lo que tarda la heurística (unos 25 s en la carga grande), y depende del contenedor `solver`: si cae, las corridas de CP-SAT fallan con «El servicio del motor no está disponible.» (SV-08) y quien lanza puede volver a lanzar con la heurística.
 - Conviene medir otra vez con la carga real de Campus II cuando Nexus tenga su horario.
 
 ## Alternativas descartadas
