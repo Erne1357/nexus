@@ -380,6 +380,12 @@ new #[Title('Corridas del motor')] class extends Component
 
         $this->authorize('apply', $run);
 
+        if (($blocked = $apply->loadBlockReason($run)) !== null) {
+            $this->error('No se aceptó', e($blocked));
+
+            return;
+        }
+
         if (! $apply->isCurrent($run)) {
             $this->showStale = true;
 
@@ -454,9 +460,12 @@ new #[Title('Corridas del motor')] class extends Component
         $this->runId = $row['run']->id ?? '';
         $run = $row === null ? null : KeyLookup::find(SolverRun::query(), $row['run']->id);
         $gate = Gate::forUser($user);
+        $acceptBlock = $run?->scope_kind === RunScope::Department ? app(ApplySolverRun::class)->loadBlockReason($run) : null;
 
         return [
             ...$base,
+            'acceptBlock' => $acceptBlock,
+            'loadPublished' => $acceptBlock === ApplySolverRun::PUBLISHED_MESSAGE,
             'softRules' => self::SOFT_RULES,
             'term' => $term,
             'shownModality' => $modality,

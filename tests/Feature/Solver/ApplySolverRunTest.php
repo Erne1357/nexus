@@ -291,6 +291,18 @@ it('SV-05: sobre una carga que ya no se edita no acepta, aunque no haya nada que
     'sin carga' => [null],
 ]);
 
+it('E-10: pedir aceptar con la carga publicada da el motivo de editabilidad antes que el de vigencia', function () {
+    $run = standardRun();
+    AcademicLoad::query()->ofDepartment($this->term->id, $this->pres->id, $this->sistemas->id)->sole()->forceFill(['status' => LoadStatus::Published])->save();
+    GroupSession::factory()->for($this->same)->inRoom($this->room)->on(5, '13:00', '14:00')->create();
+    Queue::fake();
+
+    expect(fn () => app(RequestApplySolverRun::class)->handle($run, $this->jefe))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toBe(['run' => ['La carga está publicada: para cambiar su horario, inicia el re-análisis.']]))
+        ->and($run->fresh()->status)->toBe(SolverRunStatus::Done);
+    Queue::assertNothingPushed();
+});
+
 it('de dos aceptaciones de la misma corrida, la segunda falla: revisa el estado con la corrida bloqueada', function () {
     $run = standardRun();
     $second = $run->fresh();
