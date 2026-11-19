@@ -581,10 +581,10 @@ Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reg
 
 ### Benchmark de la fase 7 (tarea 7.11)
 
-Medido el 18 de noviembre de 2026, de 23:43 a 23:56 (hora de Ciudad Juárez), con `solver:benchmark --engine=heuristic --engine=cpsat --time-limit=60` y `--time-limit=300`, con `--breakdown --markdown`:
+Medido en dos tandas con `solver:benchmark --time-limit=60` y `--time-limit=300`, con `--breakdown --markdown`: el 18 de noviembre de 2026, de 23:43 a 23:56 (hora de Ciudad Juárez), los dos motores, cuando el servicio todavía ignoraba la pista (las filas de CP-SAT de esa tanda dicen «previa a la pista»); y el 19 de noviembre de 2026, de 00:42 a 00:48 (hora de Ciudad Juárez), solo CP-SAT, con el servicio de la 7.10 (#670, `add_hint` con la pista) en el contenedor `solver` del Docker principal. La heurística no cambió entre las dos, así que sus filas valen para las dos.
 
-- **Dónde corrió.** CP-SAT en la imagen `dev` del servicio con `SOLVER_ENGINE=cpsat`, 2 CPU, 2 GB y 2 hilos (los límites de `compose.yaml`); la heurística, en el contenedor `app`, con un hilo. La máquina era compartida con otras sesiones (carga de 3 a 4 en 16 núcleos).
-- **El tiempo de `cpsat` incluye la pista.** `CpSatEngine` corre primero la heurística con el 15 % del límite (9 s con 60 s, 45 s con 300 s, o menos si termina antes) y le da a CP-SAT lo que queda. **Al medir, el servicio ignoraba `hint_sessions`:** el modelo solo usaba `add_hint` con el horario actual de cada grupo (`current_sessions`, PS-07), así que ese tiempo no le servía a CP-SAT. Desde la 7.10 (#670, Riel B) usa la pista; B midió `department-multicampus` con 60 s y la pista en 23 091 a 23 171, contra 23 608 de la heurística.
+- **Dónde corrió.** CP-SAT en la imagen `dev` del servicio con `SOLVER_ENGINE=cpsat`, 2 CPU, 2 GB y 2 hilos (los límites de `compose.yaml`); la heurística, en el contenedor `app`, con un hilo. La máquina era compartida con otras sesiones (carga de 3 a 4 en 16 núcleos). `masivo-cb` no se volvió a medir con la pista: su base de paso ya se había borrado.
+- **El tiempo de `cpsat` incluye la pista.** `CpSatEngine` corre primero la heurística con el 15 % del límite (9 s con 60 s, 45 s con 300 s, o menos si termina antes) y le da a CP-SAT lo que queda. **En la primera tanda el servicio ignoraba `hint_sessions`:** el modelo solo usaba `add_hint` con el horario actual de cada grupo (`current_sessions`, PS-07), así que ese tiempo no le servía a CP-SAT. Desde la 7.10 (#670, Riel B) usa la pista: la segunda tanda ya la trae (B había medido `department-multicampus` con 60 s y la pista en 23 091 a 23 171).
 - **Violaciones duras.** Las de la salida y las que encuentra el evaluador en PHP sobre sus sesiones (la misma vara para los dos motores): cero en todas las filas.
 - **Sin instancia real de Campus II.** Las bases con lo migrado del SII (`nexus_sii_demo` y sus copias) no tienen grupos ni sesiones de Nexus: el horario del SII solo está crudo en `sii_archivo.horarios` (el periodo más reciente es 20263), y convertirlo en grupos es de la 1.16. Por eso no se copió esa base (decisión C4 de la fase 5) y la carga de tamaño real es de la demo masiva:
   - `masivo-cb`: Ciencias Básicas, PRES, Ene-Jun 2027, de `demo:seed --volumen=masivo --hasta=asignacion` (en una base de paso): 356 grupos movibles (246 en C1 y 110 en C2), 1 078 con los fijos y 426 salones, **sin docentes** (en ese punto todavía no hay asignación), así que solo cuentan las reglas de cohortes y salones. Se exportó con `solver:export-fixture 20271 PRES CB masivo-cb --path=storage/app/solver-benchmark` y se borró al terminar, con la base.
@@ -593,35 +593,48 @@ Medido el 18 de noviembre de 2026, de 23:43 a 23:56 (hora de Ciudad Juárez), co
 | Instancia | Motor | Límite | Tiempo | Estado | Duras (salida / evaluador PHP) | Sin programar | Puntaje blando | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | tiny | heuristic | 60 s | 0.01 s | feasible | 0 / 0 | 0 | 44 | 10 | 6 | 10 | 12 | 6 | 0 | 0 | 0 | 0 |
-| tiny | cpsat | 60 s | 1.05 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
+| tiny | cpsat, previa a la pista (18 nov) | 60 s | 1.05 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
 | tiny | heuristic | 300 s | 0.01 s | feasible | 0 / 0 | 0 | 44 | 10 | 6 | 10 | 12 | 6 | 0 | 0 | 0 | 0 |
-| tiny | cpsat | 300 s | 1.03 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
+| tiny | cpsat, previa a la pista (18 nov) | 300 s | 1.03 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
 | small | heuristic | 60 s | 0.02 s | feasible | 0 / 0 | 0 | 79 | 30 | 6 | 0 | 32 | 9 | 2 | 0 | 0 | 0 |
-| small | cpsat | 60 s | 1.04 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
+| small | cpsat, previa a la pista (18 nov) | 60 s | 1.04 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
 | small | heuristic | 300 s | 0.01 s | feasible | 0 / 0 | 0 | 79 | 30 | 6 | 0 | 32 | 9 | 2 | 0 | 0 | 0 |
-| small | cpsat | 300 s | 1.03 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
+| small | cpsat, previa a la pista (18 nov) | 300 s | 1.03 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
 | medium | heuristic | 60 s | 0.02 s | feasible | 0 / 0 | 0 | 64 | 20 | 18 | 15 | 0 | 9 | 2 | 0 | 0 | 0 |
-| medium | cpsat | 60 s | 1.05 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
+| medium | cpsat, previa a la pista (18 nov) | 60 s | 1.05 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
 | medium | heuristic | 300 s | 0.02 s | feasible | 0 / 0 | 0 | 64 | 20 | 18 | 15 | 0 | 9 | 2 | 0 | 0 | 0 |
-| medium | cpsat | 300 s | 1.04 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
+| medium | cpsat, previa a la pista (18 nov) | 300 s | 1.04 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
 | infeasible | heuristic | 60 s | 0.01 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| infeasible | cpsat | 60 s | 1.02 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| infeasible | cpsat, previa a la pista (18 nov) | 60 s | 1.02 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | infeasible | heuristic | 300 s | 0.00 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| infeasible | cpsat | 300 s | 1.02 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| infeasible | cpsat, previa a la pista (18 nov) | 300 s | 1.02 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | department-multicampus | heuristic | 60 s | 27.58 s | feasible | 0 / 0 | 0 | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
-| department-multicampus | cpsat | 60 s | 61.35 s | feasible | 0 / 0 | 0 | 32 935 | 1 750 | 162 | 0 | 17 372 | 11 667 | 1 258 | 0 | 380 | 346 |
+| department-multicampus | cpsat, previa a la pista (18 nov) | 60 s | 61.35 s | feasible | 0 / 0 | 0 | 32 935 | 1 750 | 162 | 0 | 17 372 | 11 667 | 1 258 | 0 | 380 | 346 |
 | department-multicampus | heuristic | 300 s | 23.48 s | feasible | 0 / 0 | 0 | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
-| department-multicampus | cpsat | 300 s | 302.32 s | feasible | 0 / 0 | 0 | 23 066 | 60 | 144 | 0 | 16 744 | 4 662 | 868 | 6 | 350 | 232 |
+| department-multicampus | cpsat, previa a la pista (18 nov) | 300 s | 302.32 s | feasible | 0 / 0 | 0 | 23 066 | 60 | 144 | 0 | 16 744 | 4 662 | 868 | 6 | 350 | 232 |
 | masivo-cb | heuristic | 60 s | 0.83 s | feasible | 0 / 0 | 0 | 4 350 | 4 350 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| masivo-cb | cpsat | 60 s | 55.53 s | feasible | 0 / 0 | 0 | 4 040 | 4 040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| masivo-cb | cpsat, previa a la pista (18 nov) | 60 s | 55.53 s | feasible | 0 / 0 | 0 | 4 040 | 4 040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | masivo-cb | heuristic | 300 s | 0.90 s | feasible | 0 / 0 | 0 | 4 350 | 4 350 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| masivo-cb | cpsat | 300 s | 291.33 s | feasible | 0 / 0 | 0 | 4 040 | 4 040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| masivo-cb | cpsat, previa a la pista (18 nov) | 300 s | 291.33 s | feasible | 0 / 0 | 0 | 4 040 | 4 040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Con la pista (19 de noviembre de 2026):
+
+| Instancia | Motor | Límite | Tiempo | Estado | Duras (salida / evaluador PHP) | Sin programar | Puntaje blando | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| tiny | cpsat con pista | 60 s | 1.06 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
+| tiny | cpsat con pista | 300 s | 1.04 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
+| small | cpsat con pista | 60 s | 1.03 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
+| small | cpsat con pista | 300 s | 1.04 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
+| medium | cpsat con pista | 60 s | 1.03 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
+| medium | cpsat con pista | 300 s | 1.04 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
+| department-multicampus | cpsat con pista | 60 s | 60.58 s | feasible | 0 / 0 | 0 | 23 019 | 60 | 120 | 0 | 16 704 | 4 839 | 694 | 6 | 340 | 256 |
+| department-multicampus | cpsat con pista | 300 s | 301.63 s | feasible | 0 / 0 | 0 | 22 834 | 60 | 120 | 0 | 16 736 | 4 710 | 634 | 6 | 350 | 218 |
 
 Lo que dicen los números:
 
-- **Cargas chicas.** CP-SAT da mejor puntaje en `tiny`, `small` y `medium` (36, 42 y 49 contra 44, 79 y 64), en un segundo (la pausa de la primera consulta); en `infeasible` los dos dejan fuera los mismos dos grupos con el mismo puntaje. El límite no cambia nada: los dos terminan antes.
-- **CEA con docentes.** Con 60 s y sin pista, CP-SAT queda peor que la heurística (32 935 contra 23 608): con 51 s apenas mejora su primera solución (con la pista de la 7.10, 23 091 a 23 171). Con 300 s, mejor por 2.3 % (23 066 contra 23 608), en 302 s contra 23 s. La heurística no aprovecha más tiempo: su búsqueda local termina a los 23–28 s con los dos límites. CP-SAT baja SC-01 (de 360 a 60), SC-05 (de 5 217 a 4 662), SC-07 y SC-09, y sube SC-06 (de 546 a 868). SC-04, los bloques preferidos de los docentes, es más del 70 % del puntaje con los dos motores.
-- **Ciencias Básicas de la demo masiva.** CP-SAT mejora 7.1 % (4 040 contra 4 350) ya con 60 s y no mejora más con 300 s; la heurística tarda menos de un segundo.
+- **Cargas chicas.** CP-SAT da mejor puntaje en `tiny`, `small` y `medium` (36, 42 y 49 contra 44, 79 y 64, con pista y sin ella), en un segundo (la pausa de la primera consulta); en `infeasible` los dos dejan fuera los mismos dos grupos con el mismo puntaje. El límite no cambia nada: los dos terminan antes.
+- **CEA con docentes.** Con la pista, CP-SAT mejora a la heurística ya con 60 s: 23 019 contra 23 608 (2.5 %), y 22 834 con 300 s (3.3 %), en 61 y 302 s contra 23 a 28 s. Sin la pista (primera tanda), con 60 s quedaba peor (32 935: con 51 s apenas mejoraba su primera solución) y con 300 s daba 23 066. La heurística no aprovecha más tiempo: su búsqueda local termina a los 23–28 s con los dos límites. Con la pista y 300 s, CP-SAT baja SC-01 (de 360 a 60), SC-05 (de 5 217 a 4 710), SC-07 y SC-09, y sube SC-06 (de 546 a 634). SC-04, los bloques preferidos de los docentes, es más del 70 % del puntaje con los dos motores.
+- **Ciencias Básicas de la demo masiva** (solo la primera tanda, previa a la pista). CP-SAT mejora 7.1 % (4 040 contra 4 350) ya con 60 s y no mejora más con 300 s; la heurística tarda menos de un segundo.
 
 **Decisión** (del usuario, 19 de noviembre de 2026; [ADR-0028](../decisiones/0028-motor-predeterminado-por-modalidad.md)): Presencial propone CP-SAT por omisión, con la pista de la heurística, y las demás modalidades la heurística; es el valor de fábrica de `solver.default_engine`. El servicio corre siempre en su contenedor (`restart: unless-stopped`; producción exige `SOLVER_URL` y `SOLVER_TOKEN`): la heurística solo se propone como respaldo si el servicio no está configurado, y si está configurado pero caído la corrida falla y avisa (SV-08).
 
@@ -643,6 +656,7 @@ Lo que dicen los números:
 
 - **Registro.** `cpsat` entra a `solver.engines` solo si hay URL y token (`SolverServiceProvider::engineClasses()`); se decide al arrancar, así que cambiar el `.env` pide reiniciar `app` y `queue`. El que se propone al lanzar es el de `solver.default_engine` de la modalidad (7.11; de fábrica, `cpsat` en Presencial); si ahí está `cpsat` y el servicio no está configurado (respaldo, no el estado normal: el servicio corre siempre), se propone la heurística; si está configurado pero caído, la corrida falla y avisa (SV-08). En las pruebas no aparece: `phpunit.xml` deja `SOLVER_TOKEN` vacío y `CpSatEngineTest` simula el servicio con `Http::fake()` y respuestas grabadas de su API (`tests/Fixtures/solver/cpsat/`).
 - **Pista de la heurística.** Antes de mandar la entrada, `solve()` corre `PhpHeuristicEngine` sobre la misma entrada con `time_limit_seconds` igual al 15 % del límite (`HINT_TIME_SHARE`, mínimo 1 s: 9 s a 60 s, 45 s a 300 s). La heurística ya reparte ese límite entre construcción y búsqueda local, así que la construcción va siempre y la búsqueda local queda topada por él. Con su salida arma `hint_sessions[]` solo de los grupos `movable` (grupo, día, inicio, fin, tipo y salón, sin `changed`) y manda el límite menos los segundos completos que gastó, sin bajar de `MIN_SOLVE_SECONDS` (10 s) ni pasar del original; el margen de espera se cuenta desde ahí. `current_sessions` y la huella (SV-02) no cambian. Si la heurística lanza una excepción o no coloca nada, la corrida sigue sin pista y con el límite completo, y queda una advertencia en el log de la aplicación (`Log::warning`, no en el `log` de la salida, que es del servicio). Mientras corre, el aviso de avance recibe `0` con el puntaje de la heurística, así que la cancelación (SV-03) también funciona durante ella y sale tal cual, sin contarse como fallo de la heurística.
+- **Salud primero.** Antes de la pista, `solve()` pregunta la salud del servicio (`CpSatClient::health()`, `GET /health` con el tiempo de una consulta). Si no responde o no entiende la versión del contrato, lanza «El servicio del motor no está disponible.» (SV-08) de una vez, sin gastar la parte de la pista en la heurística ni mandar la entrada (revisión del Riel B en #675).
 - **Ciclo.** `solve()` manda la entrada (`POST /solve`) y consulta `GET /runs/{id}` cada `services.solver.poll_interval_ms` (1000 por omisión). En `queued` y `running` llama al aviso de avance con `progress` y `best_score`; en `done` valida `output` con `SolverOutput::fromArray` y revisa que traiga el `run_id` de la entrada; en `failed` lanza con el `error` del servicio; un `cancelled` que Nexus no pidió también es error.
 - **Cancelación.** Si el aviso de avance lanza (SV-03), manda `DELETE /runs/{id}` y deja salir la excepción; RunSolver deja la corrida cancelada.
 - **Tiempo de espera.** El límite es `time_limit_seconds` (L) más 30 s (`CpSatEngine::DEADLINE_MARGIN_SECONDS`) desde que empieza `solve()`. Ninguna consulta, ni un reintento, empieza si no termina antes del límite; cuando ya no cabe otra, o las tres consultas de un intento se vencen (el servicio está pero no contesta), cancela la corrida en el servicio y lanza «El servicio del motor no respondió a tiempo.». Peor caso con los valores por omisión: el envío (30 s) termina antes de L + 30; la última consulta, antes de L + 30; después, una pausa de 1 s y la cancelación de 5 s: L + 36 s, por debajo de L + 60 (`RunSolver::TIMEOUT_MARGIN`), así que la corrida termina con este mensaje y no la corta el worker.

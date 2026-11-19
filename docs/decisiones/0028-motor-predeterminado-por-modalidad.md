@@ -5,21 +5,21 @@
 ## Contexto
 Nexus tiene dos motores de horarios bajo el mismo contrato: la heurística en PHP (fase 6, clave `heuristic`) y CP-SAT en el servicio de Python (fase 7, clave `cpsat`, al que `CpSatEngine` le manda la solución de la heurística como pista). La 7.11 pide decidir con números, no por preferencia, cuál propone «Lanzar una corrida» en cada modalidad (`solver.default_engine`, por modalidad según ADR-0025). Hasta la 7.11 el predeterminado era el último motor registrado, que es la heurística.
 
-La medición está en `docs/arquitectura/solver.md`, «Benchmark de la fase 7» (18 de noviembre de 2026, hora de Ciudad Juárez). Cero violaciones duras en todas las corridas de los dos motores, también con el evaluador en PHP:
+La medición está en `docs/arquitectura/solver.md`, «Benchmark de la fase 7», en dos tandas (hora de Ciudad Juárez): el 18 de noviembre de 2026, los dos motores, cuando el servicio todavía ignoraba `hint_sessions`; y el 19 de noviembre de 2026, CP-SAT con el servicio de la 7.10 (#670, Riel B), que ya usa la pista. Cero violaciones duras en todas las corridas de los dos motores, también con el evaluador en PHP:
 
-| Instancia | Heurística | CP-SAT con 60 s | CP-SAT con 300 s |
-|---|---|---|---|
-| `tiny`, `small`, `medium` | 44, 79 y 64 (0.02 s) | 36, 42 y 49 (1 s) | igual que con 60 s |
-| `infeasible` | 2 sin programar, 12 | 2 sin programar, 12 | igual |
-| CEA con docentes (`department-multicampus`, 1 139 movibles) | 23 608 (23–28 s) | 32 935 (61 s) | 23 066 (302 s), 2.3 % mejor |
-| Ciencias Básicas de la demo masiva, sin docentes (356 movibles) | 4 350 (1 s) | 4 040 (56 s), 7.1 % mejor | 4 040 (291 s) |
+| Instancia | Heurística | CP-SAT con pista, 60 s | CP-SAT con pista, 300 s | CP-SAT previo a la pista (60 s / 300 s) |
+|---|---|---|---|---|
+| `tiny`, `small`, `medium` | 44, 79 y 64 (0.02 s) | 36, 42 y 49 (1 s) | igual que con 60 s | igual |
+| `infeasible` | 2 sin programar, 12 | — | — | 2 sin programar, 12 |
+| CEA con docentes (`department-multicampus`, 1 139 movibles) | 23 608 (23–28 s) | **23 019** (61 s), 2.5 % mejor | **22 834** (302 s), 3.3 % mejor | 32 935 / 23 066 |
+| Ciencias Básicas de la demo masiva, sin docentes (356 movibles) | 4 350 (1 s) | — | — | 4 040 (56 s) / 4 040 (291 s), 7.1 % mejor |
 
-Al medir, el servicio todavía ignoraba `hint_sessions`, así que CP-SAT arrancaba sin la solución de la heurística y la carga grande con 60 s quedaba peor que ella. Desde la 7.10 (#670, Riel B) el servicio usa la pista: B midió `department-multicampus` con 60 s y la pista en **23 091 a 23 171**, contra 23 608 de la heurística. No hubo instancia real de Campus II: Nexus todavía no tiene el horario del SII como grupos (solo crudo en `sii_archivo`), así que la de tamaño real es la de la demo masiva.
+Sin la pista, CP-SAT arrancaba sin la solución de la heurística y la carga grande con 60 s quedaba peor que ella; con la pista la mejora ya con 60 s (B había medido 23 091 a 23 171 en la 7.10). La carga de la demo masiva no se volvió a medir con la pista. No hubo instancia real de Campus II: Nexus todavía no tiene el horario del SII como grupos (solo crudo en `sii_archivo`), así que la de tamaño real es la de la demo masiva.
 
 ## Decisión
 Decisión del usuario, 19 de noviembre de 2026:
 
-1. **Presencial propone CP-SAT** por omisión, con la pista de la heurística. Con la pista, CP-SAT ya mejora a la heurística con 60 s en la carga grande y en todas las demás instancias, sin violaciones duras.
+1. **Presencial propone CP-SAT** por omisión, con la pista de la heurística. Con la pista, CP-SAT ya mejora a la heurística con 60 s en la carga grande (23 019 contra 23 608) y en las chicas, sin violaciones duras.
 2. **El servicio corre siempre.** El microservicio del motor vive en su contenedor de Docker (`solver`, `restart: unless-stopped`), arriba junto con `app` y `queue`, y producción exige `SOLVER_URL` y `SOLVER_TOKEN` (decisión del usuario, 19 de noviembre de 2026). No es un servicio opcional que se active después.
 3. **Las demás modalidades (EAD, En línea, TecNM Virtual) proponen la heurística.** No hay instancias suyas que medir (fase 10).
 4. **La heurística solo como respaldo de configuración.** Si el servicio no está configurado (`CpSatClient::configured()` falso: sin `SOLVER_URL` o `SOLVER_TOKEN`, como en las pruebas), `cpsat` no se registra y `EngineRegistry::default()` propone la heurística aunque el parámetro diga `cpsat`. No es el estado normal. Si el servicio está configurado pero caído, la corrida de CP-SAT falla y avisa (SV-08, confirmado el 17 de noviembre de 2026): no cambia sola a la heurística.
