@@ -37,14 +37,14 @@
     @else
         <div class="space-y-3">
             @if ($stale)
-                <div class="alert alert-warning alert-soft items-start text-sm max-md:grid-cols-1" role="alert" data-testid="alternatives-stale">
-                    <x-icon name="o-exclamation-triangle" class="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <div class="min-w-0">
-                        <p class="font-semibold">Esto cambió desde que se calcularon las alternativas.</p>
+                <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 rounded-field border border-warning/45 bg-warning/10 px-3.5 py-3 text-sm" role="alert" data-testid="alternatives-stale">
+                    <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
+                    <div class="min-w-0 flex-1 basis-56">
+                        <p class="font-semibold text-warning">Esto cambió desde que se calcularon las alternativas.</p>
                         <p>El horario de esos grupos o lo que los rodea ya no es el mismo; las alternativas son de {{ $alternatives['computedAt']?->isToday() ? 'hoy a las '.$alternatives['computedAt']->format('G:i') : 'antes' }}. Vuelve a buscar para elegir con el horario de hoy.</p>
                     </div>
                     @if ($canSearch)
-                        <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-primary btn-sm max-md:h-11 max-md:min-h-11" wire:click="searchAlternatives" spinner="searchAlternatives" data-testid="search-again" />
+                        <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-primary btn-sm max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="searchAlternatives" spinner="searchAlternatives" data-testid="search-again" />
                     @endif
                 </div>
             @endif
@@ -142,14 +142,14 @@
             @endif
 
             @if ($failed)
-                <div class="alert alert-error alert-soft items-start text-sm max-md:grid-cols-1" role="alert" data-testid="alternatives-failed">
-                    <x-icon name="o-x-circle" class="h-5 w-5 shrink-0" aria-hidden="true" />
-                    <div class="min-w-0">
-                        <p class="font-semibold">El motor no pudo buscar alternativas.</p>
+                <div class="flex flex-wrap items-start gap-x-3 gap-y-2.5 rounded-field border border-error/40 bg-error/10 px-3.5 py-3 text-sm" role="alert" data-testid="alternatives-failed">
+                    <x-icon name="o-x-circle" class="mt-0.5 h-5 w-5 shrink-0 text-error" aria-hidden="true" />
+                    <div class="min-w-0 flex-1 basis-56">
+                        <p class="font-semibold text-error">El motor no pudo buscar alternativas.</p>
                         <p class="break-words">{{ $alternatives['message'] ?? 'Algo falló al correrlo.' }}</p>
                     </div>
                     @if ($canSearch)
-                        <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-sm max-md:h-11 max-md:min-h-11" wire:click="searchAlternatives" spinner="searchAlternatives" />
+                        <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-sm max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="searchAlternatives" spinner="searchAlternatives" />
                     @endif
                 </div>
             @elseif ($none)
@@ -157,11 +157,14 @@
                     <x-icon name="o-no-symbol" class="mt-0.5 h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
                     <div class="grid min-w-0 gap-1">
                         <p class="font-semibold">El motor no encontró un acomodo sin choques duros.</p>
-                        <p>{{ $alternatives['message'] && $alternatives['message'] !== \App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives::NONE_FOUND ? $alternatives['message'].' ' : '' }}Buscó {{ $alternatives['computedAt']?->isToday() ? 'hoy a las '.$alternatives['computedAt']->format('G:i') : '' }} y {{ $movingText }}.</p>
+                        <p>{{ $alternatives['message'] && $alternatives['message'] !== \App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives::NONE_FOUND ? $alternatives['message'].' ' : '' }}Buscó{{ $alternatives['computedAt']?->isToday() ? ' hoy a las '.$alternatives['computedAt']->format('G:i') : '' }} moviendo solo {{ $request->group->subject?->code }} · {{ $request->group->code }} y los grupos de su departamento con los que choca; lo demás quedó fijo.</p>
                         <p class="text-neutral">Puedes rechazarla con un comentario para que pidan otro horario, o liberar el lugar en el editor de horarios y volver a buscar.</p>
                         @if ($canSearch)
                             <div class="mt-1 flex flex-wrap gap-2">
                                 <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-sm max-md:h-11 max-md:min-h-11" wire:click="searchAlternatives" spinner="searchAlternatives" data-testid="search-again" />
+                                @if ($editorUrl !== null)
+                                    <a href="{{ $editorUrl }}" wire:navigate class="btn btn-ghost btn-sm max-md:h-11 max-md:min-h-11"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" aria-hidden="true" />Abrir en el editor</a>
+                                @endif
                             </div>
                         @endif
                     </div>

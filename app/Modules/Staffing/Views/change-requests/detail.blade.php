@@ -86,10 +86,10 @@
             <section aria-labelledby="request-chosen-title" data-testid="request-chosen" class="min-w-0">
                 <h3 id="request-chosen-title" class="mb-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">{{ $request->status === ChangeRequestStatus::Applied ? 'Lo aplicado' : 'Lo aprobado' }} · alternativa {{ $alternatives['chosen']['letter'] }}</h3>
                 @if ($staleAlternatives && $request->status === ChangeRequestStatus::Approved)
-                    <div class="mb-3 alert alert-warning alert-soft items-start text-sm" role="alert" data-testid="alternatives-stale">
-                        <x-icon name="o-exclamation-triangle" class="h-5 w-5 shrink-0" aria-hidden="true" />
+                    <div class="mb-3 flex items-start gap-3 rounded-field border border-warning/45 bg-warning/10 px-3.5 py-3 text-sm" role="alert" data-testid="alternatives-stale">
+                        <x-icon name="o-exclamation-triangle" class="mt-0.5 h-5 w-5 shrink-0 text-warning" aria-hidden="true" />
                         <div class="min-w-0">
-                            <p class="font-semibold">Esto cambió desde que se aprobó la alternativa.</p>
+                            <p class="font-semibold text-warning">Esto cambió desde que se aprobó la alternativa.</p>
                             <p>El horario de esos grupos o lo que los rodea ya no es el mismo: no se puede escribir tal cual. Acomódala a mano en el editor de horarios y luego márcala como aplicada.</p>
                         </div>
                     </div>
