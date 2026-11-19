@@ -20,7 +20,7 @@
     $selectedKey = $alternatives['selected']['key'] ?? 'pedido';
     $stale = $staleAlternatives && $items > 0;
     $canSearch = $canDecide && $alternatives['assessable'] && ! $computing;
-    $movingText = 'mueve solo '.$request->group->subject?->code.' · '.$request->group->code.' y los grupos de su departamento con los que choca; lo demás queda fijo';
+    $movingText = 'mueve solo '.$request->group->subject?->code.' · '.$request->group->code.' y los grupos de su departamento y su campus con los que choca; lo demás queda fijo';
 @endphp
 <section aria-labelledby="request-impact-title" data-testid="request-impact" class="min-w-0">
     <div class="mb-2 flex items-center justify-between gap-2">
@@ -157,7 +157,7 @@
                     <x-icon name="o-no-symbol" class="mt-0.5 h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
                     <div class="grid min-w-0 gap-1">
                         <p class="font-semibold">El motor no encontró un acomodo sin choques duros.</p>
-                        <p>{{ $alternatives['message'] && $alternatives['message'] !== \App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives::NONE_FOUND ? $alternatives['message'].' ' : '' }}Buscó{{ $alternatives['computedAt']?->isToday() ? ' hoy a las '.$alternatives['computedAt']->format('G:i') : '' }} moviendo solo {{ $request->group->subject?->code }} · {{ $request->group->code }} y los grupos de su departamento con los que choca; lo demás quedó fijo.</p>
+                        <p>{{ $alternatives['message'] && $alternatives['message'] !== \App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives::NONE_FOUND ? $alternatives['message'].' ' : '' }}Buscó{{ $alternatives['computedAt']?->isToday() ? ' hoy a las '.$alternatives['computedAt']->format('G:i') : '' }} moviendo solo {{ $request->group->subject?->code }} · {{ $request->group->code }} y los grupos de su departamento y su campus con los que choca; lo demás quedó fijo.</p>
                         <p class="text-neutral">Puedes rechazarla con un comentario para que pidan otro horario, o liberar el lugar en el editor de horarios y volver a buscar.</p>
                         @if ($canSearch)
                             <div class="mt-1 flex flex-wrap gap-2">

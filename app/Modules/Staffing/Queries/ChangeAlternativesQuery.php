@@ -598,6 +598,6 @@ final class ChangeAlternativesQuery
         $when = $computedAt->isToday() ? 'hoy a las '.$computedAt->format('G:i') : $computedAt->translatedFormat('j M').' a las '.$computedAt->format('G:i');
         $list = count($moved) <= 1 ? implode('', $moved) : implode(', ', array_slice($moved, 0, -1)).' y '.end($moved);
 
-        return "Heurística · {$when}. Las alternativas mueven solo {$list}; lo demás queda fijo, y los grupos de otros departamentos nunca se mueven.";
+        return "Heurística · {$when}. Las alternativas mueven solo {$list}; lo demás queda fijo, y los grupos de otros departamentos o de otro campus nunca se mueven.";
     }
 }
