@@ -82,6 +82,7 @@ abstract class WeekPdf extends PublishedPdf
                 'label' => $group->label(),
                 'subject' => $group->subject['name'],
                 'color' => $colors[$group->subject['code']],
+                'change' => self::changeOf($group),
                 ...$detail($group, self::session($session)),
             ];
 

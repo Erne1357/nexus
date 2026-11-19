@@ -150,7 +150,9 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         return [
             new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView)),
+            // «Paralelos» (Scheduling, tarea 8.8) es una pestaña de la bandeja: va como su pantalla hija, sin entrada propia.
             new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
+                childRoutes: ['scheduling.parallels'],
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalReviewView)),
             // Evalúa periodos ya cursados: no depende de que haya carga en curso (MN-04 no la nombra; supuesto por confirmar).
             new NavigationItem('Precisión de la proyección', 'academic-load.forecast-accuracy', 'o-scale', NavigationArea::Academico, group: NavigationGroup::Propuesta, order: 1,

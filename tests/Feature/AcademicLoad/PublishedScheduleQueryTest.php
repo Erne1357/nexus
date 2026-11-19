@@ -122,7 +122,7 @@ it('no guarda en caché el RFC, la justificación ni quién publicó', function 
     Cache::purge('array');
     app(PublishedScheduleQuery::class)->schedule($this->term, $this->presencial);
 
-    $cached = json_encode(Cache::get('published-schedule:v2:'.$this->term->id.':'.$this->presencial->id.':'.app(PublishedScheduleQuery::class)->version($this->term, $this->presencial)), JSON_UNESCAPED_UNICODE);
+    $cached = json_encode(Cache::get('published-schedule:v3:'.$this->term->id.':'.$this->presencial->id.':'.app(PublishedScheduleQuery::class)->version($this->term, $this->presencial)), JSON_UNESCAPED_UNICODE);
 
     expect($cached)->not->toContain('RIML800101AB1')
         ->not->toContain('published_by')

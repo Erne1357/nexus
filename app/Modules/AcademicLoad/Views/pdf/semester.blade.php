@@ -1,7 +1,8 @@
 {{-- PDF de una carrera, retícula y semestre (SemesterPdf) y, con `$staff`, el de un departamento (DepartmentPdf): tabla
      tipo SII, elegida por el usuario el 10 de noviembre de 2026. Un renglón por materia con su color y, debajo, uno por
      grupo con docente y una columna por día. Solo el del personal lleva la capacidad y la marca «préstamo» del salón de
-     otro departamento. --}}
+     otro departamento. Tarea 8.5: bajo «CLAVE · grupo», la marca de lo que le cambió en la última publicación; un grupo
+     cancelado en ella va con la clave tachada, «Cancelado» y sin horario. --}}
 @extends('academic-load::pdf.layout')
 
 @section('content')
@@ -31,21 +32,25 @@
                     </tr>
                     @foreach ($subject['groups'] as $group)
                         <tr style="page-break-inside: avoid;">
-                            <td style="border-left: 4px solid {{ $subject['color'] }};" class="mono"><b>{{ $subject['code'] }} · {{ $group['code'] }}</b>@if (($group['campus'] ?? null) !== null)<br><span class="dim">{{ $group['campus'] }}</span>@endif</td>
+                            <td style="border-left: 4px solid {{ $subject['color'] }};" class="mono"><b @class(['gone' => $group['cancelled']])>{{ $subject['code'] }} · {{ $group['code'] }}</b>@if (($group['campus'] ?? null) !== null)<br><span class="dim">{{ $group['campus'] }}</span>@endif @if ($group['change'] !== null)<br><span @class(['tag change', 'change-added' => $group['change']['added'], 'change-cancelled' => $group['cancelled']])>{{ $group['change']['label'] }}</span>@endif</td>
                             <td @class(['dim' => $group['teacher'] === 'Por asignar'])>{{ $group['teacher'] }}</td>
                             @if ($staff ?? false)
-                                <td class="mono">{{ $group['capacity'] }}</td>
+                                <td class="mono">{{ $group['cancelled'] ? '' : $group['capacity'] }}</td>
                             @endif
-                            @foreach ($days as $day)
-                                <td>
-                                    @forelse ($group['cells'][$day['day']] ?? [] as $cell)
-                                        <div class="mono"><b>{{ $cell['hours'] }}</b></div>
-                                        <div class="mono">{{ $cell['place'] }}@if ($cell['kind']) <span class="tag">{{ $cell['kind'] }}</span>@endif @if (($staff ?? false) && $cell['loan']) <span class="tag">Préstamo</span>@endif</div>
-                                    @empty
-                                        <span class="dim">—</span>
-                                    @endforelse
-                                </td>
-                            @endforeach
+                            @if ($group['cancelled'])
+                                <td colspan="{{ count($days) }}" class="dim">Se canceló este grupo.</td>
+                            @else
+                                @foreach ($days as $day)
+                                    <td>
+                                        @forelse ($group['cells'][$day['day']] ?? [] as $cell)
+                                            <div class="mono"><b>{{ $cell['hours'] }}</b></div>
+                                            <div class="mono">{{ $cell['place'] }}@if ($cell['kind']) <span class="tag">{{ $cell['kind'] }}</span>@endif @if (($staff ?? false) && $cell['loan']) <span class="tag">Préstamo</span>@endif</div>
+                                        @empty
+                                            <span class="dim">—</span>
+                                        @endforelse
+                                    </td>
+                                @endforeach
+                            @endif
                         </tr>
                     @endforeach
                 @endforeach

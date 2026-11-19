@@ -2,6 +2,7 @@
 
 use App\Modules\AcademicLoad\Queries\PublishedContext;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
+use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedWeek;
 use App\Modules\AcademicLoad\Rules\PublishedThrottle;
 use App\Modules\Core\Support\WeekGrid;
@@ -18,6 +19,10 @@ use Livewire\Component;
  * M1: lo publicado es por modalidad y el campus es un filtro); cambiar uno navega a la URL nueva. Una carrera que no tiene
  * nada publicado en la modalidad (o en el campus del filtro) es 404. Solo lee de
  * PublishedScheduleQuery.
+ *
+ * Desde la tarea 8.5, cada ficha lleva la marca de lo que le cambió en la última publicación de su carga y los grupos que
+ * esa publicación canceló se ven tachados en su materia, sin contarse entre los grupos (supuesto por confirmar); la fecha
+ * de «Actualizado el» los toma en cuenta.
  */
 new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
 {
@@ -136,13 +141,16 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
         ['context' => $context, 'entry' => $entry, 'plan' => $plan] = $this->resolution($contexts);
         $schedule = $context->schedule;
         $groups = $schedule->semester($entry['career']['id'], $plan['plan']['id'], $this->semesterNumber());
+        $shown = [...$groups, ...$schedule->cancelledIn($entry['career']['id'], $plan['plan']['id'], $this->semesterNumber())];
+        usort($shown, PublishedGroup::compare(...));
         $profile = $schedule->profile();
 
         $subjects = [];
 
-        foreach ($groups as $group) {
+        foreach ($shown as $group) {
             $subjects[$group->subject['code']]['subject'] = $group->subject;
             $subjects[$group->subject['code']]['groups'][] = $group;
+            $subjects[$group->subject['code']]['count'] = ($subjects[$group->subject['code']]['count'] ?? 0) + ($group->isCancelled() ? 0 : 1);
         }
 
         ksort($subjects);
@@ -153,11 +161,12 @@ new #[Layout('layouts::public')] #[Title('Horarios')] class extends Component
             'plans' => $entry['plans'],
             'currentPlan' => $plan,
             'subjects' => array_values($subjects),
-            'chains' => PublishedWeek::chains($groups),
+            'chains' => PublishedWeek::chains($shown),
             'groupCount' => count($groups),
+            'subjectCount' => count(array_filter($subjects, fn (array $subject): bool => $subject['count'] > 0)),
             'profile' => $profile,
             'days' => WeekGrid::of($profile)->covering(PublishedWeek::sessions($groups))->days,
-            'updated' => PublishedWeek::updatedOn($schedule->updatedAt($groups)),
+            'updated' => PublishedWeek::updatedOn($schedule->updatedAt($shown)),
             'careerOptions' => array_map(fn (array $row): array => ['id' => $row['career']['code'], 'name' => $row['career']['name']], $schedule->careers()),
             'planOptions' => array_map(fn (array $row): array => ['id' => $row['plan']['code'], 'name' => $row['plan']['code']], array_reverse($entry['plans'])),
             'semesterOptions' => array_map(fn (int $semester): array => ['id' => $semester, 'name' => 'Semestre '.$semester], $plan['semesters']),
