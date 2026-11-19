@@ -134,8 +134,13 @@ function publishedPdfMemoryProbe(): PublishedExport
 it('el job sube su tope de memoria mientras arma el exporte, sin bajar uno mayor', function (?string $start, string $during) {
     Storage::fake(PublishedExports::DISK);
     $previous = (string) ini_get('memory_limit');
-    // Un tope menor que el del job pero por encima de lo que ya usa la prueba: el contenedor trae 128 MB.
-    ini_set('memory_limit', $start ?? (string) (memory_get_usage(true) + 32 * 1048576));
+    // Un tope por encima de lo que ya usa la prueba (el contenedor trae 128 MB). Si el proceso ya usa más que el tope del
+    // job (pasa al correr después de tests/Arch, que carga php-parser), ese tope ya es mayor y el job no lo toca.
+    $start ??= (string) (memory_get_usage(true) + 32 * 1048576);
+    if ($start !== '-1' && $during === GeneratePublishedExport::MEMORY_LIMIT && (int) $start >= 512 * 1048576) {
+        $during = $start;
+    }
+    ini_set('memory_limit', $start);
 
     try {
         (new GeneratePublishedExport(publishedPdfMemoryProbe()))->handle(app(PublishedExports::class));
