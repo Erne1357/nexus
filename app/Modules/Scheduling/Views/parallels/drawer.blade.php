@@ -4,13 +4,16 @@
     lo que se ahorra; si ya hay grupos sueltos, que armar los reorganiza; el error de la Action, si lo hubo. Desde 1024 px
     la matriz para mover esperados (scheduling::parallels.matrix); debajo, lo que piden en renglones, de consulta. Siguen
     los grupos que resultan (scheduling::parallels.results) y lo que pasa al armar. Al pie fijo, el motivo de lo que no se
-    puede (o el aviso de los esperados de menos), «Cancelar», «Usar lo de Nexus» si el armado cambió y «Armar grupos»,
-    que confirma con el diálogo de Core. `close()` es del x-drawer.
+    puede (o el aviso de los esperados de menos), «Cancelar», «Usar lo de Nexus» si el armado cambió y «Armar grupos» (o
+    «Reorganizar grupos» si ya hay grupos), que confirma con el diálogo de Core con el mismo verbo (G-05 del recorrido 8.11).
+    `close()` es del x-drawer.
 --}}
 @php
     $row = $draft->row;
     $signed = fn (int $n): string => $n > 0 ? '−'.$n : ($n < 0 ? '+'.abs($n) : '0');
     $reorganize = $row->groups !== [];
+    $armLabel = $reorganize ? 'Reorganizar grupos' : 'Armar grupos';
+    $confirmTitle = $reorganize ? "¿Reorganizar los grupos de {$row->subject->name} en {$row->campus->name}?" : "¿Armar los paralelos de {$row->subject->name} en {$row->campus->name}?";
     $withSchedule = count(array_filter($row->groups, fn ($group): bool => $group->minutes > 0));
     $withTeacher = count(array_filter($row->groups, fn ($group): bool => $group->hasTeacher()));
     $groupErrors = collect($errors->getMessages())->filter(fn ($messages, $field): bool => $field === 'groups' || str_starts_with($field, 'groups.'))->flatten()->unique()->values();
@@ -93,9 +96,9 @@
                 <button type="button" class="btn max-lg:hidden" wire:click="useSuggestion" wire:loading.attr="disabled" data-testid="parallels-reset"><x-icon name="o-arrow-path" class="h-4 w-4" aria-hidden="true" />Usar lo de Nexus</button>
             @endif
             <button type="button" class="btn btn-primary max-lg:hidden" wire:click="arm" data-testid="parallels-arm" @disabled($armBlocked !== null) @if ($armBlocked !== null) aria-describedby="parallels-why" @endif
-                x-confirm="{{ $confirm }}" data-confirm-title="¿Armar los paralelos de {{ $row->subject->name }} en {{ $row->campus->name }}?" data-confirm-button="Armar grupos" data-confirm-tone="warning"
+                x-confirm="{{ $confirm }}" data-confirm-title="{{ $confirmTitle }}" data-confirm-button="{{ $armLabel }}" data-confirm-tone="warning"
                 wire:loading.attr="disabled" wire:target="arm">
-                <x-icon name="o-arrows-pointing-in" class="h-4 w-4" aria-hidden="true" />{{ $reorganize ? 'Reorganizar grupos' : 'Armar grupos' }}
+                <x-icon name="o-arrows-pointing-in" class="h-4 w-4" aria-hidden="true" />{{ $armLabel }}
             </button>
         </div>
     </footer>
