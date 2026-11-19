@@ -180,7 +180,7 @@ Lo caro de un grupo es lo que recorre todo: los pares de sesiones de su salón e
 
 ## Heurística PHP: construcción
 
-Tarea 6.6. `Engines/PhpHeuristic/PhpHeuristicEngine` (clave `heuristic`, «Heurística (PHP)», contrato v1, `checksHardRules()` verdadero) coloca los grupos movibles con una construcción voraz (`Builder`) y valida el resultado con el evaluador en memoria (`FinalValidation`). Se registra en `solver.engines` después del motor de prueba, así que es el predeterminado mientras no llegue `solver.default_engine` (7.11). Después de validar lo construido corre la búsqueda local (6.7, la sección siguiente) y vuelve a validar.
+Tarea 6.6. `Engines/PhpHeuristic/PhpHeuristicEngine` (clave `heuristic`, «Heurística (PHP)», contrato v1, `checksHardRules()` verdadero) coloca los grupos movibles con una construcción voraz (`Builder`) y valida el resultado con el evaluador en memoria (`FinalValidation`). Se registra en `solver.engines` después del motor de prueba y es el predeterminado de fábrica de toda modalidad (`solver.default_engine`, 7.11). Después de validar lo construido corre la búsqueda local (6.7, la sección siguiente) y vuelve a validar.
 
 **Patrón de sesiones** (`SessionPattern`; reglas-de-negocio.md, «Patrón de sesiones», PS-01 a PS-08). Sesiones de una hora, una por día en días distintos y a la misma hora todos los días. Las opciones van por niveles y gana el mejor candidato del primer nivel donde alguno cabe:
 
@@ -554,7 +554,7 @@ La secuencia en la demo encontró un hueco al aceptar: CP-SAT dejó sin acomodar
   - `medium`: 12 grupos movibles y uno fijo, 2 campus, 2 carreras con tronco común (claves de cohorte compartidas), laboratorio con préstamo aceptado, paquete (`package:<id>:<campus>:1`), docente en dos campus con traslado y salón ajeno sin préstamo. Factible.
   - `infeasible`: un docente cuyos bloques `unavailable` dejan menos horas libres que las de sus grupos (HC-09); al menos dos de sus tres grupos deben salir en `unscheduled`.
   - `department-multicampus`: la carga de Ciencias Económico-Administrativas (1 139 grupos movibles, 2 708 con los fijos, 657 docentes, 426 salones, C1 y C2) en PRES, Ene-Jun 2027, generada de la demo masiva y anonimizada (fichas `g001`, `t001`, `r001`…). No lleva resultado esperado; se mide en el benchmark. Grupo `solver-slow` en la suite.
-- Para regenerar una instancia real: `docker compose exec -e DB_DATABASE=<base demo> app php artisan solver:export-fixture <periodo> <modalidad> <clave de departamento> <nombre> [--career=<clave>]` (por ejemplo `20271 PRES CEA department-multicampus`). Escribe solo `input.json`; `expected.json` se escribe a mano.
+- Para regenerar una instancia real: `docker compose exec -e DB_DATABASE=<base demo> app php artisan solver:export-fixture <periodo> <modalidad> <clave de departamento> <nombre> [--career=<clave>]` (por ejemplo `20271 PRES CEA department-multicampus`). Escribe solo `input.json`; `expected.json` se escribe a mano. Con `--path=storage/app/<carpeta>` la escribe ahí (ignorado por git; nunca fuera de `storage/app`), para medir una carga que no debe entrar al repositorio.
 - `tests/Feature/Solver/SolverFixturesTest.php` corre cada motor registrado sobre cada fixture. A todos les exige una salida válida del contrato, el `run_id` de la entrada, el tiempo límite y sesiones de grupos de la entrada, dentro de la rejilla de su campus, alineadas a bloques y en un salón de ese campus. Solo a los motores que declaran `checksHardRules()` les exige además lo de `expected.json`: cero `hard_violations` y todo programado donde hay solución, `unscheduled` correcto donde no, y las horas semanales de `must_schedule` (HC-12). El motor de prueba (`FixedEngine`) corre solo las revisiones estructurales.
 - El servicio Python lee los mismos archivos y corre la misma verificación con pytest.
 - Los fixtures grandes corren fuera del CI de PR (job nocturno o manual; el CI de PR los salta con `--exclude-group=solver-slow`); `tiny`, `small`, `medium` e `infeasible` corren en cada PR.
@@ -562,7 +562,7 @@ La secuencia en la demo encontró un hueco al aceptar: CP-SAT dejó sin acomodar
 
 ### Línea base (se llena al cerrar cada fase)
 
-`php artisan solver:benchmark [--engine=*] [--fixture=*] [--markdown]` corre cada motor registrado (o los de `--engine`) sobre cada fixture (o los de `--fixture`) y mide el tiempo con `hrtime`. La tabla de consola trae motor, fixture, grupos movibles, sesiones propuestas, sin programar, violaciones duras, puntaje blando, estado, segundos y «Cumple» (✓/✗ contra `expected.json` en los motores que declaran `checksHardRules()`; «—» en los demás). Con `--markdown` imprime la tabla con las columnas de abajo para pegarla aquí. Un motor o fixture desconocido termina con error.
+`php artisan solver:benchmark [--engine=*] [--fixture=*] [--input=*] [--time-limit=] [--breakdown] [--markdown]` corre cada motor registrado (o los de `--engine`) sobre cada fixture (o los de `--fixture`) y mide el tiempo con `hrtime`. Para la 7.11: `--input` agrega entradas fuera de los fixtures (con el nombre de su carpeta; si no se da `--fixture`, solo esas), `--time-limit` corre todo con el mismo límite (de 10 a 600 s) y `--breakdown` agrega el límite, el estado, las violaciones duras que encuentra el evaluador en PHP sobre las sesiones de la salida (la misma vara para los dos motores) y el puntaje de SC-01 a SC-09. `cpsat` entra si la aplicación tiene `SOLVER_URL` y `SOLVER_TOKEN` (por ejemplo, `docker compose exec -e SOLVER_URL=http://solver:8000 -e SOLVER_TOKEN=… app php artisan solver:benchmark …`). La tabla de consola trae motor, fixture, grupos movibles, sesiones propuestas, sin programar, violaciones duras, puntaje blando, estado, segundos y «Cumple» (✓/✗ contra `expected.json` en los motores que declaran `checksHardRules()`; «—» en los demás). Con `--markdown` imprime la tabla con las columnas de abajo para pegarla aquí. Un motor o fixture desconocido termina con error.
 
 Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reglas duras ni calcula puntaje, así que sus ceros no miden nada y solo muestran que el comando corre. Las filas de la heurística (construcción y búsqueda local, 6.7) son del 17 de noviembre de 2026; las de la línea base de la fase se vuelven a correr al cerrarla.
 
@@ -578,6 +578,52 @@ Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reg
 | medium | heuristic | 0.01 s | 0 | 64 | 0 |
 | infeasible | heuristic | 0.00 s | 0 | 12 | 2 |
 | department-multicampus | heuristic | 25.93 s | 0 | 23608 | 0 |
+
+### Benchmark de la fase 7 (tarea 7.11)
+
+Medido el 18 de noviembre de 2026, de 23:43 a 23:56 (hora de Ciudad Juárez), con `solver:benchmark --engine=heuristic --engine=cpsat --time-limit=60` y `--time-limit=300`, con `--breakdown --markdown`:
+
+- **Dónde corrió.** CP-SAT en la imagen `dev` del servicio con `SOLVER_ENGINE=cpsat`, 2 CPU, 2 GB y 2 hilos (los límites de `compose.yaml`); la heurística, en el contenedor `app`, con un hilo. La máquina era compartida con otras sesiones (carga de 3 a 4 en 16 núcleos).
+- **El tiempo de `cpsat` incluye la pista.** `CpSatEngine` corre primero la heurística con el 15 % del límite (9 s con 60 s, 45 s con 300 s, o menos si termina antes) y le da a CP-SAT lo que queda. **El servicio ignora `hint_sessions`:** el modelo solo usa `add_hint` con el horario actual de cada grupo (`current_sessions`, PS-07), así que hoy ese tiempo no le sirve a CP-SAT.
+- **Violaciones duras.** Las de la salida y las que encuentra el evaluador en PHP sobre sus sesiones (la misma vara para los dos motores): cero en todas las filas.
+- **Sin instancia real de Campus II.** Las bases con lo migrado del SII (`nexus_sii_demo` y sus copias) no tienen grupos ni sesiones de Nexus: el horario del SII solo está crudo en `sii_archivo.horarios` (el periodo más reciente es 20263), y convertirlo en grupos es de la 1.16. Por eso no se copió esa base (decisión C4 de la fase 5) y la carga de tamaño real es de la demo masiva:
+  - `masivo-cb`: Ciencias Básicas, PRES, Ene-Jun 2027, de `demo:seed --volumen=masivo --hasta=asignacion` (en una base de paso): 356 grupos movibles (246 en C1 y 110 en C2), 1 078 con los fijos y 426 salones, **sin docentes** (en ese punto todavía no hay asignación), así que solo cuentan las reglas de cohortes y salones. Se exportó con `solver:export-fixture 20271 PRES CB masivo-cb --path=storage/app/solver-benchmark` y se borró al terminar, con la base.
+  - `department-multicampus` (Ciencias Económico-Administrativas, 1 139 movibles, 657 docentes, C1 y C2) sigue siendo la carga real con docentes.
+
+| Instancia | Motor | Límite | Tiempo | Estado | Duras (salida / evaluador PHP) | Sin programar | Puntaje blando | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| tiny | heuristic | 60 s | 0.01 s | feasible | 0 / 0 | 0 | 44 | 10 | 6 | 10 | 12 | 6 | 0 | 0 | 0 | 0 |
+| tiny | cpsat | 60 s | 1.05 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
+| tiny | heuristic | 300 s | 0.01 s | feasible | 0 / 0 | 0 | 44 | 10 | 6 | 10 | 12 | 6 | 0 | 0 | 0 | 0 |
+| tiny | cpsat | 300 s | 1.03 s | feasible | 0 / 0 | 0 | 36 | 0 | 6 | 10 | 12 | 0 | 4 | 0 | 0 | 4 |
+| small | heuristic | 60 s | 0.02 s | feasible | 0 / 0 | 0 | 79 | 30 | 6 | 0 | 32 | 9 | 2 | 0 | 0 | 0 |
+| small | cpsat | 60 s | 1.04 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
+| small | heuristic | 300 s | 0.01 s | feasible | 0 / 0 | 0 | 79 | 30 | 6 | 0 | 32 | 9 | 2 | 0 | 0 | 0 |
+| small | cpsat | 300 s | 1.03 s | feasible | 0 / 0 | 0 | 42 | 0 | 6 | 0 | 28 | 0 | 8 | 0 | 0 | 0 |
+| medium | heuristic | 60 s | 0.02 s | feasible | 0 / 0 | 0 | 64 | 20 | 18 | 15 | 0 | 9 | 2 | 0 | 0 | 0 |
+| medium | cpsat | 60 s | 1.05 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
+| medium | heuristic | 300 s | 0.02 s | feasible | 0 / 0 | 0 | 64 | 20 | 18 | 15 | 0 | 9 | 2 | 0 | 0 | 0 |
+| medium | cpsat | 300 s | 1.04 s | feasible | 0 / 0 | 0 | 49 | 0 | 18 | 15 | 0 | 0 | 8 | 0 | 0 | 8 |
+| infeasible | heuristic | 60 s | 0.01 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| infeasible | cpsat | 60 s | 1.02 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| infeasible | heuristic | 300 s | 0.00 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| infeasible | cpsat | 300 s | 1.02 s | partial | 0 / 0 | 2 | 12 | 0 | 12 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| department-multicampus | heuristic | 60 s | 27.58 s | feasible | 0 / 0 | 0 | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
+| department-multicampus | cpsat | 60 s | 61.35 s | feasible | 0 / 0 | 0 | 32 935 | 1 750 | 162 | 0 | 17 372 | 11 667 | 1 258 | 0 | 380 | 346 |
+| department-multicampus | heuristic | 300 s | 23.48 s | feasible | 0 / 0 | 0 | 23 608 | 360 | 120 | 0 | 16 708 | 5 217 | 546 | 21 | 340 | 296 |
+| department-multicampus | cpsat | 300 s | 302.32 s | feasible | 0 / 0 | 0 | 23 066 | 60 | 144 | 0 | 16 744 | 4 662 | 868 | 6 | 350 | 232 |
+| masivo-cb | heuristic | 60 s | 0.83 s | feasible | 0 / 0 | 0 | 4 350 | 4 350 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| masivo-cb | cpsat | 60 s | 55.53 s | feasible | 0 / 0 | 0 | 4 040 | 4 040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| masivo-cb | heuristic | 300 s | 0.90 s | feasible | 0 / 0 | 0 | 4 350 | 4 350 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| masivo-cb | cpsat | 300 s | 291.33 s | feasible | 0 / 0 | 0 | 4 040 | 4 040 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+Lo que dicen los números:
+
+- **Cargas chicas.** CP-SAT da mejor puntaje en `tiny`, `small` y `medium` (36, 42 y 49 contra 44, 79 y 64), en un segundo (la pausa de la primera consulta); en `infeasible` los dos dejan fuera los mismos dos grupos con el mismo puntaje. El límite no cambia nada: los dos terminan antes.
+- **CEA con docentes.** Con 60 s, CP-SAT queda peor que la heurística (32 935 contra 23 608): con 51 s apenas mejora su primera solución. Con 300 s, mejor por 2.3 % (23 066 contra 23 608), en 302 s contra 23 s. La heurística no aprovecha más tiempo: su búsqueda local termina a los 23–28 s con los dos límites. CP-SAT baja SC-01 (de 360 a 60), SC-05 (de 5 217 a 4 662), SC-07 y SC-09, y sube SC-06 (de 546 a 868). SC-04, los bloques preferidos de los docentes, es más del 70 % del puntaje con los dos motores.
+- **Ciencias Básicas de la demo masiva.** CP-SAT mejora 7.1 % (4 040 contra 4 350) ya con 60 s y no mejora más con 300 s; la heurística tarda menos de un segundo.
+
+La decisión del motor predeterminado está en [ADR-0028](../decisiones/0028-motor-predeterminado-por-modalidad.md): el valor de fábrica sigue siendo la heurística en todas las modalidades, y la propuesta para Presencial está por confirmar con el usuario.
 
 ## Despliegue del servicio Python
 
@@ -595,7 +641,7 @@ Fila de referencia del arnés (6.12): el motor de prueba (`fixed`) no revisa reg
 
 `Engines/CpSat/` (tarea 7.9). `CpSatEngine` (clave `cpsat`, «CP-SAT (servicio)», `checksHardRules() = true`) implementa `SolverEngine` sobre `CpSatClient`, que envuelve el cliente HTTP de Laravel con `services.solver` (`SOLVER_URL`, `SOLVER_TOKEN` como `Authorization: Bearer`; 3 s para conectar, 30 s para el envío, que lleva la entrada grande, y 5 s para cada consulta o cancelación, `poll_timeout`). El resto de Nexus no sabe que hay un servicio.
 
-- **Registro.** `cpsat` entra a `solver.engines` solo si hay URL y token (`SolverServiceProvider::engineClasses()`); se decide al arrancar, así que cambiar el `.env` pide reiniciar `app` y `queue`. Va antes del de prueba para no volverse el predeterminado (el último registrado) antes de la 7.11 (supuesto por confirmar). En las pruebas no aparece: `phpunit.xml` deja `SOLVER_TOKEN` vacío y `CpSatEngineTest` simula el servicio con `Http::fake()` y respuestas grabadas de su API (`tests/Fixtures/solver/cpsat/`).
+- **Registro.** `cpsat` entra a `solver.engines` solo si hay URL y token (`SolverServiceProvider::engineClasses()`); se decide al arrancar, así que cambiar el `.env` pide reiniciar `app` y `queue`. El que se propone al lanzar es el de `solver.default_engine` de la modalidad (7.11); si ahí está `cpsat` y el servicio no está configurado, se propone la heurística. En las pruebas no aparece: `phpunit.xml` deja `SOLVER_TOKEN` vacío y `CpSatEngineTest` simula el servicio con `Http::fake()` y respuestas grabadas de su API (`tests/Fixtures/solver/cpsat/`).
 - **Pista de la heurística.** Antes de mandar la entrada, `solve()` corre `PhpHeuristicEngine` sobre la misma entrada con `time_limit_seconds` igual al 15 % del límite (`HINT_TIME_SHARE`, mínimo 1 s: 9 s a 60 s, 45 s a 300 s). La heurística ya reparte ese límite entre construcción y búsqueda local, así que la construcción va siempre y la búsqueda local queda topada por él. Con su salida arma `hint_sessions[]` solo de los grupos `movable` (grupo, día, inicio, fin, tipo y salón, sin `changed`) y manda el límite menos los segundos completos que gastó, sin bajar de `MIN_SOLVE_SECONDS` (10 s) ni pasar del original; el margen de espera se cuenta desde ahí. `current_sessions` y la huella (SV-02) no cambian. Si la heurística lanza una excepción o no coloca nada, la corrida sigue sin pista y con el límite completo, y queda una advertencia en el log de la aplicación (`Log::warning`, no en el `log` de la salida, que es del servicio). Mientras corre, el aviso de avance recibe `0` con el puntaje de la heurística, así que la cancelación (SV-03) también funciona durante ella y sale tal cual, sin contarse como fallo de la heurística.
 - **Ciclo.** `solve()` manda la entrada (`POST /solve`) y consulta `GET /runs/{id}` cada `services.solver.poll_interval_ms` (1000 por omisión). En `queued` y `running` llama al aviso de avance con `progress` y `best_score`; en `done` valida `output` con `SolverOutput::fromArray` y revisa que traiga el `run_id` de la entrada; en `failed` lanza con el `error` del servicio; un `cancelled` que Nexus no pidió también es error.
 - **Cancelación.** Si el aviso de avance lanza (SV-03), manda `DELETE /runs/{id}` y deja salir la excepción; RunSolver deja la corrida cancelada.

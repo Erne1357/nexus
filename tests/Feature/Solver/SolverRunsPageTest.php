@@ -7,7 +7,9 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Building;
@@ -16,6 +18,11 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Actions\ReleaseStaleApplyingRun;
+use App\Modules\Solver\Engines\CpSat\CpSatClient;
+use App\Modules\Solver\Engines\CpSat\CpSatEngine;
+use App\Modules\Solver\Engines\EngineRegistry;
+use App\Modules\Solver\Engines\FixedEngine;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverRunStatus;
 use App\Modules\Solver\Jobs\RunSolver;
@@ -313,6 +320,16 @@ it('una corrida de un motor que ya no está registrado muestra su nombre y «Vol
         ->assertSet('launchLimit', 120)
         ->assertSeeHtml('data-testid="launch-engine-unavailable"')
         ->assertSee('CP-SAT (servicio) no está disponible ahora');
+});
+
+it('7.11: «Lanzar una corrida» propone el motor predeterminado de la modalidad (`solver.default_engine`)', function () {
+    app()->instance(EngineRegistry::class, new EngineRegistry([new CpSatEngine(new CpSatClient('http://solver.test', 'secreto')), new FixedEngine, new PhpHeuristicEngine]));
+
+    runsPage($this->jefe)->call('openLaunch')->assertSet('launchEngine', 'heuristic');
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.default_engine', 'value' => ['pres' => 'cpsat', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']]);
+
+    runsPage($this->jefe)->call('openLaunch')->assertSet('launchEngine', 'cpsat');
 });
 
 it('el componente de avance también cubre «Aplicando…» y avisa a la página cuando la corrida termina de aplicarse', function () {

@@ -123,6 +123,24 @@ it('CF-S7: guarda los parámetros de una tarjeta, muestra «Volver al valor por 
         ->and(Activity::query()->where('description', 'like', 'Cambió el parámetro%')->count())->toBe(2);
 });
 
+it('CF-S7: una tabla de opciones (el motor de cada modalidad) se elige de una lista y solo guarda una de sus opciones', function () {
+    $dom = domOf($this->actingAs($this->admin)->get('/configuracion/parametros')->assertOk());
+
+    expect($dom->querySelector('[data-testid="setting-solver.default_engine"] select'))->not->toBeNull()
+        ->and(textOf($dom->querySelector('[data-testid="setting-solver.default_engine"]')))->toContain('Por omisión: Presencial: Heurística (PHP)');
+
+    Livewire::actingAs($this->admin)->test('core::pages.settings')
+        ->assertSet('values.solver__default_engine.pres', 'heuristic')
+        ->set('values.solver__default_engine.pres', 'magia')
+        ->call('save', 'solver')
+        ->assertHasErrors(['values.solver__default_engine.pres'])
+        ->set('values.solver__default_engine.pres', 'cpsat')
+        ->call('save', 'solver')
+        ->assertHasNoErrors();
+
+    expect(storedSetting('solver.default_engine'))->toEqual(['pres' => 'cpsat', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']);
+});
+
 it('CF-S7: un valor inválido marca su campo y no guarda nada de la tarjeta', function () {
     Livewire::actingAs($this->admin)->test('core::pages.settings')
         ->set('values.staffing__min_campus_travel_minutes', '90')

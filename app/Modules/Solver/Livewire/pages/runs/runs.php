@@ -262,7 +262,8 @@ new #[Title('Corridas del motor')] class extends Component
     }
 
     /**
-     * Abre «Lanzar una corrida» o, con una corrida, «Volver a correr» con su alcance, su motor y su límite.
+     * Abre «Lanzar una corrida» o, con una corrida, «Volver a correr» con su alcance, su motor y su límite. Sin corrida, el
+     * motor es el predeterminado de la modalidad (`solver.default_engine`, 7.11).
      */
     public function openLaunch(EngineRegistry $engines, ?string $againId = null): void
     {
@@ -279,7 +280,7 @@ new #[Title('Corridas del motor')] class extends Component
         $this->launchCareer = $again?->career_id ?? ($options['careers'][0]['id'] ?? '');
         $registered = array_map(fn (SolverEngine $engine): string => $engine->key(), $engines->all());
         $this->unavailableEngine = $again !== null && ! in_array($again->engine, $registered, true) ? $this->engineLabel($again->engine) : null;
-        $this->launchEngine = $again !== null && $this->unavailableEngine === null ? $again->engine : $engines->default()->key();
+        $this->launchEngine = $again !== null && $this->unavailableEngine === null ? $again->engine : $engines->default($this->context()[1]->code)->key();
         $this->launchLimit = $again === null ? SolverSettings::fromSettings()->timeLimitFor(RunScope::from($this->launchScope)) : (int) (RunPayloads::read($again, 'input')['time_limit_seconds'] ?? 300);
         $this->showLaunch = true;
     }

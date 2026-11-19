@@ -2,13 +2,13 @@
 
 namespace App\Modules\Solver\Engines;
 
+use App\Modules\Solver\Rules\SolverSettings;
 use InvalidArgumentException;
 
 /**
  * Los motores disponibles (tarea 6.3). Los registra el provider de Solver con la etiqueta `solver.engines`: la heurística
- * en PHP (6.6) y el cliente de CP-SAT (fase 7) se agregan ahí. El registro vive en código y no en `settings`, porque el
- * catálogo de parámetros (CF-S7) no tiene parámetros de texto; elegir el motor predeterminado por modalidad
- * (`solver.default_engine`) llega con la 7.11. Mientras, el predeterminado es el último registrado.
+ * en PHP (6.6) y el cliente de CP-SAT (fase 7) se agregan ahí. El registro vive en código; el motor predeterminado de
+ * cada modalidad es el parámetro `solver.default_engine` (7.11, SolverSettings), con la heurística de fábrica.
  *
  * No guarda estado entre peticiones: solo indexa los motores que recibe.
  */
@@ -47,8 +47,19 @@ final readonly class EngineRegistry
         return $this->engines[$key] ?? throw new InvalidArgumentException("No hay un motor de horarios «{$key}».");
     }
 
-    public function default(): SolverEngine
+    /**
+     * El motor que se propone al lanzar en la modalidad (`PRES`): el de `solver.default_engine` si está registrado (CP-SAT
+     * solo lo está con el servicio configurado); si no, o sin modalidad, la heurística; y si tampoco está, el último
+     * registrado. Con modalidad lee el parámetro de la base.
+     *
+     * @throws InvalidArgumentException si no hay motores registrados
+     */
+    public function default(?string $modalityCode = null): SolverEngine
     {
-        return $this->engines[array_key_last($this->engines)] ?? throw new InvalidArgumentException('No hay motores de horarios registrados.');
+        $preferred = $modalityCode === null ? SolverSettings::DEFAULT_ENGINE : SolverSettings::fromSettings()->defaultEngineFor($modalityCode);
+
+        return $this->engines[$preferred]
+            ?? $this->engines[SolverSettings::DEFAULT_ENGINE]
+            ?? ($this->engines === [] ? throw new InvalidArgumentException('No hay motores de horarios registrados.') : $this->engines[array_key_last($this->engines)]);
     }
 }

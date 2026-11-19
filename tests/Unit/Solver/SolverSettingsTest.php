@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\Core\Settings\SettingType;
+use App\Modules\Solver\Engines\CpSat\CpSatEngine;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Rules\SolverSettings;
@@ -49,3 +52,26 @@ it('declara los pesos blandos con un campo por regla, permiso de Subdirección y
 it('un tiempo fuera de 10 a 600 segundos usa el de omisión, como lo valida el lanzamiento (SV-02)', function (int $seconds) {
     expect(SolverSettings::fromValue(['department' => $seconds])->timeLimitFor(RunScope::Department))->toBe(300);
 })->with([5, 9, 601, 3600]);
+
+it('7.11: sin parámetro, el motor predeterminado de toda modalidad es la heurística (valor de fábrica)', function (string $modality) {
+    expect(SolverSettings::fromValue(null)->defaultEngineFor($modality))->toBe(PhpHeuristicEngine::KEY);
+})->with(['PRES', 'EAD', 'ENL', 'TNMV', 'NUEVA']);
+
+it('7.11: lee el motor de cada modalidad y usa la heurística en las que faltan o traen un motor que no es opción', function () {
+    $settings = SolverSettings::fromValue(null, null, ['pres' => CpSatEngine::KEY, 'ead' => 'fixed', 'enl' => 7]);
+
+    expect($settings->defaultEngineFor('PRES'))->toBe(CpSatEngine::KEY)
+        ->and($settings->defaultEngineFor('EAD'))->toBe(PhpHeuristicEngine::KEY)
+        ->and($settings->defaultEngineFor('ENL'))->toBe(PhpHeuristicEngine::KEY)
+        ->and($settings->defaultEngineFor('TNMV'))->toBe(PhpHeuristicEngine::KEY);
+});
+
+it('7.11: declara el motor predeterminado como una tabla de opciones por modalidad, con la heurística de fábrica', function () {
+    $definition = collect(SolverSettings::definitions())->firstWhere('key', SolverSettings::DEFAULT_ENGINE_SETTING);
+
+    expect($definition->type)->toBe(SettingType::ChoiceTable)
+        ->and(array_keys($definition->options))->toBe([PhpHeuristicEngine::KEY, CpSatEngine::KEY])
+        ->and($definition->default)->toBe(['pres' => 'heuristic', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic'])
+        ->and($definition->permission)->toBe(SolverPermission::SettingUpdate)
+        ->and(SolverSettings::fromValue(null, null, $definition->default))->toEqual(new SolverSettings);
+});
