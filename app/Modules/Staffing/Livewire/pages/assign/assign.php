@@ -11,6 +11,7 @@ use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\CampusGroupCountsQuery;
 use App\Modules\Staffing\Actions\AssignTeacher;
+use App\Modules\Staffing\Actions\UnassignTeacher;
 use App\Modules\Staffing\Enums\RankingState;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
@@ -44,10 +45,13 @@ use Mary\Traits\Toast;
  * ese grupo; `?depto=<código>` elige el departamento a quien ve varios.
  *
  * Asignar al primer lugar es un clic; fuera de él (o fuera del ranking) pide el motivo en el renglón con el lugar que
- * ocupa. Lo que rechaza AssignTeacher se ve en su lugar. Si la carga está en propuesta, quien puede la pasa a
- * asignación (StartStaffing): si ya se sabe que Scheduling lo vetaría (StaffingBlockersQuery), el botón sale
- * deshabilitado con los motivos, y si lo veta al pasarla, ve los motivos; en otro estado que no sea asignación ni ajustes
- * es de solo lectura. La ven quienes ven el ranking del departamento (StaffingRankingPolicy::viewAny) y asignan
+ * ocupa. Lo que rechaza AssignTeacher se ve en su lugar. «Quitar» (junto al docente de un grupo, en las dos vistas) pide
+ * el motivo en un x-modal y llama a UnassignTeacher (incidencia F-02 del ensayo 8.11: sin docente, el grupo se puede
+ * cerrar en el re-análisis o cancelar al armar paralelos); lo que rechaza se ve en el modal y en un toast. Con un filtro
+ * de docente que deja la lista vacía, el estado vacío ofrece «Ver todos» (F-09). Si la carga está en propuesta, quien
+ * puede la pasa a asignación (StartStaffing): si ya se sabe que Scheduling lo vetaría (StaffingBlockersQuery), el botón
+ * sale deshabilitado con los motivos, y si lo veta al pasarla, ve los motivos; en otro estado que no sea asignación,
+ * ajustes ni re-análisis es de solo lectura. La ven quienes ven el ranking del departamento (StaffingRankingPolicy::viewAny) y asignan
  * quienes pueden (GroupTeacherAssignmentPolicy::create), con la policy antes de cada método. Lo que muestra sale de
  * AssignmentBoardQuery y GroupRankingQuery; mientras algún grupo a la vista espera su ranking, consulta cada 5 s.
  */
@@ -105,6 +109,12 @@ new #[Title('Asignación docente')] class extends Component
     /** El motivo de asignar fuera del primer lugar (HC-16). */
     public string $reason = '';
 
+    /** El modal de quitar el docente de un grupo. */
+    public bool $showUnassign = false;
+
+    /** El motivo de quitar el docente (UnassignTeacher lo exige; supuesto por confirmar). */
+    public string $unassignReason = '';
+
     /**
      * El periodo, la modalidad, el campus del filtro (null, «Todos») y el departamento con los que pinta y escribe. El
      * navegador no los puede cambiar: cambian al elegir otra modalidad, campus o departamento, que se resuelven de nuevo.
@@ -161,6 +171,14 @@ new #[Title('Asignación docente')] class extends Component
      */
     #[Locked]
     public ?array $pending = null;
+
+    /**
+     * El grupo al que se le quita el docente en el modal: su id, su clave, su materia y el nombre del docente.
+     *
+     * @var array{group: string, code: string, subject: string, teacher: string}|null
+     */
+    #[Locked]
+    public ?array $unassigning = null;
 
     /**
      * Lo que rechazó AssignTeacher al asignar al primer lugar, para mostrarlo junto al docente.
@@ -249,6 +267,14 @@ new #[Title('Asignación docente')] class extends Component
     public function updatedState(): void
     {
         $this->state = in_array($this->state, self::STATES, true) ? $this->state : 'todos';
+    }
+
+    /**
+     * «Ver todos» del estado vacío: quita el filtro de docente que dejaba la lista vacía (F-09).
+     */
+    public function showAllStates(): void
+    {
+        $this->state = 'todos';
     }
 
     public function setView(string $view): void
@@ -368,6 +394,67 @@ new #[Title('Asignación docente')] class extends Component
     }
 
     /**
+     * «Quitar»: abre el modal con el motivo para quitarle el docente a un grupo, con la policy de asignar
+     * (GroupTeacherAssignmentPolicy::create, la misma que decide UnassignTeacher). El estado de la carga lo revisa la
+     * Action al quitarlo. Si el grupo ya no tiene docente (otra sesión se lo quitó), lo avisa y no abre nada.
+     */
+    public function askUnassign(string $groupId, AssignmentBoardQuery $query): void
+    {
+        $group = $this->assignableGroup($groupId, $query);
+        $this->pending = $this->failure = null;
+        $this->reset('unassignReason', 'unassigning', 'showUnassign');
+        $this->resetErrorBag();
+
+        if ($group->teacher_id === null) {
+            $this->error('No se quitó el docente', e("El grupo {$group->code} ya no tiene docente."));
+
+            return;
+        }
+
+        $group->loadMissing('subject', 'teacher');
+        $this->unassigning = ['group' => $group->id, 'code' => $group->code, 'subject' => (string) $group->subject?->name, 'teacher' => (string) $group->teacher?->name];
+        $this->showUnassign = true;
+    }
+
+    /**
+     * Quita el docente con el motivo escrito (UnassignTeacher). Lo que rechaza (la carga en otro estado, el grupo ya sin
+     * docente) se queda en el modal y sale en un toast de error.
+     */
+    public function unassign(AssignmentBoardQuery $query, UnassignTeacher $action): void
+    {
+        abort_if($this->unassigning === null, 404);
+
+        $group = $this->assignableGroup($this->unassigning['group'], $query);
+        $this->validate(
+            ['unassignReason' => ['required', 'string', 'max:500']],
+            ['unassignReason.required' => 'Escribe el motivo para quitar al docente.'],
+            ['unassignReason' => 'motivo'],
+        );
+
+        try {
+            $action->handle($group, auth()->user(), $this->unassignReason);
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $field => $messages) {
+                $this->addError($field === 'reason' ? 'unassignReason' : 'unassign', (string) $messages[0]);
+            }
+
+            $this->error('No se quitó el docente', e((string) collect($e->errors())->flatten()->first()));
+
+            return;
+        }
+
+        ['code' => $code, 'subject' => $subject, 'teacher' => $teacher] = $this->unassigning;
+        $this->reset('unassignReason', 'unassigning', 'showUnassign');
+        $this->success(e("Quitaste a {$teacher}"), e("{$code} · {$subject} queda sin docente."));
+    }
+
+    public function cancelUnassign(): void
+    {
+        $this->reset('unassignReason', 'unassigning', 'showUnassign');
+        $this->resetErrorBag();
+    }
+
+    /**
      * Pasa la carga del departamento de propuesta a asignación docente; si se veta, deja los motivos a la vista.
      */
     public function startStaffing(AssignmentBoardQuery $query, StartStaffing $action): void
@@ -440,6 +527,7 @@ new #[Title('Asignación docente')] class extends Component
             'stateMessage' => $stateMessage,
             'readOnlyReason' => $canAssign ? null : ($stateMessage ?? 'Solo consulta: asignan el jefe del departamento y el jefe de proyecto docente.'),
             'counts' => ['todos' => $board->total(), 'sin' => $board->total() - $board->assignedCount(), 'con' => $board->assignedCount()],
+            'hiddenByState' => $visible === [] && $this->state !== 'todos' ? count($this->filtered($board->groups, byState: false)) : 0,
             'subjects' => $this->subjectOptions($board),
             'careers' => $this->careerOptions($board),
             'semesters' => $this->semesterOptions($board),
@@ -707,21 +795,23 @@ new #[Title('Asignación docente')] class extends Component
     }
 
     /**
-     * Los grupos que cumplen los filtros: estado, materia, carrera, semestre y la búsqueda (clave, materia, carrera o
-     * docente, sin importar acentos ni mayúsculas).
+     * Los grupos que cumplen los filtros: estado (si `$byState`), materia, carrera, semestre y la búsqueda (clave,
+     * materia, carrera o docente, sin importar acentos ni mayúsculas). Sin el estado, cuántos esconde el filtro de
+     * docente cuando deja la lista vacía (F-09).
      *
      * @param  list<BoardGroup>  $groups
      * @return list<BoardGroup>
      */
-    private function filtered(array $groups): array
+    private function filtered(array $groups, bool $byState = true): array
     {
         $needle = self::fold(trim($this->search));
+        $state = $byState ? $this->state : 'todos';
 
-        return array_values(array_filter($groups, function (BoardGroup $row) use ($needle): bool {
+        return array_values(array_filter($groups, function (BoardGroup $row) use ($needle, $state): bool {
             $group = $row->group;
 
             return match (true) {
-                $this->state === 'sin' && $row->hasTeacher(), $this->state === 'con' && ! $row->hasTeacher() => false,
+                $state === 'sin' && $row->hasTeacher(), $state === 'con' && ! $row->hasTeacher() => false,
                 $this->subjectFilter !== '' && $group->subject?->code !== $this->subjectFilter => false,
                 $this->careerFilter !== '' && $group->ownerCareer?->code !== $this->careerFilter => false,
                 $this->semesterFilter !== '' && (string) $group->semester !== $this->semesterFilter => false,
