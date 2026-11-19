@@ -105,13 +105,19 @@ final class ReanalysisSuggestionsQuery
             teacherName: $group->teacher?->name,
         ))->all();
 
+        $seats = AdvisorGroup::seatsByCareer($advisorGroups);
+
         return new ReanalysisSuggestions(
             suggestions: $this->advisor->advise($block->rows, $advisorGroups, $careerCodes, $settings, $this->opening($block, $subject, $campusId)),
             groups: $advisorGroups,
             models: $groups->keyBy('id')->all(),
-            seats: AdvisorGroup::seatsByCareer($advisorGroups),
+            seats: $seats,
             careerCodes: $careerCodes,
             threshold: $settings->highlightThreshold,
+            balances: collect($block->rows)
+                ->reject(fn (ReanalysisRow $row): bool => $row->balance === null)
+                ->mapWithKeys(fn (ReanalysisRow $row): array => [$row->careerId => $settings->balanceOf($row->expectedStudents, $seats[$row->careerId] ?? 0)])
+                ->all(),
         );
     }
 

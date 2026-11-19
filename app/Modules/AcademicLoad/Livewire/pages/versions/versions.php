@@ -14,7 +14,6 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -28,7 +27,8 @@ use Livewire\Component;
  * el 17 de noviembre de 2026, en .impeccable/mocks/versiones/c.html): la trazabilidad de lo que vieron docentes y alumnos
  * en cada momento. Arriba, la línea de versiones de la carga (como la de «Publicación», de la primera a la vigente), con
  * la fecha, el motivo y lo que cambió; debajo, la versión elegida (`?version=`, la vigente sin elegir): quién la publicó y
- * cuándo, su comentario y la reapertura que la originó, sus cifras, a quién se avisó (RA-05, RA-06), sus archivos y lo que
+ * cuándo, su comentario y la reapertura que la originó, sus cifras, a quién se avisó o se va a avisar (RA-05, RA-06: si
+ * el aviso ya salió, LoadVersionsQuery::noticeChannels(), lo mismo que lee el drawer), sus archivos y lo que
  * cambió contra la anterior por tipo (VersionChanges). «Ver por docente o carrera» abre en un drawer lo que se le dijo a
  * cada uno.
  *
@@ -140,6 +140,9 @@ new #[Title('Versiones publicadas')] class extends Component
 
         $diff = $query->diff($load, $selected['version']);
         $next = collect($versions)->firstWhere('version', $selected['version'] + 1);
+        $notices = $selected['legacy'] || $diff === null
+            ? ['bell' => false, 'mail' => false, 'sent' => false]
+            : $query->noticeChannels($load, $selected['publishedAt'], $next['publishedAt'] ?? null);
 
         return [
             'load' => $load,
@@ -148,7 +151,8 @@ new #[Title('Versiones publicadas')] class extends Component
             'selected' => $selected,
             'diff' => $diff,
             'sections' => $diff === null ? [] : VersionChanges::byKind($diff),
-            'affected' => $this->showAffected && $diff !== null ? $this->affected($load, $diff, $query, $selected, $next['publishedAt'] ?? null) : null,
+            'notices' => $notices,
+            'affected' => $this->showAffected && $diff !== null ? $this->affected($diff, $query, $notices) : null,
             'until' => $next['publishedAt'] ?? null,
             'campuses' => $campuses->of($load->modality)->keyBy('code'),
             'files' => $this->files($load, $published),
@@ -157,22 +161,22 @@ new #[Title('Versiones publicadas')] class extends Component
     }
 
     /**
-     * Lo que se le dijo a cada docente y a cada carrera: solo los que están en el diff de la versión (RA-05), y por dónde
-     * les llegó a los docentes (RA-06: la campana y el correo que de verdad salieron; nada en una versión de antes de los
-     * avisos).
+     * Lo que se le dijo a cada docente y a cada carrera: solo los que están en el diff de la versión (RA-05), y si el aviso
+     * ya salió y por dónde les llegó a los docentes (`$notices`, LoadVersionsQuery::noticeChannels(), lo mismo que lee el
+     * resumen; nada en una versión de antes de los avisos).
      *
      * @param  array<string, mixed>  $diff
-     * @param  array{publishedAt: CarbonImmutable, legacy: bool}  $selected
-     * @return array{teachers: list<array{name: string, lines: list<string>}>, careers: list<array{code: string, name: ?string, lines: list<string>}>, channels: array{bell: bool, mail: bool}}
+     * @param  array{bell: bool, mail: bool, sent: bool}  $notices
+     * @return array{teachers: list<array{name: string, lines: list<string>}>, careers: list<array{code: string, name: ?string, lines: list<string>}>, channels: array{bell: bool, mail: bool, sent: bool}}
      */
-    private function affected(AcademicLoad $load, array $diff, LoadVersionsQuery $query, array $selected, ?CarbonImmutable $until): array
+    private function affected(array $diff, LoadVersionsQuery $query, array $notices): array
     {
         $careers = SnapshotDiff::careers($diff);
 
         return [
             'teachers' => VersionChanges::byTeacher($diff),
             'careers' => VersionChanges::byCareer($diff, $query->careerNames(array_keys($careers)), $careers),
-            'channels' => $selected['legacy'] ? ['bell' => false, 'mail' => false] : $query->teacherNoticeChannels($load, $selected['publishedAt'], $until),
+            'channels' => $notices,
         ];
     }
 

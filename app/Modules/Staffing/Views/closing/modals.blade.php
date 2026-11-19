@@ -3,14 +3,16 @@
     cierre» (sobre su drawer):
     - Cerrar: el aviso de lo que pasa al cerrar con la cifra de grupos que se confirman, los que pasan con justificación
       y un comentario opcional.
-    - Reabrir (o «Regresar con comentarios» en una modalidad con visto bueno): el motivo, obligatorio; el botón se habilita al
-      escribirlo.
+    - Reabrir (o «Regresar con comentarios» en una modalidad con visto bueno): a dónde vuelve la carga (`$reopenTo`, que
+      askReopen() lee de ReopenLoad::destination(): ajustes o, si su cierre salió de un re-análisis, re-análisis con la
+      versión publicada vigente, RA-08) y el motivo, obligatorio; el botón se habilita al escribirlo.
     - Dar visto bueno: comentario opcional; solo en una modalidad que lo exige.
     `$closing` es la carga a la vista (o null).
 --}}
 @php($load = $closing?->load)
 @php($where = $load === null ? '' : "{$load->department->name} en {$load->modality->name}")
 @php($returning = $load !== null && $load->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Closed && $load->modality->profile->requiresSubdireccionApproval)
+@php($destination = ($reopenTo ?? \App\Modules\AcademicLoad\Enums\LoadStatus::Adjusting)->label())
 
 <x-modal wire:model="showClose" :title="'Cerrar la carga de '.$where" box-class="max-w-xl" data-testid="close-modal">
     @if ($closing)
@@ -42,8 +44,8 @@
     <div class="space-y-4" x-data="{ filled: false }" x-init="$watch(() => $wire.showReopen, () => filled = false)">
         @if ($load)
             <p class="text-sm">
-                {{ $returning ? 'La carga regresa a Ajustes con tus comentarios y la jefatura del departamento la corrige.' : 'La carga regresa a Ajustes y la jefatura del departamento vuelve a editarla.' }}
-                @if ($load->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Published)
+                {{ $returning ? "La carga regresa a {$destination} con tus comentarios y la jefatura del departamento la corrige." : "La carga regresa a {$destination} y la jefatura del departamento vuelve a editarla." }}
+                @if ($load->status === \App\Modules\AcademicLoad\Enums\LoadStatus::Published || $reopenTo === \App\Modules\AcademicLoad\Enums\LoadStatus::Reanalysis)
                     Mientras tanto se sigue viendo la versión publicada{{ $load->current_version > 0 ? ' (v'.$load->current_version.')' : '' }}.
                 @endif
             </p>
