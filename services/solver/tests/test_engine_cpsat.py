@@ -299,7 +299,8 @@ def test_infactible_solo_si_a_todos_los_que_faltan_se_lo_impiden_sus_reglas():
 
 def test_sin_tiempo_en_la_reserva_el_grupo_con_opciones_dice_que_falto_tiempo_y_sus_reglas_siguen():
     """Si la reserva se acabó, un grupo que sí tiene opciones con lo demás fijo sale con «no se alcanzó» (y la corrida
-    no sería `infeasible`), mientras que uno sin opciones sale con su regla: los dos llevan motivo."""
+    no sería `infeasible`), mientras que uno sin opciones sale con su regla: los dos llevan motivo. Si ni siquiera
+    alcanzó el plazo de la corrida para armar el modelo de los motivos, todos dicen que faltó tiempo."""
     from app.model.data import ModelData
     from app.model.phases import SearchLimits
     from app.model.search import Search
@@ -310,12 +311,14 @@ def test_sin_tiempo_en_la_reserva_el_grupo_con_opciones_dice_que_falto_tiempo_y_
     )
     search = Search(unplaced=["cabe", "grande"])
 
-    found = _complete(data, search, time.perf_counter() - 1, SearchLimits(), seed=0)
+    found = _complete(data, search, time.perf_counter() - 1, time.perf_counter() + 10, SearchLimits(), seed=0)
 
     assert found["cabe"].reasons[0].startswith("No se alcanzó a programar en el plazo de la corrida")
     assert not found["cabe"].by_rules
     assert found["grande"].reasons[0].startswith("HC-05:")
     assert found["grande"].by_rules
+    late = _complete(data, search, time.perf_counter() - 1, time.perf_counter() - 1, SearchLimits(), seed=0)
+    assert all(not entry.by_rules and "plazo" in entry.reasons[0] for entry in late.values())
 
 
 def test_sin_todos_programados_no_hay_mejor_puntaje_ni_soluciones_completas():

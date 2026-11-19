@@ -72,14 +72,23 @@ class SearchLimits:
 
 
 class _OnSolution(cp_model.CpSolverSolutionCallback):
-    """Llama a `handler` con cada solución intermedia de CP-SAT (lo usa el avance de la corrida, 7.7)."""
+    """Llama a `handler` con cada solución intermedia de CP-SAT (lo usa el avance de la corrida, 7.7). Corre en un hilo
+    de CP-SAT: si `handler` lanza (un aviso de avance que revisa la cancelación, por ejemplo), guarda la excepción,
+    detiene la búsqueda y `run_solver` la vuelve a lanzar."""
 
-    def __init__(self, handler: Callable[[cp_model.CpSolverSolutionCallback], None]) -> None:
+    def __init__(self, handler: Callable[[cp_model.CpSolverSolutionCallback], None], raised: list[BaseException]):
         super().__init__()
         self._handler = handler
+        self._raised = raised
 
     def on_solution_callback(self) -> None:
-        self._handler(self)
+        if self._raised:
+            return
+        try:
+            self._handler(self)
+        except BaseException as error:
+            self._raised.append(error)
+            self.stop_search()
 
 
 class InvalidModel(RuntimeError):
@@ -95,15 +104,18 @@ def run_solver(
 ) -> Any:
     """`solver.solve(model)` con los hilos de los límites y revisando la cancelación cada `CANCEL_POLL_SECONDS`: si
     la cancelan, detiene la búsqueda (`stop_search`) y vuelve a lanzar la excepción de la cancelación. Con
-    `on_solution`, lo llama en cada solución intermedia (no debe lanzar excepciones: corre en un hilo de CP-SAT). Un
-    `MODEL_INVALID` lanza `InvalidModel`."""
+    `on_solution`, lo llama en cada solución intermedia; si lanza, la búsqueda se detiene y la excepción sale de aquí.
+    Un `MODEL_INVALID` lanza `InvalidModel`."""
     solver.parameters.num_workers = limits.workers
-    callback = _OnSolution(on_solution) if on_solution is not None else None
+    raised: list[BaseException] = []
+    callback = _OnSolution(on_solution, raised) if on_solution is not None else None
     if limits.check_cancelled is None:
-        return _valid(solver.solve(model, callback), model)
+        status = solver.solve(model, callback)
+        if raised:
+            raise raised[0]
+        return _valid(status, model)
 
     done = threading.Event()
-    raised: list[BaseException] = []
 
     def watch() -> None:
         while not done.wait(CANCEL_POLL_SECONDS):
@@ -125,6 +137,22 @@ def run_solver(
         raise raised[0]
 
     return _valid(status, model)
+
+
+def solve_until(
+    model: cp_model.CpModel,
+    deadline: float,
+    limits: SearchLimits,
+    seed: int,
+    on_solution: Callable[[cp_model.CpSolverSolutionCallback], None] | None = None,
+) -> tuple[cp_model.CpSolver, Any]:
+    """Un `CpSolver` con el tiempo hasta `deadline` (`time.perf_counter()`, al menos 0.05 s) y la semilla, resuelto con
+    `run_solver`: el solver y su estado."""
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = max(0.05, deadline - time.perf_counter())
+    solver.parameters.random_seed = seed
+
+    return solver, run_solver(solver, model, limits, on_solution)
 
 
 def _valid(status: Any, model: cp_model.CpModel) -> Any:

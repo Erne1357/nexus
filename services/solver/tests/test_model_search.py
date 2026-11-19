@@ -183,6 +183,23 @@ def test_los_limites_salen_del_contexto_de_la_corrida(monkeypatch):
     assert limits.budget(1.0).max_variables == 123
 
 
+def test_una_excepcion_del_aviso_de_cada_solucion_detiene_a_cp_sat_y_sale_de_run_solver():
+    """El aviso de cada solución corre en un hilo de CP-SAT: si lanza (un aviso que revisa la cancelación, por ejemplo),
+    la búsqueda se detiene y la excepción sale de `run_solver`, con o sin revisión de cancelación."""
+    from app.model.phases import SearchLimits, run_solver
+
+    model = cp_model.CpModel()
+    values = [model.new_int_var(0, 10, f"x{i}") for i in range(5)]
+    model.maximize(sum(values))
+
+    def fail(callback) -> None:
+        raise ValueError("aviso roto")
+
+    for limits in (SearchLimits(), SearchLimits(check_cancelled=lambda: None)):
+        with pytest.raises(ValueError, match="aviso roto"):
+            run_solver(cp_model.CpSolver(), model, limits, on_solution=fail)
+
+
 def test_un_modelo_invalido_no_se_esconde_como_infactible():
     """`MODEL_INVALID` es un defecto del motor: `run_solver` lanza `InvalidModel` con el mensaje de CP-SAT, y la
     corrida queda `failed` en vez de reportar «no cabe»."""
@@ -356,3 +373,19 @@ def test_run_solver_avisa_cada_solucion_intermedia():
     assert status == cp_model.OPTIMAL
     assert seen
     assert seen[-1] == solver.objective_value == 8 + 7 + 6 + 5 + 4
+
+
+@pytest.mark.parametrize("name", ["medium", "infeasible"])
+def test_el_aviso_de_lns_cuenta_los_programados_con_el_valor_del_objetivo(name):
+    """El aviso de cada solución de la primera vuelta cuenta los programados con el valor del objetivo (sin recorrer
+    las opciones en el hilo de CP-SAT): nunca más que los movibles, y el último es lo que quedó programado."""
+    from app.model.phases import SearchLimits
+
+    data = ModelData.of(fixture(name))
+    reports: list[int] = []
+
+    found = lns(data, time_limit=10, limits=SearchLimits(workers=1), seed=7, report=reports.append)
+
+    assert reports
+    assert all(0 <= placed <= len(data.movable) for placed in reports)
+    assert reports[-1] == len(found.sessions)

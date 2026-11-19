@@ -32,8 +32,8 @@ from app.contract.output import ProposedSession, RunMetrics, UnscheduledGroup
 from .constraints import add_hard_constraints
 from .data import ModelData
 from .objective import add_objective
-from .phases import FEASIBLE, SearchLimits, run_solver
-from .room_model import improve_rooms
+from .phases import FEASIBLE, SearchLimits, solve_until
+from .room_model import improve_rooms_scored
 from .rooms import RoomAssignmentError
 from .score import Score, SoftScorer
 from .search import Improvement, Search, _sub_input, improve, lns
@@ -132,16 +132,17 @@ def solve(
     total = max(1, len(model_data.movable))
     phases: list[Phase] = []
 
-    def mark(name: str, search: Search, sessions: list[ProposedSession]) -> Score:
-        score = scorer.score(sessions)
+    def mark(name: str, search: Search, sessions: list[ProposedSession], score: Score | None = None) -> Score:
+        score = score or scorer.score(sessions)
         off_pattern = sum(tier > 0 for tier in search.tiers.values())
         phases.append(Phase(name, round(time.perf_counter() - started, 1), off_pattern, score))
 
         return score
 
+    # El plazo de `lns` se mide desde ahora: armar los datos y el puntaje ya tomó parte del de la corrida.
     search = lns(
         model_data,
-        time_limit=max(0.0, time_limit - reserve),
+        time_limit=max(0.0, deadline - reserve - time.perf_counter()),
         limits=limits,
         seed=seed,
         first_share=first_share(time_limit),
@@ -162,9 +163,11 @@ def solve(
     )
     mark("improve", search, search.all_sessions)
 
-    unplaced = _complete(model_data, search, deadline - reserve / 2, limits, seed)
-    sessions = improve_rooms(model_data, search.all_sessions, deadline, limits=limits, seed=seed)
-    score = mark("improve_rooms", search, sessions)
+    unplaced = _complete(model_data, search, deadline - reserve / 2, deadline, limits, seed)
+    sessions, score = improve_rooms_scored(
+        model_data, search.all_sessions, deadline, limits=limits, scorer=scorer, seed=seed
+    )
+    score = mark("improve_rooms", search, sessions, score)
     progress(99, _best(search, score))
 
     output = _output(data, model_data, search, sessions, score, improvement, unplaced, started, engine, version)
@@ -182,24 +185,30 @@ def _best(search: Search, score: Score) -> int | None:
 PLACED, NO_OPTIONS, DOES_NOT_FIT, NO_TIME = "placed", "no_options", "does_not_fit", "no_time"
 
 
-def _complete(data: ModelData, search: Search, deadline: float, limits: SearchLimits, seed: int) -> dict[str, Unplaced]:
+def _complete(
+    data: ModelData, search: Search, deadline: float, run_deadline: float, limits: SearchLimits, seed: int
+) -> dict[str, Unplaced]:
     """Los que no quedaron, con lo demás fijo. Primero un solo modelo con todos ellos: el dominio de cada uno solo
     depende de lo fijo, así que da las opciones que le quitó cada regla a todos a la vez, sin armar la entrada una vez
-    por grupo. Se arma sin plazo (es uno solo y de eso salen los motivos), con el tope de variables y la cancelación.
-    Los que no tienen opciones se quedan con sus reglas; los demás se intentan uno por uno (`_alone`), cada uno con su
-    parte del tiempo que queda. Todo grupo sin lugar lleva su motivo."""
+    por grupo. Ese modelo puede usar hasta el fin de la corrida (`run_deadline`: de él salen los motivos), con el tope
+    de variables y la cancelación; si no alcanza, los que faltan dicen que no hubo tiempo. Los que no tienen opciones
+    se quedan con sus reglas; los demás se intentan uno por uno (`_alone`) hasta `deadline`, cada uno con su parte del
+    tiempo que queda. Todo grupo sin lugar lleva su motivo."""
     pending = list(search.unplaced)
     if not pending:
         return {}
     limits.tick()
     shared = ModelData.of(_sub_input(data.source, search, set(pending)))
-    budget = BuildBudget(max_variables=limits.max_variables, check_cancelled=limits.check_cancelled)
+    budget = BuildBudget(
+        max_variables=limits.max_variables, deadline=run_deadline, check_cancelled=limits.check_cancelled
+    )
     try:
         domains = build_variables(cp_model.CpModel(), shared, DomainOptions(all_tiers=True), budget).groups
-    except ModelTooLarge as error:
-        return {
-            group_id: Unplaced([f"No se pudo revisar por qué no cabe: {error}"], by_rules=False) for group_id in pending
-        }
+    except (BuildTimeout, ModelTooLarge) as error:
+        reason = "No se alcanzó a revisar por qué no cabe en el plazo de la corrida."
+        if isinstance(error, ModelTooLarge):
+            reason = f"No se pudo revisar por qué no cabe: {error}"
+        return {group_id: Unplaced([reason], by_rules=False) for group_id in pending}
     found: dict[str, Unplaced] = {}
     candidates = [group_id for group_id in pending if domains[group_id].options]
     for group_id in pending:
@@ -219,8 +228,8 @@ def _complete(data: ModelData, search: Search, deadline: float, limits: SearchLi
             options = len(domains[group_id].options)
             rules = _reasons(data, search, group_id, domains[group_id].rejected_options, available=options)
             reasons = [
-                f"No se alcanzó a programar en el plazo de la corrida: le quedan {options} opciones libres con los "
-                "demás grupos fijos.",
+                f"No se alcanzó a programar en el plazo de la corrida; al empezar la reserva tenía {options} opciones "
+                "libres con los demás grupos fijos.",
                 *rules,
             ]
         found[group_id] = Unplaced(reasons, by_rules=outcome != NO_TIME)
@@ -251,22 +260,22 @@ def _alone(
     literals = [option.literal for option in domain.options]
     tiers = cp_model.LinearExpr.weighted_sum(literals, [option.tier for option in domain.options])
     model.minimize(tiers)
-    first = _run(model, (time.perf_counter() + deadline) / 2, limits, seed)
-    if first.status == cp_model.INFEASIBLE:
+    first, status = solve_until(model, (time.perf_counter() + deadline) / 2, limits, seed)
+    if status == cp_model.INFEASIBLE:
         rules = _reasons(data, search, group_id, domain.rejected_options, available=len(domain.options))
         return DOES_NOT_FIT, [
             f"No cabe con los grupos ya programados: ninguna de sus {len(domain.options)} opciones libres sirve con "
             "ellos.",
             *rules,
         ]
-    if first.status not in FEASIBLE:
+    if status not in FEASIBLE:
         return NO_TIME, []
     for literal in literals:
-        model.add_hint(literal, first.solver.boolean_value(literal))
-    model.add(tiers <= int(first.solver.value(tiers)))
+        model.add_hint(literal, first.boolean_value(literal))
+    model.add(tiers <= int(first.value(tiers)))
     model.minimize(objective.expression())
-    second = _run(model, deadline, limits, seed)
-    solver = second.solver if second.status in FEASIBLE else first.solver
+    second, status = solve_until(model, deadline, limits, seed)
+    solver = second if status in FEASIBLE else first
     option = chosen_option(solver, domain)
     try:
         sessions = sessions_of(solver, variables, sub)
@@ -279,20 +288,6 @@ def _alone(
     search.tiers[group_id] = option.tier
 
     return PLACED, []
-
-
-@dataclass
-class _Solved:
-    solver: cp_model.CpSolver
-    status: int
-
-
-def _run(model: cp_model.CpModel, deadline: float, limits: SearchLimits, seed: int) -> _Solved:
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = max(0.05, deadline - time.perf_counter())
-    solver.parameters.random_seed = seed
-
-    return _Solved(solver, run_solver(solver, model, limits))
 
 
 def _reasons(data: ModelData, search: Search, group_id: str, rejected: dict[str, int], available: int = 0) -> list[str]:

@@ -20,7 +20,7 @@ class CpSatEngine:
     def solve(self, data: SolverInput, context: RunContext) -> SolverOutput:
         resolution = solve(
             data,
-            time_limit=float(data.time_limit_seconds or context.default_time_limit),
+            time_limit=float(data.time_limit_seconds),
             limits=SearchLimits.of(context),
             seed=data.options.seed or 0,
             report=context.report,

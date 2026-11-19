@@ -247,8 +247,9 @@ def _place_most(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.1, deadline - solve_at)
     solver.parameters.random_seed = seed
-    placed = cp_model.LinearExpr.sum(literals)
-    on_solution = None if report is None else lambda callback: report(int(callback.value(placed)))
+    # Los programados salen del valor del objetivo, sin recorrer las opciones en el hilo de CP-SAT: los niveles suman
+    # menos que `per_group`, así que es el techo de objetivo / per_group.
+    on_solution = None if report is None else lambda callback: report(-(-round(callback.objective_value) // per_group))
     status = run_solver(solver, model, limits, on_solution)
     feasible = status in FEASIBLE
     search.steps.append(
