@@ -129,6 +129,22 @@ it('el jefe lanza con el motor de prueba, ve la semana con los cambios y acepta:
     $page->assertSee('Aplicada');
 });
 
+it('SV-06: una violación HC-08 no retiene: el modal de aceptar y el aviso de la aplicada muestran «Problemas de entrada por corregir»', function () {
+    $page = launchFromRunsPage($this->jefe);
+    $run = SolverRun::query()->sole();
+    $run->update(['output' => [...$run->output, 'hard_violations' => [['rule' => 'HC-08', 'group_ids' => [$this->second->id], 'message' => 'Ana Pérez no tiene horas libres.']]]]);
+
+    $page->call('openAccept')
+        ->assertSeeHtml('data-testid="accept-input-problems"')
+        ->assertSee('Problemas de entrada por corregir')
+        ->assertSee('Ana Pérez no tiene horas libres.')
+        ->call('apply');
+
+    expect($this->second->sessions()->count())->toBeGreaterThan(0);
+
+    $page->assertSeeHtml('data-testid="applied-input-problems"')->assertSee('Problemas de entrada por corregir');
+});
+
 it('SV-02: con la carga cambiada, «Aceptar» abre el aviso de entrada vencida y no escribe', function () {
     $page = launchFromRunsPage($this->jefe);
     GroupSession::factory()->for($this->second)->inRoom($this->room)->on(5, '13:00', '14:00')->create();
