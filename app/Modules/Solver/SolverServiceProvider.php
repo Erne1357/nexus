@@ -16,6 +16,7 @@ use App\Modules\Core\Models\Modality;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Settings\SettingDefinition;
+use App\Modules\Scheduling\Events\NewGroupPlacementRequested;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Solver\Console\ExportSolverFixture;
 use App\Modules\Solver\Console\PruneSolverRunFilesCommand;
@@ -30,6 +31,7 @@ use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Enums\SolverRunStatus;
+use App\Modules\Solver\Listeners\ProvideNewGroupPlacement;
 use App\Modules\Solver\Models\SolverRun;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Queries\CareerLoadsQuery;
@@ -37,6 +39,7 @@ use App\Modules\Solver\Rules\InputFingerprint;
 use App\Modules\Solver\Rules\SolverSettings;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Event;
 
 /**
  * Módulo Solver (fases 6 y 7, R2): el motor que sugiere horarios y salones para la carga de un departamento en una
@@ -79,9 +82,15 @@ final class SolverServiceProvider extends ModuleServiceProvider
         return [...(CpSatClient::configured() ? [CpSatEngine::class] : []), FixedEngine::class, PhpHeuristicEngine::class];
     }
 
+    /**
+     * Los comandos del motor y, para «Abrir un grupo» del re-análisis (tarea 8.3b), quien contesta dónde cabe el grupo
+     * nuevo: Scheduling lo pide con un evento porque no puede depender del motor.
+     */
     public function boot(): void
     {
         parent::boot();
+
+        Event::listen(NewGroupPlacementRequested::class, ProvideNewGroupPlacement::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([ExportSolverFixture::class, PruneSolverRunFilesCommand::class, SolverBenchmark::class]);

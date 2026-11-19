@@ -248,7 +248,7 @@ it('un docente de honorarios se marca y un grupo cancelado no ocupa al docente',
         ->and(collect($teachers[$this->t1->id]->busy)->pluck('day')->all())->not->toContain(2);
 });
 
-it('HC-10: los préstamos aceptados a un grupo de la corrida son acuerdos; los propuestos no', function () {
+it('HC-10: los préstamos aceptados a un grupo de la corrida son acuerdos de ese grupo (`group_id`); los propuestos no', function () {
     $owned = buildInputRoom($this->s2, $this->basicas);
     $loan = fn (array $attributes, bool $accepted = false) => InterdepartmentalAgreement::factory()->when($accepted, fn ($factory) => $factory->accepted())->create([
         'term_id' => $this->term->id, 'campus_id' => $this->s2->id, 'from_department_id' => $this->sistemas->id,
@@ -260,7 +260,7 @@ it('HC-10: los préstamos aceptados a un grupo de la corrida son acuerdos; los p
     $input = buildInputForDepartment()->input;
 
     expect($input->agreements)->toHaveCount(1)
-        ->and($input->agreements[0]->toArray())->toBe(['room_id' => $owned->id, 'to_department_id' => $this->sistemas->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00'])
+        ->and($input->agreements[0]->toArray())->toBe(['room_id' => $owned->id, 'to_department_id' => $this->sistemas->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'group_id' => $this->bdS2->id])
         ->and(collect($input->rooms)->pluck('id')->all())->toContain($owned->id)
         ->and($input->subjectRoomDefaults)->toBe([]);
 });
@@ -376,7 +376,23 @@ it('HC-03: los grupos de una instancia de paquete llevan su clave de cohorte y l
         ->and($groups[$loose->id]->movable)->toBeTrue()
         ->and($groups[$basic->id]->cohorts)->toContain("package:{$package->id}:S1:2")
         ->and($groups[$basic->id]->movable)->toBeFalse()
-        ->and($groups[$other->id] ?? null)->toBeNull();
+        ->and($groups[$other->id]->movable)->toBeFalse()
+        ->and($groups[$other->id]->cohorts)->toContain("package:{$package->id}:S1:1")->not->toContain("package:{$package->id}:S1:2");
+});
+
+it('HC-03: los grupos del semestre del alumno tipo de un movible entran fijos aunque su materia tenga varios grupos, y el semestre lleva la combinación', function () {
+    $calcB = buildInputGroup($this->calc, $this->s1, $this->isc, $this->planIsc, 1, ['code' => 'B']);
+    GroupSession::factory()->for($this->calcS1)->on(1, '08:00', '09:00')->create();
+    GroupSession::factory()->for($calcB)->on(2, '07:00', '08:00')->create();
+
+    $groups = buildInputGroupsOf(buildInputForDepartment());
+    $combination = "combination:{$this->planIsc->id}:1:S1";
+
+    expect($groups[$calcB->id]->movable)->toBeFalse()
+        ->and($groups[$this->progS1->id]->cohorts)->toBe(["plan:{$this->planIsc->id}:1:S1", $combination])
+        ->and($groups[$calcB->id]->cohorts)->toBe([$combination])
+        ->and($groups[$this->calcS1->id]->cohorts)->toBe([])
+        ->and($groups[$this->unrelated->id] ?? null)->toBeNull();
 });
 
 it('HC-03: el mismo paquete con el mismo número en dos campus no queda en la misma cohorte', function () {
@@ -482,6 +498,52 @@ it('HC-03: un grupo virtual de una materia que ya tiene grupo en ese semestre no
     $groups = collect(buildInputForGroups([], [$virtual])->groups)->keyBy('id')->all();
 
     expect($groups[$virtual->id]->cohorts)->toBe(['package:p1:S1:1']);
+});
+
+it('HC-03: por grupos, los movibles llevan la combinación de su semestre y los grupos de ese semestre entran fijos', function () {
+    $calcB = buildInputGroup($this->calc, $this->s1, $this->isc, $this->planIsc, 1, ['code' => 'B']);
+    GroupSession::factory()->for($this->calcS1)->on(1, '08:00', '09:00')->create();
+    GroupSession::factory()->for($calcB)->on(2, '07:00', '08:00')->create();
+
+    $input = buildInputForGroups([$this->progS1->id]);
+    $groups = collect($input->groups)->keyBy('id')->all();
+    $combination = "combination:{$this->planIsc->id}:1:S1";
+
+    expect($groups[$calcB->id]->movable)->toBeFalse()
+        ->and($groups[$calcB->id]->fixedSessions)->toHaveCount(1)
+        ->and($groups[$this->progS1->id]->cohorts)->toBe(["plan:{$this->planIsc->id}:1:S1", $combination])
+        ->and($groups[$calcB->id]->cohorts)->toBe([$combination])
+        ->and($groups[$this->calcS1->id]->cohorts)->toBe([])
+        ->and($groups[$this->unrelated->id] ?? null)->toBeNull()
+        ->and(SolverInput::fromArray($input->toArray())->toArray())->toBe($input->toArray());
+});
+
+it('HC-03: el semestre de un grupo virtual entra completo y fijo con su combinación, y el virtual la lleva si su materia no tiene grupo ahí', function () {
+    $calcB = buildInputGroup($this->calc, $this->s1, $this->isc, $this->planIsc, 1, ['code' => 'B']);
+    GroupSession::factory()->for($this->calcS1)->on(1, '08:00', '09:00')->create();
+    GroupSession::factory()->for($calcB)->on(2, '07:00', '08:00')->create();
+    $combination = "combination:{$this->planIsc->id}:1:S1";
+
+    $newSubject = buildInputVirtual($this->bd, $this->s1, $this->isc, $this->planIsc, 1);
+    $input = buildInputForGroups([], [$newSubject]);
+    $groups = collect($input->groups)->keyBy('id')->all();
+
+    expect(collect($groups)->filter->movable->keys()->all())->toBe([$newSubject->id])
+        ->and($groups[$newSubject->id]->cohorts)->toBe(["plan:{$this->planIsc->id}:1:S1", $combination])
+        ->and($groups[$this->progS1->id]->cohorts)->toBe(["plan:{$this->planIsc->id}:1:S1", $combination])
+        ->and($groups[$calcB->id]->movable)->toBeFalse()
+        ->and($groups[$calcB->id]->cohorts)->toBe([$combination])
+        ->and($groups[$this->calcS1->id]->movable)->toBeFalse()
+        ->and($groups[$this->calcS1->id]->cohorts)->toBe([])
+        ->and(SolverInput::fromArray($input->toArray())->toArray())->toBe($input->toArray());
+
+    $sameSubject = buildInputVirtual($this->calc, $this->s1, $this->isc, $this->planIsc, 1);
+    $input = buildInputForGroups([], [$sameSubject]);
+    $groups = collect($input->groups)->keyBy('id')->all();
+
+    expect($groups[$sameSubject->id]->cohorts)->toBe([])
+        ->and($groups[$calcB->id]->cohorts)->toBe([$combination])
+        ->and(SolverInput::fromArray($input->toArray())->toArray())->toBe($input->toArray());
 });
 
 it('por grupos: rechaza un grupo virtual sin el prefijo new:, fijo, repetido o de un campus que no existe', function (string $case) {

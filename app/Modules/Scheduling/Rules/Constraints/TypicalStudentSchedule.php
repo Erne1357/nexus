@@ -37,11 +37,7 @@ final class TypicalStudentSchedule implements Constraint
         $reported = [];
 
         foreach ($this->semestersIn($state, $scope) as [$modalityId, $campusId, $studyPlanId, $semester]) {
-            $bySubject = [];
-
-            foreach ($state->groupsOfSemester($modalityId, $campusId, $studyPlanId, $semester) as $group) {
-                $bySubject[$group->subjectId][] = $group;
-            }
+            $bySubject = $this->bySubject($state, $state->groupsOfSemester($modalityId, $campusId, $studyPlanId, $semester));
 
             if (TypicalStudentCombination::exists($this->options($state, $bySubject))) {
                 continue;
@@ -63,6 +59,28 @@ final class TypicalStudentSchedule implements Constraint
         }
 
         yield from $this->packageOverlaps($state, $scope, $reported);
+    }
+
+    /**
+     * Los grupos del semestre por materia, con las materias por su clave y los grupos por id: el núcleo mínimo sin
+     * combinación sale de quitar materias en este orden, así que la base (que lee los grupos sin orden) y la foto del
+     * contrato del motor (que los trae por clave) culpan a los mismos grupos. La clave y el id del grupo son los mismos
+     * en las dos fotos.
+     *
+     * @param  list<StateGroup>  $groups
+     * @return array<string, list<StateGroup>>
+     */
+    private function bySubject(ScheduleState $state, array $groups): array
+    {
+        usort($groups, fn (StateGroup $a, StateGroup $b): int => [$state->subject($a->subjectId)?->code ?? '', $a->subjectId, $a->id]
+            <=> [$state->subject($b->subjectId)?->code ?? '', $b->subjectId, $b->id]);
+        $bySubject = [];
+
+        foreach ($groups as $group) {
+            $bySubject[$group->subjectId][] = $group;
+        }
+
+        return $bySubject;
     }
 
     private static function pairKey(string $a, string $b): string

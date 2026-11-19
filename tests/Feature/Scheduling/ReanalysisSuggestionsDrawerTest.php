@@ -29,6 +29,7 @@ beforeEach(function () {
     DemandForecast::query()->where('subject_id', $this->world->integral->id)->where('campus_id', $this->world->c2->id)->where('career_id', $this->world->isc->id)->update(['expected_students' => 70]);
     $this->a = $this->world->groups['A'];
     $this->expandKey = "expand_quota:{$this->a->id}:{$this->world->isc->id}";
+    $this->openKey = "open_group:{$this->world->isc->id}";
 });
 
 function suggestionsDrawer(User $user, ReanalysisWorld $world, ?Campus $campus = null): Testable
@@ -54,15 +55,16 @@ describe('jefe del departamento', function () {
             ->assertSee('Ampliar el cupo de ISIC en el grupo A de 40 a 50')
             ->assertSee('ISIC: 70 esperados · 40 lugares · faltan 30')
             ->assertSee('La capacidad del grupo A sube de 40 a 50, dentro de su salón (HC-05, HC-07).')
-            ->assertSee('Hace falta abrir un grupo')
-            ->assertSee('Llega con la sugerencia del motor (tarea 8.3b): horario, salón y cupos por carrera.')
+            ->assertSee('Abrir un grupo de ACF-0902 para ISIC')
+            ->assertSee('Sin docente: asígnalo en Asignación docente.')
             ->assertSee('Grupos de ahora')
             ->assertDontSeeHtml('data-testid="suggestions-readonly"');
 
-        $open = domOf($drawer)->querySelector('[data-key="open_group"]');
+        $open = domOf($drawer)->querySelector("[data-key=\"{$this->openKey}\"]");
 
-        expect(suggestionKeysShown($drawer))->toBe([$this->expandKey, 'open_group'])
+        expect(suggestionKeysShown($drawer))->toBe([$this->expandKey, $this->openKey])
             ->and($open->querySelector('[data-testid="suggestion-apply"]'))->toBeNull()
+            ->and($open->querySelector('[data-testid="suggestion-find"]'))->not->toBeNull()
             ->and(textOf(domOf($drawer)->querySelector('[data-testid="suggestions-now"][data-career="ISIC"]')))->toBe('40');
     });
 
@@ -73,7 +75,7 @@ describe('jefe del departamento', function () {
 
         expect(lastToastOf($drawer)['title'])->toBe('Sugerencia aplicada')
             ->and($this->a->fresh()->capacity)->toBe(50)
-            ->and(suggestionKeysShown($drawer))->toBe(['open_group'])
+            ->and(suggestionKeysShown($drawer))->toBe([$this->openKey])
             ->and(textOf(domOf($drawer)->querySelector('[data-testid="suggestions-now"][data-career="ISIC"]')))->toBe('50, ya ajustado');
     });
 
@@ -125,13 +127,13 @@ describe('jefe del departamento', function () {
     it('descartar solo esconde la sugerencia en la pantalla, sin guardar nada', function () {
         $drawer = suggestionsDrawer($this->jefe, $this->world)->call('discard', $this->expandKey);
 
-        expect(suggestionKeysShown($drawer))->toBe(['open_group'])
+        expect(suggestionKeysShown($drawer))->toBe([$this->openKey])
             ->and($this->a->fresh()->capacity)->toBe(40);
 
         $drawer->assertSee('Volver a mostrar la descartada')->call('restoreDiscarded');
 
-        expect(suggestionKeysShown($drawer))->toBe([$this->expandKey, 'open_group'])
-            ->and(suggestionKeysShown(suggestionsDrawer($this->jefe, $this->world)))->toBe([$this->expandKey, 'open_group']);
+        expect(suggestionKeysShown($drawer))->toBe([$this->expandKey, $this->openKey])
+            ->and(suggestionKeysShown(suggestionsDrawer($this->jefe, $this->world)))->toBe([$this->expandKey, $this->openKey]);
     });
 
     it('una sugerencia que ya no aplica o una carga fuera de re-análisis no cambian nada y lo dicen', function () {

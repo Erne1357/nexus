@@ -14,26 +14,22 @@ use App\Modules\Solver\Evaluation\ContractState;
 /**
  * El veredicto de las pruebas de equivalencia de la tarea 6.5: las reglas duras violadas por cada grupo movible de una
  * entrada del motor, con el validador de la fase 3 sobre la foto de la base y con el evaluador en memoria sobre el
- * contrato (con las sesiones actuales de los movibles). Cada lista va ordenada, y los grupos por id.
- *
- * El contrato solo trae las cohortes de HC-03 (el único grupo de una materia en su semestre), así que el choque del
- * núcleo sin combinación, que sale de materias con varios grupos y no lleva `other_group_id`, no se puede ver en
- * memoria: `$withTypicalStudentCore` en falso lo deja fuera del lado de la base.
+ * contrato (con las sesiones actuales de los movibles). Cada lista va ordenada, y los grupos por id. El núcleo sin
+ * combinación de HC-03 cuenta de los dos lados: la entrada trae el semestre completo de cada movible y la clave
+ * `combination:`.
  */
 final class Verdicts
 {
     /**
      * @return array{array<string, list<string>>, array<string, list<string>>} [base, memoria]
      */
-    public static function of(SolverInput $input, ScheduleState $databaseState, bool $withTypicalStudentCore = true): array
+    public static function of(SolverInput $input, ScheduleState $databaseState): array
     {
         $movable = array_values(array_map(fn (GroupInput $group): string => $group->id, array_filter($input->groups, fn (GroupInput $group): bool => $group->movable)));
         $fromDatabase = [];
 
         foreach (app(ScheduleValidator::class)->validate($databaseState, ValidationScope::groups(...$movable))->violations() as $violation) {
-            $isCore = $violation->rule === 'HC-03' && ! isset($violation->related['other_group_id']);
-
-            if ($violation->severity === ConflictSeverity::Hard && in_array($violation->groupId, $movable, true) && ($withTypicalStudentCore || ! $isCore)) {
+            if ($violation->severity === ConflictSeverity::Hard && in_array($violation->groupId, $movable, true)) {
                 $fromDatabase[$violation->groupId][$violation->rule] = true;
             }
         }

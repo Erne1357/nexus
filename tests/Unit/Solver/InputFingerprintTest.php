@@ -119,6 +119,11 @@ it('SV-02: cambia cuando cambia algo de lo que define la vigencia', function (Cl
 
         return $data;
     }],
+    'prestar el salón a un solo grupo (`agreements[].group_id`)' => [function (array $data): array {
+        $data['agreements'][0]['group_id'] = 'g002';
+
+        return $data;
+    }],
 ]);
 
 it('SV-02: no cambia con la solución inicial sugerida (hint_sessions)', function () {

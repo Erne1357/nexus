@@ -43,9 +43,14 @@ use InvalidArgumentException;
  * - Una corrida es la carga de un departamento en la modalidad, en todos sus campus, o los grupos de una carrera para
  *   explorar. Esos grupos son los movibles, con sus sesiones actuales en `current_sessions`.
  * - Todo lo demás entra fijo: los otros grupos activos de la modalidad que comparten docente, salón (por sus sesiones) o
- *   cohorte con un movible, como grupos `movable = false` con sus sesiones como `fixed_sessions`; los grupos de otras
- *   modalidades o que no se incluyen, como ocupación (`teachers[].busy`, `rooms[].busy`).
- * - Las cohortes son las de Cohorts (HC-03 hoy; los paquetes después).
+ *   cohorte con un movible, o que son del semestre del alumno tipo de un movible (su plan, semestre, campus y
+ *   modalidad: el que revisa HC-03, completo, también las materias de varios grupos), como grupos `movable = false` con
+ *   sus sesiones como `fixed_sessions`; los grupos de otras modalidades o que no se incluyen, como ocupación
+ *   (`teachers[].busy`, `rooms[].busy`).
+ * - Las cohortes son las de Cohorts: `plan:` (HC-03), `package:` (DM-09) y `combination:`, la combinación del alumno
+ *   tipo de los semestres de los movibles con materias de varios grupos (Cohorts::combinations(), con los movibles como
+ *   los que se van a reprogramar), para que el núcleo sin combinación de HC-03 viaje en el contrato.
+ * - Cada préstamo aceptado va con su grupo (`group_id`, HC-10), como lo revisa el validador.
  * - Aviso de tronco común (decisión del usuario, 17 de noviembre de 2026): si un movible comparte cohorte con un grupo
  *   de otro departamento que todavía no tiene sesiones, se avisa y no se impide nada.
  *
@@ -102,6 +107,9 @@ final class BuildSolverInput
      *   virtual) de su materia está en ese semestre del alumno tipo; además conserva las claves que ya traiga. Los grupos
      *   fijos que comparten una de sus claves o su docente entran, como los de un movible. La cohorte de los grupos que ya
      *   existen no cambia aunque el virtual les quite ser el único de su materia (más estricto; supuesto por confirmar).
+     * - Las combinaciones del #653 aplican igual: el semestre del alumno tipo de cada movible y de cada virtual entra
+     *   completo y fijo, con su `combination:`, y el virtual la lleva cuando ningún grupo de su materia la trae
+     *   (withCombinations()), para que el motor no rompa el núcleo sin combinación de HC-03 al colocarlo.
      * - La corrida (`run_id`) es otra cada vez si no se da (no hay fila en `solver_runs`) y el tiempo máximo, el de una
      *   corrida de departamento si no se da. `$state` deja reutilizar una foto ya leída de la modalidad.
      *
@@ -198,9 +206,17 @@ final class BuildSolverInput
         $active = array_filter($state->groups(), fn (StateGroup $group): bool => $group->isActive && $group->modalityId === $modality->id);
         $movable = array_filter($active, $isInRun);
         $cohorts = Cohorts::of($state, $active);
-        $extras = array_values(array_map(fn (array $entry): GroupInput => $entry['input'], $virtual));
+        $semesterGroups = $this->semesterGroups($state, $movable, $modality->id, $virtual);
+        $combinations = Cohorts::combinations($state, $semesterGroups, array_keys($movable));
+        $keys = [];
 
-        $fixed = $this->fixedGroups($state, $active, $movable, $cohorts, $extras);
+        foreach ($cohorts as $groupId => $own) {
+            $keys[$groupId] = [...$own, ...$combinations[$groupId] ?? []];
+        }
+
+        $extras = $this->withCombinations($state, $virtual, $semesterGroups, $keys);
+
+        $fixed = $this->fixedGroups($state, $active, $movable, $keys, $semesterGroups, $extras);
         $included = $this->ordered($state, [...$movable, ...$fixed]);
         $includedIds = array_fill_keys(array_map(fn (StateGroup $group): string => $group->id, $included), true);
 
@@ -223,7 +239,7 @@ final class BuildSolverInput
             new Scope(ScopeKind::from($scope->value), $scopeId),
             (int) $state->setting('staffing.min_campus_travel_minutes', CampusTravel::DEFAULT_MINUTES),
             max(0, $profile->weeklyHoursTolerance ?? (int) $state->setting('scheduling.weekly_hours_tolerance', 0)),
-            [...array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $cohorts[$group->id] ?? [], $usesRooms), $included), ...$extras],
+            [...array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $keys[$group->id] ?? [], $usesRooms), $included), ...$extras],
             $this->teachers($state, $term, $included, $includedIds, $movable, $extraTeachers),
             $usesRooms ? $this->rooms($state, $campusIds, $roomIds, $includedIds) : [],
             $agreements,
@@ -238,15 +254,16 @@ final class BuildSolverInput
 
     /**
      * Los grupos activos de la modalidad, fuera de la corrida, que comparten docente, salón o cohorte con un movible (o
-     * docente o cohorte con un grupo virtual).
+     * docente o cohorte con un grupo virtual), o que son del semestre del alumno tipo de un movible o de un virtual.
      *
      * @param  array<string, StateGroup>  $active
      * @param  array<string, StateGroup>  $movable
      * @param  array<string, list<string>>  $cohorts
+     * @param  array<string, StateGroup>  $semesterGroups
      * @param  list<GroupInput>  $extras
      * @return array<string, StateGroup>
      */
-    private function fixedGroups(ScheduleState $state, array $active, array $movable, array $cohorts, array $extras = []): array
+    private function fixedGroups(ScheduleState $state, array $active, array $movable, array $cohorts, array $semesterGroups, array $extras = []): array
     {
         $teachers = [];
         $rooms = [];
@@ -279,9 +296,80 @@ final class BuildSolverInput
         }
 
         return array_filter($active, fn (StateGroup $group): bool => ! isset($movable[$group->id])
-            && (($group->teacherId !== null && isset($teachers[$group->teacherId]))
+            && (isset($semesterGroups[$group->id])
+                || ($group->teacherId !== null && isset($teachers[$group->teacherId]))
                 || array_filter($cohorts[$group->id] ?? [], fn (string $key): bool => isset($keys[$key])) !== []
                 || array_filter($state->sessionsOf($group->id), fn (StateSession $session): bool => $session->roomId !== null && isset($rooms[$session->roomId])) !== []));
+    }
+
+    /**
+     * Los grupos activos del semestre del alumno tipo de cada movible y de cada grupo virtual (su plan, semestre, campus y
+     * modalidad), por id: los que revisa HC-03, completos. Solo ellos llevan la clave `combination:`, así que una entrada
+     * con esa clave trae siempre todo su semestre (ContractState lo supone).
+     *
+     * @param  array<string, StateGroup>  $movable
+     * @param  array<string, array{input: GroupInput, campusId: string}>  $virtual
+     * @return array<string, StateGroup>
+     */
+    private function semesterGroups(ScheduleState $state, array $movable, string $modalityId, array $virtual = []): array
+    {
+        $semesters = array_map(fn (StateGroup $group): array => [$group->modalityId, $group->campusId, $group->studyPlanId, $group->semester], $movable);
+
+        foreach ($virtual as $entry) {
+            $semesters[] = [$modalityId, $entry['campusId'], $entry['input']->studyPlanId, $entry['input']->semester];
+        }
+
+        $groups = [];
+
+        foreach ($semesters as [$modality, $campusId, $studyPlanId, $semester]) {
+            foreach ($state->groupsOfSemester($modality, $campusId, $studyPlanId, $semester) as $member) {
+                $groups[$member->id] = $member;
+            }
+        }
+
+        return $groups;
+    }
+
+    /**
+     * Los grupos virtuales como entran al contrato: si su semestre lleva la combinación del alumno tipo (alguna materia
+     * tiene varios grupos) y ningún grupo de su materia la trae, el virtual la lleva, porque la combinación lleva un grupo
+     * de cada materia del semestre (SolverInput::assertCombinations()) y él es la única opción de la suya; así el motor no
+     * lo empalma con la combinación. Si su materia ya la trae, el virtual es una opción más y no la lleva. La combinación
+     * se elige con los grupos que ya existen: si es el virtual el que le da a una materia su segundo grupo, el semestre no
+     * la lleva y basta `plan:` (los grupos que ya existen conservan la suya; ver forGroups()).
+     *
+     * @param  array<string, array{input: GroupInput, campusId: string}>  $virtual
+     * @param  array<string, StateGroup>  $semesterGroups
+     * @param  array<string, list<string>>  $keys  las claves de cada grupo de la foto, con su `combination:`
+     * @return list<GroupInput>
+     */
+    private function withCombinations(ScheduleState $state, array $virtual, array $semesterGroups, array $keys): array
+    {
+        $carried = [];
+
+        foreach ($semesterGroups as $group) {
+            foreach (array_filter($keys[$group->id] ?? [], Cohorts::isCombination(...)) as $key) {
+                $carried[$key][$state->subject($group->subjectId)?->code ?? "group:{$group->id}"] = true;
+            }
+        }
+
+        $inputs = [];
+
+        foreach ($virtual as $entry) {
+            $extra = $entry['input'];
+            $key = Cohorts::COMBINATION.":{$extra->studyPlanId}:{$extra->semester}:{$extra->campusCode}";
+
+            if (isset($carried[$key]) && ! isset($carried[$key][$extra->subjectCode])) {
+                $carried[$key][$extra->subjectCode] = true;
+                $extra = new GroupInput($extra->id, $extra->campusCode, $extra->subjectCode, $extra->departmentId, $extra->ownerCareerId, $extra->studyPlanId,
+                    $extra->semester, $extra->weeklyHours, $extra->practiceHours, $extra->needsLab, $extra->capacity, $extra->teacherId,
+                    array_values(array_unique([...$extra->cohorts, $key])), $extra->fixedSessions, $extra->candidateRoomIds, true);
+            }
+
+            $inputs[] = $extra;
+        }
+
+        return $inputs;
     }
 
     /**
@@ -301,7 +389,8 @@ final class BuildSolverInput
     }
 
     /**
-     * Los préstamos aceptados de los grupos movibles, a favor del departamento de cada grupo (HC-10), sin repetir.
+     * Los préstamos aceptados de los grupos movibles, cada uno con su grupo (`group_id`) y el departamento del grupo
+     * (HC-10): como en el validador, el préstamo de un grupo no le sirve a otro de su departamento.
      *
      * @param  array<string, StateGroup>  $movable
      * @return list<RoomAgreement>
@@ -316,7 +405,7 @@ final class BuildSolverInput
                     continue;
                 }
 
-                $agreement = new RoomAgreement($loan->roomId, $group->departmentId, $loan->day, Minutes::format($loan->start), Minutes::format($loan->end));
+                $agreement = new RoomAgreement($loan->roomId, $group->departmentId, $loan->day, Minutes::format($loan->start), Minutes::format($loan->end), $group->id);
                 $agreements[json_encode($agreement->toArray())] = $agreement;
             }
         }
