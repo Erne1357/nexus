@@ -101,13 +101,13 @@ describe('quitar el docente', function () {
         expect($this->group->fresh()->teacher_id)->toBeNull();
     });
 
-    it('con la carga cerrada «Quitar» sale deshabilitado con su motivo, y lo que rechaza la Action se ve en el modal sin 500', function () {
+    it('con la carga cerrada no sale «Quitar docente», como «Cambiar», y lo que rechaza la Action se ve en el modal sin 500', function () {
         $this->world->load->update(['status' => LoadStatus::Closed]);
 
         $page = unassignPage($this->jefe, ['estado' => 'todos'])
+            ->assertSee('La carga está en Cerrada: ya no se asignan docentes.')
             ->assertDontSeeHtml('data-testid="unassign-teacher"')
-            ->assertSeeHtml('data-testid="unassign-disabled"')
-            ->assertSeeHtml('title="La carga está en Cerrada: ya no se asignan docentes."')
+            ->assertDontSee('Cambiar')
             ->call('askUnassign', $this->group->id)
             ->set('unassignReason', 'Renunció.')
             ->call('unassign')
@@ -129,13 +129,12 @@ describe('quitar el docente', function () {
         expect(lastToastOf($page))->type->toBe('error')->description->toBe('El grupo G ya no tiene docente.');
     });
 
-    it('la Subdirección ve «Quitar» deshabilitado con su motivo y no puede quitarlo', function () {
+    it('la Subdirección no ve «Quitar docente» y no puede quitarlo', function () {
         $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
 
         unassignPage($subdireccion, ['depto' => 'SC', 'estado' => 'todos'])
+            ->assertSeeText('Beto Salas')
             ->assertDontSeeHtml('data-testid="unassign-teacher"')
-            ->assertSeeHtml('data-testid="unassign-disabled"')
-            ->assertSeeHtml('title="Solo consulta: asignan el jefe del departamento y el jefe de proyecto docente."')
             ->call('askUnassign', $this->group->id)
             ->assertForbidden();
 
@@ -158,7 +157,8 @@ describe('quitar el docente', function () {
         $proyecto = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $otherCampus->id, 'department_id' => $this->world->department->id])->create();
 
         unassignPage($proyecto, ['estado' => 'todos'])
-            ->assertSeeHtml('data-testid="unassign-disabled"')
+            ->assertSeeText('Beto Salas')
+            ->assertDontSeeHtml('data-testid="unassign-teacher"')
             ->call('askUnassign', $this->group->id)
             ->assertForbidden();
 

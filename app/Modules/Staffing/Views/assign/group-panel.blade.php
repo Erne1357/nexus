@@ -46,7 +46,9 @@
                             · {{ $row->assignment->assignedBy?->name }}
                         </span>
                     @endif
-                    <span class="-ms-3 md:-me-3 md:ms-0">@include('staffing::assign.unassign-button', ['group' => $group])</span>
+                    @if ($canAssign)
+                        <span class="-ms-3 md:-me-3 md:ms-0">@include('staffing::assign.unassign-button', ['group' => $group])</span>
+                    @endif
                 @else
                     <x-core::status-badge tone="warning" label="Sin docente" icon="o-clock" />
                 @endif

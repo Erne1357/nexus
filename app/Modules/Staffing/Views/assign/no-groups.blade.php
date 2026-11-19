@@ -7,7 +7,7 @@
     {{ $board->campus === null ? 'El departamento no tiene grupos en esta modalidad y periodo.' : "El departamento no tiene grupos en {$board->campus->code}." }}
 @elseif ($hiddenByState > 0)
     <span class="grid justify-items-center gap-3">
-        <span>
+        <span class="text-balance">
             @if ($hiddenByState === 1)
                 El grupo que cumple los filtros {{ $state === 'sin' ? 'ya tiene docente.' : 'no tiene docente.' }}
             @else

@@ -1,7 +1,7 @@
 {{--
     Las acciones de un grupo en la vista por materia: «Ocultar ranking» si está abierto; si no, «Cambiar» (con docente,
-    para quien asigna) o «Ver el ranking completo (N)». Con docente, «Quitar docente» (staffing::assign.unassign-button,
-    deshabilitado con su motivo para quien no asigna). A la derecha, «Siguiente sin docente» salvo con el filtro «Sin
+    para quien asigna) o «Ver el ranking completo (N)». Con docente y para quien asigna, como «Cambiar», «Quitar docente»
+    (staffing::assign.unassign-button). A la derecha, «Siguiente sin docente» salvo con el filtro «Sin
     docente», donde el siguiente es el renglón de abajo (ahí va al pie del ranking abierto); `iconOnly`, en el renglón
     compacto de un grupo con docente, solo su icono.
 --}}
