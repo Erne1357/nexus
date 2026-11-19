@@ -3,6 +3,7 @@
 namespace App\Modules\Solver\Actions;
 
 use App\Modules\Academic\Models\Department;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -37,7 +38,7 @@ use Throwable;
  *    espera aquí y luego falla, porque ya no está pendiente.
  * 2. Toma el candado de aceptar de la carga (`pg_advisory_xact_lock` por periodo, modalidad y departamento): dos corridas
  *    de la misma carga se aceptan una después de otra, así la segunda ve la huella que dejó la primera.
- * 3. Toma la carga en compartido (FOR SHARE, como el editor) y exige que exista y se pueda editar
+ * 3. (E-10) Una carga publicada se rechaza con su propio motivo, antes que el de vigencia. Toma la carga en compartido (FOR SHARE, como el editor) y exige que exista y se pueda editar
  *    (LoadEditability::EDITABLE): «La carga ya no se puede editar: está aprobada.». FOR SHARE basta para que la carga no
  *    cambie de estado (las transiciones la toman FOR UPDATE) y no detiene al editor mientras se arma la entrada.
  * 4. Revisa la vigencia (SV-02): arma otra vez la entrada con BuildSolverInput y, si su huella no es la de la corrida,
@@ -65,6 +66,8 @@ use Throwable;
  */
 final class ApplySolverRun
 {
+    public const string PUBLISHED_MESSAGE = 'La carga está publicada: para cambiar su horario, inicia el re-análisis.';
+
     public const string STALE_MESSAGE = 'La carga cambió desde que se lanzó esta corrida: vuelve a correrla.';
 
     public function __construct(
@@ -159,13 +162,34 @@ final class ApplySolverRun
      */
     private function ensureLoadEditable(?AcademicLoad $load): void
     {
-        if ($load === null) {
-            throw ValidationException::withMessages(['run' => 'La carga ya no se puede editar: no existe en este periodo y modalidad.']);
-        }
+        $reason = self::notEditableReason($load?->status);
 
-        if (! in_array($load->status, LoadEditability::EDITABLE, true)) {
-            throw ValidationException::withMessages(['run' => 'La carga ya no se puede editar: está '.mb_strtolower($load->status->label()).'.']);
+        if ($reason !== null) {
+            throw ValidationException::withMessages(['run' => $reason]);
         }
+    }
+
+    /**
+     * Por qué la carga (su estado; null si no existe) no recibe el horario de una corrida, o null si se edita
+     * (LoadEditability::EDITABLE). Una publicada tiene su propio motivo: se cambia con el re-análisis.
+     */
+    public static function notEditableReason(?LoadStatus $status): ?string
+    {
+        return match (true) {
+            $status === null => 'La carga ya no se puede editar: no existe en este periodo y modalidad.',
+            in_array($status, LoadEditability::EDITABLE, true) => null,
+            $status === LoadStatus::Published => self::PUBLISHED_MESSAGE,
+            default => 'La carga ya no se puede editar: está '.mb_strtolower($status->label()).'.',
+        };
+    }
+
+    /**
+     * El motivo por el que la carga de la corrida no recibe su horario hoy (sin bloquear nada; lo lee la pantalla y
+     * RequestApplySolverRun), o null si se puede aceptar.
+     */
+    public function loadBlockReason(SolverRun $run): ?string
+    {
+        return self::notEditableReason(AcademicLoad::query()->ofDepartment($run->term_id, $run->modality_id, $run->department_id)->value('status'));
     }
 
     /**
