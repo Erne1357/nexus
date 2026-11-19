@@ -27,6 +27,11 @@
         <h3 id="request-impact-title" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Impacto y alternativas</h3>
         @if ($canDecide)
             <x-button label="Recalcular impacto" icon="o-arrow-path" class="btn-ghost btn-sm max-md:h-11 max-md:min-h-11" wire:click="recalculateImpact" spinner="recalculateImpact" data-testid="recalculate-impact" />
+        @else
+            <span class="tooltip tooltip-left" data-tip="Lo recalcula el jefe del departamento.">
+                <button type="button" class="btn btn-ghost btn-sm max-md:h-11 max-md:min-h-11" disabled aria-describedby="recalculate-why"><x-icon name="o-arrow-path" class="h-4 w-4" aria-hidden="true" />Recalcular impacto</button>
+            </span>
+            <span id="recalculate-why" class="sr-only">Lo recalcula el jefe del departamento.</span>
         @endif
     </div>
 
@@ -70,24 +75,26 @@
                             <button type="button" role="tab" id="tab-{{ $tab['key'] }}" aria-controls="alternative-panel" aria-selected="{{ $on ? 'true' : 'false' }}" tabindex="{{ $on ? 0 : -1 }}"
                                 wire:click="$set('alternative', '{{ $tab['key'] }}')" data-testid="tab-{{ $tab['key'] }}"
                                 class="{{ \Illuminate\Support\Arr::toCssClasses([
-                                    '-mb-px grid min-w-0 content-center gap-0.5 border-b-2 px-3 pt-2.5 pb-2 text-start hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary @max-[30rem]:px-2 max-md:min-h-11',
+                                    '-mb-px grid min-w-0 content-center gap-0.5 border-b-2 px-3 pt-2.5 pb-2 text-start hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary @max-[30rem]:px-1.5 max-md:min-h-11',
                                     'border-primary bg-[color-mix(in_oklab,var(--color-secondary)_35%,var(--color-base-100))]' => $on,
                                     'border-transparent' => ! $on,
                                 ]) }}">
                                 <span @class(['truncate text-sm whitespace-nowrap', 'font-semibold' => $on, 'font-medium' => ! $on])>
                                     <span class="@max-[30rem]:hidden">{{ $tab['name'] }}</span><span class="hidden @max-[30rem]:inline">{{ $tab['short'] }}</span>
                                 </span>
-                                <span @class(['flex items-center gap-1 overflow-hidden text-[12.5px] whitespace-nowrap', 'text-error' => ! $tabStale && $tab['hard'] > 0, 'text-neutral' => $tabStale || $tab['hard'] === 0])>
+                                {{-- El veredicto nunca se recorta: en una caja angosta va sin icono y, si no cabe, baja de renglón entre la
+                                     palabra y la cifra (una cifra cortada se leería como otra). --}}
+                                <span @class(['flex flex-wrap items-center gap-x-1 text-[12.5px] leading-tight', 'text-error' => ! $tabStale && $tab['hard'] > 0, 'text-neutral' => $tabStale || $tab['hard'] === 0])>
                                     @if ($tabStale)
-                                        <x-icon name="o-clock" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />Vencida
+                                        <x-icon name="o-clock" class="h-3.5 w-3.5 shrink-0 @max-[30rem]:hidden" aria-hidden="true" /><span>Vencida</span>
                                     @elseif ($tab['hard'] > 0)
-                                        <x-icon name="o-x-circle" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span class="font-mono font-semibold tabular-nums">{{ $tab['hard'] }}</span>
+                                        <x-icon name="o-x-circle" class="h-3.5 w-3.5 shrink-0 @max-[30rem]:hidden" aria-hidden="true" /><span class="font-mono font-semibold whitespace-nowrap tabular-nums">{{ $tab['hard'] }}</span>
                                         <span class="@max-[30rem]:hidden">{{ $tab['hard'] === 1 ? 'choque' : 'choques' }}</span><span class="hidden @max-[30rem]:inline">{{ $tab['hard'] === 1 ? 'duro' : 'duros' }}</span>
                                     @elseif ($tab['score'] !== null)
-                                        <x-icon name="o-check-circle" class="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" /><span class="@max-[30rem]:hidden">Puntaje</span><span class="hidden @max-[30rem]:inline">Pts.</span>
-                                        <span class="font-mono font-semibold tabular-nums">{{ $tab['score'] < 0 ? '−'.abs($tab['score']) : $tab['score'] }}</span>
+                                        <x-icon name="o-check-circle" class="h-3.5 w-3.5 shrink-0 text-success @max-[30rem]:hidden" aria-hidden="true" /><span class="@max-[30rem]:hidden">Puntaje</span><span class="hidden @max-[30rem]:inline">Pts.</span>
+                                        <span class="font-mono font-semibold whitespace-nowrap tabular-nums">{{ $tab['score'] < 0 ? '−'.abs($tab['score']) : $tab['score'] }}</span>
                                     @else
-                                        <x-icon name="o-check-circle" class="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" /><span class="@max-[30rem]:hidden">Sin choques duros</span><span class="hidden @max-[30rem]:inline">Sin duros</span>
+                                        <x-icon name="o-check-circle" class="h-3.5 w-3.5 shrink-0 text-success @max-[30rem]:hidden" aria-hidden="true" /><span class="@max-[30rem]:hidden">Sin choques duros</span><span class="hidden @max-[30rem]:inline">Sin duros</span>
                                     @endif
                                 </span>
                             </button>
@@ -108,7 +115,7 @@
                             <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-no-symbol" class="h-4 w-4 shrink-0" aria-hidden="true" />Sin alternativa</span>
                             <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">Ninguna sin choques duros</span>
                         </div>
-                    @elseif ($items === 0 && $canSearch && $alternatives['pedidoHard'] > 0)
+                    @elseif ($items === 0 && $canSearch && $alternatives['pedidoHard'] > 0 && ! $failed)
                         <button type="button" wire:click="searchAlternatives" wire:loading.remove wire:target="searchAlternatives" data-testid="search-alternatives"
                             class="{{ $slot }} border-base-content/35 bg-base-100 text-primary hover:border-primary hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                             <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-arrows-right-left" class="h-4 w-4 shrink-0" aria-hidden="true" />Buscar alternativas</span>
@@ -118,7 +125,12 @@
                             <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-arrow-path" class="h-4 w-4 shrink-0 motion-safe:animate-spin" />Buscando…</span>
                             <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">Tarda unos segundos</span>
                         </div>
-                    @elseif ($items === 0 && $canSearch)
+                    @elseif ($items === 0 && ! $canDecide && $alternatives['assessable'] && $alternatives['pedidoHard'] > 0 && ! $failed)
+                        <div class="{{ $slot }} border-base-content/25 bg-base-100 text-neutral" aria-disabled="true" title="Las pide el jefe del departamento." data-testid="search-alternatives-readonly">
+                            <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-arrows-right-left" class="h-4 w-4 shrink-0" aria-hidden="true" />Buscar alternativas</span>
+                            <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">Las pide el jefe del departamento</span>
+                        </div>
+                    @elseif ($items === 0 && $canSearch && ! $failed)
                         <div class="{{ $slot }} border-base-content/25 bg-base-100 text-neutral" aria-disabled="true" title="Lo pedido no deja choques duros: se aprueba como se pidió." data-testid="search-alternatives-disabled">
                             <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-arrows-right-left" class="h-4 w-4 shrink-0" aria-hidden="true" />Buscar alternativas</span>
                             <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">Lo pedido no deja choques duros</span>
@@ -172,12 +184,12 @@
             @endif
 
             @if ($items > 0 && $alternatives['engineLine'])
-                <p class="text-[13px] text-neutral" data-testid="alternatives-engine">
-                    {{ $alternatives['engineLine'] }}@if ($alternatives['message']) {{ $alternatives['message'] }}@endif
+                <div class="flex flex-wrap items-start gap-x-3 gap-y-1" data-testid="alternatives-engine">
+                    <p class="min-w-0 flex-1 basis-64 text-[13px] text-neutral">{{ $alternatives['engineLine'] }}@if ($alternatives['message']) {{ $alternatives['message'] }}@endif</p>
                     @if ($canSearch && ! $stale)
-                        <button type="button" class="link link-primary ms-1 font-medium whitespace-nowrap" wire:click="searchAlternatives" wire:loading.attr="disabled" wire:target="searchAlternatives" data-testid="search-again-quiet">Buscar otra vez</button>
+                        <x-button label="Buscar otra vez" icon="o-arrow-path" class="btn-ghost btn-sm -mt-1 max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="searchAlternatives" spinner="searchAlternatives" data-testid="search-again-quiet" />
                     @endif
-                </p>
+                </div>
             @endif
 
             @if ($items > 0 && $alternatives['pedidoHard'] === 0 && ! $stale)
