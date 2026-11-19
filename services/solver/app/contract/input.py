@@ -112,6 +112,12 @@ class SessionSlot(ContractModel):
         return check_ends_after(info.data.get("starts_at"), value)
 
 
+class HintSession(SessionSlot):
+    """Una sesión de la solución inicial sugerida: un `SessionSlot` con su grupo. El motor puede ignorarla."""
+
+    group_id: NonEmptyStr
+
+
 class TimeSlot(ContractModel):
     """Un bloque no disponible, preferido, ocupado o bloqueado; `campus_code` solo en las ocupaciones de docentes."""
 
@@ -190,18 +196,32 @@ class SubjectRoomDefault(ContractModel):
     priority: NonNegativeInt
 
 
+MAX_WEIGHT = 10_000
+
+
+def _weight(value: Any) -> int:
+    """Un peso: entero de 0 a 10 000 (más desbordaría los coeficientes de 64 bits del motor)."""
+    checked = int_checker(0)(value)
+    if checked > MAX_WEIGHT:
+        raise ValueError("debe estar entre 0 y 10 000")
+    return checked
+
+
+Weight = Annotated[int, BeforeValidator(_weight)]
+
+
 class SoftWeights(StrictContractModel):
     """El peso de cada regla blanda SC-01 a SC-09. Cero la desactiva; una llave que falta vale cero."""
 
-    sc_01: NonNegativeInt = Field(0, alias="SC-01")
-    sc_02: NonNegativeInt = Field(0, alias="SC-02")
-    sc_03: NonNegativeInt = Field(0, alias="SC-03")
-    sc_04: NonNegativeInt = Field(0, alias="SC-04")
-    sc_05: NonNegativeInt = Field(0, alias="SC-05")
-    sc_06: NonNegativeInt = Field(0, alias="SC-06")
-    sc_07: NonNegativeInt = Field(0, alias="SC-07")
-    sc_08: NonNegativeInt = Field(0, alias="SC-08")
-    sc_09: NonNegativeInt = Field(0, alias="SC-09")
+    sc_01: Weight = Field(0, alias="SC-01")
+    sc_02: Weight = Field(0, alias="SC-02")
+    sc_03: Weight = Field(0, alias="SC-03")
+    sc_04: Weight = Field(0, alias="SC-04")
+    sc_05: Weight = Field(0, alias="SC-05")
+    sc_06: Weight = Field(0, alias="SC-06")
+    sc_07: Weight = Field(0, alias="SC-07")
+    sc_08: Weight = Field(0, alias="SC-08")
+    sc_09: Weight = Field(0, alias="SC-09")
 
     def as_dict(self) -> dict[str, int]:
         """`{"SC-01": peso, ...}` para los motores."""
@@ -233,6 +253,7 @@ class SolverInput(ContractModel):
     hard_rules: list[HardRule]
     soft_weights: SoftWeights
     options: SolverOptions = Field(default_factory=SolverOptions)
+    hint_sessions: list[HintSession] = Field(default_factory=list)
 
     def assert_consistent(self) -> None:
         """Las referencias cruzadas que PHP revisa en `SolverInput::assertConsistent`."""
@@ -267,6 +288,12 @@ class SolverInput(ContractModel):
             for j, session in enumerate(group.fixed_sessions):
                 if session.room_id is not None and session.room_id not in room_ids:
                     problems.append((f"{at}.fixed_sessions[{j}].room_id", "el salón no está en rooms"))
+
+        for i, hint in enumerate(self.hint_sessions):
+            if hint.group_id not in group_ids:
+                problems.append((f"hint_sessions[{i}].group_id", "el grupo no está en groups"))
+            if hint.room_id is not None and hint.room_id not in room_ids:
+                problems.append((f"hint_sessions[{i}].room_id", "el salón no está en rooms"))
 
         if problems:
             raise ContractError(problems)
