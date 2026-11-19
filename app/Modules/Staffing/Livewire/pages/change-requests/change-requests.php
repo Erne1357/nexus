@@ -151,6 +151,16 @@ new #[Title('Solicitudes de cambio')] class extends Component
     #[Locked]
     public bool $staleAlternatives = false;
 
+    /**
+     * La solicitud cuyas alternativas se están calculando y si el cálculo seguía en la cola, como se pintaron: el poll
+     * solo vuelve a pintar cuando eso cambia (skipRender), así un tick no rearma la lista ni el detalle.
+     */
+    #[Locked]
+    public ?string $pollingRequestId = null;
+
+    #[Locked]
+    public ?bool $pollingQueued = null;
+
     /** En pantallas angostas, la lista y el detalle van por separado. */
     #[Locked]
     public bool $mobileDetail = false;
@@ -310,10 +320,15 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
-     * Lo que dice el aviso cuando las alternativas ya están: cuántas, o que no hubo.
+     * Lo que dice el aviso cuando las alternativas ya están: cuántas, o que no hubo. Solo a quien decide: el coordinador
+     * y quien la pidió ven la pantalla actualizarse sin el aviso, porque no pueden aprobar.
      */
     private function announceAlternatives(ChangeRequest $request): void
     {
+        if (! Gate::allows('decide', $request)) {
+            return;
+        }
+
         $count = count($request->alternatives['items'] ?? []);
 
         match (ChangeAlternativesStatus::of($request->alternatives)) {
@@ -325,11 +340,27 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
-     * Mientras el motor busca, la pantalla pregunta cada 2 segundos (`wire:poll`, solo entonces) y avisa al terminar.
+     * Mientras el motor busca, la pantalla pregunta cada 2 segundos (`wire:poll`, solo entonces). Cada tick lee solo las
+     * alternativas de la solicitud que se pintó calculando (`$pollingRequestId`, fija); mientras siga en el mismo estado
+     * (en cola o calculando) no vuelve a pintar. Al terminar pinta todo y avisa a quien decide.
      */
     public function pollAlternatives(Actor $context, ChangeRequestsQuery $query): void
     {
-        $request = $this->selectedOrFail($context, $query);
+        if ($this->pollingRequestId === null) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $alternatives = ChangeRequest::query()->whereKey($this->pollingRequestId)->first(['id', 'alternatives'])?->alternatives;
+
+        if (ChangeAlternativesStatus::of($alternatives) === ChangeAlternativesStatus::Computing && ChangeAlternativesStatus::isQueued($alternatives) === $this->pollingQueued) {
+            $this->skipRender();
+
+            return;
+        }
+
+        $request = $this->visibleOrFail($this->pollingRequestId, $context, $query);
 
         if (ChangeAlternativesStatus::of($request->alternatives) !== ChangeAlternativesStatus::Computing) {
             $this->announceAlternatives($request);
@@ -534,6 +565,9 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $department = collect($this->departments)->firstWhere('code', $this->department);
         $view = $selected !== null && ($selected->status->isOpen() || ChangeAlternatives::chosen($selected->alternatives) !== null) ? $alternatives->for($selected, $this->alternative) : null;
         $chosen = $view['chosen'] ?? null;
+        $computing = $selected !== null && $selected->status === ChangeRequestStatus::Pending && ($view['status'] ?? null) === ChangeAlternativesStatus::Computing->value;
+        $this->pollingRequestId = $computing ? $selected->id : null;
+        $this->pollingQueued = $computing ? $view['queued'] : null;
 
         return [
             'requests' => $requests,
