@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
@@ -42,6 +43,7 @@ use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
+use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\ReanalysisRepublicationDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
@@ -304,6 +306,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::ReanalysisCases, 'Docentes cambiados, re-análisis cerrados y republicados, una devolución y una corrección en versión 3', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisRepublicationDemoSeeder::class, [
                 'term' => $demo->termCode,
             ])),
+            // Las solicitudes de cambio de la fase 8 (8.6 y 8.7) en la carga que el re-análisis reserva, después de sus casos.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Solicitudes de cambio en cada estado: con choques, con alternativas del motor, aprobadas y aplicadas', fn (DemoContext $demo) => $demo->runSeederPerModality(ChangeRequestsDemoSeeder::class, [
+                'term' => $demo->termCode,
+            ])),
         ];
     }
 
@@ -353,7 +359,46 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 ? true
                 : "{$hard} choques duros de docente."),
             ...$this->publicationChecks(),
+            $this->changeRequestsCheck(),
         ];
+    }
+
+    /**
+     * Lo que deja ChangeRequestsDemoSeeder en `reanalisis-casos`: la carga reservada para las solicitudes de cambio
+     * (ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS) en ajustes, con solicitudes en cada estado de la lista, una pendiente
+     * con sus alternativas del motor listas y una aprobada y una aplicada con una alternativa. Una consulta por carga; un
+     * volumen sin carga reservada (el demo) no tiene qué revisar y pasa.
+     */
+    private function changeRequestsCheck(): DemoCheck
+    {
+        return new DemoCheck([DemoCheckpoint::ReanalysisCases], 'La carga reservada tiene solicitudes de cambio en cada estado, con alternativas del motor listas, aprobadas y aplicadas', function (DemoContext $demo): true|string {
+            $missing = [];
+
+            foreach (Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->get() as $modality) {
+                foreach (ReanalysisDemoSeeder::loadsIn($demo->term()->getKey(), $modality->getKey(), [ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS]) as $load) {
+                    $rows = ChangeRequest::query()->where('term_id', $load->term_id)->where('modality_id', $load->modality_id)->where('department_id', $load->department_id)
+                        ->selectRaw("status, coalesce(alternatives ->> 'status', '') as alternatives_status, (alternatives -> 'chosen' ->> 'id') is not null as chosen")
+                        ->distinct()->get();
+                    $has = fn (ChangeRequestStatus $status, ?string $alternatives = null, ?bool $chosen = null): bool => $rows->contains(fn (ChangeRequest $row): bool => $row->status === $status
+                        && ($alternatives === null || $row->getAttribute('alternatives_status') === $alternatives)
+                        && ($chosen === null || (bool) $row->getAttribute('chosen') === $chosen));
+                    $lacks = array_keys(array_filter([
+                        ...array_combine(array_map(fn (ChangeRequestStatus $status): string => mb_strtolower($status->label()), ChangeRequestStatus::cases()),
+                            array_map(fn (ChangeRequestStatus $status): bool => ! $has($status), ChangeRequestStatus::cases())),
+                        'pendiente con alternativas listas' => ! $has(ChangeRequestStatus::Pending, 'ready'),
+                        'aprobada con alternativa' => ! $has(ChangeRequestStatus::Approved, chosen: true),
+                        'aplicada con alternativa' => ! $has(ChangeRequestStatus::Applied, chosen: true),
+                        'la carga en ajustes' => $load->status !== LoadStatus::Adjusting,
+                    ]));
+
+                    if ($lacks !== []) {
+                        $missing[] = "{$load->department->code} en {$modality->code}: ".implode(', ', $lacks);
+                    }
+                }
+            }
+
+            return $missing === [] ? true : 'Falta: '.implode('; ', $missing).'.';
+        });
     }
 
     /**
