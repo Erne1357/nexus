@@ -8,12 +8,15 @@ use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Models\LoadTransition;
+use App\Modules\AcademicLoad\Notifications\LoadRepublished;
 use App\Modules\AcademicLoad\Queries\LoadVersionsQuery;
 use App\Modules\AcademicLoad\Rules\SnapshotDiff;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\MailStatus;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -21,6 +24,7 @@ use App\Modules\Core\Navigation\NavigationItem;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Testing\Constraints\SeeInOrder;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -130,6 +134,30 @@ function versionsBoardHistory(): void
     $payload = LoadSnapshotFactory::payload($t->load, 3, $t->jefe, [$integral($e05, 45), $equations], $at);
     $diff = SnapshotDiff::between(SnapshotPayload::normalize($second->payload), SnapshotPayload::normalize($payload), [$t->isc->id => $t->systems->id, $t->ind->id => $t->systems->id]);
     LoadSnapshot::factory()->for($t->load)->publishedAt($at)->create(['version' => 3, 'created_by' => $t->jefe->id, 'payload' => $payload, 'diff' => $diff, 'reason' => SnapshotReason::Reanalysis]);
+}
+
+/**
+ * Un aviso «Carga republicada» al docente de la versión 3 de la carga, como lo deja LoadRepublished: la campana
+ * (`database`, en `notifications`) o el correo (`mail`, en el registro de correos), una hora después de publicarse.
+ */
+function versionsNotice(string $channel, ?string $title = null, MailStatus $status = MailStatus::Sent, string $at = '2027-06-26 14:05'): void
+{
+    $t = test();
+    $title ??= LoadRepublished::teacherTitle('Ciencias Básicas');
+    $at = CarbonImmutable::parse($at, 'America/Ciudad_Juarez');
+
+    if ($channel === 'mail') {
+        MailLog::factory()->create(['kind' => 'LoadRepublished', 'subject' => $title, 'status' => $status, 'sent_at' => $at]);
+
+        return;
+    }
+
+    User::factory()->create()->notifications()->create([
+        'id' => (string) Str::uuid7(),
+        'type' => LoadRepublished::class,
+        'data' => ['title' => $title, 'body' => '', 'icon' => 'o-arrow-path-rounded-square', 'tone' => 'warning', 'route' => 'published.index', 'parameters' => [], 'term_id' => $t->load->term_id, 'campus_id' => null, 'modality_id' => $t->load->modality_id],
+        'created_at' => $at,
+    ]);
 }
 
 /**
@@ -256,7 +284,9 @@ describe('la línea y la versión elegida', function () {
 
         expect(domOf($page)->querySelector('a[data-testid="file-pdf"]')->getAttribute('href'))->toBe(route('published.export', [...$parameters, 'tipo' => 'departamento', 'departamento' => $this->basics->id]))
             ->and(domOf($page)->querySelector('a[data-testid="file-excel"]')->getAttribute('href'))->toBe(route('published.export', [...$parameters, 'tipo' => 'excel']));
-        $page->assertSee(['Carga CB - 20273 PRES.pdf', 'PDF del departamento', 'Carga publicada 20273 PRES.xlsx', 'Excel de la modalidad']);
+        expect(textOf(domOf($page)->querySelector('a[data-testid="file-pdf"]')))->toContain('Carga CB - 20273 PRES.pdf')->toContain('PDF del departamento')
+            ->and(textOf(domOf($page)->querySelector('a[data-testid="file-excel"]')))->toContain('Carga publicada 20273 PRES.xlsx')->toContain('Excel de la modalidad')
+            ->and(textOf(domOf($page)->querySelector('a[data-testid="file-excel"] .whitespace-nowrap')))->toBe('.xlsx');
 
         $page->call('selectVersion', 2);
 
@@ -266,6 +296,9 @@ describe('la línea y la versión elegida', function () {
     });
 
     it('«Ver por docente o carrera» abre lo que se le avisó a cada uno', function () {
+        versionsNotice('database');
+        versionsNotice('mail');
+
         $page = versionsPageAs($this->jefe)
             ->call('openAffected')
             ->assertSet('showAffected', true)
@@ -283,6 +316,25 @@ describe('la línea y la versión elegida', function () {
             'ISC', 'Ingeniería en Sistemas Computacionales', 'Grupo nuevo: ACF-0905', 'Se canceló ACF-0904', 'ACF-0902 Cálculo Integral, grupo A (C2): cupo de 35 a 45',
         ]);
     });
+
+    it('RA-06: el drawer dice el canal por el que de verdad salió el aviso al docente: el correo, solo si se mandó (ensayo 8.11, E-04)', function (array $channels, string $text) {
+        foreach ($channels as $channel) {
+            versionsNotice($channel);
+        }
+
+        // Lo de otra carga, de otro tipo, fallido o de antes de la versión no cuenta.
+        versionsNotice('database', title: 'Cambiaron tus grupos en la carga de Sistemas y Computación');
+        versionsNotice('mail', status: MailStatus::Failed);
+        versionsNotice('mail', at: '2027-06-26 13:00');
+        MailLog::factory()->create(['kind' => 'ProposalReturned', 'subject' => 'Cambiaron tus grupos en la carga de Ciencias Básicas', 'sent_at' => CarbonImmutable::parse('2027-06-26 14:00', 'America/Ciudad_Juarez')]);
+
+        versionsPageAs($this->jefe)->call('openAffected')->assertSee($text);
+    })->with([
+        'campana y correo' => [['database', 'mail'], 'Lo que se le avisó a cada docente afectado, por la campana y el correo.'],
+        'solo campana: los docentes no tienen correo' => [['database'], 'Lo que se le avisó a cada docente afectado, por la campana.'],
+        'solo correo: los docentes no tienen cuenta' => [['mail'], 'Lo que se le avisó a cada docente afectado, por correo.'],
+        'ninguno' => [[], 'Lo que cambió para cada docente afectado. No ha salido ningún aviso por la campana ni por correo.'],
+    ]);
 
     it('en una versión anterior, el drawer dice hasta cuándo se vio y que nadie recibió el aviso', function () {
         versionsPageAs($this->jefe, ['version' => 2])->call('openAffected')
