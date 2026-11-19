@@ -1,4 +1,5 @@
-"""Motores del servicio: el de prueba (`trivial`) y el modelo CP-SAT (`cpsat`, 7.7). `SOLVER_ENGINE` elige uno."""
+"""Motores del servicio: el modelo CP-SAT (`cpsat`, 7.7; el de omisión) y el de prueba (`trivial`). `SOLVER_ENGINE`
+elige uno."""
 
 from .base import Engine, RunCancelled, RunContext
 from .cpsat import CpSatEngine

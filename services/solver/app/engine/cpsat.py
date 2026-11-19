@@ -2,8 +2,9 @@
 
 Toma de la corrida (`RunContext`) los hilos (`SOLVER_THREADS` u `options.threads` de la entrada; con 0, los núcleos
 del contenedor), el tope de variables y la cancelación (`SearchLimits.of`), y reporta el avance y el mejor puntaje con
-`context.report`. El plazo es el `time_limit_seconds` de la entrada; la semilla, `options.seed` (0 si no la trae). Se
-elige con `SOLVER_ENGINE=cpsat`; el predeterminado del servicio sigue siendo `trivial` hasta la 7.10.
+`context.report`. El plazo es el `time_limit_seconds` de la entrada; la semilla, `options.seed` (0 si no la trae). Es
+el motor del servicio por omisión desde la 7.10 (`SOLVER_ENGINE`, acuerdo con el Riel C); si la entrada trae
+`hint_sessions` (la salida de la heurística que manda `CpSatEngine` en PHP), arranca de ahí (`model/hint.py`).
 """
 
 from app.contract import SolverInput, SolverOutput

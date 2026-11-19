@@ -1,13 +1,16 @@
 """La búsqueda de una primera solución sin duras en la carga de un departamento: arranque tibio y vecindarios (LNS;
 docs/arquitectura/solver.md, «Tamaño de la instancia real»).
 
-1. **Primera vuelta**: salones en dos fases (`rooms.py`) y cada grupo con su primer nivel del patrón que cabe y los de
-   una hora por día (`DomainOptions`), con la asignación relajada (a lo más una opción por grupo) y el objetivo de
-   programar la mayor cantidad. La pista (`add_hint`) es el horario actual de cada grupo cuando es una opción del
-   patrón (`current_sessions`, PS-07).
+0. **Pista de la entrada** (`hint.py`): los grupos con pista válida (`hint_sessions`, la salida de la heurística)
+   entran ya programados, con su opción y sus salones.
+1. **Primera vuelta**, solo de los que faltan (con los de la pista fijos): salones en dos fases (`rooms.py`) y cada
+   grupo con su primer nivel del patrón que cabe (`DomainOptions`), con la asignación relajada (a lo más una opción por
+   grupo) y el objetivo de programar la mayor cantidad. La pista de CP-SAT (`add_hint`) es el horario actual de cada
+   grupo cuando es una opción del patrón (`current_sessions`, PS-07).
 2. **Vecindarios**: para cada grupo que no quedó, solo él y los que comparten docente o cohorte con él se mueven
    (`_neighbourhood`, que crece en cada intento); los demás programados entran como fijos con sus sesiones. El modelo de
-   cada vuelta es chico y la solución nunca empeora: la pista es la de antes y solo se acepta si programa más grupos.
+   cada vuelta es chico y la solución nunca empeora: la pista es lo que llevaba cada grupo (`_add_hints`: su opción en
+   `y` y sus salones en `z`) y solo se acepta si programa más grupos.
 
 3. **Mejora** (`improve`, 7.6): sobre lo que programó `lns`, vecindarios con el objetivo blando que nunca quitan un
    grupo ni lo llevan a un nivel del patrón peor (PS-10).
@@ -16,7 +19,7 @@ docs/arquitectura/solver.md, «Tamaño de la instancia real»).
 import random
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
@@ -26,6 +29,7 @@ from app.contract.output import ProposedSession
 
 from .constraints import add_hard_constraints
 from .data import ModelData
+from .hint import Hint
 from .objective import add_objective
 from .pattern import minutes
 from .phases import FEASIBLE, SearchLimits, run_solver, solve_until
@@ -81,9 +85,14 @@ def lns(
     step_seconds: float = 3,
     first_share: float = 0.25,
     report: Callable[[int], None] | None = None,
+    hint: Hint | None = None,
 ) -> Search:
     """La primera vuelta tiene a lo más `first_share` del tiempo (con pocos hilos no alcanza a probar que es lo mejor
     de su dominio y gastaría todo); el resto es para los vecindarios, de `step_seconds` cada uno.
+
+    Con `hint` (`hint.read_hint`), sus grupos entran ya programados y la primera vuelta solo arma a los que faltan, con
+    los de la pista fijos; si la pista los trae a todos, no hay primera vuelta. Si la primera vuelta no da nada, la
+    pista se queda y los vecindarios siguen con los que faltan.
 
     `limits` trae los hilos, el tope de variables (la primera vuelta lanza `ModelTooLarge` si lo pasa; un vecindario
     que lo pasa se descarta) y la cancelación, que se revisa al armar, mientras CP-SAT resuelve y entre vecindarios.
@@ -96,15 +105,38 @@ def lns(
     deadline = started + time_limit
     search = Search()
     search.chosen = _current_options(data)
-    first_deadline = started + max(step_seconds, time_limit * first_share)
-    # La primera vuelta lleva solo el primer nivel que cabe de cada grupo, así que lo que programa queda en su patrón
-    # (PS-10); los otros días y los días de 2 horas llegan con los vecindarios, a los que no quedaron.
-    first_round = DomainOptions(one_hour_tiers=False)
-    variables, solved = _place_most(data, first_round, search, min(deadline, first_deadline), limits, seed, report)
-    if solved is None or not _keep(search, solved, variables, data, replace=True):
-        search.sessions, search.chosen = {}, {}
-        search.unplaced = [group.id for group in data.movable]
-        return search
+    for group_id, hinted in (hint.groups if hint is not None else {}).items():
+        search.sessions[group_id] = list(hinted.sessions)
+        search.chosen[group_id] = hinted.chosen
+        search.tiers[group_id] = hinted.tier
+    hinted_count = len(search.sessions)
+    if report is not None and hinted_count:
+        report(hinted_count)
+    missing = {group.id for group in data.movable if group.id not in search.sessions}
+    if missing:
+        first_deadline = started + max(step_seconds, time_limit * first_share)
+        # La primera vuelta lleva solo el primer nivel que cabe de cada grupo, así que lo que programa queda en su
+        # patrón (PS-10); los otros días y los días de 2 horas llegan con los vecindarios, a los que no quedaron.
+        first_round = DomainOptions(one_hour_tiers=False)
+        first_data = ModelData.of(_sub_input(data.source, search, missing)) if hinted_count else data
+
+        def first_report(placed: int) -> None:
+            report(hinted_count + placed)
+
+        variables, solved = _place_most(
+            first_data,
+            first_round,
+            search,
+            min(deadline, first_deadline),
+            limits,
+            seed,
+            first_report if report is not None else None,
+        )
+        kept = solved is not None and _keep(search, solved, variables, first_data, replace=not hinted_count)
+        if not kept and not hinted_count:
+            search.sessions, search.chosen = {}, {}
+            search.unplaced = [group.id for group in data.movable]
+            return search
 
     pending = [(group.id, 0) for group in data.movable if group.id not in search.sessions]
     while pending and time.perf_counter() < deadline:
@@ -232,10 +264,7 @@ def _place_most(
     for domain in variables.groups.values():
         literals.extend(option.literal for option in domain.options)
         tiers.extend(option.tier for option in domain.options)
-        hint = search.chosen.get(domain.id)
-        if hint is not None and any((option.spread, option.block) == hint for option in domain.options):
-            for option in domain.options:
-                model.add_hint(option.literal, (option.spread, option.block) == hint)
+    _add_hints(model, variables, search, data, only_in_domain=True)
     # PS-10: primero los grupos programados y después el patrón. Cada grupo vale más que la suma de los niveles de
     # todos, así que el nivel solo decide entre soluciones con los mismos programados.
     per_group = 1 + sum(
@@ -266,6 +295,44 @@ def _place_most(
     )
 
     return variables, solver if feasible else None
+
+
+def _add_hints(
+    model: cp_model.CpModel,
+    variables: Variables,
+    search: Search,
+    data: ModelData,
+    chosen: Mapping[str, OptionKey | None] | None = None,
+    only_in_domain: bool = False,
+) -> None:
+    """La pista de CP-SAT (`add_hint`): lo que lleva la búsqueda, que al empezar es la pista de la entrada.
+
+    En cada grupo, la opción de `chosen` (por omisión, la de la búsqueda) en `y` y las demás en cero. Si es la opción
+    que tiene en la búsqueda, también sus salones: en las ventanas con `z`, el salón que tiene ese día (si está entre
+    los de la ventana; si no, sin pista) y las demás ventanas en cero; en las del conjunto con laboratorio, si su salón
+    es espacio de práctica. Con `only_in_domain`, un grupo cuya opción no está en su dominio no lleva pista."""
+    keys = search.chosen if chosen is None else chosen
+    for domain in variables.groups.values():
+        key = keys.get(domain.id)
+        option = next((option for option in domain.options if (option.spread, option.block) == key), None)
+        if option is None and only_in_domain:
+            continue
+        for candidate in domain.options:
+            model.add_hint(candidate.literal, candidate is option)
+        if option is None:
+            continue
+        rooms: dict[int, str | None] = {}
+        if key == search.chosen.get(domain.id):
+            rooms = {session.day: session.room_id for session in search.sessions.get(domain.id, [])}
+        used = {id(window) for window in option.windows}
+        for window in domain.windows.values():
+            in_use = id(window) in used
+            room_id = rooms.get(window.day) if in_use else None
+            if window.rooms and (not in_use or room_id in window.rooms):
+                for candidate_room, literal in window.rooms.items():
+                    model.add_hint(literal, candidate_room == room_id)
+            if window.lab is not None and (not in_use or room_id is not None):
+                model.add_hint(window.lab, room_id is not None and data.is_practice_space(room_id))
 
 
 def _keep(search: Search, solver: cp_model.CpSolver, variables: Variables, data: ModelData, replace: bool) -> bool:
@@ -373,6 +440,10 @@ IMPROVE_MAX_STEP_SECONDS = 8.0
 
 #: La parte del tiempo de un vecindario para bajar los niveles, cuando algún grupo puede (PS-10).
 LEVEL_SHARE = 0.25
+
+#: Hasta cuántos segundos puede tardar en armarse un vecindario de la mejora (en la carga real, de 0.3 a 0.6 s): uno
+#: que tarda más se descarta y no se come el plazo de los demás.
+IMPROVE_BUILD_SECONDS = 2.0
 
 #: Segundos para ajustar los salones de un vecindario (SC-03 y SC-06) antes de compararlo.
 IMPROVE_ROOM_SECONDS = 0.3
@@ -541,20 +612,23 @@ def _improve_step(
     limits: SearchLimits,
     seed: int,
 ) -> _Step:
-    """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT. Cada grupo lleva los
+    """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT contados después de
+    armarlo (en la carga real, armar uno tarda de 0.3 a 0.6 s, más que el paso de 0.4 s: contado desde antes, CP-SAT se
+    quedaba sin tiempo y casi ningún vecindario se resolvía). El armado tiene hasta `IMPROVE_BUILD_SECONDS`: uno que
+    tarda más se descarta. Cada grupo lleva los
     niveles hasta el que ya tiene (`keep_tiers`). Es lexicográfico (PS-10): si algún grupo del vecindario está fuera de
     su patrón y tiene en su dominio una opción de un nivel menor, una primera resolución busca la menor suma de niveles
     (así un grupo que ya cabe en su patrón regresa a él), con la cuarta parte del tiempo, y la segunda, con esa suma
     como tope, el menor objetivo. Si los niveles no bajaron, la pista de la segunda sigue siendo lo que había. El tope
     de variables cuenta el dominio y el objetivo: un vecindario que lo pasa se descarta."""
-    step_deadline = min(deadline, time.perf_counter() + step_seconds)
+    build_deadline = min(deadline, time.perf_counter() + IMPROVE_BUILD_SECONDS)
     sub = ModelData.of(_sub_input(data.source, search, movable))
     model = cp_model.CpModel()
     options = DomainOptions(
         keep_tiers={group: search.tiers[group] for group in movable if group in search.tiers},
         long_window_rooms=LONG_WINDOW_ROOMS,
     )
-    budget = limits.budget(step_deadline)
+    budget = limits.budget(build_deadline)
     try:
         variables = build_variables(model, sub, options, budget)
         if variables.unplaceable():
@@ -565,10 +639,8 @@ def _improve_step(
         return _Step()
     except ModelTooLarge:
         return _Step(too_large=True)
-    for domain in variables.groups.values():
-        hint = search.chosen.get(domain.id)
-        for option in domain.options:
-            model.add_hint(option.literal, (option.spread, option.block) == hint)
+    step_deadline = min(deadline, time.perf_counter() + step_seconds)
+    _add_hints(model, variables, search, sub)
     first: cp_model.CpSolver | None = None
     leveled = True
     # Solo hace falta bajar niveles si algún grupo tiene en su dominio una opción de un nivel menor que el suyo.
@@ -590,12 +662,12 @@ def _improve_step(
             first = level
             model.add(tiers <= round(level.value(tiers)))
             model.clear_hints()
+            hints: dict[str, OptionKey | None] = {}
             for domain in variables.groups.values():
                 lowered = chosen_option(first, domain)
                 keep = lowered is None or lowered.tier >= search.tiers.get(domain.id, 0)
-                hint = search.chosen.get(domain.id) if keep else (lowered.spread, lowered.block)
-                for option in domain.options:
-                    model.add_hint(option.literal, (option.spread, option.block) == hint)
+                hints[domain.id] = search.chosen.get(domain.id) if keep else (lowered.spread, lowered.block)
+            _add_hints(model, variables, search, sub, chosen=hints)
         # Si no bajó, o si no alcanzó el tiempo (UNKNOWN), sigue con las reglas: el tope de cada grupo
         # (`keep_tiers`) ya impide que el nivel suba, y la pista es lo que había.
     model.minimize(objective.expression())

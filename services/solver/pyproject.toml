@@ -24,7 +24,11 @@ testpaths = ["tests"]
 pythonpath = ["."]
 # Fuera del volumen montado en desarrollo (el usuario del contenedor no escribe en el host).
 cache_dir = "/tmp/solver-pytest-cache"
-addopts = "-ra"
+# La carga real (`realsize`, un minuto o más) no corre por omisión ni en el CI de PR: `pytest -m realsize`.
+addopts = "-ra -m 'not realsize'"
+markers = [
+    "realsize: la carga real de department-multicampus, fuera del CI de PR (se corre con `pytest -m realsize`)",
+]
 
 [tool.ruff]
 line-length = 120

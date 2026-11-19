@@ -10,7 +10,7 @@ Servicio `solver` (Python 3.12, FastAPI y OR-Tools; ADR-0027) que resuelve el co
 | `SOLVER_URL` | `.env` de `app`/`queue` | `http://solver:8000` dentro de la red `backend`. |
 | `SOLVER_DEFAULT_TIME_LIMIT` | servicio | Segundos por corrida si la entrada no los trae. |
 | `SOLVER_THREADS` | servicio | Hilos de CP-SAT por corrida (0, los núcleos del contenedor; nunca más que esos). |
-| `SOLVER_ENGINE` | servicio | Motor que atiende las corridas: `trivial` (el de prueba, por omisión) o `cpsat` (el modelo CP-SAT, 7.7; `docs/arquitectura/solver.md`, «Resolución»). |
+| `SOLVER_ENGINE` | servicio | Motor que atiende las corridas: `cpsat` (el modelo CP-SAT, por omisión desde la 7.10; `docs/arquitectura/solver.md`, «Resolución») o `trivial` (el de prueba, solo para pruebas y CI). |
 | `SOLVER_MAX_CONCURRENT_RUNS` | servicio | Corridas en cola o en curso antes de responder 429 (2 por omisión). |
 | `SOLVER_MAX_STORED_RUNS` | servicio | Corridas terminadas que se conservan en memoria para consultarlas (50). |
 
@@ -32,4 +32,9 @@ docker run --rm nexus-solver-dev sh -c "ruff check . && ruff format --check ."
 docker run --rm -e SOLVER_TOKEN=t -v "$PWD/tests/Fixtures/solver:/fixtures:ro" nexus-solver-dev pytest -q
 ```
 
-El job `solver` del CI corre lo mismo en cada PR. Todavía no es un check requerido de `develop`.
+El job `solver` del CI corre lo mismo en cada PR. Todavía no es un check requerido de `develop`. La carga real (`department-multicampus`, marcador `realsize`, alrededor de un minuto) no corre en el CI de PR; se corre a mano, montando el código que se quiere probar en `/srv/solver`:
+
+```bash
+docker run --rm --cpus 2 --memory 2g -e SOLVER_TOKEN=t -v "$PWD/services/solver:/srv/solver" \
+  -v "$PWD/tests/Fixtures/solver:/fixtures:ro" nexus-solver-dev pytest -m realsize -q
+```
