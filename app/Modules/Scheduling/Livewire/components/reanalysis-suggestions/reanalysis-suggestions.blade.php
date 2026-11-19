@@ -3,7 +3,10 @@
     campus y en cuántos grupos se ofrece; «Demanda por carrera» (esperados con las calificaciones del semestre actual
     contra los cupos de la versión vigente y los de ahora, con la diferencia y la clase de RA-04; primer semestre sin
     clasificar, RA-09); y las sugerencias de la tarea 8.3a con los grupos de ahora (scheduling::reanalysis.suggestions).
-    Al pie, a quien no ajusta, por qué; `close()` es del x-drawer.
+    Al pie fijo, a quien no ajusta, por qué; a quien ajusta, cuántas eligió y «Aplicar las N elegidas» (`btn-primary`,
+    deshabilitado sin ninguna), que confirma con el diálogo de Nexus (tono `error` si cierra un grupo) lo que pasa: cuántas
+    de cada tipo, qué grupos se cierran y qué horario pierden. En celular, «Cerrar» y «Aplicar» en dos columnas de 44 px
+    bajo la cuenta. `close()` es del x-drawer.
 --}}
 <div>
     <x-drawer wire:model.live="show" right close-on-escape class="w-full max-w-[860px] p-0!" role="dialog" aria-modal="true" aria-labelledby="suggestions-title" data-testid="suggestions-drawer">
@@ -73,14 +76,45 @@
                         </div>
                     </section>
 
-                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing, 'placements' => $placements, 'roomOptions' => $roomOptions])
+                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing, 'placements' => $placements, 'roomOptions' => $roomOptions, 'choice' => $choice])
                 </div>
 
+                @php($batch = $choice !== null && $suggestions !== [])
+                @php($count = count($choice['chosen'] ?? []))
+                @php($confirm = $choice['confirm'] ?? null)
                 <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-base-300 bg-base-100 px-5 py-3">
                     @if ($adjustReason !== null)
                         <p class="me-auto text-[13px] text-neutral">{{ $adjustReason }}</p>
+                    @elseif ($batch)
+                        <p id="suggestions-chosen-count" class="me-auto text-[13px] text-neutral max-md:w-full" aria-live="polite" data-testid="suggestions-chosen-count">
+                            @if ($count === 0)
+                                Marca las que quieras aplicar juntas.
+                            @else
+                                <span class="font-mono font-semibold tabular-nums text-base-content">{{ $count }}</span> {{ $count === 1 ? 'elegida' : 'elegidas' }} · cada una se aplica por separado.
+                            @endif
+                        </p>
                     @endif
-                    <x-button label="Cerrar" class="max-md:h-11 max-md:w-full" @click="close()" />
+                    @if ($batch)
+                        <div class="grid grid-cols-2 gap-2 max-md:w-full md:flex md:items-center">
+                            <button type="button" class="btn btn-ghost max-md:h-11" @click="close()">Cerrar</button>
+                            <button
+                                type="button"
+                                class="btn btn-primary max-md:h-11"
+                                wire:click="applyChosen"
+                                wire:loading.attr="disabled"
+                                wire:target="applyChosen"
+                                @disabled($confirm === null)
+                                @if ($confirm !== null)
+                                    x-confirm="{{ $confirm['message'] }}" data-confirm-title="{{ $confirm['title'] }}" data-confirm-button="{{ $confirm['button'] }}" data-confirm-tone="{{ $confirm['tone'] }}"
+                                @else
+                                    aria-describedby="suggestions-chosen-count"
+                                @endif
+                                data-testid="suggestions-apply-chosen"
+                            ><span class="loading loading-spinner loading-sm" wire:loading wire:target="applyChosen" aria-hidden="true"></span>{{ match ($count) { 0 => 'Aplicar las elegidas', 1 => 'Aplicar la elegida', default => "Aplicar las {$count} elegidas" } }}</button>
+                        </div>
+                    @else
+                        <x-button label="Cerrar" class="max-md:h-11 max-md:w-full" @click="close()" />
+                    @endif
                 </footer>
             </div>
         @elseif ($show)
