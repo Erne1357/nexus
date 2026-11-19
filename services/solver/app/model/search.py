@@ -28,7 +28,7 @@ from .constraints import add_hard_constraints
 from .data import ModelData
 from .objective import add_objective
 from .pattern import minutes
-from .phases import FEASIBLE, SearchLimits, run_solver
+from .phases import FEASIBLE, SearchLimits, run_solver, solve_until
 from .room_model import improve_rooms_scored
 from .rooms import RoomAssignmentError
 from .score import Score, SoftScorer
@@ -80,13 +80,17 @@ def lns(
     seed: int = 0,
     step_seconds: float = 3,
     first_share: float = 0.25,
+    report: Callable[[int], None] | None = None,
 ) -> Search:
     """La primera vuelta tiene a lo más `first_share` del tiempo (con pocos hilos no alcanza a probar que es lo mejor
     de su dominio y gastaría todo); el resto es para los vecindarios, de `step_seconds` cada uno.
 
     `limits` trae los hilos, el tope de variables (la primera vuelta lanza `ModelTooLarge` si lo pasa; un vecindario
     que lo pasa se descarta) y la cancelación, que se revisa al armar, mientras CP-SAT resuelve y entre vecindarios.
-    Los plazos son de reloj: con la misma semilla, una máquina más lenta puede llegar a otra solución."""
+    Los plazos son de reloj: con la misma semilla, una máquina más lenta puede llegar a otra solución.
+
+    `report(programados)` se llama con cada solución intermedia de la primera vuelta y después de cada vecindario
+    (7.7)."""
     limits = limits or SearchLimits()
     started = time.perf_counter()
     deadline = started + time_limit
@@ -96,7 +100,7 @@ def lns(
     # La primera vuelta lleva solo el primer nivel que cabe de cada grupo, así que lo que programa queda en su patrón
     # (PS-10); los otros días y los días de 2 horas llegan con los vecindarios, a los que no quedaron.
     first_round = DomainOptions(one_hour_tiers=False)
-    variables, solved = _place_most(data, first_round, search, min(deadline, first_deadline), limits, seed)
+    variables, solved = _place_most(data, first_round, search, min(deadline, first_deadline), limits, seed, report)
     if solved is None or not _keep(search, solved, variables, data, replace=True):
         search.sessions, search.chosen = {}, {}
         search.unplaced = [group.id for group in data.movable]
@@ -129,6 +133,8 @@ def lns(
             pending.extend((group, 0) for group in movable if group != target and group not in search.sessions)
         elif attempt < MAX_ATTEMPTS:
             pending.append((target, attempt + 1))
+        if report is not None:
+            report(len(search.sessions))
     search.unplaced = [group.id for group in data.movable if group.id not in search.sessions]
     if not search.unplaced:
         search.first_feasible_seconds = time.perf_counter() - started
@@ -202,7 +208,13 @@ def _current_options(data: ModelData) -> dict[str, OptionKey]:
 
 
 def _place_most(
-    data: ModelData, options: DomainOptions, search: Search, deadline: float, limits: SearchLimits, seed: int
+    data: ModelData,
+    options: DomainOptions,
+    search: Search,
+    deadline: float,
+    limits: SearchLimits,
+    seed: int,
+    report: Callable[[int], None] | None = None,
 ) -> tuple[Variables, cp_model.CpSolver | None]:
     """Arma y resuelve con la asignación relajada, maximizando los grupos programados y, entre soluciones con los
     mismos, el menor nivel del patrón (PS-10), con la pista de lo que lleva la búsqueda. Devuelve el solver si encontró
@@ -235,7 +247,10 @@ def _place_most(
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.1, deadline - solve_at)
     solver.parameters.random_seed = seed
-    status = run_solver(solver, model, limits)
+    # Los programados salen del valor del objetivo, sin recorrer las opciones en el hilo de CP-SAT: los niveles suman
+    # menos que `per_group`, así que es el techo de objetivo / per_group.
+    on_solution = None if report is None else lambda callback: report(-(-round(callback.objective_value) // per_group))
+    status = run_solver(solver, model, limits, on_solution)
     feasible = status in FEASIBLE
     search.steps.append(
         Step(
@@ -432,7 +447,14 @@ def improve(
                 # Los salones del vecindario los repartió la fase B sin ver edificios: se ajustan antes de comparar.
                 room_deadline = min(deadline, time.perf_counter() + IMPROVE_ROOM_SECONDS)
                 proposed, score = improve_rooms_scored(
-                    data, proposed, room_deadline, limits, scope, groups=movable, scorer=scorer
+                    data,
+                    proposed,
+                    room_deadline,
+                    limits,
+                    scope,
+                    groups=movable,
+                    scorer=scorer,
+                    seed=seed + result.steps,
                 )
                 tiers = sum({**search.tiers, **step.tiers}.values())
                 if tiers < result.tiers or (tiers == result.tiers and score.total < result.best.total):
@@ -560,15 +582,13 @@ def _improve_step(
         current = sum(search.tiers.get(group, 0) for group in variables.groups)
         model.minimize(tiers)
         now = time.perf_counter()
-        first, status = _solve(model, now + (step_deadline - now) * LEVEL_SHARE, limits, seed)
-        if status not in FEASIBLE:
-            return _Step()
+        level, status = solve_until(model, now + (step_deadline - now) * LEVEL_SHARE, limits, seed)
         leveled = status == cp_model.OPTIMAL
-        lowest = round(first.value(tiers))
-        model.add(tiers <= lowest)
-        if lowest < current:
+        if status in FEASIBLE and round(level.value(tiers)) < current:
             # Bajó el nivel: la pista de las reglas es esa solución solo en los grupos que bajaron; los demás siguen
             # con lo que tenían, que tiene su mismo nivel y mejor puntaje que una solución que solo ve los niveles.
+            first = level
+            model.add(tiers <= round(level.value(tiers)))
             model.clear_hints()
             for domain in variables.groups.values():
                 lowered = chosen_option(first, domain)
@@ -576,10 +596,10 @@ def _improve_step(
                 hint = search.chosen.get(domain.id) if keep else (lowered.spread, lowered.block)
                 for option in domain.options:
                     model.add_hint(option.literal, (option.spread, option.block) == hint)
-        else:
-            first = None
+        # Si no bajó, o si no alcanzó el tiempo (UNKNOWN), sigue con las reglas: el tope de cada grupo
+        # (`keep_tiers`) ya impide que el nivel suba, y la pista es lo que había.
     model.minimize(objective.expression())
-    solver, status = _solve(model, step_deadline, limits, seed)
+    solver, status = solve_until(model, step_deadline, limits, seed)
     if status not in FEASIBLE:
         if first is None:
             return _Step()
@@ -600,11 +620,3 @@ def _improve_step(
         step.tiers[domain.id] = option.tier
 
     return step
-
-
-def _solve(model: cp_model.CpModel, deadline: float, limits: SearchLimits, seed: int) -> tuple[cp_model.CpSolver, int]:
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = max(0.05, deadline - time.perf_counter())
-    solver.parameters.random_seed = seed
-
-    return solver, run_solver(solver, model, limits)

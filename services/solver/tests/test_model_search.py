@@ -165,8 +165,9 @@ def test_la_cancelacion_detiene_a_cp_sat_mientras_resuelve():
 
 
 def test_los_limites_salen_del_contexto_de_la_corrida(monkeypatch):
-    """Los hilos son los del servicio (`SOLVER_THREADS`); con 0, los núcleos del contenedor, nunca todos los de la
-    máquina. El tope de variables y la cancelación también vienen del contexto."""
+    """Los hilos son los del servicio (`SOLVER_THREADS`) o los de la entrada; con 0, los núcleos del contenedor, nunca
+    todos los de la máquina, y nunca más que los núcleos del contenedor (`threads=64` en uno de 2 CPU son 2). El tope
+    de variables y la cancelación también vienen del contexto."""
     from app.engine import RunContext
     from app.model import phases
 
@@ -177,8 +178,38 @@ def test_los_limites_salen_del_contexto_de_la_corrida(monkeypatch):
     assert limits.workers == 2
     assert limits.max_variables == 123
     assert limits.check_cancelled == context.check_cancelled
-    assert phases.SearchLimits.of(RunContext(threads=3)).workers == 3
+    assert phases.SearchLimits.of(RunContext(threads=1)).workers == 1
+    assert phases.SearchLimits.of(RunContext(threads=64)).workers == 2
     assert limits.budget(1.0).max_variables == 123
+
+
+def test_una_excepcion_del_aviso_de_cada_solucion_detiene_a_cp_sat_y_sale_de_run_solver():
+    """El aviso de cada solución corre en un hilo de CP-SAT: si lanza (un aviso que revisa la cancelación, por ejemplo),
+    la búsqueda se detiene y la excepción sale de `run_solver`, con o sin revisión de cancelación."""
+    from app.model.phases import SearchLimits, run_solver
+
+    model = cp_model.CpModel()
+    values = [model.new_int_var(0, 10, f"x{i}") for i in range(5)]
+    model.maximize(sum(values))
+
+    def fail(callback) -> None:
+        raise ValueError("aviso roto")
+
+    for limits in (SearchLimits(), SearchLimits(check_cancelled=lambda: None)):
+        with pytest.raises(ValueError, match="aviso roto"):
+            run_solver(cp_model.CpSolver(), model, limits, on_solution=fail)
+
+
+def test_un_modelo_invalido_no_se_esconde_como_infactible():
+    """`MODEL_INVALID` es un defecto del motor: `run_solver` lanza `InvalidModel` con el mensaje de CP-SAT, y la
+    corrida queda `failed` en vez de reportar «no cabe»."""
+    from app.model.phases import InvalidModel, SearchLimits, run_solver
+
+    model = cp_model.CpModel()
+    model.new_int_var(5, 1, "vacía")
+
+    with pytest.raises(InvalidModel, match="no es válido"):
+        run_solver(cp_model.CpSolver(), model, SearchLimits())
 
 
 def test_el_benchmark_reproduce_la_tabla_con_un_fixture():
@@ -358,3 +389,86 @@ def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(
     output = parse_output(json.loads(target.read_text()))
     assert output.unscheduled == []
     assert f"| {output.soft_score.total:,} |" in rows[-1]
+
+
+def test_run_solver_avisa_cada_solucion_intermedia():
+    """7.7: con `on_solution`, `run_solver` llama al aviso con cada solución que encuentra CP-SAT (el avance de la
+    corrida), también con la revisión de la cancelación."""
+    from app.model.phases import SearchLimits, run_solver
+
+    model = cp_model.CpModel()
+    items = [model.new_bool_var("") for _ in range(8)]
+    model.add(sum(items) <= 5)
+    model.maximize(sum((index + 1) * item for index, item in enumerate(items)))
+    seen: list[float] = []
+
+    solver = cp_model.CpSolver()
+    limits = SearchLimits(workers=1, check_cancelled=lambda: None)
+    status = run_solver(solver, model, limits, on_solution=lambda callback: seen.append(callback.objective_value))
+
+    assert status == cp_model.OPTIMAL
+    assert seen
+    assert seen[-1] == solver.objective_value == 8 + 7 + 6 + 5 + 4
+
+
+@pytest.mark.parametrize("name", ["medium", "infeasible"])
+def test_el_aviso_de_lns_cuenta_los_programados_con_el_valor_del_objetivo(name):
+    """El aviso de cada solución de la primera vuelta cuenta los programados con el valor del objetivo (sin recorrer
+    las opciones en el hilo de CP-SAT): nunca más que los movibles, y el último es lo que quedó programado."""
+    from app.model.phases import SearchLimits
+
+    data = ModelData.of(fixture(name))
+    reports: list[int] = []
+
+    found = lns(data, time_limit=10, limits=SearchLimits(workers=1), seed=7, report=reports.append)
+
+    assert reports
+    assert all(0 <= placed <= len(data.movable) for placed in reports)
+    assert reports[-1] == len(found.sessions)
+
+
+def test_si_la_resolucion_de_nivel_no_termina_el_vecindario_sigue_con_las_reglas(monkeypatch):
+    """🔵 del Riel A en el #647: si la resolución que baja los niveles no termina (UNKNOWN), el vecindario no se
+    descarta: sigue con las reglas, con el nivel de cada grupo como tope. g está el lunes y el miércoles a las 09:00
+    (nivel 1) y su docente prefiere esos días a las 07:00. Aunque la resolución de nivel no termine nunca, la de las
+    reglas lo lleva a las 07:00 (SC-04 de 8 a 0) sin subir su nivel."""
+    import time
+
+    from app.contract.output import ProposedSession
+    from app.model import search as search_module
+    from app.model.phases import SearchLimits
+    from app.model.search import Search, improve
+    from tests.instances import slot, teacher
+
+    solve_until = search_module.solve_until
+
+    def level_never_ends(model, deadline, limits, seed, on_solution=None):
+        solver, status = solve_until(model, deadline, limits, seed, on_solution)
+        # La resolución de nivel minimiza los niveles: sus coeficientes son niveles (0 o 1 aquí), no minutos.
+        if max(abs(c) for c in model.proto.objective.coeffs) <= 1:
+            return solver, cp_model.UNKNOWN
+        return solver, status
+
+    monkeypatch.setattr(search_module, "solve_until", level_never_ends)
+    data = parse_input(
+        instance(
+            campuses=[campus(days=[1, 2, 3], day_end="14:00")],
+            groups=[group("g", 2, teacher_id="t1")],
+            teachers=[teacher("t1", preferred=[slot(1, "07:00", "08:00"), slot(3, "07:00", "08:00")])],
+            rooms=[room("r1"), room("r2")],
+            soft_weights={"SC-04": 4},
+        )
+    )
+    placed = [
+        ProposedSession(
+            group_id="g", day=day, starts_at="09:00", ends_at="10:00", room_id="r1", kind="teoria", changed=True
+        )
+        for day in (1, 3)
+    ]
+    search = Search(sessions={"g": placed}, chosen={"g": (((1, 1), (3, 1)), 2)}, tiers={"g": 1})
+
+    result = improve(ModelData.of(data), search, time.perf_counter() + 3, limits=SearchLimits(workers=1), seed=7)
+
+    assert (result.initial.total, result.best.total) == (8, 0)
+    assert search.tiers == {"g": 1}
+    assert {(session.day, session.starts_at) for session in search.sessions["g"]} == {(1, "07:00"), (3, "07:00")}

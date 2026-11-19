@@ -25,7 +25,7 @@ class Settings:
     max_concurrent_runs: int = 2
     #: Corridas terminadas que se conservan en memoria (`SOLVER_MAX_STORED_RUNS`); las más viejas se descartan.
     max_stored_runs: int = 50
-    #: Motor que atiende las corridas (`SOLVER_ENGINE`); hoy solo `trivial`.
+    #: Motor que atiende las corridas (`SOLVER_ENGINE`): `trivial` (el de prueba, por omisión hasta la 7.10) o `cpsat`.
     engine: str = "trivial"
 
     @classmethod
