@@ -1,0 +1,2100 @@
+{
+    "submitted": {
+        "status": 202,
+        "body": {
+            "run_id": "bd96a3ac-9d01-4c06-a3c5-3ab39e8c8bd4",
+            "status": "queued"
+        }
+    },
+    "done": {
+        "status": 200,
+        "body": {
+            "run_id": "bd96a3ac-9d01-4c06-a3c5-3ab39e8c8bd4",
+            "status": "done",
+            "progress": 100,
+            "best_score": 552,
+            "output": {
+                "version": 1,
+                "run_id": "{run_id}",
+                "status": "feasible",
+                "sessions": [
+                    {
+                        "group_id": "ACD-0908/A",
+                        "day": 1,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B13",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A",
+                        "day": 2,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B13",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A",
+                        "day": 3,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B13",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A",
+                        "day": 4,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B13",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A",
+                        "day": 5,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A10",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A2",
+                        "day": 1,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A2",
+                        "day": 2,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A2",
+                        "day": 3,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A2",
+                        "day": 4,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/A2",
+                        "day": 5,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/A09",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/K",
+                        "day": 1,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/K",
+                        "day": 2,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/K",
+                        "day": 3,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/K",
+                        "day": 4,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/K",
+                        "day": 5,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/M",
+                        "day": 1,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B04",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/M",
+                        "day": 2,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B04",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/M",
+                        "day": 3,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/M",
+                        "day": 4,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACD-0908/M",
+                        "day": 5,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/A16",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A",
+                        "day": 1,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A",
+                        "day": 2,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A",
+                        "day": 3,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A",
+                        "day": 4,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A",
+                        "day": 5,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A2",
+                        "day": 1,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A2",
+                        "day": 2,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A2",
+                        "day": 3,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A2",
+                        "day": 4,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/A2",
+                        "day": 5,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A16",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/C",
+                        "day": 1,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B10",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/C",
+                        "day": 2,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B15",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/C",
+                        "day": 3,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B15",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/C",
+                        "day": 4,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B15",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/C",
+                        "day": 5,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I",
+                        "day": 1,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I",
+                        "day": 2,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I",
+                        "day": 3,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I",
+                        "day": 4,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A19",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I",
+                        "day": 5,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I2",
+                        "day": 1,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I2",
+                        "day": 2,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I2",
+                        "day": 3,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I2",
+                        "day": 4,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0901/I2",
+                        "day": 5,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A",
+                        "day": 1,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A",
+                        "day": 2,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A",
+                        "day": 3,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A",
+                        "day": 4,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A18",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A",
+                        "day": 5,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A2",
+                        "day": 1,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A2",
+                        "day": 2,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A2",
+                        "day": 3,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A2",
+                        "day": 4,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A18",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/A2",
+                        "day": 5,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/C",
+                        "day": 1,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/C",
+                        "day": 2,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/C",
+                        "day": 3,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/C",
+                        "day": 4,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A19",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/C",
+                        "day": 5,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A10",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/E",
+                        "day": 1,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B14",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/E",
+                        "day": 2,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/E",
+                        "day": 3,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/E",
+                        "day": 4,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B09",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/E",
+                        "day": 5,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/A18",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/M",
+                        "day": 1,
+                        "starts_at": "12:00",
+                        "ends_at": "13:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/M",
+                        "day": 2,
+                        "starts_at": "12:00",
+                        "ends_at": "13:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/M",
+                        "day": 3,
+                        "starts_at": "12:00",
+                        "ends_at": "13:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/M",
+                        "day": 4,
+                        "starts_at": "12:00",
+                        "ends_at": "13:00",
+                        "room_id": "C2/A19",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0902/M",
+                        "day": 5,
+                        "starts_at": "12:00",
+                        "ends_at": "13:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A",
+                        "day": 1,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A",
+                        "day": 2,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A",
+                        "day": 3,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/A19",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A",
+                        "day": 4,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/A19",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A",
+                        "day": 5,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A2",
+                        "day": 1,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/B07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A2",
+                        "day": 2,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/B07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A2",
+                        "day": 3,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/B07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A2",
+                        "day": 4,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/B07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/A2",
+                        "day": 5,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A09",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C",
+                        "day": 1,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C",
+                        "day": 2,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C",
+                        "day": 3,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C",
+                        "day": 4,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C",
+                        "day": 5,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C2",
+                        "day": 1,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C2",
+                        "day": 2,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C2",
+                        "day": 3,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C2",
+                        "day": 4,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A09",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/C2",
+                        "day": 5,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A19",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/K",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/K",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/K",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/K",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A17",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0903/K",
+                        "day": 5,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/C",
+                        "day": 1,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/C",
+                        "day": 2,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/C",
+                        "day": 3,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/C",
+                        "day": 4,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A17",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/C",
+                        "day": 5,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/B13",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/G",
+                        "day": 1,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/G",
+                        "day": 2,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/G",
+                        "day": 3,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/G",
+                        "day": 4,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/B01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0904/G",
+                        "day": 5,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A10",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0905/C",
+                        "day": 1,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0905/C",
+                        "day": 2,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0905/C",
+                        "day": 3,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0905/C",
+                        "day": 4,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ACF-0905/C",
+                        "day": 5,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ADF-1017/A",
+                        "day": 1,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ADF-1017/A",
+                        "day": 2,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ADF-1017/A",
+                        "day": 3,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ADF-1017/A",
+                        "day": 4,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A17",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "ADF-1017/A",
+                        "day": 5,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A10",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/C",
+                        "day": 1,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/C",
+                        "day": 2,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/C",
+                        "day": 3,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/C",
+                        "day": 4,
+                        "starts_at": "10:00",
+                        "ends_at": "11:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/M",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A17",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/M",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A07",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/M",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1053/M",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/C",
+                        "day": 1,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/C",
+                        "day": 2,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/C",
+                        "day": 3,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/C",
+                        "day": 4,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/E",
+                        "day": 1,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/E",
+                        "day": 2,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/E",
+                        "day": 3,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/E",
+                        "day": 4,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/I",
+                        "day": 1,
+                        "starts_at": "20:00",
+                        "ends_at": "21:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/I",
+                        "day": 2,
+                        "starts_at": "20:00",
+                        "ends_at": "21:00",
+                        "room_id": "C2/BX01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/I",
+                        "day": 3,
+                        "starts_at": "20:00",
+                        "ends_at": "21:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/I",
+                        "day": 4,
+                        "starts_at": "20:00",
+                        "ends_at": "21:00",
+                        "room_id": "C2/BX01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/M",
+                        "day": 1,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/M",
+                        "day": 2,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/M",
+                        "day": 3,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEC-1058/M",
+                        "day": 4,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/C",
+                        "day": 1,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/C",
+                        "day": 2,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/C",
+                        "day": 3,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/C",
+                        "day": 4,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/C",
+                        "day": 5,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/K",
+                        "day": 1,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/K",
+                        "day": 2,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/K",
+                        "day": 3,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/K",
+                        "day": 4,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/K",
+                        "day": 5,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1042/G",
+                        "day": 1,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/LF04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1042/G",
+                        "day": 2,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/LF04",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1042/G",
+                        "day": 3,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/LF04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1042/G",
+                        "day": 4,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/LF04",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1042/G",
+                        "day": 5,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/LF04",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/E",
+                        "day": 1,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/E",
+                        "day": 2,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/E",
+                        "day": 3,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/E",
+                        "day": 4,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A09",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/E",
+                        "day": 5,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/G",
+                        "day": 1,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/G",
+                        "day": 2,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/G",
+                        "day": 3,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/G",
+                        "day": 4,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/G",
+                        "day": 5,
+                        "starts_at": "13:00",
+                        "ends_at": "14:00",
+                        "room_id": "C2/B13",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/M",
+                        "day": 1,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/A10",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/M",
+                        "day": 2,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/A10",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/M",
+                        "day": 3,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/A10",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/M",
+                        "day": 4,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/A10",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1052/M",
+                        "day": 5,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B04",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1019/K",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/B01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1019/K",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/B01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1019/K",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/B01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1019/K",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A18",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1019/K",
+                        "day": 5,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A07",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1020/E",
+                        "day": 1,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1020/E",
+                        "day": 2,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1020/E",
+                        "day": 3,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1020/E",
+                        "day": 4,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1020/E",
+                        "day": 5,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/B13",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1028/M",
+                        "day": 1,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1028/M",
+                        "day": 2,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1028/M",
+                        "day": 3,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1028/M",
+                        "day": 4,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/B05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "CPF-1028/M",
+                        "day": 5,
+                        "starts_at": "19:00",
+                        "ends_at": "20:00",
+                        "room_id": "C2/A10",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0915/K",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0915/K",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0915/K",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0915/K",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0917/M",
+                        "day": 1,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0917/M",
+                        "day": 2,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0917/M",
+                        "day": 3,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEC-0917/M",
+                        "day": 4,
+                        "starts_at": "18:00",
+                        "ends_at": "19:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0912/K",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0912/K",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0912/K",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A09",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0912/K",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A09",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0912/K",
+                        "day": 5,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/B13",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0913/M",
+                        "day": 1,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0913/M",
+                        "day": 2,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0913/M",
+                        "day": 3,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0913/M",
+                        "day": 4,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A18",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0913/M",
+                        "day": 5,
+                        "starts_at": "14:00",
+                        "ends_at": "15:00",
+                        "room_id": "C2/A17",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0932/K",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A18",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0932/K",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0932/K",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A12",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0932/K",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A12",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "GEF-0932/K",
+                        "day": 5,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/A19",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1012/I",
+                        "day": 1,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B15",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1012/I",
+                        "day": 2,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B14",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1012/I",
+                        "day": 3,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B14",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1012/I",
+                        "day": 4,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B14",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1012/I",
+                        "day": 5,
+                        "starts_at": "15:00",
+                        "ends_at": "16:00",
+                        "room_id": "C2/B01",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/E",
+                        "day": 1,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/E",
+                        "day": 2,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/E",
+                        "day": 3,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/E",
+                        "day": 4,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/E",
+                        "day": 5,
+                        "starts_at": "11:00",
+                        "ends_at": "12:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/K",
+                        "day": 1,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/K",
+                        "day": 2,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/K",
+                        "day": 3,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/K",
+                        "day": 4,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "INF-1015/K",
+                        "day": 5,
+                        "starts_at": "17:00",
+                        "ends_at": "18:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCF-1006/M",
+                        "day": 1,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCF-1006/M",
+                        "day": 2,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCF-1006/M",
+                        "day": 3,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCF-1006/M",
+                        "day": 4,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF05",
+                        "kind": "practica",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCF-1006/M",
+                        "day": 5,
+                        "starts_at": "16:00",
+                        "ends_at": "17:00",
+                        "room_id": "C2/LF05",
+                        "kind": "teoria",
+                        "changed": true
+                    }
+                ],
+                "teacher_suggestions": [],
+                "unscheduled": [],
+                "hard_violations": [],
+                "soft_score": {
+                    "total": 552,
+                    "by_rule": {
+                        "SC-01": 450,
+                        "SC-02": 0,
+                        "SC-03": 0,
+                        "SC-04": 0,
+                        "SC-05": 0,
+                        "SC-06": 0,
+                        "SC-07": 102,
+                        "SC-08": 0,
+                        "SC-09": 0
+                    }
+                },
+                "relaxed_rules": [],
+                "metrics": {
+                    "elapsed_seconds": 6.451,
+                    "engine": "cpsat",
+                    "engine_version": "1.0.0",
+                    "variables": 917,
+                    "constraints": 1619,
+                    "iterations": 10,
+                    "intermediate_solutions": 4
+                },
+                "log": [
+                    "Programó 47 de 47 grupos; 0 fuera de su patrón de días (PS-04).",
+                    "Búsqueda con objetivo: revisó 9 vecindarios y aceptó 3 (0 regresaron grupos hacia su patrón); el puntaje blando pasó de 3721 a 552 y, con los salones, a 552.",
+                    "No se probó el óptimo: la búsqueda por vecindarios no da una cota, así que la salida nunca es «optimal»."
+                ]
+            }
+        }
+    }
+}

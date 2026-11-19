@@ -136,6 +136,8 @@
                         <legend class="mb-2 font-semibold">Motor</legend>
                         @if ($unavailableEngine)
                             <p class="text-sm text-neutral" data-testid="launch-engine-unavailable">{{ $unavailableEngine }} no está disponible ahora; se propone {{ $engines[$launchEngine] ?? $launchEngine }}.</p>
+                        @elseif ($unconfiguredEngine)
+                            <p class="text-sm text-neutral" data-testid="launch-engine-unconfigured">{{ $unconfiguredEngine }} no está disponible en este servidor; se propone {{ $engines[$launchEngine] ?? $launchEngine }}.</p>
                         @endif
                         <div class="join w-full" role="radiogroup" aria-label="Motor">
                             @foreach ($engines as $key => $label)

@@ -78,11 +78,29 @@ it('CF-S7: valida una tabla campo por campo, sin campos de más ni de menos', fu
         ->and(settingErrorsOf(fn () => $definition->validated(['a' => 'x', 'b' => 2])))->toBe(['value.a']);
 });
 
+function demoChoiceSetting(): SettingDefinition
+{
+    return new SettingDefinition('demo.engine', 'demo', 'Demo', 'Motor', 'Ayuda', SettingType::ChoiceTable, ['a' => 'rapido', 'b' => 'rapido'],
+        fields: ['a' => 'Uno', 'b' => 'Dos'], options: ['rapido' => 'El rápido', 'fino' => 'El fino']);
+}
+
+it('CF-S7: una tabla de opciones acepta en cada campo solo una de sus opciones y la guarda como texto', function () {
+    $definition = demoChoiceSetting();
+
+    expect($definition->validated(['a' => 'fino', 'b' => 'rapido']))->toBe(['a' => 'fino', 'b' => 'rapido'])
+        ->and(settingErrorsOf(fn () => $definition->validated(['a' => 'otro', 'b' => 'rapido'])))->toBe(['value.a'])
+        ->and(settingErrorsOf(fn () => $definition->validated(['a' => 3, 'b' => 'rapido'])))->toBe(['value.a'])
+        ->and(settingErrorsOf(fn () => $definition->validated(['a' => 'fino'])))->toContain('value.b')
+        ->and($definition->display(['a' => 'fino', 'b' => 'rapido']))->toBe('Uno: El fino, Dos: El rápido');
+});
+
 it('una definición con forma inválida falla al crearla', function () {
     expect(fn () => new SettingDefinition('sin_punto', 'demo', 'Demo', 'X', 'Y', SettingType::Integer, 1))->toThrow(InvalidArgumentException::class)
         ->and(fn () => new SettingDefinition('demo.t', 'demo', 'Demo', 'X', 'Y', SettingType::IntegerTable, [], fields: []))->toThrow(InvalidArgumentException::class)
         ->and(fn () => new SettingDefinition('demo.n', 'demo', 'Demo', 'X', 'Y', SettingType::Integer, 1, fields: ['a' => 'A']))->toThrow(InvalidArgumentException::class)
-        ->and(fn () => new SettingDefinition('demo.d', 'demo', 'Demo', 'X', 'Y', SettingType::Integer, null))->toThrow(InvalidArgumentException::class);
+        ->and(fn () => new SettingDefinition('demo.d', 'demo', 'Demo', 'X', 'Y', SettingType::Integer, null))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => new SettingDefinition('demo.c', 'demo', 'Demo', 'X', 'Y', SettingType::ChoiceTable, ['a' => 'x'], fields: ['a' => 'A']))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => new SettingDefinition('demo.o', 'demo', 'Demo', 'X', 'Y', SettingType::IntegerTable, ['a' => 1], fields: ['a' => 'A'], options: ['x' => 'X']))->toThrow(InvalidArgumentException::class);
 });
 
 it('muestra el valor para la pantalla', function () {
@@ -120,6 +138,7 @@ it('CF-S7: Asignación docente, Horarios, Proyección de demanda y Motor de hora
         'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
         'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits', 'solver.soft_weights',
+        'solver.default_engine',
     ]);
 });
 

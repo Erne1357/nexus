@@ -123,6 +123,45 @@ it('CF-S7: guarda los parámetros de una tarjeta, muestra «Volver al valor por 
         ->and(Activity::query()->where('description', 'like', 'Cambió el parámetro%')->count())->toBe(2);
 });
 
+it('CF-S7: una tabla de opciones (el motor de cada modalidad) se elige de una lista y solo guarda una de sus opciones', function () {
+    $dom = domOf($this->actingAs($this->admin)->get('/configuracion/parametros')->assertOk());
+
+    expect($dom->querySelector('[data-testid="setting-solver.default_engine"] select'))->not->toBeNull()
+        ->and(textOf($dom->querySelector('[data-testid="setting-solver.default_engine"]')))->toContain('Por omisión: Presencial: CP-SAT (servicio), EAD: Heurística (PHP)');
+
+    Livewire::actingAs($this->admin)->test('core::pages.settings')
+        ->assertSet('values.solver__default_engine.pres', 'cpsat')
+        ->set('values.solver__default_engine.pres', 'magia')
+        ->call('save', 'solver')
+        ->assertHasErrors(['values.solver__default_engine.pres'])
+        ->set('values.solver__default_engine.pres', 'heuristic')
+        ->call('save', 'solver')
+        ->assertHasNoErrors();
+
+    expect(storedSetting('solver.default_engine'))->toEqual(['pres' => 'heuristic', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']);
+});
+
+it('CF-S7 y 7.11: Subdirección cambia el motor predeterminado de una modalidad; el jefe de departamento y el coordinador no', function (Role $role, Closure $scope) {
+    $definition = app(SettingRegistry::class)->get('solver.default_engine');
+    $user = User::factory()->withRole($role, ['campus_id' => Campus::factory()->create()->id, ...$scope()])->create();
+
+    expect($user->can('update', [Setting::class, $definition]))->toBeFalse();
+    Livewire::actingAs($user)->test('core::pages.settings')->assertForbidden();
+    $this->actingAs($user)->get('/configuracion/parametros')->assertForbidden();
+
+    expect(storedSetting('solver.default_engine'))->toBeNull();
+
+    Livewire::actingAs(subdireccionUser())->test('core::pages.settings')
+        ->set('values.solver__default_engine.pres', 'heuristic')
+        ->call('save', 'solver')
+        ->assertHasNoErrors();
+
+    expect(storedSetting('solver.default_engine'))->toEqual(['pres' => 'heuristic', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']);
+})->with([
+    'jefe de departamento' => [Role::JefeDepartamento, fn (): array => ['department_id' => departmentKey(10)]],
+    'coordinador' => [Role::Coordinador, fn (): array => ['career_id' => careerKey(20)]],
+]);
+
 it('CF-S7: un valor inválido marca su campo y no guarda nada de la tarjeta', function () {
     Livewire::actingAs($this->admin)->test('core::pages.settings')
         ->set('values.staffing__min_campus_travel_minutes', '90')
