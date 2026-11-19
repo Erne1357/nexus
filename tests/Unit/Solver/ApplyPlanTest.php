@@ -129,6 +129,30 @@ it('SV-06: un grupo que chocaría con lo que se queda también se queda, y eso s
     ])->and($plan->writes())->toBe([]);
 });
 
+it('SV-06 y HC-03: un grupo cuyas sesiones nuevas se empalman con un grupo de su cohorte que no se mueve también se queda', function () {
+    $slot = fn (int $day, string $from, string $to): array => [...planSlot($day, $from, $to), 'room_id' => null];
+    $cohort = ['teacher_id' => null, 'cohorts' => ['plan:p1:4:C1']];
+    $input = planInput([
+        planGroup('g-0001', [...$cohort, 'current_sessions' => [$slot(1, '07:00', '09:00')]]),
+        planGroup('g-0002', [...$cohort, 'current_sessions' => [$slot(3, '07:00', '09:00')]]),
+        planGroup('g-0003', [...$cohort, 'movable' => false, 'fixed_sessions' => [$slot(2, '07:00', '09:00')]]),
+        planGroup('g-0004', [...$cohort, 'current_sessions' => [$slot(4, '07:00', '09:00')]]),
+        planGroup('g-0005', ['teacher_id' => null, 'cohorts' => ['plan:p1:5:C1']]),
+    ]);
+
+    $plan = ApplyPlan::of($input, planOutput([
+        'g-0002' => [$slot(1, '08:00', '10:00')],
+        'g-0004' => [$slot(2, '08:00', '09:00'), $slot(5, '07:00', '08:00')],
+        'g-0005' => [$slot(1, '07:00', '09:00')],
+    ], ['unscheduled' => [['group_id' => 'g-0001', 'reasons' => ['HC-06: sin laboratorio.']]]]));
+
+    expect($plan->kept())->toBe([
+        'g-0001' => ['HC-06: sin laboratorio.'],
+        'g-0002' => ['HC-03: un grupo de su cohorte ya tiene clase el lunes de 8:00 a 10:00; se queda como está.'],
+        'g-0004' => ['HC-03: un grupo de su cohorte ya tiene clase el martes de 8:00 a 9:00; se queda como está.'],
+    ])->and(array_keys($plan->writes()))->toBe(['g-0005']);
+});
+
 it('dos grupos que intercambian sus horas se escriben los dos', function () {
     $input = planInput([
         planGroup('g-0001', ['current_sessions' => [planSlot(1, '07:00', '09:00')]]),

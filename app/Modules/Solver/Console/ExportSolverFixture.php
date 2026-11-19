@@ -19,6 +19,9 @@ use RuntimeException;
  * cambiados por fichas cortas y estables (`g001`, `t001`, `r001`…) para que el fixture no deje salir llaves de la base.
  * El contrato no lleva nombres ni datos personales; las claves de materia y de campus son del catálogo.
  *
+ * Con `--path` la escribe en `<path>/<name>/input.json`, dentro de `storage/app` (ignorado por git): para medir una carga
+ * real sin que entre al repositorio (CLAUDE.md, regla 9; benchmark de la 7.11).
+ *
  *     docker compose exec -e DB_DATABASE=nexus_demo_a2 app php artisan solver:export-fixture 20271 PRES CEA department-multicampus
  */
 final class ExportSolverFixture extends Command
@@ -28,7 +31,8 @@ final class ExportSolverFixture extends Command
         {modality : Clave de la modalidad, por ejemplo PRES}
         {department_code : Clave del departamento dueño de la carga}
         {name : Nombre de la carpeta del fixture en tests/Fixtures/solver/v1}
-        {--career= : Clave de una carrera: exporta solo sus grupos como movibles, en lugar de la carga del departamento}';
+        {--career= : Clave de una carrera: exporta solo sus grupos como movibles, en lugar de la carga del departamento}
+        {--path= : Carpeta dentro de storage/app donde escribir <name>/input.json, en lugar de tests/Fixtures/solver/v1}';
 
     protected $description = 'Exporta la entrada del motor de una carga como fixture anonimizado de tests/Fixtures/solver/v1';
 
@@ -39,6 +43,14 @@ final class ExportSolverFixture extends Command
 
     public function handle(BuildSolverInput $builder): int
     {
+        $base = $this->option('path') === null ? base_path('tests/Fixtures/solver/v1') : $this->storagePath((string) $this->option('path'));
+
+        if ($base === null) {
+            $this->error('La carpeta de --path debe estar dentro de storage/app.');
+
+            return self::INVALID;
+        }
+
         $term = Term::where('code', $this->argument('term'))->first();
         $modality = Modality::where('code', $this->argument('modality'))->first();
         $department = Department::where('code', $this->argument('department_code'))->first();
@@ -79,7 +91,7 @@ final class ExportSolverFixture extends Command
             throw new RuntimeException('Quedó una llave de la base en el fixture; revisa anonymize().');
         }
 
-        $directory = base_path('tests/Fixtures/solver/v1/'.$name);
+        $directory = $base.'/'.$name;
         File::ensureDirectoryExists($directory);
         File::put($directory.'/input.json', $json."\n");
 
@@ -98,6 +110,28 @@ final class ExportSolverFixture extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * La carpeta de `--path` (relativa a la raíz del proyecto o absoluta), sin `.` ni `..`, si queda dentro de
+     * `storage/app`; si no, null.
+     */
+    private function storagePath(string $path): ?string
+    {
+        $parts = [];
+
+        foreach (explode('/', str_starts_with($path, '/') ? $path : base_path($path)) as $part) {
+            match ($part) {
+                '', '.' => null,
+                '..' => array_pop($parts),
+                default => $parts[] = $part,
+            };
+        }
+
+        $resolved = '/'.implode('/', $parts);
+        $storage = rtrim(storage_path('app'), '/');
+
+        return $resolved === $storage || str_starts_with($resolved, $storage.'/') ? $resolved : null;
     }
 
     /**

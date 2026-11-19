@@ -1,13 +1,18 @@
 <?php
 
+use App\Modules\Core\Enums\SettingScope;
+use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Settings\SettingRegistry;
+use App\Modules\Solver\Engines\CpSat\CpSatClient;
+use App\Modules\Solver\Engines\CpSat\CpSatEngine;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\FixedEngine;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 
 /*
 | El registro de motores (tarea 6.3): los motores se registran en el provider de Solver con la etiqueta
-| `solver.engines`: el de prueba y la heurística en PHP (6.6), que es la predeterminada por ser la última.
+| `solver.engines`: el de prueba y la heurística en PHP (6.6). El predeterminado de una modalidad es el de
+| `solver.default_engine` (7.11): de fábrica, CP-SAT en Presencial y la heurística en las demás.
 */
 
 it('lista los motores registrados y da uno por su clave', function () {
@@ -25,4 +30,34 @@ it('rechaza un motor que no existe', function () {
 
 it('el parámetro de tiempos aparece en el catálogo de Parámetros, en Motor de horarios', function () {
     expect(app(SettingRegistry::class)->get('solver.time_limits')->moduleLabel)->toBe('Motor de horarios');
+});
+
+/**
+ * Un registro con los tres motores, como en un servidor con el servicio de CP-SAT.
+ */
+function registryWithCpSat(): EngineRegistry
+{
+    return new EngineRegistry([new CpSatEngine(new CpSatClient('http://solver.test', 'secreto')), new FixedEngine, new PhpHeuristicEngine]);
+}
+
+it('7.11: con el servicio, Presencial propone CP-SAT de fábrica y las demás la heurística; el parámetro lo cambia', function () {
+    $registry = registryWithCpSat();
+
+    expect($registry->default('PRES'))->toBeInstanceOf(CpSatEngine::class)
+        ->and($registry->default('EAD'))->toBeInstanceOf(PhpHeuristicEngine::class)
+        ->and($registry->default())->toBeInstanceOf(PhpHeuristicEngine::class);
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.default_engine', 'value' => ['pres' => 'heuristic', 'ead' => 'cpsat', 'enl' => 'heuristic', 'tnmv' => 'heuristic']]);
+
+    expect($registry->default('PRES'))->toBeInstanceOf(PhpHeuristicEngine::class)
+        ->and($registry->default('EAD'))->toBeInstanceOf(CpSatEngine::class);
+});
+
+it('7.11: sin servicio (CP-SAT no registrado), Presencial propone la heurística', function () {
+    expect(app(EngineRegistry::class)->default('PRES'))->toBeInstanceOf(PhpHeuristicEngine::class)
+        ->and((new EngineRegistry([new FixedEngine]))->default('PRES'))->toBeInstanceOf(FixedEngine::class);
+});
+
+it('7.11: el motor predeterminado aparece en Parámetros, en Motor de horarios', function () {
+    expect(app(SettingRegistry::class)->get('solver.default_engine')->moduleLabel)->toBe('Motor de horarios');
 });

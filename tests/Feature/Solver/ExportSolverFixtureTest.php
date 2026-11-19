@@ -76,3 +76,30 @@ it('anonimiza el grupo de cada préstamo y la clave `combination:` con la misma 
         ->and((string) $written)->not->toMatch('/[0-9a-f]{8}-[0-9a-f]{4}-/')
         ->and(SolverInput::fromArray($data)->agreements[0]->groupId)->toBe($mine['id']);
 });
+
+it('con --path escribe la entrada en esa carpeta (storage/app), nunca en tests/Fixtures', function () {
+    $term = Term::factory()->create(['code' => '20271', 'starts_on' => '2027-01-18']);
+    $campus = Campus::factory()->create(['code' => 'S1']);
+    $sistemas = Department::factory()->create(['code' => 'SIS']);
+    $career = Career::factory()->create(['department_id' => $sistemas->id]);
+    $plan = StudyPlan::factory()->create(['career_id' => $career->id]);
+    exportFixtureGroup($term, $campus, Subject::factory()->create(['department_id' => $sistemas->id, 'code' => 'SCC-1010', 'theory_hours' => 2, 'practice_hours' => 0]), $career, $plan);
+
+    $paths = [];
+    File::partialMock()->shouldReceive('ensureDirectoryExists')->andReturnNull();
+    File::partialMock()->shouldReceive('put')->once()->andReturnUsing(function (string $path, string $contents) use (&$paths): int {
+        $paths[] = $path;
+
+        return strlen($contents);
+    });
+
+    $this->artisan('solver:export-fixture', ['term' => '20271', 'modality' => 'PRES', 'department_code' => 'SIS', 'name' => 'medida-real', '--path' => 'storage/app/solver-benchmark'])->assertSuccessful();
+
+    expect($paths)->toBe([base_path('storage/app/solver-benchmark/medida-real/input.json')]);
+});
+
+it('--path no acepta una carpeta fuera del proyecto ni dentro de tests', function (string $path) {
+    $this->artisan('solver:export-fixture', ['term' => '20271', 'modality' => 'PRES', 'department_code' => 'SIS', 'name' => 'x', '--path' => $path])
+        ->expectsOutputToContain('La carpeta de --path debe estar dentro de storage/app.')
+        ->assertExitCode(2);
+})->with(['/tmp/fuera', 'tests/Fixtures/solver/v1', 'storage/app/../../tests']);
