@@ -24,6 +24,7 @@ use App\Modules\Solver\Contract\SessionKind;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Queries\SolverInputBuild;
+use App\Modules\Solver\Rules\InputFingerprint;
 
 /*
 | BuildSolverInput: arma el contrato de entrada del motor desde la base (tarea 6.4). Una corrida es la carga de un
@@ -394,4 +395,112 @@ it('los pesos blandos salen del parámetro solver.soft_weights, con SC-01 por la
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.soft_weights', 'value' => ['sc_01' => 0, 'sc_02' => 50]]);
 
     expect(buildInputForDepartment()->input->softWeights->toArray())->toBe(['SC-01' => 0, 'SC-02' => 50, 'SC-03' => 5, 'SC-04' => 4, 'SC-05' => 3, 'SC-06' => 2, 'SC-07' => 3, 'SC-08' => 2, 'SC-09' => 2]);
+});
+
+/*
+| forGroups (tareas 8.7 y 8.3b): solo los grupos pedidos se mueven y todo lo demás entra fijo. Lo usa ProposePlacements
+| para las alternativas de una solicitud de cambio y para abrir un grupo (grupos virtuales `new:<materia>:<campus>:<carrera>`).
+*/
+
+/**
+ * @param  list<string>  $ids
+ * @param  list<GroupInput>  $extra
+ */
+function buildInputForGroups(array $ids, array $extra = [], ?string $runId = 'run-3'): SolverInput
+{
+    return app(BuildSolverInput::class)->forGroups(test()->term, test()->pres, $ids, $extra, $runId);
+}
+
+/**
+ * Un grupo virtual (no existe en la base) de la materia en el campus, para la carrera y plan dados.
+ *
+ * @param  list<string>  $cohorts
+ */
+function buildInputVirtual(Subject $subject, Campus $campus, Career $career, StudyPlan $plan, int $semester, ?string $teacherId = null, array $cohorts = [], ?string $id = null): GroupInput
+{
+    return new GroupInput($id ?? "new:{$subject->code}:{$campus->code}:{$career->id}", $campus->code, $subject->code, $subject->department_id, $career->id, $plan->id,
+        $semester, 5, 2, false, 30, $teacherId, $cohorts, [], [], true);
+}
+
+it('por grupos: solo los pedidos se mueven, con sus sesiones actuales; los que comparten docente, salón o cohorte entran fijos', function () {
+    $input = buildInputForGroups([$this->progS1->id]);
+    $groups = collect($input->groups)->keyBy('id')->all();
+
+    expect(array_keys($groups))->toEqualCanonicalizing([$this->progS1->id, $this->calcS1->id, $this->sharedTeacher->id])
+        ->and(collect($groups)->filter->movable->keys()->all())->toBe([$this->progS1->id])
+        ->and($groups[$this->progS1->id]->currentSessions)->toHaveCount(2)
+        ->and($groups[$this->calcS1->id]->currentSessions)->toBe([])
+        ->and($groups[$this->sharedTeacher->id]->currentSessions)->toBe([])
+        ->and($groups[$this->sharedTeacher->id]->fixedSessions)->toHaveCount(1)
+        ->and($groups[$this->bdS2->id] ?? null)->toBeNull()
+        ->and($groups[$this->indS1->id] ?? null)->toBeNull();
+});
+
+it('por grupos: el alcance es el departamento de los grupos y el tiempo y la corrida se pueden dar', function () {
+    $input = app(BuildSolverInput::class)->forGroups($this->term, $this->pres, [$this->progS1->id, $this->indS1->id], [], 'propuesta-1', 5);
+
+    expect($input->scope->kind)->toBe(ScopeKind::Department)
+        ->and($input->scope->id)->toBe($this->sistemas->id)
+        ->and($input->runId)->toBe('propuesta-1')
+        ->and($input->timeLimitSeconds)->toBe(5)
+        ->and(collect($input->groups)->filter->movable->pluck('id')->all())->toEqualCanonicalizing([$this->progS1->id, $this->indS1->id]);
+});
+
+it('por grupos: rechaza un grupo cancelado, de otra modalidad o que no existe, y grupos de dos departamentos', function (string $case) {
+    $ids = match ($case) {
+        'cancelado' => [$this->cancelled->id],
+        'otra modalidad' => [$this->eadGroup->id],
+        'no existe' => ['019a0000-0000-7000-8000-000000000000'],
+        'dos departamentos' => [$this->progS1->id, $this->calcS1->id],
+    };
+
+    buildInputForGroups($ids);
+})->with(['cancelado', 'otra modalidad', 'no existe', 'dos departamentos'])->throws(InvalidArgumentException::class);
+
+it('HC-03: un grupo virtual entra movible con la cohorte del alumno tipo y trae fijos a sus compañeros de cohorte', function () {
+    $virtual = buildInputVirtual($this->bd, $this->s1, $this->isc, $this->planIsc, 1, $this->t2->id);
+
+    $input = buildInputForGroups([], [$virtual]);
+    $groups = collect($input->groups)->keyBy('id')->all();
+    $key = "plan:{$this->planIsc->id}:1:S1";
+
+    expect($groups[$virtual->id]->movable)->toBeTrue()
+        ->and($groups[$virtual->id]->cohorts)->toBe([$key])
+        ->and($groups[$virtual->id]->currentSessions)->toBe([])
+        ->and($groups[$this->progS1->id]->movable)->toBeFalse()
+        ->and($groups[$this->progS1->id]->cohorts)->toBe([$key])
+        ->and($groups[$this->progS1->id]->fixedSessions)->toHaveCount(2)
+        ->and($groups[$this->calcS1->id]->movable)->toBeFalse()
+        ->and(collect($input->teachers)->pluck('id')->all())->toContain($this->t2->id)
+        ->and($input->scope->id)->toBe($this->sistemas->id)
+        ->and(SolverInput::fromArray($input->toArray())->toArray())->toBe($input->toArray());
+});
+
+it('HC-03: un grupo virtual de una materia que ya tiene grupo en ese semestre no lleva la cohorte del alumno tipo, pero sí las que trae', function () {
+    $virtual = buildInputVirtual($this->prog, $this->s1, $this->isc, $this->planIsc, 1, cohorts: ['package:p1:S1:1']);
+
+    $groups = collect(buildInputForGroups([], [$virtual])->groups)->keyBy('id')->all();
+
+    expect($groups[$virtual->id]->cohorts)->toBe(['package:p1:S1:1']);
+});
+
+it('por grupos: rechaza un grupo virtual sin el prefijo new:, fijo, repetido o de un campus que no existe', function (string $case) {
+    $virtual = match ($case) {
+        'sin prefijo' => [buildInputVirtual($this->bd, $this->s1, $this->isc, $this->planIsc, 1, id: 'g-1')],
+        'fijo' => [new GroupInput('new:x', 'S1', 'SCD-1020', $this->sistemas->id, $this->isc->id, $this->planIsc->id, 1, 5, 0, false, 30, null, [], [], [], false)],
+        'repetido' => [buildInputVirtual($this->bd, $this->s1, $this->isc, $this->planIsc, 1), buildInputVirtual($this->bd, $this->s1, $this->isc, $this->planIsc, 1)],
+        'campus' => [new GroupInput('new:x', 'ZZ', 'SCD-1020', $this->sistemas->id, $this->isc->id, $this->planIsc->id, 1, 5, 0, false, 30, null, [], [], [], true)],
+    };
+
+    buildInputForGroups([], $virtual);
+})->with(['sin prefijo', 'fijo', 'repetido', 'campus'])->throws(InvalidArgumentException::class);
+
+it('SV-02: la huella de forGroups no depende de la corrida y cambia si se mueve una sesión de un grupo fijo', function () {
+    $first = InputFingerprint::of(buildInputForGroups([$this->progS1->id], runId: 'a'));
+
+    expect(InputFingerprint::of(buildInputForGroups([$this->progS1->id], runId: 'b')))->toBe($first);
+
+    GroupSession::query()->where('group_id', $this->sharedTeacher->id)->update(['day' => 4]);
+
+    expect(InputFingerprint::of(buildInputForGroups([$this->progS1->id])))->not->toBe($first);
 });
