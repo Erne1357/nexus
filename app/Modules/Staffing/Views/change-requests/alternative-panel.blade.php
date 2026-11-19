@@ -118,14 +118,17 @@
     @endif
 
     @if ($option['inputProblems'] !== [])
-        <div class="grid min-w-0 gap-2 {{ $dim }}" data-testid="alternative-input-problems">
-            <h4 class="{{ $cap }}">Lo que no depende del acomodo</h4>
+        <div class="grid min-w-0 gap-2 {{ $dim }}" data-testid="alternative-previous-problems">
+            <h4 class="{{ $cap }}">Ya estaba</h4>
             <ul class="grid gap-1.5">
                 @foreach ($option['inputProblems'] as $problem)
-                    <li class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2.5 text-sm"><span class="font-mono text-neutral">{{ $problem['rule'] }}</span><span class="break-words">{{ $problem['message'] }}</span></li>
+                    <li class="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2.5 text-sm">
+                        <span class="font-mono text-neutral">{{ $problem['rule'] }}</span>
+                        <span class="min-w-0 break-words">{{ $problem['message'] }} <span class="badge badge-neutral badge-soft badge-sm ms-1 whitespace-nowrap">{{ $problem['why'] }}</span></span>
+                    </li>
                 @endforeach
             </ul>
-            <p class="text-[12.5px] text-neutral">Ya estaban así antes de este cambio: ninguna alternativa los resuelve.</p>
+            <p class="text-[12.5px] text-neutral">Estos choques no los causa la alternativa: ya los tenían estos grupos antes del cambio, o no dependen de su horario.</p>
         </div>
     @endif
 

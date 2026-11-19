@@ -11,7 +11,7 @@ use App\Modules\Scheduling\Validation\Minutes;
 final class ChangeAlternativeText
 {
     /**
-     * «G queda lunes y martes de 8:00 a 9:00, y miércoles de 10:00 a 11:00; también se mueven H y J.»
+     * «G queda lunes y martes de 8:00 a 9:00 en A-1, y miércoles de 10:00 a 11:00 en LAB-2; también se mueven H y J.»
      *
      * @param  array<string, mixed>  $item
      */
@@ -21,7 +21,8 @@ final class ChangeAlternativeText
         $byTime = [];
 
         foreach ($requested['sessions'] ?? [] as $session) {
-            $byTime[Minutes::labelOf($session['starts_at']).' a '.Minutes::labelOf($session['ends_at'])][] = Minutes::dayName((int) $session['day']);
+            $room = ($session['room'] ?? null) === null ? '' : " en {$session['room']}";
+            $byTime[Minutes::labelOf($session['starts_at']).' a '.Minutes::labelOf($session['ends_at']).$room][] = Minutes::dayName((int) $session['day']);
         }
 
         $parts = array_map(fn (string $time, array $days): string => self::list($days)." de {$time}", array_keys($byTime), $byTime);

@@ -36,6 +36,7 @@ use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Notifications\ChangeRequestApproved;
 use App\Modules\Staffing\Notifications\ChangeRequestPendingApplication;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
@@ -350,7 +351,10 @@ it('CR-03: el aviso dice que se aprobó con otro acomodo y cómo queda, a quien 
         $message = $notice->message($s['teacherUser']);
         $start = Minutes::labelOf($alone['groups'][0]['sessions'][0]['starts_at']);
 
-        return $message->title === 'Tu solicitud de cambio se aprobó con otro acomodo' && str_contains($message->body, "Con otro acomodo: G queda lunes, martes, miércoles y jueves de {$start}");
+        $end = Minutes::labelOf($alone['groups'][0]['sessions'][0]['ends_at']);
+        $room = $alone['groups'][0]['sessions'][0]['room'];
+
+        return $message->title === 'Tu solicitud de cambio se aprobó con otro acomodo' && str_contains($message->body, "Con otro acomodo: G queda lunes, martes, miércoles y jueves de {$start} a {$end} en {$room}");
     });
     Notification::assertSentTo($s['coordinador'], ChangeRequestPendingApplication::class,
         fn (ChangeRequestPendingApplication $notice): bool => $notice->message($s['coordinador'])->title === 'Hay un cambio aprobado por aplicar, con otro acomodo');
@@ -364,7 +368,8 @@ it('CR-02: una dura previa que no depende del acomodo (HC-08) no deja sin altern
     $request = alternativesPropose(alternativesRequest($s), $s['jefe']);
 
     expect($request->alternatives['status'])->toBe('ready')
-        ->and(collect($request->alternatives['items'])->flatMap(fn (array $item) => array_column($item['input_problems'], 'rule'))->unique()->values()->all())->toBe(['HC-08']);
+        ->and(collect($request->alternatives['items'])->flatMap(fn (array $item) => array_column($item['input_problems'], 'rule'))->unique()->values()->all())->toBe(['HC-08'])
+        ->and(collect($request->alternatives['items'])->flatMap(fn (array $item) => $item['previous_problems'])->all())->toBe([]);
 });
 
 it('CR-02: en la cola: deja el cálculo en curso, despacha un job por solicitud y no pide otro mientras corre', function () {
@@ -380,11 +385,11 @@ it('CR-02: en la cola: deja el cálculo en curso, despacha un job por solicitud 
         ->and(ChangeAlternativesStatus::of($alternatives))->toBe(ChangeAlternativesStatus::Computing)
         ->and(alternativesError(fn () => app(ProposeChangeAlternatives::class)->handle($request, $s['jefe']), 'alternatives'))->toBe('Las alternativas de esta solicitud ya se están calculando.');
 
-    Queue::assertPushed(ComputeChangeAlternatives::class, fn (ComputeChangeAlternatives $job): bool => $job->uniqueId() === $request->id && $job->calculationId === $alternatives['calculation_id']);
+    Queue::assertPushed(ComputeChangeAlternatives::class, fn (ComputeChangeAlternatives $job): bool => $job->changeRequestId === $request->id && $job->calculationId === $alternatives['calculation_id']);
     Queue::assertPushed(ComputeChangeAlternatives::class, 1);
 });
 
-it('CR-02: un cálculo colgado se da por fallido después del plazo y se puede volver a pedir; un job viejo no pisa el nuevo', function () {
+it('CR-02: la espera en la cola no vence el cálculo antes de QUEUE_STALE_AFTER; uno vencido se vuelve a pedir y un job viejo no pisa el nuevo', function () {
     Queue::fake();
     $s = alternativesScenario();
     $request = alternativesRequest($s);
@@ -392,6 +397,11 @@ it('CR-02: un cálculo colgado se da por fallido después del plazo y se puede v
     $first = $request->fresh()->alternatives;
 
     $this->travel(ComputeChangeAlternatives::STALE_AFTER + 1)->seconds();
+
+    expect(ChangeAlternativesStatus::of($first))->toBe(ChangeAlternativesStatus::Computing)
+        ->and(ChangeAlternativesStatus::isQueued($first))->toBeTrue();
+
+    $this->travel(ComputeChangeAlternatives::QUEUE_STALE_AFTER)->seconds();
 
     expect(ChangeAlternativesStatus::of($first))->toBe(ChangeAlternativesStatus::Failed)
         ->and(ChangeAlternativesStatus::messageOf($first))->toBe(ChangeAlternativesStatus::STALE_MESSAGE);
@@ -405,7 +415,66 @@ it('CR-02: un cálculo colgado se da por fallido después del plazo y se puede v
 
     app(ProposeChangeAlternatives::class)->compute($request->id, $second['calculation_id']);
 
-    expect($request->fresh()->alternatives['status'])->toBe('ready');
+    expect($request->fresh()->alternatives['status'])->toBe('ready')
+        ->and($request->fresh()->alternatives['started_at'])->not->toBeNull();
+});
+
+it('CR-02: un job tardío de un cálculo vencido no guarda nada, aunque nadie lo haya vuelto a pedir', function () {
+    Queue::fake();
+    $s = alternativesScenario();
+    $request = alternativesRequest($s);
+    app(ProposeChangeAlternatives::class)->handle($request, $s['jefe']);
+    $alternatives = $request->fresh()->alternatives;
+
+    $this->travel(ComputeChangeAlternatives::QUEUE_STALE_AFTER + 1)->seconds();
+    app(ProposeChangeAlternatives::class)->compute($request->id, $alternatives['calculation_id']);
+
+    expect($request->fresh()->alternatives)->toBe($alternatives)
+        ->and(ChangeAlternativesStatus::of($request->fresh()->alternatives))->toBe(ChangeAlternativesStatus::Failed)
+        ->and(Activity::query()->where('subject_id', $request->id)->where('event', 'alternatives_proposed')->exists())->toBeFalse();
+});
+
+it('CR-02: un cálculo que empezó y no terminó en STALE_AFTER se da por fallido', function () {
+    $alternatives = ['status' => 'computing', 'calculation_id' => 'c', 'requested_at' => now()->toIso8601String(), 'started_at' => now()->toIso8601String()];
+
+    $this->travel(ComputeChangeAlternatives::STALE_AFTER + 1)->seconds();
+
+    expect(ChangeAlternativesStatus::of($alternatives))->toBe(ChangeAlternativesStatus::Failed)
+        ->and(ChangeAlternativesStatus::isQueued($alternatives))->toBeFalse();
+});
+
+it('CR-02: si la solicitud se decide mientras se calculan, el cálculo queda fallido sin alternativas', function () {
+    Queue::fake();
+    $s = alternativesScenario();
+    $request = alternativesRequest($s);
+    app(ProposeChangeAlternatives::class)->handle($request, $s['jefe']);
+    $calculation = $request->fresh()->alternatives['calculation_id'];
+    app(RejectChangeRequest::class)->handle($request->fresh(), $s['jefe'], 'No');
+
+    app(ProposeChangeAlternatives::class)->compute($request->id, $calculation);
+    $alternatives = $request->fresh()->alternatives;
+
+    expect($alternatives['status'])->toBe('failed')
+        ->and($alternatives)->not->toHaveKey('items');
+});
+
+it('CR-03: si un grupo fijo de la entrada se mueve entre la revisión y los candados (mismo docente, a la hora de la alternativa), «Esto cambió…»', function () {
+    $s = alternativesScenario();
+    $request = alternativesPropose(alternativesRequest($s), $s['jefe']);
+    $alone = alternativesItem($request, 'alone');
+    $slot = $alone['groups'][0]['sessions'][0];
+    $moved = false;
+    DB::listen(function ($query) use (&$moved, $s, $slot): void {
+        if (! $moved && str_contains($query->sql, 'for share')) {
+            $moved = true;
+            DB::table('group_sessions')->where('group_id', $s['other']->id)->update(['starts_at' => $slot['starts_at'], 'ends_at' => $slot['ends_at']]);
+        }
+    });
+
+    expect($alone['checked_group_ids'])->toContain($s['other']->id)
+        ->and(alternativesError(fn () => app(ChooseChangeAlternative::class)->handle($request, $s['jefe'], $alone['id']), 'alternative'))->toBe(ChooseChangeAlternative::STALE)
+        ->and($moved)->toBeTrue()
+        ->and($request->fresh()->status)->toBe(ChangeRequestStatus::Pending);
 });
 
 it('CR-02: si el motor falla, el cálculo queda fallido con su motivo', function () {

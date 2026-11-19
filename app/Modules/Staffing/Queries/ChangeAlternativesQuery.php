@@ -30,6 +30,9 @@ use Illuminate\Support\Collection;
  * El puntaje de una alternativa es lo que agrega al de hoy sobre la misma entrada del motor (`score - score_before`):
  * menos es mejor, y uno negativo mejora el horario de hoy. Lo pedido no tiene puntaje (el motor no lo evalúa).
  *
+ * Los choques duros que la alternativa conserva porque ya estaban (`previous_problems`) o porque no dependen del acomodo
+ * (`input_problems`: HC-07, HC-08 y HC-13) van aparte, como «ya estaba»: la alternativa no los causa.
+ *
  * Solo lee: la propuesta de lo pedido sale de AssessChangeImpact::proposal(), y la semana se arma con los grupos del
  * mismo periodo, modalidad, campus, plan y semestre que el de la solicitud (el alumno tipo de HC-03).
  */
@@ -43,7 +46,7 @@ final class ChangeAlternativesQuery
      * Las opciones de la solicitud y la elegida para el panel (`$selected`: 'pedido', el id de una alternativa o '' para
      * la de omisión: la primera alternativa si lo pedido deja choques duros, si no lo pedido; ya decidida, la elegida).
      *
-     * @return array{assessable: bool, status: ?string, searched: bool, items: int, message: ?string, computedAt: ?Carbon, chosen: ?array<string, mixed>, tabs: list<array<string, mixed>>, selected: ?array<string, mixed>, pedidoHard: int, engineLine: ?string, moved: list<string>}
+     * @return array{assessable: bool, status: ?string, queued: bool, searched: bool, items: int, message: ?string, computedAt: ?Carbon, chosen: ?array<string, mixed>, tabs: list<array<string, mixed>>, selected: ?array<string, mixed>, pedidoHard: int, engineLine: ?string, moved: list<string>}
      */
     public function for(ChangeRequest $request, string $selected = ''): array
     {
@@ -86,6 +89,7 @@ final class ChangeAlternativesQuery
         return [
             'assessable' => $assessable,
             'status' => $status?->value,
+            'queued' => ChangeAlternativesStatus::isQueued($alternatives),
             'searched' => $status !== null,
             'items' => count($items),
             'message' => ChangeAlternativesStatus::messageOf($alternatives),
@@ -246,7 +250,8 @@ final class ChangeAlternativesQuery
             'near' => $this->near($request, $item),
             'chain' => $chain,
             'teachers' => $teachers,
-            'inputProblems' => $item['input_problems'] ?? [],
+            'inputProblems' => [...array_map(fn (array $problem): array => [...$problem, 'why' => 'Ya estaba'], $item['previous_problems'] ?? []),
+                ...array_map(fn (array $problem): array => [...$problem, 'why' => 'No depende del acomodo'], $item['input_problems'] ?? [])],
             'week' => $this->week($request, collect($item['groups'])->mapWithKeys(fn (array $entry): array => [$entry['group_id'] => $entry['sessions']])->all(), false, $colors),
             'assessedAt' => null,
         ];

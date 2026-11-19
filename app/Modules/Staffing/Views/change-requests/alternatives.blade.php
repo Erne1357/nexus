@@ -15,6 +15,7 @@
     $computing = $status === 'computing';
     $failed = $status === 'failed';
     $none = $status === 'none';
+    $queued = $alternatives['queued'];
     $items = $alternatives['items'];
     $selectedKey = $alternatives['selected']['key'] ?? 'pedido';
     $stale = $staleAlternatives && $items > 0;
@@ -99,8 +100,8 @@
                     @endphp
                     @if ($computing)
                         <div class="{{ $busy }}" wire:poll.2s="pollAlternatives" aria-hidden="true" data-testid="alternatives-computing-slot">
-                            <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon name="o-arrow-path" class="h-4 w-4 shrink-0 motion-safe:animate-spin" />Buscando…</span>
-                            <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">El motor está buscando</span>
+                            <span class="flex items-center gap-1.5 text-sm font-semibold whitespace-nowrap"><x-icon :name="$queued ? 'o-clock' : 'o-arrow-path'" @class(['h-4 w-4 shrink-0', 'motion-safe:animate-spin' => ! $queued]) />{{ $queued ? 'En cola' : 'Calculando…' }}</span>
+                            <span class="truncate text-[12.5px] @max-[30rem]:hidden @max-[26rem]:block">{{ $queued ? 'Espera su turno' : 'El motor está buscando' }}</span>
                         </div>
                     @elseif ($none)
                         <div class="{{ $slot }} border-base-content/25 bg-base-100 text-neutral" data-testid="alternatives-none-slot">
@@ -128,9 +129,9 @@
 
             @if ($computing)
                 <div class="grid gap-2 rounded-field border border-info/45 bg-info/10 px-3.5 py-3" role="status" aria-live="polite" data-testid="alternatives-computing">
-                    <p class="flex items-center gap-2 font-semibold"><x-icon name="o-arrow-path" class="h-4 w-4 shrink-0 text-info motion-safe:animate-spin" aria-hidden="true" />Buscando alternativas…</p>
+                    <p class="flex items-center gap-2 font-semibold"><x-icon :name="$queued ? 'o-clock' : 'o-arrow-path'" @class(['h-4 w-4 shrink-0 text-info', 'motion-safe:animate-spin' => ! $queued]) aria-hidden="true" />{{ $queued ? 'Las alternativas esperan en la cola…' : 'Calculando alternativas…' }}</p>
                     <progress class="progress progress-info h-1.5 w-full" aria-hidden="true"></progress>
-                    <p class="text-[13px] text-neutral">El motor {{ $movingText }}. La página se actualiza sola al terminar.</p>
+                    <p class="text-[13px] text-neutral">{{ $queued ? 'La cola atiende primero lo que ya estaba corriendo; en cuanto empiece, el motor' : 'El motor' }} {{ $movingText }}. La página se actualiza sola al terminar.</p>
                 </div>
             @elseif ($items === 0 && $canSearch && $alternatives['pedidoHard'] > 0)
                 <div class="hidden gap-2 rounded-field border border-info/45 bg-info/10 px-3.5 py-3" wire:loading.grid wire:target="searchAlternatives" role="status" aria-live="polite" data-testid="alternatives-searching">

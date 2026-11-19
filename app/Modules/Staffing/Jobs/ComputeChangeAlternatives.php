@@ -3,7 +3,6 @@
 namespace App\Modules\Staffing\Jobs;
 
 use App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Throwable;
@@ -14,19 +13,28 @@ use Throwable;
  * despacha; este job llama a ProposeChangeAlternatives::compute(), que guarda `ready`, `none` o `failed` solo si ese
  * cálculo sigue siendo el vigente.
  *
- * Uno por solicitud (`ShouldBeUnique`, con un candado que vence a STALE_AFTER) y un solo intento. Si se cae o se vence,
- * failed() deja el cálculo `failed`; si el job muere sin llegar ahí, el cálculo se da por fallido al pasar STALE_AFTER
- * (ChangeAlternativesStatus::of()) y el jefe lo vuelve a pedir.
+ * Un solo intento. No hace falta `ShouldBeUnique`: ProposeChangeAlternatives no pide otro mientras uno está en curso
+ * (el estado y el id del cálculo se escriben con los candados), y un job de un cálculo que ya no es el vigente no hace
+ * nada. Al empezar marca `started_at`. Si se cae o se vence, failed() deja el cálculo `failed`; si muere sin llegar
+ * ahí, el cálculo se da por fallido al pasar STALE_AFTER desde que empezó, o QUEUE_STALE_AFTER desde que se pidió si
+ * nunca empezó (ChangeAlternativesStatus::of()), y el jefe lo vuelve a pedir.
  */
-final class ComputeChangeAlternatives implements ShouldBeUnique, ShouldQueue
+final class ComputeChangeAlternatives implements ShouldQueue
 {
     use Queueable;
 
     /** Segundos que puede correr: el motor tiene ProposePlacements::TIME_LIMIT_SECONDS por cada una de sus dos llamadas, más leer la foto y revisar cada alternativa. */
     public const int TIMEOUT = 120;
 
-    /** Un cálculo en `computing` más viejo que esto se da por fallido (el doble del tiempo del job; supuesto por confirmar). */
+    /** Un cálculo que empezó hace más que esto sin terminar se da por fallido (el doble del tiempo del job; supuesto por confirmar). */
     public const int STALE_AFTER = 2 * self::TIMEOUT;
+
+    /**
+     * Un cálculo que lleva más que esto en la cola sin empezar se da por fallido (supuesto por confirmar): la cola
+     * `default` tiene un solo worker y la comparten las corridas del motor (RunSolver, hasta 660 s), así que el margen es
+     * amplio.
+     */
+    public const int QUEUE_STALE_AFTER = 1800;
 
     public const string FAILED_MESSAGE = 'El motor no pudo calcular las alternativas: vuelve a pedirlas.';
 
@@ -36,14 +44,7 @@ final class ComputeChangeAlternatives implements ShouldBeUnique, ShouldQueue
 
     public bool $failOnTimeout = true;
 
-    public int $uniqueFor = self::STALE_AFTER;
-
     public function __construct(public readonly string $changeRequestId, public readonly string $calculationId) {}
-
-    public function uniqueId(): string
-    {
-        return $this->changeRequestId;
-    }
 
     public function handle(ProposeChangeAlternatives $propose): void
     {

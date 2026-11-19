@@ -78,7 +78,7 @@ it('CR-03: «Aprobar con la alternativa A» la elige, aprueba la solicitud y avi
     altPage($this->w->jefe, $request)
         ->set('alternative', $chain)
         ->set('comment', 'Va la cadena')
-        ->call('approveWithAlternative')
+        ->call('chooseAlternative')
         ->assertHasNoErrors()
         ->assertSee('Lo aprobado · alternativa A')
         ->assertSee('Aprobada · alternativa A');
@@ -94,7 +94,7 @@ it('«Esto cambió…»: si el horario cambió, no aprueba, marca las alternativ
 
     $page = altPage($this->w->jefe, $request)
         ->set('alternative', altId($request))
-        ->call('approveWithAlternative')
+        ->call('chooseAlternative')
         ->assertSeeHtml('data-testid="alternatives-stale"')
         ->assertSee('Esto cambió desde que se calcularon las alternativas')
         ->assertSee('Vencida')
@@ -122,10 +122,14 @@ it('buscando: mientras el motor corre en la cola la pantalla pregunta cada 2 seg
     altPage($this->w->jefe, $request)
         ->assertSeeHtml('data-testid="alternatives-computing"')
         ->assertSeeHtml('wire:poll.2s="pollAlternatives"')
-        ->assertSee('Buscando alternativas…')
+        ->assertSee('En cola')
         ->assertDontSeeHtml('data-testid="search-alternatives"');
 
-    $request->forceFill(['alternatives' => [...$request->alternatives, 'requested_at' => now()->subHour()->toIso8601String()]])->save();
+    $request->forceFill(['alternatives' => [...$request->alternatives, 'started_at' => now()->toIso8601String()]])->save();
+
+    altPage($this->w->jefe, $request)->assertSee('Calculando alternativas…')->assertSeeHtml('wire:poll.2s="pollAlternatives"');
+
+    $request->forceFill(['alternatives' => [...$request->alternatives, 'requested_at' => now()->subHours(2)->toIso8601String(), 'started_at' => now()->subHour()->toIso8601String()]])->save();
 
     altPage($this->w->jefe, $request)
         ->assertDontSeeHtml('wire:poll.2s="pollAlternatives"')
@@ -189,7 +193,7 @@ it('alcance: el jefe de otro departamento no ve la solicitud, y el docente que l
     altPage($this->w->teacherUser, $request)
         ->assertDontSeeHtml('data-testid="search-alternatives"')
         ->call('searchAlternatives')->assertForbidden();
-    altPage($this->w->teacherUser, $request)->set('alternative', altId($request))->call('approveWithAlternative')->assertForbidden();
+    altPage($this->w->teacherUser, $request)->set('alternative', altId($request))->call('chooseAlternative')->assertForbidden();
 
     app(ChooseChangeAlternative::class)->handle($request, $this->w->jefe, altId($request));
     altPage($this->w->teacherUser, $request)->assertDontSeeHtml('data-testid="apply-alternative"')->call('applyAlternative')->assertForbidden();

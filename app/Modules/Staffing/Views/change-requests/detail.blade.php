@@ -172,7 +172,7 @@
                 <div class="flex flex-wrap justify-end gap-2">
                     <x-button label="Rechazar" icon="o-x-circle" :class="'btn-outline btn-error max-md:h-11 max-md:min-h-11 '.($withAlternative ? 'max-md:w-full' : 'max-md:flex-1')" wire:click="reject" spinner="reject" data-testid="reject-request" />
                     @if ($withAlternative)
-                        <x-button :label="'Aprobar con la alternativa '.$option['letter']" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="approveWithAlternative('{{ $option['key'] }}')" spinner="approveWithAlternative" :disabled="$staleChoice" aria-describedby="{{ $staleChoice ? 'approve-why' : '' }}" data-testid="approve-alternative" />
+                        <x-button :label="'Aprobar con la alternativa '.$option['letter']" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="chooseAlternative('{{ $option['key'] }}')" spinner="chooseAlternative" :disabled="$staleChoice" aria-describedby="{{ $staleChoice ? 'approve-why' : '' }}" data-testid="approve-alternative" />
                     @else
                         <x-button :label="$hasAlternatives ? 'Aprobar lo pedido' : 'Aprobar'" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" :disabled="$blockedClashes > 0" aria-describedby="{{ $blockedClashes > 0 ? 'approve-why' : '' }}" data-testid="approve-request" />
                     @endif
