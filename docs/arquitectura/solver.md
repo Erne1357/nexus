@@ -86,7 +86,7 @@ El motor no sabe de dónde viene cada cohorte: solo garantiza que los grupos con
 | `unscheduled[]` | lista | sí | Grupos que no se pudieron colocar: `group_id`, `reasons[]` (identificadores HC y texto). |
 | `hard_violations[]` | lista | sí | Violaciones duras residuales en la solución devuelta: `rule`, `group_ids[]`, `teacher_id`, `room_id`, `message`. Debe estar vacía para `optimal` y `feasible`. |
 | `soft_score` | objeto | sí | `total` y desglose por SC-01 a SC-09 (penalización por regla). Menor es mejor. |
-| `relaxed_rules[]` | lista | no | Reglas que el motor relajó para encontrar solución en una instancia infactible, con los grupos afectados. |
+| `relaxed_rules[]` | lista | no | Reservada para reglas que un motor relaje. En v1 va vacía: ningún motor relaja una regla dura, y lo que no cabe sale en `unscheduled` con las reglas que lo impiden (ver «Resolución», «Relajación»). |
 | `metrics` | objeto | sí | `elapsed_seconds`, `engine`, `engine_version`, `variables`, `constraints`, `iterations` o `branches`, `intermediate_solutions`. |
 | `log` | lista de cadenas | no | Mensajes informativos para la pantalla de corridas. |
 
@@ -279,7 +279,7 @@ Dos familias de booleanas, enlazadas:
 | Opciones cuyas ventanas con laboratorio, taller o sala de cómputo libre no alcanzan sus horas de práctica | HC-06 |
 | Salones de otro campus o fuera de `candidate_room_ids` | El contrato (siempre) |
 
-Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_options`, `rejected_rooms`); un grupo sin opciones (`Variables.unplaceable()`, con `main_reason()`) es lo que la relajación (7.7) reporta como sin programar. Con bloques de 50 o 90 min, las horas que la rejilla no da exactas toman las dos cantidades de bloques más cercanas: con HC-12 activa, solo las que quedan dentro de `weekly_hours_tolerance`, así que con tolerancia 0 el grupo no tiene opciones, como en la heurística (PS-06); sin HC-12, las dos (supuesto por confirmar: la heurística no usa la tolerancia).
+Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_options`, `rejected_rooms`); un grupo sin opciones (`Variables.unplaceable()`, con `main_reason()`) es lo que la resolución (7.7) reporta en `unscheduled` con sus reglas. Con bloques de 50 o 90 min, las horas que la rejilla no da exactas toman las dos cantidades de bloques más cercanas: con HC-12 activa, solo las que quedan dentro de `weekly_hours_tolerance`, así que con tolerancia 0 el grupo no tiene opciones, como en la heurística (PS-06); sin HC-12, las dos (supuesto por confirmar: la heurística no usa la tolerancia).
 
 **Presupuesto al armar** (`BuildBudget`). Las corridas son hilos de un solo proceso con el `mem_limit` del servicio, y cada variable cuesta unos cientos de bytes en Python (9.9 M ocuparon 5.2 GB). Antes de crear los salones de cada grupo se revisa que el modelo no pase de `SOLVER_MAX_MODEL_VARIABLES` (1.5 M por omisión); si pasaría, la corrida falla con `ModelTooLarge` y un mensaje que dice qué hacer, en vez de tumbar el servicio. Cada 25 grupos se revisan también la cancelación (`RunContext.check_cancelled`) y el plazo (`BuildTimeout`). `Window`, `Option` y `Span` usan `__slots__`.
 
@@ -298,7 +298,7 @@ Cada grupo guarda cuántas opciones y salones descartó cada regla (`rejected_op
 
 | Regla | Forma | En el modelo |
 |---|---|---|
-| Asignación | — | Cada grupo movible toma exactamente una opción (`add_exactly_one`). Un grupo sin opciones vuelve infactible el modelo duro: es el gancho de la relajación (7.7), que lo cambia por «a lo más una» con una penalización y reporta el grupo en `unscheduled` con `main_reason()`. |
+| Asignación | — | Cada grupo movible toma exactamente una opción (`add_exactly_one`). Un grupo sin opciones vuelve infactible el modelo duro: es el gancho de la relajación de la asignación (7.7), que lo cambia por «a lo más una» y reporta el grupo en `unscheduled` con sus reglas. |
 | HC-01 | Restricción y dominio | En cada inicio de ventana de un docente, `add_at_most_one` de los `y` de las ventanas que lo cubren, en minutos (vale para grupos de campus con rejillas distintas). Su ocupación fija no entra al dominio. Sin traslado: en el evaluador `travel_minutes` solo cuenta en SC-09, un aviso que no bloquea, así que va al objetivo (7.6). |
 | HC-02 | Restricción y dominio | Igual con los `z` de cada salón; una ventana de 2 horas ocupa su salón completa (PS-05). |
 | HC-03 | Restricción y dominio | Igual por clave de cohorte: dos grupos con una misma clave nunca se empalman, como dice el contrato y hace la heurística. El evaluador busca una combinación del alumno tipo, pero la entrada solo pone `plan:` en el grupo único de su materia, así que dicen lo mismo; el modelo solo es más estricto en una entrada mal armada (dos grupos de una materia con la misma clave `plan:`). |
@@ -423,43 +423,58 @@ Tarea 7.7. `services/solver/app/model/solve.py` resuelve una entrada de punta a 
 
 1. **Programar** (`search.lns`, sin objetivo blando): la primera vuelta con hasta 15 s o la cuarta parte del plazo, y después los vecindarios de los que no quedaron. Tiene el plazo menos la reserva final.
 2. **Mejorar** (`search.improve`, con el objetivo de la 7.6) hasta el plazo menos la reserva final.
-3. **Reserva final** (la décima parte del plazo, hasta 10 s):
-   - Cada grupo que no quedó se intenta solo, con todos sus niveles y lo demás fijo; si cabe, se programa en su mejor opción.
-   - Si no cabe, va a `unscheduled` con sus motivos, del que más opciones le quitó al que menos (el primero es el de `main_reason()`). Por ejemplo, «HC-09: el docente no está disponible en 139 de sus 140 opciones.» y «HC-01: el docente ya tiene clase en 1 de sus 140 opciones, con 1 grupo programado.».
-   - Después, la fase B con objetivo ajusta los salones.
+3. **Reserva final** (la décima parte del plazo, hasta 10 s; `_complete`):
+   - Un solo modelo con todos los que no quedaron y lo demás fijo. El dominio de cada grupo solo depende de lo fijo, así que ese modelo da, de todos a la vez, las opciones que le quitó cada regla. Se arma una vez, sin plazo (de él salen los motivos), con el tope de variables y la cancelación.
+   - Los que no tienen ninguna opción van a `unscheduled` con sus motivos, de la regla que más opciones le quitó a la que menos (la primera es la de `main_reason()`). Por ejemplo, «HC-09: el docente no está disponible en 139 de sus 140 opciones.» y «HC-01: el docente ya tiene clase en 1 de sus 140 opciones, con 1 grupo programado.».
+   - Los que sí tienen opciones se intentan uno por uno, con lo demás fijo y cada uno con su parte del tiempo que queda. Primero se busca su menor nivel del patrón y después, con ese nivel como tope, su menor puntaje (PS-10). Si CP-SAT prueba que ninguna opción sirve con los programados, el motivo lo dice, con las reglas que le quitaron opciones; si no alcanzó el tiempo, también.
+   - Después, la fase B con objetivo ajusta los salones. Una sesión que cambia de salón lleva `changed` vuelto a calcular contra `current_sessions`.
 4. **La salida**:
    - el puntaje de `score.py`, el de PHP;
-   - las duras que encuentre `verify.py`, más las de la entrada (HC-08, PS-08);
-   - `metrics`: las variables y restricciones del modelo más grande, `iterations` (vecindarios de `lns` y de la mejora) e `intermediate_solutions` (la primera solución completa más los vecindarios aceptados);
-   - un `log` con lo programado, lo que quedó fuera de su patrón, la mejora y lo que no cupo.
+   - las duras que encuentre `verify.py`, que ya trae las de la entrada (HC-08, PS-08): una vez por grupo;
+   - `metrics`: las variables y restricciones del modelo más grande, `iterations` (vecindarios de `lns` y de la mejora) e `intermediate_solutions`, las soluciones completas (todos los grupos programados): la primera de `lns` más los vecindarios aceptados sobre ella, 1 si solo la reserva completó a todos y 0 si nunca quedaron todos;
+   - un `log` con lo programado, lo que quedó fuera de su patrón, la mejora y cuántos grupos no cupieron por sus reglas y cuántos por el plazo.
 
-**Límites de la corrida.** El plazo es el `time_limit_seconds` de la entrada. Los hilos, el tope de variables y la cancelación vienen de `SearchLimits.of(RunContext)`: `SOLVER_THREADS` u `options.threads`, con 0 los núcleos del contenedor. La semilla es `options.seed` (0 si no la trae).
+**Límites de la corrida.** El plazo es el `time_limit_seconds` de la entrada. Los hilos, el tope de variables y la cancelación vienen de `SearchLimits.of(RunContext)`: `SOLVER_THREADS` u `options.threads`; con 0, los núcleos del contenedor, y nunca más que esos (con `threads=64` en un contenedor de 2 CPU son 2), porque la memoria de CP-SAT crece con los hilos y el tope de variables se midió con 2. La semilla es `options.seed` (0 si no la trae), también en los modelos de salones.
 
 **Cancelación.** Se revisa al armar cada modelo (`BuildBudget`), cada 0.2 s mientras CP-SAT resuelve (`stop_search`) y entre vecindarios. La excepción sale del motor y la corrida queda `cancelled`.
 
 **Avance.** `context.report(avance, mejor puntaje)` nunca baja:
-- de 0 a 40 al programar: los grupos programados entre los movibles, con cada solución intermedia de la primera vuelta (callback de CP-SAT, `run_solver(on_solution=…)`) y después de cada vecindario, sin puntaje hasta que todos estén programados;
-- de 40 a 95 al mejorar: el plazo transcurrido, con el mejor puntaje;
+- de 0 a 40 al programar: los grupos programados entre los movibles, con cada solución intermedia de la primera vuelta (callback de CP-SAT, `run_solver(on_solution=…)`) y después de cada vecindario;
+- de 40 a 95 al mejorar: el plazo transcurrido;
 - 99 al terminar los salones; la corrida pone el 100 con la salida.
 
-**Estado y óptimo.** `feasible` si todo quedó sin duras, `partial` si algo quedó fuera o hay duras (también las de la entrada), `infeasible` si ningún grupo cupo. Nunca `optimal`: la búsqueda por vecindarios no da una cota, así que no prueba que la solución sea la mejor, y el `log` lo dice. Los vecindarios sí prueban su óptimo local, y la mejora para cuando todos lo prueban sin mejorar.
+El mejor puntaje va solo cuando todos los grupos están programados; antes es `None`, porque el puntaje de menos grupos se ve mejor de lo que es. Si la corrida termina con grupos fuera, la corrida toma el `soft_score` de la salida al terminar.
 
-**Relajación.** Lo que se relaja es la asignación: «a lo más una opción» por grupo en la búsqueda, así que un grupo que no cabe no vuelve infactible la corrida y queda en `unscheduled`. El motor nunca relaja una regla dura en su salida, así que `relaxed_rules` va vacía, como en la heurística.
+**Estado y óptimo.** `feasible` si todo quedó sin duras. `infeasible` solo si no quedó ningún grupo y a todos los que faltan se lo impiden sus reglas (no tienen opciones, o CP-SAT probó que no caben). Si a alguno le faltó tiempo, `partial`, igual que con grupos fuera o con duras, también las de la entrada. Nunca `optimal`: la búsqueda por vecindarios no da una cota, así que no prueba que la solución sea la mejor, y el `log` lo dice. Los vecindarios sí prueban su óptimo local, y la mejora para cuando todos lo prueban sin mejorar. Un `MODEL_INVALID` de CP-SAT es un defecto del motor y no se esconde como «no cabe»: `run_solver` lanza `InvalidModel` y la corrida queda `failed` con el mensaje de CP-SAT.
+
+**Relajación** (acuerdo entre rieles, supuesto por confirmar). Lo que se relaja es la asignación, no las reglas: en la búsqueda cada grupo toma «a lo más una opción», así que un grupo que no cabe no vuelve infactible la corrida; queda sin programar y se reporta en `unscheduled` con las reglas que lo impiden. Así se cumple lo que pide la 7.7, reportar qué restricciones no se pudieron cumplir y para qué grupos. Las reglas duras nunca se relajan en la salida, y `relaxed_rules` va vacía, como en la heurística: según SV-06, un grupo con una dura en la salida no se escribe y se queda como está (eso es supuesto por confirmar; lo confirmado por el usuario el 17 de noviembre de 2026 es que la corrida se acepta con grupos sin acomodar y que esos conservan su horario).
 
 **Medición** (con el motor, 2 hilos, 2 CPU y 2 GB):
-- en `tiny`, `small` y `medium`, con el plazo de su entrada, `feasible` en menos de medio segundo, con 36, 42 y 49;
-- en `infeasible`, `partial` en 0.1 s, con g001 y g002 en `unscheduled` (HC-09 y HC-01) y los grupos de t002 programados;
-- en `department-multicampus`, solo en la máquina: 27 718 a 27 765 con 60 s (60.2 s) y 23 370 con 300 s (300.3 s), todos programados, 65 fuera de su patrón y sin duras. Con 60 s reportó 111 avances, el primero a los 2.1 s.
+- en `tiny`, `small` y `medium`, con el plazo de su entrada, `feasible` en menos de 0.2 s, con 36, 42 y 49;
+- en `infeasible`, `partial` en 0.1 s, con g001 y g002 en `unscheduled` (HC-09 al frente y HC-01) y los grupos de t002 programados;
+- en `department-multicampus`, una corrida a la vez con la máquina compartida con otras sesiones (carga de 3 a 4 en 16 núcleos), todos programados, 65 fuera de su patrón y sin duras:
+
+| Plazo | Tiempo | Vecindarios (aceptados) | Total | SC-01 | SC-02 | SC-03 | SC-04 | SC-05 | SC-06 | SC-07 | SC-08 | SC-09 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 60 s | 60.3 s | 24 (24) | 28 579 | 290 | 156 | 0 | 17 092 | 9 111 | 1 190 | 30 | 362 | 348 |
+| 300 s | 300.3 s | 404 (180) | 23 191 | 60 | 162 | 0 | 16 756 | 4 701 | 898 | 6 | 350 | 258 |
+
+La heurística da 23 608 con su búsqueda local. Con 60 s, `lns` tardó 38 s en programar a todos y quedaron 16 s para mejorar.
 
 **Pruebas** (`services/solver/tests/test_engine_cpsat.py`):
 - el ciclo completo por la API con `SOLVER_ENGINE=cpsat` sobre `tiny`;
 - los fixtures sin duras;
 - `infeasible` con sus grupos y reglas;
-- un grupo sin opciones (HC-05) que no tumba la corrida;
+- un grupo sin opciones (HC-05) que no tumba la corrida, y `infeasible` cuando ninguno cabe por sus reglas;
+- 40 grupos sin lugar, todos con su regla y sin armar una entrada por cada uno;
+- un grupo al que le faltó tiempo en la reserva dice que faltó tiempo, y la corrida es `partial`;
+- HC-08 una sola vez por grupo;
 - los motivos de un caso a mano;
-- el avance;
+- el avance, sin mejor puntaje ni soluciones completas mientras falte un grupo;
 - el plazo con reloj real en una carga generada de 150 grupos con 4 s;
 - la cancelación desde el aviso de avance y por la API, que libera el lugar.
+
+En `test_model_room_model.py`, `changed` al cambiar de salón; en `test_model_search.py`, el tope de hilos y que un `MODEL_INVALID` lanza `InvalidModel`.
 
 ## Descomposición del problema
 
@@ -469,14 +484,14 @@ La unidad de corrida es la carga: un departamento en una modalidad, con sus grup
 2. **Por carrera.** El coordinador lanza corridas de los grupos de su carrera dentro de las cargas que toca, para explorar y comparar. No las acepta.
 3. **Tronco común primero, sugerido.** Las materias compartidas entre carreras (Cálculo, Álgebra, Ética…) cruzan más restricciones, así que conviene programarlas primero. No se exige: cada departamento corre cuando quiere, y la pantalla avisa cuando los grupos con los que comparte cohorte todavía no tienen horario aceptado. `PlanRun` (fase 6) propone el orden y deja la decisión al jefe.
 
-Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte queda `partial`, se puede relanzar con más tiempo o con otra regla relajada.
+Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte queda `partial`, se puede relanzar con más tiempo o después de ajustar lo que dicen los motivos de `unscheduled` (en v1 ningún motor relaja una regla dura).
 
 ## Límites de tiempo y soluciones parciales
 
 - Toda corrida tiene `time_limit_seconds`; por defecto 60 por carrera y 300 por departamento (parámetros en `settings`).
 - El motor devuelve siempre la mejor solución encontrada, con `status` honesto: `feasible` si no violó nada pero no probó óptimo, `partial` si dejó grupos sin colocar.
 - Las soluciones intermedias se reportan para progreso; la pantalla muestra el mejor puntaje hasta el momento y permite cancelar y quedarse con lo que hay.
-- Una instancia `infeasible` no se devuelve vacía: los motores programan lo que cabe y reportan los demás en `unscheduled` con las reglas que se lo impiden (la heurística, del candidato que más descartó; CP-SAT, de las opciones que le quitó cada regla). Ninguno relaja una regla dura en su salida (`relaxed_rules` vacía; ver «Resolución»).
+- Una instancia infactible no se devuelve vacía: los motores programan lo que cabe y reportan los demás en `unscheduled` con las reglas que se lo impiden (la heurística, del candidato que más descartó; CP-SAT, de las opciones que le quitó cada regla). Ninguno relaja una regla dura en su salida: en v1, `relaxed_rules` va vacía (ver «Resolución», «Relajación»).
 
 ## Límites del contrato v1
 
