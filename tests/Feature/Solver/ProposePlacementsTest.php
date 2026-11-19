@@ -15,9 +15,11 @@ use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Solver\Actions\ProposePlacements;
 use App\Modules\Solver\Contract\GroupInput;
 use App\Modules\Solver\Contract\ProposedSession;
+use App\Modules\Solver\Contract\RunMetrics;
 use App\Modules\Solver\Contract\RunStatus;
 use App\Modules\Solver\Contract\SessionKind;
 use App\Modules\Solver\Contract\SessionSlot;
+use App\Modules\Solver\Contract\SoftScore;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
 use App\Modules\Solver\Engines\EngineRegistry;
@@ -212,6 +214,67 @@ it('sin alternativa: el único lugar posible es el actual', function () {
     $result = placementsAction()->propose($base, PhpHeuristicEngine::KEY, 3);
 
     expect($result->alternatives)->toBe([])->and($result->stop)->toBe(PlacementStop::NoPlacement);
+});
+
+/**
+ * Un motor que deja cada grupo movible donde está, pero con sus sesiones partidas en horas sueltas: lunes de 7:00 a 9:00
+ * sale como 7:00 a 8:00 y 8:00 a 9:00, en el mismo salón.
+ */
+function placementsSplittingEngine(string $key = 'parte'): SolverEngine
+{
+    return new class($key) implements SolverEngine
+    {
+        public function __construct(private readonly string $engineKey) {}
+
+        public function key(): string
+        {
+            return $this->engineKey;
+        }
+
+        public function label(): string
+        {
+            return 'Parte las sesiones';
+        }
+
+        public function supportedVersions(): array
+        {
+            return [1];
+        }
+
+        public function checksHardRules(): bool
+        {
+            return true;
+        }
+
+        public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
+        {
+            $sessions = [];
+
+            foreach ($input->groups as $group) {
+                if (! $group->movable) {
+                    continue;
+                }
+
+                foreach ($group->currentSessions as $slot) {
+                    for ($hour = (int) substr($slot->startsAt, 0, 2); $hour < (int) substr($slot->endsAt, 0, 2); $hour++) {
+                        $sessions[] = new ProposedSession($group->id, $slot->day, sprintf('%02d:00', $hour), sprintf('%02d:00', $hour + 1), $slot->roomId, $slot->kind, false);
+                    }
+                }
+            }
+
+            return new SolverOutput(1, $input->runId, RunStatus::Feasible, $sessions, [], [], [], new SoftScore(0, []), [], new RunMetrics(0.0, $this->engineKey, '1'), []);
+        }
+    };
+}
+
+it('CR-02: partir una sesión de 2 h en dos de 1 h a las mismas horas y en el mismo salón no cuenta como alternativa', function () {
+    $current = [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room_id' => 'r1', 'kind' => 'teoria'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room_id' => 'r1', 'kind' => 'teoria']];
+    $base = placementsInput([placementsGroup('g1', ['teacher_id' => 't1', 'current_sessions' => $current])]);
+
+    $result = placementsAction([placementsSplittingEngine()])->propose($base, 'parte', 3);
+
+    expect($result->alternatives)->toBe([])
+        ->and($result->stop)->toBe(PlacementStop::NoPlacement);
 });
 
 it('respeta el plazo: cada vuelta le da al motor los segundos que quedan y no empieza otra con menos de uno', function () {

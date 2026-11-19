@@ -19,6 +19,10 @@ use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Minutes;
+use App\Modules\Solver\Contract\ProposedSession;
+use App\Modules\Solver\Contract\RunMetrics;
+use App\Modules\Solver\Contract\RunStatus;
+use App\Modules\Solver\Contract\SoftScore;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
 use App\Modules\Solver\Engines\EngineRegistry;
@@ -269,6 +273,61 @@ it('CR-02: sin acomodo sin choques lo registra, y el jefe solo puede rechazar', 
         ->and($request->alternatives['stop'])->toBe('no_placement')
         ->and(fn () => app(ApproveChangeRequest::class)->handle($request, $s['jefe']))->toThrow(ValidationException::class)
         ->and(app(RejectChangeRequest::class)->handle($request, $s['jefe'], 'No hay lugar')->status)->toBe(ChangeRequestStatus::Rejected);
+});
+
+it('CR-02: una alternativa que deja el grupo pedido como está hoy no cuenta, aunque el motor parta sus sesiones de 2 h en horas sueltas', function () {
+    $s = alternativesScenario();
+    GroupSession::query()->where('group_id', $s['group']->id)->delete();
+
+    foreach ([1, 3] as $day) {
+        GroupSession::factory()->for($s['group'])->inRoom($s['roomA'])->on($day, '07:00', '09:00')->create();
+    }
+
+    app()->instance(EngineRegistry::class, new EngineRegistry([new class implements SolverEngine
+    {
+        public function key(): string
+        {
+            return PhpHeuristicEngine::KEY;
+        }
+
+        public function label(): string
+        {
+            return 'Parte las sesiones';
+        }
+
+        public function supportedVersions(): array
+        {
+            return [1];
+        }
+
+        public function checksHardRules(): bool
+        {
+            return true;
+        }
+
+        public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
+        {
+            $sessions = [];
+
+            foreach ($input->groups as $group) {
+                foreach ($group->movable ? $group->currentSessions : [] as $slot) {
+                    for ($hour = (int) substr($slot->startsAt, 0, 2); $hour < (int) substr($slot->endsAt, 0, 2); $hour++) {
+                        $sessions[] = new ProposedSession($group->id, $slot->day, sprintf('%02d:00', $hour), sprintf('%02d:00', $hour + 1), $slot->roomId, $slot->kind, false);
+                    }
+                }
+            }
+
+            return new SolverOutput(1, $input->runId, RunStatus::Feasible, $sessions, [], [], [], new SoftScore(0, []), [], new RunMetrics(0.0, PhpHeuristicEngine::KEY, '1'), []);
+        }
+    }]));
+
+    $sessions = array_map(fn (int $day): array => ['day' => $day, 'starts_at' => '09:00', 'ends_at' => '11:00'], [1, 3]);
+    $request = app(RequestChange::class)->handle($s['group'], $s['teacherUser'], ChangeRequestKind::Schedule, 'A las 9', 'Otro trabajo', ['sessions' => $sessions])->fresh();
+    $request = alternativesPropose($request, $s['jefe']);
+
+    expect($request->impact['hard'])->not->toBe([])
+        ->and($request->alternatives['status'])->toBe('none')
+        ->and($request->alternatives['items'])->toBe([]);
 });
 
 it('CR-02: no pide alternativas para una solicitud sin choques duros ni para una que solo trae texto', function (string $case) {

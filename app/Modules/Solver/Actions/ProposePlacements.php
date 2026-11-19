@@ -34,7 +34,8 @@ use InvalidArgumentException;
  *   vacío y suma las horas semanales del grupo, con la tolerancia de HC-12 de la entrada.
  * - Cada alternativa se valida con el evaluador sobre la entrada sin modificar, con los grupos fijados como movibles:
  *   solo cuenta si todos los grupos quedan programados, sin violaciones duras **nuevas** (las que la base ya tenía con
- *   las sesiones actuales no cuentan) y si cambia algo respecto de las sesiones actuales. HC-07, HC-08 y HC-13 no
+ *   las sesiones actuales no cuentan) y si cambia algo respecto de las sesiones actuales, comparadas unidas (partir una
+ *   sesión en horas sueltas a las mismas horas y en el mismo salón no es un cambio). HC-07, HC-08 y HC-13 no
  *   dependen del acomodo (ApplyPlan::INPUT_RULES): no la descartan y salen en `hard_violations` como problemas de la
  *   entrada, igual que las previas (entonces la salida es `partial`). Su puntaje blando es el de esa evaluación.
  * - Diversificar: la heurística es determinista (la misma entrada da siempre la misma salida; `options.seed` no se usa),
@@ -368,7 +369,9 @@ final class ProposePlacements
     }
 
     /**
-     * Los movibles cuya colocación no es la actual.
+     * Los movibles cuya colocación no es la actual (CR-02: una que deja el grupo como está no cuenta). Se compara con
+     * las sesiones unidas, las contiguas del mismo día y salón, así que partir una sesión de 2 h en dos de 1 h a las
+     * mismas horas no es un cambio.
      *
      * @param  list<ProposedSession>  $placement
      * @param  array<string, GroupInput>  $movable
@@ -379,23 +382,47 @@ final class ProposePlacements
         $proposed = [];
 
         foreach ($placement as $session) {
-            $proposed[$session->groupId][self::slotKey($session->day, $session->startsAt, $session->endsAt, $session->roomId)] = true;
+            $proposed[$session->groupId][] = $session;
         }
 
         $changed = [];
 
         foreach ($movable as $groupId => $group) {
-            $current = self::slotKeys($group->currentSessions);
-            $mine = $proposed[$groupId] ?? [];
-            ksort($current);
-            ksort($mine);
-
-            if ($current !== $mine) {
+            if (self::joinedKeys($group->currentSessions) !== self::joinedKeys($proposed[$groupId] ?? [])) {
                 $changed[] = $groupId;
             }
         }
 
         return $changed;
+    }
+
+    /**
+     * Las llaves de las sesiones con las contiguas del mismo día y salón unidas, ordenadas.
+     *
+     * @param  list<SessionSlot|ProposedSession>  $slots
+     * @return list<string>
+     */
+    private static function joinedKeys(array $slots): array
+    {
+        usort($slots, fn (SessionSlot|ProposedSession $a, SessionSlot|ProposedSession $b): int => [$a->day, self::minutes($a->startsAt)] <=> [$b->day, self::minutes($b->startsAt)]);
+        $joined = [];
+
+        foreach ($slots as $slot) {
+            $last = array_key_last($joined);
+
+            if ($last !== null && $joined[$last][0] === $slot->day && $joined[$last][3] === $slot->roomId && $joined[$last][2] === self::minutes($slot->startsAt)) {
+                $joined[$last][2] = self::minutes($slot->endsAt);
+
+                continue;
+            }
+
+            $joined[] = [$slot->day, self::minutes($slot->startsAt), self::minutes($slot->endsAt), $slot->roomId];
+        }
+
+        $keys = array_map(fn (array $slot): string => implode('|', [$slot[0], $slot[1], $slot[2], $slot[3] ?? '']), $joined);
+        sort($keys);
+
+        return $keys;
     }
 
     /**
