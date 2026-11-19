@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Scheduling\Rules\Cohorts;
+use App\Modules\Scheduling\Rules\TypicalStudentCombination;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use Tests\Support\Scheduling\States;
 
@@ -102,4 +103,106 @@ it('HC-03: un grupo de paquete sin campus lleva el marcador «none» en la clave
         ->build();
 
     expect(cohortsOf($state, ['A'])['A'])->toContain('package:PK:none:1');
+});
+
+/**
+ * Las claves `combination:` de los grupos dados.
+ *
+ * @param  list<string>  $groupIds
+ * @return array<string, list<string>>
+ */
+function combinationCohortsOf(ScheduleState $state, array $groupIds): array
+{
+    return Cohorts::combinations($state, array_map(fn (string $id) => $state->groupOrFail($id), $groupIds));
+}
+
+it('HC-03: en un semestre con una materia de varios grupos, la combinación del alumno tipo lleva a los únicos y al grupo de cada otra materia que hoy cabe', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->session('CAL', 1, '07:00', '09:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 2, '07:00', '09:00')
+        ->build();
+
+    expect(combinationCohortsOf($state, ['CAL', 'QUI-A', 'QUI-B']))->toBe([
+        'CAL' => ['combination:P1:1:C2'],
+        'QUI-A' => [],
+        'QUI-B' => ['combination:P1:1:C2'],
+    ])->and(cohortsOf($state, ['CAL', 'QUI-A', 'QUI-B']))->toBe(['CAL' => ['plan:P1:1:C2'], 'QUI-A' => [], 'QUI-B' => []]);
+});
+
+it('HC-03: la combinación junta solo los grupos de la combinación vigente, la que ve el validador: las opciones de una materia no comparten la clave entre sí', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->group(States::group('FIS-A', subject: 'FIS', code: 'A'))
+        ->group(States::group('FIS-B', subject: 'FIS', code: 'B'))
+        ->session('CAL', 1, '07:00', '09:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 2, '07:00', '09:00')
+        ->session('FIS-A', 3, '07:00', '09:00')
+        ->session('FIS-B', 2, '08:00', '10:00')
+        ->build();
+    $ids = ['CAL', 'QUI-A', 'QUI-B', 'FIS-A', 'FIS-B'];
+    $keyed = array_keys(array_filter(combinationCohortsOf($state, $ids)));
+    $slots = fn (string $id): array => array_map(fn ($session): array => ['day' => $session->day, 'start' => $session->start, 'end' => $session->end], $state->sessionsOf($id));
+
+    expect($keyed)->toBe(['CAL', 'QUI-B', 'FIS-A'])
+        ->and(TypicalStudentCombination::exists(['CAL' => [$slots('CAL')], 'QUI' => [$slots('QUI-B')], 'FIS' => [$slots('FIS-A')]]))->toBeTrue()
+        ->and(TypicalStudentCombination::exists(['CAL' => [$slots('CAL')], 'QUI' => [$slots('QUI-A'), $slots('QUI-B')], 'FIS' => [$slots('FIS-A'), $slots('FIS-B')]]))->toBeTrue();
+});
+
+it('HC-03: sin combinación hoy, la del alumno tipo toma el primer grupo de cada materia por su clave (supuesto por confirmar)', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->session('CAL', 1, '07:00', '09:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 1, '07:00', '08:00')
+        ->build();
+
+    expect(combinationCohortsOf($state, ['CAL', 'QUI-A', 'QUI-B']))->toBe([
+        'CAL' => ['combination:P1:1:C2'],
+        'QUI-A' => ['combination:P1:1:C2'],
+        'QUI-B' => [],
+    ]);
+});
+
+it('HC-03: si hoy no hay combinación solo por un grupo que se va a reprogramar, se elige como si no tuviera sesiones y no se fija una opción que choca con lo que no se mueve', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('FIS', subject: 'FIS'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->session('CAL', 1, '07:00', '10:00')
+        ->session('FIS', 1, '09:00', '10:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 1, '07:00', '08:00')
+        ->build();
+    $ids = ['CAL', 'FIS', 'QUI-A', 'QUI-B'];
+
+    expect(array_keys(array_filter(Cohorts::combinations($state, array_map(fn (string $id) => $state->groupOrFail($id), $ids), rescheduled: ['CAL']))))
+        ->toBe(['CAL', 'FIS', 'QUI-B'])
+        ->and(array_keys(array_filter(combinationCohortsOf($state, $ids))))->toBe(['CAL', 'FIS', 'QUI-A']);
+});
+
+it('HC-03: un semestre en que cada materia tiene un solo grupo no lleva combinación, y un grupo cancelado tampoco', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI', subject: 'QUI'))
+        ->group(States::group('FIS-A', subject: 'FIS', semester: 2))
+        ->group(States::group('FIS-B', subject: 'FIS', semester: 2, active: false))
+        ->build();
+
+    expect(combinationCohortsOf($state, ['CAL', 'QUI', 'FIS-A', 'FIS-B']))->toBe(['CAL' => [], 'QUI' => [], 'FIS-A' => [], 'FIS-B' => []]);
+});
+
+it('HC-03: la clave `combination:` no cuenta para SC-01 (sus grupos ya cuentan en `plan:`)', function () {
+    expect(Cohorts::forStudentGaps(['plan:P1:1:C2', 'combination:P1:1:C2', 'package:PK:C2:1']))->toBe(['plan:P1:1:C2', 'package:PK:C2:1'])
+        ->and(Cohorts::isCombination('combination:P1:1:C2'))->toBeTrue()
+        ->and(Cohorts::isCombination('plan:P1:1:C2'))->toBeFalse();
 });

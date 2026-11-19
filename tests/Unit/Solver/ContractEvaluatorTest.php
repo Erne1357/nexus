@@ -293,3 +293,64 @@ it('una clave de paquete sin campus (`package:<id>:<n>`) ya no da paquete', func
     expect(ContractState::from($input, [])->state->group('g007')->packageId)->toBeNull()
         ->and((new ContractEvaluator)->evaluate($input, $sessions)->hardViolations)->toBe([]);
 });
+
+/**
+ * `medium` con un semestre más (p001, 5, C1): g020 movible y g021 fijo, únicos de su materia, y MED-0022 con dos grupos
+ * fijos de otro departamento (g022 el lunes de 10:00 a 12:00 y g023 el martes de 7:00 a 9:00), con las claves que da
+ * Cohorts: `plan:` en los únicos y `combination:` en los únicos y en g022.
+ */
+function evaluatorCombinationInput(bool $withCombination = true): SolverInput
+{
+    return evaluatorMediumInput(function (array $data) use ($withCombination): array {
+        $group = fn (string $id, string $subject, array $cohorts, array $fixed): array => [
+            'id' => $id, 'campus_code' => 'C1', 'subject_code' => $subject, 'department_id' => $fixed === [] ? 'd001' : 'd002', 'owner_career_id' => 'c001',
+            'study_plan_id' => 'p001', 'semester' => 5, 'weekly_hours' => 2, 'practice_hours' => 0, 'needs_lab' => false, 'capacity' => 30,
+            'cohorts' => array_values(array_filter($cohorts, fn (string $key): bool => $withCombination || ! str_starts_with($key, 'combination:'))),
+            'fixed_sessions' => $fixed, 'candidate_room_ids' => [], 'movable' => $fixed === [], 'current_sessions' => [],
+        ];
+        $at = fn (int $day, string $start, string $end): array => ['day' => $day, 'starts_at' => $start, 'ends_at' => $end, 'room_id' => 'r001', 'kind' => 'teoria'];
+
+        $data['groups'][] = $group('g020', 'MED-0020', ['plan:p001:5:C1', 'combination:p001:5:C1'], []);
+        $data['groups'][] = $group('g021', 'MED-0021', ['plan:p001:5:C1', 'combination:p001:5:C1'], [$at(3, '07:00', '09:00')]);
+        $data['groups'][] = $group('g022', 'MED-0022', ['combination:p001:5:C1'], [$at(1, '10:00', '12:00')]);
+        $data['groups'][] = $group('g023', 'MED-0022', [], [$at(2, '07:00', '09:00')]);
+
+        return $data;
+    });
+}
+
+it('HC-03: con la combinación del alumno tipo en la entrada, el evaluador ve el núcleo sin combinación igual que el validador', function () {
+    $clash = evaluatorSessions('g020', [[1, '10:00', '11:00', 'r002'], [2, '07:00', '08:00', 'r002']]);
+    $fits = evaluatorSessions('g020', [[1, '07:00', '08:00', 'r002'], [2, '10:00', '11:00', 'r002']]);
+
+    expect((new ContractEvaluator)->evaluate(evaluatorCombinationInput(), $clash)->rulesByGroup())
+        ->toEqualCanonicalizing(['g020' => ['HC-03'], 'g022' => ['HC-03'], 'g023' => ['HC-03']])
+        ->and((new ContractEvaluator)->evaluate(evaluatorCombinationInput(), $fits)->hardViolations)->toBe([])
+        ->and((new ContractEvaluator)->evaluate(evaluatorCombinationInput(withCombination: false), $clash)->hardViolations)->toBe([]);
+});
+
+it('SC-01 no cuenta la clave `combination:`: el puntaje blando es el mismo con ella y sin ella', function () {
+    $sessions = evaluatorSessions('g020', [[1, '07:00', '08:00', 'r002'], [2, '10:00', '11:00', 'r002']]);
+
+    expect((new ContractEvaluator)->evaluate(evaluatorCombinationInput(), $sessions)->softScore)
+        ->toEqual((new ContractEvaluator)->evaluate(evaluatorCombinationInput(withCombination: false), $sessions)->softScore);
+});
+
+it('HC-10: un préstamo con `group_id` solo le sirve a ese grupo; sin él, a todo el departamento', function () {
+    $input = fn (?string $groupId): SolverInput => evaluatorMediumInput(function (array $data) use ($groupId): array {
+        if ($groupId !== null) {
+            $data['agreements'][0]['group_id'] = $groupId;
+        }
+
+        return $data;
+    });
+    $sessions = [
+        ...evaluatorSessions('g002', [[2, '08:00', '10:00', 'r003', 'practica']]),
+        ...evaluatorSessions('g005', [[2, '07:00', '08:00', 'r003', 'practica']]),
+    ];
+    $hc10 = fn (SolverInput $input): array => array_keys(array_filter((new ContractEvaluator)->evaluate($input, $sessions)->rulesByGroup(), fn (array $rules): bool => in_array('HC-10', $rules, true)));
+
+    expect($hc10($input(null)))->toBe([])
+        ->and($hc10($input('g002')))->toBe(['g005'])
+        ->and($hc10($input('g005')))->toBe(['g002']);
+});
