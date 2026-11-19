@@ -228,7 +228,7 @@ class _Builder:
             literals = [
                 literal for span in spans if span.start <= start and end <= span.end for literal in span.literals
             ]
-            occupied.append(self._used(literals, exclusive) if literals else 0)
+            occupied.append(self._used(literals, exclusive))
         count = len(pieces)
         before: list[cp_model.LinearExprT | int] = [0] * count
         after: list[cp_model.LinearExprT | int] = [0] * count
@@ -254,7 +254,7 @@ class _Builder:
                     inside = [
                         literal for span in spans if a <= span.start and span.end <= b for literal in span.literals
                     ]
-                    touched[between] = self._any(inside)
+                    touched[between] = self._used(inside, exclusive=False)
                 if isinstance(touched[between], int):
                     continue
                 bound = bound + touched[between] - 1
@@ -280,17 +280,11 @@ class _Builder:
 
         return either
 
-    def _any(self, literals: list) -> cp_model.LinearExprT | int:
+    def _used(self, literals: list, exclusive: bool) -> cp_model.LinearExprT | int:
+        """Si alguna de las ventanas se usa: 0 sin ventanas; su suma, si una regla dura ya impide que se usen dos (o
+        es una sola); si no, una booleana."""
         if not literals:
             return 0
-        used = self.model.new_bool_var("")
-        self.model.add(cp_model.LinearExpr.sum(literals) <= len(literals) * used)
-
-        return used
-
-    def _used(self, literals: list, exclusive: bool) -> cp_model.LinearExprT:
-        """Si alguna de las ventanas se usa: su suma, si una regla dura ya impide que se usen dos; si no, una
-        booleana."""
         if exclusive or len(literals) == 1:
             return cp_model.LinearExpr.sum(literals)
         used = self.model.new_bool_var("")

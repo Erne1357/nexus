@@ -87,7 +87,7 @@ def improve_rooms_scored(
     if not (weights["SC-03"] or weights["SC-06"]):
         return sessions, scorer.score(sessions)
     scope = {group.id for group in data.movable} if scope is None else scope
-    windows = _windows(data, sessions)
+    windows, loose = _windows(data, sessions)
     involved = _involved(data, scorer, windows, scope)
     if groups is not None:
         involved = {window for window in involved if window.group_id in groups}
@@ -104,8 +104,11 @@ def improve_rooms_scored(
         if now >= deadline:
             break
         share = (deadline - now) / (len(days) - index)
+        day_loose = [(room_id, start, end) for room_id, loose_day, start, end in loose if loose_day == day]
         try:
-            rooms.update(_solve_day(data, scorer, by_day[day], involved, scope, now + share, limits, seed))
+            rooms.update(
+                _solve_day(data, scorer, by_day[day], day_loose, involved, scope, groups, now + share, limits, seed)
+            )
         except ModelTooLarge:
             # Un día que pasa del tope de variables se queda con los salones del emparejamiento.
             continue
@@ -118,23 +121,32 @@ def improve_rooms_scored(
         for index, session in enumerate(sessions)
     ]
     before = scorer.score(sessions)
+    if all(new is old for new, old in zip(improved, sessions, strict=True)):
+        # Ningún salón cambió: un solo puntaje (en la mejora corre una vez por vecindario sobre toda la solución).
+        return sessions, before
     after = scorer.score(improved)
 
     return (improved, after) if after.total <= before.total else (sessions, before)
 
 
-def _windows(data: ModelData, sessions: list[ProposedSession]) -> list[_Window]:
-    """Las sesiones con salón de cada grupo y día, como ventanas."""
+def _windows(data: ModelData, sessions: list[ProposedSession]) -> tuple[list[_Window], list[tuple[str, int, int, int]]]:
+    """Las sesiones con salón de cada grupo y día, como ventanas. Un día de un grupo con dos salones no es una
+    ventana del modelo: se queda como está y ocupa sus salones (salón, día, inicio, fin), para que nadie más los tome
+    a esa hora (HC-02)."""
     grouped: dict[tuple[str, int], list[int]] = defaultdict(list)
     for index, session in enumerate(sessions):
         if session.room_id is not None:
             grouped[(session.group_id, session.day)].append(index)
     windows = []
+    loose: list[tuple[str, int, int, int]] = []
     for (group_id, day), indexes in grouped.items():
         group = data.groups[group_id]
         rooms = {sessions[i].room_id for i in indexes}
         if len(rooms) != 1:
-            # Un día con dos salones no es una ventana del modelo: se queda como está.
+            loose.extend(
+                (sessions[i].room_id, day, minutes(sessions[i].starts_at), minutes(sessions[i].ends_at))
+                for i in indexes
+            )
             continue
         windows.append(
             _Window(
@@ -150,7 +162,7 @@ def _windows(data: ModelData, sessions: list[ProposedSession]) -> list[_Window]:
             )
         )
 
-    return windows
+    return windows, loose
 
 
 def _involved(data: ModelData, scorer: SoftScorer, windows: list[_Window], scope: set[str]) -> set[_Window]:
@@ -201,12 +213,16 @@ def _solve_day(
     data: ModelData,
     scorer: SoftScorer,
     windows: list[_Window],
+    loose: list[tuple[str, int, int]],
     involved: set[_Window],
     scope: set[str],
+    groups: set[str] | None,
     deadline: float,
     limits: SearchLimits,
     seed: int,
 ) -> dict[_Window, str]:
+    """Un día: las ventanas del modelo y las que les estorban eligen salón; las demás y `loose` ocupan el suyo. Con
+    `groups`, solo se mueven las de esos grupos."""
     pairs = _adjacent_pairs(data, scorer, windows)
     buildings_near: dict[_Window, set[str]] = defaultdict(set)
     for window, other in pairs:
@@ -216,15 +232,23 @@ def _solve_day(
             buildings_near[window].add(other)
     # Las ventanas que ocupan, a la misma hora, un salón que una ventana del modelo querría (por defecto o de un
     # edificio cercano) también se mueven: así dos grupos pueden cambiar de salón.
+    fitting: dict[_Window, list[str]] = {}
+
+    def candidates(window: _Window, taken: dict[str, list[tuple[int, int]]]) -> list[str]:
+        if window not in fitting:
+            fitting[window] = _fitting(data, window)
+        return _candidates(data, scorer, window, buildings_near[window], taken, fitting[window])
+
     wanted: dict[str, list[_Window]] = defaultdict(list)
     for window in windows:
         if window in involved:
-            for room_id in _candidates(data, scorer, window, buildings_near[window], {}):
+            for room_id in candidates(window, {}):
                 wanted[room_id].append(window)
     blockers = {
         window
         for window in windows
         if window not in involved
+        and (groups is None or window.group_id in groups)
         and any(other.start < window.end and window.start < other.end for other in wanted.get(window.room_id, []))
     }
     moving = [window for window in windows if window in involved or window in blockers]
@@ -232,11 +256,13 @@ def _solve_day(
     for window in windows:
         if window not in involved and window not in blockers:
             taken[window.room_id].append((window.start, window.end))
+    for room_id, start, end in loose:
+        taken[room_id].append((start, end))
 
     model = cp_model.CpModel()
     budget = limits.budget(deadline)
     for window in moving:
-        window.candidates = _candidates(data, scorer, window, buildings_near[window], taken)
+        window.candidates = candidates(window, taken)
         window.choice = {room_id: model.new_bool_var("") for room_id in window.candidates}
         model.add_exactly_one(window.choice.values())
         for room_id, literal in window.choice.items():
@@ -261,6 +287,7 @@ def _solve_day(
             if cost:
                 preference.append((cost, literal))
     if scorer.weights["SC-06"]:
+        in_model = set(moving)
         for window, other in pairs:
             # Un par de ventanas del modelo sale dos veces: se cuenta una, en un orden que no cambia entre corridas.
             if window not in involved or (
@@ -270,7 +297,8 @@ def _solve_day(
             change = model.new_bool_var("")
             for building in sorted({scorer.buildings[room_id] for room_id in window.candidates}):
                 mine = [literal for room_id, literal in window.choice.items() if scorer.buildings[room_id] == building]
-                if isinstance(other, _Window) and other in involved:
+                if isinstance(other, _Window) and other in in_model:
+                    # La otra ventana también elige salón (del modelo o una que le estorba): su edificio no es fijo.
                     theirs = [lit for room, lit in other.choice.items() if scorer.buildings[room] == building]
                     model.add(change >= sum(mine) - sum(theirs))
                 else:
@@ -302,14 +330,12 @@ def _key(window: _Window) -> tuple[str, int, int]:
     return (window.group_id, window.day, window.start)
 
 
-def _candidates(
-    data: ModelData, scorer: SoftScorer, window: _Window, near: set[str], taken: dict[str, list[tuple[int, int]]]
-) -> list[str]:
-    """El salón actual, los por defecto de la materia y los más ajustados de los edificios cercanos, de los que le
-    sirven a la ventana."""
+def _fitting(data: ModelData, window: _Window) -> list[str]:
+    """Los salones que le sirven a la ventana, sin contar lo que ocupan las demás ventanas: su campus y sus
+    candidatos, la capacidad (HC-05), la práctica (HC-06), sin bloqueo, sin ocupación fija y propio o prestado
+    (`room_reason`); del más chico al más grande. Se calcula una vez por ventana y día."""
     group = data.groups[window.group_id]
     allowed = set(group.candidate_room_ids)
-    defaults = scorer.defaults.get((group.subject_code, group.campus_code), set())
 
     def fits(room_id: str) -> bool:
         room = data.rooms[room_id]
@@ -319,16 +345,32 @@ def _candidates(
             and (not data.active("HC-05") or room.capacity >= group.capacity)
             and (not window.practice or not data.active("HC-06") or data.is_practice_space(room_id))
             and data.room_reason(room_id, group.department_id, window.day, window.start, window.end, group.id) is None
-            and not (
-                data.active("HC-02")
-                and any(start < window.end and window.start < end for start, end in taken.get(room_id, []))
-            )
         )
 
-    fitting = sorted(
+    return sorted(
         (room_id for room_id in data.rooms_by_campus.get(group.campus_code, []) if fits(room_id)),
         key=lambda room_id: (data.rooms[room_id].capacity, room_id),
     )
+
+
+def _candidates(
+    data: ModelData,
+    scorer: SoftScorer,
+    window: _Window,
+    near: set[str],
+    taken: dict[str, list[tuple[int, int]]],
+    fitting: list[str],
+) -> list[str]:
+    """El salón actual, los por defecto de la materia y los más ajustados de los edificios cercanos, de los que le
+    sirven a la ventana (`_fitting`) y nadie más ocupa a esa hora (HC-02)."""
+    group = data.groups[window.group_id]
+    defaults = scorer.defaults.get((group.subject_code, group.campus_code), set())
+    if data.active("HC-02"):
+        fitting = [
+            room_id
+            for room_id in fitting
+            if not any(start < window.end and window.start < end for start, end in taken.get(room_id, []))
+        ]
     chosen = {window.room_id: None}
     chosen.update(dict.fromkeys(room_id for room_id in fitting if room_id in defaults))
     for building in sorted(near | {scorer.buildings[window.room_id]}):

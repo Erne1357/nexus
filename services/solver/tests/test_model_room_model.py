@@ -93,6 +93,38 @@ def test_al_cambiar_de_salon_changed_se_vuelve_a_calcular_contra_el_horario_actu
     assert [(s.room_id, s.changed) for s in back] == [("r1", False), ("r1", False)]
 
 
+def test_con_groups_solo_cambian_los_salones_de_esos_grupos():
+    """En un vecindario de la mejora (`groups`), la ventana de otro grupo que ocupa el salón que se quiere no se mueve:
+    es el caso de SC-03 de arriba, pero g2 no es del vecindario, así que g1 se queda en r1. Sin `groups` se cambian."""
+    data = instance(
+        campuses=DAY,
+        groups=[group("g1", 1), group("g2", 1)],
+        rooms=[room("r1"), room("r2")],
+        subject_room_defaults=[{"subject_code": "MAT-g1", "campus_code": "C1", "room_id": "r2", "priority": 1}],
+        soft_weights=weights(sc_03=5),
+    )
+    sessions = [one_hour("g1", 1, "07:00", "r1"), one_hour("g2", 1, "07:00", "r2")]
+
+    assert improved(data, sessions, groups={"g1"}) == sessions
+    assert rooms_of(improved(data, sessions), "g1") == {"r2"}
+
+
+def test_un_dia_con_dos_salones_se_queda_y_ocupa_los_suyos():
+    """Un día de un grupo con dos salones no es una ventana del modelo, pero sus salones siguen ocupados (HC-02): g3
+    está el lunes a las 07:00 en r2 y a las 08:00 en r3, así que g1 no puede irse a r2, su salón por defecto, a las
+    07:00."""
+    data = instance(
+        campuses=DAY,
+        groups=[group("g1", 1), group("g3", 2)],
+        rooms=[room("r1"), room("r2"), room("r3")],
+        subject_room_defaults=[{"subject_code": "MAT-g1", "campus_code": "C1", "room_id": "r2", "priority": 1}],
+        soft_weights=weights(sc_03=5),
+    )
+    sessions = [one_hour("g1", 1, "07:00", "r1"), one_hour("g3", 1, "07:00", "r2"), one_hour("g3", 1, "08:00", "r3")]
+
+    assert improved(data, sessions) == sessions
+
+
 def test_el_modelo_de_salones_de_un_dia_respeta_el_tope_de_variables():
     """`SOLVER_MAX_MODEL_VARIABLES` también vale para el modelo de salones de cada día: si lo pasa, el día se queda con
     los salones del emparejamiento (el caso de SC-03 de arriba, que sin tope sí cambia)."""
