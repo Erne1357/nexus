@@ -51,9 +51,8 @@ final class SolverServiceProvider extends ModuleServiceProvider
 {
     /**
      * Los motores disponibles, con la etiqueta `solver.engines` (engineClasses()): CP-SAT si el servicio está configurado
-     * (fase 7), el de prueba y la heurística en PHP (6.6). El orden importa: mientras no llegue `solver.default_engine`
-     * (7.11), el predeterminado es el último registrado, así que la heurística va al final y es la que se propone al lanzar
-     * una corrida. Los motores no guardan estado, así que el registro puede ser único por proceso; el cliente del servicio
+     * (fase 7), el de prueba y la heurística en PHP (6.6). El que se propone al lanzar es el de `solver.default_engine` de
+     * la modalidad (7.11): de fábrica, CP-SAT en Presencial y la heurística en las demás. Los motores no guardan estado, así que el registro puede ser único por proceso; el cliente del servicio
      * de CP-SAT se arma con `services.solver`. CareerLoadsQuery recuerda sus respuestas en la petición: `scoped`, nunca
      * único (Octane).
      */
@@ -71,9 +70,9 @@ final class SolverServiceProvider extends ModuleServiceProvider
     /**
      * Los motores del registro, en orden: el de prueba siempre; la heurística (6.6) se agrega aquí. CP-SAT (7.9) solo
      * si hay servicio configurado (SOLVER_URL y SOLVER_TOKEN, CpSatClient::configured()), así que no aparece en las
-     * pruebas ni en un servidor sin el contenedor `solver`. Va primero porque, mientras no llegue
-     * `solver.default_engine` (7.11), el predeterminado es el último registrado y CP-SAT no se propone por omisión
-     * (supuesto por confirmar). Se decide al arrancar: cambiar la configuración pide reiniciar `app` y `queue`.
+     * pruebas ni en un servidor sin el contenedor `solver`. El orden es el de la lista de motores al lanzar; el
+     * predeterminado no depende de él sino de `solver.default_engine` (7.11). Se decide al arrancar: cambiar la
+     * configuración pide reiniciar `app` y `queue`.
      *
      * @return list<class-string<SolverEngine>>
      */

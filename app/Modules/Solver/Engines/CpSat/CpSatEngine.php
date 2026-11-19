@@ -25,7 +25,9 @@ use Throwable;
  * - El límite es `time_limit_seconds` más DEADLINE_MARGIN_SECONDS desde que empieza solve(). Ninguna consulta ni
  *   reintento empieza si no terminaría antes del límite (CpSatClient::status()); cuando ya no cabe otra, o el servicio
  *   no contesta (consultas vencidas), cancela la corrida en el servicio y lanza «no respondió a tiempo».
- * - Si el servicio no está, lanza SolverServiceUnavailable (SV-08: la corrida queda fallida con el mensaje).
+ * - Si el servicio no está, lanza SolverServiceUnavailable (SV-08: la corrida queda fallida con el mensaje). Antes de
+ *   todo pregunta su salud (CpSatClient::health(), con el tiempo corto de una consulta): configurado pero caído, falla de
+ *   una vez, sin gastar la parte de la pista en la heurística ni mandar la entrada (revisión del Riel B en #675).
  *
  * - Antes de mandar la entrada corre la heurística en PHP (hintEngine) sobre la misma entrada, con el 15 % del límite
  *   (HINT_TIME_SHARE; la construcción siempre, la búsqueda local con ese tope), y manda su solución como `hint_sessions`
@@ -96,6 +98,10 @@ final readonly class CpSatEngine implements SolverEngine
 
     public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
     {
+        if (! $this->client->health()) {
+            throw SolverServiceUnavailable::unreachable();
+        }
+
         $input = $this->withHint($input, $progress);
         $deadline = now()->addSeconds($input->timeLimitSeconds + self::DEADLINE_MARGIN_SECONDS);
         $runId = $this->client->submit($input->toArray());

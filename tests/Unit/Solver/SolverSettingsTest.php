@@ -1,5 +1,8 @@
 <?php
 
+use App\Modules\Core\Settings\SettingType;
+use App\Modules\Solver\Engines\CpSat\CpSatEngine;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Enums\RunScope;
 use App\Modules\Solver\Enums\SolverPermission;
 use App\Modules\Solver\Rules\SolverSettings;
@@ -49,3 +52,34 @@ it('declara los pesos blandos con un campo por regla, permiso de Subdirección y
 it('un tiempo fuera de 10 a 600 segundos usa el de omisión, como lo valida el lanzamiento (SV-02)', function (int $seconds) {
     expect(SolverSettings::fromValue(['department' => $seconds])->timeLimitFor(RunScope::Department))->toBe(300);
 })->with([5, 9, 601, 3600]);
+
+it('7.11: sin parámetro, Presencial propone CP-SAT y las demás modalidades la heurística (decisión del usuario)', function (string $modality, string $engine) {
+    expect(SolverSettings::fromValue(null)->defaultEngineFor($modality))->toBe($engine);
+})->with([
+    'Presencial' => ['PRES', CpSatEngine::KEY],
+    'EAD' => ['EAD', PhpHeuristicEngine::KEY],
+    'En línea' => ['ENL', PhpHeuristicEngine::KEY],
+    'TecNM Virtual' => ['TNMV', PhpHeuristicEngine::KEY],
+    'una modalidad sin campo' => ['NUEVA', PhpHeuristicEngine::KEY],
+]);
+
+it('7.11: lee el motor de cada modalidad y usa el de fábrica en las que faltan o traen un motor que no es opción', function () {
+    $chosen = SolverSettings::fromValue(null, null, ['pres' => PhpHeuristicEngine::KEY, 'ead' => CpSatEngine::KEY, 'enl' => 'fixed', 'tnmv' => 7]);
+    $invalid = SolverSettings::fromValue(null, null, ['pres' => 'magia']);
+
+    expect($chosen->defaultEngineFor('PRES'))->toBe(PhpHeuristicEngine::KEY)
+        ->and($chosen->defaultEngineFor('EAD'))->toBe(CpSatEngine::KEY)
+        ->and($chosen->defaultEngineFor('ENL'))->toBe(PhpHeuristicEngine::KEY)
+        ->and($chosen->defaultEngineFor('TNMV'))->toBe(PhpHeuristicEngine::KEY)
+        ->and($invalid->defaultEngineFor('PRES'))->toBe(CpSatEngine::KEY);
+});
+
+it('7.11: declara el motor predeterminado como una tabla de opciones por modalidad, con CP-SAT de fábrica en Presencial', function () {
+    $definition = collect(SolverSettings::definitions())->firstWhere('key', SolverSettings::DEFAULT_ENGINE_SETTING);
+
+    expect($definition->type)->toBe(SettingType::ChoiceTable)
+        ->and(array_keys($definition->options))->toBe([PhpHeuristicEngine::KEY, CpSatEngine::KEY])
+        ->and($definition->default)->toBe(['pres' => 'cpsat', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic'])
+        ->and($definition->permission)->toBe(SolverPermission::SettingUpdate)
+        ->and(SolverSettings::fromValue(null, null, $definition->default))->toEqual(new SolverSettings);
+});
