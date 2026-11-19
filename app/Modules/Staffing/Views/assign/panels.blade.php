@@ -51,8 +51,8 @@
                     </button>
                 </li>
             @empty
-                <li class="px-4 py-6 text-center text-sm text-neutral">
-                    {{ $board->total() === 0 ? ($board->campus === null ? 'El departamento no tiene grupos en esta modalidad y periodo.' : "El departamento no tiene grupos en {$board->campus->code}.") : 'Ningún grupo cumple los filtros.' }}
+                <li class="px-4 py-6 text-center text-sm text-neutral" data-testid="assign-no-groups">
+                    @include('staffing::assign.no-groups')
                 </li>
             @endforelse
         </ul>

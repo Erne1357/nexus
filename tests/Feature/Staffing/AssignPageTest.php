@@ -159,6 +159,30 @@ describe('vista por materia', function () {
             ->set('semesterFilter', '2')
             ->assertDontSeeHtml('data-subject="SCD-1021"');
     });
+
+    it('F-09: si el filtro de docente deja la lista vacía, lo dice y ofrece «Ver todos»', function () {
+        $this->world->assign($this->open, $this->teachers[0], $this->jefe);
+
+        assignPage($this->jefe)
+            ->assertSet('state', 'sin')
+            ->set('subjectFilter', 'SCC-1013')
+            ->assertSeeText('Los 2 grupos que cumplen los filtros ya tienen docente.')
+            ->assertSeeHtml('data-testid="show-all-states"')
+            ->call('showAllStates')
+            ->assertSet('state', 'todos')
+            ->assertSeeHtml('data-subject="SCC-1013"')
+            ->set('state', 'con')
+            ->set('subjectFilter', 'SCD-1021')
+            ->assertSeeText('El grupo que cumple los filtros no tiene docente.')
+            ->assertSeeHtml('data-testid="show-all-states"');
+    });
+
+    it('F-09: si los demás filtros dejan la lista vacía, no ofrece «Ver todos»', function () {
+        assignPage($this->jefe)
+            ->set('search', 'sin coincidencias')
+            ->assertSeeText('Ningún grupo cumple los filtros.')
+            ->assertDontSeeHtml('data-testid="show-all-states"');
+    });
 });
 
 describe('vista de dos paneles', function () {
