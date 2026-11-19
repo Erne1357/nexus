@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Notifications\LoadRepublished;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Rules\SnapshotDiff;
+use App\Modules\AcademicLoad\Rules\SnapshotDiffText;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Actions\NotifyHolders;
 use App\Modules\Core\Authorization\Target;
@@ -193,7 +194,7 @@ final class NotifyRepublication
     private static function visibleFirst(array $entries): array
     {
         $quotaOnly = static fn (array $entry): bool => $entry['kind'] === 'changed'
-            && array_diff_key($entry['changes'] ?? [], ['quota' => true, 'career_quotas' => true]) === [];
+            && array_diff_key($entry['changes'] ?? [], SnapshotDiffText::HIDDEN_CHANGES) === [];
 
         return [
             ...array_values(array_filter($entries, static fn (array $entry): bool => ! $quotaOnly($entry))),
