@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\CareerCampus;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Actions\Transitions\PublishLoad;
 use App\Modules\AcademicLoad\Database\Factories\LoadSnapshotFactory;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
@@ -113,6 +114,39 @@ it('publicar desde la confirmación congela la carga, guarda el comentario y avi
     expect($this->load->fresh()->status)->toBe(LoadStatus::Published)
         ->and($this->load->transitions()->sole()->comment)->toBe('Primera publicación')
         ->and(app(LoadVersionsQuery::class)->versions($this->load->fresh())[0])->toMatchArray(['version' => 1, 'groups' => 2, 'sessions' => 2, 'comment' => 'Primera publicación', 'publisher' => 'Laura Méndez']);
+});
+
+it('al republicar, la confirmación dice qué cambia contra la versión vigente por tipo, como el tablero de versiones (ensayo 8.11, E-16)', function () {
+    $moved = componentGroup();
+    componentGroup();
+    app(PublishLoad::class)->handle($this->load->fresh(), $this->subdireccion);
+    $this->load->refresh()->update(['status' => LoadStatus::Closed]);
+    $room = Room::factory()->capacity(40)->create(['building_id' => Building::factory()->create(['campus_id' => loadCampus()->id])->id, 'department_id' => departmentKey(10)]);
+    $moved->sessions()->sole()->update(['day' => 3, 'room_id' => $room->id]);
+
+    $page = Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
+        ->call('confirm');
+    $changes = textOf(domOf($page)->querySelector('[data-testid="publish-changes"]'));
+
+    expect($changes)->toContain('Qué cambia contra la versión 1')
+        ->toContain('Horario: 1 grupo')
+        ->toContain('Salón: 1 grupo')
+        ->not->toContain('Nuevos:')->not->toContain('Cancelados:')->not->toContain('Docente:')->not->toContain('Cupo:');
+});
+
+it('al republicar sin cambios, la confirmación lo dice; en la primera publicación no compara', function () {
+    componentGroup();
+
+    Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load])
+        ->call('confirm')
+        ->assertDontSeeHtml('data-testid="publish-changes"');
+
+    app(PublishLoad::class)->handle($this->load->fresh(), $this->subdireccion);
+    $this->load->refresh()->update(['status' => LoadStatus::Closed]);
+
+    Livewire::actingAs($this->subdireccion)->test(PUBLISH_COMPONENT, ['load' => $this->load->fresh()])
+        ->call('confirm')
+        ->assertSee('Ningún grupo cambia contra la versión 1: la versión 2 no le avisa a nadie.');
 });
 
 it('un veto se muestra en la confirmación y no publica', function () {

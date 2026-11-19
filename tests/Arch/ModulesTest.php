@@ -23,7 +23,7 @@ $leftOf = [
     'Demand' => ['Students'],
     'AcademicLoad' => ['Academic', 'CatalogValidation', 'Demand'],
     'Scheduling' => ['AcademicLoad', 'Facilities', 'Faculty'],
-    'Staffing' => ['Scheduling'],
+    'Staffing' => ['Scheduling', 'Solver'],
     'Solver' => ['Scheduling'],
     'Enrollment' => ['Scheduling', 'Students'],
 ];

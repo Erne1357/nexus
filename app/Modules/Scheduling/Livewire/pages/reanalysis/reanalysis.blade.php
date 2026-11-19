@@ -58,7 +58,7 @@
     @elseif ($state->stage === 'other')
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center" data-testid="reanalysis-empty">
             <x-icon name="o-arrow-path" class="mx-auto mb-2 h-8 w-8 text-neutral" aria-hidden="true" />
-            <p class="font-semibold">La carga de {{ $load->department->name }} está en {{ $load->status->label() }}: se re-analiza cuando vuelva a publicarse.</p>
+            <p class="font-semibold">La carga de {{ $load->department->name }} {{ $load->status->predicate() }}: se re-analiza cuando vuelva a publicarse.</p>
         </div>
     @elseif ($state->stage === 'published' && $careerIds !== null)
         <section class="flex items-start gap-3.5 rounded-box border border-base-300 bg-base-100 px-5 py-5" data-testid="reanalysis-waiting">

@@ -2,8 +2,9 @@
     El estado de la carga en el re-análisis (opción B): la línea del ciclo con la línea del estado debajo y, a la derecha,
     las acciones, como el estado de la carga en «Cierre de la carga».
 
-    - Publicada: «Ya puedes re-analizar la carga.» o «Todavía no se puede re-analizar.» con su motivo, e «Iniciar
-      re-análisis» (con confirmación, ADR-0023; deshabilitado con su motivo escrito debajo, «Nada oculto»).
+    - Publicada: «Ya puedes re-analizar la carga.» o «Todavía no se puede re-analizar.», que manda a «Lo que pide el
+      re-análisis», e «Iniciar re-análisis» (con confirmación, ADR-0023; deshabilitado, descrito por esta línea). El
+      motivo se escribe una sola vez, en la condición que falta (ensayo 8.11, E-06: salía tres veces).
     - En re-análisis: desde cuándo y quién, que docentes y alumnos siguen viendo la versión vigente y cuántos grupos ya
       cambiaron («Ver» abre la lista), con «Cancelar re-análisis» (solo sin cambios, RA-10; si no, deshabilitado con su
       motivo) y «Cerrar re-análisis», que lleva a «Cierre de la carga».
@@ -24,7 +25,7 @@
     <div class="grid min-w-0 flex-[1_1_34rem] gap-3.5">
         @include('scheduling::reanalysis.cycle', ['steps' => $state->steps, 'full' => $full])
 
-        <p class="flex items-start gap-2 border-t border-base-300 pt-3 text-sm" data-testid="reanalysis-line">
+        <p id="reanalysis-line" class="flex items-start gap-2 border-t border-base-300 pt-3 text-sm" data-testid="reanalysis-line">
             @switch($state->stage)
                 @case('published')
                     <x-icon :name="$state->isAvailable() ? 'o-check-circle' : 'o-clock'" @class(['mt-0.5 h-4 w-4 shrink-0', 'text-success' => $state->isAvailable(), 'text-warning' => ! $state->isAvailable()]) aria-hidden="true" />
@@ -33,7 +34,7 @@
                             <b class="font-semibold">Ya puedes re-analizar la carga.</b>
                             Llegaron <span class="font-mono tabular-nums">{{ number_format($state->progress['graded']) }}</span> de <span class="font-mono tabular-nums">{{ number_format($state->progress['total']) }}</span> calificaciones de {{ $state->gradesTerm }} y la proyección ya se recalculó.
                         @else
-                            <b class="font-semibold">Todavía no se puede re-analizar.</b> {{ $state->firstBlocker() }}
+                            <b class="font-semibold">Todavía no se puede re-analizar.</b> Lo que falta se dice abajo, en «Lo que pide el re-análisis».
                         @endif
                         @if (! $abilities['start'])
                             Lo inicia la jefatura de {{ $load->department->name }}.
@@ -59,7 +60,7 @@
                     <x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden="true" />
                     <span>
                         <b class="font-semibold">El re-análisis está en el cierre.</b>
-                        La carga está {{ $load->status->label() }}: se publica como la versión {{ $version + 1 }} desde «Cierre de la carga». Docentes y alumnos siguen viendo la versión {{ $version }}.
+                        La carga {{ $load->status->predicate() }}: se publica como la versión {{ $version + 1 }} desde «Cierre de la carga». Docentes y alumnos siguen viendo la versión {{ $version }}.
                     </span>
             @endswitch
         </p>
@@ -81,8 +82,7 @@
                     data-testid="start-reanalysis"
                 />
             @else
-                <x-button label="Iniciar re-análisis" icon="o-arrow-path" class="btn-primary max-md:h-11" :disabled="true" :title="$state->firstBlocker()" aria-describedby="why-start" data-testid="start-reanalysis" />
-                <p id="why-start" class="flex items-start gap-1.5 text-[13px] leading-snug text-neutral md:max-w-[44ch] md:justify-end md:text-end"><x-icon name="o-clock" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $state->firstBlocker() }}</p>
+                <x-button label="Iniciar re-análisis" icon="o-arrow-path" class="btn-primary max-md:h-11" :disabled="true" aria-describedby="reanalysis-line" data-testid="start-reanalysis" />
             @endif
         </div>
     @elseif ($state->stage === 'reanalysis' && ($abilities['cancel'] || $abilities['close']))

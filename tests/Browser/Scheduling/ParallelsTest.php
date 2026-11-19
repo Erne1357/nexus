@@ -54,3 +54,26 @@ it('el jefe abre Paralelos desde la bandeja, mueve esperados entre mixtos y arma
     expect(Group::query()->with('quotas')->get()->map(fn (Group $group): array => $group->quotas->pluck('max_seats')->sort()->values()->all())->sort()->values()->all())
         ->toContain([5, 10]);
 });
+
+it('E-09: a 320, 375 y 390 px el filtro de estado muestra cada opción completa sin desbordar la página', function (string $scheme) {
+    $this->world->request($this->world->career('IGEM'), 12, 1, 'pending');
+    $login = visit('/login');
+
+    $page = ($scheme === 'oscuro' ? $login->inDarkMode() : $login->inLightMode())
+        ->resize(390, 844)
+        ->fill('username', '19110004')
+        ->fill('password', 'password')
+        ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/scheduling/parallels')
+        ->assertSeeIn('@parallels-filter-pendientes', 'Pendientes');
+
+    foreach ([320, 375, 390] as $width) {
+        $page->resize($width, 844)
+            ->assertScript('document.documentElement.scrollWidth <= window.innerWidth')
+            ->assertScript("[...document.querySelectorAll('[data-testid=parallels-filter] button, [data-testid=parallels-filter] button > span')].every((element) => element.scrollWidth <= element.clientWidth)")
+            ->screenshot(fullPage: false, filename: "parallels-filter-{$width}-{$scheme}");
+    }
+
+    $page->assertNoJavaScriptErrors();
+})->with(['claro', 'oscuro']);

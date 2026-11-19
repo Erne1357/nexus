@@ -96,6 +96,20 @@ describe('jefe del departamento', function () {
             ->and(GroupQuota::query()->where('group_id', $this->a->id)->value('max_seats'))->toBe(44);
     });
 
+    it('HC-10: la sugerencia que pide un salón de otro departamento lleva «Pide préstamo» en su renglón', function () {
+        $building = Building::factory()->create(['campus_id' => $this->world->c2->id]);
+        $own = Room::factory()->capacity(70)->create(['building_id' => $building->id, 'code' => 'L-70', 'department_id' => $this->world->department->id]);
+        $changeKey = "change_room:{$this->a->id}:{$this->world->isc->id}";
+
+        $badge = fn (): ?Dom\Element => domOf(suggestionsDrawer($this->jefe, $this->world))->querySelector("[data-key=\"{$changeKey}\"] [data-testid=\"suggestion-loan\"]");
+
+        expect($badge())->toBeNull();
+
+        $own->update(['department_id' => Department::factory()->create(['name' => 'Sistemas'])->id]);
+
+        expect(textOf($badge()))->toBe('Pide préstamo');
+    });
+
     it('aplica «Cambiar salón» y «Cerrar grupo» (este con la confirmación de Nexus)', function () {
         $room = Room::factory()->capacity(70)->create(['building_id' => Building::factory()->create(['campus_id' => $this->world->c2->id])->id, 'code' => 'L-70']);
 

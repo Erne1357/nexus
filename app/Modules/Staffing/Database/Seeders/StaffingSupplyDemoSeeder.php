@@ -12,6 +12,8 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Demand\Rules\SuggestedGroups;
 use App\Modules\Faculty\Actions\AddPosition;
 use App\Modules\Faculty\Actions\CreateTeacher;
+use App\Modules\Faculty\Actions\UpdateTeacher;
+use App\Modules\Faculty\Database\Seeders\DemoTeacherEmail;
 use App\Modules\Faculty\Enums\PositionKind;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherPosition;
@@ -34,6 +36,9 @@ use RuntimeException;
  *   elegibles (EligibleStudentsQuery y SuggestedGroups) por sus horas semanales, para el departamento de la materia.
  * - **Capacidad:** de cada docente activo con adscripción principal al departamento, su tope de horas (sus horas base, o
  *   `HONORARIOS_HOURS` si es de honorarios, como el parámetro que pone el punto 5) menos sus horas fuera del ITCJ.
+ *
+ * Con el dominio institucional de la demo (DemoTeacherEmail), a cada alta le captura con UpdateTeacher su correo
+ * institucional ficticio, el de su RFC, como lo haría el jefe (AC-06); con otro dominio, como el del Tec, ninguno.
  *
  * Determinista: los nombres salen de Faker con `$seed` y los RFC del consecutivo. Idempotente: con la capacidad ya
  * cubierta no da de alta a nadie. No corre en producción.
@@ -94,6 +99,11 @@ final class StaffingSupplyDemoSeeder extends Seeder
                     'base_hours' => self::HIRE_HOURS,
                     'valid_from' => $termModel->starts_on->copy()->subMonth()->startOfMonth()->toDateString(),
                 ]);
+
+                if (($email = DemoTeacherEmail::for($rfc)) !== null) {
+                    app(UpdateTeacher::class)->handle($teacher, ['institutional_email' => $email]);
+                }
+
                 $hired[$department->code] = ($hired[$department->code] ?? 0) + 1;
             }
         }

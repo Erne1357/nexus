@@ -260,9 +260,11 @@ def everything_solution() -> list[ProposedSession]:
 
 def saved_outputs() -> list[tuple[Path, Path]]:
     """Las salidas guardadas para que PHP las evalúe (`tests/Unit/Solver/CpSatScoreTest.php`): las de CP-SAT de los
-    fixtures (`cpsat-output.json`) y las soluciones a mano de `scores/`."""
+    fixtures (`cpsat-output.json`) y las soluciones a mano de `scores/`. Además, la de la heurística sobre la carga
+    real (`heuristic-output.json`, la pista de la 7.10), que ya trae el puntaje del evaluador de PHP."""
     root = fixtures_dir()
     cases = [(path.parent / "input.json", path) for path in sorted((root / "v1").glob("*/cpsat-output.json"))]
+    cases += [(path.parent / "input.json", path) for path in sorted((root / "v1").glob("*/heuristic-output.json"))]
     cases += [(folder / "input.json", folder / "output.json") for folder in sorted((root / "scores").glob("*/"))]
 
     return cases
@@ -271,7 +273,9 @@ def saved_outputs() -> list[tuple[Path, Path]]:
 SAVED = saved_outputs()
 
 
-@pytest.mark.parametrize(("input_path", "output_path"), SAVED, ids=[path.parent.name for _, path in SAVED])
+@pytest.mark.parametrize(
+    ("input_path", "output_path"), SAVED, ids=[f"{path.parent.name}/{path.stem}" for _, path in SAVED]
+)
 def test_el_puntaje_de_cada_salida_guardada_es_el_de_score_py(input_path: Path, output_path: Path):
     """PHP revisa que el mismo `soft_score` sea el de su evaluador: juntas, las dos pruebas dicen que `score.py` da el
     número de PHP."""

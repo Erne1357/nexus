@@ -191,6 +191,6 @@ final class LoadEditability
     {
         return $status === null
             ? "{$department} no tiene carga en {$modality} en este periodo: no se editan {$what}."
-            : "La carga de {$department} en {$modality} está en ".mb_strtolower($status->label()).": no se editan {$what}.";
+            : "La carga de {$department} en {$modality} {$status->predicate()}: no se editan {$what}.";
     }
 }

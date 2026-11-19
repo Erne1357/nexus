@@ -22,6 +22,9 @@
         table { width: 100%; border-collapse: collapse; }
         th { background: #f6f3f2; color: #666567; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.06em; text-align: left; padding: 5px 6px; border-bottom: 1px solid #e3e0de; }
         td { vertical-align: top; padding: 4px 6px; border-bottom: 1px solid #e3e0de; }
+        table.subject { margin-bottom: 8px; }
+        table.subject tr { page-break-inside: avoid; }
+        .band { background: #f6f3f2; padding: 5px 6px; }
         .mono { font-family: 'DejaVu Sans Mono', monospace; }
         .dim { color: #666567; }
         .tag { font-size: 6.5pt; color: #2b5c8a; text-transform: uppercase; letter-spacing: 0.04em; }

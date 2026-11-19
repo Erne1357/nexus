@@ -472,3 +472,48 @@ def test_si_la_resolucion_de_nivel_no_termina_el_vecindario_sigue_con_las_reglas
     assert (result.initial.total, result.best.total) == (8, 0)
     assert search.tiers == {"g": 1}
     assert {(session.day, session.starts_at) for session in search.sessions["g"]} == {(1, "07:00"), (3, "07:00")}
+
+
+def test_los_segundos_de_cp_sat_de_un_vecindario_se_cuentan_despues_de_armarlo(monkeypatch):
+    """7.10: en la carga real, armar un vecindario de la mejora tarda de 0.3 a 0.6 s, más que sus 0.4 s de CP-SAT.
+    Contados desde antes de armar, CP-SAT se quedaba sin tiempo: desde la pista de la heurística, de 45 vecindarios en
+    30 s solo 2 dieron solución y ninguno se aceptó. Aquí armar tarda 0.3 s y el paso es de 0.1 s: el vecindario se
+    resuelve igual y lleva a g a las 07:00 que prefiere su docente (SC-04 de 8 a 0)."""
+    import time
+
+    from app.contract.output import ProposedSession
+    from app.model import search as search_module
+    from app.model.phases import SearchLimits
+    from app.model.search import Search, _improve_step
+    from tests.instances import slot, teacher
+
+    build = search_module.build_variables
+
+    def slow_build(*args, **kwargs):
+        time.sleep(0.3)
+        return build(*args, **kwargs)
+
+    monkeypatch.setattr(search_module, "build_variables", slow_build)
+    data = ModelData.of(
+        parse_input(
+            instance(
+                campuses=[campus(days=[1, 2], day_end="14:00")],
+                groups=[group("g", 2, teacher_id="t1")],
+                teachers=[teacher("t1", preferred=[slot(1, "07:00", "08:00"), slot(2, "07:00", "08:00")])],
+                rooms=[room("r1")],
+                soft_weights={"SC-04": 4},
+            )
+        )
+    )
+    placed = [
+        ProposedSession(
+            group_id="g", day=day, starts_at="09:00", ends_at="10:00", room_id="r1", kind="teoria", changed=True
+        )
+        for day in (1, 2)
+    ]
+    search = Search(sessions={"g": placed}, chosen={"g": (((1, 1), (2, 1)), 2)}, tiers={"g": 0})
+
+    step = _improve_step(data, search, {"g"}, {"g"}, time.perf_counter() + 5, 0.1, SearchLimits(workers=1), seed=7)
+
+    assert step.sessions is not None
+    assert {(session.day, session.starts_at) for session in step.sessions["g"]} == {(1, "07:00"), (2, "07:00")}

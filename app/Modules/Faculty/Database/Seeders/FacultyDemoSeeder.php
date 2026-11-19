@@ -28,7 +28,9 @@ use RuntimeException;
  * departamento que da materias en los planes del campus, de los cinco tipos de plaza (varias a la vez, vencidas y
  * futuras), sin plaza, con dos o tres departamentos, inactivos, borrados, sin correo ni grado y con nombres muy
  * largos. La adscripción es solo al departamento: el campus del docente es solo el de su RFC y su
- * historial.
+ * historial. Con el dominio institucional de la demo (DemoTeacherEmail: uno reservado, como `docentes.itcj.example`)
+ * cada docente trae un correo institucional ficticio de su RFC, salvo uno de cada 25; con otro dominio, como el del Tec,
+ * ninguno, y lo avisa.
  *
  * Al final ProvisionTeacherUsers les da usuario a los activos, que nace sin acceso (AC-02); la demo se lo da con la
  * contraseña por defecto y cambio obligatorio, para que se pueda entrar como docente (supuesto por confirmar), y unos
@@ -115,6 +117,13 @@ class FacultyDemoSeeder extends Seeder
             'Docentes: %d (inserción de todo %.1f s). Usuarios: %d creados, %d ligados (%.1f s). Jefes de proyecto docente: %d (%.1f s).',
             $totals['teachers'] ?? 0, $inserted, $access['created'], $access['linked'], $provisioned, $appointed, $headsTime,
         ));
+
+        if (DemoTeacherEmail::domain() === null) {
+            $this->command?->warn(sprintf(
+                'Docentes sin correo institucional: el dominio configurado («%s») no es reservado. La demo usa NEXUS_INSTITUTIONAL_EMAIL_DOMAIN=%s.',
+                config('nexus.institutional_email_domain'), DemoTeacherEmail::DOMAIN,
+            ));
+        }
     }
 
     /**
@@ -239,6 +248,7 @@ class FacultyDemoSeeder extends Seeder
                 'user_id' => null,
                 'name' => $teacher['name'],
                 'email' => $teacher['email'],
+                'institutional_email' => $teacher['has_institutional_email'] ? DemoTeacherEmail::for($teacher['rfc']) : null,
                 'degree' => $teacher['degree'],
                 'hired_on' => $teacher['hired_on'],
                 'is_active' => $teacher['is_active'],
