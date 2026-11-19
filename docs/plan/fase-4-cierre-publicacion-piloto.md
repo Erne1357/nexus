@@ -202,7 +202,7 @@ La fase extiende `demo:seed` como dice [testing.md](../arquitectura/testing.md):
   - La oferta y «Mi carga» son personales (`Target::ownedBy`) y cruzan campus a propósito (supuesto por confirmar): el docente ve los grupos de sus departamentos en todos los campus. El checklist debe decirlo para que no se lea como una fuga.
   - El ranking muestra el lugar y el desglose del propio docente; de los demás, solo cuántos hay.
 - **Deudas:**
-  - `UnassignTeacher` tiene Action y prueba, pero ningún botón.
+  - ~~`UnassignTeacher` tiene Action y prueba, pero ningún botón.~~ Resuelta en la fase 8: «Quitar docente» en Asignación docente (incidencia F-02 del ensayo 8.11).
   - El ranking del punto 5 del masivo tarda unos 154 s. `RankGroups` podría reutilizar las marcas entre grupos de la misma materia y horario.
 - **Supuestos:** los de Staffing siguen «por confirmar» en `docs/dominio/reglas-de-negocio.md`. Algunos: reasignar al mismo docente no deja fila; HC-01, HC-08 y HC-09 no se saltan con motivo; SC-09 marca pero no baja en el ranking; desempates; quién ve las solicitudes. El piloto (4.9) es el momento de confirmarlos.
 

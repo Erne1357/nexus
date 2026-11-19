@@ -1,5 +1,6 @@
 {{--
-    El grupo elegido en los dos paneles: encabezado con su clave y su materia, sus datos y su docente; las pestañas
+    El grupo elegido en los dos paneles: encabezado con su clave y su materia, sus datos y su docente con «Quitar
+    docente» (staffing::assign.unassign-button); las pestañas
     «Ranking» e «Historial» y, a su derecha, «Siguiente sin docente», que elige el que sigue en la lista. Debajo de lg
     es una hoja a pantalla completa (entra desde la derecha) con «Grupos» para volver; Esc también la cierra.
 --}}
@@ -44,6 +45,9 @@
                             @endif
                             · {{ $row->assignment->assignedBy?->name }}
                         </span>
+                    @endif
+                    @if ($canAssign)
+                        <span class="-ms-3 md:-me-3 md:ms-0">@include('staffing::assign.unassign-button', ['group' => $group])</span>
                     @endif
                 @else
                     <x-core::status-badge tone="warning" label="Sin docente" icon="o-clock" />
