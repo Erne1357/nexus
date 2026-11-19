@@ -22,6 +22,20 @@ it('cada estado de la carga tiene su etiqueta y el tono de su insignia', functio
     [LoadStatus::Reanalysis, 'Re-análisis', StatusTone::Warning],
 ]);
 
+it('dice el estado dentro de una frase con su etiqueta, de forma gramatical: «ya está publicada», «está en ajustes» (ensayo 8.11, E-07)', function (LoadStatus $status, string $predicate) {
+    expect($status->predicate())->toBe($predicate)
+        ->and($predicate)->toContain(mb_strtolower($status->label()));
+})->with([
+    [LoadStatus::Draft, 'está en borrador'],
+    [LoadStatus::Proposed, 'está en propuesta'],
+    [LoadStatus::Staffing, 'está en asignación'],
+    [LoadStatus::Adjusting, 'está en ajustes'],
+    [LoadStatus::Closed, 'ya está cerrada'],
+    [LoadStatus::Approved, 'ya está aprobada'],
+    [LoadStatus::Published, 'ya está publicada'],
+    [LoadStatus::Reanalysis, 'está en re-análisis'],
+]);
+
 it('solo se asignan docentes en asignación, ajustes y re-análisis', function (LoadStatus $status, bool $accepts) {
     expect($status->acceptsTeacherAssignment())->toBe($accepts);
 })->with([

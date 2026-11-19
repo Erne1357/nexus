@@ -175,7 +175,7 @@ it('con la carga que no está en propuesta, asignación o ajustes nadie acomoda,
     $rows = collect(semesterBoardFor($jefe)['groups'])->keyBy('id');
 
     expect($rows[$closed->id]['can'])->toBe(['editSessions' => false, 'assignRoom' => false, 'manageQuotas' => false])
-        ->and($rows[$closed->id]['editBlockedReason'])->toBe('La carga de Sistemas y Computación en Presencial está en cerrada: no se editan horarios.')
+        ->and($rows[$closed->id]['editBlockedReason'])->toBe('La carga de Sistemas y Computación en Presencial ya está cerrada: no se editan horarios.')
         ->and($rows[$withoutLoad->id]['editBlockedReason'])->toBe('Ciencias Básicas no tiene carga en Presencial en este periodo: no se editan horarios.');
 });
 

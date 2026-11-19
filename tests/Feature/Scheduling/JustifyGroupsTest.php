@@ -63,7 +63,7 @@ it('devuelve con su motivo los que no aplican y justifica los demás: uno comple
     expect($result['justified'])->toBe([$pending->id])
         ->and($result['skipped'])->toBe([
             ['code' => $complete->code, 'reason' => 'El grupo ya tiene docente y salón: no necesita justificación.'],
-            ['code' => $closed->code, 'reason' => 'La carga de Sistemas y Computación en EAD está en cerrada: no se editan justificaciones.'],
+            ['code' => $closed->code, 'reason' => 'La carga de Sistemas y Computación en EAD ya está cerrada: no se editan justificaciones.'],
         ])
         ->and($complete->fresh()->close_justification)->toBeNull()
         ->and($closed->fresh()->close_justification)->toBeNull();

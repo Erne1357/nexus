@@ -35,6 +35,22 @@ enum LoadStatus: string
     }
 
     /**
+     * El estado dentro de una frase, después de su sujeto («La carga de Ciencias Básicas en Presencial …»), con la
+     * etiqueta en minúsculas: los estados que son un participio van con «ya está» («ya está publicada», «ya está
+     * cerrada», «ya está aprobada») y los que son una etapa, con «está en» («está en ajustes», «está en re-análisis»).
+     * Ensayo 8.11, E-07: «está en publicada» no se lee.
+     */
+    public function predicate(): string
+    {
+        $label = mb_strtolower($this->label());
+
+        return match ($this) {
+            self::Closed, self::Approved, self::Published => "ya está {$label}",
+            default => "está en {$label}",
+        };
+    }
+
+    /**
      * Tono de la insignia de estado (DESIGN.md, "Insignias de estado"): el borrador en su tono; lo que se
      * está trabajando (propuesta, asignación, ajustes) en info; lo cerrado y lo aprobado en éxito suave; lo
      * publicado en éxito sólido, y el re-análisis en advertencia, porque reabre una carga ya publicada.
