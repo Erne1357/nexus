@@ -17,7 +17,8 @@ use Throwable;
  * cola (ApplySolverRunJob; CLAUDE.md §4.7). Esta Action es lo que corre en la petición:
  *
  * 1. Revisa que sea una corrida de departamento terminada y autoriza `apply` a `$by` (el jefe de la carga).
- * 2. Revisa la vigencia (SV-02) con ApplySolverRun::isCurrent: si la carga cambió, lanza ya el mensaje de vencida.
+ * 2. Revisa que la carga se pueda editar (E-10: una publicada no recibe corridas; el motivo va antes que el de vigencia) y
+ *    la vigencia (SV-02) con ApplySolverRun::isCurrent: si la carga cambió, lanza ya el mensaje de vencida.
  * 3. Pasa la corrida de `done` a `applying` con una actualización condicional (dos peticiones no despachan dos jobs),
  *    le pone una ficha nueva (`apply_token`) y quita el error de un intento anterior; despacha el job con esa ficha. Si
  *    el despacho falla, la corrida vuelve a `done` y la excepción se vuelve a lanzar.
@@ -35,6 +36,12 @@ final class RequestApplySolverRun
     {
         ApplySolverRun::ensureAppliable($run, SolverRunStatus::Done);
         Gate::forUser($by)->authorize('apply', $run);
+
+        $blocked = $this->apply->loadBlockReason($run);
+
+        if ($blocked !== null) {
+            throw ValidationException::withMessages(['run' => $blocked]);
+        }
 
         if (! $this->apply->isCurrent($run)) {
             throw ValidationException::withMessages(['run' => ApplySolverRun::STALE_MESSAGE]);
