@@ -301,6 +301,42 @@ def test_un_vecindario_conserva_el_campus_de_la_ocupacion_de_fuera_sin_campus_co
     assert [busy.campus_code for busy in sub.teachers[0].busy] == ["C1"]
 
 
+def test_la_mejora_regresa_a_su_patron_a_un_grupo_que_ya_cabe_en_el_aunque_suba_el_puntaje():
+    """PS-10 (confirmado el 18 de noviembre de 2026): el nivel del patrón va antes que las reglas. El caso del Riel A:
+    g, de 2 horas en un campus de lunes a miércoles, está en lunes y miércoles (nivel 1) y su patrón, lunes y martes,
+    está libre. Su docente prefiere lunes y miércoles a las 07:00 (SC-04, peso 4), así que dejarlo da 0 y regresarlo
+    da 4. Aun así la mejora lo regresa a su patrón: la primera resolución de cada vecindario baja los niveles."""
+    import time
+
+    from app.contract.output import ProposedSession
+    from app.model.phases import SearchLimits
+    from app.model.search import Search, improve
+    from tests.instances import slot, teacher
+
+    data = parse_input(
+        instance(
+            campuses=[campus(days=[1, 2, 3], day_end="14:00")],
+            groups=[group("g", 2, teacher_id="t1")],
+            teachers=[teacher("t1", preferred=[slot(1, "07:00", "08:00"), slot(3, "07:00", "08:00")])],
+            rooms=[room("r1"), room("r2")],
+            soft_weights={"SC-04": 4},
+        )
+    )
+    placed = [
+        ProposedSession(
+            group_id="g", day=day, starts_at="07:00", ends_at="08:00", room_id="r1", kind="teoria", changed=True
+        )
+        for day in (1, 3)
+    ]
+    search = Search(sessions={"g": placed}, chosen={"g": (((1, 1), (3, 1)), 0)}, tiers={"g": 1})
+
+    result = improve(ModelData.of(data), search, time.perf_counter() + 5, limits=SearchLimits(workers=1), seed=7)
+
+    assert search.tiers == {"g": 0}
+    assert {session.day for session in search.sessions["g"]} == {1, 2}
+    assert (result.tiers, result.initial.total, result.best.total) == (0, 0, 4)
+
+
 def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(tmp_path):
     """`scripts/objective.py` (7.6) da una fila por fase con el puntaje de `score.py` y, con `--output`, la salida
     del contrato con ese mismo puntaje."""
