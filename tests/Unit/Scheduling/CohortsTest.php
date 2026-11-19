@@ -172,6 +172,24 @@ it('HC-03: sin combinación hoy, la del alumno tipo toma el primer grupo de cada
     ]);
 });
 
+it('HC-03: si hoy no hay combinación solo por un grupo que se va a reprogramar, se elige como si no tuviera sesiones y no se fija una opción que choca con lo que no se mueve', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('FIS', subject: 'FIS'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->session('CAL', 1, '07:00', '10:00')
+        ->session('FIS', 1, '09:00', '10:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 1, '07:00', '08:00')
+        ->build();
+    $ids = ['CAL', 'FIS', 'QUI-A', 'QUI-B'];
+
+    expect(array_keys(array_filter(Cohorts::combinations($state, array_map(fn (string $id) => $state->groupOrFail($id), $ids), rescheduled: ['CAL']))))
+        ->toBe(['CAL', 'FIS', 'QUI-B'])
+        ->and(array_keys(array_filter(combinationCohortsOf($state, $ids))))->toBe(['CAL', 'FIS', 'QUI-A']);
+});
+
 it('HC-03: un semestre en que cada materia tiene un solo grupo no lleva combinación, y un grupo cancelado tampoco', function () {
     $state = States::builder()
         ->group(States::group('CAL', subject: 'CAL'))

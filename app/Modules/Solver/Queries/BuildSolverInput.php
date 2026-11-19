@@ -45,8 +45,8 @@ use App\Modules\Solver\Rules\SolverSettings;
  *   sus sesiones como `fixed_sessions`; los grupos de otras modalidades o que no se incluyen, como ocupación
  *   (`teachers[].busy`, `rooms[].busy`).
  * - Las cohortes son las de Cohorts: `plan:` (HC-03), `package:` (DM-09) y `combination:`, la combinación del alumno
- *   tipo de los semestres con materias de varios grupos (Cohorts::combinations()), para que el núcleo sin combinación
- *   de HC-03 viaje en el contrato.
+ *   tipo de los semestres de los movibles con materias de varios grupos (Cohorts::combinations(), con los movibles como
+ *   los que se van a reprogramar), para que el núcleo sin combinación de HC-03 viaje en el contrato.
  * - Cada préstamo aceptado va con su grupo (`group_id`, HC-10), como lo revisa el validador.
  * - Aviso de tronco común (decisión del usuario, 17 de noviembre de 2026): si un movible comparte cohorte con un grupo
  *   de otro departamento que todavía no tiene sesiones, se avisa y no se impide nada.
@@ -96,14 +96,15 @@ final class BuildSolverInput
         $active = array_filter($state->groups(), fn (StateGroup $group): bool => $group->isActive && $group->modalityId === $modality->id);
         $movable = array_filter($active, $isInRun);
         $cohorts = Cohorts::of($state, $active);
-        $combinations = Cohorts::combinations($state, $active);
+        $semesterGroups = $this->semesterGroups($state, $movable);
+        $combinations = Cohorts::combinations($state, $semesterGroups, array_keys($movable));
         $keys = [];
 
         foreach ($cohorts as $groupId => $own) {
             $keys[$groupId] = [...$own, ...$combinations[$groupId] ?? []];
         }
 
-        $fixed = $this->fixedGroups($state, $active, $movable, $keys);
+        $fixed = $this->fixedGroups($state, $active, $movable, $keys, $semesterGroups);
         $included = $this->ordered($state, [...$movable, ...$fixed]);
         $includedIds = array_fill_keys(array_map(fn (StateGroup $group): string => $group->id, $included), true);
 
@@ -143,22 +144,18 @@ final class BuildSolverInput
      * @param  array<string, StateGroup>  $active
      * @param  array<string, StateGroup>  $movable
      * @param  array<string, list<string>>  $cohorts
+     * @param  array<string, StateGroup>  $semesterGroups
      * @return array<string, StateGroup>
      */
-    private function fixedGroups(ScheduleState $state, array $active, array $movable, array $cohorts): array
+    private function fixedGroups(ScheduleState $state, array $active, array $movable, array $cohorts, array $semesterGroups): array
     {
         $teachers = [];
         $rooms = [];
         $keys = [];
-        $semesters = [];
 
         foreach ($movable as $group) {
             if ($group->teacherId !== null) {
                 $teachers[$group->teacherId] = true;
-            }
-
-            foreach ($state->groupsOfSemester($group->modalityId, $group->campusId, $group->studyPlanId, $group->semester) as $member) {
-                $semesters[$member->id] = true;
             }
 
             foreach ($state->sessionsOf($group->id) as $session) {
@@ -173,10 +170,31 @@ final class BuildSolverInput
         }
 
         return array_filter($active, fn (StateGroup $group): bool => ! isset($movable[$group->id])
-            && (isset($semesters[$group->id])
+            && (isset($semesterGroups[$group->id])
                 || ($group->teacherId !== null && isset($teachers[$group->teacherId]))
                 || array_filter($cohorts[$group->id] ?? [], fn (string $key): bool => isset($keys[$key])) !== []
                 || array_filter($state->sessionsOf($group->id), fn (StateSession $session): bool => $session->roomId !== null && isset($rooms[$session->roomId])) !== []));
+    }
+
+    /**
+     * Los grupos activos del semestre del alumno tipo de cada movible (su plan, semestre, campus y modalidad), por id: los
+     * que revisa HC-03, completos. Solo ellos llevan la clave `combination:`, así que una entrada con esa clave trae
+     * siempre todo su semestre (ContractState lo supone).
+     *
+     * @param  array<string, StateGroup>  $movable
+     * @return array<string, StateGroup>
+     */
+    private function semesterGroups(ScheduleState $state, array $movable): array
+    {
+        $groups = [];
+
+        foreach ($movable as $group) {
+            foreach ($state->groupsOfSemester($group->modalityId, $group->campusId, $group->studyPlanId, $group->semester) as $member) {
+                $groups[$member->id] = $member;
+            }
+        }
+
+        return $groups;
     }
 
     /**

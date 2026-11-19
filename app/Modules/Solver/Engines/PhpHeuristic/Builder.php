@@ -576,7 +576,7 @@ final class Builder
 
             if ($agreement->groupId === null) {
                 $ranges[$agreement->roomId][self::loanHolderKey(null, $agreement->toDepartmentId)][$agreement->day][] = $span;
-            } elseif (isset($departmentOf[$agreement->groupId])) {
+            } else {
                 $ranges[$agreement->roomId][self::loanHolderKey($agreement->groupId, '')][$agreement->day][] = $span;
                 $this->ownLoans[$agreement->groupId] = true;
             }
@@ -705,6 +705,7 @@ final class Builder
             }
 
             $grid = $this->grids[$group->campusCode];
+            $cohorts = $this->cohortsOf($group);
             $units = $grid->units($group->weeklyHours);
             $tiers = $units === null ? [] : SessionPattern::tiers($units, $grid->days);
             $labPractice = $grid->usesRooms && $group->needsLab && $group->practiceHours > 0 && isset($this->checks['HC-06']);
@@ -723,8 +724,8 @@ final class Builder
                 'practice' => $units === null ? 0 : min($units, (int) round($group->practiceHours * 60 / $grid->unitMinutes)),
                 'labPractice' => $labPractice,
                 'usesRooms' => $grid->usesRooms,
-                'cohorts' => $this->cohortsOf($group),
-                'gapCohorts' => Cohorts::forStudentGaps($this->cohortsOf($group)),
+                'cohorts' => $cohorts,
+                'gapCohorts' => Cohorts::forStudentGaps($cohorts),
                 'neighbours' => $this->neighbourCohorts($group),
                 'rooms' => [self::THEORY => $theory, self::LAB => $labs],
                 'rank' => [self::THEORY => array_flip($theory), self::LAB => array_flip($labs)],

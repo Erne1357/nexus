@@ -73,20 +73,24 @@ final class Cohorts
      * tiene un solo grupo no la lleva: ahí basta `plan:`.
      *
      * El elegido de cada materia es el de la combinación sin empalmes que el alumno tipo tiene hoy (la primera que da
-     * TypicalStudentCombination, con las materias y sus grupos por clave); si hoy no tiene ninguna, el primer grupo de
-     * cada materia por su clave (supuesto por confirmar). Un grupo sin sesiones cabe con todo.
+     * TypicalStudentCombination, con las materias y sus grupos por clave). Si hoy no tiene ninguna, la que tendría si
+     * los grupos que se van a reprogramar (`$rescheduled`, los movibles de la corrida) no tuvieran sesiones, para no
+     * fijar un grupo que ya choca con lo que no se mueve; y si tampoco, el primer grupo de cada materia por su clave
+     * (supuesto por confirmar). Un grupo sin sesiones cabe con todo.
      *
      * @param  iterable<StateGroup>  $groups
+     * @param  list<string>  $rescheduled  ids de los grupos cuyas sesiones de hoy se van a reprogramar
      * @return array<string, list<string>>
      */
-    public static function combinations(ScheduleState $state, iterable $groups): array
+    public static function combinations(ScheduleState $state, iterable $groups, array $rescheduled = []): array
     {
         $chosen = [];
         $keys = [];
+        $free = array_fill_keys($rescheduled, true);
 
         foreach ($groups as $group) {
             $semester = "{$group->modalityId}|{$group->campusId}|{$group->studyPlanId}|{$group->semester}";
-            $chosen[$semester] ??= self::combinationOf($state, $group);
+            $chosen[$semester] ??= self::combinationOf($state, $group, $free);
             $keys[$group->id] = $group->isActive && isset($chosen[$semester][$group->id])
                 ? [self::COMBINATION.":{$group->studyPlanId}:{$group->semester}:{$state->campusCode($group->campusId)}"]
                 : [];
@@ -118,9 +122,10 @@ final class Cohorts
     /**
      * Los grupos de la combinación del semestre del grupo, por id; vacío si cada materia tiene un solo grupo.
      *
+     * @param  array<string, true>  $free  los grupos que se van a reprogramar
      * @return array<string, true>
      */
-    private static function combinationOf(ScheduleState $state, StateGroup $group): array
+    private static function combinationOf(ScheduleState $state, StateGroup $group, array $free): array
     {
         $bySubject = [];
 
@@ -139,11 +144,13 @@ final class Cohorts
             $bySubject[$subjectId] = $members;
         }
 
-        $options = array_map(fn (array $members): array => array_map(fn (StateGroup $member): array => array_map(
+        $options = fn (array $free): array => array_map(fn (array $members): array => array_map(fn (StateGroup $member): array => isset($free[$member->id]) ? [] : array_map(
             fn (StateSession $session): array => ['day' => $session->day, 'start' => $session->start, 'end' => $session->end],
             $state->sessionsOf($member->id),
         ), $members), $bySubject);
-        $picked = TypicalStudentCombination::find($options) ?? array_fill_keys(array_keys($bySubject), 0);
+        $picked = TypicalStudentCombination::find($options([]))
+            ?? ($free === [] ? null : TypicalStudentCombination::find($options($free)))
+            ?? array_fill_keys(array_keys($bySubject), 0);
         $ids = [];
 
         foreach ($picked as $subjectId => $index) {
