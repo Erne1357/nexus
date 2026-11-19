@@ -18,6 +18,9 @@ use App\Modules\Scheduling\Queries\ReanalysisBoardQuery;
 use App\Modules\Scheduling\Queries\ReanalysisSuggestionsQuery;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Support\Scheduling\ReanalysisWorld;
@@ -124,6 +127,28 @@ it('«Cambiar salón»: mueve la sesión al salón libre, sube la capacidad y el
         ->and($a->fresh()->capacity)->toBe(60)
         ->and(reanalysisQuotasOf($a))->toBe([$this->isc => 60])
         ->and(Activity::query()->where('event', 'session_room_assigned')->count())->toBe(1);
+});
+
+it('G-07: «Cambiar salón» de varias sesiones lee la foto del periodo una sola vez y deja la bitácora de cada sesión', function () {
+    $room = reanalysisLargeRoom($this->world);
+    $a = $this->world->groups['A'];
+    $first = GroupSession::query()->where('group_id', $a->id)->firstOrFail();
+    GroupSession::factory()->for($a)->inRoom($first->room)->on(2, '07:00', '09:00')->create();
+    GroupSession::factory()->for($a)->inRoom($first->room)->on(3, '07:00', '09:00')->create();
+    $suggestion = reanalysisSuggestionIn($this->world, $this->world->integral, $this->world->c2, "change_room:{$a->id}:{$this->isc}");
+    Queue::fake();
+    $snapshots = 0;
+    DB::listen(function (QueryExecuted $query) use (&$snapshots): void {
+        $snapshots += str_starts_with($query->sql, 'select "id", "group_id", "day", "starts_at", "ends_at", "room_id", "kind" from "group_sessions"') ? 1 : 0;
+    });
+
+    app(ApplyReanalysisSuggestion::class)->handle($this->world->load, $suggestion, $this->jefe);
+
+    expect($suggestion->moves)->toHaveCount(3)
+        ->and($snapshots)->toBe(1)
+        ->and(GroupSession::query()->where('group_id', $a->id)->pluck('room_id')->unique()->all())->toBe([$room->id])
+        ->and(Activity::query()->where('event', 'session_room_assigned')->count())->toBe(3)
+        ->and($a->fresh()->capacity)->toBe(60);
 });
 
 it('HC-02: si el salón ya se ocupó a esa hora, no aplica nada', function () {
