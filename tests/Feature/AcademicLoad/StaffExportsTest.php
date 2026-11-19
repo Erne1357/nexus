@@ -94,6 +94,18 @@ it('Subdirección y el jefe de proyecto docente también descargan el PDF del de
     expect($response->headers->get('Content-Disposition'))->toContain('Carga SC - 20271 PRES.pdf');
 })->with([Role::Subdireccion, Role::JefeProyectoDocente]);
 
+it('F-05: el PDF del departamento también deja reintentar cuando la cola no lo toma a tiempo', function () {
+    Queue::fake();
+    $this->actingAs(staffExportsHead($this->department, $this->campus));
+
+    $this->get($this->pdfUrl)->assertStatus(202)->assertSee('Preparando el archivo');
+    $this->travel(PublishedExports::WAIT_SECONDS + 1)->seconds();
+    $this->get($this->pdfUrl)->assertSee('El archivo está tardando más de lo normal');
+    $this->get($this->pdfUrl.'&reintentar=1')->assertRedirect($this->pdfUrl);
+
+    Queue::assertPushed(GeneratePublishedExport::class, 2);
+});
+
 it('sin sesión manda a iniciar sesión y no encola nada', function () {
     Queue::fake();
 
