@@ -79,6 +79,28 @@ describe('jefe del departamento', function () {
             ->and(textOf(domOf($drawer)->querySelector('[data-testid="suggestions-now"][data-career="ISIC"]')))->toBe('50, ya ajustado');
     });
 
+    it('RA-04: la clase va contra lo publicado y, si con los lugares de ahora cambió, dice cómo quedó (ensayo 8.11, F-08)', function (int $seats, string $class) {
+        $classOf = fn (Testable $drawer): string => textOf(domOf($drawer)->querySelector('[data-testid="suggestions-class"][data-career="ISIC"]'));
+
+        $before = suggestionsDrawer($this->jefe, $this->world);
+
+        expect($classOf($before))->toBe('Faltante')
+            ->and(domOf($before)->querySelector('[data-testid="suggestions-class-now"]'))->toBeNull();
+
+        $this->a->update(['capacity' => $seats]);
+        GroupQuota::query()->where('group_id', $this->a->id)->update(['max_seats' => $seats]);
+
+        $after = suggestionsDrawer($this->jefe, $this->world);
+
+        // Lo que dice el drawer ya no se contradice: la clase de lo publicado, cómo quedó con lo de ahora y sin sugerencias.
+        expect($classOf($after))->toBe($class)
+            ->and(textOf(domOf($after)->querySelector('[data-testid="suggestions-now"][data-career="ISIC"]')))->toBe("{$seats}, ya ajustado");
+        $after->assertSee('Sin sugerencias');
+    })->with([
+        'ya ajustada: 70 lugares para 70 esperados' => [70, 'Faltante → con los lugares de ahora, ajustada'],
+        'se pasó: 100 lugares para 70 esperados, y el único grupo de ISIC no se puede cerrar' => [100, 'Faltante → con los lugares de ahora, sobrante'],
+    ]);
+
     it('edita cuántos lugares suma antes de aplicar, de 1 al máximo', function () {
         $drawer = suggestionsDrawer($this->jefe, $this->world)
             ->call('edit', $this->expandKey)

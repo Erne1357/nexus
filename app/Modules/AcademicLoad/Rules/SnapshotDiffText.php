@@ -17,6 +17,9 @@ use App\Modules\Core\Support\WeekTime;
  */
 final class SnapshotDiffText
 {
+    /** Los cambios de un grupo que la consulta pública no enseña (los cupos); publicEntries() los quita. */
+    public const array HIDDEN_CHANGES = ['quota' => true, 'career_quotas' => true];
+
     /**
      * «SCD-1027 Tópicos Avanzados de Programación, grupo A (C2)», sin el campus si el grupo no tiene.
      *
@@ -68,7 +71,7 @@ final class SnapshotDiffText
         }
 
         foreach ($diff['groups']['changed'] as $changed) {
-            $changes = array_diff_key($changed['changes'], ['quota' => true, 'career_quotas' => true]);
+            $changes = array_diff_key($changed['changes'], self::HIDDEN_CHANGES);
 
             if ($changes !== []) {
                 $entries[] = self::entry(['kind' => 'changed', 'group' => $changed['group'], 'changes' => $changes]);

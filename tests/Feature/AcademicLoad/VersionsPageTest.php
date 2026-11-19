@@ -272,6 +272,8 @@ describe('la línea y la versión elegida', function () {
     ]);
 
     it('«Se avisó a» cuenta los docentes, carreras y departamentos afectados del resumen guardado (RA-05)', function () {
+        versionsNotice('database');
+
         versionsPageAs($this->jefe)
             ->assertSeeInOrder(['Nuevos', '+1', 'Cancelados', '−1', 'Con cambios', '1'])
             ->assertSeeInOrder(['Se avisó a', '2', 'docentes', '2', 'carreras', '1', 'departamento'])
@@ -334,6 +336,30 @@ describe('la línea y la versión elegida', function () {
         'solo campana: los docentes no tienen correo' => [['database'], 'Lo que se le avisó a cada docente afectado, por la campana.'],
         'solo correo: los docentes no tienen cuenta' => [['mail'], 'Lo que se le avisó a cada docente afectado, por correo.'],
         'ninguno' => [[], 'Lo que cambió para cada docente afectado. No ha salido ningún aviso por la campana ni por correo.'],
+    ]);
+
+    it('RA-06: el resumen dice «Se avisó a» solo si el aviso ya salió y «Por avisar a» si no, con el mismo criterio que el drawer (ensayo 8.11, F-04)', function (array $notices, string $label, string $other, string $careersNote) {
+        foreach ($notices as [$channel, $title]) {
+            versionsNotice($channel, title: $title);
+        }
+
+        // Lo de otra carga o fallido no cuenta: la cola detenida no deja nada más.
+        versionsNotice('database', title: 'La carga de Sistemas y Computación cambió grupos de ISC');
+        versionsNotice('mail', status: MailStatus::Failed);
+
+        $page = versionsPageAs($this->jefe)
+            ->assertSeeInOrder([$label, '2', 'docentes', '2', 'carreras', '1', 'departamento'])
+            ->assertDontSee($other);
+
+        $label === 'Por avisar a'
+            ? $page->assertSee('No ha salido ningún aviso por la campana ni por correo.')
+            : $page->assertDontSeeHtml('data-testid="version-notified-pending"');
+
+        $page->call('openAffected')->assertSee($careersNote);
+    })->with([
+        'la cola no ha corrido: nada salió' => [[], 'Por avisar a', 'Se avisó a', 'Lo que cambió para cada carrera afectada. No ha salido ningún aviso a su coordinación.'],
+        'salió la campana a los docentes' => [[['database', null]], 'Se avisó a', 'Por avisar a', 'Lo que se le avisó a la coordinación de cada carrera afectada.'],
+        'solo salió el correo a la coordinación: ningún docente tiene cuenta ni correo' => [[['mail', 'La carga de Ciencias Básicas cambió grupos de ISC']], 'Se avisó a', 'Por avisar a', 'Lo que se le avisó a la coordinación de cada carrera afectada.'],
     ]);
 
     it('en una versión anterior, el drawer dice hasta cuándo se vio y que nadie recibió el aviso', function () {

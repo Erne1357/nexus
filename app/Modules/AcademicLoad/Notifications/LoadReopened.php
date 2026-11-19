@@ -3,7 +3,8 @@
 namespace App\Modules\AcademicLoad\Notifications;
 
 /**
- * «Subdirección reabrió la carga de <depto>»: al jefe, con el motivo, cuando la carga vuelve a ajustes desde cerrada, aprobada o publicada.
+ * «Subdirección reabrió la carga de <depto>»: al jefe, con el motivo, cuando la carga vuelve a ajustes desde cerrada, aprobada o
+ * publicada, o a re-análisis desde cerrada o aprobada (RA-08; NotifyLoadClosing).
  */
 final class LoadReopened extends LoadClosingNotification
 {

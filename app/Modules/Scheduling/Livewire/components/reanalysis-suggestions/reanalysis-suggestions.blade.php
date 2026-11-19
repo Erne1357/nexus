@@ -1,8 +1,10 @@
 {{--
     El drawer de sugerencias de una materia en un campus (x-drawer a la derecha, hasta 860 px; ADR-0023): la materia, el
     campus y en cuántos grupos se ofrece; «Demanda por carrera» (esperados con las calificaciones del semestre actual
-    contra los cupos de la versión vigente y los de ahora, con la diferencia y la clase de RA-04; primer semestre sin
-    clasificar, RA-09); y las sugerencias de la tarea 8.3a con los grupos de ahora (scheduling::reanalysis.suggestions).
+    contra los cupos de la versión vigente y los de ahora, con la diferencia y la clase de RA-04 contra la versión vigente
+    y, si con los lugares de ahora es otra, cómo quedó: «Faltante → ajustada», en `info` con `o-pencil-square` como
+    «Ahora», la clase de ahora que usa el asesor (ensayo 8.11, F-08); primer semestre sin clasificar, RA-09); y las
+    sugerencias de la tarea 8.3a con los grupos de ahora (scheduling::reanalysis.suggestions).
     Al pie fijo, a quien no ajusta, por qué; a quien ajusta y tiene algo que elegir, cuántas eligió y «Aplicar las N
     elegidas» (`btn-primary`, deshabilitado sin ninguna y mientras viaja el cambio de una casilla), que confirma con el diálogo de Nexus (tono `error` si cierra un grupo) lo que pasa: cuántas
     de cada tipo, qué grupos se cierran y qué horario pierden. En celular, la cuenta arriba y debajo «Cerrar» y «Aplicar»
@@ -81,11 +83,21 @@
                                                 </span>
                                             </td>
                                             <td class="text-end font-mono font-semibold tabular-nums max-md:col-start-2 max-md:row-start-3 max-md:flex max-md:items-baseline max-md:justify-between max-md:gap-2"><span class="font-sans text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral md:hidden">Dif.</span><span>{{ $row->balance === null ? '—' : ($row->gap() > 0 ? '+' : ($row->gap() < 0 ? '−' : '')).number_format(abs($row->gap())) }}</span></td>
-                                            <td>
+                                            <td data-testid="suggestions-class" data-career="{{ $row->careerCode }}">
                                                 @if ($row->balance === null)
                                                     <span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] text-neutral"><x-icon name="o-minus-circle" class="h-3.5 w-3.5" aria-hidden="true" />Sin clasificar</span>
                                                 @else
-                                                    <x-core::status-badge :tone="$row->balance->tone()" :label="$row->balance->label()" :icon="$row->balance->icon()" />
+                                                    @php($balanceNow = $advice?->balances[$row->careerId] ?? null)
+                                                    <span class="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1">
+                                                        <x-core::status-badge :tone="$row->balance->tone()" :label="$row->balance->label()" :icon="$row->balance->icon()" />
+                                                        @if ($balanceNow !== null && $balanceNow !== $row->balance)
+                                                            <span class="inline-flex items-center gap-1 whitespace-nowrap text-[13px] font-semibold text-info" title="Con los lugares de ahora: {{ mb_strtolower($balanceNow->label()) }}" data-testid="suggestions-class-now">
+                                                                <span aria-hidden="true">→</span>
+                                                                <x-icon name="o-pencil-square" class="h-3.5 w-3.5" aria-hidden="true" />
+                                                                <span><span class="sr-only">con los lugares de ahora, </span>{{ mb_strtolower($balanceNow->label()) }}</span>
+                                                            </span>
+                                                        @endif
+                                                    </span>
                                                 @endif
                                             </td>
                                         </tr>

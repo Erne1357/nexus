@@ -2,8 +2,10 @@
     La versión elegida, columna izquierda: «Versión N» con su motivo (deducido en una versión de antes de la tarea 8.4) y
     «Vigente»; quién y cuándo la publicó; su comentario y la reapertura o el re-análisis que la originó; tres cifras (lo
     que cambió contra la anterior, o grupos, sesiones y docentes en la primera); a quién se avisó (RA-05, RA-06: los
-    afectados del resumen del diff; las de antes de la tarea 8.4 no avisaron) y los archivos. Los archivos se arman con
-    lo publicado hoy: solo la versión vigente los descarga y las anteriores dicen por qué no.
+    afectados del resumen del diff; las de antes de la tarea 8.4 no avisaron), o «Por avisar a» si el aviso todavía no
+    sale de la cola (`$notices`, LoadVersionsQuery::noticeChannels(), lo mismo que lee el drawer; ensayo 8.11, F-04), y
+    los archivos. Los archivos se arman con lo publicado hoy: solo la versión vigente los descarga y las anteriores dicen
+    por qué no.
 --}}
 @php
     $number = $selected['version'];
@@ -23,6 +25,7 @@
         ['o-academic-cap', $summary['careers_affected'], 'carrera', 'carreras'],
         ['o-building-office', $summary['departments_affected'], 'departamento', 'departamentos'],
     ];
+    $pending = ! $selected['legacy'] && ! $notices['sent'] && array_sum(array_column($notified, 1)) > 0;
 @endphp
 <div class="grid min-w-0 content-start gap-3.5 border-base-300 p-4 md:p-5 @5xl:border-e @max-5xl:border-b" data-testid="version-summary">
     <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
@@ -64,7 +67,7 @@
 
     @if ($notified !== [])
         <div class="grid gap-1.5" data-testid="version-notified">
-            <p class="{{ $label }}">{{ $selected['legacy'] ? 'Afectados' : 'Se avisó a' }}</p>
+            <p class="{{ $label }}">{{ $selected['legacy'] ? 'Afectados' : ($pending ? 'Por avisar a' : 'Se avisó a') }}</p>
             <ul class="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 @foreach ($notified as [$icon, $count, $one, $many])
                     <li @class(['inline-flex items-center gap-1.5', 'text-neutral' => $count === 0])>
@@ -75,6 +78,8 @@
             </ul>
             @if ($selected['legacy'])
                 <p class="text-[12.5px] text-neutral">Se publicó antes de que Nexus avisara las republicaciones: nadie recibió aviso.</p>
+            @elseif ($pending)
+                <p class="text-[12.5px] text-neutral" data-testid="version-notified-pending">No ha salido ningún aviso por la campana ni por correo.</p>
             @endif
         </div>
     @endif

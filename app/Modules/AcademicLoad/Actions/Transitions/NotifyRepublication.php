@@ -10,6 +10,7 @@ use App\Modules\AcademicLoad\Models\LoadSnapshot;
 use App\Modules\AcademicLoad\Notifications\LoadRepublished;
 use App\Modules\AcademicLoad\Queries\PublishedContextQuery;
 use App\Modules\AcademicLoad\Rules\SnapshotDiff;
+use App\Modules\AcademicLoad\Rules\SnapshotDiffText;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Actions\NotifyHolders;
 use App\Modules\Core\Authorization\Target;
@@ -164,7 +165,7 @@ final class NotifyRepublication
      */
     private function semesterOf(array $entries, string $career, array $placements, ?array $previous = null): ?array
     {
-        foreach ($entries as $entry) {
+        foreach (self::visibleFirst($entries) as $entry) {
             $group = (string) $entry['group']['id'];
 
             if (! isset($placements[$group]) && $previous === null) {
@@ -179,6 +180,26 @@ final class NotifyRepublication
         }
 
         return [];
+    }
+
+    /**
+     * Las líneas con lo que muestra la consulta pública primero (grupos nuevos, cancelados y cambios de horario, salón o
+     * docente) y al final las que solo cambian cupos, que la consulta no enseña (SnapshotDiffText::publicEntries), así el
+     * enlace del coordinador abre un semestre con la marca «Cambió» (ensayo 8.11, G-06). Conserva el orden dentro de cada
+     * parte.
+     *
+     * @param  list<array{kind: string, group: array<string, mixed>, changes?: array<string, mixed>}>  $entries
+     * @return list<array{kind: string, group: array<string, mixed>, changes?: array<string, mixed>}>
+     */
+    private static function visibleFirst(array $entries): array
+    {
+        $quotaOnly = static fn (array $entry): bool => $entry['kind'] === 'changed'
+            && array_diff_key($entry['changes'] ?? [], SnapshotDiffText::HIDDEN_CHANGES) === [];
+
+        return [
+            ...array_values(array_filter($entries, static fn (array $entry): bool => ! $quotaOnly($entry))),
+            ...array_values(array_filter($entries, $quotaOnly)),
+        ];
     }
 
     /**
