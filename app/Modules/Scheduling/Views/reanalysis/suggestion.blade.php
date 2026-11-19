@@ -14,7 +14,8 @@
     N elegidas», al pie del drawer), en un blanco de 44 × 40 px centrado con el icono del tipo; la elegida lleva
     `bg-primary/5`. La que no se puede elegir lleva la casilla deshabilitada con su motivo en `title` y para lectores de
     pantalla (el de una bloqueada es el que ya está escrito bajo sus botones); la que choca con una elegida lo escribe
-    además bajo sus botones, con `o-no-symbol`.
+    además bajo sus botones, con `o-no-symbol`; y la que se desmarcó porque cambió desde que se eligió lo dice ahí, en
+    `text-warning` con `o-arrow-path`.
 --}}
 @php($slug = 'suggestion-'.substr(md5($suggestion->key), 0, 10))
 @php($editingThis = $editing === $suggestion->key)
@@ -27,6 +28,7 @@
 @php($chosen = in_array($suggestion->key, $choice['chosen'] ?? [], true))
 @php($clash = $choice['clashes'][$suggestion->key] ?? null)
 @php($notChoosable = $choice['reasons'][$suggestion->key] ?? $clash)
+@php($changedNote = $choice['changed'][$suggestion->key] ?? null)
 <li wire:key="{{ $slug }}" @class(['relative grid gap-2.5 border-t border-base-300 py-3.5 pe-4 first:border-t-0', 'ps-12' => $choice !== null, 'ps-4' => $choice === null, 'bg-primary/5' => $chosen]) aria-labelledby="{{ $slug }}-title" data-testid="suggestion" data-kind="{{ $suggestion->kind->value }}" data-key="{{ $suggestion->key }}" @if ($chosen) data-chosen @endif>
     @if ($choice !== null)
         <label @class(['absolute start-1 top-2.5 flex h-11 w-10 items-center justify-center', 'cursor-pointer' => $notChoosable === null, 'cursor-not-allowed' => $notChoosable !== null]) @if ($notChoosable !== null) title="{{ $notChoosable }}" @endif>
@@ -216,6 +218,9 @@
         @endif
         @if ($clash !== null)
             <p id="{{ $slug }}-clash" class="flex items-start gap-1.5 text-[13px] text-neutral md:ps-11" data-testid="suggestion-clash"><x-icon name="o-no-symbol" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $clash }}</p>
+        @endif
+        @if ($changedNote !== null)
+            <p class="flex items-start gap-1.5 text-[13px] text-warning md:ps-11" data-testid="suggestion-changed"><x-icon name="o-arrow-path" class="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $changedNote }}</p>
         @endif
     @endif
 </li>

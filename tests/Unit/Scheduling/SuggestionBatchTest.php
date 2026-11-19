@@ -4,6 +4,7 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorGroup;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorRoom;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorSession;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\NewGroupSpec;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use App\Modules\Scheduling\Rules\Reanalysis\SuggestionBatch;
@@ -14,7 +15,7 @@ use App\Modules\Scheduling\Rules\Reanalysis\SuggestionBatch;
 | confirmación (cuántas de cada tipo, qué grupos se cierran y qué horario pierden).
 */
 
-function batchSuggestion(ReanalysisSuggestionKind $kind, string $title, ?string $groupId = null, array $receivers = [], bool $opens = false): ReanalysisSuggestion
+function batchSuggestion(ReanalysisSuggestionKind $kind, string $title, ?string $groupId = null, array $receivers = [], bool $opens = false, array $moves = [], int $seats = 0): ReanalysisSuggestion
 {
     return new ReanalysisSuggestion(
         key: $kind->value.':'.($groupId ?? 'nuevo').':'.$title,
@@ -23,6 +24,8 @@ function batchSuggestion(ReanalysisSuggestionKind $kind, string $title, ?string 
         evidence: [],
         effect: [],
         groupId: $groupId,
+        seats: $seats,
+        moves: $moves,
         relocations: array_map(fn (string $receiver): array => ['groupId' => $receiver, 'groupCode' => $receiver, 'careerId' => 'ISIC', 'careerCode' => 'ISIC', 'seats' => 5], $receivers),
         newGroup: $opens ? new NewGroupSpec('S', 'ACF-0902', 'C2', 'C2', 'ISIC', 'ISIC', 'P', 2, 35, 20) : null,
     );
@@ -54,6 +57,34 @@ it('se abre un grupo por vez; abrir uno no choca con lo que cambia los grupos qu
     expect(SuggestionBatch::clash($openIsic, $openIind))->toBe('las dos abren un grupo, y se abre uno por vez')
         ->and(SuggestionBatch::clash($openIsic, $expandA))->toBeNull()
         ->and(SuggestionBatch::clash($closeE, $openIsic))->toBeNull();
+});
+
+it('abrir un grupo choca con cambiar de salón si su lugar buscado quiere el mismo salón a la misma hora', function () {
+    $open = batchSuggestion(ReanalysisSuggestionKind::OpenGroup, 'Abrir', opens: true);
+    $toL70 = fn (int $day, string $startsAt, string $endsAt): ReanalysisSuggestion => batchSuggestion(ReanalysisSuggestionKind::ChangeRoom, 'Cambiar B', 'B', moves: [
+        ['sessionId' => 's-b', 'when' => 'lun 7:00–9:00', 'from' => 'S-1', 'fromId' => 'r-s1', 'to' => new AdvisorRoom('r-l70', 'L-70', 70), 'day' => $day, 'startsAt' => $startsAt, 'endsAt' => $endsAt],
+    ]);
+    $placed = [$open->key => new NewGroupPlacement([
+        ['day' => 1, 'startsAt' => '08:00', 'endsAt' => '09:00', 'kind' => 'teoria', 'roomId' => 'r-l70'],
+        ['day' => 2, 'startsAt' => '08:00', 'endsAt' => '09:00', 'kind' => 'teoria', 'roomId' => 'r-l70'],
+    ])];
+
+    expect(SuggestionBatch::clash($open, $toL70(1, '07:00', '09:00'), $placed))->toBe('las dos quieren L-70 a la misma hora (lun 7:00–9:00)')
+        ->and(SuggestionBatch::clash($toL70(1, '07:00', '09:00'), $open, $placed))->toBe('las dos quieren L-70 a la misma hora (lun 7:00–9:00)')
+        ->and(SuggestionBatch::clash($open, $toL70(1, '07:00', '08:00'), $placed))->toBeNull()
+        ->and(SuggestionBatch::clash($open, $toL70(3, '08:00', '09:00'), $placed))->toBeNull()
+        ->and(SuggestionBatch::clash($open, $toL70(1, '07:00', '09:00')))->toBeNull()
+        ->and(SuggestionBatch::firstClash([$toL70(1, '07:00', '09:00'), $open], $placed))->toStartWith('«Cambiar B» y «Abrir»: las dos quieren L-70 a la misma hora');
+});
+
+it('la firma de una sugerencia cambia con lo que el jefe ve: el título, los lugares o el salón', function () {
+    $to = fn (string $room, int $seats = 20): ReanalysisSuggestion => batchSuggestion(ReanalysisSuggestionKind::ChangeRoom, "Cambiar el salón del grupo A: S-1 → {$room}", 'A', seats: $seats, moves: [
+        ['sessionId' => 's-a', 'when' => 'lun 7:00–9:00', 'from' => 'S-1', 'fromId' => 'r-s1', 'to' => new AdvisorRoom("r-{$room}", $room, 70), 'day' => 1, 'startsAt' => '07:00', 'endsAt' => '09:00'],
+    ]);
+
+    expect(SuggestionBatch::signature($to('L-70')))->toBe(SuggestionBatch::signature($to('L-70')))
+        ->and(SuggestionBatch::signature($to('L-80')))->not->toBe(SuggestionBatch::signature($to('L-70')))
+        ->and(SuggestionBatch::signature($to('L-70', 15)))->not->toBe(SuggestionBatch::signature($to('L-70')));
 });
 
 it('aplica primero abrir un grupo, que revisa todos los grupos del bloque como se leyeron, y luego las demás en su orden', function () {

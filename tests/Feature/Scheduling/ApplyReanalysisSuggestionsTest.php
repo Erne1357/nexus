@@ -13,6 +13,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Queries\ReanalysisBoardQuery;
 use App\Modules\Scheduling\Queries\ReanalysisSuggestionsQuery;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use App\Modules\Scheduling\Rules\Reanalysis\SuggestionBatchResult;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -123,7 +124,7 @@ it('si una Action rechaza el permiso o falla después de que otras ya se aplicar
     $result = app(ApplyReanalysisSuggestions::class)->handle($this->world->load, [$expand, $close], [], $this->jefe);
 
     expect(array_map(fn (ReanalysisSuggestion $suggestion): string => $suggestion->key, $result->applied))->toBe([$this->expandKey])
-        ->and(batchFailuresOf($result))->toBe([$this->closeKey => 'No tienes permiso para aplicarla: la ajusta la jefatura de su departamento.'])
+        ->and(batchFailuresOf($result))->toBe([$this->closeKey => 'Al aplicarla faltó un permiso; no se cambió nada de ella.'])
         ->and($this->a->fresh()->capacity)->toBe(50)
         ->and($this->e->fresh()->status)->toBe(GroupStatus::Planned);
 });
@@ -154,6 +155,19 @@ it('rechaza el lote sin aplicar nada si dos elegidas cambian el mismo grupo o la
         ->toThrow(ValidationException::class, 'las dos abren un grupo, y se abre uno por vez')
         ->and($this->a->fresh()->capacity)->toBe(40)
         ->and($b->fresh()->capacity)->toBe(30);
+});
+
+it('rechaza el lote si el grupo nuevo quiere el salón al que otra elegida mueve una sesión, a la misma hora', function () {
+    $l70 = Room::factory()->capacity(70)->create(['building_id' => Building::factory()->create(['campus_id' => $this->world->c2->id])->id, 'code' => 'L-70']);
+    batchExpectIn($this->world, 'isc', 120);
+    $roomKey = "change_room:{$this->a->id}:{$this->world->isc->id}";
+    [$room, $open] = batchSuggestionsIn($this->world, $roomKey, $this->openKey);
+    $inL70 = new NewGroupPlacement([['day' => 1, 'startsAt' => '07:00', 'endsAt' => '08:00', 'kind' => 'teoria', 'roomId' => $l70->id]]);
+
+    expect(fn () => app(ApplyReanalysisSuggestions::class)->handle($this->world->load, [$room, $open], [$this->openKey => $inL70], $this->jefe))
+        ->toThrow(ValidationException::class, "«{$room->title}» y «{$open->title}»: las dos quieren L-70 a la misma hora (lun 7:00–9:00).")
+        ->and(Group::query()->where('subject_id', $this->world->integral->id)->where('campus_id', $this->world->c2->id)->count())->toBe(3)
+        ->and($this->a->fresh()->capacity)->toBe(40);
 });
 
 it('autoriza todas antes de escribir: si el jefe no puede con una, no aplica ninguna', function () {

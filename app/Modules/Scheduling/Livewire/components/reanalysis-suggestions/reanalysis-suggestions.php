@@ -52,13 +52,19 @@ use Mary\Traits\Toast;
  * van en uno (NewGroupPlacementQuery::freeRooms()); «Aplicar» lo crea con OpenReanalysisGroup, que revisa con los candados
  * puestos que siga libre.
  *
- * «Aplicar las N elegidas» (seguimiento de la 8.3a): quien ajusta marca la casilla de varias sugerencias del bloque
- * (`chosen`, `wire:model.live`: cada cambio vuelve a autorizar y a pintar) y las aplica juntas con
- * ApplyReanalysisSuggestions, una por una, después de la confirmación de Nexus. No se eligen (supuestos por confirmar) las
- * que no se pueden aplicar (la de solo aviso, la bloqueada), «Abrir un grupo» sin su lugar buscado (buscarlo cuesta casi
- * un segundo y el lote no lo busca), la que se está editando (se aplica con sus lugares o su salón, con su «Aplicar») ni
- * la que choca con una ya elegida (SuggestionBatch); cada una dice por qué. Al pintar, las elegidas que ya no valen salen
- * de `chosen`. Nada viene marcado: aplicar es decisión del jefe.
+ * «Aplicar las N elegidas» (seguimiento de la 8.3a): al abrir el bloque vienen marcadas las sugerencias que se pueden
+ * aplicar (confirmado el 18 de noviembre de 2026, como en la maqueta B; si dos chocan, la primera), quien ajusta desmarca o
+ * marca (`chosen`, `wire:model.live`: cada cambio vuelve a autorizar y a pintar) y las aplica juntas con
+ * ApplyReanalysisSuggestions, una por una («Se aplican las que pasan», confirmado el 18 de noviembre de 2026), después de
+ * la confirmación de Nexus. No se eligen (supuestos por confirmar) las que no se pueden aplicar (la de solo aviso, la
+ * bloqueada), «Abrir un grupo» sin su lugar buscado (buscarlo cuesta casi un segundo y el lote no lo busca), la que se
+ * está editando (se aplica con sus lugares o su salón, con su «Aplicar») ni la que choca con una ya elegida
+ * (SuggestionBatch, con el lugar buscado del grupo nuevo); cada una dice por qué. Al pintar, las elegidas que ya no valen
+ * salen de `chosen`.
+ *
+ * Lo que el jefe vio de cada elegida queda en `seen` (SuggestionBatch::signature() y su título). Si al volver a pintar la
+ * sugerencia ya no es la misma, se desmarca y dice «Cambió desde que la elegiste»; si cambió entre el último pintado y
+ * «Aplicar», no se aplica y el toast lo dice (supuesto por confirmar).
  */
 new class extends Component
 {
@@ -117,6 +123,26 @@ new class extends Component
      */
     public array $chosen = [];
 
+    /**
+     * Lo que el jefe vio de cada elegida al elegirla, por llave: su firma (SuggestionBatch::signature()) y su título.
+     *
+     * @var array<string, array{signature: string, title: string}>
+     */
+    #[Locked]
+    public array $seen = [];
+
+    /**
+     * Las que se desmarcaron porque cambiaron desde que se eligieron, por llave, con el título que tenían.
+     *
+     * @var array<string, string>
+     */
+    #[Locked]
+    public array $changedSinceChosen = [];
+
+    /** Si al pintar se marcan las que se pueden aplicar: al abrir el bloque. */
+    #[Locked]
+    public bool $preselect = false;
+
     /** Las sugerencias ya calculadas en esta petición (no viajan al navegador); aplicar las borra. */
     private ?ReanalysisSuggestions $advice = null;
 
@@ -134,6 +160,9 @@ new class extends Component
         $this->campusId = $campusId;
         $this->editing = null;
         $this->chosen = [];
+        $this->seen = [];
+        $this->changedSinceChosen = [];
+        $this->preselect = true;
         $this->placements = array_filter($this->placements, fn (string $key): bool => str_starts_with($key, $this->discardKey('')), ARRAY_FILTER_USE_KEY);
         $this->show = true;
     }
@@ -203,6 +232,7 @@ new class extends Component
     public function applyChosen(Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query, ApplyReanalysisSuggestions $batch): void
     {
         $found = [];
+        $changed = [];
         $gone = 0;
 
         try {
@@ -215,16 +245,19 @@ new class extends Component
 
                 if ($suggestion === null) {
                     $gone++;
+                } elseif ($suggestion->blockedReason === null && ($this->seen[$key]['signature'] ?? null) !== SuggestionBatch::signature($suggestion)) {
+                    $changed[] = ['suggestion' => $suggestion, 'reason' => $this->changedReason($this->seen[$key]['title'] ?? null, $suggestion)];
                 } else {
                     $found[] = $suggestion;
                 }
             }
 
-            if ($found === [] && $gone === 0) {
+            if ($found === [] && $changed === [] && $gone === 0) {
                 throw ValidationException::withMessages(['suggestions' => 'Elige al menos una sugerencia.']);
             }
 
             $result = $found === [] ? new SuggestionBatchResult([], [], []) : $batch->handle($load, $found, $this->placementsOf($found), $context->user());
+            $result = new SuggestionBatchResult($result->applied, [...$changed, ...$result->failed], $result->opened);
         } catch (ValidationException $exception) {
             $this->error('No se aplicaron las sugerencias', e(implode(' ', $exception->validator->errors()->all())));
 
@@ -236,6 +269,8 @@ new class extends Component
         }
 
         $this->chosen = [];
+        $this->seen = [];
+        $this->changedSinceChosen = [];
         $this->advice = null;
         $this->batchToast($result, $gone, $load);
 
@@ -404,6 +439,7 @@ new class extends Component
         $blocked = $this->blockedReasons($visible, $advice, $load);
         $choice = $adjustReason === null ? $this->choice($visible, $advice, $blocked) : null;
         $this->chosen = $choice['chosen'] ?? [];
+        $this->seen = array_intersect_key($this->seen, array_flip($this->chosen));
 
         return [
             'block' => $block,
@@ -422,14 +458,15 @@ new class extends Component
     }
 
     /**
-     * Lo que se elige para aplicar junto, para quien ajusta: por qué no se puede elegir cada una que no (`reasons`); las
-     * elegidas que siguen valiendo, en el orden en que se eligieron (`chosen`: sale la que ya no se puede elegir y la que
-     * choca con una anterior); por qué choca con una elegida cada una de las demás (`clashes`); y la confirmación del lote
-     * (`confirm`: tono `error` si cierra un grupo).
+     * Lo que se elige para aplicar junto, para quien ajusta: por qué no se puede elegir cada una que no (`reasons`); cuántas
+     * se pueden (`choosable`); las elegidas que siguen valiendo, en el orden en que se eligieron (`chosen`: al abrir el
+     * bloque, todas las que se pueden; sale la que ya no se puede elegir, la que choca con una anterior y la que cambió
+     * desde que se eligió, que va a `changed` con el título que tenía); por qué choca con una elegida cada una de las demás
+     * (`clashes`); y la confirmación del lote (`confirm`: tono `error` si cierra un grupo).
      *
      * @param  list<ReanalysisSuggestion>  $visible
      * @param  array<string, string>  $blocked
-     * @return array{reasons: array<string, string>, chosen: list<string>, clashes: array<string, string>, confirm: array{title: string, message: string, button: string, tone: string}|null}
+     * @return array{reasons: array<string, string>, choosable: int, chosen: list<string>, changed: array<string, string>, clashes: array<string, string>, confirm: array{title: string, message: string, button: string, tone: string}|null}
      */
     private function choice(array $visible, ReanalysisSuggestions $advice, array $blocked): array
     {
@@ -446,31 +483,55 @@ new class extends Component
             }
         }
 
+        $placements = $this->placementsOf(array_values($choosable));
+        $candidates = $this->preselect ? array_keys($choosable) : $this->chosen;
+        $this->preselect = false;
         $chosen = [];
 
-        foreach ($this->chosen as $key) {
+        foreach ($candidates as $key) {
             $suggestion = is_string($key) ? ($choosable[$key] ?? null) : null;
 
-            if ($suggestion !== null && array_all($chosen, fn (ReanalysisSuggestion $other): bool => SuggestionBatch::clash($suggestion, $other) === null)) {
+            if ($suggestion === null) {
+                continue;
+            }
+
+            if (isset($this->seen[$key]) && $this->seen[$key]['signature'] !== SuggestionBatch::signature($suggestion)) {
+                $this->changedSinceChosen[$key] = $this->seen[$key]['title'];
+                unset($this->seen[$key]);
+
+                continue;
+            }
+
+            if (array_all($chosen, fn (ReanalysisSuggestion $other): bool => SuggestionBatch::clash($suggestion, $other, $placements) === null)) {
                 $chosen[$key] = $suggestion;
+                $this->seen[$key] ??= ['signature' => SuggestionBatch::signature($suggestion), 'title' => $suggestion->title];
+                unset($this->changedSinceChosen[$key]);
             }
         }
 
         $clashes = [];
 
         foreach (array_diff_key($choosable, $chosen) as $key => $suggestion) {
-            $other = array_find($chosen, fn (ReanalysisSuggestion $other): bool => SuggestionBatch::clash($suggestion, $other) !== null);
+            $other = array_find($chosen, fn (ReanalysisSuggestion $other): bool => SuggestionBatch::clash($suggestion, $other, $placements) !== null);
 
             if ($other !== null) {
-                $clashes[$key] = "Choca con «{$other->title}», que ya elegiste: ".SuggestionBatch::clash($suggestion, $other).'. Aplícala después, con las sugerencias de ahora.';
+                $clashes[$key] = "Choca con «{$other->title}», que ya elegiste: ".SuggestionBatch::clash($suggestion, $other, $placements).'. Aplícala después, con las sugerencias de ahora.';
             }
+        }
+
+        $changed = [];
+
+        foreach (array_intersect_key($this->changedSinceChosen, $choosable) as $key => $title) {
+            $changed[$key] = $this->changedReason($title, $choosable[$key]);
         }
 
         $count = count($chosen);
 
         return [
             'reasons' => $reasons,
+            'choosable' => count($choosable),
             'chosen' => array_keys($chosen),
+            'changed' => $changed,
             'clashes' => $clashes,
             'confirm' => $count === 0 ? null : [
                 'title' => $count === 1 ? '¿Aplicar la sugerencia elegida?' : "¿Aplicar las {$count} sugerencias elegidas?",
@@ -479,6 +540,14 @@ new class extends Component
                 'tone' => array_any($chosen, fn (ReanalysisSuggestion $suggestion): bool => $suggestion->kind === ReanalysisSuggestionKind::CloseGroup) ? 'error' : 'primary',
             ],
         ];
+    }
+
+    /**
+     * «Cambió desde que la elegiste», con el título que tenía si ya no es el mismo.
+     */
+    private function changedReason(?string $title, ReanalysisSuggestion $suggestion): string
+    {
+        return 'Cambió desde que la elegiste'.($title !== null && $title !== $suggestion->title ? " (era «{$title}»)" : '').'; revísala y vuelve a elegirla.';
     }
 
     /**

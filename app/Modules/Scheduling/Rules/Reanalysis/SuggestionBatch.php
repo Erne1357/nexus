@@ -3,6 +3,7 @@
 namespace App\Modules\Scheduling\Rules\Reanalysis;
 
 use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
+use App\Modules\Scheduling\Validation\Minutes;
 
 /**
  * Aplicar en lote las sugerencias de un bloque del re-análisis (seguimiento de la tarea 8.3a): qué elegidas no se aplican
@@ -16,6 +17,9 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
  *   cerrar un grupo que otra amplía, no lo demás. Se aplica una y la otra se vuelve a calcular.
  * - **Chocan** dos que abren un grupo: el motor buscó el lugar de cada uno sin el otro (pueden quedar en el mismo salón a
  *   la misma hora) y la segunda ya no encontraría los grupos del bloque como se leyeron.
+ * - **Chocan** abrir un grupo y cambiar de salón otro si el lugar ya buscado del grupo nuevo quiere el salón al que se
+ *   mueve una sesión a una hora que se empalma: el motor buscó el lugar leyendo la base, sin el cambio pendiente, y
+ *   aplicar las dos dejaría el grupo nuevo y el cambio fallido (lo caro sin lo barato).
  * - **Abrir un grupo va primero:** revisa todos los grupos vivos del bloque como se leyeron, así que después de cambiar
  *   uno ya no se aplicaría. Lo demás solo revisa los grupos que toca, que el grupo nuevo no cambia: no chocan.
  */
@@ -24,25 +28,72 @@ final class SuggestionBatch
     /**
      * Por qué dos sugerencias del mismo bloque no se aplican juntas, o null si sí.
      */
-    public static function clash(ReanalysisSuggestion $one, ReanalysisSuggestion $other): ?string
+    /**
+     * @param  array<string, NewGroupPlacement>  $placements  el lugar ya buscado de cada «Abrir un grupo», por llave
+     */
+    public static function clash(ReanalysisSuggestion $one, ReanalysisSuggestion $other, array $placements = []): ?string
     {
         if ($one->kind === ReanalysisSuggestionKind::OpenGroup && $other->kind === ReanalysisSuggestionKind::OpenGroup) {
             return 'las dos abren un grupo, y se abre uno por vez';
+        }
+
+        if ($one->kind === ReanalysisSuggestionKind::OpenGroup || $other->kind === ReanalysisSuggestionKind::OpenGroup) {
+            [$opening, $moving] = $one->kind === ReanalysisSuggestionKind::OpenGroup ? [$one, $other] : [$other, $one];
+
+            return self::sameRoom($placements[$opening->key] ?? null, $moving);
         }
 
         return array_intersect($one->groupIds(), $other->groupIds()) === [] ? null : 'las dos cambian el mismo grupo';
     }
 
     /**
+     * Lo que el jefe vio de una sugerencia: su tipo, su título, «Qué cambia», los grupos que toca, los lugares, el salón
+     * al que va cada sesión que se mueve, los lugares que se reparten y el grupo nuevo. Si al aplicar ya no es la misma,
+     * no se aplica sin que la vea. No cuentan «Por qué» (la evidencia) ni `expected`, que cambian con cualquier otro
+     * ajuste del bloque sin cambiar lo que hace.
+     */
+    public static function signature(ReanalysisSuggestion $suggestion): string
+    {
+        return hash('xxh128', serialize([
+            $suggestion->kind->value,
+            $suggestion->title,
+            $suggestion->effect,
+            $suggestion->groupIds(),
+            $suggestion->seats,
+            array_map(fn (array $move): array => [$move['sessionId'], $move['to']->id], $suggestion->moves),
+            $suggestion->relocations,
+            $suggestion->newGroup,
+        ]));
+    }
+
+    /**
+     * Si el lugar del grupo nuevo quiere, a una hora que se empalma, el salón al que el cambio mueve una sesión.
+     */
+    private static function sameRoom(?NewGroupPlacement $placement, ReanalysisSuggestion $moving): ?string
+    {
+        foreach ($moving->moves as $move) {
+            foreach ($placement?->sessions ?? [] as $session) {
+                if ($session['roomId'] === $move['to']->id && $session['day'] === $move['day']
+                    && Minutes::overlap(Minutes::of($session['startsAt']), Minutes::of($session['endsAt']), Minutes::of($move['startsAt']), Minutes::of($move['endsAt']))) {
+                    return "las dos quieren {$move['to']->code} a la misma hora ({$move['when']})";
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * La primera pareja de elegidas que chocan, dicha para quien aplica, o null si ninguna.
      *
      * @param  list<ReanalysisSuggestion>  $suggestions
+     * @param  array<string, NewGroupPlacement>  $placements  el lugar ya buscado de cada «Abrir un grupo», por llave
      */
-    public static function firstClash(array $suggestions): ?string
+    public static function firstClash(array $suggestions, array $placements = []): ?string
     {
         foreach ($suggestions as $index => $one) {
             foreach (array_slice($suggestions, $index + 1) as $other) {
-                if (($reason = self::clash($one, $other)) !== null) {
+                if (($reason = self::clash($one, $other, $placements)) !== null) {
                     return "«{$one->title}» y «{$other->title}»: {$reason}. Aplica una y revisa la otra con las sugerencias de ahora.";
                 }
             }

@@ -31,7 +31,8 @@ use Throwable;
  * los grupos del bloque mientras corren todas.
  *
  * Antes de escribir nada, y para todo el lote: quien actúa ajusta la carga (RA-07, `startReanalysis`), la carga sigue en
- * re-análisis, dos elegidas no chocan (SuggestionBatch: rechaza el lote con las dos y el motivo) y GroupPolicy deja hacer
+ * re-análisis, dos elegidas no chocan (SuggestionBatch, con el lugar ya buscado de abrir un grupo: rechaza el lote con las
+ * dos y el motivo) y GroupPolicy deja hacer
  * cada una sobre cada grupo que toca (ApplyReanalysisSuggestion::abilities(); el que nace de abrir un grupo,
  * OpenReanalysisGroup::ABILITIES): un permiso que falta no aplica ninguna. Abrir un grupo va primero (SuggestionBatch::
  * inOrder()). La bitácora es la de cada Action; no hay una del lote.
@@ -67,7 +68,7 @@ final class ApplyReanalysisSuggestions
             throw ValidationException::withMessages(['suggestions' => 'La carga ya no está en re-análisis: las sugerencias ya no se aplican.']);
         }
 
-        if (($clash = SuggestionBatch::firstClash($suggestions)) !== null) {
+        if (($clash = SuggestionBatch::firstClash($suggestions, $placements)) !== null) {
             throw ValidationException::withMessages(['suggestions' => $clash]);
         }
 
@@ -91,7 +92,7 @@ final class ApplyReanalysisSuggestions
             } catch (ValidationException $exception) {
                 $failed[] = ['suggestion' => $suggestion, 'reason' => implode(' ', $exception->validator->errors()->all())];
             } catch (AuthorizationException) {
-                $failed[] = ['suggestion' => $suggestion, 'reason' => 'No tienes permiso para aplicarla: la ajusta la jefatura de su departamento.'];
+                $failed[] = ['suggestion' => $suggestion, 'reason' => 'Al aplicarla faltó un permiso; no se cambió nada de ella.'];
             } catch (Throwable $exception) {
                 report($exception);
                 $failed[] = ['suggestion' => $suggestion, 'reason' => 'No se pudo aplicar por un error inesperado; intenta de nuevo.'];

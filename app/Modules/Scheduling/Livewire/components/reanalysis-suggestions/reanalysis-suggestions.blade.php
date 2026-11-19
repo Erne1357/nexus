@@ -3,8 +3,8 @@
     campus y en cuántos grupos se ofrece; «Demanda por carrera» (esperados con las calificaciones del semestre actual
     contra los cupos de la versión vigente y los de ahora, con la diferencia y la clase de RA-04; primer semestre sin
     clasificar, RA-09); y las sugerencias de la tarea 8.3a con los grupos de ahora (scheduling::reanalysis.suggestions).
-    Al pie fijo, a quien no ajusta, por qué; a quien ajusta, cuántas eligió y «Aplicar las N elegidas» (`btn-primary`,
-    deshabilitado sin ninguna), que confirma con el diálogo de Nexus (tono `error` si cierra un grupo) lo que pasa: cuántas
+    Al pie fijo, a quien no ajusta, por qué; a quien ajusta y tiene algo que elegir, cuántas eligió y «Aplicar las N
+    elegidas» (`btn-primary`, deshabilitado sin ninguna y mientras viaja el cambio de una casilla), que confirma con el diálogo de Nexus (tono `error` si cierra un grupo) lo que pasa: cuántas
     de cada tipo, qué grupos se cierran y qué horario pierden. En celular, la cuenta arriba y debajo «Cerrar» y «Aplicar»
     (el resto del ancho), de 44 px. `close()` es del x-drawer.
 --}}
@@ -79,7 +79,7 @@
                     @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing, 'placements' => $placements, 'roomOptions' => $roomOptions, 'choice' => $choice])
                 </div>
 
-                @php($batch = $choice !== null && $suggestions !== [])
+                @php($batch = ($choice['choosable'] ?? 0) > 0)
                 @php($count = count($choice['chosen'] ?? []))
                 @php($confirm = $choice['confirm'] ?? null)
                 <footer class="sticky bottom-0 flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-base-300 bg-base-100 px-5 py-3">
@@ -102,7 +102,7 @@
                                 class="btn btn-primary max-md:h-11"
                                 wire:click="applyChosen"
                                 wire:loading.attr="disabled"
-                                wire:target="applyChosen"
+                                wire:target="applyChosen,chosen"
                                 @disabled($confirm === null)
                                 @if ($confirm !== null)
                                     x-confirm="{{ $confirm['message'] }}" data-confirm-title="{{ $confirm['title'] }}" data-confirm-button="{{ $confirm['button'] }}" data-confirm-tone="{{ $confirm['tone'] }}"
