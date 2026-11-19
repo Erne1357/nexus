@@ -1,8 +1,9 @@
 """El motor CP-SAT del servicio (`app/engine/cpsat.py` y `app/model/solve.py`, tarea 7.7): el ciclo por la API, la
 cancelación, el plazo con reloj real, el avance y lo que no cabe.
 
-Las instancias rápidas son los fixtures compartidos; para el plazo y la cancelación, una carga generada de 150
-grupos (`generated`), que no se resuelve en un instante.
+Las instancias rápidas son los fixtures compartidos (cada uno de punta a punta, con su `expected.json`, en
+`test_fixtures_cpsat.py`, 7.10); para el plazo y la cancelación, una carga generada de 150 grupos (`generated`), que no
+se resuelve en un instante.
 """
 
 import json
@@ -74,16 +75,19 @@ def context(**overrides: Any) -> RunContext:
     return RunContext(threads=overrides.pop("threads", 1), **overrides)
 
 
-def test_el_motor_se_registra_y_se_elige_con_solver_engine():
+def test_cp_sat_es_el_motor_por_omision_y_el_de_prueba_solo_si_se_pide():
+    """Desde la 7.10 (acuerdo con el Riel C), el servicio usa CP-SAT si `SOLVER_ENGINE` no dice otra cosa; el de prueba
+    queda para pruebas y CI con `SOLVER_ENGINE=trivial`."""
     assert isinstance(make_engine("cpsat"), CpSatEngine)
-    assert Settings.from_env({"SOLVER_TOKEN": "t", "SOLVER_ENGINE": "cpsat"}).engine == "cpsat"
-    assert Settings.from_env({"SOLVER_TOKEN": "t"}).engine == "trivial"
+    assert Settings.from_env({"SOLVER_TOKEN": "t"}).engine == "cpsat"
+    assert Settings.from_env({"SOLVER_TOKEN": "t", "SOLVER_ENGINE": " "}).engine == "cpsat"
+    assert Settings.from_env({"SOLVER_TOKEN": "t", "SOLVER_ENGINE": "trivial"}).engine == "trivial"
 
 
 def test_ciclo_completo_por_la_api_con_el_motor_cpsat(tiny_input: dict[str, Any], auth: dict[str, str]):
-    """`tiny` por `POST /solve` y `GET /runs/{id}` con `SOLVER_ENGINE=cpsat`: una salida válida, sin duras, con el
-    puntaje de PHP (`score.py`) y el mejor puntaje de la corrida igual al de la salida."""
-    with TestClient(create_app(make_settings(engine="cpsat"))) as client:
+    """`tiny` por `POST /solve` y `GET /runs/{id}` con el motor por omisión: una salida válida de CP-SAT, sin duras,
+    con el puntaje de PHP (`score.py`) y el mejor puntaje de la corrida igual al de la salida."""
+    with TestClient(create_app(make_settings())) as client:
         run_id = client.post("/solve", json=tiny_input, headers=auth).json()["run_id"]
         wait_until(lambda: client.get(f"/runs/{run_id}", headers=auth).json()["status"] == "done", timeout=30)
         body = client.get(f"/runs/{run_id}", headers=auth).json()
@@ -96,41 +100,6 @@ def test_ciclo_completo_por_la_api_con_el_motor_cpsat(tiny_input: dict[str, Any]
     assert output.soft_score == SoftScorer(data).score(output.sessions).to_contract()
     assert body["progress"] == 100
     assert body["best_score"] == output.soft_score.total
-
-
-@pytest.mark.parametrize("name", ["tiny", "small", "medium"])
-def test_el_motor_programa_los_fixtures_sin_duras(name: str):
-    """Con el plazo de cada entrada: todo programado sin duras, `feasible` (nunca `optimal`: la búsqueda por
-    vecindarios no prueba el óptimo) y el desglose de la salida suma el total."""
-    data, expected = fixture(name)
-
-    output = CpSatEngine().solve(data, context())
-
-    assert output.status is RunStatus.FEASIBLE
-    assert output.unscheduled == []
-    assert hard_violations(data, output.sessions) == []
-    assert set(expected["must_schedule"]) <= {session.group_id for session in output.sessions}
-    assert output.soft_score.total == sum(output.soft_score.by_rule.model_dump().values())
-    assert any("No se probó el óptimo" in line for line in output.log)
-
-
-def test_el_fixture_infactible_reporta_sus_grupos_y_reglas_en_conflicto():
-    """`infeasible`: t001 solo tiene libres 6 bloques para sus tres grupos de 4 horas. Quedan al menos dos sin
-    programar, cada uno con HC-09 al frente (la indisponibilidad le quita casi todas sus opciones) y HC-01 (lo que le
-    queda choca con el grupo de su docente que sí quedó); la corrida no se cae y los de t002 se programan."""
-    data, expected = fixture("infeasible")
-
-    output = CpSatEngine().solve(data, context())
-
-    unscheduled = {entry.group_id: entry.reasons for entry in output.unscheduled}
-    assert output.status is RunStatus.PARTIAL
-    assert len(unscheduled) >= expected["min_unscheduled"]
-    assert set(unscheduled) <= set(expected["may_leave_unscheduled"])
-    for reasons in unscheduled.values():
-        assert reasons[0].startswith("HC-09: el docente no está disponible")
-        assert any(reason.startswith("HC-01: el docente ya tiene clase") for reason in reasons)
-    assert set(expected["must_schedule"]) <= {session.group_id for session in output.sessions}
-    assert hard_violations(data, output.sessions) == []
 
 
 def test_un_grupo_sin_ninguna_opcion_queda_fuera_con_su_regla_y_los_demas_se_programan():
@@ -437,4 +406,57 @@ def test_en_la_carga_real_la_reserva_vuelve_a_programar_los_grupos_que_se_quitan
 
     assert found == {}
     assert set(taken) <= set(search.sessions)
+    assert hard_violations(source, search.all_sessions) == []
+
+
+def test_en_la_carga_real_los_que_necesitan_otros_dias_entran_en_la_segunda_ronda_sin_intentarlos_uno_por_uno(
+    monkeypatch,
+):
+    """Segunda pasada del Riel A: de la salida guardada de `department-multicampus` se quitan 20 grupos que están fuera
+    de su patrón (otros días o un día de 2 horas) y 20 que no. La primera ronda de la reserva, con los niveles por
+    necesidad, deja fuera a algunos de los primeros (de 2 a 4 al medirlo); la segunda, con todos sus niveles y solo
+    para ellos, los programa, así que ninguno cae en `_alone`. Sin la segunda ronda, `_alone` los intentaba uno por uno
+    y, con la máquina cargada, a algunos no les alcanzaba la reserva de 3 s."""
+    from app.contract.input import HintSession
+    from app.model import solve as solve_module
+    from app.model.data import ModelData
+    from app.model.hint import read_hint
+    from app.model.phases import SearchLimits
+    from app.model.search import Search
+
+    alone = solve_module._alone
+    tried: list[str] = []
+
+    def counted(data, search, group_id, *args):
+        tried.append(group_id)
+        return alone(data, search, group_id, *args)
+
+    monkeypatch.setattr(solve_module, "_alone", counted)
+    folder = fixtures_dir() / "v1" / "department-multicampus"
+    source = parse_input(json.loads((folder / "input.json").read_text()))
+    saved = parse_output(json.loads((folder / "cpsat-output.json").read_text()))
+    hints = [HintSession(**session.model_dump(exclude={"changed"})) for session in saved.sessions]
+    tiers = {
+        group_id: entry.tier
+        for group_id, entry in read_hint(
+            ModelData.of(source.model_copy(update={"hint_sessions": hints}))
+        ).groups.items()
+    }
+    off_pattern = sorted(group_id for group_id, tier in tiers.items() if tier)
+    in_pattern = sorted(group_id for group_id, tier in tiers.items() if not tier)
+    taken = off_pattern[:20] + in_pattern[:: len(in_pattern) // 20][:20]
+    by_group: dict[str, list] = defaultdict(list)
+    for session in saved.sessions:
+        by_group[session.group_id].append(session)
+    search = Search(
+        sessions={group_id: sessions for group_id, sessions in by_group.items() if group_id not in taken},
+        unplaced=taken,
+    )
+    started = time.perf_counter()
+
+    found = solve_module._complete(ModelData.of(source), search, started + 3, started + 10, SearchLimits(workers=2), 0)
+
+    assert found == {}
+    assert set(taken) <= set(search.sessions)
+    assert tried == []
     assert hard_violations(source, search.all_sessions) == []
