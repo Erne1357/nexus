@@ -2,7 +2,10 @@
 
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\User;
+use App\Modules\Imports\Actions\BatchNotReady;
 use App\Modules\Imports\Actions\CreateImportMapping;
+use App\Modules\Imports\Actions\RetryStalledBatch;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\RowIssue;
@@ -58,6 +61,11 @@ use Mary\Traits\Toast;
  * los lotes recientes. Mientras la cola trabaja, o prepara el archivo de errores, la vista se refresca
  * sola con `wire:poll`.
  *
+ * Un lote que se atoró validando o aplicando (ImportBatchQuery::stalled(); E-03, ensayo 8.11) se muestra «Atorado»,
+ * aquí y en los lotes recientes, y deja de refrescarse. A quien puede importar le ofrece retryStalled(), con
+ * confirmación: validar otra vez, reanudar la aplicación o, si desactivaba faltantes, marcarlo fallido
+ * (RetryStalledBatch).
+ *
  * La copia temporal del archivo (una exportación del SII, con datos personales) se borra al subir el
  * lote, al cambiar de archivo y al empezar de nuevo; si el admin cierra la pestaña, la borra la limpieza
  * de Livewire a las 24 horas.
@@ -83,7 +91,7 @@ new #[Title('Importaciones')] class extends Component
     #[Locked]
     public array $header = [];
 
-    /** El archivo temporal cuyas columnas se leyeron: upload() sube ese y no otro. */
+    /** El archivo temporal cuyas columnas se leyeron: uploadBatch() sube ese y no otro. */
     #[Locked]
     public string $readFile = '';
 
@@ -164,6 +172,9 @@ new #[Title('Importaciones')] class extends Component
             : [];
         // Lo que la cola hace después de aplicar (las invitaciones de los correos) se vuelve a leer un minuto más.
         $settling = $batch?->status === BatchStatus::Applied && $batch->applied_at?->gt(now()->subMinute()) && collect($summary)->contains('live', true);
+        // Un lote atorado ya no avanza: no se refresca, espera a que el admin lo vuelva a encolar.
+        $stalled = $batch !== null && $batches->stalled($batch);
+        $recent = $this->step === 1 ? $batches->recent() : collect();
 
         return [
             // La vista recibe las propiedades antes de with(): el paso de este render va aparte.
@@ -172,7 +183,9 @@ new #[Title('Importaciones')] class extends Component
             'batchTemplate' => $batch === null ? null : ($labels[$batch->template] ?? $batch->template),
             'batchFields' => $batchDefinition?->fields() ?? [],
             'batchKey' => $batchDefinition?->naturalKey() ?? [],
-            'polling' => $batch !== null && ($batch->status->inProgress() || $applyQueued || ($errorsPending && ! $errorsLost) || $settling),
+            'polling' => $batch !== null && (($batch->status->inProgress() && ! $stalled) || $applyQueued || ($errorsPending && ! $errorsLost) || $settling),
+            'stalled' => $stalled,
+            'stalledNotice' => $stalled ? $this->stalledNotice($batch, $labels[$batch->template] ?? $batch->template, $context->user()) : null,
             'summary' => $summary,
             'applyQueued' => $applyQueued,
             'errorsLost' => $errorsLost,
@@ -204,7 +217,8 @@ new #[Title('Importaciones')] class extends Component
                 ['id' => '', 'name' => '— Sin columna —'],
                 ...array_map(fn (string $column): array => ['id' => $column, 'name' => $column], $this->header),
             ],
-            'recent' => $this->step === 1 ? $batches->recent() : collect(),
+            'recent' => $recent,
+            'stalledRecent' => $recent->filter(fn (ImportBatch $recentBatch): bool => $batches->stalled($recentBatch))->pluck('id')->all(),
         ];
     }
 
@@ -262,9 +276,10 @@ new #[Title('Importaciones')] class extends Component
 
     /**
      * Paso 2 → 3: sube el lote, con el mapeo elegido, sin mapeo (por nombre) o con uno nuevo si el admin
-     * cambió la propuesta, y lo manda a validar a la cola.
+     * cambió la propuesta, y lo manda a validar a la cola. No se llama `upload`: en el navegador `$wire.upload` es la
+     * subida de archivos de Livewire, y «Validar el archivo» no llegaba aquí (E-01, tests/Arch/LivewireActionNamesTest.php).
      */
-    public function upload(
+    public function uploadBatch(
         TemplateRegistry $templates,
         ImportMappingQuery $mappings,
         ColumnMatcher $matcher,
@@ -417,16 +432,36 @@ new #[Title('Importaciones')] class extends Component
             }
         }
 
+        $this->queueApplication($batch, $context->user(), $deactivates ? $confirmedMissing : null);
+    }
+
+    /**
+     * Vuelve a encolar un lote atorado (RetryStalledBatch): una validación empieza otra vez y una aplicación se reanuda
+     * con las filas que faltan; la que desactivaba faltantes queda fallida con su motivo, que la página muestra.
+     * Validar otra vez es subir (`create`); reanudar o dar por fallida una aplicación es aplicar (`apply`).
+     */
+    public function retryStalled(ImportBatchQuery $batches, Actor $context, RetryStalledBatch $retry): void
+    {
+        $this->authorize('viewAny', ImportBatch::class);
+
+        $batch = $batches->findOrFail((string) $this->batchId);
+        $batch->status === BatchStatus::Applying
+            ? $this->authorize('apply', $batch)
+            : $this->authorize('create', ImportBatch::class);
+
         try {
-            ApplyQueuedBatch::dispatch($batch, $context->user(), $deactivates ? $confirmedMissing : null);
-        } catch (Throwable $exception) {
-            report($exception);
-            $this->error('La cola no respondió', 'El lote sigue validado: intenta aplicarlo otra vez en un momento.');
+            $status = $retry->handle($batch, $context->user());
+        } catch (BatchNotReady) {
+            $this->warning('El lote ya no está atorado', 'La página ya muestra cómo va.');
 
             return;
         }
 
-        $this->applyQueued = true;
+        match ($status) {
+            BatchStatus::Uploaded => $this->queueValidation($batch),
+            BatchStatus::Validated => $this->queueApplication($batch, $context->user()),
+            default => null,
+        };
     }
 
     /**
@@ -528,7 +563,7 @@ new #[Title('Importaciones')] class extends Component
     }
 
     /**
-     * Plantilla y archivo, en continue() y otra vez en upload(): llegan del navegador.
+     * Plantilla y archivo, en continue() y otra vez en uploadBatch(): llegan del navegador.
      *
      * @return array<string, list<mixed>>
      */
@@ -542,6 +577,79 @@ new #[Title('Importaciones')] class extends Component
             }],
             'file' => ['required', 'file', 'extensions:xlsx,csv,txt'],
         ];
+    }
+
+    /**
+     * Qué dice la tarjeta de un lote atorado y, a quien puede volver a encolarlo, qué le ofrece y con qué confirmación:
+     * lo que RetryStalledBatch hará con él.
+     *
+     * @return array{title: string, description: string, action: array{label: string, icon: string, title: string, message: string, tone: string}|null}
+     */
+    private function stalledNotice(ImportBatch $batch, string $template, User $user): array
+    {
+        $since = $batch->updated_at->format('d/m/Y H:i');
+        $stopped = 'El proceso de la cola se detuvo antes de terminar.';
+
+        if ($batch->status === BatchStatus::Validating) {
+            return [
+                'title' => 'La validación se atoró: no avanza desde el '.$since.', con '.number_format($batch->processed_rows).' filas leídas.',
+                'description' => "{$stopped} Validar de nuevo borra lo que alcanzó a leer y empieza otra vez con el mismo archivo.",
+                'action' => ! $user->can('create', ImportBatch::class) ? null : [
+                    'label' => 'Validar de nuevo',
+                    'icon' => 'o-arrow-path',
+                    'title' => '¿Validar de nuevo?',
+                    'message' => "Se borra lo que alcanzó a leer y {$batch->original_name} se valida otra vez desde el principio.",
+                    'tone' => 'primary',
+                ],
+            ];
+        }
+
+        $title = 'La aplicación se atoró: no avanza desde el '.$since.', con '.number_format($batch->processed_rows).' de '.number_format($batch->valid_rows).' filas revisadas.';
+        $canApply = $user->can('apply', $batch);
+
+        if ($batch->deactivate_missing) {
+            return [
+                'title' => $title,
+                'description' => "{$stopped} Lo escrito se queda. Como se eligió desactivar los que no vienen en el archivo, no se reanuda: márcalo como fallido y vuelve a subir el archivo.",
+                'action' => ! $canApply ? null : [
+                    'label' => 'Marcar como fallido',
+                    'icon' => 'o-x-circle',
+                    'title' => '¿Marcar como fallido?',
+                    'message' => 'El lote queda fallido y lo que alcanzó a escribirse se queda. Para terminar, vuelve a subir el archivo y revisa otra vez cuáles se desactivan.',
+                    'tone' => 'error',
+                ],
+            ];
+        }
+
+        return [
+            'title' => $title,
+            'description' => "{$stopped} Lo escrito se queda: reanudar sigue con las filas que faltan, sin repetir las ya escritas.",
+            'action' => ! $canApply ? null : [
+                'label' => 'Reanudar la aplicación',
+                'icon' => 'o-play',
+                'title' => '¿Reanudar la aplicación?',
+                'message' => "Se escriben en {$template} las filas que faltan; las ya escritas no se repiten. Al terminar, el lote queda aplicado a tu nombre.",
+                'tone' => 'warning',
+            ],
+        ];
+    }
+
+    /**
+     * Manda a aplicar un lote validado. Si la cola no responde, sigue validado y se vuelve a aplicar: las filas ya
+     * escritas no se repiten.
+     */
+    private function queueApplication(ImportBatch $batch, User $user, ?int $confirmedMissing = null): void
+    {
+        try {
+            ApplyQueuedBatch::dispatch($batch, $user, $confirmedMissing);
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->error('La cola no respondió', 'El lote sigue validado: intenta aplicarlo otra vez en un momento.');
+
+            return;
+        }
+
+        $this->applyQueued = true;
     }
 
     private function queueValidation(ImportBatch $batch): void

@@ -48,7 +48,8 @@ use Throwable;
  * fallo y BatchApplied llevan lo que sí se escribió (FailImportBatch); volver a importar el archivo
  * corregido es seguro por el upsert por clave natural. Si el proceso de la cola muere a media
  * aplicación, ApplyQueuedBatch deja el lote fallido con InterruptImportBatch, que lee lo escrito de esas
- * mismas cuentas.
+ * mismas cuentas. Si muere sin que corra el failed() del job, el lote se queda aplicando hasta que se ve
+ * atorado; RetryStalledBatch lo deja validado y esta Action lo reanuda con las filas que faltan.
  */
 final class ApplyImportBatch
 {
@@ -235,8 +236,10 @@ final class ApplyImportBatch
 
     /**
      * Pasa el lote de `validated` a `applying` con el registro bloqueado: dos clics en "aplicar" no
-     * lo aplican dos veces. El avance vuelve a cero: al validar contó las filas leídas. Queda en el lote
-     * si el admin eligió desactivar faltantes, que la plantilla tiene que ofrecer.
+     * lo aplican dos veces. El avance cuenta las filas válidas que ya no esperan: cero en un lote recién
+     * validado (al validar contó las filas leídas), y las ya revisadas en uno que se reanuda después de
+     * atorarse (RetryStalledBatch). Queda en el lote si el admin eligió desactivar faltantes, que la
+     * plantilla tiene que ofrecer.
      */
     private function start(ImportBatch $batch, ?string $run, ImportTemplate $template, bool $deactivateMissing): void
     {
@@ -251,11 +254,13 @@ final class ApplyImportBatch
                 $template->ensureDeactivatesMissing();
             }
 
+            $pending = ImportRow::query()->where('batch_id', $locked->id)->whereIn('status', [RowStatus::Valid, RowStatus::Warning])->count();
+
             // El archivo de errores de la validación deja de valer: la cola lo rehace al terminar.
             $locked->update([
                 'status' => BatchStatus::Applying,
                 'run_id' => $run,
-                'processed_rows' => 0,
+                'processed_rows' => max(0, $locked->valid_rows - $pending),
                 'errors_exported_at' => null,
                 'deactivate_missing' => $deactivateMissing,
             ]);

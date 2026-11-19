@@ -4,6 +4,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Imports\Actions\ExportBatchErrors;
+use App\Modules\Imports\Actions\RetryStalledBatch;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Enums\BatchStatus;
@@ -18,6 +19,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\Fixtures\ImportTemplates\CampusesTemplate;
@@ -179,7 +181,64 @@ describe('admin', function () {
             ->assertSee('La aplicación se interrumpió en la fila 3: Falló.')
             ->assertSeeInOrder(['Altas', '1', 'Cambios', '0']);
     });
+
+    it('una aplicación atorada se reanuda con confirmación y termina sin repetir lo escrito', function () {
+        stallAfterFirstRow($this->batch);
+        $since = $this->batch->fresh()->updated_at->format('d/m/Y H:i');
+        $this->travel(41)->minutes();
+
+        $page = wizardForBatch($this->admin, $this->batch)
+            ->assertSee('Atorado')
+            ->assertSee("La aplicación se atoró: no avanza desde el {$since}, con 1 de 2 filas revisadas.")
+            ->assertDontSee('Aplicando…')
+            ->assertDontSeeHtml('wire:poll')
+            ->assertSeeHtml('x-confirm="Se escriben en Campus (prueba) las filas que faltan; las ya escritas no se repiten. Al terminar, el lote queda aplicado a tu nombre."')
+            ->call('retryStalled')
+            ->assertHasNoErrors();
+
+        expect($this->batch->fresh())
+            ->status->toBe(BatchStatus::Applied)
+            ->processed_rows->toBe(2)
+            ->and($this->batch->fresh()->applier->is($this->admin))->toBeTrue()
+            ->and(Campus::where('code', 'C9')->count())->toBe(1);
+
+        $page->assertSet('step', 4)->assertSeeInOrder(['Altas', '1', 'Cambios', '1', 'Sin cambios', '0']);
+    });
+
+    it('una aplicación atorada que desactivaba faltantes no se reanuda: se marca fallida y dice por qué', function () {
+        Queue::fake();
+        stallAfterFirstRow($this->batch, deactivateMissing: true);
+        $this->travel(41)->minutes();
+
+        wizardForBatch($this->admin, $this->batch)
+            ->assertSee('no se reanuda: márcalo como fallido y vuelve a subir el archivo.')
+            ->assertSeeHtml('data-confirm-title="¿Marcar como fallido?"')
+            ->call('retryStalled')
+            ->assertSee(RetryStalledBatch::DEACTIVATING_REASON);
+
+        expect($this->batch->fresh()->status)->toBe(BatchStatus::Failed);
+        Queue::assertNothingPushed();
+    });
 });
+
+/**
+ * La aplicación del lote escribió su primera fila (C9) y el proceso de la cola murió sin dejarlo fallido.
+ */
+function stallAfterFirstRow(ImportBatch $batch, bool $deactivateMissing = false): void
+{
+    $campus = Campus::factory()->create(['code' => 'C9', 'name' => 'Campus Nueve']);
+
+    ImportRow::query()->where('batch_id', $batch->id)->where('row_number', 2)
+        ->update(['status' => RowStatus::Applied, 'target_type' => $campus->getMorphClass(), 'target_id' => $campus->id]);
+    $batch->update([
+        'status' => BatchStatus::Applying,
+        'run_id' => (string) Str::uuid7(),
+        'processed_rows' => 1,
+        'created_rows' => 1,
+        'errors_exported_at' => null,
+        'deactivate_missing' => $deactivateMissing,
+    ]);
+}
 
 describe('otros roles', function () {
     it('no pueden aplicar aunque la página la haya abierto el admin', function () {

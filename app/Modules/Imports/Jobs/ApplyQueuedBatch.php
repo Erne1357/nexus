@@ -27,8 +27,10 @@ final class ApplyQueuedBatch implements ShouldQueue
 
     public int $tries = 1;
 
-    /** Media hora, por debajo del `retry_after` de la conexión (ver ValidateQueuedBatch). */
-    public int $timeout = 1800;
+    /** Media hora, por debajo del `retry_after` de la conexión (ver ValidateQueuedBatch); ImportBatchQuery::stalled() la usa. */
+    public const int TIMEOUT = 1800;
+
+    public int $timeout = self::TIMEOUT;
 
     public bool $failOnTimeout = true;
 
