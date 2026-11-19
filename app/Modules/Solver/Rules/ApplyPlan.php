@@ -23,7 +23,7 @@ use App\Modules\Solver\Contract\SolverOutput;
  *   el mensaje; las de INPUT_RULES son `inputProblems` y no retienen), los que no recibieron ninguna
  *   sesión y los que chocarían con lo que se queda (supuesto por confirmar): si las sesiones nuevas de un grupo se
  *   empalman con las de su docente (HC-01), de su salón (HC-02) o de un grupo con una de sus claves de cohorte (HC-03,
- *   desde el 19 de noviembre de 2026) en lo que no se mueve (las sesiones fijas de la entrada, la ocupación de docentes
+ *   desde el 18 de noviembre de 2026) en lo que no se mueve (las sesiones fijas de la entrada, la ocupación de docentes
  *   y salones fuera de la corrida y las de hoy de los grupos que se quedan) o con las nuevas de un grupo anterior (en el
  *   orden de la entrada), ese grupo también se queda. Como quedarse devuelve sus sesiones de hoy, se repite hasta que
  *   nada cambia. Sin la cohorte, un grupo que el motor no acomodó se quedaba con su horario de hoy y los de su cohorte
