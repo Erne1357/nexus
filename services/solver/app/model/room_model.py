@@ -115,6 +115,9 @@ def improve_rooms_scored(
         for index, session in enumerate(sessions)
     ]
     before = scorer.score(sessions)
+    if all(new is old for new, old in zip(improved, sessions, strict=True)):
+        # Ningún salón cambió: un solo puntaje (en la mejora corre una vez por vecindario sobre toda la solución).
+        return sessions, before
     after = scorer.score(improved)
 
     return (improved, after) if after.total <= before.total else (sessions, before)
