@@ -17,7 +17,7 @@
                     <x-core::status-badge tone="warning" icon="o-arrows-right-left" :label="$changedInTray === 1 ? '1 cambia' : $changedInTray.' cambian'" />
                 @endif
             </header>
-            <ul class="grid min-h-0 content-start gap-1.5 overflow-auto p-2 [scrollbar-width:thin] max-desktop:auto-cols-[15rem] max-desktop:grid-flow-col max-desktop:overflow-y-hidden max-desktop:overscroll-x-contain max-md:auto-cols-[13.5rem]">
+            <ul class="relative grid min-h-0 content-start gap-1.5 overflow-auto p-2 [scrollbar-width:thin] max-desktop:auto-cols-[15rem] max-desktop:grid-flow-col max-desktop:overflow-y-hidden max-desktop:overscroll-x-contain max-md:auto-cols-[13.5rem]">
                 @forelse ($tray as $entry)
                     @php($group = $entry['group'])
                     <li class="min-w-0" wire:key="tray-{{ $group['id'] }}">

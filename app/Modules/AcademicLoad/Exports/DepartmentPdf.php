@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
  * departamento. Solo para el personal con sesión (`academic_load.load.export`; decisión del usuario del 10 de noviembre
  * de 2026): como el Excel de la modalidad, lo descarga quien cubre alguno de los departamentos que publicaron, porque lo
  * publicado no es secreto entre el personal. Se arma solo con la versión del departamento, así que otro departamento
- * que republica no lo invalida.
+ * que republica no lo invalida. Lleva las marcas de lo que cambió y los grupos cancelados, como el del semestre (tarea 8.5).
  */
 final class DepartmentPdf extends PublishedPdf implements StaffExport
 {
@@ -86,13 +86,14 @@ final class DepartmentPdf extends PublishedPdf implements StaffExport
     protected function document(PublishedSchedule $schedule, Term $term, Modality $modality): array
     {
         $groups = $schedule->department($this->departmentId);
+        $shown = SemesterPdf::withCancelled($groups, $schedule->cancelledOfDepartment($this->departmentId));
 
         return ['academic-load::pdf.semester', [
             'title' => $this->departmentName,
             'subtitle' => count($groups) === 1 ? '1 grupo' : count($groups).' grupos',
-            'updated' => self::updated($schedule->updatedAt($groups)),
+            'updated' => self::updated($schedule->updatedAt($shown)),
             'days' => SemesterPdf::days($groups, $schedule),
-            'subjects' => SemesterPdf::subjects($groups, $schedule),
+            'subjects' => SemesterPdf::subjects($shown, $schedule),
             'staff' => true,
         ], 'landscape'];
     }

@@ -1,7 +1,8 @@
 {{--
     El drawer de paralelos de una materia en un campus (academic-load::pages.inbox): lo que piden las carreras en ese
     campus contra lo que bastan juntándolas (un grupo es de un campus, M8), una minitabla carrera × (grupos completos, alumnos al mixto) y los grupos mixtos. Es solo la
-    sugerencia de ParallelGroups; lo mixto se arma en la fase 3. `close()` es del x-drawer.
+    sugerencia de ParallelGroups; se arma en la pestaña «Paralelos» (tarea 8.8), a la que lleva el pie si la ruta existe
+    (`armUrl`, por Route::has, como las pestañas). `close()` es del x-drawer.
 --}}
 @php($subject = $parallelsTarget['subject'])
 @php($parallels = $parallelsTarget['parallels'])
@@ -54,4 +55,11 @@
             </section>
         @endif
     </div>
+
+    @if ($parallelsTarget['armUrl'] !== null)
+        <footer class="flex items-center justify-between gap-3 border-t border-base-300 px-5 py-3" data-testid="parallels-arm-link">
+            <p class="text-sm text-neutral">Los paralelos se arman en su pestaña.</p>
+            <a href="{{ $parallelsTarget['armUrl'] }}" wire:navigate class="btn btn-sm max-md:h-11"><x-icon name="o-arrows-pointing-in" class="h-4 w-4" aria-hidden="true" />Ir a Paralelos</a>
+        </footer>
+    @endif
 </div>

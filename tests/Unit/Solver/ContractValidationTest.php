@@ -54,6 +54,11 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'soft_weights.SC-03', 'entero de 0 en adelante'],
+    'peso blando sobre el tope' => [function (array $d) {
+        $d['soft_weights']['SC-01'] = 10001;
+
+        return $d;
+    }, 'soft_weights.SC-01', 'debe estar entre 0 y 10 000'],
     'peso blando desconocido' => [function (array $d) {
         $d['soft_weights']['SC-10'] = 1;
 
@@ -96,6 +101,31 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'agreements[0].group_id', 'groups'],
+    'pista de un grupo desconocido' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => 'no-existe', 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].group_id', 'groups'],
+    'pista de un salón desconocido' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room_id' => 'no-existe', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].room_id', 'rooms'],
+    'pista con fin antes del inicio' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 1, 'starts_at' => '11:00', 'ends_at' => '09:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].ends_at', 'posterior'],
+    'pista con hora mal escrita' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 1, 'starts_at' => '9:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].starts_at', 'HH:MM'],
+    'pista en el día 7' => [function (array $d) {
+        $d['hint_sessions'] = [['group_id' => $d['groups'][0]['id'], 'day' => 7, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
+
+        return $d;
+    }, 'hint_sessions[0].day', 'entre 1 y 6'],
 ]);
 
 test('una entrada rota se rechaza con la ruta del campo', function (Closure $break, string $path, string $fragment) {

@@ -61,9 +61,80 @@
                 <div class="rounded-field border border-info/40 bg-info/10 px-3.5 py-3">
                     <span class="text-xs font-medium text-neutral">Propuesta</span>
                     <p class="mt-0.5 break-words font-semibold">{{ $request->proposed['description'] ?? '' }}</p>
+                    @foreach (\App\Modules\Staffing\Support\SessionLabels::snapshot($request->proposed['sessions'] ?? []) as $line)
+                        <p class="mt-0.5 text-sm">{{ $line['days'] }} <span class="font-mono">{{ $line['time'] }}</span></p>
+                    @endforeach
+                    @if (isset($request->proposed['room']))
+                        <p class="mt-0.5 text-sm">Salón <span class="font-mono font-semibold">{{ $request->proposed['room'] }}</span></p>
+                    @endif
                 </div>
             </div>
         </section>
+
+        @if ($request->status->isOpen())
+            @php
+                $impact = $request->impact;
+                $assessable = (bool) ($impact['assessable'] ?? false);
+                $hard = $impact['hard'] ?? [];
+                $soft = $impact['soft'] ?? [];
+                $impactGroups = collect($impact['affected_groups'] ?? [])->keyBy('id');
+            @endphp
+            <section aria-labelledby="request-impact-title" data-testid="request-impact">
+                <div class="mb-2 flex items-center justify-between gap-2">
+                    <h3 id="request-impact-title" class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Impacto</h3>
+                    @if ($canDecide)
+                        <x-button label="Recalcular impacto" icon="o-arrow-path" class="btn-ghost btn-sm max-md:h-11 max-md:min-h-11" wire:click="recalculateImpact" spinner="recalculateImpact" data-testid="recalculate-impact" />
+                    @endif
+                </div>
+                @if ($impact === null)
+                    <p class="text-sm text-neutral" data-testid="impact-none">Todavía no se calcula.</p>
+                @elseif (! $assessable)
+                    <p class="text-sm text-neutral" data-testid="impact-unassessable">La propuesta no trae un horario o un salón concretos: no se pudo simular.</p>
+                @else
+                    @if ($hard === [])
+                        <x-core::status-badge tone="success" label="Sin choques" icon="o-check-circle" data-testid="impact-clear" />
+                    @else
+                        <ul class="space-y-2" data-testid="impact-hard">
+                            @foreach ($hard as $rule)
+                                <li class="rounded-field border border-error/40 bg-error/10 px-3.5 py-3" data-testid="impact-rule">
+                                    <div class="flex items-start gap-2">
+                                        <span class="badge badge-error badge-soft h-6.5 shrink-0 font-mono font-medium">{{ $rule['rule'] }}</span>
+                                        <div class="min-w-0 space-y-0.5 text-sm">
+                                            @foreach ($rule['messages'] as $message)
+                                                <p class="break-words">{{ $message }}</p>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                    @php($ruleGroups = collect($rule['groups'])->map(fn ($id) => $impactGroups->get($id))->filter())
+                                    @if ($ruleGroups->isNotEmpty())
+                                        <ul class="mt-2 flex flex-wrap gap-1.5">
+                                            @foreach ($ruleGroups as $other)
+                                                <li class="badge badge-neutral badge-soft h-auto min-h-6.5 max-w-full gap-1.5 py-0.5 text-start font-medium"><span class="font-mono">{{ $other['code'] }}</span> {{ $other['subject'] }}@if ($other['teacher']) <span class="text-neutral">· {{ $other['teacher'] }}</span>@endif</li>
+                                            @endforeach
+                                        </ul>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+                    @if ($soft !== [])
+                        <details class="mt-2 rounded-field border border-base-300 px-3.5 py-2.5 text-sm" data-testid="impact-soft">
+                            <summary class="cursor-pointer font-medium max-md:py-1.5">{{ count($soft) }} {{ count($soft) === 1 ? 'aviso' : 'avisos' }}</summary>
+                            <ul class="mt-2 space-y-1">
+                                @foreach ($soft as $rule)
+                                    @foreach ($rule['messages'] as $message)
+                                        <li class="break-words"><span class="font-mono text-neutral">{{ $rule['rule'] }}</span> {{ $message }}</li>
+                                    @endforeach
+                                @endforeach
+                            </ul>
+                        </details>
+                    @endif
+                    @if (($impact['affected_teachers'] ?? []) !== [])
+                        <p class="mt-2 text-sm text-neutral" data-testid="impact-teachers">Docentes afectados: <span class="text-base-content">{{ collect($impact['affected_teachers'])->pluck('name')->implode(', ') }}</span></p>
+                    @endif
+                @endif
+            </section>
+        @endif
 
         <section aria-labelledby="request-reason-title">
             <h3 id="request-reason-title" class="mb-1.5 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Motivo</h3>
@@ -112,9 +183,13 @@
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
+                @php($blockedClashes = array_sum(array_map(fn ($rule) => count($rule['messages'] ?? []), $request->impact['hard'] ?? [])))
+                @if ($blockedClashes > 0)
+                    <p class="text-sm text-error" data-testid="approve-blocked">No se puede aprobar: el cambio deja {{ $blockedClashes }} {{ $blockedClashes === 1 ? 'choque duro' : 'choques duros' }}. Recházalo o pide alternativas al motor.</p>
+                @endif
                 <div class="flex flex-wrap justify-end gap-2">
                     <x-button label="Rechazar" icon="o-x-circle" class="btn-outline btn-error max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="reject" spinner="reject" data-testid="reject-request" />
-                    <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" data-testid="approve-request" />
+                    <x-button label="Aprobar" icon="o-check" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:flex-1" wire:click="approve" spinner="approve" :disabled="$blockedClashes > 0" data-testid="approve-request" />
                 </div>
             @else
                 <p class="flex items-center gap-2 text-sm text-neutral"><x-icon name="o-information-circle" class="h-4 w-4 shrink-0" aria-hidden="true" />La revisa el jefe del departamento.</p>

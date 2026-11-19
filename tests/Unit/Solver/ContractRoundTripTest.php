@@ -66,3 +66,19 @@ test('HC-10: el préstamo de un solo grupo (`agreements[].group_id`) va y vuelve
         ->and(SolverInput::fromArray($data)->agreements[0]->groupId)->toBeNull()
         ->and(SolverInput::fromArray($data)->agreements[0]->toArray())->not->toHaveKey('group_id');
 });
+
+test('hint_sessions ausente vale vacío y no se emite; presente se conserva', function () {
+    $data = contractFixture('input');
+    expect(SolverInput::fromArray($data)->hintSessions)->toBe([])
+        ->and(SolverInput::fromArray($data)->toArray())->not->toHaveKey('hint_sessions');
+
+    $data['hint_sessions'] = [
+        ['group_id' => $data['groups'][0]['id'], 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria'],
+        ['group_id' => $data['groups'][1]['id'], 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room_id' => $data['rooms'][0]['id'], 'kind' => 'teoria'],
+    ];
+
+    $input = SolverInput::fromArray($data);
+
+    expect($input->hintSessions)->toHaveCount(2)
+        ->and($input->toArray()['hint_sessions'])->toBe($data['hint_sessions']);
+});

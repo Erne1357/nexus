@@ -32,6 +32,7 @@ use App\Modules\Faculty\Events\TeacherUpdated;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupMovedToCampus;
+use App\Modules\Scheduling\Events\GroupsCancelling;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
 use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
@@ -47,6 +48,7 @@ use App\Modules\Staffing\Database\Seeders\StaffingSupplyDemoSeeder;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
+use App\Modules\Staffing\Listeners\BlockCancellingWithOpenChangeRequests;
 use App\Modules\Staffing\Listeners\BlockClosingWithPendingChangeRequests;
 use App\Modules\Staffing\Listeners\BlockReturnWithApprovedChangeRequests;
 use App\Modules\Staffing\Listeners\FollowGroupMovedToCampus;
@@ -108,6 +110,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
 
         Event::listen(LoadTransitioning::class, BlockClosingWithPendingChangeRequests::class);
         Event::listen(LoadTransitioning::class, BlockReturnWithApprovedChangeRequests::class);
+        Event::listen(GroupsCancelling::class, BlockCancellingWithOpenChangeRequests::class);
         Event::listen(GroupsCreated::class, RerankOnGroupsCreated::class);
         Event::listen(GroupMovedToCampus::class, FollowGroupMovedToCampus::class);
         Event::listen([GroupScheduleChanged::class, GroupCancelled::class, GroupTeacherChanged::class], RerankOnGroupChange::class);
@@ -295,16 +298,19 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     {
         $groups = fn (DemoContext $demo): Builder => Group::query()->active()
             ->where('term_id', $demo->term()->getKey())
-            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'));
 
         return [
             new DemoCheck([DemoCheckpoint::Staffing], 'Toda carga con grupos está en asignación', function (DemoContext $demo): true|string {
-                $pending = AcademicLoad::query()->where('term_id', $demo->term()->getKey())->where('status', '!=', LoadStatus::Staffing)
+                $pending = AcademicLoad::query()->where('term_id', $demo->term()->getKey())
+                    ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))->where('status', '!=', LoadStatus::Staffing)
                     ->whereExists(Group::query()->active()->selectRaw('1')
                         ->whereColumn('groups.term_id', 'academic_loads.term_id')
                         ->whereColumn('groups.modality_id', 'academic_loads.modality_id')
                         ->whereColumn('groups.department_id', 'academic_loads.department_id')
                         ->whereIn('groups.campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+                        ->whereIn('groups.modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))
                         ->toBase())
                     ->count();
 
@@ -329,6 +335,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             }),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Rooms), 'Cero choques duros de docente (HC-01, HC-08, HC-09)', fn (DemoContext $demo): true|string => ($hard = DB::table('schedule_conflicts')
                 ->where('term_id', $demo->term()->getKey())->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+                ->whereIn('group_id', Group::query()->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'))->select('id'))
                 ->where('severity', 'hard')->whereIn('rule', ['HC-01', 'HC-08', 'HC-09'])->whereNull('resolved_at')->count()) === 0
                 ? true
                 : "{$hard} choques duros de docente."),
@@ -353,7 +360,8 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 ->whereColumn('groups.department_id', 'academic_loads.department_id')
                 ->toBase(), not: ! $withGroups);
         $groups = fn (DemoContext $demo): Builder => Group::query()->active()->where('term_id', $demo->term()->getKey())
-            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'));
+            ->whereIn('campus_id', Campus::query()->whereIn('code', $demo->campuses)->select('id'))
+            ->whereIn('modality_id', Modality::query()->whereIn('code', $demo->volume->modalities())->select('id'));
 
         return [
             new DemoCheck([DemoCheckpoint::Publication], 'Toda carga con grupos está cerrada y sin pendientes de cierre (HC-15)', function (DemoContext $demo) use ($loads): true|string {

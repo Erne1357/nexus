@@ -25,8 +25,14 @@ use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Queries\NewGroupPlacementQuery;
+use App\Modules\Scheduling\Queries\ReanalysisBoardQuery;
+use App\Modules\Scheduling\Queries\ReanalysisSuggestionsQuery;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupPlacement;
+use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use LogicException;
 
 /**
  * Una carga presencial de Ciencias Básicas en Ago-Dic 2027 (20273) con grupos reales en Campus I y Campus II, para las
@@ -239,6 +245,27 @@ final class ReanalysisWorld
         app(TransitionLoad::class)->handle($load->fresh(), LoadStatus::Reanalysis, $this->admin, 'Llegaron las calificaciones', fn (): array => []);
 
         return ['department' => $department, 'load' => $load->refresh(), 'subject' => $subject];
+    }
+
+    /**
+     * La sugerencia «Abrir un grupo» de una carrera en un bloque (tarea 8.3b), calculada como la pide el drawer: por
+     * omisión, ISIC en Cálculo Integral en Campus II.
+     */
+    public function openGroupSuggestion(?Subject $subject = null, ?Campus $campus = null, ?Career $career = null): ReanalysisSuggestion
+    {
+        $block = app(ReanalysisBoardQuery::class)->block($this->load->fresh(), null, ($subject ?? $this->integral)->id, ($campus ?? $this->c2)->id);
+
+        return app(ReanalysisSuggestionsQuery::class)->for($this->load, $block)->find('open_group:'.($career ?? $this->isc)->id)
+            ?? throw new LogicException('No hay sugerencia de abrir un grupo para esa carrera.');
+    }
+
+    /**
+     * Dónde cabe el grupo nuevo de esa sugerencia (por omisión, la de openGroupSuggestion()), como lo contesta el motor
+     * (NewGroupPlacementQuery).
+     */
+    public function newGroupPlacement(?ReanalysisSuggestion $suggestion = null): ?NewGroupPlacement
+    {
+        return app(NewGroupPlacementQuery::class)->place($this->load->fresh(), ($suggestion ?? $this->openGroupSuggestion())->newGroup);
     }
 
     /**

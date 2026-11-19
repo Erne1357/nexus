@@ -18,6 +18,7 @@ use App\Modules\Solver\Actions\LaunchSolverRun;
 use App\Modules\Solver\Actions\ReleaseStaleApplyingRun;
 use App\Modules\Solver\Actions\RequestApplySolverRun;
 use App\Modules\Solver\Contract\SoftWeights;
+use App\Modules\Solver\Engines\CpSat\CpSatEngine;
 use App\Modules\Solver\Engines\EngineRegistry;
 use App\Modules\Solver\Engines\SolverEngine;
 use App\Modules\Solver\Enums\RunScope;
@@ -150,6 +151,9 @@ new #[Title('Corridas del motor')] class extends Component
     #[Locked]
     public ?string $againId = null;
 
+    /** Si «Volver a correr» viene de una corrida cuyo motor ya no está registrado: el nombre de ese motor. */
+    public ?string $unavailableEngine = null;
+
     public function mount(Actor $context, RunScreenQuery $screen): void
     {
         abort_unless($context->allowsAny(SolverPermission::DepartmentRunView) || $context->allowsAny(SolverPermission::CareerRunView), 403);
@@ -273,7 +277,9 @@ new #[Title('Corridas del motor')] class extends Component
             default => 'career',
         };
         $this->launchCareer = $again?->career_id ?? ($options['careers'][0]['id'] ?? '');
-        $this->launchEngine = $again?->engine ?? $engines->default()->key();
+        $registered = array_map(fn (SolverEngine $engine): string => $engine->key(), $engines->all());
+        $this->unavailableEngine = $again !== null && ! in_array($again->engine, $registered, true) ? $this->engineLabel($again->engine) : null;
+        $this->launchEngine = $again !== null && $this->unavailableEngine === null ? $again->engine : $engines->default()->key();
         $this->launchLimit = $again === null ? SolverSettings::fromSettings()->timeLimitFor(RunScope::from($this->launchScope)) : (int) (RunPayloads::read($again, 'input')['time_limit_seconds'] ?? 300);
         $this->showLaunch = true;
     }
@@ -316,6 +322,7 @@ new #[Title('Corridas del motor')] class extends Component
 
         $this->showLaunch = false;
         $this->againId = null;
+        $this->unavailableEngine = null;
         $this->runId = $run->getKey();
         $this->lens = '';
         $this->selected = '';
@@ -460,6 +467,7 @@ new #[Title('Corridas del motor')] class extends Component
             'row' => $row,
             'run' => $run,
             'engines' => collect(app(EngineRegistry::class)->all())->mapWithKeys(fn (SolverEngine $engine): array => [$engine->key() => $engine->label()])->all(),
+            'engineNames' => $this->engineNames(),
             'can' => [
                 'launch' => $this->launchOptions()['any'],
                 'apply' => $run !== null && $gate->allows('apply', $run),
@@ -606,11 +614,20 @@ new #[Title('Corridas del motor')] class extends Component
 
     private function engineLabel(string $key): string
     {
-        try {
-            return app(EngineRegistry::class)->get($key)->label();
-        } catch (InvalidArgumentException) {
-            return $key;
-        }
+        return $this->engineNames()[$key] ?? $key;
+    }
+
+    /**
+     * El nombre en pantalla de cada motor: los registrados y CP-SAT aunque el servicio no esté configurado, para que el
+     * historial no muestre la clave de una corrida de cuando sí lo estaba.
+     *
+     * @return array<string, string>
+     */
+    private function engineNames(): array
+    {
+        $registered = collect(app(EngineRegistry::class)->all())->mapWithKeys(fn (SolverEngine $engine): array => [$engine->key() => $engine->label()])->all();
+
+        return array_merge([CpSatEngine::KEY => CpSatEngine::LABEL], $registered);
     }
 
     /**

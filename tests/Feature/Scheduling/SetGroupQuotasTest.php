@@ -197,6 +197,30 @@ it('con cupo aceptado de otro departamento, cambiar lugares es directo y quitarl
         ->and($agreement->fresh()->status)->toBe(AgreementStatus::Cancelled);
 });
 
+it('el acuerdo aceptado toma los lugares nuevos de su cupo, con bitácora seats_changed y sin cambiar quién lo decidió (supuesto por confirmar)', function () {
+    GroupQuota::factory()->create(['group_id' => $this->group->id, 'career_id' => $this->foreign->id, 'max_seats' => 10]);
+    $agreement = InterdepartmentalAgreement::factory()->sharedGroup(10)->inStatus(AgreementStatus::Accepted)->create([
+        'term_id' => $this->group->term_id, 'group_id' => $this->group->id,
+        'from_department_id' => $this->imparte->id, 'to_department_id' => $this->otro->id, 'career_id' => $this->foreign->id,
+    ]);
+    $decided = $agreement->fresh()->only(['decided_by', 'decided_at']);
+
+    setQuotas([$this->owner->id => 20, $this->foreign->id => 15]);
+
+    $changed = Activity::query()->where('event', 'seats_changed')->sole();
+
+    expect($agreement->fresh()->max_seats)->toBe(15)
+        ->and($agreement->fresh()->only(['decided_by', 'decided_at']))->toEqual($decided)
+        ->and($changed->subject_id)->toBe($agreement->id)
+        ->and($changed->causer_id)->toBe($this->actor->id)
+        ->and($changed->attribute_changes['old'])->toBe(['max_seats' => 10])
+        ->and($changed->attribute_changes['attributes'])->toBe(['max_seats' => 15]);
+
+    setQuotas([$this->owner->id => 25, $this->foreign->id => 15]);
+
+    expect(Activity::query()->where('event', 'seats_changed')->count())->toBe(1);
+});
+
 it('HC-07: no deja que los cupos pasen la capacidad, sin escribir', function () {
     expect(setQuotasErrors([$this->owner->id => 30, $this->sameDept->id => 11]))
         ->toBe(['quotas' => ['HC-07: los cupos suman 41 y el grupo es de 40 lugares.']])

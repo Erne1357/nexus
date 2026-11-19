@@ -16,7 +16,7 @@
             <header class="flex items-start gap-3 border-b border-base-300 px-5 pt-5 pb-4">
                 <div class="min-w-0">
                     <h2 id="score-title" class="text-xl font-bold">Puntaje de la corrida <span class="font-mono">{{ $number }}</span></h2>
-                    <p class="text-sm text-neutral">{{ $scopeText($run) }} · {{ $engines[$run->engine] ?? $run->engine }} · menos es mejor</p>
+                    <p class="text-sm text-neutral">{{ $scopeText($run) }} · {{ $engineNames[$run->engine] ?? $run->engine }} · menos es mejor</p>
                 </div>
                 <button type="button" class="btn btn-ghost btn-sm btn-square ms-auto" wire:click="$set('showScore', false)" aria-label="Cerrar"><x-icon name="o-x-mark" class="h-5 w-5" aria-hidden="true" /></button>
             </header>
@@ -45,6 +45,17 @@
                     @endforelse
                 </section>
                 @if ($comparison)
+                    @if ($comparison->inputProblems() !== [])
+                        <section class="grid gap-2" data-testid="run-input-problems">
+                            <h3 class="font-bold">Problemas de entrada por corregir</h3>
+                            @foreach ($comparison->inputProblems() as $problem)
+                                <div class="grid gap-0.5 rounded-field border border-base-300 px-3 py-2 text-sm">
+                                    <b class="font-mono">{{ $problem['rule'] }}</b>
+                                    <span>{{ $problem['message'] }}@if ($problem['groups'] !== []) ({{ implode(', ', $problem['groups']) }})@endif</span>
+                                </div>
+                            @endforeach
+                        </section>
+                    @endif
                     <section class="grid gap-2">
                         <h3 class="font-bold">Se quedan como están</h3>
                         @forelse ($comparison->kept() as $entry)
@@ -123,6 +134,9 @@
                 <div class="grid gap-4 md:grid-cols-2">
                     <fieldset class="grid gap-2">
                         <legend class="mb-2 font-semibold">Motor</legend>
+                        @if ($unavailableEngine)
+                            <p class="text-sm text-neutral" data-testid="launch-engine-unavailable">{{ $unavailableEngine }} no está disponible ahora; se propone {{ $engines[$launchEngine] ?? $launchEngine }}.</p>
+                        @endif
                         <div class="join w-full" role="radiogroup" aria-label="Motor">
                             @foreach ($engines as $key => $label)
                                 <button type="button" role="radio" aria-checked="{{ $launchEngine === $key ? 'true' : 'false' }}" wire:click="$set('launchEngine', '{{ $key }}')"
@@ -203,6 +217,21 @@
                                 @if (count($keptAll) > 5)
                                     <li class="text-neutral">y {{ count($keptAll) - 5 }} más (en «Lo que queda»).</li>
                                 @endif
+                            </ul>
+                        </div>
+                    </div>
+                @endif
+                @php($inputProblems = $comparison->inputProblems())
+                @if ($inputProblems !== [])
+                    <div role="note" class="alert alert-info alert-soft items-start text-sm" data-testid="accept-input-problems">
+                        <x-icon name="o-information-circle" class="h-5 w-5 shrink-0" aria-hidden="true" />
+                        <div class="grid gap-1 text-base-content">
+                            <b>Problemas de entrada por corregir</b>
+                            <span>No dependen del acomodo: las sesiones se escriben igual y esto se corrige en la carga.</span>
+                            <ul class="grid gap-0.5">
+                                @foreach ($inputProblems as $problem)
+                                    <li><span class="font-mono font-semibold">{{ $problem['rule'] }}</span> · {{ $problem['message'] }}@if ($problem['groups'] !== []) ({{ implode(', ', array_slice($problem['groups'], 0, 5)) }}{{ count($problem['groups']) > 5 ? ' y '.(count($problem['groups']) - 5).' más' : '' }})@endif</li>
+                                @endforeach
                             </ul>
                         </div>
                     </div>
