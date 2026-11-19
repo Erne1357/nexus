@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
+use App\Modules\Scheduling\Rules\Cohorts;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -157,6 +158,10 @@ final class ExportSolverFixture extends Command
             $agreement['room_id'] = $this->token('room', $agreement['room_id']);
             $agreement['to_department_id'] = $this->token('department', $agreement['to_department_id']);
 
+            if (isset($agreement['group_id'])) {
+                $agreement['group_id'] = $this->token('group', $agreement['group_id']);
+            }
+
             return $agreement;
         }, $data['agreements']);
 
@@ -170,11 +175,12 @@ final class ExportSolverFixture extends Command
     }
 
     /**
-     * `plan:<plan>:<semestre>:<campus>` y `package:<paquete>:<campus>:<número>`: solo cambian las llaves.
+     * `plan:<plan>:<semestre>:<campus>`, `combination:<plan>:<semestre>:<campus>` (con la misma ficha de plan que
+     * `study_plan_id`) y `package:<paquete>:<campus>:<número>`: solo cambian las llaves.
      */
     private function cohortKey(string $key): string
     {
-        $kind = str_starts_with($key, 'plan:') ? 'plan' : 'package';
+        $kind = str_starts_with($key, 'plan:') || Cohorts::isCombination($key) ? 'plan' : 'package';
 
         return preg_replace_callback('/'.self::UUID.'/i', fn (array $match): string => $this->token($kind, $match[0]), $key) ?? $key;
     }

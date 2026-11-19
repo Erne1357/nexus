@@ -77,6 +77,11 @@ BROKEN = {
         "no se divide en bloques",
     ),
     "campo obligatorio nulo": (_set(["run_id"], None), "run_id", "es obligatorio"),
+    "préstamo de un grupo que no está": (
+        _set(["agreements", 0, "group_id"], "no-existe"),
+        "agreements[0].group_id",
+        "groups",
+    ),
     "lista que no es lista": (_set(["groups"], {"a": 1}), "groups", "lista"),
 }
 

@@ -219,6 +219,15 @@ dataset('one database scenario per hard rule', [
 
         return [];
     }],
+    'HC-10 en la ventana prestada a otro grupo de su departamento' => [function () {
+        $a = equivalenceGroup(test()->prog);
+        $b = equivalenceGroup(test()->bd);
+        equivalenceSession($a, 4, '07:00', '09:00', test()->owned);
+        equivalenceSession($b, 4, '09:00', '11:00', test()->owned);
+        equivalenceLoan($a, accepted: true, endsAt: '11:00');
+
+        return [$b->id => ['HC-10']];
+    }],
     'HC-11' => [function () {
         $a = equivalenceGroup(test()->prog);
         RoomBlock::factory()->for(test()->room)->create(['day' => 3, 'starts_at' => '07:00', 'ends_at' => '08:00']);
@@ -242,14 +251,14 @@ dataset('one database scenario per hard rule', [
     }],
 ]);
 
-function equivalenceLoan(Group $group, bool $accepted): void
+function equivalenceLoan(Group $group, bool $accepted, string $endsAt = '09:00'): void
 {
     $factory = InterdepartmentalAgreement::factory();
 
     ($accepted ? $factory->accepted() : $factory)->create([
         'term_id' => test()->term->id, 'campus_id' => test()->s1->id, 'group_id' => $group->id, 'room_id' => test()->owned->id,
         'from_department_id' => test()->sistemas->id, 'to_department_id' => test()->basicas->id,
-        'day' => 4, 'starts_at' => '07:00', 'ends_at' => '09:00',
+        'day' => 4, 'starts_at' => '07:00', 'ends_at' => $endsAt,
     ]);
 }
 
@@ -264,7 +273,7 @@ it('el evaluador en memoria sobre el contrato da las mismas reglas duras por gru
         ->and($inMemory)->toBe($fromDatabase);
 })->with('one database scenario per hard rule');
 
-it('HC-03: un grupo de otro departamento cuya materia tiene otro grupo no parece el único aunque la entrada solo traiga uno', function () {
+it('HC-03: un grupo de otro departamento cuya materia tiene otro grupo no parece el único: la entrada trae el semestre completo del movible', function () {
     $alone = equivalenceGroup(test()->prog);
     $sharesTeacher = equivalenceGroup(test()->calc, ['teacher_id' => test()->t2->id]);
     $sibling = equivalenceGroup(test()->calc);
@@ -276,12 +285,34 @@ it('HC-03: un grupo de otro departamento cuya materia tiene otro grupo no parece
 
     $groups = collect(equivalenceInput()->groups)->keyBy('id');
     [$fromDatabase, $inMemory] = equivalenceVerdicts();
+    $combination = 'combination:'.test()->plan->id.':1:S1';
 
     expect($groups[$sharesTeacher->id]->movable)->toBeFalse()
         ->and($groups[$sharesTeacher->id]->cohorts)->toBe([])
-        ->and($groups->has($sibling->id))->toBeFalse()
+        ->and($groups[$sibling->id]->movable)->toBeFalse()
+        ->and($groups[$sibling->id]->cohorts)->toBe([$combination])
+        ->and($groups[$alone->id]->cohorts)->toContain($combination)
         ->and($fromDatabase)->toBe([])
         ->and($inMemory)->toBe([]);
+});
+
+it('HC-03: el núcleo sin combinación con materias de varios grupos de otro departamento viaja en el contrato y el evaluador lo ve igual que el validador', function () {
+    $fis = equivalenceSubject(test()->basicas, 'AEF-1042');
+    $alone = equivalenceGroup(test()->prog);
+    $calcA = equivalenceGroup(test()->calc, ['code' => 'A']);
+    $calcB = equivalenceGroup(test()->calc, ['code' => 'B']);
+    $physics = equivalenceGroup($fis);
+    equivalenceSession($alone, 1, '07:00', '09:00');
+    equivalenceSession($calcA, 1, '08:00', '10:00');
+    equivalenceSession($calcB, 3, '07:00', '09:00');
+    equivalenceSession($physics, 3, '08:00', '10:00');
+
+    $groups = collect(equivalenceInput()->groups)->keyBy('id');
+    [$fromDatabase, $inMemory] = equivalenceVerdicts();
+
+    expect($groups->has($calcA->id) && $groups->has($calcB->id) && $groups->has($physics->id))->toBeTrue()
+        ->and($fromDatabase)->toBe([$alone->id => ['HC-03']])
+        ->and($inMemory)->toBe($fromDatabase);
 });
 
 it('HC-07 y HC-13 no viajan en el contrato: el validador los ve en la base y el evaluador del contrato no', function () {
@@ -294,4 +325,34 @@ it('HC-07 y HC-13 no viajan en el contrato: el validador los ve en la base y el 
 
     expect($fromDatabase)->toBe([$quotas->id => ['HC-07'], $retired->id => ['HC-13']])
         ->and($inMemory)->toBe([]);
+});
+
+it('HC-03: con dos núcleos sin combinación, el validador y el evaluador culpan a los mismos grupos aunque la base los traiga en otro orden', function () {
+    $subject = fn (Department $department, string $code): Subject => equivalenceSubject($department, $code);
+    [$y, $x, $s3, $s2, $s1] = [
+        $subject(test()->basicas, 'HCT-0005'), $subject(test()->basicas, 'HCT-0004'), $subject(test()->sistemas, 'HCT-0003'),
+        $subject(test()->basicas, 'HCT-0002'), $subject(test()->sistemas, 'HCT-0001'),
+    ];
+
+    // Creados en orden inverso a la clave: la base los lee en ese orden y el contrato por clave.
+    $yA = equivalenceGroup($y, ['code' => 'YA']);
+    $yB = equivalenceGroup($y, ['code' => 'YB']);
+    $xA = equivalenceGroup($x, ['code' => 'XA']);
+    $xB = equivalenceGroup($x, ['code' => 'XB']);
+    $third = equivalenceGroup($s3);
+    $second = equivalenceGroup($s2);
+    $first = equivalenceGroup($s1);
+    equivalenceSession($first, 1, '07:00', '09:00');
+    equivalenceSession($second, 2, '07:00', '09:00');
+    equivalenceSession($third, 3, '07:00', '09:00');
+    equivalenceSession($xA, 1, '07:00', '09:00');
+    equivalenceSession($xB, 2, '07:00', '09:00');
+    equivalenceSession($yA, 3, '07:00', '09:00');
+    equivalenceSession($yB, 1, '07:00', '09:00');
+
+    [$fromDatabase, $inMemory] = equivalenceVerdicts();
+
+    expect($fromDatabase)->not->toBe([])
+        ->and(array_merge(...array_values($fromDatabase)))->toContain('HC-03')
+        ->and($inMemory)->toBe($fromDatabase);
 });

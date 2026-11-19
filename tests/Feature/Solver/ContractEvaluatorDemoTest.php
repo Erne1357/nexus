@@ -17,8 +17,9 @@ use Tests\Support\Solver\Verdicts;
 /*
 | La equivalencia de la tarea 6.5 con la demo (volumen demo, al punto `cierre`: grupos con horario, docente y salón):
 | el horario de la demo no tiene choques, así que se mueve a propósito, siempre igual, y cada carga presencial debe dar
-| en memoria, sobre el contrato del motor, las mismas reglas duras por grupo que el validador contra la base. Sin el
-| núcleo sin combinación de HC-03, que el contrato no trae (docs/arquitectura/solver.md, «Evaluador en memoria»).
+| en memoria, sobre el contrato del motor, las mismas reglas duras por grupo que el validador contra la base, también el
+| núcleo sin combinación de HC-03 (la clave `combination:` y el semestre completo de cada movible; docs/arquitectura/
+| solver.md, «Evaluador en memoria»).
 */
 
 /**
@@ -71,7 +72,7 @@ it('con la demo y su horario movido a propósito, cada carga presencial da en me
 
     foreach (Department::query()->orderBy('name')->get() as $department) {
         $input = app(BuildSolverInput::class)->forDepartment($term, $pres, $department, 'run-demo')->input;
-        [$fromDatabase, $inMemory] = Verdicts::of($input, $state, withTypicalStudentCore: false);
+        [$fromDatabase, $inMemory] = Verdicts::of($input, $state);
 
         expect($inMemory)->toBe($fromDatabase, "La carga de {$department->name} no da lo mismo en memoria que en la base.");
 
