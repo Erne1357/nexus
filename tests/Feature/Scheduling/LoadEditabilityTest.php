@@ -48,13 +48,25 @@ it('blockedReasons da el motivo de cada grupo bloqueado', function () {
 
     $reasons = $this->rule->blockedReasons([$this->group, $cancelled]);
 
-    expect($reasons[$this->group->id])->toBe('La carga de Sistemas y Computación en Presencial está en cerrada: no se editan horarios.')
+    expect($reasons[$this->group->id])->toBe('La carga de Sistemas y Computación en Presencial ya está cerrada: no se editan horarios.')
         ->and($reasons[$cancelled->id])->toBe('El grupo E está cancelado: no se editan horarios.');
 
     $load->update(['status' => LoadStatus::Proposed]);
 
     expect($this->rule->blockedReasons([$this->group]))->toBe([$this->group->id => null]);
 });
+
+it('el motivo dice el estado de la carga de forma gramatical en cada estado que no se edita (ensayo 8.11, E-07)', function (LoadStatus $status, string $reason) {
+    AcademicLoad::factory()->inStatus($status)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->department->id]);
+
+    expect($this->rule->blockedReasons([$this->group], 'paralelos'))->toBe([$this->group->id => $reason])
+        ->and(fn () => $this->rule->ensure($this->group))->toThrow(ValidationException::class, str_replace('paralelos', 'horarios', $reason));
+})->with([
+    'borrador' => [LoadStatus::Draft, 'La carga de Sistemas y Computación en Presencial está en borrador: no se editan paralelos.'],
+    'cerrada' => [LoadStatus::Closed, 'La carga de Sistemas y Computación en Presencial ya está cerrada: no se editan paralelos.'],
+    'aprobada' => [LoadStatus::Approved, 'La carga de Sistemas y Computación en Presencial ya está aprobada: no se editan paralelos.'],
+    'publicada' => [LoadStatus::Published, 'La carga de Sistemas y Computación en Presencial ya está publicada: no se editan paralelos.'],
+]);
 
 it('traduce también el deadlock que Laravel envuelve al salir de una transacción anidada', function () {
     $deadlock = new QueryException('pgsql', 'update ...', [], new PDOException('deadlock detected', 0));

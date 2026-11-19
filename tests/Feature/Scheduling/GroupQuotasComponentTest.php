@@ -65,6 +65,15 @@ it('el jefe del departamento que imparte ve el panel con la dueña, la barra y �
         ->assertDontSee('Los cupos los reparte');
 });
 
+it('«Agregar carrera» ofrece cada carrera con su clave y su nombre, no en blanco (ensayo 8.11, E-13)', function () {
+    $page = quotasAs($this->jefe, $this->group);
+    $options = array_map(fn ($option): string => textOf($option), iterator_to_array(domOf($page)->querySelectorAll('[data-testid="quota-add"] select option')));
+
+    expect($options)->toContain('IE · Ingeniería Electrónica')
+        ->toContain('IIND · Ingeniería Industrial')
+        ->not->toContain('');
+});
+
 it('guarda los cupos, avisa y despacha quotas-saved', function () {
     quotasAs($this->jefe, $this->group)
         ->set('newCareer', $this->sameDept->id)

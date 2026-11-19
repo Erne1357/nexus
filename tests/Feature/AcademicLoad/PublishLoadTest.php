@@ -83,6 +83,14 @@ function backToClosed(): void
     AcademicLoad::query()->whereKey(test()->load->id)->update(['status' => LoadStatus::Closed->value]);
 }
 
+it('la versión queda con la misma fecha que la publicación aunque armar la foto cruce de segundo', function () {
+    LoadSnapshot::creating(fn () => test()->travel(2)->seconds());
+
+    $snapshot = publish();
+
+    expect($snapshot->fresh()->created_at->equalTo($this->load->fresh()->published_at))->toBeTrue();
+});
+
 it('publica una carga cerrada: la versión 1 con la foto de sus grupos no cancelados', function () {
     $snapshot = publish();
     $load = $this->load->fresh();

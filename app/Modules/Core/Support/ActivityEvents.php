@@ -56,6 +56,7 @@ final class ActivityEvents
         'password-reset-link-failed' => 'Enlace de contraseña sin enviar',
         'password-reset-with-link' => 'Contraseña restablecida',
         'failed-job-retried' => 'Trabajo reintentado',
+        'retried' => 'Reintentado',
         'failed-job-forgotten' => 'Trabajo descartado',
         'groups_confirmed' => 'Grupos confirmados',
         'quotas_updated' => 'Cupos',

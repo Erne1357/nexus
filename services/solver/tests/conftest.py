@@ -70,7 +70,9 @@ def make_settings(**overrides: Any) -> Settings:
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    with TestClient(create_app(make_settings())) as test_client:
+    """La API con el motor de prueba, pedido explícitamente (el del servicio por omisión es `cpsat` desde la 7.10): las
+    pruebas de la API miden el ciclo, no el modelo."""
+    with TestClient(create_app(make_settings(engine="trivial"))) as test_client:
         yield test_client
 
 

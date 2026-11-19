@@ -132,14 +132,14 @@ it('rechaza con la carga en cualquier otro estado, sin escribir', function (Load
 
     expect(fn () => placeSession($this->group, 1, '07:00', '08:00'))
         ->toThrow(fn (ValidationException $exception) => expect($exception->errors()['session'])
-            ->toBe(["La carga de Sistemas y Computación en Presencial está en {$label}: no se editan horarios."]))
+            ->toBe(["La carga de Sistemas y Computación en Presencial {$label}: no se editan horarios."]))
         ->and($this->group->sessions()->count())->toBe(0)
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
-    'borrador' => [LoadStatus::Draft, 'borrador'],
-    'cerrada' => [LoadStatus::Closed, 'cerrada'],
-    'aprobada' => [LoadStatus::Approved, 'aprobada'],
-    'publicada' => [LoadStatus::Published, 'publicada'],
+    'borrador' => [LoadStatus::Draft, 'está en borrador'],
+    'cerrada' => [LoadStatus::Closed, 'ya está cerrada'],
+    'aprobada' => [LoadStatus::Approved, 'ya está aprobada'],
+    'publicada' => [LoadStatus::Published, 'ya está publicada'],
 ]);
 
 it('rechaza si el departamento no tiene carga en el campus y el periodo', function () {

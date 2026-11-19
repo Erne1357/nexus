@@ -2,7 +2,7 @@
 
 Servicio en Python 3.12 (FastAPI + OR-Tools) que implementa el contrato JSON versión 1 de `docs/arquitectura/solver.md`. Nexus (el contenedor `queue`) le manda la entrada de una corrida, consulta su avance y recoge la salida. Nunca lo llama el navegador y no publica puertos.
 
-Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `FixedEngine` en PHP: horas seguidas desde el inicio de la jornada, `status = partial`) para que la API, el cliente de PHP y la pantalla de corridas se construyan antes que el modelo CP-SAT (tareas 7.4 a 7.7), que lo reemplazará.
+El motor por omisión es el **modelo CP-SAT** (`cpsat`, tareas 7.4 a 7.7 y 7.10; `app/model/`). Si la entrada trae `hint_sessions` (la salida de la heurística que manda `CpSatEngine` en PHP), arranca de ahí. El **motor de prueba** (`app/engine/trivial.py`, el equivalente de `FixedEngine` en PHP: horas seguidas desde el inicio de la jornada, `status = partial`) queda solo si se pide con `SOLVER_ENGINE=trivial`, para pruebas y CI.
 
 ## Estructura
 
@@ -10,10 +10,13 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 |---|---|
 | `app/config.py` | Variables de entorno (`Settings`) |
 | `app/contract/` | Modelos pydantic de la entrada y la salida v1, espejo de `app/Modules/Solver/Contract/` |
-| `app/engine/` | Interfaz de motor (`Engine`, `RunContext`) y el motor de prueba |
+| `app/engine/` | Interfaz de motor (`Engine`, `RunContext`), el motor CP-SAT (`cpsat.py`) y el de prueba (`trivial.py`) |
+| `app/model/` | El modelo CP-SAT: rejilla y patrón de sesiones, datos indexados de la entrada, variables con su dominio pre-filtrado, restricciones duras HC-01 a HC-13, el objetivo SC-01 a SC-09, salones en dos fases (`rooms.py`), la pista de la entrada (`hint.py`), la búsqueda por vecindarios (`search.py`), la resolución de punta a punta (`solve.py`) y un verificador de duras sobre la salida que no depende del modelo. Ver `docs/arquitectura/solver.md`, del «Modelo CP-SAT» a «Pista de la heurística» |
 | `app/runs.py` | Corridas en memoria, hilos de trabajo, límite de simultáneas, cancelación |
 | `app/api/` | Aplicación FastAPI (`factory.py`), autenticación y esquemas de respuesta |
-| `tests/` | pytest: API, contrato, fixtures compartidos, OR-Tools |
+| `tests/` | pytest: API, contrato, modelo, motor y los fixtures compartidos (`test_fixtures_cpsat.py`, 7.10) |
+| `scripts/benchmark.py` | Reproduce la tabla de «Tamaño de la instancia real» (`docs/arquitectura/solver.md`) con un fixture compartido; solo en la imagen `dev` |
+| `scripts/objective.py` | Mide el puntaje por fase de una corrida sobre un fixture, con o sin la pista de una salida guardada (`--hint`); solo en la imagen `dev` |
 
 ## Configuración
 
@@ -21,10 +24,11 @@ Hoy trae un **motor de prueba** (`app/engine/trivial.py`, el equivalente de `Fix
 |---|---|---|
 | `SOLVER_TOKEN` | (obligatoria) | Token compartido con Nexus. Sin ella el servicio no arranca. |
 | `SOLVER_DEFAULT_TIME_LIMIT` | `60` | Límite de tiempo por defecto, en segundos, que se pasa a los motores |
-| `SOLVER_THREADS` | `0` | Hilos de CP-SAT; `0` usa los núcleos disponibles. `options.threads` de la entrada tiene prioridad |
+| `SOLVER_THREADS` | `0` | Hilos de CP-SAT; `0` usa los núcleos disponibles. `options.threads` de la entrada tiene prioridad. Nunca más que los núcleos del contenedor |
+| `SOLVER_MAX_MODEL_VARIABLES` | `1500000` | Variables que puede tener el modelo CP-SAT de una corrida. Si las pasa, la corrida falla al armarlo con un mensaje claro, antes de agotar la memoria del servicio (las corridas comparten un proceso) |
 | `SOLVER_MAX_CONCURRENT_RUNS` | `2` | Corridas en cola o en curso antes de responder `429` |
 | `SOLVER_MAX_STORED_RUNS` | `50` | Corridas terminadas que se conservan en memoria |
-| `SOLVER_ENGINE` | `trivial` | Motor que atiende las corridas |
+| `SOLVER_ENGINE` | `cpsat` | Motor que atiende las corridas: `cpsat` (el modelo CP-SAT) o `trivial` (el de prueba, solo para pruebas y CI) |
 
 En compose, `SOLVER_TOKEN` sale de `.env` (plantilla en `.env.example`; en producción es obligatorio). `queue` lee `SOLVER_URL` (`http://solver:8000`) y `SOLVER_TOKEN` de ese mismo `.env`.
 
@@ -53,6 +57,7 @@ Con el stack de desarrollo (código montado, recarga automática, token por defe
 docker compose up -d solver
 docker compose logs -f solver
 docker compose run --rm --no-deps solver pytest          # pruebas con los fixtures compartidos montados
+docker compose run --rm --no-deps solver pytest -m realsize   # la carga real (department-multicampus, ~1 min)
 docker compose run --rm --no-deps solver ruff check .    # lint
 docker compose run --rm --no-deps solver ruff format --check .
 ```
@@ -70,6 +75,8 @@ La imagen `runtime` (etapa por defecto) no trae las herramientas de prueba.
 ### Fixtures compartidos
 
 Las pruebas leen los mismos JSON que PHP (`tests/Fixtures/solver/v1/*/input.json` y `output.json`); no se copian al servicio. En la imagen `dev` se montan en `/fixtures` (`SOLVER_FIXTURES_DIR`); fuera de Docker se leen de `<repositorio>/tests/Fixtures/solver`. Si no se encuentran, las pruebas fallan con un mensaje claro (nunca se omiten). Cada fixture nuevo entra solo a la prueba parametrizada: se valida con los modelos pydantic y vuelve a su JSON exacto, igual que en PHP.
+
+`test_fixtures_cpsat.py` (7.10) corre el motor CP-SAT sobre cada fixture y revisa la salida con el verificador independiente y con su `expected.json`. La carga real (`department-multicampus`, 60 s) lleva el marcador `realsize`: `pyproject.toml` la excluye por omisión (también en el CI de PR) y se corre con `pytest -m realsize`, de preferencia con `--cpus 2 --memory 2g`, como el servicio en compose.
 
 ## Dependencias
 

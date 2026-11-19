@@ -228,7 +228,10 @@ final class ReanalysisAdvisor
 
         foreach ($group->sessions as $session) {
             if ($chosen[$session->id]->id !== $session->room->id) {
-                $moves[] = ['sessionId' => $session->id, 'when' => $session->label(), 'from' => $session->room->code, 'fromId' => $session->room->id, 'to' => $chosen[$session->id]];
+                $moves[] = [
+                    'sessionId' => $session->id, 'when' => $session->label(), 'from' => $session->room->code, 'fromId' => $session->room->id, 'to' => $chosen[$session->id],
+                    'day' => $session->day, 'startsAt' => $session->startsAt, 'endsAt' => $session->endsAt,
+                ];
                 $this->takenRooms[] = ['room' => $chosen[$session->id]->id, 'session' => $session];
             }
         }

@@ -7,6 +7,7 @@ use App\Modules\Imports\Actions\ApplyImportBatch;
 use App\Modules\Imports\Actions\BatchNotReady;
 use App\Modules\Imports\Actions\ExportBatchErrors;
 use App\Modules\Imports\Actions\InterruptImportBatch;
+use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -27,8 +28,10 @@ final class ApplyQueuedBatch implements ShouldQueue
 
     public int $tries = 1;
 
-    /** Media hora, por debajo del `retry_after` de la conexión (ver ValidateQueuedBatch). */
-    public int $timeout = 1800;
+    /** Media hora, por debajo del `retry_after` de la conexión (ver ValidateQueuedBatch); ImportBatchQuery::stalled() la usa. */
+    public const int TIMEOUT = 1800;
+
+    public int $timeout = self::TIMEOUT;
 
     public bool $failOnTimeout = true;
 
@@ -61,8 +64,18 @@ final class ApplyQueuedBatch implements ShouldQueue
         $export->handle($batch);
     }
 
+    /**
+     * Si la interrupción lo dejó fallido sin archivo de errores (el proceso murió o pasó del tiempo, así que handle() no
+     * alcanzó a rehacerlo), lo encola: el asistente lo espera.
+     */
     public function failed(?Throwable $exception): void
     {
         app(InterruptImportBatch::class)->handle($this->batch, $this->run, $this->user);
+
+        $batch = $this->batch->refresh();
+
+        if ($batch->status === BatchStatus::Failed && $batch->errors_exported_at === null) {
+            ExportQueuedBatchErrors::dispatch($batch);
+        }
     }
 }
