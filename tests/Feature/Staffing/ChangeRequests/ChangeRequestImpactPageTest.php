@@ -128,6 +128,7 @@ it('el jefe que abre una pendiente la recalcula', function () {
 it('el modal de nueva solicitud trae las sesiones actuales del grupo y mover solo una no da HC-12', function () {
     $page = Livewire::actingAs($this->w->coordIsc)->test('staffing::pages.change-requests')
         ->call('openRequest')
+        ->assertSeeHtml('wire:model.live="requestGroupId"')
         ->set('requestGroupId', $this->g1->id)
         ->assertSet('proposedSessions', [
             ['day' => '1', 'starts_at' => '07:00', 'ends_at' => '09:00'],

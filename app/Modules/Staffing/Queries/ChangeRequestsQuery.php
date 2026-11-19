@@ -110,7 +110,7 @@ final class ChangeRequestsQuery
     {
         return $this->visible($context, $this->ofDepartment($termId, $modalityId, $campusId, $departmentId))
             ->with([
-                'group' => fn ($group) => $group->select('id', 'code', 'subject_id', 'owner_career_id', 'campus_id')->with([
+                'group' => fn ($group) => $group->select('id', 'code', 'subject_id', 'owner_career_id', 'campus_id', 'teacher_id')->with([
                     'subject:id,code,name',
                     'ownerCareer' => fn ($career) => $career->withTrashed()->select('id', 'code', 'name'),
                     'campus' => fn ($campus) => $campus->withTrashed()->select('id', 'code', 'name'),

@@ -2,7 +2,7 @@
     La lista de la pantalla de solicitudes de cambio (staffing::pages.change-requests): en tres grupos, en ese orden,
     pendientes, aprobadas por aplicar y resueltas (rechazadas y aplicadas), las más recientes primero. Cada renglón dice
     quién la pide, el grupo (con la etiqueta de su campus de hoy si la modalidad tiene más de uno), el estado, el tipo y lo
-    que propone; elegirla la abre a la derecha. La que se abre sola (la
+    que propone y, con alternativas del motor (tarea 8.7), cuántas hay o con cuál se aprobó; elegirla la abre a la derecha. La que se abre sola (la
     primera, sin elegirla) solo se marca desde lg, donde se ve su detalle; la elegida va en `bg-secondary`, como la lista de
     la asignación.
 --}}
@@ -29,7 +29,9 @@
         </h2>
         <ul class="divide-y divide-base-300">
             @foreach ($rows as $request)
-                @php($isSelected = $selected !== null && $selected->id === $request->id)
+                @php
+                    $isSelected = $selected !== null && $selected->id === $request->id;
+                @endphp
                 <li wire:key="request-{{ $request->id }}">
                     <button type="button" wire:click="pick('{{ $request->id }}')" aria-current="{{ $isSelected ? 'true' : 'false' }}" data-request="{{ $request->id }}"
                         class="group grid w-full min-w-0 cursor-pointer grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3 text-left hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary {{ $requestId !== '' ? 'aria-[current=true]:bg-secondary aria-[current=true]:text-secondary-content' : 'lg:aria-[current=true]:bg-secondary lg:aria-[current=true]:text-secondary-content' }}">
@@ -48,6 +50,20 @@
                             </span>
                         </span>
                         <span class="col-span-2 line-clamp-2 text-sm">{{ $request->proposed['description'] ?? '' }}</span>
+                        @php
+                            $chosenLetter = ($request->alternatives['chosen']['id'] ?? null) === null ? null : \App\Modules\Staffing\Support\ChangeAlternatives::letter($request->alternatives, $request->alternatives['chosen']['id']);
+                            $alternativesStatus = \App\Modules\Staffing\Enums\ChangeAlternativesStatus::of($request->alternatives);
+                            $alternativeCount = $alternativesStatus === \App\Modules\Staffing\Enums\ChangeAlternativesStatus::Ready ? count($request->alternatives['items'] ?? []) : 0;
+                            $flag = match (true) {
+                                $chosenLetter !== null => "Con la alternativa {$chosenLetter}",
+                                $request->status === \App\Modules\Staffing\Enums\ChangeRequestStatus::Pending && $alternativesStatus === \App\Modules\Staffing\Enums\ChangeAlternativesStatus::Computing => 'Buscando alternativas…',
+                                $request->status === \App\Modules\Staffing\Enums\ChangeRequestStatus::Pending && $alternativeCount > 0 => $alternativeCount === 1 ? '1 alternativa del motor' : "{$alternativeCount} alternativas del motor",
+                                default => null,
+                            };
+                        @endphp
+                        @if ($flag)
+                            <span class="col-span-2 flex items-center gap-1.5 text-[13px] text-info" data-testid="request-alternatives-flag"><x-icon name="o-arrows-right-left" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $flag }}</span>
+                        @endif
                     </button>
                 </li>
             @endforeach

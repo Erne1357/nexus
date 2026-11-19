@@ -7,7 +7,8 @@
     abajo cambian de grupo y la derecha va al botón de su cajón (la izquierda regresa); en celular, donde cada materia
     es una tira de lado, izquierda y derecha cambian de grupo y abajo va al botón (arriba regresa). Inicio y Fin van al
     primero y al último; Enter o Espacio los tocan. Con Alt, Ctrl o Cmd las flechas son del navegador.
-    Desde 1200 px siempre abierta y con su propio desplazamiento; antes, plegable (abierta desde 768 px; en celular
+    Desde 1200 px siempre abierta y con su propio desplazamiento, que lleva al grupo elegido a la vista sin mover la página
+    (así la franja «Por colocar» de arriba no se esconde); antes, plegable (abierta desde 768 px; en celular
     cerrada, y se cierra al elegir un grupo). En celular las piezas de cada materia se desplazan de lado.
 --}}
 @php
@@ -17,7 +18,14 @@
 <section class="order-1 flex min-h-0 min-w-0 flex-col rounded-box border border-base-300 bg-base-100 desktop:min-h-45 desktop:flex-[1_1_auto]"
     x-data="{ open: matchMedia('(min-width: 48rem)').matches, wide: matchMedia('(min-width: 75rem)').matches }"
     x-init="matchMedia('(min-width: 75rem)').addEventListener('change', (event) => wide = event.matches);
-        const reveal = () => $nextTick(() => wide && $el.querySelector('[data-group][aria-pressed=true]')?.scrollIntoView({ block: 'nearest' }));
+        const reveal = () => $nextTick(() => {
+            const item = wide && $el.querySelector('[data-group][aria-pressed=true]');
+            const body = $el.querySelector('#tray-body');
+            if (! item || ! body) { return }
+            const box = body.getBoundingClientRect();
+            const row = item.getBoundingClientRect();
+            body.scrollTop += row.top < box.top ? row.top - box.top : Math.max(0, row.bottom - box.bottom);
+        });
         reveal();
         $wire.$watch('groupId', reveal)"
     aria-labelledby="tray-title" aria-describedby="tray-keys" data-testid="tray">
