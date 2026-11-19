@@ -5,6 +5,7 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Solver\Actions\ProposePlacements;
 use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Rules\ApplyPlan;
@@ -14,6 +15,7 @@ use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\GroupsScheduleFingerprintQuery;
 use App\Modules\Staffing\Support\ChangeAlternatives;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -143,13 +145,21 @@ final class ChooseChangeAlternative
     }
 
     /**
-     * La revisión pesada, sin candados: la foto se lee una vez para el validador y para la entrada del motor. La usa
-     * también ApplyChosenAlternative (CR-04).
+     * La revisión pesada, sin candados: la foto se lee una vez para el validador y para la entrada del motor. Una
+     * alternativa que mueve un grupo de otro campus (calculada antes de que la cadena se limitara al campus de la
+     * solicitud, CR-02) ya no vale. La usa también ApplyChosenAlternative (CR-04).
      *
      * @param  array<string, mixed>  $item
      */
     public function isCurrent(ChangeRequest $request, array $item): bool
     {
+        $campusId = Group::query()->whereKey($request->group_id)->value('campus_id');
+
+        if ($campusId !== null && Group::query()->whereIn('id', $item['movable_group_ids'])
+            ->where(fn (Builder $query) => $query->where('campus_id', '<>', $campusId)->orWhereNull('campus_id'))->exists()) {
+            return false;
+        }
+
         $hard = $this->assess->simulateSessions($request->term_id, $request->modality_id, ChangeAlternatives::candidates($item))['hard'];
 
         if (array_filter($hard, fn (array $rule): bool => ! in_array($rule['rule'], ApplyPlan::INPUT_RULES, true)) !== []) {

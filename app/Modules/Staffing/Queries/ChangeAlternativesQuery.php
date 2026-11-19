@@ -11,6 +11,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\SessionCandidate;
 use App\Modules\Staffing\Actions\ChangeRequests\AssessChangeImpact;
+use App\Modules\Staffing\Actions\ChangeRequests\ProposeChangeAlternatives;
 use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
@@ -60,10 +61,13 @@ final class ChangeAlternativesQuery
         $assessable = (bool) ($impact['assessable'] ?? AssessChangeImpact::isAssessable($request));
         $pedidoHard = array_sum(array_map(fn (array $rule): int => count($rule['messages'] ?? []), $impact['hard'] ?? []));
         $chosen = ChangeAlternatives::chosen($alternatives);
+        $decided = $request->status !== ChangeRequestStatus::Pending;
+        $before = $request->status === ChangeRequestStatus::Applied ? ($alternatives['applied']['before'] ?? null) : null;
 
         $groups = $this->groups($request, $items);
         $key = match (true) {
-            $chosen !== null && $request->status !== ChangeRequestStatus::Pending => $chosen['id'],
+            $chosen !== null && $decided => $chosen['id'],
+            $decided => self::PEDIDO,
             $selected === self::PEDIDO => self::PEDIDO,
             $selected !== '' && collect($items)->contains('id', $selected) => $selected,
             $pedidoHard > 0 && $items !== [] => $items[0]['id'],
@@ -77,9 +81,10 @@ final class ChangeAlternativesQuery
         }
 
         $option = match (true) {
-            ! $assessable => null,
+            $key === self::PEDIDO && ! $assessable => null,
             $key === self::PEDIDO => $this->pedido($request, $impact, $pedidoHard, $groups),
-            default => $this->alternative($request, collect($items)->firstWhere('id', $key), $alternatives, $groups),
+            $request->status === ChangeRequestStatus::Applied && $before === null => null,
+            default => $this->alternative($request, collect($items)->firstWhere('id', $key), $alternatives, $groups, $before),
         };
 
         $computedAt = isset($alternatives['computed_at']) ? Carbon::parse($alternatives['computed_at'])->timezone(config('app.timezone')) : null;
@@ -98,7 +103,9 @@ final class ChangeAlternativesQuery
             'tabs' => $tabs,
             'selected' => $option === null ? null : [...$option, 'key' => $key],
             'pedidoHard' => $pedidoHard,
-            'engineLine' => $computedAt === null || $items === [] ? null : $this->engineLine($computedAt, $moved),
+            'engineLine' => $computedAt === null || $items === [] ? null : $this->engineLine($computedAt, $moved).' '.(($items[0]['kind'] ?? null) === ProposeChangeAlternatives::CHAIN
+                ? (count($items) > 1 ? 'La A deja lo pedido y mueve a los grupos con los que choca; las demás mueven solo este grupo.' : 'La A deja lo pedido y mueve a los grupos con los que choca.')
+                : 'Todas mueven solo este grupo, en el orden en que las dio el motor.'),
             'moved' => $moved,
         ];
     }
@@ -118,7 +125,7 @@ final class ChangeAlternativesQuery
             foreach (SessionLabels::snapshot($entry['sessions']) as $line) {
                 $lines[] = [
                     'label' => $entry['requested'] ? null : (isset($groups[$entry['group_id']]) ? ChangeAlternatives::label($groups[$entry['group_id']]) : $entry['code']),
-                    'line' => trim("{$line['days']} {$line['time']}".($line['room'] === null ? '' : " · {$line['room']}")),
+                    'line' => self::unbroken(trim("{$line['days']} {$line['time']}".($line['room'] === null ? '' : " · {$line['room']}"))),
                 ];
             }
         }
@@ -183,7 +190,8 @@ final class ChangeAlternativesQuery
     private function pedido(ChangeRequest $request, array $impact, int $hard, Collection $groups): array
     {
         $group = $request->group;
-        $rooms = Room::withTrashed()->whereIn('id', collect($this->assess->proposal($request))->pluck('roomId')->filter()->unique())->pluck('code', 'id');
+        $proposal = $this->assess->proposal($request);
+        $rooms = Room::withTrashed()->whereIn('id', collect($proposal)->pluck('roomId')->filter()->unique())->pluck('code', 'id');
         $sessions = array_map(fn (SessionCandidate $session): array => [
             'day' => $session->day,
             'starts_at' => WeekTime::hhmm(WeekTime::minutes($session->startsAt)),
@@ -192,7 +200,7 @@ final class ChangeAlternativesQuery
             'room_id' => $session->roomId,
             'room' => $session->roomId === null ? null : ($rooms[$session->roomId] ?? null),
             'replaces_session_id' => $session->replacesSessionId,
-        ], $this->assess->proposal($request));
+        ], $proposal);
         $impactGroups = collect($impact['affected_groups'] ?? [])->keyBy('id');
 
         $entry = ['group_id' => $group->id, 'requested' => true, 'sessions' => $sessions];
@@ -208,7 +216,8 @@ final class ChangeAlternativesQuery
             'score' => null,
             'near' => null,
             'chain' => [$this->chainRow($request, $group, $entry, $hard > 0, $colors)],
-            'teachers' => [],
+            'teachers' => array_map(fn (array $teacher): array => ['name' => $teacher['name'], 'asked' => false], $impact['affected_teachers'] ?? []),
+            'teachersLabel' => 'Docentes afectados',
             'inputProblems' => [],
             'week' => $this->week($request, [$group->id => $sessions], $hard > 0, $colors),
             'assessedAt' => isset($impact['assessed_at']) ? Carbon::parse($impact['assessed_at']) : null,
@@ -223,7 +232,7 @@ final class ChangeAlternativesQuery
      * @param  Collection<string, Group>  $groups
      * @return array<string, mixed>
      */
-    private function alternative(ChangeRequest $request, array $item, array $alternatives, Collection $groups): array
+    private function alternative(ChangeRequest $request, array $item, array $alternatives, Collection $groups, ?array $before = null): array
     {
         $letter = (string) ChangeAlternatives::letter($alternatives, $item['id']);
         $colors = $this->colors($request, $item['groups'], $groups);
@@ -231,7 +240,7 @@ final class ChangeAlternativesQuery
 
         foreach ($item['groups'] as $entry) {
             if (isset($groups[$entry['group_id']])) {
-                $chain[] = $this->chainRow($request, $groups[$entry['group_id']], $entry, false, $colors);
+                $chain[] = $this->chainRow($request, $groups[$entry['group_id']], $entry, false, $colors, $before);
             }
         }
 
@@ -247,12 +256,13 @@ final class ChangeAlternativesQuery
             'hard' => [],
             'soft' => $this->soft($item['soft'] ?? []),
             'score' => self::score($item),
-            'near' => $this->near($request, $item),
+            'near' => $this->near($request, $item, $before),
             'chain' => $chain,
             'teachers' => $teachers,
+            'teachersLabel' => 'Docentes que cambian',
             'inputProblems' => [...array_map(fn (array $problem): array => [...$problem, 'why' => 'Ya estaba'], $item['previous_problems'] ?? []),
                 ...array_map(fn (array $problem): array => [...$problem, 'why' => 'No depende del acomodo'], $item['input_problems'] ?? [])],
-            'week' => $this->week($request, collect($item['groups'])->mapWithKeys(fn (array $entry): array => [$entry['group_id'] => $entry['sessions']])->all(), false, $colors),
+            'week' => $this->week($request, collect($item['groups'])->mapWithKeys(fn (array $entry): array => [$entry['group_id'] => $entry['sessions']])->all(), false, $colors, $before),
             'assessedAt' => null,
         ];
     }
@@ -281,7 +291,7 @@ final class ChangeAlternativesQuery
      * @param  array<string, mixed>  $item
      * @return array{same: bool, text: string, note: ?string}|null
      */
-    private function near(ChangeRequest $request, array $item): ?array
+    private function near(ChangeRequest $request, array $item, ?array $before = null): ?array
     {
         $mine = collect($item['groups'])->firstWhere('requested', true);
 
@@ -290,8 +300,8 @@ final class ChangeAlternativesQuery
         }
 
         $times = fn (array $sessions): array => collect($sessions)->map(fn (array $session): string => $session['day'].'|'.WeekTime::hhmm(WeekTime::minutes($session['starts_at'])).'|'.WeekTime::hhmm(WeekTime::minutes($session['ends_at'])))->sort()->values()->all();
-        $live = $request->group->sessions->keyBy('id');
-        $otherRoom = collect($mine['sessions'])->filter(fn (array $session): bool => $session['replaces_session_id'] !== null && isset($live[$session['replaces_session_id']]) && $live[$session['replaces_session_id']]->room_id !== $session['room_id'])->values()->all();
+        $live = self::liveOf($request->group, $before);
+        $otherRoom = collect($mine['sessions'])->filter(fn (array $session): bool => $session['replaces_session_id'] !== null && isset($live[$session['replaces_session_id']]) && $live[$session['replaces_session_id']]['room_id'] !== $session['room_id'])->values()->all();
         $note = $otherRoom === [] ? null : 'En otro salón: '.ChangeAlternatives::line($otherRoom).'.';
 
         if ($request->kind === ChangeRequestKind::Room) {
@@ -320,10 +330,10 @@ final class ChangeAlternativesQuery
      * @param  array<string, int|null>  $colors
      * @return array<string, mixed>
      */
-    private function chainRow(ChangeRequest $request, Group $group, array $entry, bool $clashes, array $colors): array
+    private function chainRow(ChangeRequest $request, Group $group, array $entry, bool $clashes, array $colors, ?array $before = null): array
     {
-        $live = $group->sessions->keyBy('id');
-        $snap = fn (GroupSession $session): array => ['day' => $session->day, 'starts_at' => substr((string) $session->starts_at, 0, 5), 'ends_at' => substr((string) $session->ends_at, 0, 5), 'room' => $session->room?->code];
+        $live = self::liveOf($group, $before);
+        $snap = fn (array $session): array => ['day' => $session['day'], 'starts_at' => $session['starts_at'], 'ends_at' => $session['ends_at'], 'room' => $session['room']];
         $moves = [];
         $same = [];
         $used = [];
@@ -333,18 +343,18 @@ final class ChangeAlternativesQuery
             $was = isset($session['replaces_session_id'], $live[$session['replaces_session_id']]) ? $live[$session['replaces_session_id']] : null;
 
             if ($was !== null) {
-                $used[$was->id] = true;
-                $before = $snap($was);
+                $used[$was['id']] = true;
+                $then = $snap($was);
 
-                if ($before === $now) {
+                if ($then === $now) {
                     $same[] = $now;
 
                     continue;
                 }
 
-                $key = "{$before['starts_at']}|{$before['ends_at']}|{$before['room']}>{$now['starts_at']}|{$now['ends_at']}|{$now['room']}";
+                $key = "{$then['starts_at']}|{$then['ends_at']}|{$then['room']}>{$now['starts_at']}|{$now['ends_at']}|{$now['room']}";
                 $moves[$key] ??= ['tag' => $clashes ? 'Choca' : 'Movida', 'tone' => $clashes ? 'error' : 'warning', 'from' => [], 'to' => []];
-                $moves[$key]['from'][] = $before;
+                $moves[$key]['from'][] = $then;
                 $moves[$key]['to'][] = $now;
             } else {
                 $moves['new|'.count($moves)] = ['tag' => 'Nueva', 'tone' => 'info', 'from' => [], 'to' => [$now]];
@@ -369,10 +379,10 @@ final class ChangeAlternativesQuery
             'moves' => array_values(array_map(fn (array $move): array => [
                 'tag' => $move['tag'],
                 'tone' => $move['tone'],
-                'was' => $move['from'] === [] ? null : ChangeAlternatives::line($move['from']),
-                'now' => $move['to'] === [] ? null : ChangeAlternatives::line($move['to']),
+                'was' => $move['from'] === [] ? null : self::unbroken(ChangeAlternatives::line($move['from'])),
+                'now' => $move['to'] === [] ? null : self::unbroken(ChangeAlternatives::line($move['to'])),
             ], $moves)),
-            'same' => $same === [] ? null : ChangeAlternatives::line($same),
+            'same' => $same === [] ? null : self::unbroken(ChangeAlternatives::line($same)),
         ];
     }
 
@@ -445,7 +455,7 @@ final class ChangeAlternativesQuery
      * @param  array<string, int|null>  $colors
      * @return array<string, mixed>
      */
-    private function week(ChangeRequest $request, array $changes, bool $clashes, array $colors): array
+    private function week(ChangeRequest $request, array $changes, bool $clashes, array $colors, ?array $before = null): array
     {
         $group = $request->group;
         $cohort = $this->cohort($request);
@@ -469,13 +479,13 @@ final class ChangeAlternativesQuery
                 continue;
             }
 
-            $live = $member->sessions->keyBy('id');
+            $live = self::liveOf($member, $before);
 
             foreach ($changes[$member->id] as $session) {
                 $slot = self::slot($session['day'], $session['starts_at'], $session['ends_at']);
                 $was = isset($session['replaces_session_id'], $live[$session['replaces_session_id']]) ? $live[$session['replaces_session_id']] : null;
-                $unchanged = $was !== null && $was->day === $slot['day'] && substr((string) $was->starts_at, 0, 5) === $slot['starts_at']
-                    && substr((string) $was->ends_at, 0, 5) === $slot['ends_at'] && $was->room_id === $session['room_id'];
+                $unchanged = $was !== null && $was['day'] === $slot['day'] && $was['starts_at'] === $slot['starts_at']
+                    && $was['ends_at'] === $slot['ends_at'] && $was['room_id'] === $session['room_id'];
 
                 $items[] = [...$base, ...$slot, 'room' => $session['room'] ?? null,
                     'state' => match (true) {
@@ -485,7 +495,11 @@ final class ChangeAlternativesQuery
                         default => 'moved',
                     },
                     'mark' => null,
-                    'prev' => $unchanged || $was === null ? null : SessionLabels::DAYS[$was->day].' '.WeekTime::clock((string) $was->starts_at).($was->room_id !== $session['room_id'] && $was->day === $slot['day'] && substr((string) $was->starts_at, 0, 5) === $slot['starts_at'] ? ' · '.($was->room?->code ?? 'sin salón') : ''),
+                    'prev' => match (true) {
+                        $unchanged || $was === null => null,
+                        $was['day'] === $slot['day'] && $was['starts_at'] === $slot['starts_at'] => $was['room'] ?? 'Sin salón',
+                        default => SessionLabels::DAYS[$was['day']].' '.WeekTime::clock($was['starts_at']),
+                    },
                 ];
             }
         }
@@ -509,10 +523,65 @@ final class ChangeAlternativesQuery
             'blocks' => $blocks,
             'laid' => $laid,
             'changed' => $changed,
+            'hasMoved' => collect($items)->contains('state', 'moved'),
             'hasHard' => collect($items)->contains('state', 'hard'),
             'hasNew' => collect($items)->contains('state', 'new'),
             'hasFixed' => collect($items)->contains('state', 'fixed'),
         ];
+    }
+
+    /**
+     * Las sesiones de antes de un grupo, por id: las vivas o, ya aplicada la alternativa, las que guardó
+     * ApplyChosenAlternative al escribirla (`alternatives.applied.before`), porque ReplaceGroupSessions cambia los ids.
+     *
+     * @param  array<string, list<array<string, mixed>>>|null  $before
+     * @return Collection<string, array{id: string, day: int, starts_at: string, ends_at: string, room_id: ?string, room: ?string}>
+     */
+    private static function liveOf(Group $group, ?array $before): Collection
+    {
+        if ($before !== null) {
+            return collect($before[$group->id] ?? [])->keyBy('id');
+        }
+
+        return $group->sessions->mapWithKeys(fn (GroupSession $session): array => [$session->id => [
+            'id' => $session->id,
+            'day' => $session->day,
+            'starts_at' => substr((string) $session->starts_at, 0, 5),
+            'ends_at' => substr((string) $session->ends_at, 0, 5),
+            'room_id' => $session->room_id,
+            'room' => $session->room?->code,
+        ]]);
+    }
+
+    /**
+     * La cadena de movimientos de una alternativa, sin la semana ni la cohorte: lo que pinta la franja «Por colocar» del
+     * editor (ChosenAlternativePlacementsQuery). Una consulta por relación de los grupos de la alternativa.
+     *
+     * @param  array<string, mixed>  $item
+     * @return list<array<string, mixed>>
+     */
+    public function chain(ChangeRequest $request, array $item): array
+    {
+        $groups = Group::query()->with(['subject:id,code,name', 'teacher:id,name', 'sessions.room:id,code'])
+            ->whereIn('id', array_column($item['groups'], 'group_id'))->get()->keyBy('id');
+        $rows = [];
+
+        foreach ($item['groups'] as $entry) {
+            if (isset($groups[$entry['group_id']])) {
+                $rows[] = $this->chainRow($request, $groups[$entry['group_id']], $entry, false, []);
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Un horario para la pantalla en el que ningún rango se parte en dos renglones («15:00–⏎16:00»): un word joiner
+     * después de cada guion de rango. Solo para lo que se pinta; los avisos usan ChangeAlternatives::line() tal cual.
+     */
+    private static function unbroken(string $line): string
+    {
+        return str_replace('–', "–\u{2060}", $line);
     }
 
     /**
@@ -546,6 +615,6 @@ final class ChangeAlternativesQuery
         $when = $computedAt->isToday() ? 'hoy a las '.$computedAt->format('G:i') : $computedAt->translatedFormat('j M').' a las '.$computedAt->format('G:i');
         $list = count($moved) <= 1 ? implode('', $moved) : implode(', ', array_slice($moved, 0, -1)).' y '.end($moved);
 
-        return "Heurística · {$when}. Las alternativas mueven solo {$list}; lo demás queda fijo, y los grupos de otros departamentos nunca se mueven.";
+        return "Heurística · {$when}. Las alternativas mueven solo {$list}; lo demás queda fijo, y los grupos de otros departamentos o de otro campus nunca se mueven.";
     }
 }

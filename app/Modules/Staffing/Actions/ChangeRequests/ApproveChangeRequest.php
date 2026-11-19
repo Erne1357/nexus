@@ -117,7 +117,7 @@ final class ApproveChangeRequest
         $clashes = array_sum(array_map(fn (array $rule): int => count($rule['messages']), $impact['hard']));
 
         if ($clashes > 0) {
-            throw ValidationException::withMessages(['status' => "No se puede aprobar: el cambio deja {$clashes} ".($clashes === 1 ? 'choque duro' : 'choques duros').'. Recházalo o pide alternativas al motor.']);
+            throw ValidationException::withMessages(['status' => "No se puede aprobar: el cambio deja {$clashes} ".($clashes === 1 ? 'choque duro' : 'choques duros').'. Recházala o busca alternativas del motor.']);
         }
     }
 }

@@ -57,7 +57,8 @@ use Throwable;
  * El cálculo (compute()) pide a ProposePlacements, con la heurística en PHP, hasta ALTERNATIVES acomodos:
  *
  * - (a) la cadena: la propuesta queda fija (las sesiones que simula CR-01, con el salón y el tipo de la sesión que cada
- *   una reemplaza) y se mueven los grupos con los que choca que son del mismo departamento, periodo y modalidad; una sola.
+ *   una reemplaza) y se mueven los grupos con los que choca que son del mismo departamento, periodo, modalidad y campus
+ *   (los de otro campus quedan fijos, confirmado el 18 de noviembre de 2026); una sola.
  *   No se pide si la propuesta no suma las horas semanales del grupo (ProposePlacements::pinnedProblem; HC-12).
  * - (b) el grupo solo: se mueve el grupo pedido con todo lo demás fijo; las que falten para llegar a ALTERNATIVES. Una
  *   que lo deje como está no cuenta, y dentro de esta llamada cada una lleva al grupo a horas distintas de las
@@ -371,7 +372,8 @@ final class ProposeChangeAlternatives
         foreach ($impact['affected_groups'] as $affected) {
             $other = $state->group((string) $affected['id']);
 
-            if ($other !== null && $other->id !== $group->id && $other->isActive && $other->modalityId === $group->modality_id && $other->departmentId === $group->department_id) {
+            if ($other !== null && $other->id !== $group->id && $other->isActive && $other->modalityId === $group->modality_id && $other->departmentId === $group->department_id
+                && $other->campusId === (string) $group->campus_id) {
                 $ids[] = $other->id;
             }
         }

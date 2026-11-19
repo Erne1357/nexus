@@ -137,8 +137,8 @@
         @include('staffing::change-requests.alternative-week', ['week' => $option['week'], 'name' => $option['name']])
     </div>
 
-    @if ($option['teachers'] !== [])
-        <p class="text-sm text-neutral {{ $dim }}" data-testid="impact-teachers">Docentes que cambian:
+    @if ($option['teachers'] !== [] && (! $isPedido || ! $tabbed))
+        <p class="text-sm text-neutral {{ $dim }}" data-testid="impact-teachers">{{ $option['teachersLabel'] }}:
             @foreach ($option['teachers'] as $teacher)
                 <span class="font-medium text-base-content">{{ $teacher['name'] }}</span>@if ($teacher['asked']) (pidió el cambio)@endif{{ $loop->last ? '' : ' ·' }}
             @endforeach

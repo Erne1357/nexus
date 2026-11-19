@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Gate;
  * jefe en una solicitud de cambio aprobada, para quien quiera acomodarla a mano en lugar de «Aplicar la alternativa».
  * Solo la ve quien ve la solicitud (ChangeRequestPolicy::view); una solicitud que no está aprobada o que no se aprobó
  * con una alternativa no trae nada. Cada grupo de la cadena con sus sesiones de antes a después, como en la pantalla
- * de solicitudes (ChangeAlternativesQuery).
+ * de solicitudes (ChangeAlternativesQuery::chain(), sin la semana ni la cohorte: unas pocas consultas por pintado).
  */
 final class ChosenAlternativePlacementsQuery implements PendingPlacements
 {
@@ -32,12 +32,12 @@ final class ChosenAlternativePlacementsQuery implements PendingPlacements
             return null;
         }
 
-        $view = $this->alternatives->for($request);
-        $option = $view['selected'];
-        $requested = collect($option['chain'])->firstWhere('requested', true);
+        $item = ChangeAlternatives::chosen($request->alternatives);
+        $chain = $this->alternatives->chain($request, $item);
+        $requested = collect($chain)->firstWhere('requested', true);
 
         return new PendingPlacementSet(
-            title: "{$option['name']} de la solicitud de cambio de ".($requested['label'] ?? 'un grupo'),
+            title: 'Alternativa '.ChangeAlternatives::letter($request->alternatives, $item['id']).' de la solicitud de cambio de '.($requested['label'] ?? 'un grupo'),
             note: 'El jefe del departamento la aprobó. Colócala a mano aquí, o escríbela de una vez con «Aplicar la alternativa» en la solicitud; después márcala como aplicada.',
             backUrl: route('staffing.change-requests', ['solicitud' => $request->id]),
             groups: array_map(fn (array $row): array => [
@@ -46,7 +46,7 @@ final class ChosenAlternativePlacementsQuery implements PendingPlacements
                 'subject' => $row['subject'],
                 'moves' => $row['moves'],
                 'same' => $row['same'],
-            ], $option['chain']),
+            ], $chain),
         );
     }
 }
