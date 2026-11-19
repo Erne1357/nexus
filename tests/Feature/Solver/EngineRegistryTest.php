@@ -12,7 +12,7 @@ use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 /*
 | El registro de motores (tarea 6.3): los motores se registran en el provider de Solver con la etiqueta
 | `solver.engines`: el de prueba y la heurística en PHP (6.6). El predeterminado de una modalidad es el de
-| `solver.default_engine` (7.11), con la heurística de fábrica.
+| `solver.default_engine` (7.11): de fábrica, CP-SAT en Presencial y la heurística en las demás.
 */
 
 it('lista los motores registrados y da uno por su clave', function () {
@@ -40,22 +40,20 @@ function registryWithCpSat(): EngineRegistry
     return new EngineRegistry([new CpSatEngine(new CpSatClient('http://solver.test', 'secreto')), new FixedEngine, new PhpHeuristicEngine]);
 }
 
-it('7.11: el predeterminado de una modalidad es el de `solver.default_engine`, y sin parámetro la heurística', function () {
+it('7.11: con el servicio, Presencial propone CP-SAT de fábrica y las demás la heurística; el parámetro lo cambia', function () {
     $registry = registryWithCpSat();
-
-    expect($registry->default('PRES'))->toBeInstanceOf(PhpHeuristicEngine::class)
-        ->and($registry->default())->toBeInstanceOf(PhpHeuristicEngine::class);
-
-    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.default_engine', 'value' => ['pres' => 'cpsat', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']]);
 
     expect($registry->default('PRES'))->toBeInstanceOf(CpSatEngine::class)
         ->and($registry->default('EAD'))->toBeInstanceOf(PhpHeuristicEngine::class)
         ->and($registry->default())->toBeInstanceOf(PhpHeuristicEngine::class);
+
+    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.default_engine', 'value' => ['pres' => 'heuristic', 'ead' => 'cpsat', 'enl' => 'heuristic', 'tnmv' => 'heuristic']]);
+
+    expect($registry->default('PRES'))->toBeInstanceOf(PhpHeuristicEngine::class)
+        ->and($registry->default('EAD'))->toBeInstanceOf(CpSatEngine::class);
 });
 
-it('7.11: si el motor elegido no está registrado (CP-SAT sin servicio), el predeterminado es la heurística', function () {
-    Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.default_engine', 'value' => ['pres' => 'cpsat', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']]);
-
+it('7.11: sin servicio (CP-SAT no registrado), Presencial propone la heurística', function () {
     expect(app(EngineRegistry::class)->default('PRES'))->toBeInstanceOf(PhpHeuristicEngine::class)
         ->and((new EngineRegistry([new FixedEngine]))->default('PRES'))->toBeInstanceOf(FixedEngine::class);
 });

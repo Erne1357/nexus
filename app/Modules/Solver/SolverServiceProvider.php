@@ -52,7 +52,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
     /**
      * Los motores disponibles, con la etiqueta `solver.engines` (engineClasses()): CP-SAT si el servicio está configurado
      * (fase 7), el de prueba y la heurística en PHP (6.6). El que se propone al lanzar es el de `solver.default_engine` de
-     * la modalidad (7.11), con la heurística de fábrica. Los motores no guardan estado, así que el registro puede ser único por proceso; el cliente del servicio
+     * la modalidad (7.11): de fábrica, CP-SAT en Presencial y la heurística en las demás. Los motores no guardan estado, así que el registro puede ser único por proceso; el cliente del servicio
      * de CP-SAT se arma con `services.solver`. CareerLoadsQuery recuerda sus respuestas en la petición: `scoped`, nunca
      * único (Octane).
      */

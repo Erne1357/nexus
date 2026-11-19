@@ -8,7 +8,8 @@ use InvalidArgumentException;
 /**
  * Los motores disponibles (tarea 6.3). Los registra el provider de Solver con la etiqueta `solver.engines`: la heurística
  * en PHP (6.6) y el cliente de CP-SAT (fase 7) se agregan ahí. El registro vive en código; el motor predeterminado de
- * cada modalidad es el parámetro `solver.default_engine` (7.11, SolverSettings), con la heurística de fábrica.
+ * cada modalidad es el parámetro `solver.default_engine` (7.11, SolverSettings): de fábrica, CP-SAT en Presencial y la
+ * heurística en las demás.
  *
  * No guarda estado entre peticiones: solo indexa los motores que recibe.
  */

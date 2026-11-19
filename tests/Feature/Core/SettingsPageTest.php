@@ -127,18 +127,18 @@ it('CF-S7: una tabla de opciones (el motor de cada modalidad) se elige de una li
     $dom = domOf($this->actingAs($this->admin)->get('/configuracion/parametros')->assertOk());
 
     expect($dom->querySelector('[data-testid="setting-solver.default_engine"] select'))->not->toBeNull()
-        ->and(textOf($dom->querySelector('[data-testid="setting-solver.default_engine"]')))->toContain('Por omisión: Presencial: Heurística (PHP)');
+        ->and(textOf($dom->querySelector('[data-testid="setting-solver.default_engine"]')))->toContain('Por omisión: Presencial: CP-SAT (servicio), EAD: Heurística (PHP)');
 
     Livewire::actingAs($this->admin)->test('core::pages.settings')
-        ->assertSet('values.solver__default_engine.pres', 'heuristic')
+        ->assertSet('values.solver__default_engine.pres', 'cpsat')
         ->set('values.solver__default_engine.pres', 'magia')
         ->call('save', 'solver')
         ->assertHasErrors(['values.solver__default_engine.pres'])
-        ->set('values.solver__default_engine.pres', 'cpsat')
+        ->set('values.solver__default_engine.pres', 'heuristic')
         ->call('save', 'solver')
         ->assertHasNoErrors();
 
-    expect(storedSetting('solver.default_engine'))->toEqual(['pres' => 'cpsat', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']);
+    expect(storedSetting('solver.default_engine'))->toEqual(['pres' => 'heuristic', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']);
 });
 
 it('CF-S7: un valor inválido marca su campo y no guarda nada de la tarjeta', function () {

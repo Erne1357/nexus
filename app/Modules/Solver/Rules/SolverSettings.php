@@ -17,9 +17,11 @@ use App\Modules\Solver\Enums\SolverPermission;
  * un entero de 10 a 600 usa el de omisión. Puro: solo fromSettings() lee la base.
  *
  * El motor predeterminado de cada modalidad (`solver.default_engine`, tarea 7.11; ADR-0028): una tabla de opciones con un
- * campo por modalidad del catálogo (su clave en minúsculas, ADR-0025) y la heurística en PHP como valor de fábrica. Una
- * modalidad sin campo, o con un motor que no es opción, usa la heurística. Es lo que propone «Lanzar una corrida»
- * (EngineRegistry::default()); quien lanza puede elegir otro.
+ * campo por modalidad del catálogo (su clave en minúsculas, ADR-0025). De fábrica, CP-SAT en Presencial y la heurística en
+ * PHP en las demás (decisión del usuario, 19 de noviembre de 2026). Un campo que falta o trae un motor que no es opción
+ * usa su valor de fábrica, y una modalidad sin campo usa la heurística. Es lo que propone «Lanzar una corrida»
+ * (EngineRegistry::default(), que propone la heurística si el motor elegido no está registrado); quien lanza puede
+ * elegir otro.
  */
 final readonly class SolverSettings
 {
@@ -38,7 +40,7 @@ final readonly class SolverSettings
 
     public const string DEFAULT_ENGINE_SETTING = 'solver.default_engine';
 
-    /** El motor de fábrica de toda modalidad (7.11): la heurística en PHP. La recomendación del benchmark está en ADR-0028, por confirmar con el usuario. */
+    /** El motor de una modalidad sin campo en `solver.default_engine`, y el que se propone si el elegido no está registrado: la heurística en PHP. */
     public const string DEFAULT_ENGINE = PhpHeuristicEngine::KEY;
 
     /**
@@ -57,8 +59,13 @@ final readonly class SolverSettings
      */
     public const array ENGINE_MODALITIES = ['pres' => 'Presencial', 'ead' => 'EAD', 'enl' => 'En línea', 'tnmv' => 'TecNM Virtual'];
 
-    /** @var array<string, string> */
-    public const array DEFAULT_ENGINES = ['pres' => self::DEFAULT_ENGINE, 'ead' => self::DEFAULT_ENGINE, 'enl' => self::DEFAULT_ENGINE, 'tnmv' => self::DEFAULT_ENGINE];
+    /**
+     * Los valores de fábrica de `solver.default_engine` (decisión del usuario, 19 de noviembre de 2026; ADR-0028): CP-SAT en
+     * Presencial, con la pista de la heurística, y la heurística en las demás modalidades.
+     *
+     * @var array<string, string>
+     */
+    public const array DEFAULT_ENGINES = ['pres' => CpSatEngine::KEY, 'ead' => self::DEFAULT_ENGINE, 'enl' => self::DEFAULT_ENGINE, 'tnmv' => self::DEFAULT_ENGINE];
 
     /**
      * Los pesos de SC-01 a SC-09 por omisión (tabla SC de docs/dominio/reglas-de-negocio.md). Las llaves del parámetro
