@@ -1,6 +1,6 @@
 {{--
     El detalle de la solicitud elegida (staffing::pages.change-requests, maqueta A): el grupo, el estado y, en un renglón,
-    el docente, quién la pidió (si fue la coordinación), la materia, la carrera dueña y el campus de hoy de su grupo (M8);
+    el docente de hoy del grupo, quién la pidió (si fue la coordinación), la materia, la carrera dueña y el campus de hoy de su grupo (M8);
     la foto de las sesiones
     al pedirla contra lo que se propone; el motivo; el historial (pidió, aprobó o rechazó con su comentario, aplicó) y,
     en un pie pegado abajo del panel, lo que le toca a quien lo ve: decidir (el jefe), aplicar (el coordinador si es de
@@ -31,9 +31,9 @@
             <span class="text-sm text-neutral">Pedida el <span class="tabular-nums">{{ $when($request->created_at) }}</span></span>
         </div>
         <dl class="flex flex-wrap gap-x-5 gap-y-1 text-sm" data-testid="request-facts">
-            <div class="flex gap-1.5"><dt class="text-neutral">Docente</dt><dd class="font-semibold">{{ $request->teacher?->name ?? 'Sin docente' }}</dd></div>
+            <div class="flex gap-1.5"><dt class="text-neutral">Docente</dt><dd class="font-semibold" data-testid="request-teacher">{{ $group->teacher?->name ?? 'Sin docente' }}</dd></div>
             @if ($byCoordination)
-                <div class="flex gap-1.5"><dt class="text-neutral">La pidió</dt><dd>{{ $request->requestedBy?->name }} <span class="text-neutral">· coordinación</span></dd></div>
+                <div class="flex gap-1.5"><dt class="text-neutral">Pidió</dt><dd data-testid="request-requester">{{ $request->requestedBy?->name }}@unless (str_starts_with((string) $request->requestedBy?->name, 'Coordinación'))<span class="text-neutral"> · coordinación de {{ $career?->code }}</span>@endunless</dd></div>
             @endif
             <div class="flex gap-1.5"><dt class="text-neutral">Materia</dt><dd class="font-mono">{{ $group->subject->code }}</dd></div>
             <div class="flex min-w-0 gap-1.5"><dt class="shrink-0 text-neutral">Carrera dueña</dt><dd class="min-w-0"><span class="font-mono font-semibold">{{ $career?->code }}</span> {{ $career?->name }}</dd></div>
@@ -60,7 +60,11 @@
                 </span>
                 @if ($approvedLines !== [])
                     <div class="rounded-field border border-success/40 bg-success/7 px-3.5 py-3" data-testid="request-approved-box">
-                        <span class="text-xs font-medium text-neutral">{{ $request->status === ChangeRequestStatus::Applied ? 'Aplicada' : 'Aprobada' }} · alternativa {{ $alternatives['chosen']['letter'] }}</span>
+                        <span class="text-xs font-medium text-neutral" data-testid="request-approved-label">{{ match (true) {
+                            $request->status !== ChangeRequestStatus::Applied => 'Aprobada · alternativa '.$alternatives['chosen']['letter'],
+                            isset($request->alternatives['applied']) => 'Aplicada · alternativa '.$alternatives['chosen']['letter'],
+                            default => 'Aprobada con la alternativa '.$alternatives['chosen']['letter'].' · aplicada a mano',
+                        } }}</span>
                         @foreach ($approvedLines as $line)
                             <p class="mt-0.5 font-mono text-sm [word-spacing:-0.25em]">@if ($line['label'])<span class="font-semibold">{{ $line['label'] }}</span> · @endif{{ $line['line'] }}</p>
                         @endforeach
@@ -179,7 +183,7 @@
                 @elseif (! $withAlternative && $blockedClashes > 0)
                     <p class="text-sm text-error" id="approve-why" data-testid="approve-blocked">{{ $hasAlternatives
                         ? "No se puede aprobar lo pedido: deja {$blockedClashes} {$plural($blockedClashes)}. Elige una alternativa o recházala."
-                        : "No se puede aprobar: el cambio deja {$blockedClashes} {$plural($blockedClashes)}. Recházala o busca alternativas." }}</p>
+                        : "No se puede aprobar: el cambio deja {$blockedClashes} {$plural($blockedClashes)}. ".(($alternatives['status'] ?? null) === 'computing' ? 'Recházala o espera las alternativas del motor.' : 'Recházala o busca alternativas.') }}</p>
                 @endif
                 <div class="flex flex-wrap justify-end gap-2">
                     <x-button label="Rechazar" icon="o-x-circle" :class="'btn-outline btn-error max-md:h-11 max-md:min-h-11 '.($withAlternative ? 'max-md:w-full' : 'max-md:flex-1')" wire:click="reject" spinner="reject" data-testid="reject-request" />

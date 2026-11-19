@@ -1,8 +1,14 @@
 <?php
 
+use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Scheduling\Actions\Sessions\ReplaceGroupSessions;
+use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Solver\Actions\ProposePlacements;
+use App\Modules\Solver\Queries\BuildSolverInput;
+use App\Modules\Solver\Rules\InputFingerprint;
 use App\Modules\Staffing\Actions\ChangeRequests\ApplyChosenAlternative;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\ChooseChangeAlternative;
@@ -71,6 +77,27 @@ it('CR-04: no aplica una solicitud aprobada sin alternativa elegida ni una pendi
 
     app(ApplyChosenAlternative::class)->handle($request->fresh(), $this->w->coordIsc);
 })->with(['sin alternativa', 'pendiente'])->throws(ValidationException::class);
+
+it('CR-02: una alternativa que mueve un grupo de otro campus (calculada antes del límite por campus) ya no se elige', function () {
+    $request = altProposed($this->w);
+    $other = Group::factory()->create(['term_id' => $this->w->term->id, 'modality_id' => modalityOf('PRES')->id, 'campus_id' => Campus::factory()->create()->id,
+        'subject_id' => Subject::factory()->create(['department_id' => $this->w->sc->id])->id, 'department_id' => $this->w->sc->id]);
+    $alternatives = $request->alternatives;
+    $movable = [...collect($alternatives['items'])->firstWhere('id', altId($request))['movable_group_ids'], $other->id];
+    // Con la huella de esa entrada, como si se hubiera calculado así: solo la revisión del campus la descarta.
+    $fingerprint = InputFingerprint::of(app(BuildSolverInput::class)->forGroups($this->w->term, modalityOf('PRES'), $movable, [], null, ProposePlacements::TIME_LIMIT_SECONDS));
+    $alternatives['items'] = array_map(fn (array $item): array => $item['id'] === altId($request) ? [...$item, 'movable_group_ids' => $movable, 'fingerprint' => $fingerprint] : $item, $alternatives['items']);
+    $request->forceFill(['alternatives' => $alternatives])->save();
+
+    try {
+        app(ChooseChangeAlternative::class)->handle($request->fresh(), $this->w->jefe, altId($request));
+        $this->fail('Debió rechazar la alternativa con un grupo de otro campus.');
+    } catch (ValidationException $e) {
+        expect($e->errors()['alternative'][0])->toStartWith('Esto cambió');
+    }
+
+    expect($request->fresh()->status)->toBe(ChangeRequestStatus::Pending);
+});
 
 it('alcance: solo aplica quien aplica según el tipo (la coordinación de la carrera dueña en uno de horario)', function (string $who) {
     $request = altProposed($this->w);

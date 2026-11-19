@@ -4,6 +4,8 @@ use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Actions\ChangeRequests\ApproveChangeRequest;
 use App\Modules\Staffing\Actions\ChangeRequests\ChooseChangeAlternative;
+use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
+use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use Illuminate\Support\Facades\DB;
@@ -164,6 +166,36 @@ it('el poll lee solo las alternativas mientras siguen calculándose y, al termin
     $this->actingAs($this->w->jefe);
     $jefe->call('pollAlternatives')->assertSee('Alternativa A');
     expect(lastToastOf($jefe)['title'] ?? '')->toContain('sin choques duros');
+});
+
+it('si la deciden en otra pestaña mientras se calculan, el siguiente tick vuelve a pintar sin el poll ni la decisión', function () {
+    $request = altRequest($this->w);
+    $request->forceFill(['alternatives' => ['status' => 'computing', 'calculation_id' => 'c1', 'requested_at' => now()->toIso8601String(), 'started_at' => now()->toIso8601String(), 'requested_by' => $this->w->jefe->id]])->save();
+    $page = altPage($this->w->jefe, $request)->assertSeeHtml('wire:poll.2s="pollAlternatives"')->assertSeeHtml('data-testid="request-decision"');
+
+    ChangeRequest::query()->whereKey($request->id)->update(['status' => ChangeRequestStatus::Rejected, 'decided_by' => $this->w->jefe->id, 'decided_at' => now(), 'decision_comment' => 'Desde otra pestaña']);
+
+    $page->call('pollAlternatives')
+        ->assertDontSeeHtml('wire:poll.2s="pollAlternatives"')
+        ->assertDontSeeHtml('data-testid="request-decision"')
+        ->assertSee('Desde otra pestaña');
+});
+
+it('la que pidió la coordinación dice el docente del grupo y quién la pidió', function () {
+    $request = app(RequestChange::class)->handle($this->w->group, $this->w->coordIsc, ChangeRequestKind::Schedule, 'A las 11', 'Choca con otra materia', ['sessions' => array_map(fn (int $day): array => ['day' => $day, 'starts_at' => '11:00', 'ends_at' => '12:00'], [1, 2, 3, 4])])->fresh();
+
+    altPage($this->w->jefe, $request)
+        ->assertSeeInOrder(['Docente', 'Marisol Quiñones Duarte', 'Pidió', 'Karla Beltrán Ochoa', 'coordinación de ISC'])
+        ->assertDontSee('Sin docente');
+});
+
+it('aprobada con una alternativa y marcada aplicada a mano, dice que se aplicó a mano', function () {
+    $request = altProposed($this->w);
+    app(ChooseChangeAlternative::class)->handle($request, $this->w->jefe, altId($request));
+
+    altPage($this->w->coordIsc, $request)->call('markApplied')->assertHasNoErrors()
+        ->assertSee('Aprobada con la alternativa A · aplicada a mano')
+        ->assertDontSeeHtml('data-testid="request-chosen"');
 });
 
 it('solo avisos: lo pedido sin choques duros se aprueba como se pidió y no se buscan alternativas', function () {
