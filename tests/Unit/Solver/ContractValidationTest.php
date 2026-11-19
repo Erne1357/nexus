@@ -79,6 +79,28 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'groups[2].weekly_hours', 'debe ser un entero de 1 en adelante'],
+    'combinación de otro semestre que el del grupo' => [function (array $d) {
+        $d['groups'][0]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:2:C1";
+
+        return $d;
+    }, 'groups[0].cohorts[1]', 'otro plan, semestre o campus'],
+    'combinación con dos grupos de la misma materia' => [function (array $d) {
+        $d['groups'][1]['subject_code'] = $d['groups'][0]['subject_code'];
+        $d['groups'][0]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:1:C1";
+        $d['groups'][1]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:1:C1";
+
+        return $d;
+    }, 'groups[1].cohorts[2]', 'dos grupos de ACF-0901'],
+    'combinación sin un grupo de cada materia de su semestre' => [function (array $d) {
+        $d['groups'][0]['cohorts'][] = "combination:{$d['groups'][0]['study_plan_id']}:1:C1";
+
+        return $d;
+    }, 'groups[0].cohorts[1]', 'SCD-1008'],
+    'préstamo de un grupo que no está en groups' => [function (array $d) {
+        $d['agreements'][0]['group_id'] = '0190a000-0000-7000-8000-999999999999';
+
+        return $d;
+    }, 'agreements[0].group_id', 'groups'],
     'pista de un grupo desconocido' => [function (array $d) {
         $d['hint_sessions'] = [['group_id' => 'no-existe', 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria']];
 

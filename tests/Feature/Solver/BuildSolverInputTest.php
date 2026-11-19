@@ -247,7 +247,7 @@ it('un docente de honorarios se marca y un grupo cancelado no ocupa al docente',
         ->and(collect($teachers[$this->t1->id]->busy)->pluck('day')->all())->not->toContain(2);
 });
 
-it('HC-10: los préstamos aceptados a un grupo de la corrida son acuerdos; los propuestos no', function () {
+it('HC-10: los préstamos aceptados a un grupo de la corrida son acuerdos de ese grupo (`group_id`); los propuestos no', function () {
     $owned = buildInputRoom($this->s2, $this->basicas);
     $loan = fn (array $attributes, bool $accepted = false) => InterdepartmentalAgreement::factory()->when($accepted, fn ($factory) => $factory->accepted())->create([
         'term_id' => $this->term->id, 'campus_id' => $this->s2->id, 'from_department_id' => $this->sistemas->id,
@@ -259,7 +259,7 @@ it('HC-10: los préstamos aceptados a un grupo de la corrida son acuerdos; los p
     $input = buildInputForDepartment()->input;
 
     expect($input->agreements)->toHaveCount(1)
-        ->and($input->agreements[0]->toArray())->toBe(['room_id' => $owned->id, 'to_department_id' => $this->sistemas->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00'])
+        ->and($input->agreements[0]->toArray())->toBe(['room_id' => $owned->id, 'to_department_id' => $this->sistemas->id, 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'group_id' => $this->bdS2->id])
         ->and(collect($input->rooms)->pluck('id')->all())->toContain($owned->id)
         ->and($input->subjectRoomDefaults)->toBe([]);
 });
@@ -375,7 +375,23 @@ it('HC-03: los grupos de una instancia de paquete llevan su clave de cohorte y l
         ->and($groups[$loose->id]->movable)->toBeTrue()
         ->and($groups[$basic->id]->cohorts)->toContain("package:{$package->id}:S1:2")
         ->and($groups[$basic->id]->movable)->toBeFalse()
-        ->and($groups[$other->id] ?? null)->toBeNull();
+        ->and($groups[$other->id]->movable)->toBeFalse()
+        ->and($groups[$other->id]->cohorts)->toContain("package:{$package->id}:S1:1")->not->toContain("package:{$package->id}:S1:2");
+});
+
+it('HC-03: los grupos del semestre del alumno tipo de un movible entran fijos aunque su materia tenga varios grupos, y el semestre lleva la combinación', function () {
+    $calcB = buildInputGroup($this->calc, $this->s1, $this->isc, $this->planIsc, 1, ['code' => 'B']);
+    GroupSession::factory()->for($this->calcS1)->on(1, '08:00', '09:00')->create();
+    GroupSession::factory()->for($calcB)->on(2, '07:00', '08:00')->create();
+
+    $groups = buildInputGroupsOf(buildInputForDepartment());
+    $combination = "combination:{$this->planIsc->id}:1:S1";
+
+    expect($groups[$calcB->id]->movable)->toBeFalse()
+        ->and($groups[$this->progS1->id]->cohorts)->toBe(["plan:{$this->planIsc->id}:1:S1", $combination])
+        ->and($groups[$calcB->id]->cohorts)->toBe([$combination])
+        ->and($groups[$this->calcS1->id]->cohorts)->toBe([])
+        ->and($groups[$this->unrelated->id] ?? null)->toBeNull();
 });
 
 it('HC-03: el mismo paquete con el mismo número en dos campus no queda en la misma cohorte', function () {

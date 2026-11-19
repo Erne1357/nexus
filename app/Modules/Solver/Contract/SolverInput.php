@@ -2,6 +2,8 @@
 
 namespace App\Modules\Solver\Contract;
 
+use App\Modules\Scheduling\Rules\Cohorts;
+
 /** La entrada del motor de horarios, versión 1 (docs/arquitectura/solver.md, «Contrato JSON»). */
 final readonly class SolverInput
 {
@@ -143,6 +145,57 @@ final readonly class SolverInput
             }
             if ($hint->roomId !== null && ! in_array($hint->roomId, $roomIds, true)) {
                 throw ContractException::at(ContractFields::path($at, 'room_id'), 'el salón no está en rooms');
+            }
+        }
+
+        foreach ($this->agreements as $i => $agreement) {
+            if ($agreement->groupId !== null && ! in_array($agreement->groupId, $groupIds, true)) {
+                throw ContractException::at(ContractFields::path(ContractFields::path(ContractFields::path($path, 'agreements'), $i), 'group_id'), 'el grupo no está en groups');
+            }
+        }
+
+        $this->assertCombinations($path);
+    }
+
+    /**
+     * Cada clave `combination:<plan>:<semestre>:<campus>` trae su semestre completo (docs/arquitectura/solver.md,
+     * «Cohortes»): la llevan solo grupos de ese plan, semestre y campus, uno por materia (`subject_code`), y cada materia
+     * de ese semestre en la entrada tiene el suyo. Si no, el evaluador clasificaría mal HC-03 sin avisar.
+     */
+    private function assertCombinations(string $path): void
+    {
+        $subjects = [];
+        $carriers = [];
+
+        foreach ($this->groups as $i => $group) {
+            $subject = $group->subjectCode === '' ? "group:{$group->id}" : $group->subjectCode;
+            $subjects["{$group->studyPlanId}:{$group->semester}:{$group->campusCode}"][$subject] = true;
+
+            foreach ($group->cohorts as $j => $key) {
+                if (! Cohorts::isCombination($key)) {
+                    continue;
+                }
+
+                $at = ContractFields::path(ContractFields::path(ContractFields::path(ContractFields::path($path, 'groups'), $i), 'cohorts'), $j);
+                $semester = substr($key, strlen(Cohorts::COMBINATION) + 1);
+
+                if ($semester !== "{$group->studyPlanId}:{$group->semester}:{$group->campusCode}") {
+                    throw ContractException::at($at, 'la combinación es de otro plan, semestre o campus que el grupo');
+                }
+
+                if (isset($carriers[$semester][$subject])) {
+                    throw ContractException::at($at, "la combinación trae dos grupos de {$subject}");
+                }
+
+                $carriers[$semester][$subject] = $at;
+            }
+        }
+
+        foreach ($carriers as $semester => $bySubject) {
+            $missing = array_keys(array_diff_key($subjects[$semester], $bySubject));
+
+            if ($missing !== []) {
+                throw ContractException::at(reset($bySubject), 'la combinación no trae un grupo de '.implode(', ', $missing));
             }
         }
     }

@@ -30,7 +30,7 @@ final class DemandRecalculationDemoSeeder extends Seeder
 {
     /**
      * Las materias que califica: las `$subjects` con más alumnos cursándolas en el semestre ordinario anterior a `$term`,
-     * por número de alumnos y luego por id. La elección no depende de la semilla (la semilla solo reparte aprobadas y
+     * por número de alumnos y luego por clave de materia (no por id, que cambia en cada siembra). La elección no depende de la semilla (la semilla solo reparte aprobadas y
      * reprobadas), así que la demo de la propuesta puede saber de antemano qué filas quedarán en «Cambió».
      *
      * @return list<string>
@@ -38,13 +38,15 @@ final class DemandRecalculationDemoSeeder extends Seeder
     public static function subjectsToGrade(string $term, int $subjects): array
     {
         return KardexRecord::query()
-            ->where('term_code', TermCode::previousRegular($term))
-            ->where('result', KardexResult::Cursando)
-            ->groupBy('subject_id')
+            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
+            ->where('kardex_records.term_code', TermCode::previousRegular($term))
+            ->where('kardex_records.result', KardexResult::Cursando)
+            ->groupBy('kardex_records.subject_id', 'subjects.code')
             ->orderByRaw('count(*) desc')
-            ->orderBy('subject_id')
+            ->orderBy('subjects.code')
             ->limit($subjects)
-            ->pluck('subject_id')
+            ->pluck('kardex_records.subject_id')
+            ->map(fn (mixed $id): string => (string) $id)
             ->all();
     }
 
