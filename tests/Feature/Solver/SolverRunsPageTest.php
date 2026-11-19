@@ -322,16 +322,23 @@ it('una corrida de un motor que ya no está registrado muestra su nombre y «Vol
         ->assertSee('CP-SAT (servicio) no está disponible ahora');
 });
 
-it('7.11: «Lanzar una corrida» propone el motor predeterminado de la modalidad: CP-SAT en Presencial con el servicio, la heurística sin él', function () {
-    runsPage($this->jefe)->call('openLaunch')->assertSet('launchEngine', 'heuristic');
+it('7.11: «Lanzar una corrida» propone el motor predeterminado de la modalidad: CP-SAT en Presencial con el servicio, la heurística con una nota sin él', function () {
+    runsPage($this->jefe)->call('openLaunch')
+        ->assertSet('launchEngine', 'heuristic')
+        ->assertSeeHtml('data-testid="launch-engine-unconfigured"')
+        ->assertSee('CP-SAT (servicio) no está disponible en este servidor; se propone Heurística (PHP).');
 
     app()->instance(EngineRegistry::class, new EngineRegistry([new CpSatEngine(new CpSatClient('http://solver.test', 'secreto')), new FixedEngine, new PhpHeuristicEngine]));
 
-    runsPage($this->jefe)->call('openLaunch')->assertSet('launchEngine', 'cpsat');
+    runsPage($this->jefe)->call('openLaunch')
+        ->assertSet('launchEngine', 'cpsat')
+        ->assertDontSeeHtml('data-testid="launch-engine-unconfigured"');
 
     Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => 'solver.default_engine', 'value' => ['pres' => 'heuristic', 'ead' => 'heuristic', 'enl' => 'heuristic', 'tnmv' => 'heuristic']]);
 
-    runsPage($this->jefe)->call('openLaunch')->assertSet('launchEngine', 'heuristic');
+    runsPage($this->jefe)->call('openLaunch')
+        ->assertSet('launchEngine', 'heuristic')
+        ->assertDontSeeHtml('data-testid="launch-engine-unconfigured"');
 });
 
 it('el componente de avance también cubre «Aplicando…» y avisa a la página cuando la corrida termina de aplicarse', function () {

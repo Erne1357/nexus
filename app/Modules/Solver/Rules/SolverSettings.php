@@ -17,7 +17,8 @@ use App\Modules\Solver\Enums\SolverPermission;
  * un entero de 10 a 600 usa el de omisión. Puro: solo fromSettings() lee la base.
  *
  * El motor predeterminado de cada modalidad (`solver.default_engine`, tarea 7.11; ADR-0028): una tabla de opciones con un
- * campo por modalidad del catálogo (su clave en minúsculas, ADR-0025). De fábrica, CP-SAT en Presencial y la heurística en
+ * campo por cada modalidad que siembra ADR-0025 (ENGINE_MODALITIES, una lista fija: PRES, EAD, ENL y TNMV, por su clave
+ * en minúsculas; supuesto por confirmar). De fábrica, CP-SAT en Presencial y la heurística en
  * PHP en las demás (decisión del usuario, 19 de noviembre de 2026). Un campo que falta o trae un motor que no es opción
  * usa su valor de fábrica, y una modalidad sin campo usa la heurística. Es lo que propone «Lanzar una corrida»
  * (EngineRegistry::default()); quien lanza puede elegir otro. El servicio de CP-SAT corre siempre en su contenedor: la

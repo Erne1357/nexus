@@ -106,6 +106,12 @@ function cpsatSequenceService(array $recordings): void
     $current = null;
 
     Http::fake(function (Request $request) use ($recordings, &$current): PromiseInterface {
+        if ($request->method() === 'GET' && parse_url($request->url(), PHP_URL_PATH) === '/health') {
+            $health = json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/cpsat/health.json'), true, flags: JSON_THROW_ON_ERROR);
+
+            return Http::response($health['body'], $health['status']);
+        }
+
         if ($request->method() === 'POST') {
             $department = Department::query()->findOrFail($request['scope']['id'])->code;
             expect($recordings)->toHaveKey($department);

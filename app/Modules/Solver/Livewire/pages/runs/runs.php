@@ -154,6 +154,12 @@ new #[Title('Corridas del motor')] class extends Component
     /** Si «Volver a correr» viene de una corrida cuyo motor ya no está registrado: el nombre de ese motor. */
     public ?string $unavailableEngine = null;
 
+    /**
+     * Si el motor predeterminado de la modalidad (`solver.default_engine`) no está registrado, porque el servicio de
+     * CP-SAT no está configurado en este servidor: su nombre. Se propone la heurística y el drawer lo dice (7.11).
+     */
+    public ?string $unconfiguredEngine = null;
+
     public function mount(Actor $context, RunScreenQuery $screen): void
     {
         abort_unless($context->allowsAny(SolverPermission::DepartmentRunView) || $context->allowsAny(SolverPermission::CareerRunView), 403);
@@ -280,7 +286,10 @@ new #[Title('Corridas del motor')] class extends Component
         $this->launchCareer = $again?->career_id ?? ($options['careers'][0]['id'] ?? '');
         $registered = array_map(fn (SolverEngine $engine): string => $engine->key(), $engines->all());
         $this->unavailableEngine = $again !== null && ! in_array($again->engine, $registered, true) ? $this->engineLabel($again->engine) : null;
-        $this->launchEngine = $again !== null && $this->unavailableEngine === null ? $again->engine : $engines->default($this->context()[1]->code)->key();
+        $modalityCode = $this->context()[1]->code;
+        $this->launchEngine = $again !== null && $this->unavailableEngine === null ? $again->engine : $engines->default($modalityCode)->key();
+        $preferred = SolverSettings::fromSettings()->defaultEngineFor($modalityCode);
+        $this->unconfiguredEngine = $again === null && ! in_array($preferred, $registered, true) ? $this->engineLabel($preferred) : null;
         $this->launchLimit = $again === null ? SolverSettings::fromSettings()->timeLimitFor(RunScope::from($this->launchScope)) : (int) (RunPayloads::read($again, 'input')['time_limit_seconds'] ?? 300);
         $this->showLaunch = true;
     }
@@ -324,6 +333,7 @@ new #[Title('Corridas del motor')] class extends Component
         $this->showLaunch = false;
         $this->againId = null;
         $this->unavailableEngine = null;
+        $this->unconfiguredEngine = null;
         $this->runId = $run->getKey();
         $this->lens = '';
         $this->selected = '';

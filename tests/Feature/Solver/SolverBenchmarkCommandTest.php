@@ -116,25 +116,40 @@ it('7.11: --time-limit cambia el límite de cada entrada y rechaza uno fuera de 
     expect($code)->toBe(1)->and($output)->toContain('El límite de --time-limit va de 10 a 600 segundos.');
 });
 
-it('7.11: --input corre una entrada fuera de los fixtures, con el nombre de su carpeta, y solo esa si no se da --fixture', function () {
-    $directory = storage_path('framework/testing/benchmark-'.uniqid());
-    File::ensureDirectoryExists($directory.'/carga-real');
-    File::copy(base_path('tests/Fixtures/solver/v1/small/input.json'), $directory.'/carga-real/input.json');
+it('7.11: --input corre entradas de storage/app con el nombre de su carpeta desde ahí, sin pisarse, y solo esas si no se da --fixture', function () {
+    $directory = storage_path('app/benchmark-'.uniqid());
+    $name = basename($directory);
+
+    foreach (['a/carga', 'b/carga'] as $folder) {
+        File::ensureDirectoryExists($directory.'/'.$folder);
+        File::copy(base_path('tests/Fixtures/solver/v1/small/input.json'), $directory.'/'.$folder.'/input.json');
+    }
 
     try {
-        [$code, $output] = benchmarkRun(['--engine' => ['fixed'], '--input' => [$directory.'/carga-real/input.json']]);
+        [$code, $output] = benchmarkRun(['--engine' => ['fixed'], '--markdown' => true, '--input' => [
+            $directory.'/a/carga/input.json', $directory.'/b/carga/input.json', $directory.'/a/carga/input.json',
+        ]]);
     } finally {
         File::deleteDirectory($directory);
     }
 
     expect($code)->toBe(0)
-        ->and($output)->toContain('carga-real')
-        ->and($output)->not->toContain('tiny');
+        ->and($output)->toContain("| {$name}/a/carga | fixed |", "| {$name}/b/carga | fixed |", "| {$name}/a/carga (2) | fixed |")
+        ->and($output)->not->toContain('| tiny |');
 
     [$code, $output] = benchmarkRun(['--engine' => ['fixed'], '--input' => ['/no/existe/input.json']]);
 
     expect($code)->toBe(1)->and($output)->toContain('No hay una entrada en «/no/existe/input.json»');
 });
+
+it('7.11: --input no acepta una entrada fuera de storage/app', function (string $path) {
+    [$code, $output] = benchmarkRun(['--engine' => ['fixed'], '--input' => [$path]]);
+
+    expect($code)->toBe(1)->and($output)->toContain('La entrada de --input debe estar dentro de storage/app.');
+})->with([
+    'un fixture' => [fn (): string => base_path('tests/Fixtures/solver/v1/small/input.json')],
+    'subiendo desde storage/app' => [fn (): string => storage_path('app/../../tests/Fixtures/solver/v1/tiny/input.json')],
+]);
 
 it('7.11: --breakdown agrega el límite, las duras según el evaluador en PHP y el puntaje de SC-01 a SC-09', function () {
     [$code, $output] = benchmarkRun(['--engine' => ['heuristic'], '--fixture' => ['small'], '--markdown' => true, '--breakdown' => true]);

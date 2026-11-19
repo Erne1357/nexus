@@ -16,8 +16,8 @@ use Illuminate\Console\Command;
  * `expected.json` solo en los motores que declaran `checksHardRules()`; en los demás va «—».
  *
  * Para el benchmark de la 7.11: `--time-limit` corre todas las entradas con el mismo límite, `--input` agrega entradas
- * fuera de los fixtures (una carga real exportada a storage/app con `solver:export-fixture --path`; si no se da
- * `--fixture`, solo esas) y `--breakdown` agrega el límite, el estado, las violaciones duras que encuentra el evaluador
+ * fuera de los fixtures, solo de `storage/app` (una carga real exportada con `solver:export-fixture --path`; si no se da
+ * `--fixture`, solo esas; su nombre es su carpeta desde `storage/app`, con « (2)» si se repite) y `--breakdown` agrega el límite, el estado, las violaciones duras que encuentra el evaluador
  * en PHP sobre las sesiones de la salida (la misma vara para los dos motores) y el puntaje de SC-01 a SC-09.
  *
  *     docker compose exec app php artisan solver:benchmark --engine=fixed --fixture=tiny --markdown
@@ -28,7 +28,7 @@ final class SolverBenchmark extends Command
     protected $signature = 'solver:benchmark
         {--engine=* : Claves de motor; todos si no se da}
         {--fixture=* : Nombres de fixture; todos si no se da (ninguno si se da --input)}
-        {--input=* : Archivos input.json fuera de los fixtures; su nombre es el de su carpeta}
+        {--input=* : Archivos input.json dentro de storage/app; su nombre es su carpeta desde storage/app}
         {--time-limit= : Segundos de cada corrida, de 10 a 600; si no se da, los de cada entrada}
         {--breakdown : Agrega el límite, el estado, las duras según el evaluador en PHP y el puntaje de SC-01 a SC-09}
         {--markdown : Imprime la tabla en Markdown para la línea base de solver.md}';
@@ -151,14 +151,31 @@ final class SolverBenchmark extends Command
             $instances[$name] = [$directory.'/'.$name.'/input.json', $directory.'/'.$name.'/expected.json'];
         }
 
+        $storage = (string) realpath(storage_path('app'));
+
         foreach ($inputs as $path) {
-            if (! is_file($path)) {
+            $real = realpath($path);
+
+            if ($real === false || ! is_file($real)) {
                 $this->error("No hay una entrada en «{$path}».");
 
                 return null;
             }
 
-            $instances[basename(dirname($path))] = [$path, null];
+            if ($storage === '' || ! str_starts_with($real, $storage.'/')) {
+                $this->error('La entrada de --input debe estar dentro de storage/app.');
+
+                return null;
+            }
+
+            $name = substr(dirname($real), strlen($storage) + 1);
+            $unique = $name;
+
+            for ($copy = 2; isset($instances[$unique]); $copy++) {
+                $unique = "{$name} ({$copy})";
+            }
+
+            $instances[$unique] = [$real, null];
         }
 
         return $instances;
