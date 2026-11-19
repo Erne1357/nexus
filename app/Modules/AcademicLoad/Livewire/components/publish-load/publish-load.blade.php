@@ -93,6 +93,25 @@
                         @endforeach
                     </dl>
 
+                    @if ($preview['changes'] !== null)
+                        <div class="grid gap-1.5" data-testid="publish-changes">
+                            <p class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Qué cambia contra la versión {{ $current }}</p>
+                            @if ($preview['changes'] === [])
+                                <p class="text-sm text-neutral">Ningún grupo cambia contra la versión {{ $current }}: la versión {{ $nextVersion }} no le avisa a nadie.</p>
+                            @else
+                                <ul class="flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
+                                    @foreach ($preview['changes'] as $section)
+                                        @php($count = count($section['rows']))
+                                        <li class="inline-flex items-center gap-1.5" data-kind="{{ $section['kind'] }}">
+                                            <x-icon :name="$section['icon']" @class(['h-4 w-4 shrink-0', 'text-success' => $section['kind'] === 'added', 'text-error' => $section['kind'] === 'cancelled', 'text-neutral' => ! in_array($section['kind'], ['added', 'cancelled'], true)]) aria-hidden="true" />
+                                            <span>{{ $section['label'] }}: <span class="font-mono font-semibold">{{ $count }}</span> {{ $count === 1 ? 'grupo' : 'grupos' }}</span>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            @endif
+                        </div>
+                    @endif
+
                     <ul class="grid gap-2">
                         @if ($preview['withoutTeacher'] > 0)
                             <li class="flex gap-2.5 items-start"><x-icon name="o-exclamation-triangle" class="w-5 h-5 text-warning shrink-0" aria-hidden="true" />

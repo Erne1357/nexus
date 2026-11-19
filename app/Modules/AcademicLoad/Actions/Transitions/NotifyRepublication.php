@@ -30,7 +30,9 @@ use Illuminate\Support\Facades\Notification;
  *   tenga usuario o correo institucional (supuesto por confirmar). Quien es docente y también coordinador o jefe recibe un
  *   aviso por cada papel, con las líneas de ese papel;
  * - los coordinadores de cada carrera afectada (SnapshotDiff::careers()): los titulares de enviar la propuesta de la
- *   carrera en la modalidad de la carga, de cualquier campus, como NotifyProposalReturned (M6, MS18);
+ *   carrera en la modalidad de la carga, de cualquier campus, como NotifyProposalReturned (M6, MS18). El aviso abre el
+ *   semestre publicado de la carrera con la retícula y el semestre del primer grupo cambiado que la lleva (el de su primera
+ *   línea; de la versión anterior si se canceló), no el primero de la retícula (ensayo 8.11, E-15);
  * - los jefes de cada otro departamento afectado (SnapshotDiff::departments(): préstamos de salón y grupos compartidos):
  *   los titulares de decidir acuerdos de ese departamento en la modalidad, como los avisos de los acuerdos (M12).
  *
@@ -59,7 +61,7 @@ final class NotifyRepublication
         $notify = fn (RepublicationAudience $audience, string $label, array $entries, string $route, array $parameters): LoadRepublished => new LoadRepublished($load, $version, $snapshot->reason, $audience, $label, $entries, $route, $parameters);
 
         return $this->teachers($load, $diff, $payload, $notify)
-            + $this->coordinators($load, $diff, $payload, $notify)
+            + $this->coordinators($load, $version, $diff, $payload, $notify)
             + $this->departments($load, $diff, $notify);
     }
 
@@ -102,14 +104,27 @@ final class NotifyRepublication
      * @param  array<string, mixed>  $diff
      * @param  array<string, mixed>  $payload
      */
-    private function coordinators(AcademicLoad $load, array $diff, array $payload, callable $notify): int
+    private function coordinators(AcademicLoad $load, int $version, array $diff, array $payload, callable $notify): int
     {
         $published = array_flip(SnapshotDiff::careerIds($payload));
+        $placements = self::placements($payload);
+        $previous = null;
         $sent = 0;
 
         foreach (SnapshotDiff::careers($diff) as $id => $career) {
+            $semester = [];
+
+            if (isset($published[$id])) {
+                $semester = $this->semesterOf($career['entries'], (string) $id, $placements);
+
+                if ($semester === null) {
+                    $previous ??= self::placements(SnapshotPayload::normalize(LoadSnapshot::query()->where('academic_load_id', $load->getKey())->where('version', $version - 1)->value('payload') ?? ['groups' => []]));
+                    $semester = $this->semesterOf($career['entries'], (string) $id, $placements, $previous) ?? [];
+                }
+            }
+
             [$route, $parameters] = isset($published[$id])
-                ? ['published.semester', [...$this->published($load), 'carrera' => $career['career']['code']]]
+                ? ['published.semester', [...$this->published($load), 'carrera' => $career['career']['code'], ...$semester]]
                 : ['published.index', $this->published($load)];
             $holders = $this->recipients->holders(AcademicLoadPermission::ProposalSubmit, Target::of(modality: $load->modality_id, career: (string) $id));
 
@@ -135,6 +150,54 @@ final class NotifyRepublication
         }
 
         return $sent;
+    }
+
+    /**
+     * La retícula y el semestre (`?reticula=&semestre=` del semestre publicado) del primer grupo de las líneas de una
+     * carrera que la lleva con semestre: el grupo como quedó o, si se canceló, como estaba en la versión anterior
+     * (`$previous`). Null si para encontrarlo hace falta la versión anterior y no se dio; [] si ningún grupo lo dice.
+     *
+     * @param  list<array{kind: string, group: array<string, mixed>}>  $entries
+     * @param  array<string, array<string, array<string, mixed>>>  $placements  los lugares de la versión nueva, por grupo y carrera
+     * @param  array<string, array<string, array<string, mixed>>>|null  $previous  los de la versión anterior
+     * @return array{reticula?: string, semestre?: string}|null
+     */
+    private function semesterOf(array $entries, string $career, array $placements, ?array $previous = null): ?array
+    {
+        foreach ($entries as $entry) {
+            $group = (string) $entry['group']['id'];
+
+            if (! isset($placements[$group]) && $previous === null) {
+                return null;
+            }
+
+            $placement = ($placements[$group] ?? $previous[$group] ?? [])[$career] ?? null;
+
+            if (($placement['semester'] ?? null) !== null && ($placement['study_plan']['code'] ?? null) !== null) {
+                return ['reticula' => $placement['study_plan']['code'], 'semestre' => (string) $placement['semester']];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Los lugares de cada grupo de un payload, por id del grupo y de la carrera (el primero de cada carrera).
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    private static function placements(array $payload): array
+    {
+        $placements = [];
+
+        foreach ($payload['groups'] as $group) {
+            foreach ($group['placements'] as $placement) {
+                $placements[(string) $group['id']][(string) $placement['career']['id']] ??= $placement;
+            }
+        }
+
+        return $placements;
     }
 
     /**

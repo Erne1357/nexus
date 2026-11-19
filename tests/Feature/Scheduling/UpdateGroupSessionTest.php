@@ -186,7 +186,7 @@ it('con la carga cerrada o el grupo cancelado no la mueve', function (Closure $s
         ->toThrow(ValidationException::class, $message)
         ->and($this->session->fresh()->day)->toBe(1);
 })->with([
-    'carga cerrada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Closed]), 'está en cerrada: no se editan horarios.'],
+    'carga cerrada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Closed]), 'ya está cerrada: no se editan horarios.'],
     'grupo cancelado' => [fn ($test) => $test->group->update(['status' => 'cancelled']), 'El grupo D está cancelado'],
 ]);
 

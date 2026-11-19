@@ -99,7 +99,7 @@ it('el mensaje de la carga dice el departamento, la modalidad y el estado', func
 
     $errors = errorsOf(fn () => app(ProposeGroupQuota::class)->handle($this->group, $this->foreign, 5, $this->actor));
 
-    expect($errors['quotas'][0])->toBe("La carga de {$this->imparte->name} en {$this->group->modality->name} está en cerrada: no se editan cupos.");
+    expect($errors['quotas'][0])->toBe("La carga de {$this->imparte->name} en {$this->group->modality->name} ya está cerrada: no se editan cupos.");
 });
 
 it('retira la propuesta', function () {

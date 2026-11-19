@@ -111,10 +111,12 @@ describe('jefe del departamento', function () {
         $page = reanalysisPage($this->jefe)
             ->assertSee('Todavía no se puede re-analizar.')
             ->assertSee('La proyección de demanda todavía no se recalcula con el kárdex importado')
-            ->assertSeeHtml('id="why-start"')
             ->assertSee('Falta la proyección');
 
-        expect(domOf($page)->querySelector('[data-testid="start-reanalysis"]')->hasAttribute('disabled'))->toBeTrue()
+        $start = domOf($page)->querySelector('[data-testid="start-reanalysis"]');
+        expect($start->hasAttribute('disabled'))->toBeTrue()
+            ->and($start->getAttribute('aria-describedby'))->toBe('reanalysis-line')
+            ->and(domOf($page)->querySelector('#reanalysis-line'))->not->toBeNull()
             ->and(domOf($page)->querySelector('[data-check="forecast"]')->getAttribute('data-state'))->toBe('wait');
 
         $page->call('startReanalysis');
@@ -123,12 +125,17 @@ describe('jefe del departamento', function () {
             ->and(lastToastOf($page)['title'])->toBe('No se inició el re-análisis');
     });
 
-    it('RA-02: sin kárdex nuevo, la condición lo dice y las otras dos esperan', function () {
+    it('RA-02: sin kárdex nuevo, la condición lo dice una sola vez y las otras dos esperan (ensayo 8.11, E-06)', function () {
         $this->world->published();
 
-        $page = reanalysisPage($this->jefe)->assertSee('No se ha importado un kárdex después de la versión 1 de la carga.');
+        $page = reanalysisPage($this->jefe);
+        $html = $page->html();
 
-        expect(domOf($page)->querySelector('[data-check="kardex"]')->getAttribute('data-state'))->toBe('wait')
+        expect(substr_count($html, 'No se ha importado un kárdex después de la versión 1 de la carga.'))->toBe(1)
+            ->and(textOf(domOf($page)->querySelector('[data-check="kardex"]')))->toContain('No se ha importado un kárdex después de la versión 1 de la carga.')
+            ->and(textOf(domOf($page)->querySelector('#reanalysis-line')))->toContain('Todavía no se puede re-analizar.')->toContain('«Lo que pide el re-análisis»')
+            ->and(domOf($page)->querySelector('#why-start'))->toBeNull()
+            ->and(domOf($page)->querySelector('[data-check="kardex"]')->getAttribute('data-state'))->toBe('wait')
             ->and(domOf($page)->querySelector('[data-check="grades"]')->getAttribute('data-state'))->toBe('pending');
     });
 

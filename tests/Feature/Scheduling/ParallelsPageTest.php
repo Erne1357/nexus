@@ -194,7 +194,7 @@ it('con la carga no editable lo dice y no deja armar', function () {
     $this->world->load->update(['status' => LoadStatus::Published]);
 
     parallelsPageOpen(parallelsPageAs($this->jefe))
-        ->assertSee('La carga de Ciencias Básicas en Presencial está en publicada: no se editan paralelos.')
+        ->assertSee('La carga de Ciencias Básicas en Presencial ya está publicada: no se editan paralelos.')
         ->assertSeeHtml('data-testid="parallels-arm" disabled')
         ->call('arm')
         ->assertHasErrors('groups');

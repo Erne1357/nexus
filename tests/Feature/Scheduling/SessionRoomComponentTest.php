@@ -166,7 +166,7 @@ it('con la carga fuera de propuesta, asignación o ajustes, el jefe lo ve de sol
     sessionRoomAs($this->jefe)
         ->assertOk()
         ->assertSee('CC-05')
-        ->assertSee('está en cerrada: no se editan horarios.')
+        ->assertSee('ya está cerrada: no se editan horarios.')
         ->assertDontSee('Quitar salón')
         ->assertSeeHtml('data-testid="session-room-reason"');
 });
