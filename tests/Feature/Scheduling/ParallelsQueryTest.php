@@ -9,6 +9,9 @@ use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalPackage;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Demand\Enums\ForecastMethod;
+use App\Modules\Facilities\Models\Building;
+use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\SubjectRoomDefault;
 use App\Modules\Scheduling\Queries\Parallels;
 use App\Modules\Scheduling\Queries\ParallelSlot;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
@@ -213,6 +216,77 @@ it('lo que no cabe en un grupo pasa a los lugares libres de un mixto antes de qu
         ['quotas' => ['ISIC' => 25], 'capacity' => 25, 'keeps' => '1'],
         ['quotas' => ['IIND' => 20, 'ITIC' => 10, 'ISIC' => 5], 'capacity' => 35, 'keeps' => null],
     ])->and($row->short)->toBe([]);
+});
+
+/**
+ * Un salón por defecto de la materia en el campus del mundo: la capacidad con que nace un grupo nuevo (GroupCapacity).
+ */
+function parallelsRoomDefault(Subject $subject, int $capacity): void
+{
+    $room = Room::factory()->capacity($capacity)->create(['building_id' => Building::factory()->create(['campus_id' => test()->world->campus->id])->id]);
+    SubjectRoomDefault::factory()->create(['subject_id' => $subject->id, 'campus_id' => test()->world->campus->id, 'room_id' => $room->id, 'priority' => 1]);
+}
+
+/**
+ * Por carrera (clave), los esperados que la sugerencia pone en algún grupo.
+ *
+ * @return array<string, int>
+ */
+function parallelsPlacedExpected(ParallelSubject $row): array
+{
+    $codes = Career::query()->pluck('code', 'id')->all();
+    $placed = [];
+
+    foreach ($row->suggestion as $slot) {
+        foreach ($slot->expected as $id => $count) {
+            $placed[$codes[$id]] = ($placed[$codes[$id]] ?? 0) + $count;
+        }
+    }
+
+    ksort($placed);
+
+    return $placed;
+}
+
+it('E-08: con un salón más chico que el tamaño objetivo los completos son de su capacidad y ningún grupo lleva más esperados que lugares', function () {
+    $this->world->subject->update(['needs_lab' => true]);
+    parallelsRoomDefault($this->world->subject, 23);
+    $ieme = $this->world->career('IEME');
+    $this->world->groupsOf($this->world->request($this->isic, 74, 3), 3, ['capacity' => 23]);
+    $this->world->groupsOf($this->world->request($ieme, 56, 3), 3, ['capacity' => 23]);
+    $this->world->request($this->iind, 6, 1);
+
+    $row = parallelsRow();
+
+    expect($row->size())->toBe(23)
+        ->and($row->suggested())->toBe(6)
+        ->and(array_filter($row->suggestion, fn (ParallelSlot $slot): bool => array_sum($slot->expected) > $slot->capacity))->toBe([])
+        ->and(parallelsSlots($row))->toBe([
+            ['quotas' => ['IEME' => 23], 'capacity' => 23, 'keeps' => '4'],
+            ['quotas' => ['IEME' => 23], 'capacity' => 23, 'keeps' => '5'],
+            ['quotas' => ['ISIC' => 23], 'capacity' => 23, 'keeps' => '1'],
+            ['quotas' => ['ISIC' => 23], 'capacity' => 23, 'keeps' => '2'],
+            ['quotas' => ['ISIC' => 23], 'capacity' => 23, 'keeps' => '3'],
+            ['quotas' => ['IEME' => 10, 'IIND' => 6, 'ISIC' => 5], 'capacity' => 23, 'keeps' => '6'],
+        ])
+        ->and(parallelsPlacedExpected($row))->toBe(['IEME' => 56, 'IIND' => 6, 'ISIC' => 74])
+        ->and($row->short)->toBe([])
+        ->and($row->arrangeBlockedReason())->toBeNull();
+});
+
+it('E-08: un completo que se queda en un grupo más chico lleva sus lugares, y lo que no cabe se cuenta una sola vez, de menos', function () {
+    $isic = $this->world->request($this->isic, 70, 2);
+    $this->world->groupsOf($isic, 1, ['capacity' => 30]);
+    $this->world->groupsOf($isic);
+
+    $row = parallelsRow();
+
+    expect(parallelsSlots($row))->toBe([
+        ['quotas' => ['ISIC' => 30], 'capacity' => 30, 'keeps' => '1'],
+        ['quotas' => ['ISIC' => 30], 'capacity' => 35, 'keeps' => '2'],
+    ])
+        ->and(parallelsPlacedExpected($row))->toBe(['ISIC' => 60])
+        ->and($row->short)->toBe([$this->isic->id => 10]);
 });
 
 it('marca como bloqueado el grupo con una solicitud de cambio abierta que la sugerencia cancelaría', function () {

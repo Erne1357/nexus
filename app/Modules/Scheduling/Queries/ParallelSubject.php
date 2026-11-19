@@ -13,7 +13,8 @@ use App\Modules\Core\Models\Campus;
  * - `careers`: las carreras que cuentan (parte aceptada, o pendiente que el departamento puede decidir, como ParallelGroups
  *   en la bandeja) con esperados sueltos, por clave; `excluded`, las que no cuentan: parte regresada, o sin esperados
  *   (aunque pidan grupos, no tienen alumnos que juntar);
- * - `parallels`: la cuenta de ParallelGroups con los esperados y grupos sueltos de cada carrera, con el tamaño objetivo;
+ * - `parallels`: la cuenta de ParallelGroups con los esperados y grupos sueltos de cada carrera, con el tamaño de un
+ *   completo: el objetivo sin pasar la capacidad de un grupo nuevo (ParallelsQuery::row(); E-08 del ensayo 8.11);
  * - `groups`: los grupos sueltos que ya existen (de cualquier carrera), por orden de creación;
  * - `suggestion`: los grupos que sugiere Nexus (ParallelGroups::layout), cada uno con sus cupos y el grupo que se queda
  *   (ParallelPlacement), sin pasar la capacidad real de ese grupo; `short`, los esperados de cada carrera que no caben en
@@ -50,6 +51,9 @@ final readonly class ParallelSubject
         public ?array $lastArrangement = null,
     ) {}
 
+    /**
+     * El tamaño de un completo: el objetivo de la materia sin pasar la capacidad con que nace un grupo.
+     */
     public function size(): int
     {
         return $this->parallels->size;

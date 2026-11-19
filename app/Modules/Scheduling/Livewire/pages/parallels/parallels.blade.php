@@ -2,8 +2,9 @@
     La pestaña «Paralelos» de la bandeja del departamento (tarea 8.8, maqueta B; DESIGN.md, «Paralelos»). El mismo
     encabezado que la bandeja (departamento, modalidad, periodo y el estado de la carga), el filtro de campus con las
     materias por juntar de cada uno y las pestañas «Bandeja · Paralelos». Luego las cuatro cifras, la búsqueda y «Todas ·
-    Por armar · Armadas», la tabla de materias por campus (renglones apilados debajo de 768 px) y lo que no hay que
-    juntar, plegado con su motivo. El drawer de una materia arma sus paralelos. Todo lo que se pinta viene de
+    Por armar · Pendientes · Armadas» (cada opción completa: si no caben, el grupo se desplaza de lado dentro de sí, sin
+    mover la página; E-09 del ensayo 8.11), la tabla de materias por campus (renglones apilados debajo de 768 px) y lo
+    que no hay que juntar, plegado con su motivo. El drawer de una materia arma sus paralelos. Todo lo que se pinta viene de
     ParallelsQuery y ParallelDraft.
 --}}
 @php
@@ -86,13 +87,13 @@
             @php
                 $filterOptions = array_filter(['' => 'Todas', 'por-armar' => 'Por armar', 'pendientes' => 'Pendientes', 'armadas' => 'Armadas'], fn ($optionLabel, $option) => $option !== 'pendientes' || $filterCounts['pendientes'] > 0 || $filter === 'pendientes', ARRAY_FILTER_USE_BOTH);
             @endphp
-            <div role="group" aria-label="Estado" class="join grid w-full md:flex md:w-auto" style="grid-template-columns: repeat({{ count($filterOptions) }}, minmax(0, 1fr))" data-testid="parallels-filter">
+            <div role="group" aria-label="Estado" class="join flex w-full max-md:overflow-x-auto md:w-auto" data-testid="parallels-filter">
                 @foreach ($filterOptions as $option => $optionLabel)
                     <button type="button" wire:click="$set('filter', '{{ $option }}')" aria-pressed="{{ $filter === $option ? 'true' : 'false' }}" data-testid="parallels-filter-{{ $option ?: 'todas' }}"
                         @class([
-                            'btn join-item px-2 max-md:h-auto max-md:min-h-11 max-md:min-w-0 max-md:flex-col max-md:gap-0 max-md:py-1 max-md:leading-tight md:gap-1.5 md:whitespace-nowrap md:px-3',
+                            'btn join-item shrink-0 whitespace-nowrap px-2 max-md:h-auto max-md:min-h-11 max-md:grow max-md:flex-col max-md:gap-0 max-md:py-1 max-md:leading-tight max-md:focus-visible:-outline-offset-2 md:gap-1.5 md:px-3',
                             'btn-primary' => $filter === $option,
-                        ])><span class="max-md:max-w-full max-md:truncate">{{ $optionLabel }}</span> <span class="font-mono text-[12.5px] tabular-nums opacity-85">{{ $filterCounts[$option] }}</span></button>
+                        ])><span>{{ $optionLabel }}</span> <span class="font-mono text-[12.5px] tabular-nums opacity-85">{{ $filterCounts[$option] }}</span></button>
                 @endforeach
             </div>
             <p class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-neutral desktop:ms-auto" data-testid="parallels-legend">
