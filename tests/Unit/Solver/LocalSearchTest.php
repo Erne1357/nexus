@@ -200,6 +200,31 @@ it('el puntaje incremental es el que da el evaluador, regla por regla', function
     expect((new LocalScore($input, $byGroup))->total())->toBe((new ContractEvaluator)->evaluate($input, $sessions)->softScore->total);
 })->with(['tiny', 'small', 'medium', 'infeasible'])->with(SoftWeights::RULES);
 
+it('SC-01: el puntaje incremental no cuenta la clave `combination:`, igual que el evaluador', function () {
+    $sessions = (new PhpHeuristicEngine(search: null))->solve(localSearchFixture('small'))->sessions;
+    $weights = array_fill_keys(SoftWeights::RULES, 0);
+    $weights['SC-01'] = 3;
+    $plain = localSearchFixture('small', ['soft_weights' => $weights]);
+    $data = $plain->toArray();
+
+    foreach ($data['groups'] as $i => $group) {
+        $data['groups'][$i]['cohorts'][] = 'combination:p001:1:C1';
+    }
+
+    $combined = SolverInput::fromArray($data);
+    $byGroup = [];
+
+    foreach ($sessions as $session) {
+        $byGroup[$session->groupId][] = $session;
+    }
+
+    $total = (new ContractEvaluator)->evaluate($plain, $sessions)->softScore->total;
+
+    expect($total)->toBeGreaterThan(0)
+        ->and((new LocalScore($combined, $byGroup))->total())->toBe($total)
+        ->and((new ContractEvaluator)->evaluate($combined, $sessions)->softScore->total)->toBe($total);
+});
+
 it('el delta de un cambio de uno o dos grupos es la diferencia de puntaje que da el evaluador', function (string $fixture) {
     $input = localSearchFixture($fixture);
     $byGroup = localSearchByGroup((new PhpHeuristicEngine(search: null))->solve($input));
@@ -592,6 +617,10 @@ function localSearchRandomData(int $seed, int $groupCount): array
     foreach ($rooms as $room) {
         if (isset($room['owner_department_id']) && $int(0, 1) === 1) {
             $agreements[] = ['room_id' => $room['id'], 'to_department_id' => $room['owner_department_id'] === 'd1' ? 'd2' : 'd1', 'day' => $int(1, 5), 'starts_at' => '07:00', 'ends_at' => '11:00'];
+
+            if ($int(0, 1) === 1) {
+                $agreements[array_key_last($agreements)]['group_id'] = $pick($groups)['id'];
+            }
         }
     }
 

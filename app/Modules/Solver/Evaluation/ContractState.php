@@ -5,6 +5,7 @@ namespace App\Modules\Solver\Evaluation;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Scheduling\Enums\SessionKind;
+use App\Modules\Scheduling\Rules\Cohorts;
 use App\Modules\Scheduling\Rules\Soft\SoftContext;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleState;
@@ -39,20 +40,23 @@ use App\Modules\Solver\Contract\TimeSlot;
  *   perfil de la rejilla de ese campus (HC-04; con bloques de tiempo) y la tolerancia de HC-12 de la entrada
  *   (`weekly_hours_tolerance`). Las reglas solo comparan igualdad.
  * - HC-03 sigue las cohortes de la entrada: cada clave `plan:<plan>:<semestre>:<campus>` mete al grupo en ese semestre
- *   del alumno tipo, y un grupo sin clave de plan no cuenta en ninguno (la entrada no trae los otros grupos de su
- *   materia, así que parecería el único). La clave `package:<id>:<campus>:<n>` da el paquete y su número al grupo,
- *   que es lo que revisa TypicalStudentSchedule.
+ *   del alumno tipo, y un grupo sin clave de plan no cuenta en ninguno (la entrada no tiene por qué traer los otros
+ *   grupos de su materia, así que parecería el único). La clave `combination:<plan>:<semestre>:<campus>` dice que la
+ *   entrada trae ese semestre completo (BuildSolverInput mete todos los grupos del semestre de cada movible): sus
+ *   grupos y todos los de la entrada de ese plan, semestre y campus cuentan ahí, con las materias de varios grupos, así
+ *   que TypicalStudentSchedule ve el núcleo sin combinación igual que el validador. La clave `package:<id>:<campus>:<n>`
+ *   da el paquete y su número al grupo, que es lo que revisa TypicalStudentSchedule.
  * - La ocupación de fuera de la corrida entra como grupos de contexto (ids con el prefijo CONTEXT), activos y sin horas:
  *   los `busy` de un docente, uno por docente y campus (sin `campus_code`, el campus de su primer grupo con él; supuesto
  *   por confirmar), y los `busy` de un salón, uno por salón. Ninguna violación de un grupo de contexto sale del adaptador.
  * - HC-08: las horas base del docente son sus `remaining_hours` más las horas de sus grupos fijos de la entrada, sin
  *   horas externas ni tolerancia, así que lo que le queda es lo mismo que en la base.
- * - HC-10: cada préstamo aceptado (`agreements`) es de todos los grupos del departamento al que se presta.
+ * - HC-10: un préstamo aceptado (`agreements`) con `group_id` es solo de ese grupo, como lo revisa el validador
+ *   (RoomLoan, por grupo); sin él, de todos los grupos del departamento al que se presta (las entradas de antes).
  * - HC-07 y HC-13 no se pueden revisar: el contrato no trae cupos ni catálogos (se verifican al armar la entrada; la foto
- *   da todos los planes activos y las carreras ofrecidas). Tampoco el núcleo sin combinación de HC-03, que sale de
- *   materias con varios grupos: el contrato solo trae las cohortes de las materias con un solo grupo.
- * - SC-09 usa `travel_minutes`; SC-01 las cohortes de la entrada; SC-03, SC-04, SC-06 y SC-08 lo que trae la entrada
- *   (SoftContext).
+ *   da todos los planes activos y las carreras ofrecidas).
+ * - SC-09 usa `travel_minutes`; SC-01 las cohortes de la entrada (sin `combination:`, Cohorts::forStudentGaps());
+ *   SC-03, SC-04, SC-06 y SC-08 lo que trae la entrada (SoftContext).
  */
 final readonly class ContractState
 {
@@ -125,10 +129,11 @@ final readonly class ContractState
         $byDepartment = [];
         $subjectsByCode = [];
         $teacherCampus = [];
+        $complete = self::completeSemesters($input);
 
         foreach ($input->groups as $group) {
             $subjectId = self::subjectOf($group);
-            [$semesters, $package] = self::cohortsOf($input, $group);
+            [$semesters, $package] = self::cohortsOf($input, $group, $complete);
 
             $builder->subject(new StateSubject($subjectId, $group->subjectCode, $group->subjectCode === '' ? 'La materia' : $group->subjectCode,
                 max(0, $group->weeklyHours - $group->practiceHours), $group->practiceHours, $group->needsLab));
@@ -201,7 +206,9 @@ final readonly class ContractState
         }
 
         foreach ($input->agreements as $agreement) {
-            foreach ($byDepartment[$agreement->toDepartmentId] ?? [] as $groupId) {
+            $holders = $agreement->groupId === null ? $byDepartment[$agreement->toDepartmentId] ?? [] : (isset($groups[$agreement->groupId]) ? [$agreement->groupId] : []);
+
+            foreach ($holders as $groupId) {
                 $builder->loan(new StateRoomLoan($groupId, $agreement->roomId, $agreement->day, Minutes::of($agreement->startsAt), Minutes::of($agreement->endsAt), true));
             }
         }
@@ -277,11 +284,13 @@ final readonly class ContractState
     }
 
     /**
-     * Los semestres del alumno tipo de sus claves `plan:` y el paquete de su primera clave `package:`, como [id, número].
+     * Los semestres del alumno tipo del grupo, sin repetir: los de sus claves `plan:` y `combination:`, y el suyo si la
+     * entrada lo trae completo; y el paquete de su primera clave `package:`, como [id, número].
      *
+     * @param  array<string, true>  $complete  «campus|plan|semestre» de las claves `combination:` de la entrada
      * @return array{list<array{string, string, string, int}>, array{string, int}|null}
      */
-    private static function cohortsOf(SolverInput $input, GroupInput $group): array
+    private static function cohortsOf(SolverInput $input, GroupInput $group, array $complete): array
     {
         $semesters = [];
         $package = null;
@@ -289,14 +298,42 @@ final readonly class ContractState
         foreach ($group->cohorts as $key) {
             $parts = explode(':', $key);
 
-            if ($parts[0] === 'plan' && count($parts) === 4) {
-                $semesters[] = [self::modalityOf($input, $parts[3]), $parts[3], $parts[1], (int) $parts[2]];
+            if (($parts[0] === 'plan' || $parts[0] === Cohorts::COMBINATION) && count($parts) === 4) {
+                $semesters["{$parts[3]}|{$parts[1]}|{$parts[2]}"] = [self::modalityOf($input, $parts[3]), $parts[3], $parts[1], (int) $parts[2]];
             } elseif ($parts[0] === 'package' && $package === null && count($parts) === 4) {
                 $package = [$parts[1], (int) $parts[3]];
             }
         }
 
-        return [$semesters, $package];
+        $own = "{$group->campusCode}|{$group->studyPlanId}|{$group->semester}";
+
+        if (isset($complete[$own])) {
+            $semesters[$own] ??= [self::modalityOf($input, $group->campusCode), $group->campusCode, $group->studyPlanId, $group->semester];
+        }
+
+        return [array_values($semesters), $package];
+    }
+
+    /**
+     * Los semestres que la entrada trae completos: los de sus claves `combination:`, como «campus|plan|semestre».
+     *
+     * @return array<string, true>
+     */
+    private static function completeSemesters(SolverInput $input): array
+    {
+        $complete = [];
+
+        foreach ($input->groups as $group) {
+            foreach ($group->cohorts as $key) {
+                $parts = explode(':', $key);
+
+                if (Cohorts::isCombination($key) && count($parts) === 4) {
+                    $complete["{$parts[3]}|{$parts[1]}|{$parts[2]}"] = true;
+                }
+            }
+        }
+
+        return $complete;
     }
 
     /**

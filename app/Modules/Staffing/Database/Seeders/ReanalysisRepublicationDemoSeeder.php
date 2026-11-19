@@ -25,6 +25,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Staffing\Actions\AssignTeacher;
+use App\Modules\Staffing\Actions\QueueRankings;
 use App\Modules\Staffing\Actions\RefreshTeacherTermLoads;
 use App\Modules\Staffing\Actions\UnassignTeacher;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
@@ -177,7 +178,7 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
         Event::fakeFor(function () use ($loads, $plan): void {
             foreach ($loads as $load) {
                 $head = ReanalysisDemoSeeder::headOf($load);
-                $this->cancelTaught($load, $head);
+                $refusals = $this->cancelTaught($load, $head);
                 $this->staffOpened($load, $head);
                 $reassigned = $this->reassign($load, $head, min(3, max(2, intdiv($this->groups($load)->count(), 40))));
 
@@ -186,7 +187,7 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
                 }
 
                 $missing = array_keys(array_filter([
-                    'un grupo cerrado (ninguno de los que sobran deja combinación sin empalmes al alumno tipo, HC-03)' => app(ReanalysisChangesQuery::class)->since($load->fresh())['summary']['cancelled'] === 0,
+                    'un grupo cerrado ('.($refusals === [] ? 'ningún grupo de los que sobran se pudo cerrar' : implode('; ', $refusals)).')' => app(ReanalysisChangesQuery::class)->since($load->fresh())['summary']['cancelled'] === 0,
                     'un cambio de docente (ningún candidato del ranking pasa HC-01, HC-08 y HC-09)' => $reassigned === 0,
                 ]));
 
@@ -202,14 +203,18 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
     /**
      * Si Scheduling no pudo cerrar ningún grupo de la carga (CancelGroup no cancela uno con docente y todos los que sobran
      * lo tienen), el jefe le quita el docente a uno de los que sobran (UnassignTeacher) y lo cancela; las dos cosas en una
-     * transacción que se revierte si el grupo no se puede cerrar (HC-03).
+     * transacción que se revierte si el grupo no se puede cerrar (HC-03). Da los motivos de los que no se pudieron cerrar,
+     * para detener la demo con ellos si la carga corregida se queda sin cierre.
+     *
+     * @return list<string>
      */
-    private function cancelTaught(AcademicLoad $load, User $head): void
+    private function cancelTaught(AcademicLoad $load, User $head): array
     {
         $changes = app(ReanalysisChangesDemoSeeder::class);
+        $refusals = [];
 
         if (app(ReanalysisChangesQuery::class)->since($load)['summary']['cancelled'] > 0) {
-            return;
+            return [];
         }
 
         foreach ($changes->surplusCandidates($load)->whereNotNull('teacher_id')->take(self::MAX_ATTEMPTS) as $group) {
@@ -217,18 +222,22 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
 
             try {
                 app(UnassignTeacher::class)->handle($group, $head, self::CANCEL_REASON);
-                $cancelled = $changes->cancelGuarded($group, $head);
-                $cancelled ? DB::commit() : DB::rollBack();
+                $result = $changes->cancelGuarded($group, $head);
+                $result === true ? DB::commit() : DB::rollBack();
             } catch (Throwable $exception) {
                 DB::rollBack();
 
                 throw $exception;
             }
 
-            if ($cancelled) {
-                return;
+            if ($result === true) {
+                return [];
             }
+
+            $refusals[] = $result;
         }
+
+        return $refusals;
     }
 
     /**
@@ -315,6 +324,12 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
     {
         $opened = $this->groups($load)->whereNull('teacher_id')->where('close_justification', ReanalysisChangesDemoSeeder::OPENED_JUSTIFICATION);
 
+        // El evento GroupsCreated va silenciado en la demo por puntos: sin esto el grupo abierto no tendría ranking y la
+        // pantalla de asignación no mostraría candidatos. Se encola como RerankOnGroupsCreated (la cola es síncrona).
+        if ($opened->isNotEmpty()) {
+            app(QueueRankings::class)->forScope($load->term_id, $load->modality_id, $load->department_id);
+        }
+
         foreach ($opened as $group) {
             // Por lugar y, entre iguales de varios grupos, por RFC: un orden que no depende de los ids de la siembra.
             $candidates = StaffingRanking::query()
@@ -353,7 +368,13 @@ final class ReanalysisRepublicationDemoSeeder extends Seeder
                 app(AssignTeacher::class)->handle($group->fresh(), $teacher, $head, $reason);
 
                 return true;
-            } catch (ValidationException) {
+            } catch (ValidationException $exception) {
+                // Solo lo que dice «no cabe»: el validador (`teacher`) o el motivo del lugar en el ranking (`reason`, HC-16).
+                // Cualquier otra cosa (carga que no admite docentes, grupo ya cancelado) es un error de la demo.
+                if (array_intersect(array_keys($exception->errors()), ['teacher', 'reason']) === []) {
+                    throw $exception;
+                }
+
                 continue;
             } finally {
                 $this->validator->forget();

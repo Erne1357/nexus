@@ -82,8 +82,8 @@ it('HC-02, HC-06, HC-10, HC-11: no ofrece un salón ocupado, de otro tipo, apart
 
     $suggestions = reanalysisSuggestionsOf($this->world, $this->world->integral, $this->world->c2);
 
-    expect(reanalysisSuggestionKeys($suggestions))->toBe(["expand_quota:{$this->world->groups['A']->id}:{$this->world->isc->id}", 'open_group'])
-        ->and($suggestions->find('open_group')->evidence)->toBe(['ISIC: faltan 20 lugares aunque se amplíen los grupos que caben']);
+    expect(reanalysisSuggestionKeys($suggestions))->toBe(["expand_quota:{$this->world->groups['A']->id}:{$this->world->isc->id}", "open_group:{$this->world->isc->id}"])
+        ->and($suggestions->find("open_group:{$this->world->isc->id}")->evidence[0])->toBe('ISIC: faltan 20 lugares aunque se amplíen los grupos que caben');
 });
 
 it('HC-10: un salón de otro departamento se ofrece después de los propios, diciendo a quién se pide', function () {
@@ -130,5 +130,6 @@ it('lee en un número fijo de consultas, sin importar cuántos grupos tenga el b
         $this->world->group($this->world->integral, $this->world->isc, 30, $this->world->c2, 2, day: $day);
     }
 
-    expect($count())->toBe($few)->toBeLessThanOrEqual(15);
+    // 18: las de 8.3a más la materia, el plan vigente de cada carrera y el salón por defecto para abrir un grupo (8.3b).
+    expect($count())->toBe($few)->toBeLessThanOrEqual(18);
 });

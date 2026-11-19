@@ -36,8 +36,9 @@ use RuntimeException;
  * se vean llenos. Todo por las Actions reales, como el jefe de cada departamento (`jefe.<clave>`; el admin si no lo hay) y
  * Subdirección (`subdir`). El reparto es `plan()`: por clave de departamento, en el orden de CASES y, si sobran cargas,
  * otra vuelta con EXTRA_CASES. Con el volumen demo hay 4 cargas: CB corregida en v3, CEA con cambios, II cancelada y vuelta
- * a iniciar, SC habilitada; con el masivo 6: además MM republicada en v2 y SC cerrada (II habilitada, EE cancelada y vuelta
- * a iniciar). Hay una carga por departamento y modalidad (M1), así que más casos por pantalla salen de cada carga, no de
+ * a iniciar, SC habilitada; con el masivo 6: además MM republicada en v2 y SC reservada para las solicitudes de cambio de la
+ * fase 8 (CASE_CHANGE_REQUESTS, que siembra Staffing; II habilitada, EE cancelada y vuelta a iniciar). «Cerrada, por
+ * publicar» sale con 7 cargas o más. Hay una carga por departamento y modalidad (M1), así que más casos por pantalla salen de cada carga, no de
  * más cargas.
  *
  * Este seeder hace la parte de AcademicLoad, en tres modos:
@@ -88,13 +89,19 @@ final class ReanalysisDemoSeeder extends Seeder
     public const string CASE_CORRECTED = 'corrected';
 
     /**
+     * Reservada para las solicitudes de cambio de la fase 8 (8.6 y 8.7, Riel C): este seeder no la toca (queda publicada
+     * en su versión 1) y el paso de Staffing de este mismo punto la reabre a ajustes y siembra ahí sus solicitudes.
+     */
+    public const string CASE_CHANGE_REQUESTS = 'change_requests';
+
+    /**
      * Los casos en el orden en que se reparten: primero los que llenan más pantallas, para que la demo chica (4 cargas)
      * tenga la línea de versiones con los tres motivos, una carga con cambios, una cancelada y una habilitada.
      */
-    public const array CASES = [self::CASE_CORRECTED, self::CASE_CHANGED, self::CASE_RESTARTED, self::CASE_AVAILABLE, self::CASE_REPUBLISHED, self::CASE_CLOSED, self::CASE_UNCHANGED];
+    public const array CASES = [self::CASE_CORRECTED, self::CASE_CHANGED, self::CASE_RESTARTED, self::CASE_AVAILABLE, self::CASE_REPUBLISHED, self::CASE_CHANGE_REQUESTS, self::CASE_CLOSED, self::CASE_UNCHANGED];
 
     /** La vuelta para las cargas que sobran después de CASES. */
-    public const array EXTRA_CASES = [self::CASE_AVAILABLE, self::CASE_CHANGED, self::CASE_REPUBLISHED, self::CASE_UNCHANGED, self::CASE_CLOSED, self::CASE_RESTARTED, self::CASE_CORRECTED];
+    public const array EXTRA_CASES = [self::CASE_AVAILABLE, self::CASE_CHANGED, self::CASE_REPUBLISHED, self::CASE_UNCHANGED, self::CASE_CLOSED, self::CASE_CHANGE_REQUESTS, self::CASE_RESTARTED, self::CASE_CORRECTED];
 
     /** Los casos cuya carga cambia en el re-análisis (Scheduling y Staffing). */
     public const array CHANGING = [self::CASE_CHANGED, self::CASE_CLOSED, self::CASE_REPUBLISHED, self::CASE_CORRECTED];
@@ -270,7 +277,7 @@ final class ReanalysisDemoSeeder extends Seeder
         $plan = self::plan($term->getKey(), $modality->getKey());
         $started = [];
 
-        foreach (self::loadsIn($term->getKey(), $modality->getKey(), array_values(array_diff(self::CASES, [self::CASE_AVAILABLE]))) as $load) {
+        foreach (self::loadsIn($term->getKey(), $modality->getKey(), array_values(array_diff(self::CASES, [self::CASE_AVAILABLE, self::CASE_CHANGE_REQUESTS]))) as $load) {
             $case = $plan[$load->getKey()];
             $head = self::headOf($load);
             $starts = fn (): int => $load->transitions()->where('to_status', LoadStatus::Reanalysis->value)->count();

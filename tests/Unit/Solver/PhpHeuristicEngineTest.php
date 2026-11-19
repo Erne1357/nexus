@@ -284,6 +284,26 @@ it('usa el salón ajeno solo en las horas del préstamo aceptado (HC-10)', funct
         ->and(heuristicReasonsOf($output, 'g2'))->toContain('HC-10');
 });
 
+it('HC-10: un grupo sin préstamo propio nunca se coloca en la ventana prestada a otro grupo de su departamento (`agreements[].group_id`)', function () {
+    $loan = fn (string $groupId, string $from, string $to): array => array_map(fn (int $day): array => ['room_id' => 'r1', 'to_department_id' => 'd001', 'day' => $day, 'starts_at' => $from, 'ends_at' => $to, 'group_id' => $groupId], [1, 2, 3, 4]);
+    $input = heuristicInput(
+        [heuristicGroup('g1', ['teacher_id' => 't1']), heuristicGroup('g2', ['teacher_id' => 't2']), heuristicGroup('g3', ['teacher_id' => 't3'])],
+        [heuristicTeacher('t1'), heuristicTeacher('t2'), heuristicTeacher('t3')],
+        [heuristicRoom('r1', ['owner_department_id' => 'd002'])],
+        ['agreements' => [...$loan('g1', '07:00', '10:00'), ...$loan('g2', '12:00', '13:00')]],
+    );
+    $output = (new PhpHeuristicEngine)->solve($input);
+    $starts = heuristicPatternOf($output, 'g2')[1];
+
+    expect(heuristicPatternOf($output, 'g1')[0])->toBe([1, 2, 3, 4])
+        ->and(heuristicPatternOf($output, 'g2'))->toBe([[1, 2, 3, 4], ['12:00']])
+        ->and($starts)->not->toContain('07:00', '08:00', '09:00')
+        ->and(heuristicSessionsByDay($output, 'g3'))->toBe([])
+        ->and(heuristicReasonsOf($output, 'g3'))->toStartWith('HC-10')
+        ->and($output->hardViolations)->toBe([])
+        ->and((new ContractEvaluator)->evaluate($input, $output->sessions)->hardViolations)->toBe([]);
+});
+
 it('dice por qué no programa un grupo sin salón con lugar, sin laboratorio o con horas que la rejilla no da exactas (HC-05, HC-06, PS-06)', function () {
     $input = heuristicInput(
         [

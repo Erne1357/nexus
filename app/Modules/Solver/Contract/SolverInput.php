@@ -2,6 +2,8 @@
 
 namespace App\Modules\Solver\Contract;
 
+use App\Modules\Scheduling\Rules\Cohorts;
+
 /** La entrada del motor de horarios, versión 1 (docs/arquitectura/solver.md, «Contrato JSON»). */
 final readonly class SolverInput
 {
@@ -15,6 +17,7 @@ final readonly class SolverInput
      * @param  list<RoomAgreement>  $agreements
      * @param  list<SubjectRoomDefault>  $subjectRoomDefaults
      * @param  list<string>  $hardRules  Identificadores HC activos.
+     * @param  list<HintSession>  $hintSessions  Solución inicial sugerida (opcional; el motor puede ignorarla).
      */
     public function __construct(
         public int $version,
@@ -34,6 +37,7 @@ final readonly class SolverInput
         public array $hardRules,
         public SoftWeights $softWeights,
         public SolverOptions $options,
+        public array $hintSessions = [],
     ) {}
 
     /**
@@ -64,6 +68,7 @@ final readonly class SolverInput
             self::hardRules($data, $path),
             SoftWeights::fromArray(ContractFields::object($data, 'soft_weights', $path), ContractFields::path($path, 'soft_weights')),
             SolverOptions::fromArray(is_array($data['options'] ?? null) ? $data['options'] : [], ContractFields::path($path, 'options')),
+            ContractFields::objects($data, 'hint_sessions', $path, HintSession::class, false),
         );
 
         $input->assertConsistent($path);
@@ -108,6 +113,7 @@ final readonly class SolverInput
         }
 
         $groupIds = [];
+        $allGroupIds = array_map(fn (GroupInput $g): string => $g->id, $this->groups);
         foreach ($this->groups as $i => $group) {
             $at = ContractFields::path(ContractFields::path($path, 'groups'), $i);
             if (! in_array($group->campusCode, $campusCodes, true)) {
@@ -131,6 +137,67 @@ final readonly class SolverInput
                 }
             }
         }
+
+        foreach ($this->hintSessions as $i => $hint) {
+            $at = ContractFields::path(ContractFields::path($path, 'hint_sessions'), $i);
+            if (! in_array($hint->groupId, $allGroupIds, true)) {
+                throw ContractException::at(ContractFields::path($at, 'group_id'), 'el grupo no está en groups');
+            }
+            if ($hint->roomId !== null && ! in_array($hint->roomId, $roomIds, true)) {
+                throw ContractException::at(ContractFields::path($at, 'room_id'), 'el salón no está en rooms');
+            }
+        }
+
+        foreach ($this->agreements as $i => $agreement) {
+            if ($agreement->groupId !== null && ! in_array($agreement->groupId, $groupIds, true)) {
+                throw ContractException::at(ContractFields::path(ContractFields::path(ContractFields::path($path, 'agreements'), $i), 'group_id'), 'el grupo no está en groups');
+            }
+        }
+
+        $this->assertCombinations($path);
+    }
+
+    /**
+     * Cada clave `combination:<plan>:<semestre>:<campus>` trae su semestre completo (docs/arquitectura/solver.md,
+     * «Cohortes»): la llevan solo grupos de ese plan, semestre y campus, uno por materia (`subject_code`), y cada materia
+     * de ese semestre en la entrada tiene el suyo. Si no, el evaluador clasificaría mal HC-03 sin avisar.
+     */
+    private function assertCombinations(string $path): void
+    {
+        $subjects = [];
+        $carriers = [];
+
+        foreach ($this->groups as $i => $group) {
+            $subject = $group->subjectCode === '' ? "group:{$group->id}" : $group->subjectCode;
+            $subjects["{$group->studyPlanId}:{$group->semester}:{$group->campusCode}"][$subject] = true;
+
+            foreach ($group->cohorts as $j => $key) {
+                if (! Cohorts::isCombination($key)) {
+                    continue;
+                }
+
+                $at = ContractFields::path(ContractFields::path(ContractFields::path(ContractFields::path($path, 'groups'), $i), 'cohorts'), $j);
+                $semester = substr($key, strlen(Cohorts::COMBINATION) + 1);
+
+                if ($semester !== "{$group->studyPlanId}:{$group->semester}:{$group->campusCode}") {
+                    throw ContractException::at($at, 'la combinación es de otro plan, semestre o campus que el grupo');
+                }
+
+                if (isset($carriers[$semester][$subject])) {
+                    throw ContractException::at($at, "la combinación trae dos grupos de {$subject}");
+                }
+
+                $carriers[$semester][$subject] = $at;
+            }
+        }
+
+        foreach ($carriers as $semester => $bySubject) {
+            $missing = array_keys(array_diff_key($subjects[$semester], $bySubject));
+
+            if ($missing !== []) {
+                throw ContractException::at(reset($bySubject), 'la combinación no trae un grupo de '.implode(', ', $missing));
+            }
+        }
     }
 
     /**
@@ -140,7 +207,7 @@ final readonly class SolverInput
     {
         $each = fn (array $list): array => array_map(fn (object $o): array => $o->toArray(), $list);
 
-        return [
+        $array = [
             'version' => $this->version,
             'run_id' => $this->runId,
             'term' => ['code' => $this->termCode],
@@ -159,5 +226,11 @@ final readonly class SolverInput
             'soft_weights' => $this->softWeights->toArray(),
             'options' => $this->options->toArray(),
         ];
+
+        if ($this->hintSessions !== []) {
+            $array['hint_sessions'] = $each($this->hintSessions);
+        }
+
+        return $array;
     }
 }
