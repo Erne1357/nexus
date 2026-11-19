@@ -31,6 +31,9 @@ final readonly class CpSatEngine implements SolverEngine
 {
     public const string KEY = 'cpsat';
 
+    /** Su nombre en pantalla, también para las corridas de cuando el servicio estaba configurado y ya no lo está. */
+    public const string LABEL = 'CP-SAT (servicio)';
+
     /**
      * Lo que se espera al servicio después del límite de la corrida: el tiempo de armar y mandar la salida. Con él, el
      * peor caso queda por debajo de RunSolver::TIMEOUT_MARGIN (60 s) y la corrida termina con este mensaje antes de
@@ -57,7 +60,7 @@ final readonly class CpSatEngine implements SolverEngine
 
     public function label(): string
     {
-        return 'CP-SAT (servicio)';
+        return self::LABEL;
     }
 
     public function supportedVersions(): array

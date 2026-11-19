@@ -457,7 +457,7 @@ final class ReanalysisChangesDemoSeeder extends Seeder
                 continue;
             }
 
-            if ($this->cancelGuarded($group, $head)) {
+            if ($this->cancelGuarded($group, $head) === true) {
                 $subjects[$group->subject_id.'|'.$group->campus_id] = true;
                 $done++;
             }
@@ -502,9 +502,10 @@ final class ReanalysisChangesDemoSeeder extends Seeder
     /**
      * Cancela el grupo con CancelGroup (bitácora, sesiones, acuerdos, GroupCancelled), en una transacción que se revierte
      * sin dejar nada si al alumno tipo de su plan y semestre en su campus le falta una combinación sin empalmes (HC-03):
-     * quitar un grupo quita una opción, y CancelGroup no lo revisa. Falso si se revirtió o la Action lo rechazó.
+     * quitar un grupo quita una opción, y CancelGroup no lo revisa. Da `true` si lo cerró; si se revirtió o la Action lo
+     * rechazó, el motivo, para que quien llama lo diga si lo necesita.
      */
-    public function cancelGuarded(Group $group, User $head): bool
+    public function cancelGuarded(Group $group, User $head): true|string
     {
         DB::beginTransaction();
 
@@ -520,16 +521,16 @@ final class ReanalysisChangesDemoSeeder extends Seeder
             if ($peers !== [] && $this->validator->validate($this->validator->stateFor($group->term_id, $group->modality_id), ValidationScope::groups(...$peers), ['HC-03'])->hasHard()) {
                 DB::rollBack();
 
-                return false;
+                return "al alumno tipo del plan y semestre del grupo {$group->code} le faltaría una combinación sin empalmes (HC-03)";
             }
 
             DB::commit();
 
             return true;
-        } catch (ValidationException) {
+        } catch (ValidationException $exception) {
             DB::rollBack();
 
-            return false;
+            return "CancelGroup rechazó el grupo {$group->code}: ".collect($exception->errors())->flatten()->implode(' ');
         } catch (Throwable $exception) {
             DB::rollBack();
 

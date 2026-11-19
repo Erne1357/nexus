@@ -19,7 +19,7 @@ use App\Modules\Solver\Contract\SolverInput;
  *
  * No entra lo que solo ajusta cómo busca el motor o cómo puntúa, porque no cambia lo que hay en la carga: el
  * identificador de la corrida (`run_id`), el límite de tiempo, las opciones del motor, los pesos de las reglas blandas
- * (los fija Subdirección para todo el Tec) y los minutos de traslado de SC-09 (supuesto por confirmar). Los cupos por
+ * (los fija Subdirección para todo el Tec) los minutos de traslado de SC-09 (supuesto por confirmar) y la solución inicial sugerida (`hint_sessions`, una pista que no cambia el problema). Los cupos por
  * carrera (`group_quotas`) no entran al contrato y tampoco a la huella: el motor no los usa.
  *
  * Canónico quiere decir que no depende del orden: las llaves van ordenadas y cada lista se ordena por el JSON de sus
@@ -29,7 +29,7 @@ use App\Modules\Solver\Contract\SolverInput;
 final class InputFingerprint
 {
     /** @var list<string> Lo que no cuenta para la vigencia. */
-    public const array IGNORED = ['run_id', 'time_limit_seconds', 'options', 'soft_weights', 'travel_minutes'];
+    public const array IGNORED = ['run_id', 'time_limit_seconds', 'options', 'soft_weights', 'travel_minutes', 'hint_sessions'];
 
     public static function of(SolverInput $input): string
     {

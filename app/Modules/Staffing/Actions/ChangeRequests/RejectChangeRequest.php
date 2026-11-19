@@ -2,7 +2,6 @@
 
 namespace App\Modules\Staffing\Actions\ChangeRequests;
 
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\User;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
@@ -18,7 +17,7 @@ use Illuminate\Validation\ValidationException;
  */
 final class RejectChangeRequest
 {
-    public function __construct(private readonly NotifyChangeRequest $notify) {}
+    public function __construct(private readonly NotifyChangeRequest $notify, private readonly LocksChangeRequestScope $locks) {}
 
     /**
      * @throws ValidationException
@@ -31,17 +30,12 @@ final class RejectChangeRequest
             throw ValidationException::withMessages(['comment' => 'Escribe por qué se rechaza la solicitud.']);
         }
 
-        $request = DB::transaction(function () use ($request, $actor, $comment): ChangeRequest {
-            $request->setRawAttributes($request->newQuery()->lockForUpdate()->findOrFail($request->getKey())->getAttributes(), sync: true);
+        $request = $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor, $comment): ChangeRequest {
+            $load = $this->locks->lock($request);
 
             if ($request->status !== ChangeRequestStatus::Pending) {
                 throw ValidationException::withMessages(['status' => 'La solicitud ya no está pendiente.']);
             }
-
-            $load = AcademicLoad::query()
-                ->ofDepartment($request->term_id, $request->modality_id, $request->department_id)
-                ->lockForUpdate()
-                ->first();
 
             if (! ChangeRequestRules::acceptsRequests($load?->status)) {
                 throw ValidationException::withMessages(['status' => 'La carga del departamento está en '.($load?->status->label() ?? 'ningún estado').': solo se deciden solicitudes con la carga en asignación o en ajustes.']);
@@ -58,7 +52,7 @@ final class RejectChangeRequest
                 ->log('Rechazó la solicitud de cambio');
 
             return $request;
-        });
+        }));
 
         $this->notify->requester($request, ChangeRequestRejected::class);
 

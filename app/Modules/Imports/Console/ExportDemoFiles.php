@@ -7,6 +7,8 @@ use App\Modules\Faculty\Enums\TeacherDegree;
 use App\Modules\Imports\Templates\ImportTemplate;
 use App\Modules\Imports\Templates\StudentsTemplate;
 use App\Modules\Imports\Templates\TemplateRegistry;
+use App\Modules\Students\Database\Seeders\ClosingGrades;
+use App\Modules\Students\Enums\KardexResult;
 use Closure;
 use Illuminate\Console\Command;
 use Illuminate\Database\Query\Builder;
@@ -21,6 +23,9 @@ use Illuminate\Support\LazyCollection;
  * `storage/app/imports/<dir>/` (disco `imports`, fuera de git) y se suben en el orden de
  * reglas-de-negocio.md, "Reglas de datos".
  *
+ * Con `--closing-grades` (por omisión, el ordinario anterior al periodo actual) escribe además `kardex-cierre-<periodo>.csv`, las
+ * calificaciones de cierre de lo que se cursa, para el ensayo del re-análisis (ver writeClosingGrades()).
+ *
  * No exporta lo borrado; lo inactivo sí, con su «vigente» en los planes. Los renglones salen por bloques
  * (`lazyById`) a un flujo, sin cargar el kárdex en memoria. No corre en producción: son datos de prueba.
  */
@@ -28,7 +33,12 @@ final class ExportDemoFiles extends Command
 {
     private const int CHUNK = 5000;
 
-    protected $signature = 'imports:export-demo {--dir=demo : Carpeta dentro del disco imports}';
+    protected $signature = 'imports:export-demo
+        {--dir=demo : Carpeta dentro del disco imports}
+        {--closing-grades= : Periodo cuyas calificaciones de cierre se escriben en kardex-cierre-<periodo>.csv (por omisión, el ordinario anterior al periodo actual)}
+        {--captured-share=0.85 : Parte de lo que se cursa que se califica, en materias completas (como la demo del re-análisis)}
+        {--failure-share=0.15 : Parte de lo calificado que sale reprobada}
+        {--seed=2027 : Semilla del reparto de aprobadas y reprobadas}';
 
     protected $description = 'Escribe los datos sembrados como CSV con el formato de cada plantilla de importación';
 
@@ -76,6 +86,67 @@ final class ExportDemoFiles extends Command
 
             $this->components->twoColumnDetail("{$dir}/{$name}.csv", "{$count} filas");
         }
+
+        return $this->writeClosingGrades($disk->path($dir), $dir, $templates->get('kardex'));
+    }
+
+    /**
+     * El kárdex de cierre para el ensayo del re-análisis: las filas `cursando` del periodo (por omisión, el ordinario
+     * anterior al periodo actual) pasan a calificación final con la misma regla de DemandRecalculationDemoSeeder
+     * (ClosingGrades): materias completas hasta `--captured-share` de lo que se cursa y `--failure-share` de reprobadas,
+     * repartidas por `crc32(número de control|clave de materia|semilla)`, así que el mismo archivo sale cada vez. Mismas
+     * columnas que la plantilla `kardex`, para subirlo por el asistente. No escribe nada si el periodo no tiene filas
+     * cursando.
+     */
+    private function writeClosingGrades(string $path, string $dir, ImportTemplate $template): int
+    {
+        $current = (string) (DB::table('terms')->where('is_current', true)->value('code') ?? '20271');
+        $term = trim((string) ($this->option('closing-grades') ?: ($current[4] === '1' ? sprintf('%04d3', (int) substr($current, 0, 4) - 1) : substr($current, 0, 4).'1')));
+
+        if (preg_match('/^[0-9]{4}[123]$/', $term) !== 1) {
+            $this->components->error('El periodo de las calificaciones de cierre debe ser un código del SII, como 20263.');
+
+            return self::FAILURE;
+        }
+
+        $subjectIds = ClosingGrades::subjectsToCapture($term, (float) $this->option('captured-share'));
+        $pending = DB::table('kardex_records as kr')
+            ->join('students as st', 'st.id', '=', 'kr.student_id')
+            ->join('subjects as s', 's.id', '=', 'kr.subject_id')
+            ->where('kr.term_code', $term)->where('kr.result', KardexResult::Cursando->value)
+            ->whereIn('kr.subject_id', $subjectIds)
+            ->whereNull('kr.deleted_at')->whereNull('st.deleted_at')->whereNull('s.deleted_at')
+            ->get(['kr.id', 'st.control_number', 's.code', 'kr.attempt', 'kr.sii_subject_code'])
+            ->keyBy('id');
+
+        if ($pending->isEmpty()) {
+            $this->components->warn("No hay filas cursando en {$term}: no se escribe el kárdex de cierre.");
+
+            return self::SUCCESS;
+        }
+
+        $split = ClosingGrades::split(
+            $pending->map(fn (object $r): array => ['id' => (string) $r->id, 'key' => "{$r->control_number}|{$r->code}"])->values()->all(),
+            (float) $this->option('failure-share'),
+            (int) $this->option('seed'),
+        );
+        $failed = array_flip($split['failed']);
+        $rows = $pending->sortBy(fn (object $r): string => "{$r->control_number}|{$r->code}")->map(fn (object $r): array => [
+            $r->control_number, $r->code, $term,
+            isset($failed[$r->id]) ? ClosingGrades::FAILED_GRADE : ClosingGrades::PASSED_GRADE,
+            isset($failed[$r->id]) ? KardexResult::Reprobada->value : KardexResult::Aprobada->value,
+            $r->attempt, $r->sii_subject_code,
+        ])->values();
+
+        $name = "kardex-cierre-{$term}";
+
+        if ($this->write("{$path}/{$name}.csv", $template, $rows) === null) {
+            $this->components->error("No se pudo escribir {$dir}/{$name}.csv.");
+
+            return self::FAILURE;
+        }
+
+        $this->components->twoColumnDetail("{$dir}/{$name}.csv", sprintf('%d filas (%d aprobadas, %d reprobadas)', $rows->count(), count($split['passed']), count($failed)));
 
         return self::SUCCESS;
     }

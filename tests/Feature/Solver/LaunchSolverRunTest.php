@@ -223,6 +223,61 @@ it('SV-01: una corrida que no se movió en 20 minutos no impide lanzar otra; que
     Notification::assertSentTo($stuck->creator, SolverRunFinished::class);
 });
 
+it('SV-01: lanzar una de carrera da por perdidas las de esa carrera que no se movieron en 20 minutos, no las de otra ni las que siguen vivas', function () {
+    Queue::fake();
+    Notification::fake();
+    $other = Career::factory()->create(['department_id' => $this->sistemas->id]);
+    $career = fn (Career $career, int $minutes): SolverRun => SolverRun::factory()->forCareer()->create([
+        'term_id' => $this->term->id,
+        'modality_id' => $this->pres->id,
+        'career_id' => $career->id,
+        'status' => SolverRunStatus::Running,
+        'updated_at' => now()->subMinutes($minutes),
+    ]);
+    $stuck = $career($this->isc, 21);
+    $alive = $career($this->isc, 5);
+    $elsewhere = $career($other, 21);
+
+    launchSolverRun(RunScope::Career);
+
+    expect($stuck->fresh())
+        ->status->toBe(SolverRunStatus::Failed)
+        ->error->toBe('No terminó en 20 minutos: se lanzó otra corrida.')
+        ->finished_at->not->toBeNull()
+        ->and($alive->fresh()->status)->toBe(SolverRunStatus::Running)
+        ->and($elsewhere->fresh()->status)->toBe(SolverRunStatus::Running);
+
+    Notification::assertSentTo($stuck->creator, SolverRunFinished::class);
+    Notification::assertNotSentTo($elsewhere->creator, SolverRunFinished::class);
+});
+
+it('SV-01: lanzar una de departamento da por perdidas las de sus carreras que no se movieron en 20 minutos, en el mismo periodo y modalidad', function () {
+    Queue::fake();
+    Notification::fake();
+    $foreign = Career::factory()->create(['department_id' => Department::factory()->create()->id]);
+    $career = fn (Career $career, array $attributes = []): SolverRun => SolverRun::factory()->forCareer()->create([
+        'term_id' => $this->term->id,
+        'modality_id' => $this->pres->id,
+        'career_id' => $career->id,
+        'status' => SolverRunStatus::Queued,
+        'updated_at' => now()->subMinutes(21),
+        ...$attributes,
+    ]);
+    $stuck = $career($this->isc);
+    $foreignStuck = $career($foreign);
+    $otherTerm = $career($this->isc, ['term_id' => Term::factory()->create()->id]);
+
+    launchSolverRun();
+
+    expect($stuck->fresh())
+        ->status->toBe(SolverRunStatus::Failed)
+        ->error->toBe('No terminó en 20 minutos: se lanzó otra corrida.')
+        ->and($foreignStuck->fresh()->status)->toBe(SolverRunStatus::Queued)
+        ->and($otherTerm->fresh()->status)->toBe(SolverRunStatus::Queued);
+
+    Notification::assertSentTo($stuck->creator, SolverRunFinished::class);
+});
+
 it('solo lanza quien puede lanzar ese alcance: el jefe de otro departamento y el jefe sobre una carrera reciben 403', function (Closure $launch) {
     Queue::fake();
 

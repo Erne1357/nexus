@@ -29,8 +29,11 @@ def parse_output(data: Any) -> SolverOutput:
 
 
 def to_dict(model: BaseModel) -> dict[str, Any]:
-    """El JSON del contrato: sin campos nulos (PHP los omite) y con las llaves SC-NN."""
-    return model.model_dump(mode="json", exclude_none=True, by_alias=True)
+    """El JSON del contrato: sin campos nulos (PHP los omite), con las llaves SC-NN y sin `hint_sessions` vacía."""
+    data = model.model_dump(mode="json", exclude_none=True, by_alias=True)
+    if data.get("hint_sessions") == []:
+        del data["hint_sessions"]
+    return data
 
 
 __all__ = [
