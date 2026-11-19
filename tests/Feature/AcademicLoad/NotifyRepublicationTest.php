@@ -277,3 +277,29 @@ it('RA-05: quien es docente afectado y coordinador de una carrera afectada recib
         ->and($titles)->toContain('Cambiaron tus grupos en la carga de '.$this->load->department->name)
         ->and($titles)->toContain('La carga de '.$this->load->department->name.' cambió grupos de ISC');
 });
+
+it('RA-05: el aviso al coordinador abre el semestre y la retícula del primer grupo cambiado de su carrera, también si se canceló (ensayo 8.11, E-15)', function () {
+    Notification::fake();
+    $placement = fn (Career $career, int $semester, string $plan): array => LoadSnapshotFactory::placement([
+        'career' => ['id' => $career->id, 'code' => $career->code, 'name' => $career->name],
+        'study_plan' => ['id' => fakeKey(800 + $semester), 'code' => $plan],
+        'semester' => $semester,
+        'seats' => 30,
+    ]);
+    $group = fn (int $key, string $code, array $placements, int $day): array => LoadSnapshotFactory::group([
+        'id' => fakeKey($key), 'code' => $code, 'teacher' => republicationTeacher($this->kept), 'placements' => $placements, 'sessions' => [LoadSnapshotFactory::session(['day' => $day])],
+    ]);
+    $first = $group(1, 'A', [$placement($this->isc, 1, 'ISIC-2010-224')], 1);
+    $third = $group(2, 'B', [$placement($this->isc, 3, 'ISIC-2010-224')], 2);
+    $cancelled = $group(3, 'C', [$placement($this->ige, 5, 'IGEM-2009-201')], 3);
+    $kept = $group(4, 'D', [$placement($this->ige, 2, 'IGEM-2009-201')], 4);
+
+    republicationVersions([$first, $third, $cancelled, $kept], [$first, array_replace($third, ['sessions' => [LoadSnapshotFactory::session(['day' => 5])]]), $kept]);
+
+    app(NotifyRepublication::class)->handle($this->load, 2);
+
+    Notification::assertSentTo($this->iscCoordinator, LoadRepublished::class, fn (LoadRepublished $notice): bool => $notice->message($this->iscCoordinator)->route === 'published.semester'
+        && $notice->message($this->iscCoordinator)->parameters === ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => '3']);
+    Notification::assertSentTo($this->igeCoordinator, LoadRepublished::class, fn (LoadRepublished $notice): bool => $notice->message($this->igeCoordinator)->parameters === ['periodo' => '20271', 'modalidad' => 'pres', 'carrera' => 'IGE', 'reticula' => 'IGEM-2009-201', 'semestre' => '5']
+        && str_contains(route($notice->message($this->igeCoordinator)->route, $notice->message($this->igeCoordinator)->parameters), '/horarios/20271/pres/carrera/IGE?reticula=IGEM-2009-201&semestre=5'));
+});
