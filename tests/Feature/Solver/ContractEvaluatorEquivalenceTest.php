@@ -326,3 +326,33 @@ it('HC-07 y HC-13 no viajan en el contrato: el validador los ve en la base y el 
     expect($fromDatabase)->toBe([$quotas->id => ['HC-07'], $retired->id => ['HC-13']])
         ->and($inMemory)->toBe([]);
 });
+
+it('HC-03: con dos núcleos sin combinación, el validador y el evaluador culpan a los mismos grupos aunque la base los traiga en otro orden', function () {
+    $subject = fn (Department $department, string $code): Subject => equivalenceSubject($department, $code);
+    [$y, $x, $s3, $s2, $s1] = [
+        $subject(test()->basicas, 'HCT-0005'), $subject(test()->basicas, 'HCT-0004'), $subject(test()->sistemas, 'HCT-0003'),
+        $subject(test()->basicas, 'HCT-0002'), $subject(test()->sistemas, 'HCT-0001'),
+    ];
+
+    // Creados en orden inverso a la clave: la base los lee en ese orden y el contrato por clave.
+    $yA = equivalenceGroup($y, ['code' => 'YA']);
+    $yB = equivalenceGroup($y, ['code' => 'YB']);
+    $xA = equivalenceGroup($x, ['code' => 'XA']);
+    $xB = equivalenceGroup($x, ['code' => 'XB']);
+    $third = equivalenceGroup($s3);
+    $second = equivalenceGroup($s2);
+    $first = equivalenceGroup($s1);
+    equivalenceSession($first, 1, '07:00', '09:00');
+    equivalenceSession($second, 2, '07:00', '09:00');
+    equivalenceSession($third, 3, '07:00', '09:00');
+    equivalenceSession($xA, 1, '07:00', '09:00');
+    equivalenceSession($xB, 2, '07:00', '09:00');
+    equivalenceSession($yA, 3, '07:00', '09:00');
+    equivalenceSession($yB, 1, '07:00', '09:00');
+
+    [$fromDatabase, $inMemory] = equivalenceVerdicts();
+
+    expect($fromDatabase)->not->toBe([])
+        ->and(array_merge(...array_values($fromDatabase)))->toContain('HC-03')
+        ->and($inMemory)->toBe($fromDatabase);
+});
