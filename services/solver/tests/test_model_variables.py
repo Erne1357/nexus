@@ -332,6 +332,19 @@ def test_keep_tiers_conserva_el_nivel_que_el_grupo_ya_tiene_en_la_busqueda():
     assert variables.option_count == 7
 
 
+def test_keep_tiers_es_el_tope_del_grupo_aunque_los_niveles_siguientes_sean_de_una_hora_por_dia():
+    """PS-10: en la mejora, el nivel que el grupo ya tiene es su tope. De lunes a miércoles, un grupo de 2 horas en su
+    patrón (lunes y martes, nivel 0) no lleva los otros juegos de días, que por omisión entran por ser de una hora por
+    día: así ningún vecindario lo saca de su patrón."""
+    data = instance(campuses=[campus(days=[1, 2, 3])], groups=[group("g1", 2)], rooms=[room("r1"), room("r2")])
+    _, free = build(data, DomainOptions())
+    _, capped = build(data, DomainOptions(keep_tiers={"g1": 0}))
+
+    assert {option.tier for option in free.groups["g1"].options} == {0, 1}
+    assert {option.tier for option in capped.groups["g1"].options} == {0}
+    assert capped.option_count == 3
+
+
 def test_si_el_patron_no_cabe_entra_el_nivel_siguiente():
     """El docente no puede el martes: el patrón (lunes y martes) no cabe y entra el nivel de un día de 2 horas, que va
     con `z` explícito porque ocupa dos bloques."""

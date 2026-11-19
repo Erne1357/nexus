@@ -15,6 +15,8 @@ pegadas a otra sesión del docente con salón. Las demás se quedan donde están
 - SC-03 cuenta las horas fuera de los salones por defecto; SC-06, un cambio de edificio por par de sesiones pegadas del
   docente. Desempatan (por debajo de las reglas, como en `objective.py`) el salón de `current_sessions` (PS-07) y la
   teoría en aula (PS-05).
+- El tope de variables (`SearchLimits.max_variables`) vale para el modelo de cada día: un día que lo pasa se queda con
+  los salones que tenía.
 """
 
 import time
@@ -30,6 +32,7 @@ from .data import ModelData
 from .pattern import minutes
 from .phases import FEASIBLE, SearchLimits, run_solver
 from .score import Score, SoftScorer, hours
+from .variables import ModelTooLarge
 
 #: Salones por edificio que se ofrecen a una ventana pegada a una sesión de ese edificio: los más ajustados.
 ROOMS_PER_BUILDING = 4
@@ -97,7 +100,11 @@ def improve_rooms_scored(
         if now >= deadline:
             break
         share = (deadline - now) / (len(days) - index)
-        rooms.update(_solve_day(data, scorer, by_day[day], involved, scope, now + share, limits))
+        try:
+            rooms.update(_solve_day(data, scorer, by_day[day], involved, scope, now + share, limits))
+        except ModelTooLarge:
+            # Un día que pasa del tope de variables se queda con los salones del emparejamiento.
+            continue
 
     room_of = {index: rooms[window] for window in windows for index in window.sessions}
     improved = [
@@ -222,12 +229,14 @@ def _solve_day(
             taken[window.room_id].append((window.start, window.end))
 
     model = cp_model.CpModel()
+    budget = limits.budget(deadline)
     for window in moving:
         window.candidates = _candidates(data, scorer, window, buildings_near[window], taken)
         window.choice = {room_id: model.new_bool_var("") for room_id in window.candidates}
         model.add_exactly_one(window.choice.values())
         for room_id, literal in window.choice.items():
             model.add_hint(literal, room_id == window.room_id)
+        budget.check(len(model.proto.variables), f"los salones del día {window.day} (fase B)")
     if data.active("HC-02"):
         _no_overlap(model, moving)
 
@@ -248,7 +257,10 @@ def _solve_day(
                 preference.append((cost, literal))
     if scorer.weights["SC-06"]:
         for window, other in pairs:
-            if window not in involved or (isinstance(other, _Window) and other in involved and id(other) < id(window)):
+            # Un par de ventanas del modelo sale dos veces: se cuenta una, en un orden que no cambia entre corridas.
+            if window not in involved or (
+                isinstance(other, _Window) and other in involved and _key(other) < _key(window)
+            ):
                 continue
             change = model.new_bool_var("")
             for building in sorted({scorer.buildings[room_id] for room_id in window.candidates}):
@@ -261,6 +273,7 @@ def _solve_day(
                     if target != building:
                         model.add(change >= sum(mine))
             penalty.append((scorer.weights["SC-06"], change))
+            budget.check(len(model.proto.variables), f"los salones del día {window.day} (fase B)")
     if not penalty:
         return {}
     scale = sum(cost for cost, _ in preference) + 1
@@ -277,6 +290,10 @@ def _solve_day(
         window: next(room_id for room_id, literal in window.choice.items() if solver.boolean_value(literal))
         for window in moving
     }
+
+
+def _key(window: _Window) -> tuple[str, int, int]:
+    return (window.group_id, window.day, window.start)
 
 
 def _candidates(

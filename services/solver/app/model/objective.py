@@ -24,10 +24,15 @@ Dónde va cada regla:
 vecindario de la búsqueda los demás programados entran fijos pero siguen en el alcance, así que sus huecos y empalmes
 cuentan como en el problema completo.
 
-**Orden lexicográfico** (PS-10): primero el nivel del patrón de cada opción (PS-04: los otros días solo si el patrón no
-cabe), después las reglas y al final las sesiones que cambian respecto a `current_sessions` (PS-07), como desempate.
-Cada nivel va multiplicado por más de lo que pueden sumar todos los de abajo (`Objective.expression`); los grupos
-programados van antes que todo, y eso lo decide quien resuelve (`search.lns` y `search.improve`).
+**Orden lexicográfico** (PS-10, confirmado el 18 de noviembre de 2026): (1) los grupos programados, (2) el nivel del
+patrón, (3) SC-01 a SC-09 y (4) la hora actual (PS-07), como desempate. Aquí solo van (3) y (4): lo que se minimiza son
+las reglas y, por debajo de ellas, las sesiones que cambian respecto a `current_sessions` (`Objective.expression`). Los
+programados y el nivel no son términos con una escala: los decide quien resuelve. `search.lns` maximiza los programados
+y, entre soluciones con los mismos, el menor nivel; `search.improve` no quita a ninguno y le pone a cada grupo su nivel
+como tope (`DomainOptions.keep_tiers`), así que ningún grupo deja su patrón para bajar el puntaje.
+
+**Tope de variables.** Con un `BuildBudget`, lo que agrega el objetivo cuenta contra `max_variables` como las variables
+del dominio: se revisa después de cada recurso y día, y lanza `ModelTooLarge`.
 """
 
 from collections import defaultdict
@@ -42,7 +47,7 @@ from app.contract.input import SOFT_RULES
 from .data import ModelData
 from .pattern import minutes
 from .score import Session, SoftScorer, hours, php_int, uncovered
-from .variables import GroupDomain, Option, Span, Variables
+from .variables import BuildBudget, GroupDomain, Option, Span, Variables
 
 #: Los minutos de penalización de una hora o de un evento (cambio de edificio, traslado).
 HOUR = 60
@@ -61,19 +66,15 @@ class Fixed:
 
 @dataclass
 class Objective:
-    """Los términos del objetivo: el nivel del patrón de cada grupo, las reglas (sin peso y en minutos) y las sesiones
-    que cambian."""
+    """Los términos del objetivo: las reglas (sin peso y en minutos) y las sesiones que cambian."""
 
     weights: dict[str, int]
     rules: dict[str, list[tuple[int, cp_model.LinearExprT]]] = field(
         default_factory=lambda: {rule: [] for rule in SOFT_RULES}
     )
-    #: El nivel del patrón de la opción de cada grupo (PS-04).
-    tiers: list[tuple[int, cp_model.LinearExprT]] = field(default_factory=list)
     #: Las sesiones de la opción de cada grupo que no estaban en `current_sessions` (PS-07).
     changes: list[tuple[int, cp_model.LinearExprT]] = field(default_factory=list)
-    #: Lo más que pueden sumar las reglas con peso y las sesiones que cambian.
-    rules_bound: int = 0
+    #: Lo más que pueden sumar las sesiones que cambian: las sesiones de los grupos del modelo.
     changes_bound: int = 0
 
     def rule_expression(self, rule: str) -> cp_model.LinearExpr:
@@ -88,23 +89,22 @@ class Objective:
         return cp_model.LinearExpr.weighted_sum([expr for _, expr in terms], [c for c, _ in terms])
 
     def expression(self) -> cp_model.LinearExpr:
-        """Lo que se minimiza, en orden lexicográfico: el nivel del patrón, las reglas y las sesiones que cambian.
-        Cada parte se multiplica por más de lo que pueden sumar las de abajo."""
-        rule_weight = self.changes_bound + 1
-        tier_weight = rule_weight * (self.rules_bound + 1)
-
-        return tier_weight * _sum(self.tiers) + rule_weight * self.penalty() + _sum(self.changes)
+        """Lo que se minimiza: las reglas y, como desempate, las sesiones que cambian (PS-10). Un minuto de
+        penalización vale más que todas las sesiones que pueden cambiar (`changes_bound`), así que la hora actual
+        solo decide entre soluciones con el mismo puntaje. La escala depende solo de cuántas sesiones tiene el modelo,
+        no de los pesos: el coeficiente más grande es el peso por los minutos por (sesiones + 1), lejos del límite de
+        64 bits de CP-SAT con los pesos de 0 a 10 000 del contrato."""
+        return (self.changes_bound + 1) * self.penalty() + _sum(self.changes)
 
     def by_rule(self, solver: cp_model.CpSolver) -> dict[str, int]:
         """El desglose con peso, en la unidad de PHP (minutos entre 60), de la solución del solver."""
         return {rule: self.weights[rule] * int(solver.value(self.rule_expression(rule))) // HOUR for rule in SOFT_RULES}
 
-    def add(self, rule: str, coefficient: int, expression: cp_model.LinearExprT, bound: int) -> None:
-        """Un término de la regla, en minutos sin peso, con lo más que puede valer."""
+    def add(self, rule: str, coefficient: int, expression: cp_model.LinearExprT) -> None:
+        """Un término de la regla, en minutos sin peso."""
         if self.weights[rule] == 0 or coefficient == 0:
             return
         self.rules[rule].append((coefficient, expression))
-        self.rules_bound += self.weights[rule] * bound
 
 
 def add_objective(
@@ -112,18 +112,21 @@ def add_objective(
     variables: Variables,
     data: ModelData,
     scope: Iterable[str] | None = None,
+    budget: BuildBudget | None = None,
 ) -> Objective:
-    """Arma los términos de SC-01, SC-02, SC-04, SC-05, SC-07, SC-08 y SC-09 (sin minimizar: quien resuelve decide
-    cómo combinarlo con los grupos programados). Un peso cero apaga la regla: no crea nada."""
+    """Arma los términos de SC-01, SC-02, SC-04, SC-05, SC-07, SC-08 y SC-09 y los de la hora actual (sin minimizar:
+    quien resuelve decide cómo combinarlo con los grupos programados y el nivel del patrón). Un peso cero apaga la
+    regla: no crea nada. Con `budget`, lanza `ModelTooLarge` si las variables del modelo pasan de su
+    `max_variables`."""
     scorer = SoftScorer(data.source)
     objective = Objective(weights=scorer.weights)
     in_scope = {group.id for group in data.movable} if scope is None else set(scope) & set(scorer.groups)
-    builder = _Builder(model, variables, data, scorer, objective, in_scope)
+    builder = _Builder(model, variables, data, scorer, objective, in_scope, budget or BuildBudget())
     builder.option_terms()
     builder.gap_terms()
     builder.overlap_terms()
     builder.travel_terms()
-    builder.pattern_terms()
+    builder.change_terms()
 
     return objective
 
@@ -137,6 +140,7 @@ class _Builder:
         scorer: SoftScorer,
         objective: Objective,
         in_scope: set[str],
+        budget: BuildBudget,
     ) -> None:
         self.model = model
         self.variables = variables
@@ -144,11 +148,15 @@ class _Builder:
         self.scorer = scorer
         self.objective = objective
         self.in_scope = in_scope
+        self.budget = budget
         self.weights = objective.weights
         #: Los docentes de los grupos del alcance: los de `ValidationScope::teacherIds`.
         self.teachers_in_scope = {
             scorer.groups[group_id].teacher_id for group_id in in_scope if scorer.groups[group_id].teacher_id
         }
+
+    def _check(self, rule: str) -> None:
+        self.budget.check(len(self.model.proto.variables), f"el objetivo ({rule})")
 
     # --- Por opción: SC-02, SC-04, SC-08 -------------------------------------------------------------------------
 
@@ -174,12 +182,7 @@ class _Builder:
         if not any(hours_by_option):
             return
         literals = [option.literal for option in domain.options]
-        self.objective.add(
-            rule,
-            1,
-            cp_model.LinearExpr.weighted_sum(literals, [HOUR * h for h in hours_by_option]),
-            HOUR * max(hours_by_option),
-        )
+        self.objective.add(rule, 1, cp_model.LinearExpr.weighted_sum(literals, [HOUR * h for h in hours_by_option]))
 
     # --- Huecos: SC-01 por cohorte y SC-05 por docente ------------------------------------------------------------
 
@@ -193,6 +196,7 @@ class _Builder:
                 self._gap(
                     "SC-05", f"{teacher_id}:{day}", spans, fixed.get((teacher_id, day), []), self.data.active("HC-01")
                 )
+                self._check("SC-05")
         if self.weights["SC-01"]:
             fixed = self._cohort_fixed()
             touched = {key for group_id in self.in_scope for key in self.scorer.groups[group_id].cohorts}
@@ -201,6 +205,7 @@ class _Builder:
                     continue
                 spans = self.variables.cohorts.spans(key, day)
                 self._gap("SC-01", f"{key}:{day}", spans, fixed.get((key, day), []), self.data.active("HC-03"))
+                self._check("SC-01")
 
     def _gap(self, rule: str, name: str, spans: list[Span], fixed: list[Fixed], exclusive: bool) -> None:
         """Los minutos de hueco del recurso en el día, por tramos: el día se parte en los tramos entre todos los
@@ -256,8 +261,7 @@ class _Builder:
             model.add(gap >= bound)
             terms.append((end - start, gap))
         if terms:
-            expression = cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
-            self.objective.add(rule, 1, expression, sum(length for length, _ in terms))
+            self.objective.add(rule, 1, cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms]))
 
     def _either(
         self, first: cp_model.LinearExprT | int, second: cp_model.LinearExprT | int
@@ -292,6 +296,13 @@ class _Builder:
         self.model.add(cp_model.LinearExpr.sum(literals) <= len(literals) * used)
 
         return used
+
+    def _used_once(self, cache: dict, key: tuple, literals: list, exclusive: bool) -> cp_model.LinearExprT:
+        """`_used`, una sola vez por llave: varios pares de SC-09 comparten el mismo fin o inicio."""
+        if key not in cache:
+            cache[key] = self._used(literals, exclusive)
+
+        return cache[key]
 
     def _teacher_fixed(self) -> dict[tuple[str, int], list[Fixed]]:
         """Por docente y día: las sesiones de sus grupos fijos y su ocupación de fuera de la corrida."""
@@ -345,7 +356,8 @@ class _Builder:
                     terms.append((end - start, both))
             if terms:
                 expression = cp_model.LinearExpr.weighted_sum([t for _, t in terms], [c for c, _ in terms])
-                self.objective.add("SC-07", 1, expression, sum(length for length, _ in terms))
+                self.objective.add("SC-07", 1, expression)
+            self._check("SC-07")
 
     def _semester_pairs(self) -> list[tuple[str, str]]:
         """Los pares de `ConsecutiveSemesters`: un grupo del alcance con una cohorte `plan:` y los de la misma cohorte
@@ -408,8 +420,13 @@ class _Builder:
     # --- Traslados: SC-09 ------------------------------------------------------------------------------------------
 
     def travel_terms(self) -> None:
+        """Por docente y día, cada fin de sesión en un campus con cada inicio en otro a menos de `travel_minutes`:
+        `justo ≥ sale + llega - 1 - en medio`. `sale` y `llega` son si alguna sesión termina o empieza ahí (`_used`):
+        su suma solo si HC-01 impide que dos sesiones del docente terminen a la misma hora; con HC-01 apagada, una
+        booleana, porque con la suma `justo` tendría que valer 2 y el modelo quedaría infactible."""
         if not self.weights["SC-09"]:
             return
+        exclusive = self.data.active("HC-01")
         travel = self.data.source.travel_minutes
         fixed = self._teacher_fixed()
         campus_of = {group_id: group.campus_code for group_id, group in self.scorer.groups.items()}
@@ -427,6 +444,7 @@ class _Builder:
                 starts[(campus_of[span.group_id], span.start)].extend(span.literals)
             fixed_ends = {(item.campus, item.end) for item in constants}
             fixed_starts = {(item.campus, item.start) for item in constants}
+            used: dict[tuple[str, str, int], cp_model.LinearExprT] = {}
             for origin, end in sorted(set(ends) | fixed_ends):
                 for target, start in sorted(set(starts) | fixed_starts):
                     if origin == target or not 0 <= start - end < travel:
@@ -448,22 +466,22 @@ class _Builder:
                         if end <= span.start and span.end <= start
                         for literal in span.literals
                     ]
-                    leave = leaving or cp_model.LinearExpr.sum(ends[(origin, end)])
-                    arrive = arriving or cp_model.LinearExpr.sum(starts[(target, start)])
+                    leave = leaving or self._used_once(used, ("end", origin, end), ends[(origin, end)], exclusive)
+                    arrive = arriving or self._used_once(
+                        used, ("start", target, start), starts[(target, start)], exclusive
+                    )
                     tight = self.model.new_bool_var("")
                     self.model.add(tight >= leave + arrive - 1 - cp_model.LinearExpr.sum(between))
-                    self.objective.add("SC-09", HOUR, tight, HOUR)
+                    self.objective.add("SC-09", HOUR, tight)
+            self._check("SC-09")
 
-    # --- El nivel del patrón (PS-04) y la hora actual (PS-07) ------------------------------------------------------
+    # --- La hora actual (PS-07) ------------------------------------------------------------------------------------
 
-    def pattern_terms(self) -> None:
+    def change_terms(self) -> None:
         for domain in self.variables.groups.values():
             if not domain.options:
                 continue
             literals = [option.literal for option in domain.options]
-            tiers = [option.tier for option in domain.options]
-            if any(tiers):
-                self.objective.tiers.append((1, cp_model.LinearExpr.weighted_sum(literals, tiers)))
             current = {
                 (slot.day, minutes(slot.starts_at), minutes(slot.ends_at)) for slot in domain.group.current_sessions
             }

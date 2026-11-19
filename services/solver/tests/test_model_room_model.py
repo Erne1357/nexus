@@ -10,6 +10,7 @@ from typing import Any
 from app.contract import SOFT_RULES, parse_input
 from app.contract.output import ProposedSession
 from app.model.data import ModelData
+from app.model.phases import SearchLimits
 from app.model.room_model import improve_rooms
 from app.model.score import SoftScorer
 from app.model.verify import hard_violations
@@ -66,6 +67,22 @@ def test_sc03_lleva_la_materia_a_su_salon_por_defecto():
 
     assert score(data, result).by_rule["SC-03"] == 0
     assert rooms_of(result, "g1") == {"r2"}
+
+
+def test_el_modelo_de_salones_de_un_dia_respeta_el_tope_de_variables():
+    """`SOLVER_MAX_MODEL_VARIABLES` también vale para el modelo de salones de cada día: si lo pasa, el día se queda con
+    los salones del emparejamiento (el caso de SC-03 de arriba, que sin tope sí cambia)."""
+    data = instance(
+        campuses=DAY,
+        groups=[group("g1", 1), group("g2", 1)],
+        rooms=[room("r1"), room("r2")],
+        subject_room_defaults=[{"subject_code": "MAT-g1", "campus_code": "C1", "room_id": "r2", "priority": 1}],
+        soft_weights=weights(sc_03=5),
+    )
+    sessions = [one_hour("g1", 1, "07:00", "r1"), one_hour("g2", 1, "07:00", "r2")]
+
+    assert improved(data, sessions, limits=SearchLimits(max_variables=1)) == sessions
+    assert rooms_of(improved(data, sessions, limits=SearchLimits(max_variables=4)), "g1") == {"r2"}
 
 
 def test_sc06_junta_en_un_edificio_las_sesiones_pegadas_del_docente():

@@ -236,6 +236,45 @@ def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_dur
     assert [progress for _, progress in reports] == sorted(progress for _, progress in reports)
 
 
+def test_un_vecindario_cuyo_objetivo_pasa_del_tope_de_variables_se_descarta_sin_tumbar_la_mejora(monkeypatch):
+    """El tope de variables (`SOLVER_MAX_MODEL_VARIABLES`) cuenta también el objetivo de cada vecindario: con un tope
+    por encima del dominio pero por debajo del modelo con objetivo, cada vecindario se descarta (`too_large`), la
+    solución se queda como estaba y la mejora termina sin error. Sin tope, la misma mejora sí acepta vecindarios."""
+    import copy
+    import time
+
+    from app.model import search as search_module
+    from app.model.phases import SearchLimits
+    from app.model.search import improve
+
+    model_data = ModelData.of(fixture("small"))
+    found = lns(model_data, time_limit=20, limits=SearchLimits(workers=1), seed=7)
+    sizes: list[tuple[int, int]] = []
+    add_objective = search_module.add_objective
+
+    def measured(model, *args, **kwargs):
+        before = len(model.proto.variables)
+        objective = add_objective(model, *args, **kwargs)
+        sizes.append((before, len(model.proto.variables)))
+        return objective
+
+    monkeypatch.setattr(search_module, "add_objective", measured)
+    free = improve(model_data, copy.deepcopy(found), time.perf_counter() + 5, limits=SearchLimits(workers=1), seed=7)
+    assert free.accepted >= 1
+    assert free.too_large == 0
+    domain, full = max(before for before, _ in sizes), min(after for _, after in sizes)
+    assert domain + 1 < full
+
+    capped_search = copy.deepcopy(found)
+    limits = SearchLimits(workers=1, max_variables=(domain + full) // 2)
+    capped = improve(model_data, capped_search, time.perf_counter() + 5, limits=limits, seed=7)
+
+    assert capped.accepted == 0
+    assert capped.too_large == capped.steps >= 1
+    assert capped.best == capped.initial
+    assert capped_search.sessions == found.sessions
+
+
 def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(tmp_path):
     """`scripts/objective.py` (7.6) da una fila por fase con el puntaje de `score.py` y, con `--output`, la salida
     del contrato con ese mismo puntaje."""

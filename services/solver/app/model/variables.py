@@ -60,8 +60,9 @@ class DomainOptions:
     #: Niveles de más, por grupo, después del primero donde alguna opción cabe (la segunda vuelta de los que no
     #: quedaron; PS-04).
     extra_tiers: Mapping[str, int] = field(default_factory=dict)
-    #: Además, por grupo, todos los niveles hasta este (el de la opción que ya tiene en la búsqueda: un vecindario que
-    #: mejora el puntaje puede dejarlo donde está; 7.6).
+    #: Por grupo, todos los niveles hasta este y ninguno más arriba: el de la opción que ya tiene en la búsqueda. Un
+    #: vecindario de la mejora (7.6) puede dejarlo donde está o regresarlo hacia su patrón, pero nunca llevarlo a un
+    #: nivel peor (PS-09, PS-10). Manda sobre `all_tiers`, `extra_tiers` y `one_hour_tiers`.
     keep_tiers: Mapping[str, int] = field(default_factory=dict)
     #: Además, los niveles siguientes mientras sean de una hora por día (otros juegos de días, PS-04): no crean
     #: ventanas de más de un bloque, así que entran al conjunto de salones sin `z`.
@@ -243,6 +244,15 @@ class BuildBudget:
         if self.deadline is not None and time.perf_counter() > self.deadline:
             raise BuildTimeout("Se acabó el tiempo de la corrida mientras se armaba el modelo.")
 
+    def check(self, created: int, what: str) -> None:
+        """Lanza `ModelTooLarge` si el modelo ya pasa del límite: lo revisan el objetivo (`objective.py`) y los
+        modelos de salones de la fase B (`room_model.py`), que agregan variables después de `build_variables`."""
+        if self.max_variables is not None and created > self.max_variables:
+            raise ModelTooLarge(
+                f"El modelo pasa de {self.max_variables} variables con {what}: lleva {created}. Corre por partes (por "
+                "carrera o por campus) o sube SOLVER_MAX_MODEL_VARIABLES si el servicio tiene memoria."
+            )
+
     def reserve(self, created: int, more: int, done: int, total: int) -> None:
         """Lanza `ModelTooLarge` si crear `more` variables pasa del límite."""
         if self.max_variables is not None and created + more > self.max_variables:
@@ -403,7 +413,7 @@ def _domain(
     first_tier = 0
     first_with_options: int | None = None
     extra = variables.options.extra_tiers.get(group.id, 0)
-    keep = variables.options.keep_tiers.get(group.id, -1)
+    keep = variables.options.keep_tiers.get(group.id)
     for units in unit_counts(group, grid, data):
         practice = practice_units(group, grid, units) if lab_practice else 0
         unit_tiers = tiers(units, grid.days)
@@ -413,10 +423,14 @@ def _domain(
             one_hour = variables.options.one_hour_tiers and all(
                 max(count for _, count in spread) == 1 for spread in spreads
             )
-            if (
+            if keep is not None:
+                if tier > keep:
+                    domain.truncated = True
+                    break
+            elif (
                 not variables.options.all_tiers
                 and first_with_options is not None
-                and tier > max(first_with_options + extra, keep)
+                and tier > first_with_options + extra
                 and not one_hour
             ):
                 domain.truncated = True
