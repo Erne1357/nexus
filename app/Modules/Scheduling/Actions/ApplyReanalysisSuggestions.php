@@ -15,6 +15,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Auth\Access\Gate as GateContract;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Aplica varias sugerencias de un bloque del re-análisis a la vez, las que el jefe eligió en el drawer («Aplicar las N
@@ -34,6 +35,10 @@ use Illuminate\Validation\ValidationException;
  * cada una sobre cada grupo que toca (ApplyReanalysisSuggestion::abilities(); el que nace de abrir un grupo,
  * OpenReanalysisGroup::ABILITIES): un permiso que falta no aplica ninguna. Abrir un grupo va primero (SuggestionBatch::
  * inOrder()). La bitácora es la de cada Action; no hay una del lote.
+ *
+ * Una vez que empieza a escribir, nada detiene el lote a medias: si la Action de una niega el permiso (otra cosa que pide
+ * al aplicar, como el préstamo de un salón) o falla la base, esa se cuenta como no aplicada con su motivo (y el error se
+ * reporta) y siguen las demás, porque las anteriores ya se guardaron y la pantalla tiene que decirlo.
  */
 final class ApplyReanalysisSuggestions
 {
@@ -85,6 +90,11 @@ final class ApplyReanalysisSuggestions
                 $applied[] = $suggestion;
             } catch (ValidationException $exception) {
                 $failed[] = ['suggestion' => $suggestion, 'reason' => implode(' ', $exception->validator->errors()->all())];
+            } catch (AuthorizationException) {
+                $failed[] = ['suggestion' => $suggestion, 'reason' => 'No tienes permiso para aplicarla: la ajusta la jefatura de su departamento.'];
+            } catch (Throwable $exception) {
+                report($exception);
+                $failed[] = ['suggestion' => $suggestion, 'reason' => 'No se pudo aplicar por un error inesperado; intenta de nuevo.'];
             }
         }
 
@@ -92,8 +102,9 @@ final class ApplyReanalysisSuggestions
     }
 
     /**
-     * GroupPolicy sobre cada grupo que toca cada sugerencia (en una consulta) y sobre el que nacería de abrir uno. Un grupo
-     * que ya no está no se autoriza aquí: su Action dice que la sugerencia ya no aplica.
+     * GroupPolicy sobre cada grupo vivo de la carga que toca cada sugerencia (en una consulta) y sobre el que nacería de
+     * abrir uno. Un grupo que ya no está (otra pestaña lo canceló) no se autoriza aquí: su Action dice que la sugerencia
+     * ya no aplica, sin detener las demás.
      *
      * @param  list<ReanalysisSuggestion>  $suggestions
      *
@@ -102,6 +113,10 @@ final class ApplyReanalysisSuggestions
     private function authorizeAll(GateContract $gate, AcademicLoad $load, array $suggestions): void
     {
         $groups = Group::query()
+            ->active()
+            ->where('term_id', $load->term_id)
+            ->where('modality_id', $load->modality_id)
+            ->where('department_id', $load->department_id)
             ->whereIn('id', array_values(array_unique(array_merge(...array_map(fn (ReanalysisSuggestion $suggestion): array => $suggestion->groupIds(), $suggestions)))))
             ->get()
             ->keyBy('id');

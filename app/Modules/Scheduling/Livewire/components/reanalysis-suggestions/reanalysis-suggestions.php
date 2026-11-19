@@ -211,7 +211,7 @@ new class extends Component
             $advice = $block === null ? null : $this->suggestions($load, $block, $query);
 
             foreach (array_values(array_unique(array_filter($this->chosen, fn (mixed $key): bool => is_string($key) && $key !== $this->editing))) as $key) {
-                $suggestion = in_array($this->discardKey($key), $this->discarded, true) ? null : $advice?->find($key);
+                $suggestion = $this->shown($key, $advice);
 
                 if ($suggestion === null) {
                     $gone++;
@@ -581,13 +581,21 @@ new class extends Component
     private function suggestion(string $key, AcademicLoad $load, Actor $context, ReanalysisLoadsQuery $loads, ReanalysisBoardQuery $boards, ReanalysisSuggestionsQuery $query): ReanalysisSuggestion
     {
         $block = $this->block($load, $context, $loads, $boards);
-        $suggestion = $block === null ? null : $this->suggestions($load, $block, $query)->find($key);
+        $suggestion = $this->shown($key, $block === null ? null : $this->suggestions($load, $block, $query));
 
-        if ($suggestion === null || in_array($this->discardKey($key), $this->discarded, true)) {
+        if ($suggestion === null) {
             throw ValidationException::withMessages(['suggestion' => 'Esa sugerencia ya no aplica: la demanda o los grupos cambiaron. Revisa las de ahora.']);
         }
 
         return $suggestion;
+    }
+
+    /**
+     * La sugerencia de esa llave entre las de ahora, si no se descartó en la pantalla.
+     */
+    private function shown(string $key, ?ReanalysisSuggestions $advice): ?ReanalysisSuggestion
+    {
+        return in_array($this->discardKey($key), $this->discarded, true) ? null : $advice?->find($key);
     }
 
     /**

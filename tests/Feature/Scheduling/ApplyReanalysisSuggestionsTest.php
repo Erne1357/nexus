@@ -103,6 +103,31 @@ it('si una cambió desde que se calculó, aplica las demás y dice cuál no y po
         ->and($this->e->fresh()->status)->toBe(GroupStatus::Planned);
 });
 
+it('un grupo que otra pestaña canceló solo detiene su sugerencia, no el lote', function () {
+    [$expand, $close] = batchSuggestionsIn($this->world, $this->expandKey, $this->closeKey);
+    $this->e->update(['status' => GroupStatus::Cancelled]);
+
+    $result = app(ApplyReanalysisSuggestions::class)->handle($this->world->load, [$expand, $close], [], $this->jefe);
+
+    expect(batchFailuresOf($result))->toBe([$this->closeKey => 'Un grupo de la sugerencia ya no está en la carga: vuelve a abrir las sugerencias.'])
+        ->and($this->a->fresh()->capacity)->toBe(50);
+});
+
+it('si una Action rechaza el permiso o falla después de que otras ya se aplicaron, lo dice y sigue con las demás', function () {
+    [$close, $expand] = batchSuggestionsIn($this->world, $this->closeKey, $this->expandKey);
+    $cancels = 0;
+    Gate::before(function (User $user, string $ability) use (&$cancels): ?bool {
+        return $ability === 'cancel' && ++$cancels > 1 ? false : null;
+    });
+
+    $result = app(ApplyReanalysisSuggestions::class)->handle($this->world->load, [$expand, $close], [], $this->jefe);
+
+    expect(array_map(fn (ReanalysisSuggestion $suggestion): string => $suggestion->key, $result->applied))->toBe([$this->expandKey])
+        ->and(batchFailuresOf($result))->toBe([$this->closeKey => 'No tienes permiso para aplicarla: la ajusta la jefatura de su departamento.'])
+        ->and($this->a->fresh()->capacity)->toBe(50)
+        ->and($this->e->fresh()->status)->toBe(GroupStatus::Planned);
+});
+
 it('«Abrir un grupo» sin el lugar del motor no se aplica y lo dice; las demás sí', function () {
     [$expand, $open] = batchSuggestionsIn($this->world, $this->expandKey, $this->openKey);
 
