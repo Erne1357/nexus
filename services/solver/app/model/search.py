@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from ortools.sat.python import cp_model
 
-from app.contract.input import GroupInput, SessionSlot, SolverInput
+from app.contract.input import GroupInput, SessionSlot, SolverInput, TeacherInput
 from app.contract.output import ProposedSession
 
 from .constraints import add_hard_constraints
@@ -297,7 +297,9 @@ def _neighbours(data: ModelData, group_id: str) -> list[str]:
 
 def _sub_input(source: SolverInput, search: Search, movable: set[str]) -> SolverInput:
     """La entrada de un vecindario: sus grupos movibles; los demás programados, fijos con sus sesiones; los demás sin
-    programar, fuera."""
+    programar, fuera. Como quitar grupos puede cambiar el primer grupo de un docente, la ocupación de fuera sin
+    `campus_code` lleva el campus que le da la entrada completa (`score.py`), y el objetivo del vecindario cuenta SC-09
+    como el puntaje con el que se acepta."""
     groups: list[GroupInput] = []
     for group in source.groups:
         if not group.movable or group.id in movable:
@@ -314,8 +316,35 @@ def _sub_input(source: SolverInput, search: Search, movable: set[str]) -> Solver
                 for session in search.sessions[group.id]
             ]
             groups.append(group.model_copy(update={"movable": False, "fixed_sessions": slots, "current_sessions": []}))
+    update: dict[str, object] = {"groups": groups}
+    if any(slot.campus_code is None for teacher in source.teachers for slot in teacher.busy):
+        update["teachers"] = _busy_with_campus(source)
 
-    return source.model_copy(update={"groups": groups})
+    return source.model_copy(update=update)
+
+
+def _busy_with_campus(source: SolverInput) -> list[TeacherInput]:
+    """Los docentes con el campus de cada ocupación de fuera que no lo trae: el de su primer grupo de la entrada
+    completa, o el primer campus, como `SoftScorer`. `BuildSolverInput` siempre lo manda; esto cubre otras entradas."""
+    first_campus: dict[str, str] = {}
+    for group in source.groups:
+        if group.teacher_id is not None:
+            first_campus.setdefault(group.teacher_id, group.campus_code)
+    default = source.campuses[0].code if source.campuses else None
+
+    return [
+        teacher.model_copy(
+            update={
+                "busy": [
+                    slot
+                    if slot.campus_code is not None
+                    else slot.model_copy(update={"campus_code": first_campus.get(teacher.id, default)})
+                    for slot in teacher.busy
+                ]
+            }
+        )
+        for teacher in source.teachers
+    ]
 
 
 #: Grupos por vecindario de la mejora: los de unos docentes completos, más los que comparten cohorte con ellos.

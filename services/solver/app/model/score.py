@@ -25,6 +25,8 @@ from itertools import pairwise
 from app.contract.input import SOFT_RULES, SolverInput
 from app.contract.output import ProposedSession, RuleScores, SoftScore
 
+from .pattern import minutes
+
 #: El prefijo de los grupos de contexto, como `ContractState::CONTEXT`.
 CONTEXT = "busy:"
 
@@ -94,10 +96,6 @@ def by_day(sessions: Iterable[Session]) -> dict[int, list[Session]]:
         day_sessions.sort(key=lambda session: (session.start, session.end))
 
     return days
-
-
-def minutes(clock: str) -> int:
-    return int(clock[:2]) * 60 + int(clock[3:])
 
 
 class SoftScorer:

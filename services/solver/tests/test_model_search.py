@@ -275,6 +275,32 @@ def test_un_vecindario_cuyo_objetivo_pasa_del_tope_de_variables_se_descarta_sin_
     assert capped_search.sessions == found.sessions
 
 
+def test_un_vecindario_conserva_el_campus_de_la_ocupacion_de_fuera_sin_campus_code():
+    """Sin `campus_code`, una ocupación de fuera es del campus del primer grupo del docente en la entrada (`score.py`).
+    Si ese grupo no está programado, sale de la entrada del vecindario; aun así la ocupación conserva su campus, así que
+    SC-09 en el vecindario cuenta lo mismo que el puntaje con el que se acepta."""
+    from app.contract.output import ProposedSession
+    from app.model.search import Search, _sub_input
+    from tests.instances import slot, teacher
+
+    data = parse_input(
+        instance(
+            campuses=[campus(), campus("C2")],
+            groups=[group("primero", 1, teacher_id="t1"), group("otro", 1, teacher_id="t1", campus_code="C2")],
+            teachers=[teacher("t1", busy=[slot(1, "09:00", "10:00")])],
+            rooms=[room("r1"), room("r2", campus_code="C2")],
+        )
+    )
+    placed = ProposedSession(
+        group_id="otro", day=2, starts_at="07:00", ends_at="08:00", room_id="r2", kind="teoria", changed=True
+    )
+
+    sub = _sub_input(data, Search(sessions={"otro": [placed]}), {"otro"})
+
+    assert [group.id for group in sub.groups] == ["otro"]
+    assert [busy.campus_code for busy in sub.teachers[0].busy] == ["C1"]
+
+
 def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(tmp_path):
     """`scripts/objective.py` (7.6) da una fila por fase con el puntaje de `score.py` y, con `--output`, la salida
     del contrato con ese mismo puntaje."""
