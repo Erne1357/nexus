@@ -9,7 +9,8 @@ docs/arquitectura/solver.md, «Tamaño de la instancia real»).
    (`_neighbourhood`, que crece en cada intento); los demás programados entran como fijos con sus sesiones. El modelo de
    cada vuelta es chico y la solución nunca empeora: la pista es la de antes y solo se acepta si programa más grupos.
 
-Sin objetivo blando todavía (7.6); 7.7 la registra como motor con el avance y la relajación.
+3. **Mejora** (`improve`, 7.6): sobre lo que programó `lns`, vecindarios con el objetivo blando que nunca quitan un
+   grupo ni lo llevan a un nivel del patrón peor (PS-10).
 """
 
 import random
@@ -347,13 +348,15 @@ IMPROVE_ROOM_SECONDS = 0.3
 @dataclass
 class Improvement:
     """Lo que lleva la mejora: el puntaje al empezar, el mejor, la suma de los niveles del patrón de la mejor
-    solución (PS-04), los vecindarios revisados y los aceptados."""
+    solución (PS-04), los vecindarios revisados, los aceptados y los que se descartaron porque su modelo pasaba del
+    tope de variables (`SearchLimits.max_variables`)."""
 
     initial: Score
     best: Score
     tiers: int
     steps: int = 0
     accepted: int = 0
+    too_large: int = 0
 
 
 def improve(
@@ -368,12 +371,15 @@ def improve(
 
     Cada vecindario son los grupos programados de unos docentes y los que comparten cohorte con ellos; los demás
     programados entran fijos con sus sesiones, pero siguen en el alcance del objetivo. Sus grupos se programan todos
-    (asignación exacta: nunca deja fuera a uno que estaba), con sus niveles por necesidad y el que ya tenían, y el
-    modelo minimiza el objetivo (`objective.py`) con la pista de lo que tenían.
+    (asignación exacta: nunca deja fuera a uno que estaba), cada uno con su nivel del patrón como tope
+    (`DomainOptions.keep_tiers`), y el modelo minimiza el objetivo (`objective.py`: las reglas y, como desempate, la
+    hora actual) con la pista de lo que tenían.
 
-    Es lexicográfico (PS-10): primero los grupos programados (lo que dejó `lns`, que ningún vecindario quita), después
-    la suma de los niveles del patrón y después el puntaje de toda la solución (`score.py`, el de PHP). Un vecindario se
-    acepta solo si baja esa pareja: menos niveles, o los mismos y menos puntaje.
+    Es lexicográfico (PS-10, confirmado el 18 de noviembre de 2026): primero los grupos programados (lo que dejó `lns`,
+    que ningún vecindario quita), después la suma de los niveles del patrón y después el puntaje de toda la solución
+    (`score.py`, el de PHP). El nivel no va en el objetivo con una escala: con el tope por grupo ninguno sube, así que
+    la suma tampoco, y un grupo nunca deja su patrón para bajar el puntaje. Un vecindario se acepta si los niveles no
+    suben y el puntaje baja, o si los niveles bajan.
 
     Cada vecindario tiene `IMPROVE_STEP_SECONDS` de CP-SAT; después de una vuelta sin mejora, el doble (hasta
     `IMPROVE_MAX_STEP_SECONDS`). Para cuando se acaba el plazo o cuando, en una vuelta sin mejora, CP-SAT probó que cada
@@ -396,7 +402,9 @@ def improve(
             limits.tick()
             result.steps += 1
             step = _improve_step(data, search, movable, scope, deadline, step_seconds, limits, seed + result.steps)
-            proven = proven and step.proven
+            # Un vecindario que pasa del tope no cambia con más tiempo: cuenta como resuelto.
+            proven = proven and (step.proven or step.too_large)
+            result.too_large += step.too_large
             if step.sessions is not None:
                 sessions = {**search.sessions, **step.sessions}
                 proposed = [session for items in sessions.values() for session in items]
@@ -406,7 +414,7 @@ def improve(
                     data, proposed, room_deadline, limits, scope, groups=movable, scorer=scorer
                 )
                 tiers = sum({**search.tiers, **step.tiers}.values())
-                if (tiers, score.total) < (result.tiers, result.best.total):
+                if tiers < result.tiers or (tiers == result.tiers and score.total < result.best.total):
                     search.sessions = defaultdict(list)
                     for session in proposed:
                         search.sessions[session.group_id].append(session)
@@ -469,13 +477,14 @@ def _improvement_batches(data: ModelData, search: Search, rng: random.Random) ->
 
 @dataclass
 class _Step:
-    """Lo que dio un vecindario: sus sesiones, opciones y niveles (`None` si no hubo solución a tiempo) y si CP-SAT
-    probó que es lo mejor del vecindario."""
+    """Lo que dio un vecindario: sus sesiones, opciones y niveles (`None` si no hubo solución a tiempo), si CP-SAT
+    probó que es lo mejor del vecindario y si su modelo pasaba del tope de variables."""
 
     sessions: dict[str, list[ProposedSession]] | None = None
     chosen: dict[str, OptionKey] = field(default_factory=dict)
     tiers: dict[str, int] = field(default_factory=dict)
     proven: bool = False
+    too_large: bool = False
 
 
 def _improve_step(
@@ -488,7 +497,9 @@ def _improve_step(
     limits: SearchLimits,
     seed: int,
 ) -> _Step:
-    """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT."""
+    """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT. Cada grupo lleva los
+    niveles hasta el que ya tiene (`keep_tiers`, PS-10). El tope de variables cuenta el dominio y el objetivo: un
+    vecindario que lo pasa se descarta."""
     step_deadline = min(deadline, time.perf_counter() + step_seconds)
     sub = ModelData.of(_sub_input(data.source, search, movable))
     model = cp_model.CpModel()
@@ -496,14 +507,17 @@ def _improve_step(
         keep_tiers={group: search.tiers[group] for group in movable if group in search.tiers},
         long_window_rooms=LONG_WINDOW_ROOMS,
     )
+    budget = limits.budget(step_deadline)
     try:
-        variables = build_variables(model, sub, options, limits.budget(step_deadline))
-    except (BuildTimeout, ModelTooLarge):
+        variables = build_variables(model, sub, options, budget)
+        if variables.unplaceable():
+            return _Step()
+        add_hard_constraints(model, variables, sub)
+        objective = add_objective(model, variables, sub, scope=scope, budget=budget)
+    except BuildTimeout:
         return _Step()
-    if variables.unplaceable():
-        return _Step()
-    add_hard_constraints(model, variables, sub)
-    objective = add_objective(model, variables, sub, scope=scope)
+    except ModelTooLarge:
+        return _Step(too_large=True)
     model.minimize(objective.expression())
     for domain in variables.groups.values():
         hint = search.chosen.get(domain.id)

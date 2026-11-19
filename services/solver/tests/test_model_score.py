@@ -282,14 +282,22 @@ def test_el_puntaje_de_cada_salida_guardada_es_el_de_score_py(input_path: Path, 
     assert output.soft_score.total == sum(value for value in output.soft_score.by_rule.model_dump().values())
 
 
-def test_hay_salidas_de_cp_sat_de_small_y_medium_y_la_solucion_a_mano_es_la_de_estas_pruebas():
-    assert {path.parent.name for _, path in SAVED} >= {"small", "medium", "all-rules"}
+def test_hay_salidas_de_cp_sat_de_small_medium_y_la_carga_real_y_la_solucion_a_mano_es_la_de_estas_pruebas():
+    """La de `department-multicampus` es la carga real de un departamento (1 139 grupos movibles), con penalización en
+    todas las reglas menos SC-03 (la carga no trae salones por defecto): con ella, la equivalencia con PHP no depende
+    solo de instancias chicas."""
+    assert {path.parent.name for _, path in SAVED} >= {"small", "medium", "department-multicampus", "all-rules"}
+    real = parse_output(load(fixtures_dir() / "v1" / "department-multicampus" / "cpsat-output.json"))
+    assert len({session.group_id for session in real.sessions}) == 1139
+    assert [rule for rule, value in real.soft_score.by_rule.model_dump(by_alias=True).items() if value == 0] == [
+        "SC-03"
+    ]
     folder = fixtures_dir() / "scores" / "all-rules"
     assert parse_input(load(folder / "input.json")) == parse_input({**everything_instance(), "run_id": "all-rules"})
     assert parse_output(load(folder / "output.json")).sessions == everything_solution()
 
 
-@pytest.mark.parametrize("name", ["small", "medium"])
+@pytest.mark.parametrize("name", ["small", "medium", "department-multicampus"])
 def test_las_salidas_de_cp_sat_guardadas_programan_todo_sin_duras(name: str):
     folder = fixtures_dir() / "v1" / name
     data = parse_input(load(folder / "input.json"))
@@ -297,5 +305,6 @@ def test_las_salidas_de_cp_sat_guardadas_programan_todo_sin_duras(name: str):
     expected = load(folder / "expected.json")
 
     assert hard_violations(data, output.sessions) == []
-    assert set(expected["must_schedule"]) <= {session.group_id for session in output.sessions}
+    assert set(expected.get("must_schedule", [])) <= {session.group_id for session in output.sessions}
+    assert {group.id for group in data.groups if group.movable} == {session.group_id for session in output.sessions}
     assert output.unscheduled == []
