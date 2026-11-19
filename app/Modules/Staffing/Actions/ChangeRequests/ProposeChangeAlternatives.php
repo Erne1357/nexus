@@ -12,7 +12,6 @@ use App\Modules\Scheduling\Actions\Sessions\ReplaceGroupSessions;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
-use App\Modules\Scheduling\Queries\ScheduleStateQuery;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\SessionCandidate;
@@ -22,43 +21,62 @@ use App\Modules\Solver\Contract\SessionSlot;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
 use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
+use App\Modules\Solver\Enums\PlacementStop;
 use App\Modules\Solver\Evaluation\ContractEvaluator;
 use App\Modules\Solver\Evaluation\ContractState;
 use App\Modules\Solver\Queries\BuildSolverInput;
+use App\Modules\Solver\Rules\ApplyPlan;
 use App\Modules\Solver\Rules\InputFingerprint;
+use App\Modules\Staffing\Enums\ChangeAlternativesStatus;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
+use App\Modules\Staffing\Jobs\ComputeChangeAlternatives;
 use App\Modules\Staffing\Models\ChangeRequest;
+use App\Modules\Staffing\Queries\GroupsScheduleFingerprintQuery;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * CR-02 (tarea 8.7; supuesto por confirmar): pide al motor acomodos sin choques para una solicitud de cambio pendiente
  * cuya propuesta deja choques duros, y los guarda en `change_requests.alternatives` con bitácora. Decide el jefe del
- * departamento (ChangeRequestPolicy::decide, que esta Action vuelve a revisar). No escribe sesiones.
+ * departamento (ChangeRequestPolicy::decide, que handle() vuelve a revisar). No escribe sesiones.
  *
- * Con la carga del departamento en asignación o ajustes, como para decidir, y una propuesta que se puede simular (CR-01)
- * y deja choques duros (la que no los deja se aprueba como se pidió). Pide a ProposePlacements, con la heurística en
- * PHP porque corre en la petición, hasta ALTERNATIVES acomodos:
+ * **En la cola** (CLAUDE.md §4.7): handle() revisa lo barato (pendiente, la carga en asignación o ajustes, una propuesta
+ * que se puede simular y que, según el impacto guardado, deja choques duros), deja `alternatives` en `computing` con un
+ * id de cálculo (`calculation_id`), `requested_at` y `requested_by`, y después del commit despacha
+ * ComputeChangeAlternatives (uno por solicitud). Si ya hay un cálculo en curso que no está colgado, no pide otro. El job
+ * llama a compute(), que hace el trabajo y guarda `ready` (con alternativas), `none` (sin ninguna, con el motivo) o
+ * `failed` (la solicitud ya no se puede decidir, la propuesta ya no deja choques o el motor falló), solo si ese cálculo
+ * sigue siendo el vigente. Los estados y lo que trae cada uno: ChangeAlternativesStatus y modelo-de-datos.md.
+ *
+ * El cálculo (compute()) pide a ProposePlacements, con la heurística en PHP, hasta ALTERNATIVES acomodos:
  *
  * - (a) la cadena: la propuesta queda fija (las sesiones que simula CR-01, con el salón y el tipo de la sesión que cada
  *   una reemplaza) y se mueven los grupos con los que choca que son del mismo departamento, periodo y modalidad; una sola.
+ *   No se pide si la propuesta no suma las horas semanales del grupo (ProposePlacements::pinnedProblem; HC-12).
  * - (b) el grupo solo: se mueve el grupo pedido con todo lo demás fijo; las que falten para llegar a ALTERNATIVES. Una
- *   que lo deje como está no cuenta, y cada una lleva al grupo a horas distintas de las anteriores (ProposePlacements).
+ *   que lo deje como está no cuenta, y dentro de esta llamada cada una lleva al grupo a horas distintas de las
+ *   anteriores (ProposePlacements). La cadena y el grupo solo son llamadas aparte: el grupo solo puede repetir horas de
+ *   la cadena.
  *
  * Los grupos de otros departamentos nunca se mueven. Cada alternativa se revisa además con el validador de horarios
- * (AssessChangeImpact::simulateSessions, solo lo que agrega) y se descarta si deja un choque duro. Se guarda con las
+ * (AssessChangeImpact::simulateSessions, solo lo que agrega) y se descarta si deja un choque duro nuevo; HC-07, HC-08 y
+ * HC-13 no dependen del acomodo (ApplyPlan::INPUT_RULES): no la descartan y se guardan aparte como `input_problems`,
+ * con las que el motor reportó. El validador ve lo que el contrato no trae (el núcleo sin combinación de HC-03), así que
+ * descarta algunas que el motor sí dio. Cada alternativa lleva un id único (uuid) que no se repite entre cálculos, las
  * sesiones resultantes de cada grupo que cambia (día, inicio, fin, tipo, salón y la sesión que reemplaza; las horas que
  * se pegan con el mismo tipo y salón se unen, como en el editor), los avisos blandos, el puntaje del motor (y el de hoy
- * sobre la misma entrada), los grupos y docentes afectados y la huella de la entrada (SV-02), que ChooseChangeAlternative
- * compara para decir «Esto cambió…». Si ninguna queda, se guarda NONE_FOUND: el jefe rechaza o, si la propuesta ya no
- * deja choques, la aprueba como se pidió.
+ * sobre la misma entrada), los grupos y docentes afectados, la huella de la entrada (SV-02) y la de las sesiones de sus
+ * grupos, que ChooseChangeAlternative compara para decir «Esto cambió…». Por qué paró la búsqueda va en `stop` y su
+ * motivo en `message` (PlacementStop).
  *
- * El motor corre fuera de los candados (hasta ProposePlacements::TIME_LIMIT_SECONDS por cada una de las dos llamadas);
- * guardar toma los de LocksChangeRequestScope, en su orden, y vuelve a revisar el estado. Pedirlas otra vez reemplaza
- * las anteriores.
+ * La foto de la modalidad se lee una sola vez por cálculo (la del impacto, AssessChangeImpact::state) para el impacto,
+ * las dos entradas del motor y la revisión de cada alternativa. Guardar toma los candados de LocksChangeRequestScope, en
+ * su orden. Pedirlas otra vez reemplaza las anteriores.
  */
 final class ProposeChangeAlternatives
 {
@@ -71,18 +89,24 @@ final class ProposeChangeAlternatives
 
     public const string NONE_FOUND = 'El motor no encontró acomodos sin choques.';
 
+    public const string NO_HARD_CLASHES = 'El cambio no deja choques duros: se puede aprobar como se pidió.';
+
+    public const string TEXT_ONLY = 'La solicitud solo trae texto: el motor no tiene un horario o un salón que acomodar.';
+
     public function __construct(
         private readonly AssessChangeImpact $assess,
         private readonly BuildSolverInput $build,
         private readonly ProposePlacements $placements,
         private readonly ContractEvaluator $evaluator,
-        private readonly ScheduleStateQuery $states,
         private readonly LocksChangeRequestScope $locks,
+        private readonly GroupsScheduleFingerprintQuery $groupsFingerprint,
     ) {}
 
     /**
-     * @throws ValidationException si la solicitud no está pendiente, la carga no está en asignación o ajustes, o la
-     *                             propuesta no se puede simular o no deja choques duros
+     * Pide el cálculo: deja `computing` y despacha el job.
+     *
+     * @throws ValidationException si la solicitud no está pendiente, la carga no está en asignación o ajustes, la
+     *                             propuesta no se puede simular o no deja choques duros, o ya se están calculando
      */
     public function handle(ChangeRequest $request, User $actor): ChangeRequest
     {
@@ -90,35 +114,136 @@ final class ProposeChangeAlternatives
 
         $request->refresh();
         self::ensureDecidable($request, AcademicLoad::query()->ofDepartment($request->term_id, $request->modality_id, $request->department_id)->first());
+        self::ensureProposable($request);
 
-        $proposal = $this->assess->proposal($request);
+        $calculationId = (string) Str::uuid7();
 
-        if ($proposal === []) {
-            throw ValidationException::withMessages(['status' => 'La solicitud solo trae texto: el motor no tiene un horario o un salón que acomodar.']);
-        }
-
-        $impact = $this->assess->simulate($request);
-
-        if ($impact['hard'] === []) {
-            throw ValidationException::withMessages(['status' => 'El cambio no deja choques duros: se puede aprobar como se pidió.']);
-        }
-
-        $alternatives = $this->alternatives($request, $proposal, $impact);
-
-        return $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor, $alternatives): ChangeRequest {
+        $this->locks->guard(fn () => DB::transaction(function () use ($request, $actor, $calculationId): void {
             self::ensureDecidable($request, $this->locks->lock($request));
+            self::ensureProposable($request);
 
-            $request->forceFill(['alternatives' => $alternatives])->save();
+            if (ChangeAlternativesStatus::of($request->alternatives) === ChangeAlternativesStatus::Computing) {
+                throw ValidationException::withMessages(['alternatives' => 'Las alternativas de esta solicitud ya se están calculando.']);
+            }
+
+            $request->forceFill(['alternatives' => [
+                'status' => ChangeAlternativesStatus::Computing->value,
+                'calculation_id' => $calculationId,
+                'requested_at' => now()->toIso8601String(),
+                'requested_by' => $actor->getKey(),
+            ]])->save();
+
+            ComputeChangeAlternatives::dispatch($request->getKey(), $calculationId)->afterCommit();
+        }));
+
+        return $request;
+    }
+
+    /**
+     * El cálculo de ComputeChangeAlternatives. No hace nada si `$calculationId` ya no es el cálculo en curso de la
+     * solicitud (se volvió a pedir, o se dio por colgado y se pidió otro).
+     */
+    public function compute(string $requestId, string $calculationId): void
+    {
+        $request = ChangeRequest::query()->find($requestId);
+
+        if ($request === null || ! self::isCalculation($request->alternatives, $calculationId)) {
+            return;
+        }
+
+        try {
+            self::ensureDecidable($request, AcademicLoad::query()->ofDepartment($request->term_id, $request->modality_id, $request->department_id)->first());
+            $proposal = $this->assess->proposal($request);
+            $impact = $this->assess->simulate($request);
+
+            if ($proposal === [] || $impact['hard'] === []) {
+                throw ValidationException::withMessages(['status' => $proposal === [] ? self::TEXT_ONLY : self::NO_HARD_CLASHES]);
+            }
+
+            $result = $this->alternatives($request, $proposal, $impact);
+        } catch (ValidationException $exception) {
+            $this->fail($requestId, $calculationId, (string) collect($exception->errors())->flatten()->first());
+
+            return;
+        } catch (Throwable $exception) {
+            report($exception);
+            $this->fail($requestId, $calculationId, ComputeChangeAlternatives::FAILED_MESSAGE);
+
+            return;
+        }
+
+        $this->finish($requestId, $calculationId, [
+            'status' => ($result['items'] === [] ? ChangeAlternativesStatus::None : ChangeAlternativesStatus::Ready)->value,
+            ...$result,
+        ]);
+    }
+
+    /**
+     * Deja fallido el cálculo, con su motivo, si sigue siendo el vigente.
+     */
+    public function fail(string $requestId, string $calculationId, string $message): void
+    {
+        $this->finish($requestId, $calculationId, ['status' => ChangeAlternativesStatus::Failed->value, 'computed_at' => now()->toIso8601String(), 'message' => $message]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $result
+     */
+    private function finish(string $requestId, string $calculationId, array $result): void
+    {
+        $request = ChangeRequest::query()->find($requestId);
+
+        if ($request === null) {
+            return;
+        }
+
+        $this->locks->guard(fn () => DB::transaction(function () use ($request, $calculationId, $result): void {
+            $this->locks->lock($request);
+
+            if (! self::isCalculation($request->alternatives, $calculationId)) {
+                return;
+            }
+
+            $request->forceFill(['alternatives' => [...array_intersect_key($request->alternatives, array_flip(['calculation_id', 'requested_at', 'requested_by'])), ...$result]])->save();
 
             activity()
                 ->performedOn($request)
-                ->causedBy($actor)
+                ->causedBy(User::query()->find($request->alternatives['requested_by'] ?? null))
                 ->event('alternatives_proposed')
-                ->withProperties(['engine' => $alternatives['engine'], 'alternatives' => array_column($alternatives['items'], 'kind', 'id')])
-                ->log($alternatives['items'] === [] ? 'Pidió alternativas al motor; no encontró acomodos sin choques' : 'Pidió alternativas al motor para la solicitud de cambio');
-
-            return $request;
+                ->withProperties(['status' => $result['status'], 'engine' => $result['engine'] ?? null, 'alternatives' => array_column($result['items'] ?? [], 'kind', 'id'), 'message' => $result['message'] ?? null])
+                ->log(match ($result['status']) {
+                    ChangeAlternativesStatus::Ready->value => 'El motor calculó alternativas para la solicitud de cambio',
+                    ChangeAlternativesStatus::None->value => 'El motor no encontró acomodos sin choques para la solicitud de cambio',
+                    default => 'No se pudieron calcular las alternativas de la solicitud de cambio',
+                });
         }));
+    }
+
+    /**
+     * Si lo guardado es ese cálculo y sigue en curso.
+     *
+     * @param  array<string, mixed>|null  $alternatives
+     */
+    private static function isCalculation(?array $alternatives, string $calculationId): bool
+    {
+        return ($alternatives['status'] ?? null) === ChangeAlternativesStatus::Computing->value && ($alternatives['calculation_id'] ?? null) === $calculationId;
+    }
+
+    /**
+     * Lo barato de CR-02, con lo guardado: una propuesta que se puede simular y que, según el impacto (CR-01, que el jefe
+     * recalcula al abrirla), deja choques duros. El cálculo lo vuelve a revisar con el impacto del momento.
+     *
+     * @throws ValidationException
+     */
+    private static function ensureProposable(ChangeRequest $request): void
+    {
+        if (! AssessChangeImpact::isAssessable($request)) {
+            throw ValidationException::withMessages(['status' => self::TEXT_ONLY]);
+        }
+
+        if ($request->impact !== null && ($request->impact['hard'] ?? []) === []) {
+            throw ValidationException::withMessages(['status' => self::NO_HARD_CLASHES]);
+        }
     }
 
     /**
@@ -138,37 +263,45 @@ final class ProposeChangeAlternatives
     /**
      * @param  list<SessionCandidate>  $proposal
      * @param  array<string, mixed>  $impact
-     * @return array{computed_at: string, engine: string, items: list<array<string, mixed>>, message: ?string, chosen: null}
+     * @return array{computed_at: string, engine: string, items: list<array<string, mixed>>, stop: string, message: ?string, chosen: null}
      */
     private function alternatives(ChangeRequest $request, array $proposal, array $impact): array
     {
         $group = Group::query()->findOrFail($request->group_id);
         $term = Term::query()->findOrFail($group->term_id);
         $modality = Modality::withTrashed()->findOrFail($group->modality_id);
-        $state = $this->states->forModality($term, $modality->id);
+        $state = $this->assess->state($group->term_id, $group->modality_id);
         $usesRooms = $state->profile($modality->id)->usesRooms;
         $pinned = array_map(fn (SessionCandidate $session): SessionSlot => new SessionSlot($session->day, Minutes::clock($session->startsAt), Minutes::clock($session->endsAt),
             ContractSessionKind::from($session->kind->value), $usesRooms ? $session->roomId : null), $proposal);
 
         $runs = [];
+        $stops = [];
         $chain = $this->chainGroups($state, $group, $impact);
 
         if ($chain !== []) {
             $base = $this->build->forGroups($term, $modality, [$group->id, ...$chain], [], null, ProposePlacements::TIME_LIMIT_SECONDS, $state);
+            $mine = collect($base->groups)->firstWhere('id', $group->id);
 
-            foreach ($this->placements->propose($base, PhpHeuristicEngine::KEY, 1, [$group->id => $pinned]) as $output) {
-                $runs[] = [self::CHAIN, $base, $output];
+            if (ProposePlacements::pinnedProblem($mine, $pinned, $base->weeklyHoursTolerance) === null) {
+                $proposals = $this->placements->propose($base, PhpHeuristicEngine::KEY, 1, [$group->id => $pinned]);
+                $stops[] = $proposals->stop;
+
+                foreach ($proposals as $output) {
+                    $runs[] = [self::CHAIN, $base, $output];
+                }
             }
         }
 
         $base = $this->build->forGroups($term, $modality, [$group->id], [], null, ProposePlacements::TIME_LIMIT_SECONDS, $state);
+        $proposals = $this->placements->propose($base, PhpHeuristicEngine::KEY, self::ALTERNATIVES - count($runs));
+        $stops[] = $proposals->stop;
 
-        foreach ($this->placements->propose($base, PhpHeuristicEngine::KEY, self::ALTERNATIVES - count($runs)) as $output) {
+        foreach ($proposals as $output) {
             $runs[] = [self::ALONE, $base, $output];
         }
 
         $items = [];
-        $numbers = [];
         $before = [];
 
         foreach ($runs as [$kind, $input, $output]) {
@@ -176,16 +309,22 @@ final class ProposeChangeAlternatives
             $item = $this->item($group, $input, $output, $before[spl_object_id($input)]);
 
             if ($item !== null) {
-                $numbers[$kind] = ($numbers[$kind] ?? 0) + 1;
-                $items[] = ['id' => "{$kind}-{$numbers[$kind]}", 'kind' => $kind, ...$item];
+                $items[] = ['id' => (string) Str::uuid7(), 'kind' => $kind, ...$item];
             }
         }
+
+        $stop = match (true) {
+            in_array(PlacementStop::TimeLimit, $stops, true) => PlacementStop::TimeLimit,
+            count($items) >= self::ALTERNATIVES => PlacementStop::Complete,
+            default => PlacementStop::NoPlacement,
+        };
 
         return [
             'computed_at' => now()->toIso8601String(),
             'engine' => PhpHeuristicEngine::KEY,
             'items' => $items,
-            'message' => $items === [] ? self::NONE_FOUND : null,
+            'stop' => $stop->value,
+            'message' => $stop->message(count($items)),
             'chosen' => null,
         ];
     }
@@ -254,20 +393,36 @@ final class ProposeChangeAlternatives
         }
 
         $check = $this->assess->simulateSessions($requested->term_id, $requested->modality_id, $candidates, fresh: false);
+        [$inputHard, $blocking] = collect($check['hard'])->partition(fn (array $rule): bool => in_array($rule['rule'], ApplyPlan::INPUT_RULES, true));
 
-        if ($check['hard'] !== []) {
+        if ($blocking->isNotEmpty()) {
             return null;
         }
 
+        $inputProblems = [];
+
+        foreach ($output->hardViolations as $violation) {
+            $inputProblems["{$violation->rule}|{$violation->message}"] = ['rule' => $violation->rule, 'message' => $violation->message, 'groups' => array_values($violation->groupIds)];
+        }
+
+        foreach ($inputHard as $rule) {
+            foreach ($rule['messages'] as $message) {
+                $inputProblems["{$rule['rule']}|{$message}"] ??= ['rule' => $rule['rule'], 'message' => $message, 'groups' => $rule['groups']];
+            }
+        }
+
         usort($entries, fn (array $a, array $b): int => [! $a['requested'], $a['code']] <=> [! $b['requested'], $b['code']]);
+        $movableIds = array_values(array_map(fn ($group): string => $group->id, array_filter($input->groups, fn ($group): bool => $group->movable)));
         $others = array_values(array_filter($entries, fn (array $entry): bool => ! $entry['requested']));
         $teacherIds = array_values(array_unique(array_filter(array_column($entries, 'teacher_id'))));
 
         return [
-            'movable_group_ids' => array_values(array_map(fn ($group): string => $group->id, array_filter($input->groups, fn ($group): bool => $group->movable))),
+            'movable_group_ids' => $movableIds,
             'fingerprint' => InputFingerprint::of($input),
+            'sessions_fingerprint' => $this->groupsFingerprint->of($movableIds),
             'groups' => $entries,
             'soft' => $check['soft'],
+            'input_problems' => array_values($inputProblems),
             'score' => $output->softScore->total,
             'score_by_rule' => $output->softScore->byRule,
             'score_before' => $scoreBefore,

@@ -24,8 +24,9 @@ use Illuminate\Validation\ValidationException;
  * el commit. StartAdjusting llama a TransitionLoad dentro de esta transacción: vuelve a pedir la modalidad y la carga
  * que ya se tienen, en el mismo orden.
  *
- * Aprobar eligiendo una alternativa del motor (CR-03, ChooseChangeAlternative) es este mismo flujo con otra revisión en
- * lugar del bloqueo de choques de la propuesta original: approve() con la suya.
+ * Aprobar eligiendo una alternativa del motor (CR-03) es este mismo flujo con otra revisión en lugar del bloqueo de
+ * choques de la propuesta original: approveWithAlternative(), que solo llama ChooseChangeAlternative. Los avisos dicen
+ * entonces que se aprobó con otro acomodo y qué cambia (ChangeRequestNotification lee `alternatives.chosen`).
  */
 final class ApproveChangeRequest
 {
@@ -40,15 +41,28 @@ final class ApproveChangeRequest
     }
 
     /**
-     * El flujo de aprobar con `$check` en lugar del bloqueo de choques: corre con los candados tomados, la solicitud
-     * pendiente y la carga en asignación o ajustes, antes de escribir; lanza ValidationException para no aprobar y puede
-     * dejar otros atributos en la solicitud, que se guardan con la aprobación.
+     * CR-03: aprobar con la alternativa del motor que eligió el jefe; solo la llama ChooseChangeAlternative, que ya
+     * autorizó. `$choose` corre con los candados tomados, la solicitud pendiente y la carga en asignación o ajustes, en
+     * lugar del bloqueo de choques de lo que se pidió: revisa que la alternativa siga vigente (lanza ValidationException
+     * si no) y deja `alternatives.chosen` en la solicitud, que se guarda con la aprobación.
+     *
+     * @param  Closure(ChangeRequest): void  $choose
+     *
+     * @throws ValidationException
+     */
+    public function approveWithAlternative(ChangeRequest $request, User $actor, ?string $comment, Closure $choose): ChangeRequest
+    {
+        return $this->approve($request, $actor, $comment, $choose);
+    }
+
+    /**
+     * El flujo de aprobar con `$check` antes de escribir, con los candados tomados.
      *
      * @param  Closure(ChangeRequest): void  $check
      *
      * @throws ValidationException
      */
-    public function approve(ChangeRequest $request, User $actor, ?string $comment, Closure $check): ChangeRequest
+    private function approve(ChangeRequest $request, User $actor, ?string $comment, Closure $check): ChangeRequest
     {
         $comment = $comment === null || trim($comment) === '' ? null : trim($comment);
 
@@ -71,13 +85,15 @@ final class ApproveChangeRequest
                 $this->startAdjusting->handle($load, $actor, 'Solicitud de cambio aprobada');
             }
 
+            $chosen = $request->alternatives['chosen']['id'] ?? null;
+
             activity()
                 ->performedOn($request)
                 ->causedBy($actor)
                 ->event('approved')
                 ->withChanges(['old' => ['status' => 'pending'], 'attributes' => ['status' => 'approved']])
-                ->withProperties(['comment' => $comment])
-                ->log('Aprobó la solicitud de cambio');
+                ->withProperties(['comment' => $comment, ...($chosen === null ? [] : ['alternative' => $chosen])])
+                ->log($chosen === null ? 'Aprobó la solicitud de cambio' : 'Aprobó la solicitud de cambio con una alternativa del motor');
 
             return $request;
         }));

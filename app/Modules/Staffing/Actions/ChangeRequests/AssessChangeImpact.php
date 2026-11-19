@@ -7,6 +7,7 @@ use App\Modules\Scheduling\Enums\ConflictSeverity;
 use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Validation\ScheduleState;
 use App\Modules\Scheduling\Validation\ScheduleValidator;
 use App\Modules\Scheduling\Validation\SessionCandidate;
 use App\Modules\Scheduling\Validation\ValidationScope;
@@ -84,6 +85,15 @@ final class AssessChangeImpact
         }
 
         return $this->candidates($request, Group::query()->with('sessions')->findOrFail($request->group_id));
+    }
+
+    /**
+     * La foto de la modalidad que esta instancia ya leyó (la de simulate()), para no volver a leerla al armar la entrada
+     * del motor (ProposeChangeAlternatives).
+     */
+    public function state(string $termId, string $modalityId): ScheduleState
+    {
+        return $this->validator->stateFor($termId, $modalityId);
     }
 
     /**
