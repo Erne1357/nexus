@@ -32,15 +32,17 @@ use InvalidArgumentException;
  *    (BuildSolverInput::forGroups) y su huella tiene que ser la guardada (SV-02), y sus sesiones no pueden dejar choques
  *    duros nuevos con el validador (AssessChangeImpact::simulateSessions; HC-07, HC-08 y HC-13 no cuentan, no dependen
  *    del acomodo: ApplyPlan::INPUT_RULES).
- * 2. **Con los candados** (lo barato, dos consultas): la huella de los grupos de la alternativa y sus sesiones
- *    (GroupsScheduleFingerprintQuery) tiene que ser la guardada.
+ * 2. **Con los candados** (lo barato, dos consultas): la huella de todos los grupos reales de la entrada, los que se
+ *    mueven y los fijos (los que comparten docente, salón o cohorte), con sus sesiones (GroupsScheduleFingerprintQuery),
+ *    tiene que ser la guardada.
  *
- * Si algo cambió, no aprueba: «Esto cambió…» y el jefe las vuelve a pedir. Carrera que queda cubierta: los grupos de la
- * alternativa son del departamento de la carga, y el editor y las Actions de esa carga toman su candado antes de
- * escribir, así que, ya con los candados, nadie mueve esos grupos hasta aprobar; un cambio en ellos entre el paso 1 y
- * los candados lo ve el paso 2. Lo que no cubre: un cambio alrededor (otro departamento, un salón, la disponibilidad de
- * un docente) entre el paso 1 y la aprobación. Aprobar no escribe sesiones; al aplicar, el editor vuelve a validar con
- * el horario de ese momento, así que ese cambio tampoco deja un choque escrito.
+ * Si algo cambió, no aprueba: «Esto cambió…» y el jefe las vuelve a pedir. Carrera que queda cubierta: un cambio en
+ * cualquiera de esos grupos entre el paso 1 y los candados (por ejemplo, el editor mueve a la hora de la alternativa un
+ * grupo fijo del mismo docente) lo ve el paso 2; los del departamento de la carga, además, ya no se mueven hasta aprobar,
+ * porque el editor y las Actions de esa carga toman su candado antes de escribir. Lo que no cubre: en ese mismo lapso,
+ * la ocupación de los salones por grupos que no entran a la entrada y la disponibilidad de los docentes. Aprobar no
+ * escribe sesiones; al aplicar, el editor vuelve a validar con el horario de ese momento, así que eso tampoco deja un
+ * choque escrito.
  *
  * La elegida queda en `alternatives.chosen` (id, quién y cuándo), para que el editor de horarios la precargue al
  * aplicar la solicitud. Quien aplica sigue siendo el de siempre según el tipo de la solicitud, aunque la alternativa
@@ -80,7 +82,7 @@ final class ChooseChangeAlternative
         return $this->approve->approveWithAlternative($request, $actor, $comment, function (ChangeRequest $locked) use ($actor, $alternativeId): void {
             $item = self::item($locked, $alternativeId);
 
-            if ($this->groupsFingerprint->of($item['movable_group_ids']) !== $item['sessions_fingerprint']) {
+            if ($this->groupsFingerprint->of($item['checked_group_ids']) !== $item['sessions_fingerprint']) {
                 throw ValidationException::withMessages(['alternative' => self::STALE]);
             }
 
