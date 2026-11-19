@@ -196,3 +196,165 @@ def test_el_benchmark_reproduce_la_tabla_con_un_fixture():
     rows = output.splitlines()[2:]
     assert [row.split(" | ")[0] for row in rows] == ["| lns", "| two-phase"]
     assert all("3 de 3 | 0 |" in row for row in rows)
+
+
+@pytest.mark.parametrize("name", ["small", "medium"])
+def test_la_mejora_con_objetivo_baja_el_puntaje_sin_quitar_grupos_ni_agregar_duras(name):
+    """7.6: sobre lo que programó `lns`, los vecindarios con objetivo solo se aceptan si bajan, en ese orden, los
+    niveles del patrón y el puntaje de toda la solución (el de PHP; PS-10): nunca suben esa pareja, nunca quitan un
+    grupo programado y no agregan duras. El avance que reporta nunca baja."""
+    import time
+
+    from app.model.phases import SearchLimits
+    from app.model.score import SoftScorer
+    from app.model.search import improve
+
+    data = fixture(name)
+    model_data = ModelData.of(data)
+    limits = SearchLimits(workers=1)
+    found = lns(model_data, time_limit=20, limits=limits, seed=7)
+    placed = set(found.sessions)
+    initial_tiers = sum(found.tiers.values())
+    reports: list[tuple[tuple[int, int], float]] = []
+
+    result = improve(
+        model_data,
+        found,
+        time.perf_counter() + 5,
+        limits=limits,
+        seed=7,
+        report=lambda state, progress: reports.append(((state.tiers, state.best.total), progress)),
+    )
+
+    assert SoftScorer(data).score(found.all_sessions) == result.best
+    assert result.tiers == sum(found.tiers.values())
+    assert (result.tiers, result.best.total) <= (initial_tiers, result.initial.total)
+    assert set(found.sessions) == placed
+    assert hard_violations(data, found.all_sessions) == []
+    assert reports
+    assert [key for key, _ in reports] == sorted((key for key, _ in reports), reverse=True)
+    assert [progress for _, progress in reports] == sorted(progress for _, progress in reports)
+
+
+def test_un_vecindario_cuyo_objetivo_pasa_del_tope_de_variables_se_descarta_sin_tumbar_la_mejora(monkeypatch):
+    """El tope de variables (`SOLVER_MAX_MODEL_VARIABLES`) cuenta también el objetivo de cada vecindario: con un tope
+    por encima del dominio pero por debajo del modelo con objetivo, cada vecindario se descarta (`too_large`), la
+    solución se queda como estaba y la mejora termina sin error. Sin tope, la misma mejora sí acepta vecindarios."""
+    import copy
+    import time
+
+    from app.model import search as search_module
+    from app.model.phases import SearchLimits
+    from app.model.search import improve
+
+    model_data = ModelData.of(fixture("small"))
+    found = lns(model_data, time_limit=20, limits=SearchLimits(workers=1), seed=7)
+    sizes: list[tuple[int, int]] = []
+    add_objective = search_module.add_objective
+
+    def measured(model, *args, **kwargs):
+        before = len(model.proto.variables)
+        objective = add_objective(model, *args, **kwargs)
+        sizes.append((before, len(model.proto.variables)))
+        return objective
+
+    monkeypatch.setattr(search_module, "add_objective", measured)
+    free = improve(model_data, copy.deepcopy(found), time.perf_counter() + 5, limits=SearchLimits(workers=1), seed=7)
+    assert free.accepted >= 1
+    assert free.too_large == 0
+    domain, full = max(before for before, _ in sizes), min(after for _, after in sizes)
+    assert domain + 1 < full
+
+    capped_search = copy.deepcopy(found)
+    limits = SearchLimits(workers=1, max_variables=(domain + full) // 2)
+    capped = improve(model_data, capped_search, time.perf_counter() + 5, limits=limits, seed=7)
+
+    assert capped.accepted == 0
+    assert capped.too_large == capped.steps >= 1
+    assert capped.best == capped.initial
+    assert capped_search.sessions == found.sessions
+
+
+def test_un_vecindario_conserva_el_campus_de_la_ocupacion_de_fuera_sin_campus_code():
+    """Sin `campus_code`, una ocupación de fuera es del campus del primer grupo del docente en la entrada (`score.py`).
+    Si ese grupo no está programado, sale de la entrada del vecindario; aun así la ocupación conserva su campus, así que
+    SC-09 en el vecindario cuenta lo mismo que el puntaje con el que se acepta."""
+    from app.contract.output import ProposedSession
+    from app.model.search import Search, _sub_input
+    from tests.instances import slot, teacher
+
+    data = parse_input(
+        instance(
+            campuses=[campus(), campus("C2")],
+            groups=[group("primero", 1, teacher_id="t1"), group("otro", 1, teacher_id="t1", campus_code="C2")],
+            teachers=[teacher("t1", busy=[slot(1, "09:00", "10:00")])],
+            rooms=[room("r1"), room("r2", campus_code="C2")],
+        )
+    )
+    placed = ProposedSession(
+        group_id="otro", day=2, starts_at="07:00", ends_at="08:00", room_id="r2", kind="teoria", changed=True
+    )
+
+    sub = _sub_input(data, Search(sessions={"otro": [placed]}), {"otro"})
+
+    assert [group.id for group in sub.groups] == ["otro"]
+    assert [busy.campus_code for busy in sub.teachers[0].busy] == ["C1"]
+
+
+def test_la_mejora_regresa_a_su_patron_a_un_grupo_que_ya_cabe_en_el_aunque_suba_el_puntaje():
+    """PS-10 (confirmado el 18 de noviembre de 2026): el nivel del patrón va antes que las reglas. El caso del Riel A:
+    g, de 2 horas en un campus de lunes a miércoles, está en lunes y miércoles (nivel 1) y su patrón, lunes y martes,
+    está libre. Su docente prefiere lunes y miércoles a las 07:00 (SC-04, peso 4), así que dejarlo da 0 y regresarlo
+    da 4. Aun así la mejora lo regresa a su patrón: la primera resolución de cada vecindario baja los niveles."""
+    import time
+
+    from app.contract.output import ProposedSession
+    from app.model.phases import SearchLimits
+    from app.model.search import Search, improve
+    from tests.instances import slot, teacher
+
+    data = parse_input(
+        instance(
+            campuses=[campus(days=[1, 2, 3], day_end="14:00")],
+            groups=[group("g", 2, teacher_id="t1")],
+            teachers=[teacher("t1", preferred=[slot(1, "07:00", "08:00"), slot(3, "07:00", "08:00")])],
+            rooms=[room("r1"), room("r2")],
+            soft_weights={"SC-04": 4},
+        )
+    )
+    placed = [
+        ProposedSession(
+            group_id="g", day=day, starts_at="07:00", ends_at="08:00", room_id="r1", kind="teoria", changed=True
+        )
+        for day in (1, 3)
+    ]
+    search = Search(sessions={"g": placed}, chosen={"g": (((1, 1), (3, 1)), 0)}, tiers={"g": 1})
+
+    result = improve(ModelData.of(data), search, time.perf_counter() + 5, limits=SearchLimits(workers=1), seed=7)
+
+    assert search.tiers == {"g": 0}
+    assert {session.day for session in search.sessions["g"]} == {1, 2}
+    assert (result.tiers, result.initial.total, result.best.total) == (0, 0, 4)
+
+
+def test_el_script_del_objetivo_da_el_puntaje_por_fase_y_la_salida_del_contrato(tmp_path):
+    """`scripts/objective.py` (7.6) da una fila por fase con el puntaje de `score.py` y, con `--output`, la salida
+    del contrato con ese mismo puntaje."""
+    import importlib.util
+    from pathlib import Path
+
+    from app.contract import parse_output
+
+    path = Path(__file__).resolve().parents[1] / "scripts" / "objective.py"
+    spec = importlib.util.spec_from_file_location("objective_script", path)
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    target = tmp_path / "salida.json"
+
+    table = script.main(["small", "--time-limit", "5", "--threads", "1", "--output", str(target)])
+
+    rows = table.splitlines()[2:]
+    assert [row.split(" | ")[0] for row in rows] == ["| lns", "| improve", "| improve_rooms"]
+    output = parse_output(json.loads(target.read_text()))
+    assert output.unscheduled == []
+    assert f"| {output.soft_score.total:,} |" in rows[-1]
