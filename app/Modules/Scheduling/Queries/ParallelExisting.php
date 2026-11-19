@@ -2,6 +2,8 @@
 
 namespace App\Modules\Scheduling\Queries;
 
+use Closure;
+
 /**
  * Un grupo suelto (sin paquete) que ya existe de una materia y campus, como lo muestra la pestaña «Paralelos» (tarea 8.8):
  * su clave, su carrera dueña, su capacidad, su docente (el nombre, o null), sus sesiones y minutos colocados, sus cupos
@@ -50,6 +52,63 @@ final readonly class ParallelExisting
             $this->vetoed !== null => $this->vetoed,
             default => null,
         };
+    }
+
+    /**
+     * Por qué no se pueden cancelar los grupos de un armado que no se pueden cancelar, o null si no hay ninguno: uno solo,
+     * con lockReason(); varios con docente, en una frase que los nombra a todos (de cuatro en adelante, los dos primeros
+     * «y N más»: G-05 del recorrido final del ensayo 8.11), y después el motivo de cada uno con una solicitud de cambio
+     * abierta.
+     *
+     * @param  list<self>  $locked
+     * @param  Closure(string): ?string  $codeOf  la clave de una carrera por su id
+     */
+    public static function lockReasonOf(array $locked, Closure $codeOf): ?string
+    {
+        if (count($locked) <= 1) {
+            return isset($locked[0]) ? $locked[0]->lockReason($codeOf($locked[0]->ownerCareerId)) : null;
+        }
+
+        $withTeacher = array_values(array_filter($locked, fn (self $group): bool => $group->hasTeacher()));
+        $vetoes = array_values(array_unique(array_filter(array_map(fn (self $group): ?string => $group->hasTeacher() ? null : $group->vetoed, $locked))));
+        $teachers = match (count($withTeacher)) {
+            0 => null,
+            1 => $withTeacher[0]->lockReason($codeOf($withTeacher[0]->ownerCareerId)),
+            default => self::teachersReason($withTeacher, $codeOf),
+        };
+
+        return implode(' ', array_filter([$teachers, ...$vetoes]));
+    }
+
+    /**
+     * «Los grupos 2, 3 y 2 más de ISIC tienen docente…» o, de varias carreras, «Los grupos 2 de IIND y 3 de ILOG…».
+     *
+     * @param  list<self>  $groups  dos o más, todos con docente
+     * @param  Closure(string): ?string  $codeOf
+     */
+    private static function teachersReason(array $groups, Closure $codeOf): string
+    {
+        $owners = array_map(fn (self $group): ?string => $codeOf($group->ownerCareerId), $groups);
+        $careers = array_values(array_unique(array_filter($owners)));
+        $oneCareer = count($careers) === 1 && ! in_array(null, $owners, true);
+        $names = array_map(fn (self $group, ?string $owner): string => $oneCareer || $owner === null ? $group->code : "{$group->code} de {$owner}", $groups, $owners);
+        $shown = count($names) > 3 ? [$names[0], $names[1], (count($names) - 2).' más'] : $names;
+        $room = $careers === [] ? 'de sus carreras' : 'de '.self::list($careers);
+
+        return 'Los grupos '.self::list($shown).($oneCareer ? " de {$careers[0]}" : '')
+            ." tienen docente y el arreglo no les deja lugar: deja grupos con lugares {$room} o quítales primero el docente.";
+    }
+
+    /**
+     * «A», «A y B», «A, B y C».
+     *
+     * @param  list<string>  $items
+     */
+    private static function list(array $items): string
+    {
+        $last = array_pop($items);
+
+        return $items === [] ? (string) $last : implode(', ', $items)." y {$last}";
     }
 
     /**

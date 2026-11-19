@@ -36,6 +36,8 @@ use Illuminate\Validation\ValidationException;
  * de las otras sesiones del grupo en ese salón no detienen la asignación (`loanBlocked`). Deja la bitácora en el grupo
  * (`session_room_assigned`, con la sesión de antes y de después) y avisa con GroupScheduleChanged después del commit.
  * Sin cambios no escribe, no registra ni avisa. El resultado dice si se pidió préstamo.
+ *
+ * handleMany() hace lo mismo con varias sesiones de un grupo a la vez (el «Cambiar salón» del re-análisis).
  */
 final class AssignSessionRoom
 {
@@ -54,59 +56,128 @@ final class AssignSessionRoom
     public function handle(GroupSession $session, ?Room $room, User $actor): SessionResult
     {
         [$session, $group, $loans] = $this->editability->guard(fn (): array => DB::transaction(function () use ($session, $room, $actor): array {
-            $group = Group::query()->findOrFail($session->group_id);
-            $this->editability->lockLoad($group);
-            $group = Group::query()->lockForUpdate()->findOrFail($group->id);
+            $group = $this->lockGroup($session->group_id);
             $session = GroupSession::query()->lockForUpdate()->findOrFail($session->getKey());
-            $old = SessionRules::snapshot($session);
-
-            $this->rules->ensureEditable($group);
             $this->validator->forget();
+            $loans = $this->assign($group, $session, $room, $actor);
 
-            if ($session->room_id === $room?->getKey()) {
-                return [$session, $group, new LoanSyncResult];
+            if ($loans !== null) {
+                GroupScheduleChanged::dispatch($group, timesChanged: false);
             }
 
-            if ($room !== null) {
-                $room = Room::withTrashed()->sharedLock()->findOrFail($room->getKey());
-                $this->rules->ensureRoomUsable($group, $room);
-                $this->ensureNotLoanedToOthers($group, $session, $room);
-                $this->rules->ensureNoOverlaps($this->validator->checkSession($group, new SessionCandidate(
-                    $session->day, $old['starts_at'], $old['ends_at'], $room->id, $session->kind, $session->id,
-                )), $session->id, ['HC-02']);
-            }
-
-            $previous = $session->room_id === null ? null : Room::withTrashed()->findOrFail($session->room_id);
-
-            try {
-                DB::transaction(fn () => $session->update(['room_id' => $room?->id]));
-            } catch (QueryException $exception) {
-                throw $this->rules->overlapTaken($exception, $group, $session->day, $old['starts_at'], $old['ends_at'], $room?->id);
-            }
-
-            if ($previous !== null) {
-                $this->loans->resync($group, $previous, $session->day, $actor);
-            }
-
-            $loans = $room === null ? new LoanSyncResult : $this->loans->resync($group, $room, $session->day, $actor, strictFor: $session);
-
-            $session->refresh();
-
-            activity()
-                ->causedBy($actor)
-                ->performedOn($group)
-                ->event(self::EVENT)
-                ->withChanges(['attributes' => SessionRules::snapshot($session), 'old' => $old])
-                ->log($this->describe($group, $session, $previous, $room));
-
-            GroupScheduleChanged::dispatch($group, timesChanged: false);
-
-            return [$session, $group, $loans];
+            return [$session, $group, $loans ?? new LoanSyncResult];
         }));
 
         $this->validator->forget();
 
         return new SessionResult($session, $this->validator->validateGroup($group), loanRequested: $loans->requested, loanBlocked: $loans->blocked);
+    }
+
+    /**
+     * handle() con varias sesiones de un mismo grupo, cada una a su salón (`null` lo quita), en una transacción: el
+     * «Cambiar salón» del re-análisis (ApplyReanalysisSuggestion). Cada sesión pasa por las mismas guardas y deja su
+     * bitácora; el grupo avisa una vez con GroupScheduleChanged. Una que falla no deja ninguna.
+     *
+     * Lee la foto del validador una sola vez para todas y no valida el grupo al final, porque quien llama no pinta
+     * violaciones: leerla dos veces por sesión hacía tardar de 8 a 10 s el cambio de tres sesiones en la demo masiva
+     * (G-07 del recorrido final del ensayo 8.11). Una foto basta: las sesiones de un grupo no se enciman (la exclusión de
+     * grupo de `group_sessions`), así que mover una no cambia el HC-02 de otra, y si otro grupo toma el salón entre
+     * tanto, la exclusión de salón de la base lo detiene (SessionRules::overlapTaken()).
+     *
+     * @param  array<string, Room|null>  $rooms  el salón de cada sesión, por id de sesión
+     *
+     * @throws ValidationException si una sesión ya no es del grupo o una guarda la rechaza
+     */
+    public function handleMany(Group $group, array $rooms, User $actor): void
+    {
+        $this->editability->guard(fn () => DB::transaction(function () use ($group, $rooms, $actor): void {
+            $group = $this->lockGroup($group->id);
+            $sessions = GroupSession::query()
+                ->where('group_id', $group->id)
+                ->whereKey(array_keys($rooms))
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            if ($sessions->count() !== count($rooms)) {
+                throw ValidationException::withMessages(['session' => "Una sesión ya no es del grupo {$group->code}."]);
+            }
+
+            $this->validator->forget();
+            $changed = false;
+
+            foreach ($rooms as $sessionId => $room) {
+                $changed = $this->assign($group, $sessions[$sessionId], $room, $actor) !== null || $changed;
+            }
+
+            if ($changed) {
+                GroupScheduleChanged::dispatch($group, timesChanged: false);
+            }
+        }));
+
+        $this->validator->forget();
+    }
+
+    /**
+     * La carga en compartido y luego el grupo, bloqueado: el orden de LoadEditability.
+     */
+    private function lockGroup(string $groupId): Group
+    {
+        $this->editability->lockLoad(Group::query()->findOrFail($groupId));
+
+        return Group::query()->lockForUpdate()->findOrFail($groupId);
+    }
+
+    /**
+     * Con el grupo y la sesión ya bloqueados, le pone el salón a la sesión: las guardas, la escritura, los préstamos y la
+     * bitácora. Pregunta al validador con la foto que ya tenga. Null si la sesión ya estaba en ese salón (no escribe).
+     *
+     * @throws ValidationException
+     */
+    private function assign(Group $group, GroupSession $session, ?Room $room, User $actor): ?LoanSyncResult
+    {
+        $old = SessionRules::snapshot($session);
+
+        $this->rules->ensureEditable($group);
+
+        if ($session->room_id === $room?->getKey()) {
+            return null;
+        }
+
+        if ($room !== null) {
+            $room = Room::withTrashed()->sharedLock()->findOrFail($room->getKey());
+            $this->rules->ensureRoomUsable($group, $room);
+            $this->ensureNotLoanedToOthers($group, $session, $room);
+            $this->rules->ensureNoOverlaps($this->validator->checkSession($group, new SessionCandidate(
+                $session->day, $old['starts_at'], $old['ends_at'], $room->id, $session->kind, $session->id,
+            )), $session->id, ['HC-02']);
+        }
+
+        $previous = $session->room_id === null ? null : Room::withTrashed()->findOrFail($session->room_id);
+
+        try {
+            DB::transaction(fn () => $session->update(['room_id' => $room?->id]));
+        } catch (QueryException $exception) {
+            throw $this->rules->overlapTaken($exception, $group, $session->day, $old['starts_at'], $old['ends_at'], $room?->id);
+        }
+
+        if ($previous !== null) {
+            $this->loans->resync($group, $previous, $session->day, $actor);
+        }
+
+        $loans = $room === null ? new LoanSyncResult : $this->loans->resync($group, $room, $session->day, $actor, strictFor: $session);
+
+        $session->refresh();
+
+        activity()
+            ->causedBy($actor)
+            ->performedOn($group)
+            ->event(self::EVENT)
+            ->withChanges(['attributes' => SessionRules::snapshot($session), 'old' => $old])
+            ->log($this->describe($group, $session, $previous, $room));
+
+        return $loans;
     }
 
     /**

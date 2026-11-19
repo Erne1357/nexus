@@ -11,11 +11,13 @@ use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Scheduling\Actions\Parallels\ArmParallelGroups;
 use App\Modules\Scheduling\Actions\Parallels\ParallelArrangement;
 use App\Modules\Scheduling\Queries\ParallelDraft;
+use App\Modules\Scheduling\Queries\ParallelExisting;
 use App\Modules\Scheduling\Queries\Parallels;
 use App\Modules\Scheduling\Queries\ParallelsQuery;
 use App\Modules\Scheduling\Queries\ParallelSubject;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -304,6 +306,7 @@ new #[Title('Paralelos')] class extends Component
             'confirm' => $draft === null ? null : $this->confirmLine($draft),
             'hours' => $row === null ? 0 : $this->weeklyHours($row),
             'duration' => $this->duration(...),
+            'assignUrl' => fn (ParallelExisting $group): ?string => $row === null ? null : $this->assignUrl($row, $group),
         ];
     }
 
@@ -385,17 +388,19 @@ new #[Title('Paralelos')] class extends Component
      * El estado de cada materia, por `clave-campus` (la misma regla en la lista, la cuenta de la pestaña, el filtro y el
      * drawer): «Armada»; «Pendiente» si lo que sugiere Nexus no se puede armar todavía (una parte sin aceptar, un grupo que
      * no se puede cancelar o HC-07), con su motivo; si no, «Por armar», con los grupos que ya existen y los alumnos que la
-     * sugerencia deja de menos (`ParallelSubject::$short`).
+     * sugerencia deja de menos (`ParallelSubject::$short`). Si lo que no deja armar son grupos con docente, `assignUrl` lleva
+     * a quitárselo al primero en Asignación docente (G-05 del recorrido final del ensayo 8.11).
      *
      * @param  list<ParallelSubject>  $subjects
-     * @return array<string, array{key: string, tone: string, label: string, icon: ?string, note: ?string}>
+     * @return array<string, array{key: string, tone: string, label: string, icon: ?string, note: ?string, assignUrl: ?string}>
      */
     private function states(array $subjects): array
     {
         $states = [];
 
         foreach ($subjects as $subject) {
-            $reason = $subject->arranged() ? null : ParallelDraft::suggested($subject)->blockedReason();
+            $draft = $subject->arranged() ? null : ParallelDraft::suggested($subject);
+            $reason = $draft?->blockedReason();
             $existing = count($subject->groups);
             $short = array_sum($subject->short);
             $notes = array_filter([
@@ -404,13 +409,24 @@ new #[Title('Paralelos')] class extends Component
             ]);
 
             $states[$this->keyOf($subject)] = match (true) {
-                $subject->arranged() => ['key' => 'armadas', 'tone' => 'success', 'label' => 'Armada', 'icon' => null, 'note' => null],
-                $reason !== null => ['key' => 'pendientes', 'tone' => 'neutral', 'label' => 'Pendiente', 'icon' => 'o-lock-closed', 'note' => $reason],
-                default => ['key' => 'por-armar', 'tone' => 'warning', 'label' => 'Por armar', 'icon' => 'o-clock', 'note' => $notes === [] ? null : implode(' · ', $notes)],
+                $subject->arranged() => ['key' => 'armadas', 'tone' => 'success', 'label' => 'Armada', 'icon' => null, 'note' => null, 'assignUrl' => null],
+                $reason !== null => ['key' => 'pendientes', 'tone' => 'neutral', 'label' => 'Pendiente', 'icon' => 'o-lock-closed', 'note' => $reason,
+                    'assignUrl' => isset($draft->teacherBlocked()[0]) ? $this->assignUrl($subject, $draft->teacherBlocked()[0]) : null],
+                default => ['key' => 'por-armar', 'tone' => 'warning', 'label' => 'Por armar', 'icon' => 'o-clock', 'note' => $notes === [] ? null : implode(' · ', $notes), 'assignUrl' => null],
             };
         }
 
         return $states;
+    }
+
+    /**
+     * Asignación docente en la materia, con el grupo abierto: donde se le quita el docente a un grupo que el arreglo no
+     * puede cancelar (G-05 del recorrido final del ensayo 8.11). Null si Staffing no está: va a la derecha de Scheduling en
+     * el mapa, así que esta pantalla la conoce solo por el nombre de su ruta.
+     */
+    private function assignUrl(ParallelSubject $subject, ParallelExisting $group): ?string
+    {
+        return Route::has('staffing.assign') ? route('staffing.assign', ['grupo' => $group->id, 'materia' => $subject->subject->code]) : null;
     }
 
     private function keyOf(ParallelSubject $subject): string
