@@ -95,7 +95,7 @@
                         </div>
                     </section>
 
-                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing, 'placements' => $placements, 'roomOptions' => $roomOptions, 'choice' => $choice])
+                    @include('scheduling::reanalysis.suggestions', ['block' => $block, 'load' => $load, 'suggestions' => $suggestions, 'advice' => $advice, 'adjustReason' => $adjustReason, 'blocked' => $blocked, 'discardedCount' => $discardedCount, 'editing' => $editing, 'placements' => $placements, 'roomOptions' => $roomOptions, 'choice' => $choice, 'assignUrls' => $assignUrls])
                 </div>
 
                 @php($batch = ($choice['choosable'] ?? 0) > 0)

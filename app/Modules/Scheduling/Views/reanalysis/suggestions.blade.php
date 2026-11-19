@@ -51,7 +51,7 @@
     @else
         <ul class="grid rounded-box border border-base-300 bg-base-100" data-testid="suggestions-list">
             @foreach ($suggestions as $suggestion)
-                @include('scheduling::reanalysis.suggestion', ['suggestion' => $suggestion, 'reason' => $adjustReason ?? ($blocked[$suggestion->key] ?? null), 'placement' => $placements[$suggestion->key] ?? null, 'choice' => $choice])
+                @include('scheduling::reanalysis.suggestion', ['suggestion' => $suggestion, 'reason' => $adjustReason ?? ($blocked[$suggestion->key] ?? null), 'placement' => $placements[$suggestion->key] ?? null, 'choice' => $choice, 'assignUrl' => $assignUrls[$suggestion->key] ?? null])
             @endforeach
         </ul>
     @endif

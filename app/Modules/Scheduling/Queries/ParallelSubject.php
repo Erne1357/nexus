@@ -156,10 +156,11 @@ final readonly class ParallelSubject
             return 'Falta aceptar la parte de '.self::list($pending).': sus lugares nacen al aceptarla.';
         }
 
-        $blocked = $this->blocked()[0] ?? null;
+        $blocked = ParallelExisting::lockReasonOf($this->blocked(), fn (string $careerId): ?string => collect([...$this->careers, ...$this->excluded])
+            ->first(fn (ParallelCareer $career): bool => $career->career->getKey() === $careerId)?->career->code);
 
         if ($blocked !== null) {
-            return $blocked->lockReason(collect([...$this->careers, ...$this->excluded])->first(fn (ParallelCareer $career): bool => $career->career->getKey() === $blocked->ownerCareerId)?->career->code);
+            return $blocked;
         }
 
         foreach ($this->suggestion as $slot) {

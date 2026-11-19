@@ -8,9 +8,11 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Tests\Support\AcademicLoad\FakePublishedExport;
 
@@ -81,6 +83,26 @@ it('F-05: si la cola no lo toma a tiempo, dice que tarda más de lo normal y rei
     $this->travel(PublishedExports::WAIT_SECONDS - 1)->seconds();
 
     expect($this->exports->state($export))->toBe(ExportState::Pending);
+});
+
+it('G-01: con la caché redis (Valkey, como en producción), un exporte recién pedido sigue «preparando» y se vence a los WAIT_SECONDS', function () {
+    Queue::fake();
+    config(['cache.default' => 'redis', 'cache.prefix' => 'nexus-test-g01-'.Str::random(10).'-']);
+    $export = new FakePublishedExport;
+    $pendingKey = 'published-export:pending:'.$export->key();
+
+    try {
+        $this->exports->request($export);
+
+        expect(Cache::get($pendingKey))->toBeString()
+            ->and($this->exports->state($export))->toBe(ExportState::Pending);
+
+        $this->travel(PublishedExports::WAIT_SECONDS + 1)->seconds();
+
+        expect($this->exports->state($export))->toBe(ExportState::Stalled);
+    } finally {
+        Cache::forget($pendingKey);
+    }
 });
 
 it('F-05: el job que encoló un reintento no vuelve a armar el exporte que ya dejó listo el primero', function () {
