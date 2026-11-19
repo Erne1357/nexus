@@ -11,6 +11,7 @@ use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Jobs\ValidateQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
+use App\Modules\Imports\Models\ImportRow;
 use App\Modules\Imports\Templates\TemplateRegistry;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Bus;
@@ -127,7 +128,7 @@ describe('admin', function () {
             ->set('file', campusCsv())->call('continue')
             ->assertSet('step', 2)
             ->assertSee('C2 · Campus II')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasNoErrors();
 
         $batch = ImportBatch::sole();
@@ -144,7 +145,7 @@ describe('admin', function () {
             ->set('template', 'test-campus-scoped')->set('campusCode', 'C2')
             ->set('file', campusCsv())->call('continue')->assertSet('step', 2)
             ->set('campusCode', 'C1')->assertSee('C2 · Campus II')
-            ->call('upload')->assertHasNoErrors();
+            ->call('uploadBatch')->assertHasNoErrors();
 
         expect(ImportBatch::sole()->campus_id)->toBe($this->c2->id)->and($this->c2->id)->not->toBe($c1->id);
     });
@@ -152,7 +153,7 @@ describe('admin', function () {
     it('con un solo campus, la plantilla de campus usa ese sin preguntar', function () {
         Queue::fake();
 
-        wizardWithFile($this->admin, 'test-campus-scoped')->assertSet('step', 2)->call('upload')->assertHasNoErrors();
+        wizardWithFile($this->admin, 'test-campus-scoped')->assertSet('step', 2)->call('uploadBatch')->assertHasNoErrors();
 
         expect(ImportBatch::sole()->campus_id)->toBe($this->c2->id);
     });
@@ -170,7 +171,7 @@ describe('admin', function () {
     })->with(['inactivo' => 'C8', 'inexistente' => 'C99']);
 
     it('sin cambios a la propuesta por nombre sube el lote sin mapeo y lo valida en la cola', function () {
-        $component = wizardWithFile($this->admin)->call('upload')->assertHasNoErrors();
+        $component = wizardWithFile($this->admin)->call('uploadBatch')->assertHasNoErrors();
 
         $batch = ImportBatch::sole();
 
@@ -194,7 +195,7 @@ describe('admin', function () {
             ->set('mappingId', $mapping->id)
             ->assertSet('assignments', ['code' => 'clave', 'name' => 'extra', 'modality' => ''])
             ->assertSee('El mapeo «SII 2026» espera columnas que el archivo no trae: MOD.')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasNoErrors();
 
         expect(ImportBatch::sole()->mapping_id)->toBe($mapping->id);
@@ -212,13 +213,13 @@ describe('admin', function () {
     it('si el admin cambia la propuesta, pide un nombre y guarda el mapeo nuevo con el lote', function () {
         $component = wizardWithFile($this->admin)
             ->set('assignments.name', 'extra')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasErrors('mappingName')
             ->assertSee('Ponle un nombre al mapeo para guardarlo: las columnas ya no son las de la propuesta.');
 
         expect(ImportBatch::count())->toBe(0);
 
-        $component->set('mappingName', 'Exportación de octubre')->call('upload')->assertHasNoErrors();
+        $component->set('mappingName', 'Exportación de octubre')->call('uploadBatch')->assertHasNoErrors();
 
         $mapping = ImportMapping::sole();
 
@@ -234,7 +235,7 @@ describe('admin', function () {
         wizardWithFile($this->admin)
             ->set('assignments.name', 'extra')
             ->set('mappingName', 'Octubre')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasErrors('mappingName')
             ->assertSee('Ya hay un mapeo con ese nombre para esta plantilla.');
 
@@ -245,7 +246,7 @@ describe('admin', function () {
         wizardWithFile($this->admin)
             ->set('assignments.code', '')
             ->set('mappingName', 'Sin clave')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasErrors('assignments')
             ->assertSee('Falta la columna de clave, que identifica cada registro.');
 
@@ -256,11 +257,11 @@ describe('admin', function () {
     it('rechaza una columna en dos campos y una columna que el archivo no tiene', function () {
         wizardWithFile($this->admin)
             ->set('assignments.name', 'clave')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasErrors('assignments')
             ->assertSee('La columna clave está en dos campos: clave y nombre.')
             ->set('assignments.name', 'INVENTADA')
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasErrors('assignments.name');
 
         expect(ImportBatch::count())->toBe(0);
@@ -283,7 +284,7 @@ describe('admin', function () {
     it('no sube un archivo distinto del que se revisó', function () {
         wizardWithFile($this->admin)
             ->set('file', UploadedFile::fake()->createWithContent('otro.csv', "x,y\n1,2\n"))
-            ->call('upload')
+            ->call('uploadBatch')
             ->assertHasErrors('file')
             ->assertSee('El archivo cambió después de revisar sus columnas: vuelve al paso 1 y revísalas otra vez.');
 
@@ -293,7 +294,7 @@ describe('admin', function () {
     it('si la cola no responde al subir, el lote queda subido y abierto en la página', function () {
         Bus::shouldReceive('dispatch')->once()->andThrow(new RuntimeException('Valkey no responde.'));
 
-        $page = wizardWithFile($this->admin)->call('upload');
+        $page = wizardWithFile($this->admin)->call('uploadBatch');
 
         $batch = ImportBatch::sole();
 
@@ -333,6 +334,50 @@ describe('admin', function () {
             ->withQueryParams(['lote' => $failed->id])
             ->test('imports::pages.import-wizard')
             ->assertSee('El archivo está vacío: no tiene encabezado.');
+    });
+
+    it('un lote que se atoró validando dice desde cuándo, deja de refrescarse y se valida de nuevo con confirmación', function () {
+        $batch = app(StoreImportBatch::class)->handle($this->admin, 'test-campuses', campusCsv());
+        $batch->update(['status' => BatchStatus::Validating, 'processed_rows' => 11500]);
+        ImportRow::factory()->for($batch, 'batch')->count(3)->create();
+        $since = $batch->fresh()->updated_at->format('d/m/Y H:i');
+        $this->travel(41)->minutes();
+
+        wizardForBatchId($this->admin, $batch->id)
+            ->assertSee('Atorado')
+            ->assertSee("La validación se atoró: no avanza desde el {$since}, con 11,500 filas leídas.")
+            ->assertDontSee('Validando…')
+            ->assertDontSeeHtml('wire:poll')
+            ->assertSeeHtml('x-confirm="Se borra lo que alcanzó a leer y campus.csv se valida otra vez desde el principio."')
+            ->call('retryStalled')
+            ->assertHasNoErrors();
+
+        expect($batch->fresh())->status->toBe(BatchStatus::Validated)->total_rows->toBe(1)
+            ->and(ImportRow::where('batch_id', $batch->id)->count())->toBe(1);
+    });
+
+    it('mientras el lote avanza no está atorado: no ofrece volver a encolarlo y no lo toca', function () {
+        $batch = ImportBatch::factory()->create(['status' => BatchStatus::Validating, 'processed_rows' => 1500]);
+        $this->travel(39)->minutes();
+
+        $page = wizardForBatchId($this->admin, $batch->id)
+            ->assertSee('1,500 filas leídas')
+            ->assertSeeHtml('wire:poll')
+            ->assertDontSee('Atorado')
+            ->call('retryStalled');
+
+        expect(lastToastOf($page))->type->toBe('warning')->title->toBe('El lote ya no está atorado')
+            ->and($batch->fresh())->status->toBe(BatchStatus::Validating)->processed_rows->toBe(1500);
+    });
+
+    it('los lotes recientes marcan los atorados', function () {
+        ImportBatch::factory()->create(['original_name' => 'kardex-octubre.csv', 'status' => BatchStatus::Applying]);
+        $this->travel(41)->minutes();
+        ImportBatch::factory()->create(['original_name' => 'alumnos.csv', 'status' => BatchStatus::Validating]);
+
+        Livewire::actingAs($this->admin)
+            ->test('imports::pages.import-wizard')
+            ->assertSeeInOrder(['alumnos.csv', 'Validando', 'kardex-octubre.csv', 'Atorado']);
     });
 
     it('retoma un lote reciente y empieza otro desde cero', function () {
@@ -409,9 +454,10 @@ describe('otros roles', function () {
         expect(ImportBatch::whereKeyNot($batch->id)->count())->toBe(0);
     })->with([
         'continuar' => ['continue', []],
-        'subir' => ['upload', []],
+        'subir' => ['uploadBatch', []],
         'abrir un lote' => ['open', ['lote']],
         'volver a encolar' => ['requeue', []],
+        'volver a encolar un lote atorado' => ['retryStalled', []],
     ]);
 
     it('a quien no tiene sesión lo manda al login', function () {

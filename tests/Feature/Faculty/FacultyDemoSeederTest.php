@@ -1,10 +1,13 @@
 <?php
 
 use App\Modules\Academic\Database\Seeders\AcademicDemoSeeder;
+use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoTermSeeder;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Rules\PasswordResetRules;
+use App\Modules\Faculty\Database\Seeders\DemoTeacherEmail;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Models\Teacher;
 use Database\Seeders\DatabaseSeeder;
@@ -87,6 +90,31 @@ it('hay docentes de cada departamento con materias en el campus, inactivos, borr
         ->and(DB::table('teachers')->whereNull('degree')->exists())->toBeTrue()
         ->and(DB::table('teachers')->whereRaw('length(name) > 80')->exists())->toBeTrue();
 });
+
+it('AC-06 y RA-06: con el dominio de la demo, cada docente de los dos campus trae un correo institucional ficticio de su RFC, salvo unos pocos, y es al que le llegan los avisos', function () {
+    config(['nexus.institutional_email_domain' => DemoTeacherEmail::DOMAIN]);
+
+    seedDemoTeachers(['C1' => 22, 'C2' => 25]);
+
+    $teachers = Teacher::withTrashed()->orderBy('rfc')->get();
+    $withEmail = $teachers->whereNotNull('institutional_email');
+    $teacher = Teacher::query()->whereNotNull('institutional_email')->whereNotNull('user_id')->with('user')->orderBy('rfc')->firstOrFail();
+
+    expect($withEmail->every(fn (Teacher $teacher): bool => $teacher->institutional_email === mb_strtolower($teacher->rfc).'@docentes.itcj.example'))->toBeTrue()
+        ->and($withEmail->pluck('institutional_email')->unique())->toHaveCount($withEmail->count())
+        ->and($teachers->whereNull('institutional_email')->count())->toBeGreaterThan(0)->toBeLessThanOrEqual(4)
+        ->and($withEmail->every(fn (Teacher $teacher): bool => app(PasswordResetRules::class)->isInstitutionalEmail($teacher->institutional_email)))->toBeTrue()
+        ->and(app(HeadMailAddressQuery::class)->for($teacher->user))->toBe($teacher->institutional_email);
+});
+
+it('con un dominio institucional que no es reservado, como el del Tec, no siembra ningún correo institucional', function (string $domain) {
+    config(['nexus.institutional_email_domain' => $domain]);
+
+    seedDemoTeachers();
+
+    expect(DB::table('teachers')->count())->toBe(40)
+        ->and(DB::table('teachers')->whereNotNull('institutional_email')->count())->toBe(0);
+})->with(['cdjuarez.tecnm.mx', 'itcj.example.mx', '']);
 
 it('la disponibilidad del periodo actual no se traslapa y cae entre las 7:00 y las 21:00', function () {
     seedDemoTeachers();

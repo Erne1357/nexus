@@ -10,8 +10,10 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Imports\Actions\ApplyImportBatch;
+use App\Modules\Imports\Actions\RetryStalledBatch;
 use App\Modules\Imports\Actions\StoreImportBatch;
 use App\Modules\Imports\Actions\ValidateImportBatch;
+use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\RowStatus;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Queries\ImportBatchQuery;
@@ -22,6 +24,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
@@ -224,6 +227,31 @@ describe('el archivo de TI', function () {
         app(SendAccessInvitation::class)->handle(Teacher::where('rfc', 'PRUE090002AB1')->sole()->user, 'docente.dos@cdjuarez.tecnm.mx', $jefe);
 
         expect(emailsSummary($batch)['Invitación enviada']['count'])->toBe(1);
+    });
+
+    it('AC-19: al reanudar una aplicación atorada, el resumen cuenta las invitaciones de quien la empezó y de quien la reanudó', function () {
+        teacherForEmails($this->sc, 'PRUE000001AB1');
+        teacherForEmails($this->sc, 'PRUE000002AB1');
+        $batch = app(ValidateImportBatch::class)->handle(app(StoreImportBatch::class)->handle(
+            $this->admin,
+            'teacher_emails',
+            UploadedFile::fake()->createWithContent('correos.csv', "RFC,Correo\nPRUE000001AB1,ana@cdjuarez.tecnm.mx\nPRUE000002AB1,beto@cdjuarez.tecnm.mx\n"),
+        ));
+
+        // El admin empezó a aplicar: se escribió la primera fila (y salió su invitación) y el proceso de la cola murió.
+        $row = $batch->rows()->where('row_number', 2)->sole();
+        $teacher = $this->template->apply($row->normalized, $this->context);
+        $row->update(['status' => RowStatus::Applied, 'target_type' => $teacher->getMorphClass(), 'target_id' => $teacher->getKey()]);
+        $batch->update(['status' => BatchStatus::Applying, 'run_id' => (string) Str::uuid7(), 'processed_rows' => 1, 'updated_rows' => 1, 'applied_by' => $this->admin->id]);
+        $this->travel(41)->minutes();
+
+        $resumer = User::factory()->admin()->create();
+        app(RetryStalledBatch::class)->handle($batch, $resumer);
+        app(ApplyImportBatch::class)->handle($batch->fresh(), $resumer);
+
+        Notification::assertSentOnDemandTimes(AccessInvitation::class, 2);
+        expect($batch->fresh()->applied_by)->toBe($this->admin->id)
+            ->and(emailsSummary($batch)['Invitaciones enviadas'])->toBe(['count' => 2, 'keys' => ['PRUE000001AB1', 'PRUE000002AB1']]);
     });
 
     it('AC-19: el asistente muestra el resumen de los correos al validar y al aplicar', function () {

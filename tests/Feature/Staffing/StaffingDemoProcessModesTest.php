@@ -12,6 +12,7 @@ use App\Modules\Core\Enums\DemoVolume;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Database\Seeders\DemoTeacherEmail;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherDepartment;
@@ -167,6 +168,23 @@ it('da de alta docentes de asignatura donde la capacidad no llega a 1.35 veces l
         ->and($hired->sole()->positions->sole()->base_hours)->toBe(StaffingSupplyDemoSeeder::HIRE_HOURS)
         ->and($hired->sole()->positions->sole()->valid_from->lte($this->term->starts_on))->toBeTrue();
 });
+
+it('AC-06: con el dominio de la demo, cada alta trae su correo institucional ficticio de su RFC; con el del Tec, ninguna', function (string $domain, bool $withEmail) {
+    config(['nexus.institutional_email_domain' => $domain]);
+    $this->plan->subjects()->attach($this->subject->id, ['semester' => 1]);
+    Student::factory()->count(70)->create(['study_plan_id' => $this->plan->id, 'career_id' => $this->career->id, 'campus_id' => $this->campus->id])
+        ->each(fn (Student $student) => StudentProgress::factory()->create(['student_id' => $student->id, 'subjects_available' => [$this->subject->id]]));
+    $ana = ($this->teacher)('Ana', 1);
+
+    (new DatabaseSeeder)->setContainer(app())->callWith(StaffingSupplyDemoSeeder::class, ['campuses' => ['C2']]);
+
+    $hired = Teacher::query()->whereKeyNot($ana->id)->sole();
+
+    expect($hired->institutional_email)->toBe($withEmail ? mb_strtolower($hired->rfc).'@docentes.itcj.example' : null);
+})->with([
+    'dominio de la demo' => [DemoTeacherEmail::DOMAIN, true],
+    'dominio del Tec' => ['cdjuarez.tecnm.mx', false],
+]);
 
 it('la revisión del punto 5 compara cada carga con sus grupos en los campus de la demo: una carga sin grupos puede quedarse en borrador', function () {
     ($this->group)('A1', 1, '07:00', '09:00', 1);

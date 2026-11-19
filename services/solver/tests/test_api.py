@@ -166,7 +166,7 @@ def test_un_fallo_del_motor_deja_la_corrida_en_failed(tiny_input: Data, auth: di
 
 
 def test_se_descartan_las_corridas_terminadas_mas_viejas(tiny_input: Data, auth: dict[str, str]):
-    with TestClient(create_app(make_settings(max_stored_runs=2))) as client:
+    with TestClient(create_app(make_settings(engine="trivial", max_stored_runs=2))) as client:
         ids = []
         for _ in range(4):
             run_id = client.post("/solve", json=tiny_input, headers=auth).json()["run_id"]

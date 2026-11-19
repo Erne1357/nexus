@@ -74,7 +74,7 @@ it('con la carga fuera de propuesta, asignación o ajustes, o el grupo cancelado
         ->and(GroupSession::query()->whereKey($this->session->id)->exists())->toBeTrue()
         ->and(Activity::query()->where('event', 'like', 'session_%')->count())->toBe(0);
 })->with([
-    'carga publicada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Published]), 'La carga de Sistemas y Computación en Presencial está en publicada: no se editan horarios.'],
+    'carga publicada' => [fn ($test) => $test->load->update(['status' => LoadStatus::Published]), 'La carga de Sistemas y Computación en Presencial ya está publicada: no se editan horarios.'],
     'grupo cancelado' => [fn ($test) => $test->group->update(['status' => 'cancelled']), 'El grupo D está cancelado: no se editan horarios.'],
 ]);
 

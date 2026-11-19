@@ -3,8 +3,9 @@
 Sin buscar nada, pone cada grupo movible en horas seguidas desde el inicio de la jornada de su campus, un día por
 grupo según su orden, en su primer salón candidato o en el primer salón de su campus. Un grupo que no cabe en la
 jornada queda sin programar. No revisa reglas duras ni calcula el puntaje, así que nunca dice `feasible`: devuelve
-`partial` y lo avisa en el log. Existe para que la API, el cliente de PHP y la pantalla de corridas se construyan
-antes que el modelo CP-SAT (tareas 7.4 a 7.7), que lo reemplaza.
+`partial` y lo avisa en el log. Sirvió para construir la API, el cliente de PHP y la pantalla de corridas antes que el
+modelo CP-SAT (tareas 7.4 a 7.7). Desde la 7.10 el servicio usa `cpsat` por omisión, y este motor queda solo si se pide
+con `SOLVER_ENGINE=trivial`, para pruebas y CI.
 """
 
 import time

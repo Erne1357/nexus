@@ -16,8 +16,9 @@ use Random\Randomizer;
  *
  * Los casos raros no dependen del azar sino del consecutivo, para que aparezcan aun con pocos docentes: cada 20
  * docentes se repiten los 20 escenarios de plazas (los cinco tipos, dos o tres plazas completas, vencidas, futuras
- * y sin plaza), y de los demás, los inactivos, borrados, sin correo, sin grado, de nombre muy largo y con dos o
- * tres departamentos.
+ * y sin plaza), y de los demás, los inactivos, borrados, sin correo, sin correo institucional (`has_institutional_email`:
+ * uno de cada 25; el correo lo arma el seeder con DemoTeacherEmail), sin grado, de nombre muy largo y con dos o tres
+ * departamentos.
  */
 final class TeacherRosterGenerator
 {
@@ -136,6 +137,7 @@ final class TeacherRosterGenerator
             'rfc' => $rfc,
             'name' => $name,
             'email' => $i % 13 === 3 ? null : strtolower($rfc).'@example.test',
+            'has_institutional_email' => $i % 25 !== 12,
             'degree' => $i % 11 === 4 ? null : self::DEGREES[$this->random->getInt(0, count(self::DEGREES) - 1)],
             'hired_on' => $i % 20 === 6 ? null : sprintf('%d-%02d-%02d', $this->random->getInt(1995, 2025), $this->random->getInt(1, 12), $this->random->getInt(1, 28)),
             'is_active' => $isActive,

@@ -66,7 +66,16 @@
                     <x-icon name="o-archive-box-x-mark" class="h-4 w-4" aria-hidden="true" />Descartar
                 </button>
             @endif
-            @if ($can['apply'])
+            @if ($can['apply'] && $acceptBlock)
+                <span class="flex flex-col gap-1 max-md:w-full md:items-end">
+                    <button type="button" class="btn btn-primary btn-disabled max-md:h-11" aria-disabled="true" aria-describedby="accept-why" tabindex="0" data-testid="run-accept-disabled">
+                        <x-icon name="o-check" class="h-4 w-4" aria-hidden="true" />Aceptar corrida
+                    </button>
+                    <span id="accept-why" class="flex items-center gap-1 text-xs text-neutral">
+                        <x-icon name="o-lock-closed" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $acceptBlock }}
+                    </span>
+                </span>
+            @elseif ($can['apply'])
                 <button type="button" class="btn btn-primary max-md:h-11 max-md:flex-1" wire:click="openAccept" data-testid="run-accept">
                     <x-icon name="o-check" class="h-4 w-4" aria-hidden="true" />Aceptar corrida
                 </button>

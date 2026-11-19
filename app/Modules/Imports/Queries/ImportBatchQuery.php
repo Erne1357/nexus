@@ -3,8 +3,11 @@
 namespace App\Modules\Imports\Queries;
 
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Imports\Enums\BatchStatus;
 use App\Modules\Imports\Enums\RowIssue;
 use App\Modules\Imports\Enums\RowStatus;
+use App\Modules\Imports\Jobs\ApplyQueuedBatch;
+use App\Modules\Imports\Jobs\ValidateQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportDeactivation;
 use App\Modules\Imports\Models\ImportRow;
@@ -18,6 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\LazyCollection;
+use Spatie\Activitylog\Models\Activity;
 
 /**
  * Lecturas de lotes de importación para el asistente y el archivo de errores. Quién las ve lo decide
@@ -25,6 +29,9 @@ use Illuminate\Support\LazyCollection;
  */
 final class ImportBatchQuery
 {
+    /** Lo que espera stalled(), además del tiempo máximo del job, para dar por atorado un lote. */
+    public const int STALL_MARGIN_MINUTES = 10;
+
     /**
      * Los lotes más recientes, para retomar uno desde el asistente.
      *
@@ -39,6 +46,48 @@ final class ImportBatchQuery
             ->orderByDesc('id')
             ->limit($limit)
             ->get();
+    }
+
+    /**
+     * Si el lote se atoró (E-03, ensayo 8.11): sigue validándose o aplicándose, pero lleva sin avanzar más que el tiempo
+     * máximo de su job más STALL_MARGIN_MINUTES. El avance es `updated_at`, que cada bloque de 500 filas mueve al sumar
+     * `processed_rows`. Como la Action pone el estado al empezar el job, y la cola corta todo job que pasa de su tiempo
+     * máximo, un lote así ya no lo trabaja ningún job: el proceso murió sin que corriera su failed() (sin memoria, un
+     * despliegue) y nadie lo va a terminar. El margen deja que la cola lo marque fallida primero cuando sí puede (el
+     * `retry_after` de la conexión, 1860 s, entrega otra vez el job muerto y su failed() corre). Supuesto por confirmar:
+     * el tiempo máximo más diez minutos.
+     */
+    public function stalled(ImportBatch $batch): bool
+    {
+        $timeout = match ($batch->status) {
+            BatchStatus::Validating => ValidateQueuedBatch::TIMEOUT,
+            BatchStatus::Applying => ApplyQueuedBatch::TIMEOUT,
+            default => null,
+        };
+
+        return $timeout !== null && $batch->updated_at->lt(now()->subSeconds($timeout)->subMinutes(self::STALL_MARGIN_MINUTES));
+    }
+
+    /**
+     * Quienes escribieron la aplicación del lote: quien la empezó (`applied_by`) y quien la reanudó después de atorarse
+     * (la bitácora `retried` de la aplicación, RetryStalledBatch), sin repetir. Cada uno escribió a su nombre su parte,
+     * así que lo que salió de ella (las invitaciones de los correos) se busca a nombre de todos.
+     *
+     * @return list<string>
+     */
+    public function appliers(ImportBatch $batch): array
+    {
+        return Activity::query()
+            ->where('subject_type', $batch->getMorphClass())
+            ->where('subject_id', $batch->getKey())
+            ->where('event', 'retried')
+            ->where('properties->stage', BatchStatus::Applying->value)
+            ->pluck('causer_id')
+            ->prepend($batch->applied_by)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**

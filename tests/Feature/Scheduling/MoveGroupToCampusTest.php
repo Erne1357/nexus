@@ -100,7 +100,7 @@ it('MS9: se rechaza si alguna de sus sesiones tiene salón', function () {
 it('MS9: se rechaza si la carga no está abierta', function () {
     $this->load->update(['status' => LoadStatus::Published]);
 
-    expect(fn () => moveGroup())->toThrow(ValidationException::class, 'La carga de Sistemas y Computación en Presencial está en publicada: no se editan grupos.')
+    expect(fn () => moveGroup())->toThrow(ValidationException::class, 'La carga de Sistemas y Computación en Presencial ya está publicada: no se editan grupos.')
         ->and($this->group->fresh()->campus_id)->toBe($this->c2->id);
 });
 

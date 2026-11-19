@@ -81,6 +81,13 @@ it('hay docentes de cada departamento, inactivos, borrados, sin correo, sin grad
         ->and($teachers->contains(fn (array $teacher) => mb_strlen($teacher['name']) > 80))->toBeTrue();
 });
 
+it('unos pocos docentes no traen correo institucional, y son los mismos con cualquier semilla', function () {
+    $without = fn (int $seed): array => array_column(array_filter(roster(200, seed: $seed), fn (array $teacher): bool => ! $teacher['has_institutional_email']), 'rfc');
+
+    expect(count($without(2027)))->toBeGreaterThan(0)->toBeLessThanOrEqual(10)
+        ->and($without(1))->toBe($without(2027));
+});
+
 it('la disponibilidad cae entre las 7:00 y las 21:00 de lunes a viernes, sin traslapes y con los contiguos unidos', function () {
     $blocks = collect(roster(60))->pluck('availability')->filter();
 

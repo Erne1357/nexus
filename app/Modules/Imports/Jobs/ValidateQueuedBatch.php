@@ -35,8 +35,13 @@ final class ValidateQueuedBatch implements ShouldQueue
 
     public int $tries = 1;
 
-    /** Media hora: un bloque de 500 filas tarda segundos, así que un job que llega aquí se atoró. */
-    public int $timeout = 1800;
+    /**
+     * Media hora: un bloque de 500 filas tarda segundos, así que un job que llega aquí se atoró. ImportBatchQuery::stalled()
+     * lo usa para saber cuándo ya ningún job trabaja un lote que sigue validándose.
+     */
+    public const int TIMEOUT = 1800;
+
+    public int $timeout = self::TIMEOUT;
 
     public bool $failOnTimeout = true;
 

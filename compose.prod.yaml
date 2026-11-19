@@ -21,6 +21,10 @@ x-app-environment: &app-environment
   APP_URL: https://${APP_DOMAIN:?Define APP_DOMAIN en .env (nombre público del servidor)}
   SESSION_SECURE_COOKIE: "true"
   LOG_CHANNEL: stderr
+  # El servicio del motor siempre está arriba: sin su dirección o su token, CP-SAT desaparecería sin aviso
+  # (CpSatClient::configured()), así que producción no arranca sin ellos.
+  SOLVER_URL: ${SOLVER_URL:?Define SOLVER_URL en .env (http://solver:8000, el servicio del motor en la red backend)}
+  SOLVER_TOKEN: ${SOLVER_TOKEN:?Define SOLVER_TOKEN en .env (token compartido con el servicio del motor de horarios)}
 
 services:
   # El proxy nginx del stack base es solo para desarrollo: en producción lo
