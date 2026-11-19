@@ -9,6 +9,7 @@ use App\Modules\Core\Support\WeekGrid;
 use App\Modules\Scheduling\Actions\Sessions\PlaceGroupSession;
 use App\Modules\Scheduling\Enums\SchedulingPermission;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Queries\ScheduleEditorQuery;
 use App\Modules\Scheduling\Validation\Minutes;
 use Illuminate\Validation\ValidationException;
@@ -47,6 +48,10 @@ use Mary\Traits\Toast;
  * `?grupo=` abre la modalidad y el campus del grupo. Cambiar de modalidad o de campus reabre la página sin lo elegido.
  * Sin elegir, abre en una modalidad con salones; una sin salones (sus grupos van sin campus, MS4) lo dice en lugar del
  * editor.
+ *
+ * `?solicitud=` (tarea 8.7) pone arriba la franja «Por colocar» con lo que otro módulo ya decidió para unos grupos y
+ * falta escribir: la alternativa del motor elegida en una solicitud de cambio (PendingPlacements, que liga Staffing). Es
+ * informativa: no precoloca nada; quien la abre coloca a mano con el editor de siempre.
  */
 new #[Title('Horarios')] class extends Component
 {
@@ -76,6 +81,10 @@ new #[Title('Horarios')] class extends Component
 
     #[Url(as: 'salon')]
     public string $roomId = '';
+
+    /** La llave de lo que hay por colocar (el id de una solicitud de cambio); '' nada. */
+    #[Url(as: 'solicitud')]
+    public string $placementKey = '';
 
     /** El día de la lista del celular; '' es el primero del perfil. Lo cambia el navegador. */
     #[Url(as: 'dia')]
@@ -279,8 +288,10 @@ new #[Title('Horarios')] class extends Component
      */
     public function with(): array
     {
+        $placements = $this->placementKey === '' ? null : app(PendingPlacements::class)->for(app(Actor::class), $this->placementKey);
+
         if ($this->termId === null) {
-            return ['term' => null, 'careers' => [], 'career' => null, 'message' => $this->message, 'campusCounts' => null, ...$this->scopeViewData(), 'campusCode' => $this->campus];
+            return ['term' => null, 'careers' => [], 'career' => null, 'message' => $this->message, 'campusCounts' => null, ...$this->scopeViewData(), 'campusCode' => $this->campus, 'placements' => $placements];
         }
 
         [$term, $campus, $editor, $context, $modality] = $this->context();
@@ -307,6 +318,7 @@ new #[Title('Horarios')] class extends Component
             'mobileDay' => in_array((int) $this->day, $days, true) ? (int) $this->day : $days[0],
             'chainClasses' => WeekGrid::CHAINS,
             'fills' => WeekGrid::FILLS,
+            'placements' => $placements,
         ];
     }
 

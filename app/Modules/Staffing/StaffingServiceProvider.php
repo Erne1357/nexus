@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing;
 
+use App\Modules\AcademicLoad\Database\Seeders\ReanalysisDemoSeeder;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Events\LoadTransitioning;
@@ -38,9 +39,11 @@ use App\Modules\Scheduling\Events\GroupsCreated;
 use App\Modules\Scheduling\Events\GroupTeacherChanged;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Queries\ClosingBlockersQuery;
+use App\Modules\Scheduling\Queries\PendingPlacements;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Staffing\Console\RankTerm;
 use App\Modules\Staffing\Console\RefreshTeacherLoadsCommand;
+use App\Modules\Staffing\Database\Seeders\ChangeRequestsDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\ReanalysisRepublicationDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
@@ -61,6 +64,7 @@ use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
@@ -95,6 +99,17 @@ final class StaffingServiceProvider extends ModuleServiceProvider
     protected array $policies = [
         ChangeRequest::class => ChangeRequestPolicy::class,
     ];
+
+    /**
+     * El editor de horarios muestra «por colocar» la alternativa del motor elegida en una solicitud de cambio
+     * (`?solicitud=`, tarea 8.7).
+     */
+    public function register(): void
+    {
+        parent::register();
+
+        $this->app->bind(PendingPlacements::class, ChosenAlternativePlacementsQuery::class);
+    }
 
     public function boot(): void
     {
@@ -291,6 +306,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
             new DemoStep(DemoCheckpoint::ReanalysisCases, 'Docentes cambiados, re-análisis cerrados y republicados, una devolución y una corrección en versión 3', fn (DemoContext $demo) => $demo->runSeederPerModality(ReanalysisRepublicationDemoSeeder::class, [
                 'term' => $demo->termCode,
             ])),
+            // Las solicitudes de cambio de la fase 8 (8.6 y 8.7) en la carga que el re-análisis reserva, después de sus casos.
+            new DemoStep(DemoCheckpoint::ReanalysisCases, 'Solicitudes de cambio en cada estado: con choques, con alternativas del motor, aprobadas y aplicadas', fn (DemoContext $demo) => $demo->runSeederPerModality(ChangeRequestsDemoSeeder::class, [
+                'term' => $demo->termCode,
+            ])),
         ];
     }
 
@@ -340,7 +359,31 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 ? true
                 : "{$hard} choques duros de docente."),
             ...$this->publicationChecks(),
+            $this->changeRequestsCheck(),
         ];
+    }
+
+    /**
+     * Lo que deja ChangeRequestsDemoSeeder en `reanalisis-casos`: la carga reservada para las solicitudes de cambio
+     * (ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS) en ajustes y cada escenario en su estado
+     * (ChangeRequestsDemoSeeder::problems()), con las alternativas listas y la elegida sin aplicar vigentes según la huella
+     * barata que compara la pantalla. Un volumen sin carga reservada (el demo) no tiene qué revisar y pasa.
+     */
+    private function changeRequestsCheck(): DemoCheck
+    {
+        return new DemoCheck([DemoCheckpoint::ReanalysisCases], 'La carga reservada tiene solicitudes de cambio en cada estado de la pantalla, con sus alternativas vigentes', function (DemoContext $demo): true|string {
+            $missing = [];
+
+            foreach (Modality::query()->whereIn('code', $demo->volume->modalities())->orderBy('code')->get() as $modality) {
+                foreach (ReanalysisDemoSeeder::loadsIn($demo->term()->getKey(), $modality->getKey(), [ReanalysisDemoSeeder::CASE_CHANGE_REQUESTS]) as $load) {
+                    if (($problems = ChangeRequestsDemoSeeder::problems($load)) !== []) {
+                        $missing[] = "{$load->department->code} en {$modality->code}: ".implode(', ', $problems);
+                    }
+                }
+            }
+
+            return $missing === [] ? true : implode('; ', $missing).'.';
+        });
     }
 
     /**

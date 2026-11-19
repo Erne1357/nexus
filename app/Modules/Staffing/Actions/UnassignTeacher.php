@@ -12,8 +12,10 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Quita el docente de un grupo (supuesto por confirmar: con motivo, y queda en el historial). Misma regla de estado de
- * la carga que AssignTeacher: `staffing` o `adjusting`. Marca la asignación vigente como reemplazada, llama a
- * SetGroupTeacher con null y deja bitácora con el motivo. Quién puede lo decide GroupTeacherAssignmentPolicy::create.
+ * la carga que AssignTeacher (LoadStatus::acceptsTeacherAssignment): `staffing`, `adjusting` o `reanalysis`. Marca la
+ * asignación vigente como reemplazada, llama a SetGroupTeacher con null y deja bitácora con el motivo. Quién puede lo
+ * decide GroupTeacherAssignmentPolicy::create. La llama «Quitar docente» de Asignación docente (incidencia F-02): sin
+ * docente, el grupo ya se puede cerrar en el re-análisis o cancelar al armar paralelos (CancelGroup).
  */
 final class UnassignTeacher
 {

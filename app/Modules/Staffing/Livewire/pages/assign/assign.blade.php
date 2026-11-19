@@ -2,7 +2,8 @@
     Asignación docente (tarea 3.9; maquetas C «Por materia» y A «Dos paneles» de .impeccable/mocks/staffing/jefe/; el
     alcance, maqueta U2, opción A): encabezado con el departamento, la modalidad, el periodo y la carga con su avance, y
     el filtro de campus; el aviso del estado de la carga; el renglón de la vista y los filtros, y la vista elegida. Todo lo que se pinta viene de AssignmentBoardQuery y
-    GroupRankingQuery. Mientras algún grupo a la vista espera su ranking, la página consulta cada 5 s.
+    GroupRankingQuery. Mientras algún grupo a la vista espera su ranking, la página consulta cada 5 s. Al final, el modal
+    de «Quitar docente» (staffing::assign.unassign-modal).
 
     Alpine solo mueve la vista y el foco: lleva la página al grupo de `?grupo=` (`data-scroll-to`) o al que pide
     `assign-scroll-to` («Siguiente sin docente», que además le pone el foco) y lo marca un momento con un anillo; si
@@ -73,5 +74,7 @@
         @else
             @include('staffing::assign.by-subject')
         @endif
+
+        @include('staffing::assign.unassign-modal')
     @endif
 </div>

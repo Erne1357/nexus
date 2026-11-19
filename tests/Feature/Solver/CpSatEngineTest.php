@@ -34,7 +34,8 @@ use Illuminate\Support\Sleep;
 | contrato. El servicio se simula con Http::fake() y respuestas grabadas de su API real (tests/Fixtures/solver/cpsat/,
 | sacadas con el TestClient de FastAPI sobre la entrada `tiny`: `done` trae la salida de referencia de tiny; `queued`
 | se armó con la misma función que responde GET /runs/{id}, y `rejected-day-end` a mano, con la forma de un 422 real).
-| Sleep va simulado y mueve el reloj: el tiempo de espera se prueba sin esperar.
+| Sleep va simulado y mueve el reloj: el tiempo de espera se prueba sin esperar. Antes de todo, `solve()` pregunta la
+| salud del servicio (`GET /health`): si no responde, falla de una vez (SV-08) sin gastar tiempo en la pista.
 */
 
 beforeEach(function () {
@@ -76,8 +77,9 @@ function cpsatResponse(string|array $recording, Request $request): PromiseInterf
 }
 
 /**
- * Simula el servicio: POST /solve responde `$submit`; cada GET /runs/{id} responde la siguiente de `$polls` (la última
- * se repite), y antes de responder corre `$onPoll` con el número de consulta; DELETE responde `cancelled`.
+ * Simula el servicio: GET /health responde la salud grabada; POST /solve responde `$submit`; cada GET /runs/{id} responde
+ * la siguiente de `$polls` (la última se repite), y antes de responder corre `$onPoll` con el número de consulta; DELETE
+ * responde `cancelled`.
  *
  * @param  list<string|array{status: int, body: mixed}>  $polls
  * @param  string|array{status: int, body: mixed}  $submit
@@ -88,6 +90,10 @@ function cpsatFakeService(array $polls, string|array $submit = 'submitted', ?Clo
     $poll = 0;
 
     Http::fake(function (Request $request) use ($polls, $submit, $onPoll, &$poll): PromiseInterface {
+        if (cpsatIsHealth($request)) {
+            return cpsatResponse('health', $request);
+        }
+
         if ($request->method() === 'POST') {
             return cpsatResponse($submit, $request);
         }
@@ -199,6 +205,11 @@ function cpsatTinyInput(): SolverInput
     return SolverInput::fromArray(json_decode(file_get_contents(__DIR__.'/../../Fixtures/solver/v1/tiny/input.json'), true, flags: JSON_THROW_ON_ERROR));
 }
 
+function cpsatIsHealth(Request $request): bool
+{
+    return $request->method() === 'GET' && parse_url($request->url(), PHP_URL_PATH) === '/health';
+}
+
 /**
  * Las peticiones que recibió el servicio simulado, como «MÉTODO ruta».
  *
@@ -240,7 +251,7 @@ it('envía la entrada, consulta cada segundo con su avance y devuelve la salida 
         ->and($output->toArray())->toBe(SolverOutput::fromArray(cpsatRecording('done')['body']['output'])->toArray())
         ->and($output->runId)->toBe($input->runId)
         ->and($reported)->toBe([[0, null], [40, 120]])
-        ->and(cpsatSentRequests())->toBe(['POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}", "GET /runs/{$runId}"]);
+        ->and(cpsatSentRequests())->toBe(['GET /health', 'POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}", "GET /runs/{$runId}"]);
 
     Http::assertSent(fn (Request $request): bool => $request->method() === 'POST' && $request->data() === $input->toArray());
     Sleep::assertSequence([Sleep::for(1000)->milliseconds(), Sleep::for(1000)->milliseconds()]);
@@ -252,7 +263,7 @@ it('manda el token compartido de la configuración en cada petición', function 
 
     app(CpSatEngine::class)->solve(cpsatTinyInput());
 
-    expect(Http::recorded())->toHaveCount(3)
+    expect(Http::recorded())->toHaveCount(4)
         ->and(Http::recorded()->every(fn (array $pair): bool => $pair[0]->hasHeader('Authorization', 'Bearer token-de-config')
             && str_starts_with($pair[0]->url(), 'http://motor.interno:8000/')))->toBeTrue();
 });
@@ -278,7 +289,7 @@ it('si el aviso de avance corta la corrida (cancelación), la cancela en el serv
 
     $runId = cpsatRecording('submitted')['body']['run_id'];
 
-    expect(cpsatSentRequests())->toBe(['POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}", "DELETE /runs/{$runId}"]);
+    expect(cpsatSentRequests())->toBe(['GET /health', 'POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}", "DELETE /runs/{$runId}"]);
 });
 
 it('cancela la corrida en el servicio y lanza un tiempo agotado cuando otra consulta ya no cabe en el límite más el margen', function () {
@@ -301,6 +312,10 @@ it('con el servicio colgado, cancela y lanza «no respondió a tiempo» antes de
     $hung = 0;
 
     Http::fake(function (Request $request) use ($started, $hangsAfter, &$hung): PromiseInterface {
+        if (cpsatIsHealth($request)) {
+            return cpsatResponse('health', $request);
+        }
+
         if ($request->method() !== 'GET') {
             return cpsatResponse($request->method() === 'POST' ? 'submitted' : 'cancelled', $request);
         }
@@ -327,14 +342,31 @@ it('con el servicio colgado, cancela y lanza «no respondió a tiempo» antes de
     'cerca del límite: el reintento ya no cabe' => [33, 1],
 ]);
 
-it('sin servicio (conexión rechazada) lanza que no está disponible y no reintenta el envío', function () {
-    Http::fake(['*' => Http::failedConnection('cURL error 7: Failed to connect to solver port 8000: Connection refused')]);
+it('si el envío pierde la conexión, lanza que no está disponible y no lo reintenta', function () {
+    Http::fake(fn (Request $request): PromiseInterface => cpsatResponse(cpsatIsHealth($request) ? 'health' : 'connection-lost', $request));
 
     expect(fn () => cpsatEngine()->solve(cpsatTinyInput()))
         ->toThrow(SolverServiceUnavailable::class, 'El servicio del motor no está disponible.');
 
-    expect(cpsatSentRequests())->toBe(['POST /solve']);
+    expect(cpsatSentRequests())->toBe(['GET /health', 'POST /solve']);
 });
+
+it('SV-08: con el servicio configurado pero caído, falla de una vez sin gastar la pista en la heurística ni mandar la entrada', function (array|string $health) {
+    Http::fake(fn (Request $request): PromiseInterface => cpsatResponse($health, $request));
+    $heuristic = cpsatHeuristic(cpsatHeuristicOutput(), spendSeconds: 9);
+    $started = now();
+
+    expect(fn () => cpsatEngine($heuristic)->solve(cpsatTinyInput()))
+        ->toThrow(SolverServiceUnavailable::class, 'El servicio del motor no está disponible.');
+
+    expect($heuristic->received)->toBeNull()
+        ->and(cpsatSentRequests())->toBe(['GET /health'])
+        ->and($started->diffInSeconds(now()))->toBeLessThan(1);
+})->with([
+    'sin conexión' => ['connection-lost'],
+    'error interno (500)' => [['status' => 500, 'body' => 'Internal Server Error']],
+    'otra versión del contrato' => [['status' => 200, 'body' => ['status' => 'ok', 'version' => '9.0.0', 'contract_versions' => [2], 'runs_in_progress' => 0]]],
+]);
 
 it('reintenta una consulta que perdió la conexión y sigue con la corrida', function () {
     cpsatFakeService(['connection-lost', 'done']);
@@ -344,7 +376,7 @@ it('reintenta una consulta que perdió la conexión y sigue con la corrida', fun
     $runId = cpsatRecording('submitted')['body']['run_id'];
 
     expect($output->runId)->toBe(cpsatTinyInput()->runId)
-        ->and(cpsatSentRequests())->toBe(['POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}"]);
+        ->and(cpsatSentRequests())->toBe(['GET /health', 'POST /solve', "GET /runs/{$runId}", "GET /runs/{$runId}"]);
 });
 
 it('una entrada rechazada (422) lanza el detalle legible, con la ruta de cada campo', function (string $recording, string $message) {
@@ -358,7 +390,7 @@ it('una entrada rechazada (422) lanza el detalle legible, con la ruta de cada ca
             ->and($rejected->problems)->toBe(cpsatRecording($recording)['body']['detail']);
     }
 
-    expect(cpsatSentRequests())->toBe(['POST /solve']);
+    expect(cpsatSentRequests())->toBe(['GET /health', 'POST /solve']);
 })->with([
     'dos campos' => ['rejected', 'El servicio del motor rechazó la entrada: groups[1].weekly_hours: debe ser un entero de 1 en adelante; teachers[0].remaining_hours: debe ser un entero de 0 en adelante.'],
     'bloque que no divide la jornada' => ['rejected-day-end', 'El servicio del motor rechazó la entrada: campuses[0].day_end: la jornada de 07:00 a 21:30 no se divide en bloques de 60 minutos.'],
@@ -454,7 +486,7 @@ it('en las pruebas, sin servicio configurado, el registro no trae cpsat', functi
     expect(array_map(fn ($engine): string => $engine->key(), app(EngineRegistry::class)->all()))->not->toContain(CpSatEngine::KEY);
 });
 
-it('SV-08: sin servicio, la corrida queda fallida con «El servicio del motor no está disponible.» y avisa a quien la lanzó', function () {
+it('SV-08: con el servicio configurado pero caído, la corrida queda fallida con «El servicio del motor no está disponible.» y avisa a quien la lanzó', function () {
     Notification::fake();
     Http::fake(['*' => Http::failedConnection()]);
     $run = cpsatQueuedRun();
@@ -546,14 +578,14 @@ it('si la heurística falla, la corrida sigue sin pista, con el límite completo
 });
 
 it('SV-03: si el aviso de avance corta la corrida mientras corre la heurística, la cancelación sale y no se manda nada al servicio', function () {
-    Http::fake();
+    Http::fake(['solver.test/health' => Http::response(cpsatRecording('health')['body'])]);
     $heuristic = cpsatHeuristic(cpsatHeuristicOutput(), progressCall: fn (Closure $progress) => $progress(30, 99));
 
     expect(fn () => cpsatEngine($heuristic)->solve(cpsatTinyInput(), function (): void {
         throw new SolverRunCancelled;
     }))->toThrow(SolverRunCancelled::class);
 
-    Http::assertNothingSent();
+    expect(cpsatSentRequests())->toBe(['GET /health']);
 });
 
 it('reporta el puntaje de la heurística como avance 0 mientras corre', function () {
