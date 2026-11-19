@@ -49,6 +49,9 @@ final class PhpHeuristicEngine implements SolverEngine
 
     public const string VERSION = '1.0';
 
+    /** Principio de la línea de `log` cuando se acaba el tiempo límite; NewGroupSlotQuery la reconoce por él. */
+    public const string TIMEOUT_LOG = 'Se acabó el tiempo límite';
+
     /**
      * @param  (Closure(): float)|null  $clock  segundos de un reloj monótono; las pruebas dan uno propio
      * @param  LocalSearch|null  $search  la búsqueda local; null, solo la construcción
@@ -187,7 +190,7 @@ final class PhpHeuristicEngine implements SolverEngine
         }
 
         if ($build->timedOut) {
-            $log[] = "Se acabó el tiempo límite ({$input->timeLimitSeconds} s) antes de terminar: lo colocado se validó y lo demás queda sin programar.";
+            $log[] = self::TIMEOUT_LOG." ({$input->timeLimitSeconds} s) antes de terminar: lo colocado se validó y lo demás queda sin programar.";
         }
 
         $overloaded = array_unique(array_map(fn (HardViolation $violation): ?string => $violation->teacherId,

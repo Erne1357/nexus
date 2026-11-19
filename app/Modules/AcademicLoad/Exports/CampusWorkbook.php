@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Exports;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Queries\PublishedGroup;
 use App\Modules\AcademicLoad\Queries\PublishedScheduleQuery;
+use App\Modules\AcademicLoad\Queries\PublishedWeek;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -21,10 +22,19 @@ use OpenSpout\Writer\XLSX\Writer;
  * semestre, día, horas, tipo, salón, edificio y si el salón es prestado. Solo para el personal con sesión
  * (`academic_load.load.export`; decisión del usuario del 10 de noviembre de 2026: el Excel completo, para cualquiera
  * del personal que cubre alguno de los departamentos que publicaron). Se arma con openspout, que ya usa Imports.
+ *
+ * Desde la tarea 8.5, arriba de los encabezados va «Actualizado el …» con la fecha y la hora de la publicación más
+ * reciente, y un renglón vacío para que el filtro de la hoja tome solo la tabla; la última columna, «Cambió», dice en
+ * palabras lo que le cambió al grupo en la última publicación de su carga (la línea de SnapshotDiffText::publicEntries(),
+ * sin cupos), vacía si no cambió. Sin número de versión. Los grupos cancelados no van: la hoja es lo publicado (supuesto
+ * por confirmar).
  */
 final class CampusWorkbook implements StaffExport
 {
-    public const array HEADER = ['Departamento', 'Campus', 'Clave', 'Materia', 'Grupo', 'Créditos', 'Capacidad', 'Docente', 'Carrera', 'Retícula', 'Semestre', 'Día', 'Inicio', 'Fin', 'Tipo', 'Salón', 'Edificio', 'Préstamo'];
+    public const array HEADER = ['Departamento', 'Campus', 'Clave', 'Materia', 'Grupo', 'Créditos', 'Capacidad', 'Docente', 'Carrera', 'Retícula', 'Semestre', 'Día', 'Inicio', 'Fin', 'Tipo', 'Salón', 'Edificio', 'Préstamo', 'Cambió'];
+
+    /** La forma del archivo, en su llave (como PublishedPdf::FORMAT). 2: la fecha arriba y la columna «Cambió» (tarea 8.5). */
+    public const int FORMAT = 2;
 
     /**
      * @param  list<string>  $snapshotIds
@@ -53,7 +63,7 @@ final class CampusWorkbook implements StaffExport
 
     public function key(): string
     {
-        return 'excel-'.hash('xxh128', implode('|', [$this->termId, $this->modalityId, ...$this->snapshotIds]));
+        return 'excel-'.hash('xxh128', implode('|', [self::FORMAT, $this->termId, $this->modalityId, ...$this->snapshotIds]));
     }
 
     public function filename(): string
@@ -92,6 +102,9 @@ final class CampusWorkbook implements StaffExport
             $writer = new Writer;
             $writer->openToFile($path);
             $writer->getCurrentSheet()->setName("{$this->termCode} {$this->modalityCode}");
+            $updated = PublishedWeek::updatedOn($schedule->updatedAt($schedule->groups()));
+            $writer->addRow(Row::fromValues([$updated === '' ? null : "Actualizado el {$updated}"]));
+            $writer->addRow(Row::fromValues([]));
             $writer->addRow(Row::fromValuesWithStyle(self::HEADER, (new Style)->withFontBold(true)));
 
             $profile = $schedule->profile();
@@ -112,7 +125,8 @@ final class CampusWorkbook implements StaffExport
 
     /**
      * Los renglones de un grupo: uno por sesión, o uno sin horario (también en una modalidad sin bloques de tiempo). En
-     * una modalidad sin salones, las columnas de salón van vacías en lugar de decir «Por asignar».
+     * una modalidad sin salones, las columnas de salón van vacías en lugar de decir «Por asignar». Cada renglón termina
+     * con lo que le cambió al grupo en la última publicación, o vacío.
      *
      * @return list<list<string|int|null>>
      */
@@ -133,8 +147,10 @@ final class CampusWorkbook implements StaffExport
             $owner['semester'] ?? null,
         ];
 
+        $change = $group->change?->line;
+
         if ($group->sessions === [] || ! $usesTimeBlocks) {
-            return [[...$base, null, null, null, null, null, null, null]];
+            return [[...$base, null, null, null, null, null, null, null, $change]];
         }
 
         return array_map(fn ($session): array => [
@@ -146,6 +162,7 @@ final class CampusWorkbook implements StaffExport
             $usesRooms ? ($session->room['code'] ?? ($session->kind === 'virtual' ? 'Virtual' : 'Por asignar')) : null,
             $usesRooms ? ($session->room['building']['name'] ?? null) : null,
             $usesRooms ? ($session->isLoanedTo($group->departmentId) ? 'Sí' : 'No') : null,
+            $change,
         ], $group->sessions);
     }
 }

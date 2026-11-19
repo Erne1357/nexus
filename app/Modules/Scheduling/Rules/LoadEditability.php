@@ -17,8 +17,9 @@ use PDOException;
 
 /**
  * La única regla de «grupo editable» del editor de horarios (3.5) y de los cupos (3.6): el grupo no está cancelado y
- * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en propuesta, asignación o
- * ajustes ("Aprobaciones y permisos"). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más
+ * la carga de su departamento en su modalidad y periodo (M1; AcademicLoad::ofDepartment) está en propuesta, asignación,
+ * ajustes o re-análisis ("Aprobaciones y permisos"; en re-análisis, fase 8, tarea 8.1, la carga se edita con el validador
+ * como en ajustes y la última versión publicada sigue intacta y pública). Un grupo sin fila de carga no se edita (supuesto por confirmar, lo más
  * restrictivo).
  *
  * Orden de candados: las Actions toman la carga con lockLoad() (FOR SHARE) antes de bloquear el grupo (FOR UPDATE),
@@ -28,7 +29,7 @@ use PDOException;
 final class LoadEditability
 {
     /** @var list<LoadStatus> */
-    public const array EDITABLE = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting];
+    public const array EDITABLE = [LoadStatus::Proposed, LoadStatus::Staffing, LoadStatus::Adjusting, LoadStatus::Reanalysis];
 
     private const string DEADLOCK = '40P01';
 
@@ -37,10 +38,46 @@ final class LoadEditability
      */
     public function lockLoad(Group $group): ?AcademicLoad
     {
+        return $this->lockLoadOf($group->term_id, $group->modality_id, $group->department_id);
+    }
+
+    /**
+     * Toma con FOR SHARE la carga de un departamento en una modalidad y un periodo, sin un grupo de por medio (armar
+     * paralelos, que crea y cancela grupos de toda una materia).
+     */
+    public function lockLoadOf(string $termId, string $modalityId, string $departmentId): ?AcademicLoad
+    {
         return AcademicLoad::query()
-            ->ofDepartment($group->term_id, $group->modality_id, $group->department_id)
+            ->ofDepartment($termId, $modalityId, $departmentId)
             ->sharedLock()
             ->first(['id', 'status']);
+    }
+
+    /**
+     * Toma la carga (FOR SHARE) y exige que sea editable, sin un grupo de por medio.
+     *
+     * @throws ValidationException
+     */
+    public function ensureLoad(string $termId, string $modalityId, string $departmentId, string $what, string $key): void
+    {
+        $reason = $this->loadReason($this->lockLoadOf($termId, $modalityId, $departmentId)?->status, $departmentId, $modalityId, $what);
+
+        if ($reason !== null) {
+            throw ValidationException::withMessages([$key => $reason]);
+        }
+    }
+
+    /**
+     * Por qué no se edita lo de una carga en ese estado (null si no hay carga), o null si se edita.
+     */
+    public function loadReason(?LoadStatus $status, string $departmentId, string $modalityId, string $what): ?string
+    {
+        return self::isEditable($status) ? null : self::reason(
+            $status,
+            Department::withTrashed()->whereKey($departmentId)->value('name'),
+            Modality::withTrashed()->whereKey($modalityId)->value('name'),
+            $what,
+        );
     }
 
     /**
@@ -55,13 +92,7 @@ final class LoadEditability
             throw ValidationException::withMessages([$key => "El grupo {$group->code} está cancelado: no se editan {$what}."]);
         }
 
-        $status = $this->lockLoad($group)?->status;
-        $reason = self::isEditable($status) ? null : self::reason(
-            $status,
-            Department::withTrashed()->whereKey($group->department_id)->value('name'),
-            Modality::withTrashed()->whereKey($group->modality_id)->value('name'),
-            $what,
-        );
+        $reason = $this->loadReason($this->lockLoad($group)?->status, $group->department_id, $group->modality_id, $what);
 
         if ($reason !== null) {
             throw ValidationException::withMessages([$key => $reason]);

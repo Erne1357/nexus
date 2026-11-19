@@ -77,10 +77,11 @@ it('el jefe de departamento descarga el Excel de la modalidad con un renglón po
     $reader->close();
     unlink($path);
 
-    expect($rows[0])->toBe(CampusWorkbook::HEADER)
-        ->and($rows)->toHaveCount(3)
-        ->and(array_slice($rows[1], 0, 8))->toBe(['SC', 'C2', 'AED-1026', 'Estructura de Datos', 'C', 5, 33, 'Iván Castañeda Ortiz'])
-        ->and(array_slice($rows[2], 11))->toBe(['Martes', '9:00', '11:00', 'Práctica', 'LC-2', 'Edificio de Laboratorios', 'Sí'])
+    expect($rows[0][0])->toBe('Actualizado el 12 de diciembre de 2026 a las 10:30')
+        ->and($rows[1])->toBe(CampusWorkbook::HEADER)
+        ->and($rows)->toHaveCount(4)
+        ->and(array_slice($rows[2], 0, 8))->toBe(['SC', 'C2', 'AED-1026', 'Estructura de Datos', 'C', 5, 33, 'Iván Castañeda Ortiz'])
+        ->and(array_slice($rows[3], 11, 7))->toBe(['Martes', '9:00', '11:00', 'Práctica', 'LC-2', 'Edificio de Laboratorios', 'Sí'])
         ->and(json_encode($rows, JSON_UNESCAPED_UNICODE))->not->toContain('CAOI800101AB1');
 });
 
@@ -152,7 +153,7 @@ it('la consulta ofrece los exportes del personal solo a quien tiene el permiso',
 it('en un campus sin salones el Excel deja vacías las columnas de salón, y sin bloques de tiempo da un renglón por grupo', function () {
     $group = app(PublishedScheduleQuery::class)->schedule($this->term, modalityOf('PRES'))->groups()[0];
 
-    expect(array_slice(CampusWorkbook::rows($group, 'SC', usesRooms: false)[1], 15))->toBe([null, null, null])
+    expect(array_slice(CampusWorkbook::rows($group, 'SC', usesRooms: false)[1], 15, 3))->toBe([null, null, null])
         ->and(CampusWorkbook::rows($group, 'SC', usesTimeBlocks: false))->toHaveCount(1);
 });
 

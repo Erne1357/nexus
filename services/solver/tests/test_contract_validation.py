@@ -49,6 +49,11 @@ BROKEN = {
         "posterior",
     ),
     "peso blando negativo": (_set(["soft_weights", "SC-03"], -1), "soft_weights.SC-03", "entero de 0 en adelante"),
+    "peso blando sobre el tope": (
+        _set(["soft_weights", "SC-01"], 10001),
+        "soft_weights.SC-01",
+        "debe estar entre 0 y 10 000",
+    ),
     "peso blando desconocido": (_set(["soft_weights", "SC-10"], 1), "soft_weights.SC-10", "desconocida"),
     "regla dura mal escrita": (_set(["hard_rules", 2], "HC-3"), "hard_rules[2]", "HC-"),
     "salón candidato inexistente": (
@@ -145,3 +150,45 @@ def test_una_salida_partial_admite_violaciones_duras(tiny_output: Data):
     tiny_output["hard_violations"] = [{"rule": "HC-01", "group_ids": ["g"], "message": "Docente empalmado."}]
 
     assert parse_output(tiny_output).hard_violations[0].rule == "HC-01"
+
+
+def _hint(data: Data, **changes: Any) -> dict[str, Any]:
+    hint = {
+        "group_id": data["groups"][0]["id"],
+        "day": 1,
+        "starts_at": "09:00",
+        "ends_at": "11:00",
+        "kind": "teoria",
+    }
+    return {**hint, **changes}
+
+
+def test_hint_sessions_por_omision_es_vacia_y_presente_se_acepta(tiny_input: Data):
+    assert parse_input(tiny_input).hint_sessions == []
+
+    tiny_input["hint_sessions"] = [_hint(tiny_input), _hint(tiny_input, room_id=tiny_input["rooms"][0]["id"])]
+    parsed = parse_input(tiny_input)
+
+    assert len(parsed.hint_sessions) == 2
+    assert parsed.hint_sessions[1].room_id == tiny_input["rooms"][0]["id"]
+
+
+@pytest.mark.parametrize(
+    ("changes", "path", "fragment"),
+    [
+        ({"group_id": "no-existe"}, "hint_sessions[0].group_id", "groups"),
+        ({"room_id": "no-existe"}, "hint_sessions[0].room_id", "rooms"),
+        ({"starts_at": "11:00", "ends_at": "09:00"}, "hint_sessions[0].ends_at", "posterior"),
+        ({"day": 7}, "hint_sessions[0].day", "entre 1 y 6"),
+    ],
+    ids=["grupo desconocido", "salón desconocido", "fin antes del inicio", "día 7"],
+)
+def test_una_pista_rota_se_rechaza_con_la_ruta_del_campo(
+    tiny_input: Data, changes: dict[str, Any], path: str, fragment: str
+):
+    tiny_input["hint_sessions"] = [_hint(tiny_input, **changes)]
+
+    with pytest.raises(ContractError) as raised:
+        parse_input(tiny_input)
+
+    assert fragment in dict(raised.value.problems)[path]

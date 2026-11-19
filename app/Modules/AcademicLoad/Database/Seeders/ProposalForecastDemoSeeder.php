@@ -580,13 +580,14 @@ final class ProposalForecastDemoSeeder extends Seeder
     private function subjectsToGrade(): array
     {
         return KardexRecord::query()
-            ->where('term_code', TermCode::previousRegular($this->term->code))
-            ->where('result', KardexResult::Cursando)
-            ->groupBy('subject_id')
+            ->join('subjects', 'subjects.id', '=', 'kardex_records.subject_id')
+            ->where('kardex_records.term_code', TermCode::previousRegular($this->term->code))
+            ->where('kardex_records.result', KardexResult::Cursando)
+            ->groupBy('kardex_records.subject_id', 'subjects.code')
             ->orderByRaw('count(*) desc')
-            ->orderBy('subject_id')
+            ->orderBy('subjects.code')
             ->limit(self::RECALCULATED_SUBJECTS)
-            ->pluck('subject_id')
+            ->pluck('kardex_records.subject_id')
             ->all();
     }
 

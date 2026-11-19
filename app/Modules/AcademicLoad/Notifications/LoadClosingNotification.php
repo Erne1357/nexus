@@ -32,13 +32,21 @@ abstract class LoadClosingNotification extends NexusNotification
         return 'info';
     }
 
+    /**
+     * La pantalla a la que lleva el aviso: el cierre de la carga, salvo que el aviso diga otra.
+     */
+    protected function route(): string
+    {
+        return 'staffing.closing';
+    }
+
     public function message(object $notifiable): NotificationMessage
     {
         return new NotificationMessage(
             title: $this->title(),
             body: Str::limit($this->comment ?? '', 160),
             icon: $this->icon(),
-            route: 'staffing.closing',
+            route: $this->route(),
             parameters: ['departamento' => $this->department->getKey()],
             termId: $this->load->term_id,
             tone: $this->tone(),

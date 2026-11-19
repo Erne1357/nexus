@@ -159,3 +159,47 @@ it('SV-06: la cascada alcanza a un grupo que ya se escribía cuando otro, despu�
         'g-0002' => ['HC-01: su docente ya tiene clase el miércoles de 7:00 a 8:00; se queda como está.'],
     ])->and($plan->writes())->toBe([]);
 });
+
+it('SV-06: un grupo con solo HC-08 se escribe y la violación queda en los problemas de entrada', function () {
+    $input = planInput([planGroup('g-0001'), planGroup('g-0002')]);
+
+    $plan = ApplyPlan::of($input, planOutput([
+        'g-0001' => [planSlot(1, '07:00', '09:00')],
+        'g-0002' => [planSlot(2, '07:00', '09:00')],
+    ], ['hard_violations' => [['rule' => 'HC-08', 'group_ids' => ['g-0001', 'g-0002'], 'message' => 'El docente no tiene horas libres.']]]));
+
+    expect(array_keys($plan->writes()))->toBe(['g-0001', 'g-0002'])
+        ->and($plan->kept())->toBe([])
+        ->and($plan->inputProblems)->toBe([['rule' => 'HC-08', 'group_ids' => ['g-0001', 'g-0002'], 'message' => 'El docente no tiene horas libres.']]);
+});
+
+it('SV-06: un grupo con HC-01 se retiene', function () {
+    $plan = ApplyPlan::of(planInput([planGroup('g-0001')]), planOutput(
+        ['g-0001' => [planSlot(1, '07:00', '09:00')]],
+        ['hard_violations' => [['rule' => 'HC-01', 'group_ids' => ['g-0001'], 'message' => 'Docente empalmado.']]],
+    ));
+
+    expect($plan->kept())->toBe(['g-0001' => ['HC-01: Docente empalmado.']])->and($plan->inputProblems)->toBe([]);
+});
+
+it('SV-06: un grupo con HC-08 y HC-02 se retiene solo por la de acomodo', function () {
+    $plan = ApplyPlan::of(planInput([planGroup('g-0001')]), planOutput(
+        ['g-0001' => [planSlot(1, '07:00', '09:00')]],
+        ['hard_violations' => [
+            ['rule' => 'HC-08', 'group_ids' => ['g-0001'], 'message' => 'Sin horas.'],
+            ['rule' => 'HC-02', 'group_ids' => ['g-0001'], 'message' => 'Salón empalmado.'],
+        ]],
+    ));
+
+    expect($plan->kept())->toBe(['g-0001' => ['HC-02: Salón empalmado.']])
+        ->and(array_column($plan->inputProblems, 'rule'))->toBe(['HC-08']);
+});
+
+it('SV-06: una violación dura de una regla desconocida (HC-99) retiene el grupo, que es lo seguro', function () {
+    $plan = ApplyPlan::of(planInput([planGroup('g-0001')]), planOutput(
+        ['g-0001' => [planSlot(1, '07:00', '09:00')]],
+        ['hard_violations' => [['rule' => 'HC-99', 'group_ids' => ['g-0001'], 'message' => 'Regla nueva.']]],
+    ));
+
+    expect($plan->kept())->toBe(['g-0001' => ['HC-99: Regla nueva.']])->and($plan->inputProblems)->toBe([]);
+});

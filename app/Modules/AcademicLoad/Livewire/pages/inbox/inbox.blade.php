@@ -4,7 +4,8 @@
     campus con las carreras que piden algo en cada uno (filtra las cifras y las filas; la parte se decide una vez); el
     aviso de HC-14; a la izquierda las carreras con el estado de su parte y, a
     la derecha, lo que pide la elegida con la sugerencia de paralelos y sus botones. Desde lg los dos paneles van
-    juntos; debajo, la lista y el detalle van por separado. Todo lo que se pinta viene de DepartmentInboxQuery.
+    juntos; debajo, la lista y el detalle van por separado. Arriba de ellos, las pestañas «Bandeja · Paralelos» (tarea 8.8).
+    Todo lo que se pinta viene de DepartmentInboxQuery.
 --}}
 {{--
     Al cerrar la confirmación o un drawer (Esc, el velo, Cancelar o al decidir), el foco vuelve al botón que lo abrió
@@ -83,6 +84,8 @@
                 <span class="text-sm text-neutral">Filtra las carreras y las cifras. La parte de <span class="font-mono">{{ $inbox->department->code }}</span> se acepta o se regresa una vez, para todos sus campus.</span>
             </div>
         @endif
+
+        @include('academic-load::inbox.tabs', ['active' => 'inbox'])
 
         @if ($inbox->pendingCatalogs !== [])
             <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm" data-testid="pending-catalogs"

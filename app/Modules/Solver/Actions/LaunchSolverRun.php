@@ -41,7 +41,8 @@ use Throwable;
  * - SV-01: un departamento tiene a lo más una corrida en cola o corriendo por periodo y modalidad. Una que no se movió
  *   en RunSolver::STALE_AFTER segundos se da por perdida: queda fallida (solo si sigue en curso y sin moverse), se avisa
  *   a quien la lanzó y se lanza la nueva (supuesto por confirmar). Si dos entran a la vez, el índice único parcial
- *   detiene la segunda con el mismo mensaje. Las de carrera conviven.
+ *   detiene la segunda con el mismo mensaje. Las de carrera conviven; una de carrera vencida se da por perdida igual al
+ *   lanzar otra de su carrera o una de su departamento (supuesto por confirmar).
  * - SV-02: arma la entrada con BuildSolverInput y guarda su huella (InputFingerprint) para saber al aceptar si la carga
  *   cambió.
  *
@@ -82,8 +83,9 @@ final class LaunchSolverRun
         $engine = $this->engine($engineKey);
         $this->ensureTimeLimit($timeLimitSeconds);
 
+        $this->releaseStaleRuns($term, $modality, $owner);
+
         if ($owner instanceof Department) {
-            $this->releaseStaleRuns($term, $modality, $owner);
             $this->ensureNoRunInProgress($term, $modality, $owner);
         }
 
@@ -192,21 +194,26 @@ final class LaunchSolverRun
     }
 
     /**
-     * SV-01: las corridas del departamento en curso que no se movieron en RunSolver::STALE_AFTER segundos quedan
-     * fallidas, con aviso a quien las lanzó. Cada una se actualiza solo si sigue en curso y sin moverse, así que una que
-     * terminó en medio no se pisa ni avisa.
+     * SV-01: las corridas en curso que no se movieron en RunSolver::STALE_AFTER segundos quedan fallidas, con aviso a
+     * quien las lanzó. Al lanzar una de departamento, las de ese departamento (y la que se quedó aplicando vuelve a
+     * estar lista) y las de exploración de sus carreras; al lanzar una de carrera, las de esa carrera, siempre en el
+     * mismo periodo y modalidad. Una de carrera no tiene quien la libere de otra forma: sin esto, la que perdió su job
+     * se vería «Corriendo» para siempre (supuesto por confirmar; revisión del Riel B en #635). Cada una se actualiza solo
+     * si sigue en curso y sin moverse, así que una que terminó en medio no se pisa ni avisa.
      */
-    private function releaseStaleRuns(Term $term, Modality $modality, Department $department): void
+    private function releaseStaleRuns(Term $term, Modality $modality, Department|Career $owner): void
     {
         $limit = now()->subSeconds(RunSolver::STALE_AFTER);
 
-        $this->inProgress($term, $modality, $department)
-            ->where('status', SolverRunStatus::Applying)
-            ->where('updated_at', '<', $limit)
-            ->pluck('id')
-            ->each(fn (string $runId) => ApplySolverRunJob::release($runId, 'No terminó de aplicarse en '.intdiv(RunSolver::STALE_AFTER, 60).' minutos: se lanzó otra corrida.', $limit));
+        if ($owner instanceof Department) {
+            $this->inProgress($term, $modality, $owner)
+                ->where('status', SolverRunStatus::Applying)
+                ->where('updated_at', '<', $limit)
+                ->pluck('id')
+                ->each(fn (string $runId) => ApplySolverRunJob::release($runId, 'No terminó de aplicarse en '.intdiv(RunSolver::STALE_AFTER, 60).' minutos: se lanzó otra corrida.', $limit));
+        }
 
-        $this->inProgress($term, $modality, $department)
+        $this->releasable($term, $modality, $owner)
             ->where('updated_at', '<', $limit)
             ->pluck('id')
             ->each(function (string $runId) use ($limit): void {
@@ -225,6 +232,27 @@ final class LaunchSolverRun
                     $run->creator?->notify(new SolverRunFinished($run));
                 }
             });
+    }
+
+    /**
+     * Las corridas en cola o corriendo que se dan por perdidas al lanzar en `$owner`: las del departamento y las de sus
+     * carreras, o las de la carrera.
+     *
+     * @return Builder<SolverRun>
+     */
+    private function releasable(Term $term, Modality $modality, Department|Career $owner): Builder
+    {
+        $query = SolverRun::query()
+            ->where('term_id', $term->getKey())
+            ->where('modality_id', $modality->getKey())
+            ->whereIn('status', [SolverRunStatus::Queued, SolverRunStatus::Running]);
+
+        return $owner instanceof Career
+            ? $query->where('scope_kind', RunScope::Career)->where('career_id', $owner->getKey())
+            : $query->where(fn (Builder $scope) => $scope
+                ->where(fn (Builder $department) => $department->where('scope_kind', RunScope::Department)->where('department_id', $owner->getKey()))
+                ->orWhere(fn (Builder $career) => $career->where('scope_kind', RunScope::Career)
+                    ->whereIn('career_id', Career::withTrashed()->where('department_id', $owner->getKey())->select('id'))));
     }
 
     /**

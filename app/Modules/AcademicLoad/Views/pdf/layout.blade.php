@@ -1,6 +1,8 @@
 {{-- Marco común de los PDF de lo publicado (ADR-0021): carta, DejaVu Sans, los colores de DESIGN.md escritos aquí porque
-     DomPDF no carga app.css. Encabezado con la institución, el título y la modalidad (o el campus del filtro) y el periodo; pie con la fecha de
-     actualización y el número de página. --}}
+     DomPDF no carga app.css. Encabezado con la institución a la izquierda y, a la derecha, la modalidad (o el campus del
+     filtro) y el periodo y debajo «Actualizado el …» con la fecha y la hora de la versión vigente (tarea 8.5); pie con la
+     leyenda oficial y el número de página. `.change` es la marca discreta de un grupo que cambió en la última
+     publicación (en `info`; el nuevo en `success` y el cancelado en `error`), sin versión ni cupos. --}}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -23,18 +25,22 @@
         .mono { font-family: 'DejaVu Sans Mono', monospace; }
         .dim { color: #666567; }
         .tag { font-size: 6.5pt; color: #2b5c8a; text-transform: uppercase; letter-spacing: 0.04em; }
+        .change { font-family: 'DejaVu Sans', sans-serif; font-weight: bold; color: #2b5c8a; }
+        .change-added { color: #1f6f4f; }
+        .change-cancelled { color: #b42318; }
+        .gone { text-decoration: line-through; color: #666567; }
     </style>
 </head>
 <body>
     <header>
         <table><tr>
             <td style="border: 0; padding: 0;"><span class="brand">Nexus · Horarios</span><br><span class="org">Instituto Tecnológico de Ciudad Juárez</span></td>
-            <td style="border: 0; padding: 0; text-align: right;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}</td>
+            <td style="border: 0; padding: 0; text-align: right;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}@if ($updated)<br>Actualizado el {{ $updated }}@endif</td>
         </tr></table>
     </header>
     <footer>
         <table><tr>
-            <td style="border: 0; padding: 0;">Horarios oficiales del Instituto Tecnológico de Ciudad Juárez{{ $updated ? ' · Actualizado el '.$updated : '' }}</td>
+            <td style="border: 0; padding: 0;">Horarios oficiales del Instituto Tecnológico de Ciudad Juárez</td>
             <td style="border: 0; padding: 0; text-align: right;" class="page"></td>
         </tr></table>
     </footer>

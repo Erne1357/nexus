@@ -7,7 +7,9 @@ use App\Modules\Core\Models\ModalityProfile;
 | El diagrama de "Máquina de estados de la carga académica" (docs/proceso/proceso-propuesto.md) como datos:
 | cada par permitido y todos los demás, la matriz completa de 8 x 8, para un campus sin visto bueno de
 | Subdirección (cerrada publica directo) y para uno con él (cerrada pasa a aprobada). Cerrada, aprobada y
-| publicada se reabren a ajustes (confirmado el 10 de noviembre de 2026).
+| publicada se reabren a ajustes (confirmado el 10 de noviembre de 2026). El re-análisis (tarea 8.1) sale de publicada,
+| se cierra y sigue por el mismo camino: no publica directo (RA-03), y cerrada y aprobada también pueden devolverse a
+| re-análisis (RA-08). La flecha de re-análisis a publicada es la de cancelar sin cambios (RA-10): solo la toma CancelReanalysis.
 */
 
 const COMMON_LOAD_TRANSITIONS = [
@@ -15,14 +17,14 @@ const COMMON_LOAD_TRANSITIONS = [
     'proposed' => ['staffing'],
     'staffing' => ['adjusting', 'closed'],
     'adjusting' => ['staffing'],
-    'approved' => ['published', 'adjusting'],
+    'approved' => ['published', 'adjusting', 'reanalysis'],
     'published' => ['reanalysis', 'adjusting'],
-    'reanalysis' => ['published'],
+    'reanalysis' => ['closed', 'published'],
 ];
 
 function allowedLoadTransitions(bool $requiresApproval): array
 {
-    return [...COMMON_LOAD_TRANSITIONS, 'closed' => [$requiresApproval ? 'approved' : 'published', 'adjusting']];
+    return [...COMMON_LOAD_TRANSITIONS, 'closed' => [$requiresApproval ? 'approved' : 'published', 'adjusting', 'reanalysis']];
 }
 
 function loadProfile(bool $requiresApproval): ModalityProfile

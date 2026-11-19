@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Solver\Contract\ContractException;
+use App\Modules\Solver\Contract\RoomAgreement;
 use App\Modules\Solver\Contract\RunStatus;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
@@ -51,4 +52,33 @@ test('la tolerancia de HC-12 negativa se rechaza con su ruta', function () {
     $data['weekly_hours_tolerance'] = -1;
 
     expect(fn () => SolverInput::fromArray($data))->toThrow(ContractException::class, 'weekly_hours_tolerance');
+});
+
+test('HC-10: el préstamo de un solo grupo (`agreements[].group_id`) va y vuelve; sin él, el JSON no lo trae', function () {
+    $data = contractFixture('input');
+    $groupId = $data['groups'][0]['id'];
+    $withGroup = $data;
+    $withGroup['agreements'][0]['group_id'] = $groupId;
+
+    expect(SolverInput::fromArray($withGroup)->agreements[0]->groupId)->toBe($groupId)
+        ->and(SolverInput::fromArray($withGroup)->toArray())->toBe($withGroup)
+        ->and(RoomAgreement::fromArray(RoomAgreement::fromArray($withGroup['agreements'][0])->toArray())->toArray())->toBe($withGroup['agreements'][0])
+        ->and(SolverInput::fromArray($data)->agreements[0]->groupId)->toBeNull()
+        ->and(SolverInput::fromArray($data)->agreements[0]->toArray())->not->toHaveKey('group_id');
+});
+
+test('hint_sessions ausente vale vacío y no se emite; presente se conserva', function () {
+    $data = contractFixture('input');
+    expect(SolverInput::fromArray($data)->hintSessions)->toBe([])
+        ->and(SolverInput::fromArray($data)->toArray())->not->toHaveKey('hint_sessions');
+
+    $data['hint_sessions'] = [
+        ['group_id' => $data['groups'][0]['id'], 'day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'kind' => 'teoria'],
+        ['group_id' => $data['groups'][1]['id'], 'day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room_id' => $data['rooms'][0]['id'], 'kind' => 'teoria'],
+    ];
+
+    $input = SolverInput::fromArray($data);
+
+    expect($input->hintSessions)->toHaveCount(2)
+        ->and($input->toArray()['hint_sessions'])->toBe($data['hint_sessions']);
 });
