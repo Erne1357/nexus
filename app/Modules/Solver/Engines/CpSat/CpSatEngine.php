@@ -3,10 +3,13 @@
 namespace App\Modules\Solver\Engines\CpSat;
 
 use App\Modules\Solver\Contract\ContractException;
+use App\Modules\Solver\Contract\HintSession;
 use App\Modules\Solver\Contract\SolverInput;
 use App\Modules\Solver\Contract\SolverOutput;
+use App\Modules\Solver\Engines\PhpHeuristic\PhpHeuristicEngine;
 use App\Modules\Solver\Engines\SolverEngine;
 use Closure;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 use Throwable;
 
@@ -23,6 +26,12 @@ use Throwable;
  *   reintento empieza si no terminaría antes del límite (CpSatClient::status()); cuando ya no cabe otra, o el servicio
  *   no contesta (consultas vencidas), cancela la corrida en el servicio y lanza «no respondió a tiempo».
  * - Si el servicio no está, lanza SolverServiceUnavailable (SV-08: la corrida queda fallida con el mensaje).
+ *
+ * - Antes de mandar la entrada corre la heurística en PHP (hintEngine) sobre la misma entrada, con el 15 % del límite
+ *   (HINT_TIME_SHARE; la construcción siempre, la búsqueda local con ese tope), y manda su solución como `hint_sessions`
+ *   (solo de los grupos movibles) para que CP-SAT arranque de ahí. Lo que gastó se descuenta del límite que se manda al
+ *   servicio, sin bajar de MIN_SOLVE_SECONDS. Si la heurística falla, la corrida sigue sin pista y con el límite
+ *   completo, y queda una advertencia en el log de la aplicación. `current_sessions` y la huella no se tocan.
  *
  * Cancelar en el servicio es de buena fe: si esa petición también falla, se ignora y sale el error original. No guarda
  * estado entre corridas (Octane).
@@ -48,9 +57,19 @@ final readonly class CpSatEngine implements SolverEngine
      */
     public const int DEADLINE_MARGIN_SECONDS = 30;
 
+    /** La parte del límite que se le da a la heurística para armar la pista (la construcción siempre; la búsqueda local, con ese tope). */
+    public const float HINT_TIME_SHARE = 0.15;
+
+    /**
+     * Lo menos que se le manda a CP-SAT después de descontar a la heurística: con menos no alcanza a construir ni a
+     * mejorar la pista. Nunca pasa del límite original de la corrida.
+     */
+    public const int MIN_SOLVE_SECONDS = 10;
+
     public function __construct(
         private CpSatClient $client,
         private int $pollIntervalMs = 1000,
+        private ?SolverEngine $hintEngine = null,
     ) {}
 
     public function key(): string
@@ -75,6 +94,7 @@ final readonly class CpSatEngine implements SolverEngine
 
     public function solve(SolverInput $input, ?Closure $progress = null): SolverOutput
     {
+        $input = $this->withHint($input, $progress);
         $deadline = now()->addSeconds($input->timeLimitSeconds + self::DEADLINE_MARGIN_SECONDS);
         $runId = $this->client->submit($input->toArray());
 
@@ -106,6 +126,76 @@ final readonly class CpSatEngine implements SolverEngine
 
             Sleep::for($this->pollIntervalMs)->milliseconds();
         }
+    }
+
+    /**
+     * Corre la heurística con su parte del límite y devuelve la entrada para el servicio: con `hint_sessions` de los
+     * grupos movibles y el límite menos lo que tardó la heurística (mínimo MIN_SOLVE_SECONDS, sin pasar del original).
+     * Si la heurística falla, la entrada sale igual, sin pista y con el límite completo. Si `$progress` lanza (SV-03)
+     * mientras corre, esa excepción sale: no es un fallo de la heurística.
+     *
+     * @param  (Closure(int, ?int): void)|null  $progress
+     */
+    private function withHint(SolverInput $input, ?Closure $progress): SolverInput
+    {
+        $started = now();
+        $cancelled = null;
+        $limit = $input->timeLimitSeconds;
+        $hintInput = $this->copy($input, max(1, (int) ceil($limit * self::HINT_TIME_SHARE)), $input->hintSessions);
+
+        try {
+            $output = ($this->hintEngine ?? new PhpHeuristicEngine)->solve($hintInput, $progress === null ? null
+                : function (int $percent, ?int $score) use ($progress, &$cancelled): void {
+                    try {
+                        $progress(0, $score);
+                    } catch (Throwable $exception) {
+                        $cancelled = $exception;
+
+                        throw $exception;
+                    }
+                });
+        } catch (Throwable $exception) {
+            if ($cancelled !== null && $exception === $cancelled) {
+                throw $exception;
+            }
+
+            Log::warning('CP-SAT: la heurística en PHP falló y la corrida sigue sin pista: '.$exception->getMessage(), ['run_id' => $input->runId]);
+
+            return $input;
+        }
+
+        $movable = [];
+        foreach ($input->groups as $group) {
+            if ($group->movable) {
+                $movable[$group->id] = true;
+            }
+        }
+
+        $hints = [];
+        foreach ($output->sessions as $session) {
+            if (isset($movable[$session->groupId])) {
+                $hints[] = new HintSession($session->groupId, $session->day, $session->startsAt, $session->endsAt, $session->kind, $session->roomId);
+            }
+        }
+
+        if ($hints === []) {
+            return $input;
+        }
+
+        $spent = (int) floor(max(0, $started->diffInMilliseconds(now(), true)) / 1000);
+        $remaining = max(min($limit, self::MIN_SOLVE_SECONDS), $limit - $spent);
+
+        return $this->copy($input, $remaining, $hints);
+    }
+
+    /**
+     * @param  list<HintSession>  $hints
+     */
+    private function copy(SolverInput $input, int $timeLimitSeconds, array $hints): SolverInput
+    {
+        return new SolverInput($input->version, $input->runId, $input->termCode, $input->modalityCode, $input->campuses, $timeLimitSeconds,
+            $input->scope, $input->travelMinutes, $input->weeklyHoursTolerance, $input->groups, $input->teachers, $input->rooms,
+            $input->agreements, $input->subjectRoomDefaults, $input->hardRules, $input->softWeights, $input->options, $hints);
     }
 
     /**
