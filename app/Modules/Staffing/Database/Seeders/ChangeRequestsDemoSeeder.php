@@ -15,7 +15,10 @@ use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\RecipientsQuery;
+use App\Modules\Facilities\Actions\AddRoomBlock;
+use App\Modules\Facilities\Events\RoomBlockAdded;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Faculty\Actions\SetTeacherAvailability;
 use App\Modules\Faculty\Enums\AvailabilityKind;
 use App\Modules\Faculty\Events\AvailabilityChanged;
@@ -84,7 +87,11 @@ use InvalidArgumentException;
  *    alternativas de la otra ya no valen: al elegir una, el jefe ve «Esto cambió…».
  * 4. **Después:** primero una que la coordinación pide en el grupo de un docente que acaba de dejar disponibles solo las
  *    horas en que ya da clase (SetTeacherAvailability; la materia, de un solo tipo de sesión): el motor no encuentra otro
- *    acomodo («sin alternativa», `none`; CR-02: dejarlo como está no cuenta). Luego pendientes sin choques (de horario y de salón), con solo el aviso de traslado entre campus (SC-09, si
+ *    acomodo («sin alternativa», `none`; CR-02: dejarlo como está no cuenta). Como a la misma hora otro salón ya es otro
+ *    acomodo, se elige, entre los primeros candidatos, el grupo con menos salones libres a sus horas (con el masivo sobran
+ *    aulas a cualquier hora) y Subdirección aparta los que queden, del periodo (AddRoomBlock, ROOM_BLOCK_REASON; supuesto
+ *    por confirmar), así que no depende del volumen. Luego pendientes sin choques (de horario y de salón), con solo el
+ *    aviso de traslado entre campus (SC-09, si
  *    un docente del departamento tiene clases en otro campus), con choque duro y sus alternativas listas (de horario y de
  *    salón), con
  *    choque duro sin pedir alternativas, solo con texto, con el cálculo en la cola («En cola»; pasados
@@ -126,6 +133,9 @@ final class ChangeRequestsDemoSeeder extends Seeder
 
     public const string REOPEN_REASON = 'Se reabre a ajustes para atender las solicitudes de cambio de horario y de salón de docentes y coordinaciones.';
 
+    /** El motivo con que Subdirección aparta, a las horas del grupo de `n`, los salones a los que el motor lo podría pasar. */
+    public const string ROOM_BLOCK_REASON = 'Apartado para las prácticas de laboratorio del semestre.';
+
     /** Lo que pide: solo texto, o un horario o salón que no deja nada, que deja solo avisos o que deja choques duros. */
     private const string TEXT = 'text';
 
@@ -138,7 +148,10 @@ final class ChangeRequestsDemoSeeder extends Seeder
     /** Choque duro con el grupo del escenario que se aprueba con una alternativa y se aplica (`applied_alternative`). */
     private const string CLASH = 'clash';
 
-    /** Choque duro en el grupo de un docente que deja disponibles solo las horas en que ya da clase: sin otro acomodo. */
+    /**
+     * Choque duro en el grupo de un docente que deja disponibles solo las horas en que ya da clase, sin otro salón libre a
+     * esas horas (pick(), byFreeRooms() y reserveRooms()): sin otro acomodo.
+     */
     private const string LOCKED = 'locked';
 
     /** En qué termina. */
@@ -349,7 +362,8 @@ final class ChangeRequestsDemoSeeder extends Seeder
     /**
      * Lo que falta o no vale en la carga reservada según SCENARIOS, para la revisión del punto (StaffingServiceProvider):
      * la carga en ajustes y cada escenario en su estado (las alternativas listas y la elegida sin aplicar, vigentes según
-     * la huella barata que compara la pantalla; la de `x`, vencida). Vacío si todo está.
+     * la huella barata que compara la pantalla; las de `x`, todas vencidas, para que la que elija el jefe diga «Esto
+     * cambió…»: la pantalla solo lo descubre al elegir). Vacío si todo está.
      *
      * @return list<string>
      */
@@ -386,7 +400,7 @@ final class ChangeRequestsDemoSeeder extends Seeder
                 $scenario['target'] === self::APPLIED_BY_HAND => $chosen === null || isset($alternatives['applied']) ? 'sin alternativa acomodada a mano' : null,
                 $scenario['target'] === self::APPROVED_ALTERNATIVE => $chosen === null || ! $fresh($chosen) ? 'sin alternativa elegida vigente' : null,
                 $scenario['target'] === self::READY => $items === [] || ! array_all($items, $fresh) ? 'sin alternativas listas y vigentes' : null,
-                $scenario['target'] === self::STALE => $items === [] || array_all($items, $fresh) ? 'sin alternativas vencidas' : null,
+                $scenario['target'] === self::STALE => $items === [] || array_any($items, $fresh) ? 'sin todas sus alternativas vencidas (al elegir una vigente no sale «Esto cambió…»)' : null,
                 $scenario['target'] === self::NONE => $status !== ChangeAlternativesStatus::None ? 'el motor no la dejó sin alternativa' : null,
                 $scenario['target'] === self::QUEUED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Computing->value || isset($alternatives['started_at']) ? 'sin cálculo en la cola' : null,
                 $scenario['target'] === self::STARTED => ($alternatives['status'] ?? null) !== ChangeAlternativesStatus::Computing->value || ! isset($alternatives['started_at']) ? 'sin cálculo empezado' : null,
@@ -695,13 +709,21 @@ final class ChangeRequestsDemoSeeder extends Seeder
             ->reject(fn (Group $group): bool => $used->has($group->id) || $group->sessions->isEmpty())
             ->when($shape === self::CLASH, fn (Collection $groups) => $groups->where('campus_id', $target->campus_id))
             // Un docente que cierra su disponibilidad necesita grupo, y la materia, un solo tipo de sesión: si no, el motor da
-            // como alternativa las mismas horas con la teoría y la práctica cambiadas de lugar.
+            // como alternativa las mismas horas con la teoría y la práctica cambiadas de lugar. Con salones, cada sesión con
+            // el suyo: a una sin salón el motor le da uno, y eso ya es otro acomodo.
             ->when($shape === self::LOCKED, fn (Collection $groups) => $groups->filter(fn (Group $group): bool => $group->teacher_id !== null
-                && ((int) $group->subject?->theory_hours === 0 || (int) $group->subject?->practice_hours === 0)))
+                && ((int) $group->subject?->theory_hours === 0 || (int) $group->subject?->practice_hours === 0)
+                && (! $this->profile->usesRooms || $group->sessions->every(fn (GroupSession $session): bool => $session->room_id !== null))))
             // Los docentes con clases en otro campus se guardan para el aviso de traslado (SOFT) y van al final en los demás.
             ->sortBy(fn (Group $group): array => [isset($this->travellers[$group->teacher_id]) !== ($shape === self::SOFT), $group->campus->code !== $preferred,
                 crc32($key.'|'.implode('|', ReanalysisChangesDemoSeeder::stableKey($group)))])
             ->values();
+        $free = [];
+
+        if ($shape === self::LOCKED) {
+            [$groups, $free] = $this->byFreeRooms($groups, $scenario['by'], $perTeacher->all());
+        }
+
         $tried = 0;
 
         foreach ($groups as $group) {
@@ -726,11 +748,123 @@ final class ChangeRequestsDemoSeeder extends Seeder
             $option = $kind === ChangeRequestKind::Room ? $this->roomOption($key, $group, $shape) : $this->scheduleOption($group, $shape, $target);
 
             if ($option !== null) {
+                if ($shape === self::LOCKED) {
+                    $this->reserveRooms($key, $group, $free[$group->id] ?? []);
+                }
+
                 return [$group, $requester, ...$option];
             }
         }
 
         return null;
+    }
+
+    /**
+     * Los candidatos de LOCKED (los que tienen quien pide y quien aplicaría) con menos salones libres a sus horas primero,
+     * y esos salones por grupo (freeRooms()). Revisa hasta MAX_GROUPS en su orden y para en el primero sin ninguno: con el
+     * volumen demo casi siempre es el primero; con el masivo, donde sobran salones, ninguno sale sin libres y va el de menos.
+     *
+     * @param  Collection<int, Group>  $groups
+     * @param  array<string, int>  $perTeacher
+     * @return array{0: Collection<int, Group>, 1: array<string, list<array{0: Room, 1: GroupSession}>>}
+     */
+    private function byFreeRooms(Collection $groups, string $by, array $perTeacher): array
+    {
+        $free = [];
+
+        foreach ($groups as $group) {
+            if ($this->requester($by, $group, $perTeacher) === null || $this->scheduleApplier($group) === null) {
+                continue;
+            }
+
+            $free[$group->id] = $this->freeRooms($group);
+
+            if ($free[$group->id] === [] || count($free) >= self::MAX_GROUPS) {
+                break;
+            }
+        }
+
+        $order = array_flip(array_keys($free));
+
+        return [
+            $groups->filter(fn (Group $group): bool => isset($free[$group->id]))
+                ->sortBy(fn (Group $group): array => [count($free[$group->id]), $order[$group->id]])->values(),
+            $free,
+        ];
+    }
+
+    /**
+     * Los salones activos del campus a los que se podría pasar una sesión del grupo a la misma hora sin agregar un choque
+     * duro (el salón libre, sin bloqueo, con cupo, del tipo que pide la sesión y prestado si es de otro departamento),
+     * según el validador, que es el que revisa al final cada alternativa del motor (ProposeChangeAlternatives). Con la
+     * disponibilidad cerrada, el grupo solo cabe a sus horas de hoy, y a la misma hora otro salón ya es otro acomodo (CR-02):
+     * sin ninguno de estos, el motor no tiene alternativa. Sin salones en la modalidad, ninguno.
+     *
+     * @return list<array{0: Room, 1: GroupSession}>
+     */
+    private function freeRooms(Group $group): array
+    {
+        if (! $this->profile->usesRooms) {
+            return [];
+        }
+
+        $rooms = $this->rooms[$group->campus_id] ??= Room::query()->where('campus_id', $group->campus_id)->where('is_active', true)->orderBy('code')->get(['id', 'code']);
+        $sessions = $group->sessions->sortBy([['day', 'asc'], ['starts_at', 'asc']])->values();
+        $free = [];
+
+        foreach ($sessions as $session) {
+            foreach ($rooms as $room) {
+                if ($room->id === $session->room_id) {
+                    continue;
+                }
+
+                $candidates = $sessions->map(fn (GroupSession $current): SessionCandidate => new SessionCandidate($current->day, (string) $current->starts_at, (string) $current->ends_at,
+                    $current->id === $session->id ? $room->id : $current->room_id, $current->kind, $current->id))->all();
+
+                if ($this->added($group, $candidates)[0] === []) {
+                    $free[] = [$room, $session];
+                }
+            }
+        }
+
+        return $free;
+    }
+
+    /**
+     * Subdirección aparta los salones libres de freeRooms() a las horas del grupo, en el periodo (AddRoomBlock, con su
+     * bitácora; RoomBlockAdded se descarta: el salón está libre a esa hora, así que no abre ni cierra choques). Solo bloquea
+     * donde ninguna sesión del periodo usa el salón y no repite un bloqueo que ya está. Avisa si aun así queda un salón.
+     *
+     * @param  list<array{0: Room, 1: GroupSession}>  $free
+     */
+    private function reserveRooms(string $key, Group $group, array $free): void
+    {
+        if ($free === []) {
+            return;
+        }
+
+        $subdireccion = ReanalysisDemoSeeder::subdireccion();
+
+        foreach ($free as [$room, $session]) {
+            [$startsAt, $endsAt] = [substr((string) $session->starts_at, 0, 5), substr((string) $session->ends_at, 0, 5)];
+            $blocked = RoomBlock::query()->where('room_id', $room->id)->where('term_id', $group->term_id)->where('day', $session->day)
+                ->where('starts_at', '<', $endsAt)->where('ends_at', '>', $startsAt)->exists();
+            $used = GroupSession::query()->where('room_id', $room->id)->where('day', $session->day)->where('starts_at', '<', $endsAt)->where('ends_at', '>', $startsAt)
+                ->whereIn('group_id', Group::query()->active()->where('term_id', $group->term_id)->select('id'))->exists();
+
+            if (! $blocked && ! $used) {
+                $this->actingAs($subdireccion, fn () => Event::fakeFor(fn () => app(AddRoomBlock::class)->handle($room, [
+                    'term_id' => $group->term_id, 'day' => $session->day, 'starts_at' => $startsAt, 'ends_at' => $endsAt, 'reason' => self::ROOM_BLOCK_REASON,
+                ]), [RoomBlockAdded::class]));
+            }
+        }
+
+        $this->validator->forget();
+        $this->existing = [];
+
+        if (($left = $this->freeRooms($group)) !== []) {
+            $this->command?->warn("Solicitudes de cambio: «{$key}» puede tener alternativa: ".self::join(array_values(array_unique(array_map(fn (array $pair): string => $pair[0]->code, $left)))).' sigue libre a sus horas.');
+        }
     }
 
     /**
