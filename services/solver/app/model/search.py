@@ -408,8 +408,9 @@ def improve(
     Es lexicográfico (PS-10, confirmado el 18 de noviembre de 2026): primero los grupos programados (lo que dejó `lns`,
     que ningún vecindario quita), después la suma de los niveles del patrón y después el puntaje de toda la solución
     (`score.py`, el de PHP). El nivel no va en el objetivo con una escala: con el tope por grupo ninguno sube, así que
-    la suma tampoco, y un grupo nunca deja su patrón para bajar el puntaje. Un vecindario se acepta si los niveles no
-    suben y el puntaje baja, o si los niveles bajan.
+    la suma tampoco, y un grupo nunca deja su patrón para bajar el puntaje; si alguno está fuera de su patrón, el
+    vecindario primero busca bajar los niveles (`_improve_step`), así que regresa al que ya cabe. Un vecindario se
+    acepta si los niveles no suben y el puntaje baja, o si los niveles bajan.
 
     Cada vecindario tiene `IMPROVE_STEP_SECONDS` de CP-SAT; después de una vuelta sin mejora, el doble (hasta
     `IMPROVE_MAX_STEP_SECONDS`). Para cuando se acaba el plazo o cuando, en una vuelta sin mejora, CP-SAT probó que cada
@@ -535,8 +536,10 @@ def _improve_step(
     seed: int,
 ) -> _Step:
     """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT. Cada grupo lleva los
-    niveles hasta el que ya tiene (`keep_tiers`, PS-10). El tope de variables cuenta el dominio y el objetivo: un
-    vecindario que lo pasa se descarta."""
+    niveles hasta el que ya tiene (`keep_tiers`). Es lexicográfico (PS-10): si algún grupo del vecindario está fuera de
+    su patrón, una primera resolución busca la menor suma de niveles (así un grupo que ya cabe en su patrón regresa a
+    él) y la segunda, con esa suma como tope, el menor objetivo; cada una con la mitad del tiempo. El tope de variables
+    cuenta el dominio y el objetivo: un vecindario que lo pasa se descarta."""
     step_deadline = min(deadline, time.perf_counter() + step_seconds)
     sub = ModelData.of(_sub_input(data.source, search, movable))
     model = cp_model.CpModel()
@@ -555,22 +558,37 @@ def _improve_step(
         return _Step()
     except ModelTooLarge:
         return _Step(too_large=True)
-    model.minimize(objective.expression())
     for domain in variables.groups.values():
         hint = search.chosen.get(domain.id)
         for option in domain.options:
             model.add_hint(option.literal, (option.spread, option.block) == hint)
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = max(0.05, step_deadline - time.perf_counter())
-    solver.parameters.random_seed = seed
-    status = run_solver(solver, model, limits)
+    first: cp_model.CpSolver | None = None
+    leveled = True
+    if any(search.tiers.get(group, 0) > 0 for group in variables.groups):
+        options_of = [option for domain in variables.groups.values() for option in domain.options]
+        tiers = cp_model.LinearExpr.weighted_sum([o.literal for o in options_of], [o.tier for o in options_of])
+        model.minimize(tiers)
+        now = time.perf_counter()
+        first, status = _solve(model, now + (step_deadline - now) / 2, limits, seed)
+        if status not in FEASIBLE:
+            return _Step()
+        leveled = status == cp_model.OPTIMAL
+        model.clear_hints()
+        for option in options_of:
+            model.add_hint(option.literal, first.boolean_value(option.literal))
+        model.add(tiers <= round(first.value(tiers)))
+    model.minimize(objective.expression())
+    solver, status = _solve(model, step_deadline, limits, seed)
     if status not in FEASIBLE:
-        return _Step()
+        if first is None:
+            return _Step()
+        # Sin tiempo para el objetivo: se queda con la solución de la primera resolución, que ya baja el nivel.
+        solver, status = first, cp_model.FEASIBLE
     try:
         proposed = sessions_of(solver, variables, sub)
     except RoomAssignmentError:
         return _Step()
-    step = _Step(sessions={group: [] for group in variables.groups}, proven=status == cp_model.OPTIMAL)
+    step = _Step(sessions={group: [] for group in variables.groups}, proven=leveled and status == cp_model.OPTIMAL)
     for session in proposed:
         step.sessions[session.group_id].append(session)
     for domain in variables.groups.values():
@@ -581,3 +599,11 @@ def _improve_step(
         step.tiers[domain.id] = option.tier
 
     return step
+
+
+def _solve(model: cp_model.CpModel, deadline: float, limits: SearchLimits, seed: int) -> tuple[cp_model.CpSolver, int]:
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = max(0.05, deadline - time.perf_counter())
+    solver.parameters.random_seed = seed
+
+    return solver, run_solver(solver, model, limits)
