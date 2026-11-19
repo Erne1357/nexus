@@ -252,6 +252,32 @@ document.addEventListener('alpine:init', () => {
 
             // Cada página llega con su menú: la entrada activa, a la vista en la columna.
             requestAnimationFrame(() => this.revealActive());
+
+            this.arriveFromLogin();
+        },
+
+        /**
+         * Primera página después de entrar con la credencial (resources/js/login.js, tarea 1.23): el login dejó la banda
+         * en su lugar sobre el fondo y avisó con nexus.entrada en sessionStorage. Aquí llega lo demás: lo de la banda
+         * que no voló (la ruta, la búsqueda y la campana) aparece y el menú y el contenido suben un poco.
+         */
+        arriveFromLogin() {
+            let arriving = false;
+            try {
+                arriving = window.sessionStorage.getItem('nexus.entrada') === '1';
+                window.sessionStorage.removeItem('nexus.entrada');
+            } catch {
+                return;
+            }
+            if (!arriving || reducedMotion()) {
+                return;
+            }
+            const header = document.querySelector('header');
+            // Lo que no voló: todo menos la liebre, «Nexus» y la credencial.
+            const bandItems = header ? [...header.children].filter((element) => element.id !== 'nexus-hare' && element.tagName !== 'A' && !element.querySelector('#nexus-credential-toggle')) : [];
+            bandItems.forEach((element, index) => element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 260, delay: index * 30, easing: settleEasing(), fill: 'backwards' }));
+            document.getElementById('nexus-menu')?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 320, delay: 60, easing: settleEasing(), fill: 'backwards' });
+            document.getElementById('nexus-content')?.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 420, delay: 80, easing: openEasing(), fill: 'backwards' });
         },
 
         destroy() {

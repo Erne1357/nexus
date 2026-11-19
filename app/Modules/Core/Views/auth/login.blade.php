@@ -1,10 +1,19 @@
 {{--
-    Pantalla de acceso G (tarea 1.17; DESIGN.md, "Pantalla de acceso"). A la derecha, los logos del TecNM y del ITCJ,
-    la marca Nexus y el formulario; a la izquierda, los avisos del Tec sobre su foto (LG-01) y el botón de atajos (LG-02).
-    En celular el formulario va primero y los avisos debajo. El movimiento vive en resources/js/login.js (nexusLogin).
-    $notices y $shortcuts vienen de LoginScreenQuery (FortifyServiceProvider).
+    Pantalla de acceso con credencial (tarea 1.23, sobre el login G de la 1.17; DESIGN.md, "Pantalla de acceso"). A la
+    derecha, los logos en placas (core::login.plates) y la credencial que cuelga de su cinta: la cabecera azul con la
+    liebre y la marca, la ficha vacía de quien entra y el formulario; su reverso son los atajos (LG-02). A la izquierda,
+    los avisos del Tec sobre su foto (LG-01) y el botón de atajos, que voltea la credencial. En celular la credencial va
+    primero y los avisos debajo.
+
+    El movimiento y el envío viven en resources/js/login.js (nexusLogin): el formulario se manda pidiendo JSON, la ficha
+    se llena con la respuesta (LoginResponse) y la credencial se vuelve la banda antes de ir a la página. Sin
+    JavaScript el formulario entra como siempre. $notices y $shortcuts vienen de LoginScreenQuery (FortifyServiceProvider).
 --}}
-@php($fallbackPhoto = Vite::asset('resources/images/login/edificio-itcj.webp'))
+@php
+    $fallbackPhoto = Vite::asset('resources/images/login/edificio-itcj.webp');
+    $hare = Vite::asset('resources/images/liebre-512.png');
+    $hasShortcuts = $shortcuts !== [];
+@endphp
 
 <x-core::layouts.guest title="Iniciar sesión" bare>
     @push('head')
@@ -14,94 +23,208 @@
     <div
         x-data="nexusLogin({ total: {{ count($notices) }} })"
         class="grid min-h-svh lg:grid-cols-[minmax(0,1fr)_clamp(460px,42vw,720px)]"
+        style="--hare: url('{{ $hare }}')"
     >
-        {{-- Entrada --}}
+        {{-- La credencial --}}
         <main
-            class="order-1 mx-auto flex w-full max-w-[560px] flex-col bg-base-100 px-4 pt-6 pb-7 lg:order-2 lg:min-h-svh lg:max-w-none lg:px-[clamp(28px,3.4vw,56px)] lg:pt-[clamp(20px,3vh,32px)] lg:pb-[clamp(28px,5vh,56px)]"
+            class="order-1 mx-auto flex w-full max-w-[560px] flex-col bg-base-100 px-4 pt-6 pb-2 lg:order-2 lg:min-h-svh lg:max-w-none lg:px-[clamp(28px,3.4vw,56px)] lg:pt-[clamp(20px,3vh,32px)] lg:pb-[clamp(28px,5vh,56px)]"
         >
-            <x-core::login.brand />
+            <x-core::login.plates />
 
-            {{-- El formulario --}}
-            <section x-show="view === 'login'" data-login-view="login" aria-label="Iniciar sesión" class="mt-5 lg:mt-[clamp(20px,3.6vh,36px)]">
-                <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-4">
-                    @csrf
+            <div class="flex flex-1 items-center justify-center pt-[26px] lg:pt-[clamp(28px,4.5vh,48px)]">
+                <div x-ref="badge" data-login-badge class="relative w-full max-w-[460px] perspective-[1600px] lg:w-[min(clamp(400px,29vw,560px),100%)] lg:max-w-none">
+                    {{-- La cinta sube hasta arriba de la pantalla; el broche la une a la credencial --}}
+                    <span x-ref="strap" aria-hidden="true" class="absolute bottom-[calc(100%+8px)] left-1/2 -ml-1.5 h-screen w-3 bg-primary"></span>
+                    <span x-ref="clip" aria-hidden="true" class="absolute -top-3.5 left-1/2 z-10 -ml-[15px] h-7 w-[30px]">
+                        <span class="absolute inset-x-0 top-0 h-3.5 rounded-sm bg-neutral"></span>
+                        <span class="absolute top-2.5 left-1/2 -ml-1.5 h-[18px] w-3 rounded-b-[3px] bg-neutral"></span>
+                    </span>
 
-                    @if (session('status') === 'password-reset')
-                        <x-alert title="Tu contraseña quedó lista. Entra con ella." icon="o-check-circle" class="alert-success" />
-                    @endif
+                    <div x-ref="turn" class="grid transform-3d" x-bind:class="flipped && 'rotate-y-180'">
+                        {{-- Frente: la ficha y el formulario --}}
+                        <article
+                            x-ref="front"
+                            x-bind:inert="flipped"
+                            aria-labelledby="login-badge-title"
+                            class="@container col-start-1 row-start-1 flex flex-col overflow-hidden rounded-[12px] bg-base-100 shadow-[0_18px_44px_rgb(9_45_72/0.22),0_2px_6px_rgb(9_45_72/0.12)] backface-hidden"
+                        >
+                            <header x-ref="header" class="relative flex items-center gap-4 bg-primary px-[22px] pt-7 pb-[18px]">
+                                <span aria-hidden="true" class="absolute top-[9px] left-1/2 -ml-[29px] h-[9px] w-[58px] rounded-full bg-base-100"></span>
+                                <span x-ref="hare" aria-hidden="true" class="grid aspect-[9/8] w-[clamp(62px,15.5cqw,80px)] flex-none place-items-center bg-accent">
+                                    <span class="block h-[78%] w-[64%] bg-white mask-(--hare) mask-contain mask-center mask-no-repeat"></span>
+                                </span>
+                                <h1 id="login-badge-title" class="flex">
+                                    <span class="sr-only">Nexus</span>
+                                    <x-core::login.mark x-ref="mark" data-login-mark class="w-[min(52cqw,300px)]" />
+                                </h1>
+                            </header>
+                            <div x-ref="stripe" aria-hidden="true" class="h-[3px] flex-none bg-accent"></div>
 
-                    <x-input
-                        label="Usuario"
-                        name="username"
-                        :value="old('username')"
-                        error-field="username"
-                        placeholder="Control o empleado"
-                        autocomplete="username"
-                        autocapitalize="none"
-                        spellcheck="false"
-                        autofocus
-                        required
-                    />
+                            <div class="flex flex-1 flex-col gap-[18px] px-[22px] pt-5 pb-6">
+                                {{-- La ficha: vacía hasta que la persona entra --}}
+                                <div x-ref="card" aria-hidden="true" class="grid grid-cols-[70px_minmax(0,1fr)] items-start gap-4">
+                                    <div x-ref="photo" class="relative grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-base-300 bg-base-200">
+                                        <span data-ghost x-bind:class="revealed && 'opacity-0'" class="absolute inset-[16%_9%_10%] bg-secondary mask-(--hare) mask-contain mask-center mask-no-repeat"></span>
+                                        <span data-value x-text="credential.initials" x-bind:class="revealed ? 'opacity-100' : 'opacity-0'" class="relative text-[26px] font-bold tracking-[-0.02em] text-primary"></span>
+                                    </div>
+                                    <dl class="grid grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)] gap-x-3.5 gap-y-[7px]">
+                                        @foreach ([
+                                            ['label' => 'Nombre', 'key' => 'name', 'ghost' => 'w-[84%]', 'wide' => true, 'value' => 'text-[16.5px] font-bold', 'ref' => 'name'],
+                                            ['label' => 'Puesto', 'key' => 'role', 'ghost' => 'w-[64%]', 'wide' => true, 'value' => '', 'ref' => 'role'],
+                                            ['label' => 'Usuario', 'key' => 'username', 'ghost' => 'w-[70%]', 'wide' => false, 'value' => 'font-mono', 'ref' => null],
+                                            ['label' => 'Periodo', 'key' => 'term', 'ghost' => 'w-[72%]', 'wide' => false, 'value' => '', 'ref' => null],
+                                        ] as $field)
+                                            <div @class(['min-w-0', 'col-span-2' => $field['wide']])>
+                                                <dt class="text-[11.5px] font-medium tracking-[.09em] text-neutral uppercase">{{ $field['label'] }}</dt>
+                                                <dd class="relative mt-px min-h-[1.5em] text-[15px]">
+                                                    <span data-ghost x-bind:class="revealed && 'opacity-0'" class="{{ $field['ghost'] }} absolute top-1/2 left-0 -mt-[.3em] h-[.6em] rounded-[2px] bg-secondary"></span>
+                                                    <span
+                                                        data-value
+                                                        @if ($field['ref']) x-ref="{{ $field['ref'] }}" @endif
+                                                        x-text="credential.{{ $field['key'] }}"
+                                                        x-bind:class="revealed ? 'opacity-100' : 'opacity-0'"
+                                                        class="{{ $field['value'] }} block truncate"
+                                                    ></span>
+                                                </dd>
+                                            </div>
+                                        @endforeach
+                                    </dl>
+                                </div>
 
-                    <x-password
-                        label="Contraseña"
-                        name="password"
-                        error-field="password"
-                        placeholder="••••••••"
-                        autocomplete="current-password"
-                        right
-                        required
-                    />
+                                <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-4" x-on:submit.prevent="submit">
+                                    @csrf
 
-                    <div class="flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2">
-                        <a href="{{ route('password.request') }}" class="link text-[14.5px] underline-offset-3">¿Olvidaste tu contraseña?</a>
-                        <x-checkbox label="Recordarme" name="remember" value="1" :checked="(bool) old('remember')" />
+                                    @if (session('status') === 'password-reset')
+                                        <x-alert title="Tu contraseña quedó lista. Entra con ella." icon="o-check-circle" class="alert-success" />
+                                    @endif
+
+                                    <div role="alert" x-show="error" x-cloak class="alert alert-error alert-soft items-start text-[14px]">
+                                        <x-icon name="o-exclamation-circle" class="h-5 w-5" />
+                                        <span id="login-error" x-text="error"></span>
+                                    </div>
+
+                                    <x-input
+                                        label="Usuario"
+                                        name="username"
+                                        :value="old('username')"
+                                        error-field="username"
+                                        placeholder="Control o empleado"
+                                        autocomplete="username"
+                                        autocapitalize="none"
+                                        spellcheck="false"
+                                        autofocus
+                                        required
+                                    />
+
+                                    <x-password
+                                        label="Contraseña"
+                                        name="password"
+                                        error-field="password"
+                                        placeholder="••••••••"
+                                        autocomplete="current-password"
+                                        right
+                                        required
+                                    />
+
+                                    <div class="flex flex-wrap items-center justify-between gap-x-3.5 gap-y-2">
+                                        <a href="{{ route('password.request') }}" class="link text-[14.5px] underline-offset-3">¿Olvidaste tu contraseña?</a>
+                                        <x-checkbox label="Recordarme" name="remember" value="1" :checked="(bool) old('remember')" />
+                                    </div>
+
+                                    <x-button type="submit" class="btn-accent mt-2.5 h-[50px] text-[16.5px]" x-bind:aria-busy="busy ? 'true' : 'false'">
+                                        <span x-show="busy" x-cloak class="loading loading-spinner loading-sm"></span>
+                                        <span x-text="busy ? 'Entrando…' : 'Entrar'">Entrar</span>
+                                    </x-button>
+                                </form>
+                            </div>
+                        </article>
+
+                        {{-- Reverso: los atajos (LG-02) --}}
+                        @if ($hasShortcuts)
+                            <article
+                                x-ref="back"
+                                inert
+                                x-bind:inert="!flipped"
+                                aria-labelledby="login-shortcuts-title"
+                                class="@container col-start-1 row-start-1 flex rotate-y-180 flex-col overflow-hidden rounded-[12px] bg-base-100 shadow-[0_18px_44px_rgb(9_45_72/0.22),0_2px_6px_rgb(9_45_72/0.12)] backface-hidden"
+                            >
+                                <header class="relative flex items-center gap-4 bg-primary px-[22px] pt-7 pb-[18px]">
+                                    <span aria-hidden="true" class="absolute top-[9px] left-1/2 -ml-[29px] h-[9px] w-[58px] rounded-full bg-base-100"></span>
+                                    <span aria-hidden="true" class="grid aspect-[9/8] w-[clamp(62px,15.5cqw,80px)] flex-none place-items-center bg-accent">
+                                        <span class="block h-[78%] w-[64%] bg-white mask-(--hare) mask-contain mask-center mask-no-repeat"></span>
+                                    </span>
+                                    <svg viewBox="-52 -52 2873 835" class="block h-auto w-[min(52cqw,300px)] overflow-visible" aria-hidden="true" focusable="false">
+                                        <use href="#nexus-marca-letras" class="fill-primary stroke-primary" stroke-width="88" stroke-linejoin="round" />
+                                        <use href="#nexus-marca-letras" class="fill-white stroke-white" stroke-width="56" stroke-linejoin="round" />
+                                        <use href="#nexus-marca-letras" class="fill-accent" />
+                                    </svg>
+                                </header>
+                                <div aria-hidden="true" class="h-[3px] flex-none bg-accent"></div>
+
+                                <div class="flex flex-1 flex-col px-[22px] pt-5 pb-6">
+                                    <h2 id="login-shortcuts-title" tabindex="-1" data-drop class="mb-3 text-[22px] font-bold outline-none">Atajos</h2>
+                                    <ul class="border-t border-base-300">
+                                        @foreach ($shortcuts as $shortcut)
+                                            <li data-drop class="border-b border-base-300">
+                                                <a
+                                                    href="{{ $shortcut['href'] }}"
+                                                    @if ($shortcut['download']) download @else target="_blank" rel="noopener" @endif
+                                                    class="group flex items-center gap-3.5 rounded-box px-2 py-3.5 hover:bg-base-200"
+                                                >
+                                                    <span class="grid size-[42px] shrink-0 place-items-center rounded-box bg-base-200 text-primary group-hover:bg-secondary">
+                                                        <x-icon :name="$shortcut['download'] ? 'o-arrow-down-tray' : 'o-arrow-top-right-on-square'" class="h-5 w-5" />
+                                                    </span>
+                                                    <span class="flex min-w-0 flex-1 flex-col">
+                                                        <span class="font-bold">{{ $shortcut['title'] }}</span>
+                                                        @if ($shortcut['description'])
+                                                            <span class="text-sm text-neutral">{{ $shortcut['description'] }}</span>
+                                                        @endif
+                                                    </span>
+                                                    @unless ($shortcut['download'])
+                                                        <span class="sr-only">(se abre en otra pestaña)</span>
+                                                    @endunless
+                                                </a>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                    <div class="mt-auto pt-[22px]">
+                                        <button type="button" data-drop class="btn btn-ghost -ml-2 gap-2 font-normal" x-on:click="closeShortcuts">
+                                            <x-icon name="o-arrow-left" class="h-[18px] w-[18px]" />Iniciar sesión
+                                        </button>
+                                    </div>
+                                </div>
+                            </article>
+                        @endif
                     </div>
+                </div>
+            </div>
 
-                    <x-button label="Entrar" type="submit" class="btn-accent mt-7 h-[50px] text-[16.5px]" />
-                </form>
-            </section>
-
-            {{-- Los atajos (LG-02): caen en el lugar del formulario --}}
-            @if ($shortcuts !== [])
-                <section x-show="view === 'shortcuts'" x-cloak data-login-view="shortcuts" aria-labelledby="login-shortcuts-title" class="mt-5 lg:mt-[clamp(20px,3.6vh,36px)]">
-                    <h2 id="login-shortcuts-title" tabindex="-1" data-drop class="text-[clamp(21px,1.5vw,25px)] font-bold outline-none">Atajos</h2>
-                    <ul class="mt-4 border-t border-base-300">
-                        @foreach ($shortcuts as $shortcut)
-                            <li data-drop class="border-b border-base-300">
-                                <a
-                                    href="{{ $shortcut['href'] }}"
-                                    @if ($shortcut['download']) download @else target="_blank" rel="noopener" @endif
-                                    class="flex items-center gap-3.5 rounded-box px-2 py-3.5 hover:bg-base-200"
-                                >
-                                    <span class="grid size-[42px] shrink-0 place-items-center rounded-box bg-base-200 text-primary">
-                                        <x-icon :name="$shortcut['download'] ? 'o-arrow-down-tray' : 'o-arrow-top-right-on-square'" class="h-5 w-5" />
-                                    </span>
-                                    <span class="flex min-w-0 flex-1 flex-col">
-                                        <span class="font-bold">{{ $shortcut['title'] }}</span>
-                                        @if ($shortcut['description'])
-                                            <span class="text-sm text-neutral">{{ $shortcut['description'] }}</span>
-                                        @endif
-                                    </span>
-                                    @unless ($shortcut['download'])
-                                        <span class="sr-only">(se abre en otra pestaña)</span>
-                                    @endunless
-                                </a>
-                            </li>
-                        @endforeach
-                    </ul>
-                    <button type="button" data-drop class="btn btn-ghost -ml-2 mt-5 gap-2 font-normal" x-on:click="closeShortcuts">
-                        <x-icon name="o-arrow-left" class="h-[18px] w-[18px]" />Iniciar sesión
-                    </button>
-                </section>
-            @endif
-
-            <div class="hidden lg:mt-auto lg:block"></div>
+            {{-- La banda a la que llega la credencial al entrar; la misma forma que core::components.band (cámbiense juntas) --}}
+            <template x-ref="band">
+                <div aria-hidden="true" class="fixed inset-x-0 top-0 text-sm/[1.45]">
+                    <div class="flex h-16 items-center gap-[18px] bg-band pe-5 text-band-content max-desktop:gap-3.5 max-md:h-14 max-md:gap-3 max-md:pe-2.5">
+                        <span data-arrival="hare" class="grid h-16 w-[72px] flex-none place-items-center bg-accent max-md:h-14 max-md:w-14">
+                            <span class="block size-[46px] bg-accent-content mask-(--hare) mask-contain mask-center mask-no-repeat max-md:size-[38px]"></span>
+                        </span>
+                        <span data-arrival="wordmark" class="text-xl font-bold tracking-[-0.01em] max-md:text-lg">Nexus</span>
+                        <span class="flex-1"></span>
+                        <span class="flex h-[46px] max-w-full min-w-0 items-center gap-2.5 rounded-full border border-band-content/20 ps-1.5 pe-3 max-md:h-11 max-md:px-[5px]">
+                            <span data-arrival="avatar" class="grid size-[34px] flex-none place-items-center rounded-full bg-secondary text-[13px] font-bold text-secondary-content"></span>
+                            <span class="flex min-w-0 flex-col leading-tight max-md:sr-only">
+                                <span data-arrival="name" class="truncate font-bold"></span>
+                                <span data-arrival="summary" class="text-[12.5px] whitespace-nowrap text-band-muted max-desktop:hidden"></span>
+                            </span>
+                            <x-icon name="o-chevron-down" class="h-[18px] w-[18px] flex-none max-md:hidden" />
+                        </span>
+                    </div>
+                    <div class="h-[3px] bg-accent"></div>
+                </div>
+            </template>
         </main>
 
         {{-- Avisos (LG-01) sobre la foto; sin avisos, la foto del edificio sola --}}
         @if ($notices !== [])
-            <h2 class="order-2 mx-auto mt-2 mb-2.5 w-full max-w-[560px] px-4 text-[19px] font-bold lg:hidden">Avisos</h2>
+            <h2 class="order-2 mx-auto mt-[26px] mb-2.5 w-full max-w-[560px] px-4 text-[19px] font-bold lg:hidden">Avisos</h2>
         @endif
         <section
             aria-roledescription="carrusel"
@@ -174,11 +297,12 @@
                 </div>
             @endif
 
-            @if ($shortcuts !== [])
+            @if ($hasShortcuts)
                 <button
                     type="button"
                     x-ref="shortcutsButton"
                     x-on:click="openShortcuts"
+                    aria-controls="login-shortcuts-title"
                     class="absolute top-[calc(100cqw*11/16-60px)] left-3 z-10 flex min-h-12 items-center gap-3 rounded-[12px] bg-white/90 px-3.5 py-2 text-primary shadow-[0_2px_4px_rgb(0_0_0/0.08),0_18px_40px_-18px_rgb(0_0_0/0.42)] backdrop-blur-md transition hover:-translate-y-px hover:bg-white lg:top-auto lg:bottom-[max(24px,calc(clamp(48px,17vh,170px)-58px))] lg:left-[clamp(24px,3.4vw,56px)] lg:min-h-[52px]"
                 >
                     <x-icon name="o-squares-2x2" class="h-5 w-5" />
