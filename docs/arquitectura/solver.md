@@ -437,7 +437,8 @@ Tarea 7.7. `services/solver/app/model/solve.py` resuelve una entrada de punta a 
 3. **Reserva final** (la décima parte del plazo, hasta 10 s; `_complete`):
    - Un solo modelo con todos los que no quedaron y lo demás fijo. El dominio de cada grupo solo depende de lo fijo, así que ese modelo da, de todos a la vez, las opciones que le quitó cada regla. Se arma una vez, sin plazo (de él salen los motivos), con el tope de variables y la cancelación.
    - Los que no tienen ninguna opción van a `unscheduled` con sus motivos, de la regla que más opciones le quitó a la que menos (la primera es la de `main_reason()`). Por ejemplo, «HC-09: el docente no está disponible en 139 de sus 140 opciones.» y «HC-01: el docente ya tiene clase en 1 de sus 140 opciones, con 1 grupo programado.».
-   - Los que sí tienen opciones se intentan uno por uno, con lo demás fijo y cada uno con su parte del tiempo que queda. Primero se busca su menor nivel del patrón y después, con ese nivel como tope, su menor puntaje (PS-10). Si CP-SAT prueba que ninguna opción sirve con los programados, el motivo lo dice, con las reglas que le quitaron opciones; si no alcanzó el tiempo, también.
+   - A los que sí tienen opciones, el mismo modelo los programa juntos (`_together`), con la asignación relajada y en orden lexicográfico (PS-10): primero los más programados con el menor nivel, después, con esas dos cotas, el menor puntaje. No se arma una entrada por grupo: en la carga real cuesta de 0.2 a 0.3 s cada una, y con 40 grupos que cabían y la reserva de 60 s (3 s), repartida uno por uno, no se programaba ninguno (revisión del Riel A).
+   - Si CP-SAT probó que no caben más, los que quedan dicen «No cabe con los grupos ya programados…» con las reglas que les quitaron opciones. Si no lo probó, se intentan uno por uno (`_alone`): el armado tiene hasta el fin de la reserva y las resoluciones, su parte del tiempo que queda. Si no alcanza, el motivo lo dice; también si el modelo pasa del tope de variables o la fase B no le encuentra salón.
    - Después, la fase B con objetivo ajusta los salones. Una sesión que cambia de salón lleva `changed` vuelto a calcular contra `current_sessions`.
 4. **La salida**:
    - el puntaje de `score.py`, el de PHP;
@@ -478,6 +479,8 @@ La heurística da 23 608 con su búsqueda local. Con 60 s, `lns` tardó 38 s en 
 - `infeasible` con sus grupos y reglas;
 - un grupo sin opciones (HC-05) que no tumba la corrida, y `infeasible` cuando ninguno cabe por sus reglas;
 - 40 grupos sin lugar, todos con su regla y sin armar una entrada por cada uno;
+- 40 grupos sin lugar que caben, programados juntos en una reserva de 1 s aunque intentar cada uno cueste 0.1 s;
+- si CP-SAT prueba que no caben más, el que queda dice que no cabe con los programados, con sus reglas;
 - un grupo al que le faltó tiempo en la reserva dice que faltó tiempo, y la corrida es `partial`;
 - HC-08 una sola vez por grupo;
 - los motivos de un caso a mano;

@@ -28,7 +28,7 @@ from .constraints import add_hard_constraints
 from .data import ModelData
 from .objective import add_objective
 from .pattern import minutes
-from .phases import FEASIBLE, SearchLimits, run_solver
+from .phases import FEASIBLE, SearchLimits, run_solver, solve_until
 from .room_model import improve_rooms_scored
 from .rooms import RoomAssignmentError
 from .score import Score, SoftScorer
@@ -569,7 +569,7 @@ def _improve_step(
         tiers = cp_model.LinearExpr.weighted_sum([o.literal for o in options_of], [o.tier for o in options_of])
         model.minimize(tiers)
         now = time.perf_counter()
-        first, status = _solve(model, now + (step_deadline - now) / 2, limits, seed)
+        first, status = solve_until(model, now + (step_deadline - now) / 2, limits, seed)
         if status not in FEASIBLE:
             return _Step()
         leveled = status == cp_model.OPTIMAL
@@ -578,7 +578,7 @@ def _improve_step(
             model.add_hint(option.literal, first.boolean_value(option.literal))
         model.add(tiers <= round(first.value(tiers)))
     model.minimize(objective.expression())
-    solver, status = _solve(model, step_deadline, limits, seed)
+    solver, status = solve_until(model, step_deadline, limits, seed)
     if status not in FEASIBLE:
         if first is None:
             return _Step()
@@ -599,11 +599,3 @@ def _improve_step(
         step.tiers[domain.id] = option.tier
 
     return step
-
-
-def _solve(model: cp_model.CpModel, deadline: float, limits: SearchLimits, seed: int) -> tuple[cp_model.CpSolver, int]:
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = max(0.05, deadline - time.perf_counter())
-    solver.parameters.random_seed = seed
-
-    return solver, run_solver(solver, model, limits)

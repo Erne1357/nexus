@@ -337,3 +337,73 @@ def test_sin_todos_programados_no_hay_mejor_puntaje_ni_soluciones_completas():
     assert partial.metrics.intermediate_solutions == 0
     complete = CpSatEngine().solve(fixture("tiny")[0], context())
     assert complete.metrics.intermediate_solutions >= 1
+
+
+def test_la_reserva_programa_juntos_a_muchos_grupos_que_caben_sin_armar_uno_por_uno(monkeypatch):
+    """Revisión del Riel A: armar la entrada de un grupo cuesta de 0.2 a 0.3 s en la carga real, así que con 40 grupos
+    que caben y la reserva repartida uno por uno no se programaba ninguno. Aquí cada intento por grupo (`_alone`)
+    cuesta 0.1 s de más: en una reserva de 1 s, el modelo de la reserva los programa juntos a los 40, sin duras, y
+    `_alone` no se llama."""
+    from app.model import solve as solve_module
+    from app.model.data import ModelData
+    from app.model.phases import SearchLimits
+    from app.model.search import Search
+
+    alone = solve_module._alone
+    tried: list[str] = []
+
+    def slow(data, search, group_id, *args):
+        tried.append(group_id)
+        time.sleep(0.1)
+        return alone(data, search, group_id, *args)
+
+    monkeypatch.setattr(solve_module, "_alone", slow)
+    groups = [group(f"g{i:02d}", 1, teacher_id=f"t{i:02d}") for i in range(40)]
+    source = parse_input(
+        instance(
+            campuses=[campus(days=[1, 2, 3, 4, 5], day_end="14:00")],
+            groups=groups,
+            teachers=[teacher(f"t{i:02d}") for i in range(40)],
+            rooms=[room(f"r{i}") for i in range(8)],
+        )
+    )
+    search = Search(unplaced=[entry["id"] for entry in groups])
+    started = time.perf_counter()
+
+    found = solve_module._complete(ModelData.of(source), search, started + 1, started + 5, SearchLimits(workers=1), 0)
+
+    assert found == {}
+    assert len(search.sessions) == 40
+    assert tried == []
+    assert hard_violations(source, search.all_sessions) == []
+    assert time.perf_counter() - started < 1.5
+
+
+def test_si_cp_sat_prueba_que_no_caben_mas_los_que_quedan_no_caben_con_los_programados():
+    """Dos grupos de una hora sin lugar y su docente solo puede el lunes a las 07:00: el modelo de la reserva programa
+    uno y prueba que no cabe otro, así que el segundo sale con «no cabe con los grupos ya programados» y sus reglas
+    (HC-09), sin intentarlo solo."""
+    from app.model.data import ModelData
+    from app.model.phases import SearchLimits
+    from app.model.search import Search
+    from app.model.solve import _complete
+
+    source = parse_input(
+        instance(
+            groups=[group("g1", 1, teacher_id="t1"), group("g2", 1, teacher_id="t1")],
+            teachers=[teacher("t1", unavailable=[slot(1, "08:00", "10:00"), slot(2, "07:00", "10:00")])],
+            rooms=[room("r1"), room("r2")],
+        )
+    )
+    search = Search(unplaced=["g1", "g2"])
+
+    found = _complete(ModelData.of(source), search, time.perf_counter() + 2, time.perf_counter() + 5, SearchLimits(), 0)
+
+    assert len(search.sessions) == 1
+    [(left, entry)] = found.items()
+    assert left not in search.sessions
+    assert entry.by_rules
+    assert (
+        entry.reasons[0] == "No cabe con los grupos ya programados: ninguna de sus 1 opciones libres sirve con ellos."
+    )
+    assert entry.reasons[1].startswith("HC-09: el docente no está disponible en 5 de sus 6 opciones")

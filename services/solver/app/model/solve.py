@@ -36,9 +36,17 @@ from .phases import FEASIBLE, SearchLimits, solve_until
 from .room_model import improve_rooms_scored
 from .rooms import RoomAssignmentError
 from .score import Score, SoftScorer
-from .search import Improvement, Search, _sub_input, improve, lns
+from .search import Improvement, Search, _keep, _sub_input, improve, lns
 from .solution import chosen_option, sessions_of
-from .variables import BuildBudget, BuildTimeout, DomainOptions, ModelTooLarge, build_variables, unit_counts
+from .variables import (
+    BuildBudget,
+    BuildTimeout,
+    DomainOptions,
+    ModelTooLarge,
+    Variables,
+    build_variables,
+    unit_counts,
+)
 from .verify import hard_violations
 
 #: Hasta cuántos segundos tiene la primera vuelta de `lns`.
@@ -188,12 +196,18 @@ PLACED, NO_OPTIONS, DOES_NOT_FIT, NO_TIME = "placed", "no_options", "does_not_fi
 def _complete(
     data: ModelData, search: Search, deadline: float, run_deadline: float, limits: SearchLimits, seed: int
 ) -> dict[str, Unplaced]:
-    """Los que no quedaron, con lo demás fijo. Primero un solo modelo con todos ellos: el dominio de cada uno solo
-    depende de lo fijo, así que da las opciones que le quitó cada regla a todos a la vez, sin armar la entrada una vez
-    por grupo. Ese modelo puede usar hasta el fin de la corrida (`run_deadline`: de él salen los motivos), con el tope
-    de variables y la cancelación; si no alcanza, los que faltan dicen que no hubo tiempo. Los que no tienen opciones
-    se quedan con sus reglas; los demás se intentan uno por uno (`_alone`) hasta `deadline`, cada uno con su parte del
-    tiempo que queda. Todo grupo sin lugar lleva su motivo."""
+    """Los que no quedaron, con lo demás fijo, en un solo modelo con todos ellos:
+
+    1. El dominio de cada uno solo depende de lo fijo, así que el modelo da las opciones que le quitó cada regla a
+       todos a la vez. Se arma con hasta el fin de la corrida (`run_deadline`: de él salen los motivos), con el tope de
+       variables y la cancelación; si no alcanza, los que faltan dicen que no hubo tiempo.
+    2. Los que no tienen opciones se quedan con sus reglas.
+    3. A los que sí, el mismo modelo los programa juntos (`_together`), sin armar una entrada por grupo: armar una
+       cuesta de 0.2 a 0.3 s en la carga real, y con 40 grupos la reserva no alcanzaba.
+    4. Si CP-SAT probó que no caben más, los que quedan no caben con los programados; si no lo probó, se intentan uno
+       por uno (`_alone`) con lo que queda hasta `deadline`.
+
+    Todo grupo sin lugar lleva su motivo."""
     pending = list(search.unplaced)
     if not pending:
         return {}
@@ -202,34 +216,50 @@ def _complete(
     budget = BuildBudget(
         max_variables=limits.max_variables, deadline=run_deadline, check_cancelled=limits.check_cancelled
     )
+    model = cp_model.CpModel()
     try:
-        domains = build_variables(cp_model.CpModel(), shared, DomainOptions(all_tiers=True), budget).groups
+        variables = build_variables(model, shared, DomainOptions(all_tiers=True), budget)
     except (BuildTimeout, ModelTooLarge) as error:
         reason = "No se alcanzó a revisar por qué no cabe en el plazo de la corrida."
         if isinstance(error, ModelTooLarge):
             reason = f"No se pudo revisar por qué no cabe: {error}"
         return {group_id: Unplaced([reason], by_rules=False) for group_id in pending}
+    domains = variables.groups
     found: dict[str, Unplaced] = {}
-    candidates = [group_id for group_id in pending if domains[group_id].options]
     for group_id in pending:
         if not domains[group_id].options:
             found[group_id] = Unplaced(_reasons(data, search, group_id, domains[group_id].rejected_options), True)
     scope = {group.id for group in data.movable}
-    for index, group_id in enumerate(candidates):
+    candidates = [group_id for group_id in pending if domains[group_id].options]
+    proven = False
+    if candidates and time.perf_counter() < deadline:
+        proven = _together(shared, model, variables, search, scope, deadline, limits, seed)
+    left = [group_id for group_id in candidates if group_id not in search.sessions]
+    for index, group_id in enumerate(left):
         limits.tick()
+        options = len(domains[group_id].options)
+        rules = _reasons(data, search, group_id, domains[group_id].rejected_options, available=options)
+        if proven:
+            found[group_id] = Unplaced([_does_not_fit(options), *rules], by_rules=True)
+            continue
         now = time.perf_counter()
-        share = (deadline - now) / (len(candidates) - index)
+        solve_seconds = (deadline - now) / (len(left) - index)
         outcome, reasons = (
-            (NO_TIME, []) if share <= 0 else _alone(data, search, group_id, scope, now + share, limits, seed)
+            (NO_TIME, [])
+            if solve_seconds <= 0
+            else _alone(data, search, group_id, scope, deadline, solve_seconds, limits, seed)
         )
         if outcome == PLACED:
             continue
         if outcome == NO_TIME:
-            options = len(domains[group_id].options)
-            rules = _reasons(data, search, group_id, domains[group_id].rejected_options, available=options)
             reasons = [
-                f"No se alcanzó a programar en el plazo de la corrida; al empezar la reserva tenía {options} opciones "
-                "libres con los demás grupos fijos.",
+                *(
+                    reasons
+                    or [
+                        f"No se alcanzó a programar en el plazo de la corrida; al empezar la reserva tenía {options} "
+                        "opciones libres con los demás grupos fijos."
+                    ]
+                ),
                 *rules,
             ]
         found[group_id] = Unplaced(reasons, by_rules=outcome != NO_TIME)
@@ -238,13 +268,71 @@ def _complete(
     return {group_id: found[group_id] for group_id in search.unplaced}
 
 
+def _does_not_fit(options: int) -> str:
+    return f"No cabe con los grupos ya programados: ninguna de sus {options} opciones libres sirve con ellos."
+
+
+def _together(
+    shared: ModelData,
+    model: cp_model.CpModel,
+    variables: Variables,
+    search: Search,
+    scope: set[str],
+    deadline: float,
+    limits: SearchLimits,
+    seed: int,
+) -> bool:
+    """Programa juntos a los que no quedaron, en el modelo de los motivos, con la asignación relajada y en orden
+    lexicográfico (PS-10): una resolución maximiza los programados y, con los mismos, el menor nivel (como `lns`), con
+    la mitad del tiempo; otra, con esos programados y ese nivel como cotas, minimiza el objetivo, con la mitad de lo que
+    queda. Guarda lo que programó en la búsqueda. Devuelve si CP-SAT probó que no caben más."""
+    add_hard_constraints(model, variables, shared, relaxed=True)
+    options = [option for domain in variables.groups.values() for option in domain.options]
+    literals = [option.literal for option in options]
+    placed = cp_model.LinearExpr.sum(literals)
+    tiers = cp_model.LinearExpr.weighted_sum(literals, [option.tier for option in options])
+    per_group = 1 + sum(max((o.tier for o in d.options), default=0) for d in variables.groups.values())
+    model.maximize(per_group * placed - tiers)
+    now = time.perf_counter()
+    first, status = solve_until(model, now + (deadline - now) / 2, limits, seed)
+    if status not in FEASIBLE:
+        return False
+    proven = status == cp_model.OPTIMAL
+    solver = first
+    try:
+        objective = add_objective(model, variables, shared, scope=scope, budget=limits.budget(deadline))
+    except (BuildTimeout, ModelTooLarge):
+        objective = None
+    if objective is not None:
+        for literal in literals:
+            model.add_hint(literal, first.boolean_value(literal))
+        model.add(placed >= round(first.value(placed)))
+        model.add(tiers <= round(first.value(tiers)))
+        model.minimize(objective.expression())
+        now = time.perf_counter()
+        second, status = solve_until(model, now + (deadline - now) / 2, limits, seed)
+        if status in FEASIBLE:
+            solver = second
+
+    return _keep(search, solver, variables, shared, replace=False) and proven
+
+
 def _alone(
-    data: ModelData, search: Search, group_id: str, scope: set[str], deadline: float, limits: SearchLimits, seed: int
+    data: ModelData,
+    search: Search,
+    group_id: str,
+    scope: set[str],
+    deadline: float,
+    solve_seconds: float,
+    limits: SearchLimits,
+    seed: int,
 ) -> tuple[str, list[str]]:
-    """El grupo con todos sus niveles y los demás programados fijos. Si cabe, queda en la búsqueda (`PLACED`). Es
-    lexicográfico (PS-10): una resolución busca el menor nivel del patrón y otra, con ese nivel como tope, el menor
-    puntaje; si la segunda no termina, se queda con la primera. Si no cabe, sus motivos: sin opciones (`NO_OPTIONS`) o
-    CP-SAT probó que ninguna sirve con los demás (`DOES_NOT_FIT`). `NO_TIME` si no alcanzó el plazo."""
+    """El grupo con todos sus niveles y los demás programados fijos. Si cabe, queda en la búsqueda (`PLACED`). Se arma
+    con hasta `deadline` (el armado cuesta lo mismo con cualquier parte del tiempo), y las resoluciones tienen
+    `solve_seconds`. Es lexicográfico (PS-10): una resolución busca el menor nivel del patrón y otra, con ese nivel como
+    tope, el menor puntaje; si la segunda no termina, se queda con la primera. Si no cabe, sus motivos: sin opciones
+    (`NO_OPTIONS`) o CP-SAT probó que ninguna sirve con los demás (`DOES_NOT_FIT`). `NO_TIME` si no alcanzó el plazo,
+    con un motivo propio si el modelo pasa del tope de variables o la fase B no le encontró salón."""
     sub = ModelData.of(_sub_input(data.source, search, {group_id}))
     model = cp_model.CpModel()
     budget = limits.budget(deadline)
@@ -255,32 +343,31 @@ def _alone(
             return NO_OPTIONS, _reasons(data, search, group_id, domain.rejected_options)
         add_hard_constraints(model, variables, sub)
         objective = add_objective(model, variables, sub, scope=scope, budget=budget)
-    except (BuildTimeout, ModelTooLarge):
+    except BuildTimeout:
         return NO_TIME, []
+    except ModelTooLarge as error:
+        return NO_TIME, [f"No se pudo revisar si cabe: {error}"]
+    solve_deadline = min(deadline, time.perf_counter() + solve_seconds)
     literals = [option.literal for option in domain.options]
     tiers = cp_model.LinearExpr.weighted_sum(literals, [option.tier for option in domain.options])
     model.minimize(tiers)
-    first, status = solve_until(model, (time.perf_counter() + deadline) / 2, limits, seed)
+    first, status = solve_until(model, (time.perf_counter() + solve_deadline) / 2, limits, seed)
     if status == cp_model.INFEASIBLE:
         rules = _reasons(data, search, group_id, domain.rejected_options, available=len(domain.options))
-        return DOES_NOT_FIT, [
-            f"No cabe con los grupos ya programados: ninguna de sus {len(domain.options)} opciones libres sirve con "
-            "ellos.",
-            *rules,
-        ]
+        return DOES_NOT_FIT, [_does_not_fit(len(domain.options)), *rules]
     if status not in FEASIBLE:
         return NO_TIME, []
     for literal in literals:
         model.add_hint(literal, first.boolean_value(literal))
     model.add(tiers <= int(first.value(tiers)))
     model.minimize(objective.expression())
-    second, status = solve_until(model, deadline, limits, seed)
+    second, status = solve_until(model, solve_deadline, limits, seed)
     solver = second if status in FEASIBLE else first
     option = chosen_option(solver, domain)
     try:
         sessions = sessions_of(solver, variables, sub)
-    except RoomAssignmentError:
-        return NO_TIME, []
+    except RoomAssignmentError as error:
+        return NO_TIME, [f"La fase B no le encontró salón: {error}"]
     if option is None or not sessions:
         return NO_TIME, []
     search.sessions[group_id] = sessions
