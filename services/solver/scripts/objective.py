@@ -1,11 +1,20 @@
 """Mide el objetivo del modelo CP-SAT (tarea 7.6) con un fixture compartido: el puntaje blando total y por regla,
-como el `SoftScorer` de PHP, después de cada fase. Con `--output` escribe la salida del contrato (así se generan los
-`cpsat-output.json` de `tests/Fixtures/solver/v1`). Desde la raíz del repositorio:
+como el `SoftScorer` de PHP, después de cada fase. Desde la raíz del repositorio:
 
     docker build --target dev -t nexus-solver-dev services/solver
     docker run --rm --cpus 2 --memory 2g -e PYTHONPATH=/srv/solver \\
         -v "$PWD/services/solver:/srv/solver:ro" -v "$PWD/tests/Fixtures/solver:/fixtures:ro" \\
         nexus-solver-dev python scripts/objective.py department-multicampus --time-limit 60 --threads 2
+
+Con `--output` escribe la salida del contrato. Así se generan los `cpsat-output.json` de `tests/Fixtures/solver/v1`,
+que son fotos: las pruebas revisan que su `soft_score` sea el de `score.py` y el de PHP, no que el motor las repita.
+Para escribirlas, los fixtures van sin `:ro` y con el usuario de la máquina; `small` y `medium` van con un hilo y
+`department-multicampus` con 2 y `--compact` (una línea, para que pese menos):
+
+    docker run --rm --user "$(id -u):$(id -g)" -e PYTHONPATH=/srv/solver \\
+        -v "$PWD/services/solver:/srv/solver:ro" -v "$PWD/tests/Fixtures/solver:/fixtures" \\
+        nexus-solver-dev python scripts/objective.py medium --threads 1 \\
+        --output /fixtures/v1/medium/cpsat-output.json
 
 Las fases: `lns` programa a todos (sin objetivo), `improve` busca por vecindarios con el objetivo hasta el plazo menos
 la reserva de los salones, y `improve_rooms` (la fase B con objetivo) ajusta los salones con lo que queda.
@@ -108,12 +117,14 @@ def main(argv: list[str] | None = None) -> str:
     parser.add_argument("--threads", type=int, default=2, help="hilos de CP-SAT (2, los del servicio en compose)")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--output", help="archivo donde escribir la salida del contrato")
+    parser.add_argument("--compact", action="store_true", help="la salida en una línea, sin sangría")
     args = parser.parse_args(argv)
 
     root = Path(os.environ.get("SOLVER_FIXTURES_DIR", "/fixtures")) / "v1" / args.fixture
     output, phases = run(root, args.time_limit, args.threads, args.seed)
     if args.output:
-        Path(args.output).write_text(json.dumps(to_dict(output), indent=4, ensure_ascii=False) + "\n")
+        indent = None if args.compact else 4
+        Path(args.output).write_text(json.dumps(to_dict(output), indent=indent, ensure_ascii=False) + "\n")
     result = table(phases)
     print(result)
 

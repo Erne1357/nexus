@@ -8,10 +8,10 @@ use App\Modules\Solver\Evaluation\ContractEvaluator;
 | El puntaje blando del servicio CP-SAT es el de PHP (tarea 7.6; docs/arquitectura/solver.md, «Modelo CP-SAT:
 | objetivo»). El servicio calcula el `soft_score` de su salida con su espejo en Python de SoftScorer (`score.py`); aquí
 | el evaluador de PHP vuelve a calcularlo sobre las mismas sesiones y tiene que dar el mismo total y el mismo desglose.
-| Las salidas son las que guardó el servicio para `small` y `medium` (`cpsat-output.json`, generadas con
-| `services/solver/scripts/objective.py`) y una solución a mano que penaliza en las nueve reglas
-| (`scores/all-rules`, la de `services/solver/tests/test_model_score.py`). pytest revisa del otro lado que cada
-| `soft_score` guardado es el de `score.py`.
+| Las salidas son las que guardó el servicio para `small`, `medium` y la carga real `department-multicampus`
+| (`cpsat-output.json`, generadas con `services/solver/scripts/objective.py`) y una solución a mano que penaliza en
+| las nueve reglas (`scores/all-rules`, la de `services/solver/tests/test_model_score.py`). pytest revisa del otro
+| lado que cada `soft_score` guardado es el de `score.py`.
 */
 
 /**
@@ -59,6 +59,10 @@ it('las salidas de CP-SAT guardadas no tienen violaciones duras para el evaluado
 
     expect((new ContractEvaluator)->evaluate($data, $saved->sessions)->hardViolations)->toBe([]);
 })->with(array_filter(cpSatScoreCases(), fn (array $case): bool => str_ends_with($case[1], 'cpsat-output.json')));
+
+it('entre las salidas guardadas está la carga real de un departamento', function () {
+    expect(array_keys(cpSatScoreCases()))->toContain('small', 'medium', 'department-multicampus', 'all-rules');
+});
 
 it('la solución a mano penaliza en las nueve reglas', function () {
     [$input, $output] = cpSatScoreCases()['all-rules'];
