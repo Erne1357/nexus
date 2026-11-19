@@ -308,6 +308,31 @@ it('un servicio lleno, con el token rechazado o con un error interno lanza que n
     'error interno (500)' => [['status' => 500, 'body' => 'Internal Server Error'], 'El servicio del motor no está disponible.'],
 ]);
 
+it('si una consulta de avance falla (5xx, sin conexión o respuesta rara), cancela la corrida en el servicio antes de lanzar el error', function (array|string $failure, string $exception) {
+    cpsatFakeService(['running', $failure]);
+
+    expect(fn () => cpsatEngine()->solve(cpsatTinyInput()))->toThrow($exception);
+
+    $runId = cpsatRecording('submitted')['body']['run_id'];
+    $requests = cpsatSentRequests();
+
+    expect(end($requests))->toBe("DELETE /runs/{$runId}");
+})->with([
+    'error interno (500)' => [['status' => 500, 'body' => 'Internal Server Error'], SolverServiceUnavailable::class],
+    'puerta de enlace (502)' => [['status' => 502, 'body' => 'Bad Gateway'], SolverServiceUnavailable::class],
+    'respuesta sin estado' => [['status' => 200, 'body' => ['progress' => 10]], SolverServiceUnavailable::class],
+    'estado desconocido' => [['status' => 200, 'body' => ['run_id' => 'x', 'status' => 'paused']], CpSatRunFailed::class],
+    'sin conexión en todos los intentos' => ['connection-lost', SolverServiceUnavailable::class],
+]);
+
+it('una corrida que ya terminó en el servicio (fallida o cancelada allá) no se vuelve a cancelar', function (string $recording) {
+    cpsatFakeService(['running', $recording]);
+
+    expect(fn () => cpsatEngine()->solve(cpsatTinyInput()))->toThrow(CpSatRunFailed::class);
+
+    expect(cpsatSentRequests())->not->toContain('DELETE /runs/'.cpsatRecording('submitted')['body']['run_id']);
+})->with(['failed', 'cancelled']);
+
 it('una corrida que el servicio ya no tiene (404, se reinició) lanza que hay que volver a lanzarla', function () {
     cpsatFakeService(['running', 'not-found']);
 

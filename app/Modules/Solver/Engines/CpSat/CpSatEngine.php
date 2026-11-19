@@ -85,6 +85,12 @@ final readonly class CpSatEngine implements SolverEngine
                 $this->cancelQuietly($runId);
 
                 throw CpSatRunFailed::timedOut($exception);
+            } catch (SolverServiceUnavailable $exception) {
+                // Un 5xx, la conexión perdida en todos los intentos o una respuesta sin estado: la corrida puede seguir
+                // viva en el servicio ocupando un hilo, así que se cancela de buena fe antes de dejar salir el error.
+                $this->cancelQuietly($runId);
+
+                throw $exception;
             }
 
             if ($run['status'] === 'done') {
@@ -95,7 +101,7 @@ final readonly class CpSatEngine implements SolverEngine
                 'queued', 'running' => $this->report($runId, $run, $progress),
                 'failed' => throw CpSatRunFailed::failed($run['error'] ?? null),
                 'cancelled' => throw CpSatRunFailed::cancelledByService(),
-                default => throw CpSatRunFailed::unknownStatus($run['status']),
+                default => $this->cancelAndThrow($runId, CpSatRunFailed::unknownStatus($run['status'])),
             };
 
             Sleep::for($this->pollIntervalMs)->milliseconds();
@@ -133,6 +139,16 @@ final readonly class CpSatEngine implements SolverEngine
         }
 
         return $output->runId === $input->runId ? $output : throw CpSatRunFailed::foreignOutput();
+    }
+
+    /**
+     * Un estado que Nexus no conoce puede ser de una corrida que sigue viva en el servicio: se cancela antes del error.
+     */
+    private function cancelAndThrow(string $runId, Throwable $exception): never
+    {
+        $this->cancelQuietly($runId);
+
+        throw $exception;
     }
 
     private function cancelQuietly(string $runId): void
