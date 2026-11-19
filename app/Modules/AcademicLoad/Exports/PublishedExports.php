@@ -46,7 +46,8 @@ final class PublishedExports
 
     /**
      * En qué va: listo, fallido, en camino (Stalled si se pidió hace más de WAIT_SECONDS) o sin pedir. Una marca «en
-     * camino» sin la hora en que se pidió (de antes de la F-05) cuenta como vencida.
+     * camino» sin la hora en que se pidió (de antes de la F-05) cuenta como vencida. La hora se lee con is_numeric() y no
+     * con is_int(): el RedisStore guarda los números sin serializar y los devuelve como cadena (G-01 del recorrido 8.11).
      */
     public function state(PublishedExport $export): ExportState
     {
@@ -62,7 +63,7 @@ final class PublishedExports
 
         return match (true) {
             $requestedAt === null => ExportState::Missing,
-            ! is_int($requestedAt) || now()->getTimestamp() - $requestedAt > self::WAIT_SECONDS => ExportState::Stalled,
+            ! is_numeric($requestedAt) || now()->getTimestamp() - (int) $requestedAt > self::WAIT_SECONDS => ExportState::Stalled,
             default => ExportState::Pending,
         };
     }
