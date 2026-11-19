@@ -12,6 +12,7 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupQuota;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Scheduling\Rules\LoadEditability;
 use App\Modules\Scheduling\Rules\QuotaRules;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -40,9 +41,10 @@ use Illuminate\Validation\ValidationException;
  * - **Cerrar grupo:** suma los lugares de `relocations` a los grupos que los reciben (SetGroupQuotas) y cancela el grupo
  *   (CancelGroup: pierde su horario y sus acuerdos vivos). Uno con docente no se cierra hasta quitárselo en Asignación
  *   docente (`blockedReason`; CancelGroup tampoco lo deja).
- * - **Abrir grupo** no se aplica: llega con el motor (tarea 8.3b).
+ * - **Abrir grupo** no se aplica aquí: lleva el horario y el salón del motor y lo crea OpenReanalysisGroup (tarea 8.3b).
  *
- * Los lugares se suman a lo que el grupo tenga en ese momento, no a lo que vio la sugerencia.
+ * Los lugares se suman a lo que el grupo tenga en ese momento, no a lo que vio la sugerencia. Un deadlock de la base sale
+ * como error de validación (LoadEditability::guard()), no como un 500.
  */
 final class ApplyReanalysisSuggestion
 {
@@ -52,6 +54,7 @@ final class ApplyReanalysisSuggestion
         private readonly AssignSessionRoom $rooms,
         private readonly CancelGroup $cancel,
         private readonly QuotaRules $rules,
+        private readonly LoadEditability $editability,
     ) {}
 
     /**
@@ -63,8 +66,8 @@ final class ApplyReanalysisSuggestion
         $gate = Gate::forUser($actor);
         $gate->authorize('startReanalysis', $load);
 
-        if (! $suggestion->isApplicable()) {
-            throw ValidationException::withMessages(['suggestion' => 'Abrir un grupo llega con la sugerencia del motor: aquí todavía no se aplica.']);
+        if ($suggestion->kind === ReanalysisSuggestionKind::OpenGroup) {
+            throw ValidationException::withMessages(['suggestion' => 'Abrir un grupo se aplica con el horario y el salón que encuentre el motor.']);
         }
 
         if ($suggestion->blockedReason !== null) {
@@ -77,7 +80,7 @@ final class ApplyReanalysisSuggestion
             throw ValidationException::withMessages(['seats' => "Los lugares van de 1 a {$suggestion->maxSeats}."]);
         }
 
-        DB::transaction(function () use ($load, $suggestion, $actor, $seats, $gate): void {
+        $this->editability->guard(fn () => DB::transaction(function () use ($load, $suggestion, $actor, $seats, $gate): void {
             $status = AcademicLoad::query()->whereKey($load->getKey())->sharedLock()->first(['id', 'status'])?->status;
 
             if ($status !== LoadStatus::Reanalysis) {
@@ -94,7 +97,7 @@ final class ApplyReanalysisSuggestion
                 ReanalysisSuggestionKind::CloseGroup => $this->close($group, $groups, $suggestion, $actor, $gate),
                 ReanalysisSuggestionKind::OpenGroup => null,
             };
-        });
+        }), 'suggestion');
     }
 
     /**

@@ -7,13 +7,15 @@ use App\Modules\Scheduling\Enums\ReanalysisSuggestionKind;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorGroup;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorRoom;
 use App\Modules\Scheduling\Rules\Reanalysis\AdvisorSession;
+use App\Modules\Scheduling\Rules\Reanalysis\NewGroupBase;
 use App\Modules\Scheduling\Rules\Reanalysis\ReanalysisSuggestion;
 use App\Modules\Scheduling\Rules\ReanalysisAdvisor;
 
 /*
 | Las sugerencias del re-análisis de una materia en un campus (tarea 8.3a): con lo esperado de cada carrera (RA-04) y los
 | grupos vivos, propone ampliar un cupo dentro de HC-05 y HC-07, cambiar a un salón más grande libre a la misma hora,
-| avisa que hace falta abrir un grupo (lo trae el motor, 8.3b) y propone cerrar un grupo sobrante reubicando sus lugares.
+| propone abrir un grupo para cada carrera que sigue faltante (8.3b; su horario y salón los trae el motor) y cerrar un grupo
+| sobrante reubicando sus lugares.
 | Las carreras de primer semestre no se clasifican (RA-09) y no dan sugerencias.
 */
 
@@ -52,13 +54,23 @@ function advisorGroup(string $code, int $capacity, array $quotas, ?array $sessio
 }
 
 /**
+ * Cálculo Integral en C2 con grupos de 35, con el plan vigente de las carreras dadas (semestre 2).
+ *
+ * @param  list<string>  $careers
+ */
+function advisorOpening(array $careers = ['ISIC', 'IIND'], int $capacity = 35): NewGroupBase
+{
+    return new NewGroupBase('S', 'ACF-0902', 'C2', 'C2', $capacity, array_fill_keys($careers, ['studyPlanId' => 'plan', 'semester' => 2]));
+}
+
+/**
  * @param  list<ReanalysisRow>  $rows
  * @param  list<AdvisorGroup>  $groups
  * @return array<string, ReanalysisSuggestion>
  */
-function adviseBlock(array $rows, array $groups): array
+function adviseBlock(array $rows, array $groups, ?NewGroupBase $opening = null): array
 {
-    $suggestions = (new ReanalysisAdvisor)->advise($rows, $groups, [], DemandSettings::fromValues([]));
+    $suggestions = (new ReanalysisAdvisor)->advise($rows, $groups, [], DemandSettings::fromValues([]), $opening);
 
     return array_column(array_map(fn (ReanalysisSuggestion $suggestion): array => [$suggestion->key, $suggestion], $suggestions), 1, 0);
 }
@@ -132,19 +144,48 @@ describe('faltante', function () {
         expect($suggestions['change_room:group-A:ISIC']->effect)->toContain('Pide el préstamo de L-60 a Sistemas (HC-10).');
     });
 
-    it('si nada de lo anterior alcanza, avisa que hace falta abrir un grupo, sin acción', function () {
+    it('si nada de lo anterior alcanza, propone abrir un grupo para cada carrera que sigue faltante, con lo que le falta como cupo', function () {
         $suggestions = adviseBlock([advisorRow('ISIC', 70), advisorRow('IIND', 20)], [
             advisorGroup('A', 40, ['ISIC' => 40]),
             advisorGroup('B', 10, ['IIND' => 10], [advisorSession('s-B', null)]),
-        ]);
+        ], advisorOpening());
 
-        $open = $suggestions['open_group'];
+        $open = $suggestions['open_group:ISIC'];
 
-        expect(array_keys($suggestions))->toBe(['expand_quota:group-A:ISIC', 'open_group'])
-            ->and($open->isApplicable())->toBeFalse()
-            ->and($open->title)->toBe('Hace falta abrir un grupo')
-            ->and($open->evidence)->toBe(['ISIC: faltan 20 lugares aunque se amplíen los grupos que caben', 'IIND: faltan 10 lugares aunque se amplíen los grupos que caben'])
-            ->and($open->effect)->toBe(['Llega con la sugerencia del motor (tarea 8.3b): horario, salón y cupos por carrera.']);
+        expect(array_keys($suggestions))->toBe(['expand_quota:group-A:ISIC', 'open_group:ISIC', 'open_group:IIND'])
+            ->and($open->isApplicable())->toBeTrue()
+            ->and($open->title)->toBe('Abrir un grupo de ACF-0902 para ISIC')
+            ->and($open->careerId)->toBe('ISIC')
+            ->and($open->seats)->toBe(20)
+            ->and($open->newGroup->capacity)->toBe(35)
+            ->and($open->newGroup->seats)->toBe(20)
+            ->and($open->newGroup->studyPlanId)->toBe('plan')
+            ->and($open->newGroup->cohortKey())->toBe('plan:plan:2:C2')
+            ->and($open->evidence)->toBe(['ISIC: faltan 20 lugares aunque se amplíen los grupos que caben', 'Ningún grupo crece más: su salón no da para más y no hay uno mayor libre a su hora (HC-05)'])
+            ->and($open->effect)->toBe(['Grupo nuevo en C2, suelto, con la clave que le toque por su hora.', 'Capacidad 35 · 20 lugares para ISIC (semestre 2).', 'Sin docente: asígnalo en Asignación docente.'])
+            ->and(array_keys($open->expected))->toBe(['group-A', 'group-B'])
+            ->and($suggestions['open_group:IIND']->seats)->toBe(10);
+    });
+
+    it('el cupo del grupo nuevo llega hasta su capacidad', function () {
+        $suggestions = adviseBlock([advisorRow('ISIC', 150)], [advisorGroup('A', 50, ['ISIC' => 50])], advisorOpening(capacity: 30));
+
+        expect($suggestions['open_group:ISIC']->seats)->toBe(30)
+            ->and($suggestions['open_group:ISIC']->evidence[0])->toBe('ISIC: faltan 100 lugares aunque se amplíen los grupos que caben');
+    });
+
+    it('sin campus o sin plan vigente de la carrera, solo avisa que hace falta abrir un grupo, sin acción', function () {
+        $rows = [advisorRow('ISIC', 70)];
+        $groups = [advisorGroup('A', 50, ['ISIC' => 50])];
+        $withoutCampus = adviseBlock($rows, $groups)['open_group:ISIC'];
+        $withoutPlan = adviseBlock($rows, $groups, advisorOpening(['IIND']))['open_group:ISIC'];
+
+        expect($withoutCampus->isApplicable())->toBeFalse()
+            ->and($withoutCampus->newGroup)->toBeNull()
+            ->and($withoutCampus->title)->toBe('Hace falta abrir un grupo para ISIC')
+            ->and($withoutCampus->effect)->toBe(['Ábrelo en Horarios: la materia no tiene campus en esta modalidad.'])
+            ->and($withoutPlan->isApplicable())->toBeFalse()
+            ->and($withoutPlan->effect)->toBe(['Ábrelo en Horarios: ISIC no tiene un plan vigente con la materia.']);
     });
 
     it('dos grupos no se llevan el mismo salón a la misma hora', function () {
@@ -154,9 +195,9 @@ describe('faltante', function () {
             advisorGroup('B', 50, ['ISIC' => 50], [advisorSession('s-B', advisorRoom('R-B', 50), [$big])]),
         ]);
 
-        expect(array_keys($suggestions))->toBe(['change_room:group-A:ISIC', 'open_group'])
+        expect(array_keys($suggestions))->toBe(['change_room:group-A:ISIC', 'open_group:ISIC'])
             ->and($suggestions['change_room:group-A:ISIC']->seats)->toBe(40)
-            ->and($suggestions['open_group']->evidence)->toBe(['ISIC: faltan 60 lugares aunque se amplíen los grupos que caben']);
+            ->and($suggestions['open_group:ISIC']->evidence[0])->toBe('ISIC: faltan 60 lugares aunque se amplíen los grupos que caben');
     });
 });
 
