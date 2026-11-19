@@ -120,3 +120,16 @@ it('SV-02: cambia cuando cambia algo de lo que define la vigencia', function (Cl
         return $data;
     }],
 ]);
+
+it('SV-02: no cambia con la solución inicial sugerida (hint_sessions)', function () {
+    $with = fingerprintInput(function (array $data): array {
+        $data['hint_sessions'] = [
+            ['group_id' => $data['groups'][0]['id'], 'day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00', 'kind' => 'teoria'],
+        ];
+
+        return $data;
+    });
+
+    expect($with->hintSessions)->toHaveCount(1)
+        ->and(InputFingerprint::of($with))->toBe(InputFingerprint::of(fingerprintInput()));
+});

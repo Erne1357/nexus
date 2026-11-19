@@ -15,6 +15,7 @@ final readonly class SolverInput
      * @param  list<RoomAgreement>  $agreements
      * @param  list<SubjectRoomDefault>  $subjectRoomDefaults
      * @param  list<string>  $hardRules  Identificadores HC activos.
+     * @param  list<HintSession>  $hintSessions  Solución inicial sugerida (opcional; el motor puede ignorarla).
      */
     public function __construct(
         public int $version,
@@ -34,6 +35,7 @@ final readonly class SolverInput
         public array $hardRules,
         public SoftWeights $softWeights,
         public SolverOptions $options,
+        public array $hintSessions = [],
     ) {}
 
     /**
@@ -64,6 +66,7 @@ final readonly class SolverInput
             self::hardRules($data, $path),
             SoftWeights::fromArray(ContractFields::object($data, 'soft_weights', $path), ContractFields::path($path, 'soft_weights')),
             SolverOptions::fromArray(is_array($data['options'] ?? null) ? $data['options'] : [], ContractFields::path($path, 'options')),
+            ContractFields::objects($data, 'hint_sessions', $path, HintSession::class, false),
         );
 
         $input->assertConsistent($path);
@@ -108,6 +111,7 @@ final readonly class SolverInput
         }
 
         $groupIds = [];
+        $allGroupIds = array_map(fn (GroupInput $g): string => $g->id, $this->groups);
         foreach ($this->groups as $i => $group) {
             $at = ContractFields::path(ContractFields::path($path, 'groups'), $i);
             if (! in_array($group->campusCode, $campusCodes, true)) {
@@ -131,6 +135,16 @@ final readonly class SolverInput
                 }
             }
         }
+
+        foreach ($this->hintSessions as $i => $hint) {
+            $at = ContractFields::path(ContractFields::path($path, 'hint_sessions'), $i);
+            if (! in_array($hint->groupId, $allGroupIds, true)) {
+                throw ContractException::at(ContractFields::path($at, 'group_id'), 'el grupo no está en groups');
+            }
+            if ($hint->roomId !== null && ! in_array($hint->roomId, $roomIds, true)) {
+                throw ContractException::at(ContractFields::path($at, 'room_id'), 'el salón no está en rooms');
+            }
+        }
     }
 
     /**
@@ -140,7 +154,7 @@ final readonly class SolverInput
     {
         $each = fn (array $list): array => array_map(fn (object $o): array => $o->toArray(), $list);
 
-        return [
+        $array = [
             'version' => $this->version,
             'run_id' => $this->runId,
             'term' => ['code' => $this->termCode],
@@ -159,5 +173,11 @@ final readonly class SolverInput
             'soft_weights' => $this->softWeights->toArray(),
             'options' => $this->options->toArray(),
         ];
+
+        if ($this->hintSessions !== []) {
+            $array['hint_sessions'] = $each($this->hintSessions);
+        }
+
+        return $array;
     }
 }
