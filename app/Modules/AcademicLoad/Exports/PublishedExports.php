@@ -37,9 +37,10 @@ final class PublishedExports
 
     /**
      * Cuánto se espera un exporte en camino antes de decir que tarda más de lo normal y dejar reintentar (supuesto por
-     * confirmar). Armar el más grande tarda segundos (el PDF de un departamento de 252 grupos, unos 5 s en desarrollo el 19
-     * de noviembre de 2026; el de 671 grupos, unos 15 s) y el worker toma un job nuevo en un segundo, así que dos minutos
-     * solo se pasan con el worker caído o atorado en un job largo (un lote de importación o una corrida del motor).
+     * confirmar). Armar el más grande tarda segundos (el PDF de un departamento con la forma de la demo masiva, medido en
+     * desarrollo el 19 de noviembre de 2026: 2.7 s con 252 grupos y 11.2 s con 672, como Ciencias Económico-
+     * Administrativas) y el worker toma un job nuevo en un segundo, así que dos minutos solo se pasan con el worker caído o
+     * atorado en un job largo (un lote de importación o una corrida del motor).
      */
     public const int WAIT_SECONDS = 120;
 

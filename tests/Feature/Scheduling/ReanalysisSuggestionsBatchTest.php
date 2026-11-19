@@ -183,7 +183,9 @@ describe('jefe del departamento', function () {
 
         expect(lastToastOf($drawer)['title'])->toBe('No se aplicó ninguna')
             ->and(lastToastOf($drawer)['description'])->toEndWith('L-80»: Cambió desde que la elegiste (era «Cambiar el salón del grupo A: '.$this->world->groups['A']->sessions()->first()->room->code.' → L-70»); revísala y vuelve a elegirla.')
-            ->and(GroupSession::query()->where('group_id', $this->a->id)->value('room_id'))->toBe($before);
+            ->and(GroupSession::query()->where('group_id', $this->a->id)->value('room_id'))->toBe($before)
+            ->and($drawer->get('chosen'))->toBe([])
+            ->and(textOf(domOf($drawer)->querySelector("[data-key=\"{$roomKey}\"] [data-testid=\"suggestion-changed\"]")))->toStartWith('Cambió desde que la elegiste (era «Cambiar el salón del grupo A: ');
 
         $drawer = chosenDrawer($this->jefe, $this->world)->set('chosen', [$this->expandKey]);
         $this->a->update(['capacity' => 45]);
@@ -191,6 +193,69 @@ describe('jefe del departamento', function () {
 
         expect($drawer->get('chosen'))->toBe([])
             ->and(textOf(domOf($drawer)->querySelector("[data-key=\"{$this->expandKey}\"] [data-testid=\"suggestion-changed\"]")))->toBe('Cambió desde que la elegiste; revísala y vuelve a elegirla.');
+    });
+
+    it('F-06: después de aplicar el lote vienen marcadas las que siguen pudiéndose aplicar, y la cuenta dice cuántas', function () {
+        chosenLargeRoom($this->world, 'L-70', 70);
+        chosenExpectIn($this->world, 'isc', 120);
+        $roomKey = "change_room:{$this->a->id}:{$this->world->isc->id}";
+        $drawer = chosenDrawer($this->jefe, $this->world);
+
+        expect($drawer->get('chosen'))->toBe([$this->expandKey, $this->closeKey]);
+
+        $drawer->call('applyChosen');
+
+        expect(lastToastOf($drawer)['title'])->toBe('Se aplicaron las 2 sugerencias')
+            ->and($drawer->get('chosen'))->toBe([$roomKey])
+            ->and(domOf($drawer)->querySelector("[data-key=\"{$roomKey}\"]")->hasAttribute('data-chosen'))->toBeTrue()
+            ->and(textOf(domOf($drawer)->querySelector('[data-testid="suggestions-chosen-count"]')))->toBe('1 elegida · cada una se aplica por separado.')
+            ->and(textOf(chosenApplyButton($drawer)))->toBe('Aplicar la elegida');
+    });
+
+    it('F-06: al aplicar una sola, el bloque se vuelve a pintar con marcadas las que ya se pueden elegir', function () {
+        chosenLargeRoom($this->world, 'L-70', 70);
+        chosenExpectIn($this->world, 'isc', 120);
+        $roomKey = "change_room:{$this->a->id}:{$this->world->isc->id}";
+        $drawer = chosenDrawer($this->jefe, $this->world);
+
+        expect(chosenCheckbox($drawer, $roomKey)->hasAttribute('disabled'))->toBeTrue();
+
+        $drawer->call('apply', $this->expandKey);
+
+        expect($drawer->get('chosen'))->toBe([$this->closeKey, $roomKey])
+            ->and(textOf(chosenApplyButton($drawer)))->toBe('Aplicar las 2 elegidas');
+    });
+
+    it('F-06: «Abrir un grupo» se marca solo en cuanto tiene su horario y salón', function () {
+        $drawer = chosenDrawer($this->jefe, $this->world);
+
+        expect($drawer->get('chosen'))->toBe([$this->expandKey, $this->closeKey]);
+
+        $drawer->call('findPlacement', $this->openKey);
+
+        expect($drawer->get('chosen'))->toBe([$this->expandKey, $this->closeKey, $this->openKey])
+            ->and(chosenCheckbox($drawer, $this->openKey)->hasAttribute('disabled'))->toBeFalse()
+            ->and(domOf($drawer)->querySelector("[data-key=\"{$this->openKey}\"]")->hasAttribute('data-chosen'))->toBeTrue()
+            ->and(textOf(chosenApplyButton($drawer)))->toBe('Aplicar las 3 elegidas');
+    });
+
+    it('F-06: la que desmarcaste a mano no se vuelve a marcar en esta visita, ni al buscar un lugar ni al aplicar el lote; al volver a abrir el bloque, sí', function () {
+        $drawer = chosenDrawer($this->jefe, $this->world)->set('chosen', [$this->expandKey]);
+
+        $drawer->call('findPlacement', $this->openKey);
+
+        expect($drawer->get('chosen'))->toBe([$this->expandKey, $this->openKey]);
+
+        $drawer->call('applyChosen');
+
+        expect(lastToastOf($drawer)['title'])->toBe('Se aplicaron las 2 sugerencias')
+            ->and($this->e->fresh()->status)->toBe(GroupStatus::Planned)
+            ->and($drawer->get('chosen'))->not->toContain($this->closeKey)
+            ->and(chosenCheckbox($drawer, $this->closeKey)->hasAttribute('disabled'))->toBeFalse();
+
+        $drawer->dispatch('open-reanalysis-suggestions', subjectId: $this->world->integral->id, campusId: $this->world->c2->id);
+
+        expect($drawer->get('chosen'))->toContain($this->closeKey);
     });
 
     it('sin nada que se pueda elegir no hay casillas que marcar ni «Aplicar las elegidas»', function () {

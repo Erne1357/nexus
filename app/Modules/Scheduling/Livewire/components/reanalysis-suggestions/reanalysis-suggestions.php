@@ -62,6 +62,14 @@ use Mary\Traits\Toast;
  * (SuggestionBatch, con el lugar buscado del grupo nuevo); cada una dice por qué. Al pintar, las elegidas que ya no valen
  * salen de `chosen`.
  *
+ * La regla de marcar vuelve a correr (`preselect`; incidencia F-06 del ensayo 8.11) cada vez que el bloque se vuelve a
+ * calcular después de aplicar (una sugerencia, el lote o un grupo nuevo) y cuando «Abrir un grupo» encuentra su lugar, sin
+ * tocar lo que el jefe ya decidió en esta visita (supuesto por confirmar): las que desmarcó a mano o descartó
+ * (`unchecked`) no se vuelven a marcar hasta que él las marque o vuelva a abrir el bloque, ni la que se desmarcó porque
+ * cambió (también la que el lote no aplicó por eso, que conserva su aviso). Desmarcar a mano es lo que llega del navegador:
+ * la casilla que estaba en `chosen` antes del cambio (updatingChosen()) y ya no viene; lo que quita el servidor al pintar
+ * (ya no se puede elegir, choca o cambió) no cuenta.
+ *
  * Lo que el jefe vio de cada elegida queda en `seen` (SuggestionBatch::signature() y su título). Si al volver a pintar la
  * sugerencia ya no es la misma, se desmarca y dice «Cambió desde que la elegiste»; si cambió entre el último pintado y
  * «Aplicar», no se aplica y el toast lo dice (supuesto por confirmar).
@@ -139,9 +147,28 @@ new class extends Component
     #[Locked]
     public array $changedSinceChosen = [];
 
-    /** Si al pintar se marcan las que se pueden aplicar: al abrir el bloque. */
+    /**
+     * Si al pintar se marcan, además de las elegidas, las que se pueden aplicar y el jefe no desmarcó: al abrir el bloque,
+     * al volver a calcularlo después de aplicar y cuando «Abrir un grupo» encuentra su lugar.
+     */
     #[Locked]
     public bool $preselect = false;
+
+    /**
+     * Las que el jefe desmarcó a mano o descartó en esta visita del bloque, por llave: no se vuelven a marcar solas hasta que
+     * las marque o vuelva a abrir el bloque (supuesto por confirmar: por llave, aunque la sugerencia cambie).
+     *
+     * @var list<string>
+     */
+    #[Locked]
+    public array $unchecked = [];
+
+    /**
+     * Lo que estaba elegido antes del cambio de casillas que llega del navegador (updatingChosen()); no viaja.
+     *
+     * @var list<mixed>
+     */
+    private array $chosenBefore = [];
 
     /** Las sugerencias ya calculadas en esta petición (no viajan al navegador); aplicar las borra. */
     private ?ReanalysisSuggestions $advice = null;
@@ -162,6 +189,7 @@ new class extends Component
         $this->chosen = [];
         $this->seen = [];
         $this->changedSinceChosen = [];
+        $this->unchecked = [];
         $this->preselect = true;
         $this->placements = array_filter($this->placements, fn (string $key): bool => str_starts_with($key, $this->discardKey('')), ARRAY_FILTER_USE_KEY);
         $this->show = true;
@@ -205,13 +233,23 @@ new class extends Component
         $this->advice = null;
         $this->editing = null;
         $this->editSeats = null;
+        $this->preselect = true;
         $this->success('Sugerencia aplicada', e("{$suggestion->title}. Entra en la versión ".($load->current_version + 1).' al publicar.'));
         $this->dispatch('reanalysis-adjusted');
     }
 
     /**
+     * Guarda lo elegido antes del cambio de casillas que llega del navegador, para saber cuáles desmarcó el jefe.
+     */
+    public function updatingChosen(): void
+    {
+        $this->chosenBefore = $this->chosen;
+    }
+
+    /**
      * Elegir o dejar de elegir es de quien ajusta la carga: vuelve a autorizar. Fuera de re-análisis no queda ninguna
-     * elegida (la nota de arriba dice por qué); lo que no se puede elegir lo quita with().
+     * elegida (la nota de arriba dice por qué); lo que no se puede elegir lo quita with(). La que estaba elegida y ya no
+     * viene se desmarcó a mano y va a `unchecked`; la que se marca a mano sale de ahí.
      */
     public function updatedChosen(Actor $context, ReanalysisLoadsQuery $loads): void
     {
@@ -219,7 +257,13 @@ new class extends Component
             $this->authorizeAdjust($context, $loads);
         } catch (ValidationException) {
             $this->chosen = [];
+
+            return;
         }
+
+        $chosen = array_values(array_filter($this->chosen, is_string(...)));
+        $before = array_values(array_filter($this->chosenBefore, is_string(...)));
+        $this->unchecked = array_values(array_unique([...array_diff($this->unchecked, $chosen), ...array_diff($before, $chosen)]));
     }
 
     /**
@@ -268,10 +312,16 @@ new class extends Component
             unset($this->placements[$this->discardKey($suggestion->key)]);
         }
 
+        $this->changedSinceChosen = [];
+
+        foreach ($changed as ['suggestion' => $suggestion]) {
+            $this->changedSinceChosen[$suggestion->key] = $this->seen[$suggestion->key]['title'] ?? $suggestion->title;
+        }
+
         $this->chosen = [];
         $this->seen = [];
-        $this->changedSinceChosen = [];
         $this->advice = null;
+        $this->preselect = true;
         $this->batchToast($result, $gone, $load);
 
         if ($result->applied !== []) {
@@ -315,6 +365,7 @@ new class extends Component
         }
 
         $this->placements[$this->discardKey($key)] = ['signature' => $this->signature($suggestion), 'placement' => $placement->toArray()];
+        $this->preselect = true;
     }
 
     /**
@@ -397,6 +448,7 @@ new class extends Component
 
         unset($this->placements[$this->discardKey($key)]);
         $this->discarded = array_values(array_unique([...$this->discarded, $this->discardKey($key)]));
+        $this->unchecked = array_values(array_unique([...$this->unchecked, $key]));
     }
 
     /**
@@ -484,7 +536,9 @@ new class extends Component
         }
 
         $placements = $this->placementsOf(array_values($choosable));
-        $candidates = $this->preselect ? array_keys($choosable) : $this->chosen;
+        $candidates = $this->preselect
+            ? [...$this->chosen, ...array_diff(array_keys($choosable), $this->chosen, $this->unchecked, array_keys($this->changedSinceChosen))]
+            : $this->chosen;
         $this->preselect = false;
         $chosen = [];
 
@@ -717,6 +771,7 @@ new class extends Component
         unset($this->placements[$this->discardKey($suggestion->key)]);
         $this->advice = null;
         $this->cancelEdit();
+        $this->preselect = true;
         $this->success('Grupo abierto', e("El grupo {$group->code} de {$suggestion->newGroup->subjectCode} para {$suggestion->newGroup->careerCode}: {$placement->scheduleLabel()}. Asígnale docente en Asignación docente. Entra en la versión ".($load->current_version + 1).' al publicar.'));
         $this->dispatch('reanalysis-adjusted');
     }
