@@ -5,6 +5,7 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Actions\Sessions\ReplaceGroupSessions;
 use App\Modules\Scheduling\Models\Group;
+use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Support\ChangeAlternatives;
@@ -24,7 +25,8 @@ use Illuminate\Validation\ValidationException;
  * con ellos (ChooseChangeAlternative::sessionsUnchanged: sus grupos y sesiones siguen igual). Luego escribe las sesiones
  * de todos sus grupos con ReplaceGroupSessions, que vuelve a revisar las exclusiones de la base (su bitácora por grupo
  * dice de qué solicitud viene). Si algo cambió, no escribe ni la marca: «Esto cambió…», y quien
- * aplica la acomoda a mano en el editor. Después del commit avisa a cada docente cuyos grupos cambiaron de horario
+ * aplica la acomoda a mano en el editor. Guarda en `alternatives.applied` quién, cuándo y las sesiones de antes de cada
+ * grupo (ReplaceGroupSessions les da ids nuevos), para que la pantalla diga qué cambió ya aplicada. Después del commit avisa a cada docente cuyos grupos cambiaron de horario
  * (decidido por el usuario el 18 de noviembre de 2026).
  */
 final class ApplyChosenAlternative
@@ -78,6 +80,22 @@ final class ApplyChosenAlternative
                         'from' => $before[$group->id], 'to' => ChangeAlternatives::line($entry['sessions'])];
                 }
             }
+
+            $alternatives = $locked->alternatives;
+            $alternatives['applied'] = [
+                'applied_by' => $actor->getKey(),
+                'applied_at' => now()->toIso8601String(),
+                'before' => $groups->map(fn (Group $group): array => $group->sessions->map(fn (GroupSession $session): array => [
+                    'id' => $session->id,
+                    'day' => $session->day,
+                    'starts_at' => substr((string) $session->starts_at, 0, 5),
+                    'ends_at' => substr((string) $session->ends_at, 0, 5),
+                    'kind' => $session->kind->value,
+                    'room_id' => $session->room_id,
+                    'room' => $session->room?->code,
+                ])->values()->all())->all(),
+            ];
+            $locked->forceFill(['alternatives' => $alternatives]);
         });
 
         $this->notify->teachersOfMovedGroups($result->request, $moved);

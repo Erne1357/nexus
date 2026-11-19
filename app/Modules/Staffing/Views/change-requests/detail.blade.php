@@ -96,6 +96,18 @@
                 @endif
                 @include('staffing::change-requests.alternative-panel', ['option' => $alternatives['selected'], 'stale' => $staleAlternatives && $request->status === ChangeRequestStatus::Approved, 'tabbed' => false])
             </section>
+        @elseif ($request->status === ChangeRequestStatus::Approved && $alternatives !== null && $alternatives['chosen'] === null)
+            {{-- Aprobada como se pidió: el impacto de lo pedido, de solo lectura, para quien la aplica (como en la 8.6). --}}
+            <section aria-labelledby="request-impact-title" data-testid="request-impact" class="min-w-0">
+                <h3 id="request-impact-title" class="mb-2 text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Impacto</h3>
+                @if ($request->impact === null)
+                    <p class="text-sm text-neutral" data-testid="impact-none">Todavía no se calcula.</p>
+                @elseif (! $alternatives['assessable'] || $alternatives['selected'] === null)
+                    <p class="text-sm text-neutral" data-testid="impact-unassessable">La propuesta no trae un horario o un salón concretos: no se pudo simular.</p>
+                @else
+                    @include('staffing::change-requests.alternative-panel', ['option' => $alternatives['selected'], 'stale' => false, 'tabbed' => false])
+                @endif
+            </section>
         @endif
 
         <section aria-labelledby="request-reason-title">
