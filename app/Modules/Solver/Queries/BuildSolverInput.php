@@ -40,9 +40,14 @@ use App\Modules\Solver\Rules\SolverSettings;
  * - Una corrida es la carga de un departamento en la modalidad, en todos sus campus, o los grupos de una carrera para
  *   explorar. Esos grupos son los movibles, con sus sesiones actuales en `current_sessions`.
  * - Todo lo demás entra fijo: los otros grupos activos de la modalidad que comparten docente, salón (por sus sesiones) o
- *   cohorte con un movible, como grupos `movable = false` con sus sesiones como `fixed_sessions`; los grupos de otras
- *   modalidades o que no se incluyen, como ocupación (`teachers[].busy`, `rooms[].busy`).
- * - Las cohortes son las de Cohorts (HC-03 hoy; los paquetes después).
+ *   cohorte con un movible, o que son del semestre del alumno tipo de un movible (su plan, semestre, campus y
+ *   modalidad: el que revisa HC-03, completo, también las materias de varios grupos), como grupos `movable = false` con
+ *   sus sesiones como `fixed_sessions`; los grupos de otras modalidades o que no se incluyen, como ocupación
+ *   (`teachers[].busy`, `rooms[].busy`).
+ * - Las cohortes son las de Cohorts: `plan:` (HC-03), `package:` (DM-09) y `combination:`, la combinación del alumno
+ *   tipo de los semestres con materias de varios grupos (Cohorts::combinations()), para que el núcleo sin combinación
+ *   de HC-03 viaje en el contrato.
+ * - Cada préstamo aceptado va con su grupo (`group_id`, HC-10), como lo revisa el validador.
  * - Aviso de tronco común (decisión del usuario, 17 de noviembre de 2026): si un movible comparte cohorte con un grupo
  *   de otro departamento que todavía no tiene sesiones, se avisa y no se impide nada.
  *
@@ -91,8 +96,14 @@ final class BuildSolverInput
         $active = array_filter($state->groups(), fn (StateGroup $group): bool => $group->isActive && $group->modalityId === $modality->id);
         $movable = array_filter($active, $isInRun);
         $cohorts = Cohorts::of($state, $active);
+        $combinations = Cohorts::combinations($state, $active);
+        $keys = [];
 
-        $fixed = $this->fixedGroups($state, $active, $movable, $cohorts);
+        foreach ($cohorts as $groupId => $own) {
+            $keys[$groupId] = [...$own, ...$combinations[$groupId] ?? []];
+        }
+
+        $fixed = $this->fixedGroups($state, $active, $movable, $keys);
         $included = $this->ordered($state, [...$movable, ...$fixed]);
         $includedIds = array_fill_keys(array_map(fn (StateGroup $group): string => $group->id, $included), true);
 
@@ -112,7 +123,7 @@ final class BuildSolverInput
             new Scope(ScopeKind::from($scope->value), $scopeId),
             (int) $state->setting('staffing.min_campus_travel_minutes', CampusTravel::DEFAULT_MINUTES),
             max(0, $profile->weeklyHoursTolerance ?? (int) $state->setting('scheduling.weekly_hours_tolerance', 0)),
-            array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $cohorts[$group->id] ?? [], $usesRooms), $included),
+            array_map(fn (StateGroup $group): GroupInput => $this->groupInput($state, $group, isset($movable[$group->id]), $keys[$group->id] ?? [], $usesRooms), $included),
             $this->teachers($state, $term, $included, $includedIds, $movable),
             $usesRooms ? $this->rooms($state, $campusIds, $roomIds, $includedIds) : [],
             $agreements,
@@ -126,7 +137,8 @@ final class BuildSolverInput
     }
 
     /**
-     * Los grupos activos de la modalidad, fuera de la corrida, que comparten docente, salón o cohorte con un movible.
+     * Los grupos activos de la modalidad, fuera de la corrida, que comparten docente, salón o cohorte con un movible, o
+     * que son del semestre del alumno tipo de un movible.
      *
      * @param  array<string, StateGroup>  $active
      * @param  array<string, StateGroup>  $movable
@@ -138,10 +150,15 @@ final class BuildSolverInput
         $teachers = [];
         $rooms = [];
         $keys = [];
+        $semesters = [];
 
         foreach ($movable as $group) {
             if ($group->teacherId !== null) {
                 $teachers[$group->teacherId] = true;
+            }
+
+            foreach ($state->groupsOfSemester($group->modalityId, $group->campusId, $group->studyPlanId, $group->semester) as $member) {
+                $semesters[$member->id] = true;
             }
 
             foreach ($state->sessionsOf($group->id) as $session) {
@@ -156,7 +173,8 @@ final class BuildSolverInput
         }
 
         return array_filter($active, fn (StateGroup $group): bool => ! isset($movable[$group->id])
-            && (($group->teacherId !== null && isset($teachers[$group->teacherId]))
+            && (isset($semesters[$group->id])
+                || ($group->teacherId !== null && isset($teachers[$group->teacherId]))
                 || array_filter($cohorts[$group->id] ?? [], fn (string $key): bool => isset($keys[$key])) !== []
                 || array_filter($state->sessionsOf($group->id), fn (StateSession $session): bool => $session->roomId !== null && isset($rooms[$session->roomId])) !== []));
     }
@@ -178,7 +196,8 @@ final class BuildSolverInput
     }
 
     /**
-     * Los préstamos aceptados de los grupos movibles, a favor del departamento de cada grupo (HC-10), sin repetir.
+     * Los préstamos aceptados de los grupos movibles, cada uno con su grupo (`group_id`) y el departamento del grupo
+     * (HC-10): como en el validador, el préstamo de un grupo no le sirve a otro de su departamento.
      *
      * @param  array<string, StateGroup>  $movable
      * @return list<RoomAgreement>
@@ -193,7 +212,7 @@ final class BuildSolverInput
                     continue;
                 }
 
-                $agreement = new RoomAgreement($loan->roomId, $group->departmentId, $loan->day, Minutes::format($loan->start), Minutes::format($loan->end));
+                $agreement = new RoomAgreement($loan->roomId, $group->departmentId, $loan->day, Minutes::format($loan->start), Minutes::format($loan->end), $group->id);
                 $agreements[json_encode($agreement->toArray())] = $agreement;
             }
         }

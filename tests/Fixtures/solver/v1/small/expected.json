@@ -10,5 +10,5 @@
     ],
     "may_leave_unscheduled": [],
     "max_soft_score": null,
-    "notes": "Una carrera, un semestre, un campus: seis grupos de una misma cohorte (22 de las 35 horas de la rejilla), dos docentes con indisponibilidad, tres salones (uno de laboratorio para las 2 horas prácticas de g003 y otro con un bloqueo). Factible; hay muchas soluciones, no una sola."
+    "notes": "Una carrera, un semestre, un campus: seis grupos de una misma cohorte (22 de las 35 horas de la rejilla), dos docentes con indisponibilidad, tres salones (uno de laboratorio para las 2 horas prácticas de g003 y otro con un bloqueo) y uno de otro departamento (r004) prestado solo a g001 (`agreements[].group_id`) de lunes a jueves de 7:00 a 9:00: los demás grupos no lo pueden usar (HC-10). Factible; hay muchas soluciones, no una sola."
 }

@@ -103,3 +103,65 @@ it('HC-03: un grupo de paquete sin campus lleva el marcador «none» en la clave
 
     expect(cohortsOf($state, ['A'])['A'])->toContain('package:PK:none:1');
 });
+
+/**
+ * Las claves `combination:` de los grupos dados.
+ *
+ * @param  list<string>  $groupIds
+ * @return array<string, list<string>>
+ */
+function combinationCohortsOf(ScheduleState $state, array $groupIds): array
+{
+    return Cohorts::combinations($state, array_map(fn (string $id) => $state->groupOrFail($id), $groupIds));
+}
+
+it('HC-03: en un semestre con una materia de varios grupos, la combinación del alumno tipo lleva a los únicos y al grupo de cada otra materia que hoy cabe', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->session('CAL', 1, '07:00', '09:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 2, '07:00', '09:00')
+        ->build();
+
+    expect(combinationCohortsOf($state, ['CAL', 'QUI-A', 'QUI-B']))->toBe([
+        'CAL' => ['combination:P1:1:C2'],
+        'QUI-A' => [],
+        'QUI-B' => ['combination:P1:1:C2'],
+    ])->and(cohortsOf($state, ['CAL', 'QUI-A', 'QUI-B']))->toBe(['CAL' => ['plan:P1:1:C2'], 'QUI-A' => [], 'QUI-B' => []]);
+});
+
+it('HC-03: sin combinación hoy, la del alumno tipo toma el primer grupo de cada materia por su clave (supuesto por confirmar)', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI-B', subject: 'QUI', code: 'B'))
+        ->group(States::group('QUI-A', subject: 'QUI', code: 'A'))
+        ->session('CAL', 1, '07:00', '09:00')
+        ->session('QUI-A', 1, '08:00', '10:00')
+        ->session('QUI-B', 1, '07:00', '08:00')
+        ->build();
+
+    expect(combinationCohortsOf($state, ['CAL', 'QUI-A', 'QUI-B']))->toBe([
+        'CAL' => ['combination:P1:1:C2'],
+        'QUI-A' => ['combination:P1:1:C2'],
+        'QUI-B' => [],
+    ]);
+});
+
+it('HC-03: un semestre en que cada materia tiene un solo grupo no lleva combinación, y un grupo cancelado tampoco', function () {
+    $state = States::builder()
+        ->group(States::group('CAL', subject: 'CAL'))
+        ->group(States::group('QUI', subject: 'QUI'))
+        ->group(States::group('FIS-A', subject: 'FIS', semester: 2))
+        ->group(States::group('FIS-B', subject: 'FIS', semester: 2, active: false))
+        ->build();
+
+    expect(combinationCohortsOf($state, ['CAL', 'QUI', 'FIS-A', 'FIS-B']))->toBe(['CAL' => [], 'QUI' => [], 'FIS-A' => [], 'FIS-B' => []]);
+});
+
+it('HC-03: la clave `combination:` no cuenta para SC-01 (sus grupos ya cuentan en `plan:`)', function () {
+    expect(Cohorts::forStudentGaps(['plan:P1:1:C2', 'combination:P1:1:C2', 'package:PK:C2:1']))->toBe(['plan:P1:1:C2', 'package:PK:C2:1'])
+        ->and(Cohorts::isCombination('combination:P1:1:C2'))->toBeTrue()
+        ->and(Cohorts::isCombination('plan:P1:1:C2'))->toBeFalse();
+});

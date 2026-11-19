@@ -3,6 +3,7 @@
 namespace App\Modules\Solver\Engines\PhpHeuristic;
 
 use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Scheduling\Rules\Cohorts;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Solver\Contract\GroupInput;
 use App\Modules\Solver\Contract\ProposedSession;
@@ -18,7 +19,8 @@ use Closure;
  * La factibilidad se pregunta a índices de ocupación que se actualizan al colocar cada grupo, por bloque de la rejilla
  * de cada campus: docente × día × bloque (HC-01, con la ocupación de fuera de la corrida en todos los campus; HC-09 en
  * otro índice), salón × día × bloque (HC-02, con sus bloqueos aparte, HC-11), cohorte × día × bloque (HC-03) y los
- * préstamos aceptados por salón, departamento y día (HC-10). La capacidad (HC-05), el laboratorio (HC-06) y el dueño del
+ * préstamos aceptados por salón, quien los tiene y día (HC-10: un grupo con préstamos propios, `group_id`, usa los suyos y
+ * los de su departamento; uno sin ellos, solo los de su departamento, como el validador). La capacidad (HC-05), el laboratorio (HC-06) y el dueño del
  * salón se filtran al ordenar los salones del grupo; la ventana (HC-04) y las horas exactas (HC-12) salen de cómo se
  * arman los candidatos. HC-08 no depende del horario: se revisa antes (docentes cuyos grupos movibles suman más de lo
  * que les queda) y se reporta. Solo se revisan las reglas activas de la entrada (`hard_rules`). Las cohortes son más
@@ -95,8 +97,11 @@ final class Builder
     /** @var array<string, array<int, array<int, true>>> salón → día → bloque (HC-11) */
     private array $roomBlocked = [];
 
-    /** @var array<string, array<string, array<int, array<int, true>>>> salón → departamento → día → bloque prestado (HC-10) */
+    /** @var array<string, array<string, array<int, array<int, true>>>> salón → quien lo tiene (loanHolder()) → día → bloque prestado (HC-10) */
     private array $loans = [];
+
+    /** @var array<string, true> los grupos con préstamos propios (`agreements[].group_id`) */
+    private array $ownLoans = [];
 
     /** @var array<string, array<string, array<int, array<int, string>>>> cohorte → campus → día → bloque → grupo */
     private array $cohortAt = [];
@@ -560,17 +565,40 @@ final class Builder
         }
 
         $ranges = [];
+        $departmentOf = [];
 
-        foreach ($this->input->agreements as $agreement) {
-            $ranges[$agreement->roomId][$agreement->toDepartmentId][$agreement->day][] = [Minutes::of($agreement->startsAt), Minutes::of($agreement->endsAt)];
+        foreach ($this->input->groups as $group) {
+            $departmentOf[$group->id] = $group->departmentId;
         }
 
-        foreach ($ranges as $roomId => $byDepartment) {
+        foreach ($this->input->agreements as $agreement) {
+            $span = [Minutes::of($agreement->startsAt), Minutes::of($agreement->endsAt)];
+
+            if ($agreement->groupId === null) {
+                $ranges[$agreement->roomId][self::loanHolderKey(null, $agreement->toDepartmentId)][$agreement->day][] = $span;
+            } elseif (isset($departmentOf[$agreement->groupId])) {
+                $ranges[$agreement->roomId][self::loanHolderKey($agreement->groupId, '')][$agreement->day][] = $span;
+                $this->ownLoans[$agreement->groupId] = true;
+            }
+        }
+
+        foreach (array_keys($this->ownLoans) as $groupId) {
+            $department = self::loanHolderKey(null, $departmentOf[$groupId]);
+            $own = self::loanHolderKey($groupId, '');
+
+            foreach ($ranges as $roomId => $byHolder) {
+                foreach ($byHolder[$department] ?? [] as $day => $dayRanges) {
+                    $ranges[$roomId][$own][$day] = [...$ranges[$roomId][$own][$day] ?? [], ...$dayRanges];
+                }
+            }
+        }
+
+        foreach ($ranges as $roomId => $byHolder) {
             $grid = isset($this->rooms[$roomId]) ? $this->grids[$this->rooms[$roomId]['campus']] : null;
 
-            foreach ($grid === null ? [] : $byDepartment as $departmentId => $byDay) {
+            foreach ($grid === null ? [] : $byHolder as $holder => $byDay) {
                 foreach ($byDay as $day => $dayRanges) {
-                    $this->loans[$roomId][$departmentId][$day] = $grid->covered($dayRanges);
+                    $this->loans[$roomId][$holder][$day] = $grid->covered($dayRanges);
                 }
             }
         }
@@ -690,11 +718,13 @@ final class Builder
                 'grid' => $grid,
                 'teacher' => $group->teacherId,
                 'department' => $group->departmentId,
+                'loanHolder' => $this->loanHolder($group),
                 'units' => $units ?? 0,
                 'practice' => $units === null ? 0 : min($units, (int) round($group->practiceHours * 60 / $grid->unitMinutes)),
                 'labPractice' => $labPractice,
                 'usesRooms' => $grid->usesRooms,
                 'cohorts' => $this->cohortsOf($group),
+                'gapCohorts' => Cohorts::forStudentGaps($this->cohortsOf($group)),
                 'neighbours' => $this->neighbourCohorts($group),
                 'rooms' => [self::THEORY => $theory, self::LAB => $labs],
                 'rank' => [self::THEORY => array_flip($theory), self::LAB => array_flip($labs)],
@@ -918,13 +948,14 @@ final class Builder
     /**
      * Los salones del campus que le sirven al grupo para teoría o para práctica de laboratorio, en orden: por defecto
      * de la materia, tipo, capacidad más ajustada e id. Los de otro departamento entran solo si hay algún préstamo para
-     * el suyo (HC-10); cuál bloque cubre se revisa al colocar.
+     * el grupo o su departamento (HC-10, loanHolder()); cuál bloque cubre se revisa al colocar.
      *
      * @return list<string>
      */
     private function rank(GroupInput $group, string $kind): array
     {
-        $key = implode('|', [$group->campusCode, $group->capacity, $group->departmentId, $group->subjectCode, $kind, implode(',', $group->candidateRoomIds)]);
+        $holder = $this->loanHolder($group);
+        $key = implode('|', [$group->campusCode, $group->capacity, $group->departmentId, $holder, $group->subjectCode, $kind, implode(',', $group->candidateRoomIds)]);
 
         if (isset($this->rankings[$key])) {
             return $this->rankings[$key];
@@ -945,7 +976,7 @@ final class Builder
                 continue;
             }
 
-            if (isset($this->checks['HC-10']) && $room['owner'] !== null && $room['owner'] !== $group->departmentId && ! isset($this->loans[$roomId][$group->departmentId])) {
+            if (isset($this->checks['HC-10']) && $room['owner'] !== null && $room['owner'] !== $group->departmentId && ! isset($this->loans[$roomId][$holder])) {
                 continue;
             }
 
@@ -1101,7 +1132,7 @@ final class Builder
         $soft = 0.0;
 
         if ($this->weights['SC-01'] > 0) {
-            foreach ($group['cohorts'] as $key) {
+            foreach ($group['gapCohorts'] as $key) {
                 $soft += $this->weights['SC-01'] * $hour * self::gapDelta($this->cohortAt[$key][$campus][$day] ?? [], $start, $end);
             }
         }
@@ -1441,7 +1472,7 @@ final class Builder
 
     /**
      * Si el salón está libre en esos bloques: sin otra sesión (HC-02), sin bloqueo (HC-11) y, si es de otro
-     * departamento, con préstamo aceptado para el del grupo en cada bloque (HC-10).
+     * departamento, con préstamo aceptado para el grupo o su departamento en cada bloque (HC-10).
      *
      * @param  array<string, mixed>  $group
      */
@@ -1450,7 +1481,7 @@ final class Builder
         $at = isset($this->checks['HC-02']) ? $this->roomAt[$roomId][$day] ?? null : null;
         $blocked = isset($this->checks['HC-11']) ? $this->roomBlocked[$roomId][$day] ?? null : null;
         $owner = $this->rooms[$roomId]['owner'];
-        $loan = isset($this->checks['HC-10']) && $owner !== null && $owner !== $group['department'] ? $this->loans[$roomId][$group['department']][$day] ?? [] : null;
+        $loan = isset($this->checks['HC-10']) && $owner !== null && $owner !== $group['department'] ? $this->loans[$roomId][$group['loanHolder']][$day] ?? [] : null;
 
         for ($block = $start; $block < $end; $block++) {
             if (isset($at[$block]) || isset($blocked[$block]) || ($loan !== null && ! isset($loan[$block]))) {
@@ -1716,6 +1747,20 @@ final class Builder
     }
 
     /**
+     * Quien tiene los préstamos que le sirven al grupo (HC-10): el grupo, si tiene préstamos propios (`group_id`; los
+     * suyos más los de su departamento), o su departamento.
+     */
+    private function loanHolder(GroupInput $group): string
+    {
+        return isset($this->ownLoans[$group->id]) ? self::loanHolderKey($group->id, '') : self::loanHolderKey(null, $group->departmentId);
+    }
+
+    private static function loanHolderKey(?string $groupId, string $departmentId): string
+    {
+        return $groupId === null ? "department:{$departmentId}" : "group:{$groupId}";
+    }
+
+    /**
      * «el paquete #2: MAT-1, grupo g7» o «el semestre 3 del plan p1: MAT-2, grupo g9».
      */
     private function cohortLabel(string $detail): string
@@ -1725,6 +1770,7 @@ final class Builder
         $what = match (true) {
             $parts[0] === 'package' => 'el paquete #'.end($parts),
             $parts[0] === 'plan' && count($parts) === 4 => "el semestre {$parts[2]} del plan {$parts[1]}",
+            $parts[0] === Cohorts::COMBINATION && count($parts) === 4 => "la combinación del alumno tipo del semestre {$parts[2]} del plan {$parts[1]}",
             default => "la cohorte {$key}",
         };
 

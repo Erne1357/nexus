@@ -131,6 +131,12 @@ final readonly class SolverInput
                 }
             }
         }
+
+        foreach ($this->agreements as $i => $agreement) {
+            if ($agreement->groupId !== null && ! in_array($agreement->groupId, $groupIds, true)) {
+                throw ContractException::at(ContractFields::path(ContractFields::path(ContractFields::path($path, 'agreements'), $i), 'group_id'), 'el grupo no está en groups');
+            }
+        }
     }
 
     /**

@@ -74,6 +74,11 @@ dataset('contractBrokenInputs', [
 
         return $d;
     }, 'groups[2].weekly_hours', 'debe ser un entero de 1 en adelante'],
+    'préstamo de un grupo que no está en groups' => [function (array $d) {
+        $d['agreements'][0]['group_id'] = '0190a000-0000-7000-8000-999999999999';
+
+        return $d;
+    }, 'agreements[0].group_id', 'groups'],
 ]);
 
 test('una entrada rota se rechaza con la ruta del campo', function (Closure $break, string $path, string $fragment) {

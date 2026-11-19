@@ -2,6 +2,7 @@
 
 namespace App\Modules\Solver\Engines\PhpHeuristic;
 
+use App\Modules\Scheduling\Rules\Cohorts;
 use App\Modules\Scheduling\Rules\Timeline;
 use App\Modules\Scheduling\Validation\Minutes;
 use App\Modules\Scheduling\Validation\State\StateSession;
@@ -54,7 +55,7 @@ final class LocalScore
     /** @var array<string, int> el orden de cada grupo en la foto del evaluador */
     private array $rank = [];
 
-    /** @var array<string, list<string>> por grupo, sus claves de cohorte */
+    /** @var array<string, list<string>> por grupo, sus claves de cohorte de SC-01 (sin `combination:`, Cohorts::forStudentGaps()) */
     private array $keysOf = [];
 
     /** @var array<string, string> por salón */
@@ -116,7 +117,7 @@ final class LocalScore
             $this->rank[$group->id] = $index;
             $this->teacherOf[$group->id] = $group->teacherId;
             $this->campusOf[$group->id] = $group->campusCode;
-            $this->keysOf[$group->id] = array_values(array_unique($group->cohorts));
+            $this->keysOf[$group->id] = array_values(array_unique(Cohorts::forStudentGaps($group->cohorts)));
 
             foreach ($this->keysOf[$group->id] as $key) {
                 $members[$key][] = $group->id;
