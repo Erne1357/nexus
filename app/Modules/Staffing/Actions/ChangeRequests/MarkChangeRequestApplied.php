@@ -24,15 +24,15 @@ use Illuminate\Validation\ValidationException;
  */
 final class MarkChangeRequestApplied
 {
-    public function __construct(private readonly ReturnToStaffing $returnToStaffing, private readonly NotifyChangeRequest $notify) {}
+    public function __construct(private readonly ReturnToStaffing $returnToStaffing, private readonly NotifyChangeRequest $notify, private readonly LocksChangeRequestScope $locks) {}
 
     /**
      * @throws ValidationException
      */
     public function handle(ChangeRequest $request, User $actor): AppliedChangeRequest
     {
-        $request = DB::transaction(function () use ($request, $actor): ChangeRequest {
-            $request->setRawAttributes($request->newQuery()->lockForUpdate()->findOrFail($request->getKey())->getAttributes(), sync: true);
+        $request = $this->locks->guard(fn (): ChangeRequest => DB::transaction(function () use ($request, $actor): ChangeRequest {
+            $this->locks->lock($request);
 
             if ($request->status !== ChangeRequestStatus::Approved) {
                 throw ValidationException::withMessages(['status' => 'La solicitud no está aprobada.']);
@@ -48,7 +48,7 @@ final class MarkChangeRequestApplied
                 ->log('Marcó la solicitud de cambio como aplicada');
 
             return $request;
-        });
+        }));
 
         $this->notify->requester($request, ChangeRequestApplied::class);
 

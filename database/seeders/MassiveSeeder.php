@@ -25,6 +25,7 @@ use App\Modules\Scheduling\Database\Seeders\PublicationShowcaseDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingAgreementsDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\SchedulingDemoSeeder;
 use App\Modules\Scheduling\Events\GroupsCreated;
+use App\Modules\Solver\Database\Seeders\SolverRunsDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\LoadClosingDemoSeeder;
 use App\Modules\Staffing\Database\Seeders\StaffingDemoSeeder;
 use App\Modules\Students\Database\Seeders\StudentsDemoSeeder;
@@ -121,6 +122,7 @@ class MassiveSeeder extends Seeder
         $this->command?->info(sprintf('Cargas cerradas y reabiertas: %.1f s.', (hrtime(true) - $started) / 1e9));
 
         $this->showcase();
+        $this->solverRuns();
 
         $this->call(LoginScreenDemoSeeder::class);
     }
@@ -138,5 +140,21 @@ class MassiveSeeder extends Seeder
         $started = hrtime(true);
         $this->callWith(PublicationShowcaseDemoSeeder::class, ['versions' => 2, 'reopenAtEnd' => true]);
         $this->command?->info(sprintf('Carga publicada en varias versiones: %.1f s.', (hrtime(true) - $started) / 1e9));
+    }
+
+    /**
+     * Corridas del motor en todos sus estados (SolverRunsDemoSeeder, tarea 6.10), al final: sobre lo que dejan el cierre
+     * mezclado y la publicación, con la aceptada en el departamento de menos grupos con la carga editable. Solo con
+     * `demo:seed --hasta=todo`, que prende `demo.showcase`: las pruebas que siembran la demo no lo pagan.
+     */
+    public function solverRuns(): void
+    {
+        if (! config('demo.showcase', false)) {
+            return;
+        }
+
+        $started = hrtime(true);
+        $this->callWith(SolverRunsDemoSeeder::class, ['campuses' => ['C1', 'C2'], 'apply' => true]);
+        $this->command?->info(sprintf('Corridas del motor: %.1f s.', (hrtime(true) - $started) / 1e9));
     }
 }

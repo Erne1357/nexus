@@ -171,6 +171,19 @@ final class ScheduleValidator
     }
 
     /**
+     * Las violaciones del grupo si sus sesiones fueran exactamente estas, sin escribir nada: la propuesta completa de
+     * una vez (los choques entre las candidatas, los totales de horas y las sesiones que ya no estarían).
+     *
+     * @param  list<SessionCandidate>  $candidates
+     */
+    public function checkGroupSessions(Group $group, array $candidates): ValidationResult
+    {
+        $state = $this->stateFor($group->term_id, $group->modality_id);
+
+        return self::of($group->id, $this->validate($state->withSessions($group->id, $candidates), ValidationScope::groups($group->id)));
+    }
+
+    /**
      * Qué pasaría si el grupo fuera de este docente, sin escribir: choque (HC-01), horas (HC-08) y disponibilidad
      * (HC-09). No se cuenta a sí mismo: el grupo deja de ser de su docente actual, así que reasignarlo al mismo no da
      * choque ni falta de horas por sus propias sesiones.

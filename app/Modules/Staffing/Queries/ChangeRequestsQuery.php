@@ -176,7 +176,7 @@ final class ChangeRequestsQuery
      */
     public function requestableGroup(Actor $context, string $termId, string $modalityId, ?string $campusId, string $id): ?Group
     {
-        return KeyLookup::find($this->requestable($context, $termId, $modalityId, $campusId)->with('teacher'), $id);
+        return KeyLookup::find($this->requestable($context, $termId, $modalityId, $campusId)->with(['teacher', 'sessions']), $id);
     }
 
     /**
