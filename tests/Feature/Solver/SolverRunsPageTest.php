@@ -154,6 +154,42 @@ it('SV-02: con la carga cambiada, «Aceptar» abre el aviso de entrada vencida y
     expect(SolverRun::query()->sole()->status)->toBe(SolverRunStatus::Done);
 });
 
+it('E-10: con la carga publicada, «Aceptar» sale deshabilitado con el motivo real y un aviso dice que las corridas solo exploran', function () {
+    $page = launchFromRunsPage($this->jefe);
+    AcademicLoad::query()->sole()->forceFill(['status' => LoadStatus::Published])->save();
+
+    $page->call('$refresh')->assertSeeHtml('data-testid="run-accept-disabled"')
+        ->assertDontSeeHtml('data-testid="run-accept"')
+        ->assertSeeHtml('data-testid="run-published-note"')
+        ->assertSee('La carga está publicada: para cambiar su horario, inicia el re-análisis')
+        ->assertSee('las corridas sirven para explorar; no se pueden aceptar hasta que se inicie el re-análisis')
+        ->assertSeeHtml('data-testid="launch-open"')
+        ->call('openAccept')
+        ->assertSet('showAccept', false)
+        ->assertSet('showStale', false);
+
+    expect(SolverRun::query()->sole()->status)->toBe(SolverRunStatus::Done);
+});
+
+it('E-10: aceptar por una petición vieja con la carga publicada da el motivo de editabilidad, no «La carga cambió»', function () {
+    $page = launchFromRunsPage($this->jefe);
+    AcademicLoad::query()->sole()->forceFill(['status' => LoadStatus::Published])->save();
+    GroupSession::factory()->for($this->second)->inRoom($this->room)->on(5, '13:00', '14:00')->create();
+
+    $page->call('apply')->assertSet('showStale', false)->assertSee('La carga está publicada: para cambiar su horario, inicia el re-análisis');
+
+    expect(SolverRun::query()->sole()->status)->toBe(SolverRunStatus::Done);
+});
+
+it('E-10: con la carga en re-análisis «Aceptar» sigue habilitado y no sale el aviso de publicada', function () {
+    $page = launchFromRunsPage($this->jefe);
+    AcademicLoad::query()->sole()->forceFill(['status' => LoadStatus::Reanalysis])->save();
+
+    $page->call('$refresh')->assertSeeHtml('data-testid="run-accept"')
+        ->assertDontSeeHtml('data-testid="run-accept-disabled"')
+        ->assertDontSeeHtml('data-testid="run-published-note"');
+});
+
 it('el coordinador ve las suyas y las de departamento de su carrera, no las de otro coordinador, y no acepta', function () {
     $department = SolverRun::factory()->done()->create(['term_id' => $this->term->id, 'department_id' => $this->sistemas->id, 'output' => null]);
     $own = SolverRun::factory()->forCareer()->create(['term_id' => $this->term->id, 'career_id' => $this->isc->id, 'created_by' => $this->coordinador->id, 'status' => SolverRunStatus::Failed, 'error' => 'Se acabó la memoria.']);
@@ -308,3 +344,17 @@ it('al abrir, una corrida que se quedó aplicándose más del límite vuelve a e
 
     expect($recent->fresh()->status)->toBe(SolverRunStatus::Applying);
 });
+
+it('E-10: con la carga cerrada o aprobada, «Aceptar» sale deshabilitado con su motivo y sin el aviso de publicada', function (LoadStatus $status, string $reason) {
+    $page = launchFromRunsPage($this->jefe);
+    AcademicLoad::query()->sole()->forceFill(['status' => $status])->save();
+
+    $page->call('$refresh')
+        ->assertSeeHtml('data-testid="run-accept-disabled"')
+        ->assertDontSeeHtml('data-testid="run-accept"')
+        ->assertSee($reason)
+        ->assertDontSeeHtml('data-testid="run-published-note"');
+})->with([
+    'cerrada' => [LoadStatus::Closed, 'La carga ya no se puede editar: está cerrada.'],
+    'aprobada' => [LoadStatus::Approved, 'La carga ya no se puede editar: está aprobada.'],
+]);

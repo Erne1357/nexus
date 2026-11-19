@@ -88,6 +88,10 @@
         @endunless
     </header>
 
+    @if (! $message && $loadPublished)
+        <p class="flex items-start gap-1.5 text-sm text-neutral" data-testid="run-published-note"><x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />La carga está publicada: las corridas sirven para explorar; no se pueden aceptar hasta que se inicie el re-análisis.</p>
+    @endif
+
     @if ($message)
         <div class="flex flex-col items-center gap-2 rounded-box border border-dashed border-base-300 bg-base-100 px-5 py-10 text-center" data-testid="runs-message">
             <x-icon name="o-cpu-chip" class="h-6 w-6 text-neutral" aria-hidden="true" />
