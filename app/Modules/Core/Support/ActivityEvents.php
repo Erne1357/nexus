@@ -76,6 +76,8 @@ final class ActivityEvents
         'cancel_requested' => 'Cancelación pedida',
         'discarded' => 'Descartado',
         'impact_assessed' => 'Impacto calculado',
+        'alternatives_proposed' => 'Alternativas pedidas al motor',
+        'alternative_chosen' => 'Alternativa elegida',
     ];
 
     public static function knows(string $event): bool
