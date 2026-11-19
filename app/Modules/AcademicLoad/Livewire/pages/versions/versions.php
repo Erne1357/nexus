@@ -14,6 +14,7 @@ use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Livewire\Concerns\WithModalityScope;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -147,7 +148,7 @@ new #[Title('Versiones publicadas')] class extends Component
             'selected' => $selected,
             'diff' => $diff,
             'sections' => $diff === null ? [] : VersionChanges::byKind($diff),
-            'affected' => $this->showAffected && $diff !== null ? $this->affected($diff, $query) : null,
+            'affected' => $this->showAffected && $diff !== null ? $this->affected($load, $diff, $query, $selected, $next['publishedAt'] ?? null) : null,
             'until' => $next['publishedAt'] ?? null,
             'campuses' => $campuses->of($load->modality)->keyBy('code'),
             'files' => $this->files($load, $published),
@@ -156,18 +157,22 @@ new #[Title('Versiones publicadas')] class extends Component
     }
 
     /**
-     * Lo que se le dijo a cada docente y a cada carrera: solo los que están en el diff de la versión (RA-05).
+     * Lo que se le dijo a cada docente y a cada carrera: solo los que están en el diff de la versión (RA-05), y por dónde
+     * les llegó a los docentes (RA-06: la campana y el correo que de verdad salieron; nada en una versión de antes de los
+     * avisos).
      *
      * @param  array<string, mixed>  $diff
-     * @return array{teachers: list<array{name: string, lines: list<string>}>, careers: list<array{code: string, name: ?string, lines: list<string>}>}
+     * @param  array{publishedAt: CarbonImmutable, legacy: bool}  $selected
+     * @return array{teachers: list<array{name: string, lines: list<string>}>, careers: list<array{code: string, name: ?string, lines: list<string>}>, channels: array{bell: bool, mail: bool}}
      */
-    private function affected(array $diff, LoadVersionsQuery $query): array
+    private function affected(AcademicLoad $load, array $diff, LoadVersionsQuery $query, array $selected, ?CarbonImmutable $until): array
     {
         $careers = SnapshotDiff::careers($diff);
 
         return [
             'teachers' => VersionChanges::byTeacher($diff),
             'careers' => VersionChanges::byCareer($diff, $query->careerNames(array_keys($careers)), $careers),
+            'channels' => $selected['legacy'] ? ['bell' => false, 'mail' => false] : $query->teacherNoticeChannels($load, $selected['publishedAt'], $until),
         ];
     }
 

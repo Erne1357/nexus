@@ -8,13 +8,17 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Enums\SnapshotReason;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\LoadSnapshot;
+use App\Modules\AcademicLoad\Notifications\LoadRepublished;
 use App\Modules\AcademicLoad\Rules\SnapshotDiff;
 use App\Modules\AcademicLoad\Rules\SnapshotPayload;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\MailStatus;
+use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -155,6 +159,40 @@ final class LoadVersionsQuery
             'removed' => count($diff['groups']['cancelled']),
             'teachers' => $changed->filter(fn (array $entry): bool => array_key_exists('teacher', $entry['changes']))->count(),
             'rooms' => $changed->filter(fn (array $entry): bool => array_key_exists('room', $entry['changes']))->count(),
+        ];
+    }
+
+    /**
+     * Por dónde salió el aviso de la republicación a los docentes de una versión (RA-06; ensayo 8.11, E-04): `bell` si se
+     * guardó alguna campana y `mail` si salió algún correo (el registro de correos, CF-S8, con estado «enviado»). Se
+     * reconocen por el título del aviso al docente (LoadRepublished::teacherTitle(), que también es el asunto del correo)
+     * entre la publicación de la versión y la de la siguiente (`$until`); la campana, además, por el periodo y la modalidad
+     * de la carga. El correo no guarda la modalidad: dos cargas del mismo departamento republicadas a la vez se confunden
+     * (supuesto por confirmar). El correo sale de la cola: recién publicada, puede no haber salido todavía.
+     *
+     * @return array{bell: bool, mail: bool}
+     */
+    public function teacherNoticeChannels(AcademicLoad $load, CarbonImmutable $from, ?CarbonImmutable $until): array
+    {
+        $load->loadMissing(['department' => fn ($query) => $query->withTrashed()]);
+        $title = LoadRepublished::teacherTitle((string) $load->department?->name);
+
+        return [
+            'bell' => DatabaseNotification::query()
+                ->where('type', LoadRepublished::class)
+                ->where('data->title', $title)
+                ->where('data->term_id', $load->term_id)
+                ->where('data->modality_id', $load->modality_id)
+                ->where('created_at', '>=', $from)
+                ->when($until !== null, fn ($query) => $query->where('created_at', '<', $until))
+                ->exists(),
+            'mail' => MailLog::query()
+                ->where('kind', class_basename(LoadRepublished::class))
+                ->where('subject', $title)
+                ->where('status', MailStatus::Sent)
+                ->where('sent_at', '>=', $from)
+                ->when($until !== null, fn ($query) => $query->where('sent_at', '<', $until))
+                ->exists(),
         ];
     }
 

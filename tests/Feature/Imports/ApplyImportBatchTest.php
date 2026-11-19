@@ -232,6 +232,14 @@ it('si falla un bloque posterior, los anteriores se quedan escritos y la bitáco
     Event::assertDispatched(BatchApplied::class, fn (BatchApplied $event): bool => $event->counts['created'] === 500);
 });
 
+it('anota quién aplica al empezar, así que un lote que se corta a la mitad ya dice quién lo aplicaba', function () {
+    $lines = collect(range(1, 700))->map(fn (int $n): string => $n === 600 ? 'BOOM,x,presencial' : "K{$n},Campus {$n},presencial")->implode("\n");
+    $batch = validatedCampusBatch($this->admin, "code,name,modality\n{$lines}\n");
+
+    expect(fn () => applyCampusBatch($batch, $this->admin))->toThrow(RuntimeException::class)
+        ->and($batch->fresh())->status->toBe(BatchStatus::Failed)->applied_by->toBe($this->admin->id);
+});
+
 it('si falla afterApply, el motivo no culpa a ninguna fila', function () {
     app()->bind(CampusesTemplate::class, fn () => new class extends ApplyProbeTemplate
     {

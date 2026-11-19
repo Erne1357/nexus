@@ -61,6 +61,38 @@ it('mientras espera en la cola dice que se está preparando y no lo encola dos v
     Queue::assertPushed(fn (GeneratePublishedExport $job): bool => $job->uniqueId() === 'fake-20271-C2-abc');
 });
 
+it('F-05: si la cola no lo toma a tiempo, dice que tarda más de lo normal y reintentar lo vuelve a encolar aunque siga la marca «en camino»', function () {
+    Queue::fake();
+    $export = new FakePublishedExport;
+
+    $this->exports->request($export);
+    $this->travel(PublishedExports::WAIT_SECONDS - 1)->seconds();
+
+    expect($this->exports->state($export))->toBe(ExportState::Pending)
+        ->and($this->exports->retry($export))->toBe(ExportState::Pending);
+    Queue::assertPushed(GeneratePublishedExport::class, 1);
+
+    $this->travel(2)->seconds();
+
+    expect($this->exports->state($export))->toBe(ExportState::Stalled)
+        ->and($this->exports->retry($export))->toBe(ExportState::Pending);
+    Queue::assertPushed(GeneratePublishedExport::class, 2);
+
+    $this->travel(PublishedExports::WAIT_SECONDS - 1)->seconds();
+
+    expect($this->exports->state($export))->toBe(ExportState::Pending);
+});
+
+it('F-05: el job que encoló un reintento no vuelve a armar el exporte que ya dejó listo el primero', function () {
+    $export = new FakePublishedExport(counter: $this->counter);
+    $this->exports->generate($export);
+
+    (new GeneratePublishedExport($export))->handle($this->exports);
+
+    expect(file_get_contents($this->counter))->toBe('.')
+        ->and($this->exports->state($export))->toBe(ExportState::Ready);
+});
+
 it('si falla queda fallido unos minutos con un mensaje sin el error interno, y después se puede volver a pedir', function () {
     $failing = new FakePublishedExport(fails: true, counter: $this->counter);
 

@@ -8,6 +8,7 @@ use App\Modules\Imports\Actions\ValidateImportBatch;
 use App\Modules\Imports\Jobs\ApplyQueuedBatch;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Templates\TemplateRegistry;
+use Dom\Element;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
@@ -49,6 +50,21 @@ function deactivationWizard(User $user, ImportBatch $batch): Testable
     return Livewire::actingAs($user)->withQueryParams(['lote' => $batch->id])->test('imports::pages.import-wizard');
 }
 
+/**
+ * Los renglones (clave y nombre) de la lista de faltantes (`missing-records`) o de desactivados (`deactivated-records`),
+ * en el orden en que se listan. Se leen de sus celdas y no de todo el HTML: una clave corta como «B7» también puede
+ * salir dentro de un `wire:id` aleatorio, y la prueba fallaba a veces.
+ *
+ * @return list<list<string>>
+ */
+function listedRecords(Testable $page, string $list): array
+{
+    return array_map(
+        fn (Element $row): array => array_map(fn (Element $cell): string => textOf($cell), iterator_to_array($row->querySelectorAll('td'), false)),
+        iterator_to_array(domOf($page)->querySelectorAll("[data-testid={$list}] tbody tr"), false),
+    );
+}
+
 describe('admin', function () {
     it('en el paso 3 dice cuántos de los activos no vienen en el archivo, sin listarlos hasta que elige desactivarlos', function () {
         deactivationWizard($this->admin, $this->batch)
@@ -60,10 +76,11 @@ describe('admin', function () {
     });
 
     it('al elegir desactivarlos los lista, y el botón y la confirmación dicen cuántos', function () {
-        deactivationWizard($this->admin, $this->batch)
-            ->set('deactivateMissing', true)
-            ->assertSeeInOrder(['C2', 'Campus Dos', 'C3', 'Campus Tres'])
-            ->assertSee('Aplicar 2 filas y desactivar 2')
+        $page = deactivationWizard($this->admin, $this->batch)->set('deactivateMissing', true);
+
+        expect(listedRecords($page, 'missing-records'))->toBe([['C2', 'Campus Dos'], ['C3', 'Campus Tres']]);
+
+        $page->assertSee('Aplicar 2 filas y desactivar 2')
             ->assertSeeHtml('wire:click="apply(2)"')
             ->assertSeeHtml('Se desactivarán 2 registros que no vienen en el archivo; no se borran y se reactivan a mano en el catálogo.');
     });
@@ -82,7 +99,9 @@ describe('admin', function () {
         expect($this->c2->fresh()->is_active)->toBeFalse();
 
         $page->assertSet('step', 4)
-            ->assertSeeInOrder(['Altas', '1', '2 registros desactivados por no venir en el archivo', 'C2', 'Campus Dos', 'C3', 'Campus Tres']);
+            ->assertSeeInOrder(['Altas', '1', '2 registros desactivados por no venir en el archivo']);
+
+        expect(listedRecords($page, 'deactivated-records'))->toBe([['C2', 'Campus Dos'], ['C3', 'Campus Tres']]);
     });
 
     it('sin la opción, el paso 4 no habla de desactivados', function () {
@@ -162,11 +181,11 @@ describe('admin', function () {
             $this->c2,
         ));
 
-        deactivationWizard($this->admin, $batch)
+        $page = deactivationWizard($this->admin, $batch)
             ->assertSee('1 de 2 registros activos de Salones (prueba) en C2 no viene en el archivo.')
-            ->set('deactivateMissing', true)
-            ->assertSee('A2')
-            ->assertDontSee('B7');
+            ->set('deactivateMissing', true);
+
+        expect(array_column(listedRecords($page, 'missing-records'), 0))->toBe(['A2']);
     });
 
     it('un lote de un campus que después se retiró se sigue revisando', function () {

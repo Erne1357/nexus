@@ -257,7 +257,7 @@ it('con la carga cerrada o el grupo cancelado no asigna', function (Closure $set
     expect(fn () => assignRoom($this->room))->toThrow(ValidationException::class, $message)
         ->and($this->session->fresh()->room_id)->toBeNull();
 })->with([
-    'carga cerrada' => [fn () => test()->load->update(['status' => LoadStatus::Closed]), 'está en cerrada: no se editan horarios.'],
+    'carga cerrada' => [fn () => test()->load->update(['status' => LoadStatus::Closed]), 'ya está cerrada: no se editan horarios.'],
     'grupo cancelado' => [fn () => test()->group->update(['status' => 'cancelled']), 'está cancelado'],
 ]);
 
