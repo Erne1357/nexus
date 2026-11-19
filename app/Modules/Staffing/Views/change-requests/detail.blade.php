@@ -171,7 +171,7 @@
                 @if (! $withAlternative && $blockedClashes === 0 && $softCount > 0 && $alternatives !== null && $alternatives['assessable'])
                     <p class="text-[12.5px] text-neutral">Lo pedido deja {{ $softCount }} {{ $softCount === 1 ? 'aviso' : 'avisos' }}; se puede aprobar así.</p>
                 @endif
-                <x-textarea wire:model="comment" rows="1" maxlength="{{ $maxText }}" placeholder="Comentario: opcional al aprobar, obligatorio al rechazar" aria-label="Comentario" class="field-sizing-content min-h-10 max-h-32 resize-none" data-testid="decision-comment" />
+                <x-textarea wire:model="comment" rows="1" maxlength="{{ $maxText }}" placeholder="Comentario (obligatorio al rechazar)" aria-label="Comentario: opcional al aprobar, obligatorio al rechazar" class="field-sizing-content min-h-10 max-h-32 resize-none" data-testid="decision-comment" />
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
@@ -212,7 +212,7 @@
         @endphp
         <footer class="sticky bottom-0 z-10 space-y-2.5 border-t border-base-300 bg-base-100 px-5 py-3 max-md:px-4 [@media(max-height:44rem)]:static" data-testid="request-application">
             @if ($canApply && $chosenLetter !== null)
-                <p class="text-sm">Escribe de una vez el horario de {{ $chosenGroups === 1 ? 'su grupo' : "los {$chosenGroups} grupos de su cadena" }}, o ábrela en el editor con sus sesiones por colocar.</p>
+                <p class="text-sm max-md:text-[12.5px]">Escribe de una vez el horario de {{ $chosenGroups === 1 ? 'su grupo' : "los {$chosenGroups} grupos de su cadena" }}, o ábrela en el editor con sus sesiones por colocar.</p>
                 @error('status')
                     <p class="text-sm text-error">{{ $message }}</p>
                 @enderror
@@ -224,15 +224,18 @@
                 @if ($staleAlternatives)
                     <p class="text-sm text-error" id="apply-why" data-testid="apply-stale">La alternativa ya no se puede escribir tal cual: acomódala en el editor.</p>
                 @endif
+                {{-- En celular: la principal a todo el ancho y debajo, en una fila, el editor y «Marcar aplicada»; desde 768 px,
+                     el editor y la principal en una fila y «¿La acomodaste a mano? Marcar como aplicada» debajo. --}}
                 <div class="flex flex-wrap justify-end gap-2">
                     @if ($editorUrl !== null)
-                        <a href="{{ $editorUrl }}" wire:navigate class="btn btn-outline max-md:h-11 max-md:min-h-11 max-md:w-full" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4" aria-hidden="true" />Abrir en el editor</a>
+                        <a href="{{ $editorUrl }}" wire:navigate class="btn btn-outline whitespace-nowrap max-md:order-2 max-md:h-11 max-md:min-h-11 max-md:flex-1 max-md:px-2" data-testid="open-editor"><x-icon name="o-arrow-top-right-on-square" class="h-4 w-4 max-md:hidden" aria-hidden="true" />Abrir en el editor</a>
                     @endif
-                    <x-button :label="'Aplicar la alternativa '.$chosenLetter" icon="o-bolt" class="btn-primary max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="applyAlternative" spinner="applyAlternative" :disabled="$staleAlternatives" aria-describedby="{{ $staleAlternatives ? 'apply-why' : '' }}" data-testid="apply-alternative" />
+                    <x-button :label="'Aplicar la alternativa '.$chosenLetter" icon="o-bolt" class="btn-primary max-md:order-1 max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="applyAlternative" spinner="applyAlternative" :disabled="$staleAlternatives" aria-describedby="{{ $staleAlternatives ? 'apply-why' : '' }}" data-testid="apply-alternative" />
+                    <x-button class="btn-ghost whitespace-nowrap max-md:order-3 max-md:h-11 max-md:min-h-11 max-md:flex-1 max-md:px-2 md:hidden" wire:click="markApplied" spinner="markApplied" data-testid="apply-request-compact">Marcar aplicada</x-button>
                 </div>
-                <div class="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm text-neutral">
+                <div class="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-sm text-neutral max-md:hidden">
                     <span>¿La acomodaste a mano?</span>
-                    <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-ghost btn-sm max-md:h-11 max-md:min-h-11 max-md:w-full" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
+                    <x-button label="Marcar como aplicada" icon="o-check-badge" class="btn-ghost btn-sm" wire:click="markApplied" spinner="markApplied" data-testid="apply-request" />
                 </div>
             @elseif ($canApply)
                 <p class="text-sm">{{ $isSchedule ? 'Acomoda el cambio en el editor de horarios y luego márcala como aplicada.' : 'Asigna el salón y luego márcala como aplicada.' }}</p>

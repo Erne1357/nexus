@@ -28,11 +28,11 @@
     <ul id="pending-groups" class="mt-3 grid gap-3 lg:grid-cols-2" x-show="open">
         @foreach ($placements->groups as $group)
             <li class="min-w-0 rounded-field border border-base-300 bg-base-100 px-3.5 py-2.5" wire:key="pending-{{ $group['group_id'] }}">
-                <p class="flex flex-wrap items-baseline gap-x-2 text-sm">
-                    <a href="{{ route('scheduling.editor', array_filter(['modalidad' => $shownModality->code ?? null, 'campus' => $campusCode ?? null, 'grupo' => $group['group_id'], 'solicitud' => $placementKey])) }}" wire:navigate
-                        class="link link-hover font-mono font-semibold whitespace-nowrap [word-spacing:-0.25em]">{{ $group['label'] }}</a>
-                    <span>{{ $group['subject'] }}</span>
-                </p>
+                <a href="{{ route('scheduling.editor', array_filter(['modalidad' => $shownModality->code ?? null, 'campus' => $campusCode ?? null, 'grupo' => $group['group_id'], 'solicitud' => $placementKey])) }}" wire:navigate
+                    class="-mx-1.5 -my-1 flex min-h-11 items-center gap-x-2 rounded-field px-1.5 text-sm hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-primary">
+                    <span class="min-w-0 flex-1"><span class="font-mono font-semibold whitespace-nowrap text-primary underline underline-offset-2 [word-spacing:-0.25em]">{{ $group['label'] }}</span> <span>{{ $group['subject'] }}</span></span>
+                    <x-icon name="o-arrow-right" class="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                </a>
                 @foreach ($group['moves'] as $move)
                     <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[13px] [word-spacing:-0.25em]">
                         <span @class(['min-w-[4.2rem] font-sans text-[11.5px] font-semibold [word-spacing:normal]', 'text-warning' => $move['tone'] === 'warning', 'text-error' => $move['tone'] === 'error', 'text-info' => $move['tone'] === 'info', 'text-neutral' => $move['tone'] === 'neutral'])>{{ $move['tag'] }}</span>

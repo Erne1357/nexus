@@ -65,7 +65,7 @@
                         @endif
                         @if ($mark)
                             <span @class(['flex min-w-0', 'mt-px' => $item['span'] > 1])>
-                                <span class="inline-flex h-[14px] max-w-full items-center gap-px overflow-hidden rounded-[3px] border px-0.5 text-[11px] leading-none font-semibold whitespace-nowrap {{ $mark['tone'] }}">
+                                <span class="inline-flex h-[14px] max-w-full items-center overflow-hidden rounded-[3px] px-px text-[11px] leading-none font-semibold whitespace-nowrap {{ $mark['tone'] }}">
                                     <x-icon :name="$mark['icon']" class="h-[11px] w-[11px] shrink-0" />
                                     <span @class(['truncate @max-[30rem]:hidden', 'font-mono' => $mark['mono']])>{{ $mark['text'] }}</span>
                                 </span>
