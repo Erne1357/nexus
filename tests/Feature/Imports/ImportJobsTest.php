@@ -155,6 +155,18 @@ it('si el proceso muere a media aplicación, el lote queda fallido con lo que al
     Event::assertDispatched(BatchApplied::class, fn (BatchApplied $event): bool => $event->batch->is($batch) && $event->counts === $counts);
 });
 
+it('si el proceso muere a media aplicación, la cola rehace el archivo de errores que el asistente espera', function () {
+    $batch = ImportBatch::factory()->create();
+    $job = new ApplyQueuedBatch($batch, $this->admin);
+    $batch->update(['status' => BatchStatus::Applying, 'run_id' => $job->run, 'errors_exported_at' => null]);
+    ImportRow::factory()->for($batch, 'batch')->create(['status' => RowStatus::Error]);
+
+    $job->failed(new TimeoutExceededException('Pasó del tiempo máximo.'));
+
+    expect($batch->fresh())->status->toBe(BatchStatus::Failed)->errors_exported_at->not->toBeNull()
+        ->and(Storage::disk('imports')->exists($batch->errors_path))->toBeTrue();
+});
+
 it('el fallo de un job duplicado no toca el lote que otra corrida sigue procesando', function (BatchStatus $status, string $job) {
     $batch = ImportBatch::factory()->create(['status' => $status, 'run_id' => (string) Str::uuid7()]);
 

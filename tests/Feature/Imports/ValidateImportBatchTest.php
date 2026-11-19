@@ -91,6 +91,19 @@ it('valida cada fila y deja el lote validado con sus cuentas', function () {
         ]);
 });
 
+it('borra al empezar las filas que dejó una validación anterior, como la que se atoró o murió a medio borrar', function () {
+    // El borrado va en la misma transacción que el paso a `validating`: si el job muere a la mitad, el lote se queda
+    // subido con estas filas y el siguiente intento las vuelve a borrar.
+    $batch = batchWithFile("code,name,modality\nC9,Campus Nueve,presencial\n", attributes: ['processed_rows' => 500]);
+    $leftover = ImportRow::factory()->for($batch, 'batch')->count(3)->create()->modelKeys();
+
+    app(ValidateImportBatch::class)->handle($batch);
+
+    expect($batch->fresh())->status->toBe(BatchStatus::Validated)->total_rows->toBe(1)->processed_rows->toBe(1)
+        ->and(ImportRow::whereKey($leftover)->exists())->toBeFalse()
+        ->and(ImportRow::where('batch_id', $batch->id)->count())->toBe(1);
+});
+
 it('no escribe en el catálogo al validar', function () {
     validateBatch(batchWithFile("code,name,modality\nC9,Campus Nueve,presencial\n"));
 

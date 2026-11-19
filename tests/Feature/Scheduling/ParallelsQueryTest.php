@@ -316,7 +316,7 @@ it('marca la materia armada cuando un grupo suelto ya junta a dos carreras', fun
 it('con la carga fuera de propuesta, asignación o ajustes dice por qué no se arma', function () {
     $this->world->load->update(['status' => LoadStatus::Published]);
 
-    expect(parallelsFor()->blockedReason)->toBe('La carga de Ciencias Básicas en Presencial está en publicada: no se editan paralelos.');
+    expect(parallelsFor()->blockedReason)->toBe('La carga de Ciencias Básicas en Presencial ya está publicada: no se editan paralelos.');
 });
 
 it('lee la pestaña con un número fijo de consultas, sin importar cuántas materias, carreras o grupos haya', function () {

@@ -86,9 +86,96 @@ it('dice cada clase de cambio de un grupo en una línea', function (array $entry
     ],
     'horario que se queda sin sesiones' => [
         ['kind' => 'changed', 'group' => diffTextGroup(), 'changes' => ['schedule' => ['from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']], 'to' => []]]],
-        'SCD-1027 Tópicos Avanzados de Programación, grupo A (C2): horario de lunes 7:00 a 9:00 a ninguno.',
+        'SCD-1027 Tópicos Avanzados de Programación, grupo A (C2): se quita la sesión del lunes 7:00 a 9:00.',
     ],
 ]);
+
+/*
+| RA-05: un cambio de horario dice solo las sesiones que cambiaron (las que se quitaron, las que se agregaron y las que se
+| movieron), nunca todo el horario de antes y de después: en la campana, la línea se corta a 160 caracteres.
+*/
+it('RA-05: de un cambio de horario nombra solo las sesiones que cambiaron', function (array $changes, string $text) {
+    expect(SnapshotDiffText::changes($changes))->toBe($text);
+})->with([
+    'una sesión movida entre tres, con otro salón' => [
+        [
+            'schedule' => [
+                'from' => [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00'], ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00'], ['day' => 3, 'starts_at' => '09:00', 'ends_at' => '10:00']],
+                'to' => [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00'], ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00'], ['day' => 4, 'starts_at' => '09:00', 'ends_at' => '10:00']],
+            ],
+            'room' => [
+                'from' => [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room' => 'LC05'], ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room' => 'LC05'], ['day' => 3, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room' => 'LC05']],
+                'to' => [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room' => 'LC05'], ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room' => 'LC05'], ['day' => 4, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room' => 'LN02']],
+            ],
+        ],
+        'horario y salón de miércoles 9:00 a 10:00 en LC05 a jueves 9:00 a 10:00 en LN02',
+    ],
+    'una sesión movida entre tres, en el mismo salón' => [
+        ['schedule' => [
+            'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 5, 'starts_at' => '07:00', 'ends_at' => '08:00']],
+            'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 5, 'starts_at' => '10:00', 'ends_at' => '11:00']],
+        ]],
+        'horario de viernes 7:00 a 8:00 a viernes 10:00 a 11:00',
+    ],
+    'una sesión agregada' => [
+        ['schedule' => [
+            'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+            'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+        ]],
+        'se agrega la sesión del miércoles 7:00 a 9:00',
+    ],
+    'dos sesiones quitadas, con su salón' => [
+        [
+            'schedule' => [
+                'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+                'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+            ],
+            'room' => [
+                'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101'], ['day' => 2, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'B-12'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => null]],
+                'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101']],
+            ],
+        ],
+        'se quitan las sesiones del martes 7:00 a 9:00 en B-12 y del miércoles 7:00 a 9:00 sin salón',
+    ],
+    'una movida y otra quitada: la movida es la de la misma duración' => [
+        ['schedule' => [
+            'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 5, 'starts_at' => '07:00', 'ends_at' => '08:00']],
+            'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 4, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+        ]],
+        'horario de miércoles 7:00 a 9:00 a jueves 7:00 a 9:00, se quita la sesión del viernes 7:00 a 8:00',
+    ],
+    'una movida de día y otra que solo cambió de salón' => [
+        [
+            'schedule' => [
+                'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+                'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00'], ['day' => 4, 'starts_at' => '07:00', 'ends_at' => '09:00']],
+            ],
+            'room' => [
+                'from' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101'], ['day' => 3, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101']],
+                'to' => [['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-204'], ['day' => 4, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101']],
+            ],
+        ],
+        'horario de miércoles 7:00 a 9:00 en A-101 a jueves 7:00 a 9:00 en A-101, salón del lunes 7:00 a 9:00 de A-101 a A-204',
+    ],
+]);
+
+it('RA-05: la línea de una sesión movida entre tres cabe en la campana y dice el cambio real', function () {
+    $sessions = fn (int $day, string $room): array => [
+        ['day' => 1, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room' => 'LC05'],
+        ['day' => 2, 'starts_at' => '09:00', 'ends_at' => '11:00', 'room' => 'LC05'],
+        ['day' => $day, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room' => $room],
+    ];
+    $times = fn (array $list): array => array_map(fn (array $session): array => array_diff_key($session, ['room' => true]), $list);
+
+    $line = SnapshotDiffText::entry(['kind' => 'changed', 'group' => diffTextGroup($sessions(4, 'LN02')), 'changes' => [
+        'schedule' => ['from' => $times($sessions(3, 'LC05')), 'to' => $times($sessions(4, 'LN02'))],
+        'room' => ['from' => $sessions(3, 'LC05'), 'to' => $sessions(4, 'LN02')],
+    ]]);
+
+    expect($line)->toBe('SCD-1027 Tópicos Avanzados de Programación, grupo A (C2): horario y salón de miércoles 9:00 a 10:00 en LC05 a jueves 9:00 a 10:00 en LN02.')
+        ->and(mb_strlen($line))->toBeLessThanOrEqual(160)
+        ->and($line)->not->toContain('lunes')->not->toContain('martes');
+});
 
 it('publicEntries da las líneas del diff sin lo interno: sin cupos, lugares por carrera, departamentos ni llaves', function () {
     $group = diffTextGroup([['day' => 1, 'starts_at' => '07:00', 'ends_at' => '09:00', 'room' => 'A-101']]);

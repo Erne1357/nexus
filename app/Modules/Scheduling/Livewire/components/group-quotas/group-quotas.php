@@ -108,7 +108,7 @@ new class extends Component
             'counted' => $counted,
             'proposed' => $proposed,
             'over' => $counted + $proposed - $data['capacity'],
-            'options' => array_map(fn (array $career): array => ['id' => $career['id'], 'label' => $career['code'].' · '.$career['name']], $addable),
+            'options' => array_map(fn (array $career): array => ['id' => $career['id'], 'name' => $career['code'].' · '.$career['name']], $addable),
             'hasAddable' => $addable !== [],
             'selected' => collect($addable)->firstWhere('id', $this->newCareer),
             'canManage' => $canManage,

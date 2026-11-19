@@ -1,7 +1,7 @@
 @use('App\Modules\Imports\Enums\BatchStatus')
 
 <div>
-    <x-header title="Importaciones" subtitle="Carga un catálogo desde una exportación del SII: sube el archivo, revisa cada fila y aplica." separator progress-indicator />
+    <x-header title="Importaciones" subtitle="Importa una exportación del SII: sube el archivo, revisa cada fila y aplica." separator progress-indicator />
 
     <x-steps wire:model="step" steps-color="step-primary" stepper-classes="w-full mb-6">
         <x-step step="1" text="Archivo">
@@ -17,7 +17,7 @@
                     @else
                         <x-form wire:submit="continue" no-separator>
                             <div class="grid gap-4 md:grid-cols-2">
-                                <x-select label="Plantilla" name="template" wire:model.live="template" :options="$templates" placeholder="Elige qué catálogo importas" />
+                                <x-select label="Plantilla" name="template" wire:model.live="template" :options="$templates" placeholder="Elige qué importas" />
 
                                 <x-file label="Archivo" name="file" wire:model="file" accept=".xlsx,.csv,.txt" hint="Exportación del SII en .xlsx, .csv o .txt, hasta 19 MB." />
                             </div>
@@ -66,8 +66,12 @@
                             {{ $recentBatch->campus?->code ?? '—' }}
                         @endscope
 
-                        @scope('cell_status', $recentBatch)
-                            <x-core::status-badge :tone="$recentBatch->status->tone()" :label="$recentBatch->status->label()" :icon="$recentBatch->status->icon()" />
+                        @scope('cell_status', $recentBatch, $stalledRecent)
+                            @if (in_array($recentBatch->id, $stalledRecent, true))
+                                <x-core::status-badge tone="warning" label="Atorado" icon="o-exclamation-triangle" />
+                            @else
+                                <x-core::status-badge :tone="$recentBatch->status->tone()" :label="$recentBatch->status->label()" :icon="$recentBatch->status->icon()" />
+                            @endif
                         @endscope
 
                         @scope('actions', $recentBatch)
@@ -91,7 +95,7 @@
         <x-step step="2" text="Columnas">
             @if ($currentStep === 2 && $definition)
                 <x-card shadow>
-                    <x-form wire:submit="upload" no-separator>
+                    <x-form wire:submit="uploadBatch" no-separator>
                         <p class="text-sm">
                             <span class="font-medium">{{ $definition->label() }}</span>
                             desde <span class="font-medium">{{ $file?->getClientOriginalName() }}</span>
@@ -168,7 +172,7 @@
 
                         <x-slot:actions>
                             <x-button label="Volver" icon="o-arrow-left" wire:click="back" />
-                            <x-button label="Validar el archivo" type="submit" icon="o-check" class="btn-primary" spinner="upload" />
+                            <x-button label="Validar el archivo" type="submit" icon="o-check" class="btn-primary" spinner="uploadBatch" />
                         </x-slot:actions>
                     </x-form>
                 </x-card>
@@ -183,10 +187,16 @@
         <div @if ($polling) wire:poll.2s @endif data-testid="batch-status">
             <x-card :title="$batch->original_name" :subtitle="$batchTemplate" shadow separator>
                 <x-slot:menu>
-                    <x-core::status-badge :tone="$batch->status->tone()" :label="$batch->status->label()" :icon="$batch->status->icon()" />
+                    @if ($stalled)
+                        <x-core::status-badge tone="warning" label="Atorado" icon="o-exclamation-triangle" />
+                    @else
+                        <x-core::status-badge :tone="$batch->status->tone()" :label="$batch->status->label()" :icon="$batch->status->icon()" />
+                    @endif
                 </x-slot:menu>
 
-                @if ($batch->status === BatchStatus::Uploaded)
+                @if ($stalled)
+                    <x-alert :title="$stalledNotice['title']" :description="$stalledNotice['description']" icon="o-exclamation-triangle" class="alert-warning" data-testid="batch-stalled" />
+                @elseif ($batch->status === BatchStatus::Uploaded)
                     <x-progress class="progress-info h-1" indeterminate />
                     <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
                         <p class="text-sm">En la cola: la validación empieza en cuanto se libere el proceso.</p>
@@ -354,6 +364,21 @@
                 {{-- Con wrap: a 390 px «Aplicar … y desactivar …» no cabe junto a «Importar otro archivo». --}}
                 <x-slot:actions class="flex-wrap">
                     <x-button label="Importar otro archivo" icon="o-arrow-up-tray" wire:click="startOver" />
+
+                    @if ($stalledNotice['action'] ?? null)
+                        <x-button
+                            :label="$stalledNotice['action']['label']"
+                            :icon="$stalledNotice['action']['icon']"
+                            class="btn-primary"
+                            wire:click="retryStalled"
+                            spinner="retryStalled"
+                            x-confirm="{{ $stalledNotice['action']['message'] }}"
+                            data-confirm-title="{{ $stalledNotice['action']['title'] }}"
+                            data-confirm-button="{{ $stalledNotice['action']['label'] }}"
+                            data-confirm-tone="{{ $stalledNotice['action']['tone'] }}"
+                            data-testid="retry-stalled"
+                        />
+                    @endif
 
                     @if ($currentStep === 3 && $batch->status === BatchStatus::Validated && ! $applyQueued)
                         @if ($batch->valid_rows > 0)

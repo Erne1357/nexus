@@ -86,7 +86,9 @@
                 <a href="{{ $file['url'] }}" class="flex min-h-11 items-center gap-3 rounded-field border border-base-300 px-3 py-2 hover:bg-base-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" data-testid="file-{{ $file['kind'] }}">
                     <x-icon :name="$file['icon']" class="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
                     <span class="min-w-0">
-                        <span class="block font-mono text-[13px] font-semibold break-all">{{ $file['filename'] }}</span>
+                        @php($extension = pathinfo($file['filename'], PATHINFO_EXTENSION))
+                        {{-- Se parte entre palabras, nunca a media extensión (ensayo 8.11, E-17: «…xls / x» a 375 px). --}}
+                        <span class="block font-mono text-[13px] font-semibold break-words">{{ $extension === '' ? $file['filename'] : \Illuminate\Support\Str::beforeLast($file['filename'], '.'.$extension) }}@if ($extension !== '')<span class="whitespace-nowrap">.{{ $extension }}</span>@endif</span>
                         <span class="block text-[12.5px] text-neutral">{{ $file['label'] }} · se prepara al descargar</span>
                     </span>
                 </a>

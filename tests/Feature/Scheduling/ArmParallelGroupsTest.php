@@ -138,7 +138,7 @@ it('con la carga fuera de propuesta, asignación o ajustes no arma', function ()
     $this->world->request($this->iind, 5, 1);
     $this->world->load->update(['status' => LoadStatus::Published]);
 
-    expect(armParallelsErrors([['ISIC' => 30, 'IIND' => 5]]))->toBe(['groups' => ['La carga de Ciencias Básicas en Presencial está en publicada: no se editan paralelos.']]);
+    expect(armParallelsErrors([['ISIC' => 30, 'IIND' => 5]]))->toBe(['groups' => ['La carga de Ciencias Básicas en Presencial ya está publicada: no se editan paralelos.']]);
 });
 
 it('una carrera con su parte pendiente no se arma hasta aceptarla', function () {
