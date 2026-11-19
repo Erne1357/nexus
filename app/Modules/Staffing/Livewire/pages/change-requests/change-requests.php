@@ -341,8 +341,9 @@ new #[Title('Solicitudes de cambio')] class extends Component
 
     /**
      * Mientras el motor busca, la pantalla pregunta cada 2 segundos (`wire:poll`, solo entonces). Cada tick lee solo las
-     * alternativas de la solicitud que se pintó calculando (`$pollingRequestId`, fija); mientras siga en el mismo estado
-     * (en cola o calculando) no vuelve a pintar. Al terminar pinta todo y avisa a quien decide.
+     * alternativas y el estado de la solicitud que se pintó calculando (`$pollingRequestId`, fija); mientras siga pendiente
+     * y en el mismo estado (en cola o calculando) no vuelve a pintar. Al terminar, o si la deciden en otra pestaña, pinta
+     * todo y, si terminó, avisa a quien decide.
      */
     public function pollAlternatives(Actor $context, ChangeRequestsQuery $query): void
     {
@@ -352,9 +353,11 @@ new #[Title('Solicitudes de cambio')] class extends Component
             return;
         }
 
-        $alternatives = ChangeRequest::query()->whereKey($this->pollingRequestId)->first(['id', 'alternatives'])?->alternatives;
+        $polled = ChangeRequest::query()->whereKey($this->pollingRequestId)->first(['id', 'status', 'alternatives']);
+        $alternatives = $polled?->alternatives;
 
-        if (ChangeAlternativesStatus::of($alternatives) === ChangeAlternativesStatus::Computing && ChangeAlternativesStatus::isQueued($alternatives) === $this->pollingQueued) {
+        if ($polled?->status === ChangeRequestStatus::Pending && ChangeAlternativesStatus::of($alternatives) === ChangeAlternativesStatus::Computing
+            && ChangeAlternativesStatus::isQueued($alternatives) === $this->pollingQueued) {
             $this->skipRender();
 
             return;
@@ -563,6 +566,7 @@ new #[Title('Solicitudes de cambio')] class extends Component
         $visible = $this->filtered($requests);
         $selected = ($this->requestId === '' ? null : $requests->firstWhere('id', $this->requestId)) ?? $visible->first();
         $department = collect($this->departments)->firstWhere('code', $this->department);
+        $selected?->group->loadMissing(['teacher' => fn ($teacher) => $teacher->withTrashed()->select('id', 'name')]);
         $view = $selected !== null && ($selected->status->isOpen() || ChangeAlternatives::chosen($selected->alternatives) !== null) ? $alternatives->for($selected, $this->alternative) : null;
         $chosen = $view['chosen'] ?? null;
         $computing = $selected !== null && $selected->status === ChangeRequestStatus::Pending && ($view['status'] ?? null) === ChangeAlternativesStatus::Computing->value;
