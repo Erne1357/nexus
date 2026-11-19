@@ -17,7 +17,7 @@
         style="--days: {{ $days }}; --rows: {{ $rows }}" role="img" aria-label="Semana de {{ $week['label'] }} con {{ mb_strtolower($name) }}">
         <div class="border-e border-b border-base-300 bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))]"></div>
         @foreach ($week['days'] as $index => $day)
-            <div @class(['truncate border-b border-base-300 bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))] px-1.5 py-1 text-xs font-semibold', 'border-s' => $index > 0])>
+            <div class="{{ \Illuminate\Support\Arr::toCssClasses(['truncate border-b border-base-300 bg-[color-mix(in_oklab,var(--color-secondary)_40%,var(--color-base-100))] px-1.5 py-1 text-xs font-semibold', 'border-s' => $index > 0]) }}">
                 <span class="@max-[30rem]:hidden">{{ $day['name'] }}</span><span class="hidden @max-[30rem]:inline">{{ \App\Modules\Staffing\Support\SessionLabels::DAYS[$day['day']] ?? $day['short'] }}</span>
             </div>
         @endforeach
@@ -27,7 +27,7 @@
             @endforeach
         </div>
         @foreach ($week['days'] as $index => $day)
-            <div @class(['relative h-[calc(var(--rows)*var(--r))] bg-[image:repeating-linear-gradient(to_bottom,transparent_0_calc(var(--r)-1px),var(--color-base-300)_calc(var(--r)-1px)_var(--r))]', 'border-s border-base-300' => $index > 0])>
+            <div class="{{ \Illuminate\Support\Arr::toCssClasses(['relative h-[calc(var(--rows)*var(--r))] bg-[image:repeating-linear-gradient(to_bottom,transparent_0_calc(var(--r)-1px),var(--color-base-300)_calc(var(--r)-1px)_var(--r))]', 'border-s border-base-300' => $index > 0]) }}">
                 @foreach ($week['laid'][$day['day']] ?? [] as $item)
                     @php
                         $state = $item['state'];
@@ -37,6 +37,8 @@
                             'hard' => ['icon' => 'o-x-circle', 'text' => 'Choca', 'tone' => 'border-error/35 bg-error/10 text-error', 'mono' => false],
                             default => null,
                         };
+                        $changed = in_array($state, ['moved', 'new', 'hard'], true);
+                        $quiet = in_array($state, ['same', 'fixed'], true);
                         $label = "{$item['label']}, {$day['name']} {$item['hours']}".($item['room'] ? ", {$item['room']}" : '').match ($state) {
                             'moved' => ", movida desde {$item['prev']}",
                             'new' => ', nueva',
@@ -45,9 +47,10 @@
                             default => ', sin cambio',
                         };
                     @endphp
-                    <div @class([
+                    <div class="{{ \Illuminate\Support\Arr::toCssClasses([
                         $item['color'] === null ? '[--chain:var(--color-neutral)]' : $chains[$item['color'] % count($chains)],
-                        'absolute z-[2] flex flex-col overflow-hidden rounded-[4px] py-0.5 ps-[7px] pe-1 top-[calc(var(--top)*var(--r)+1px)] left-[calc(var(--lane)*100%/var(--lanes)+2px)] h-[calc(var(--span)*var(--r)-2px)] w-[calc(100%/var(--lanes)-4px)] @max-[30rem]:ps-[5px] @max-[30rem]:pe-0.5',
+                        $item['span'] > 1 ? 'py-0.5' : 'py-0',
+                        'absolute z-[2] flex flex-col overflow-hidden rounded-[4px] ps-[7px] pe-1 top-[calc(var(--top)*var(--r)+1px)] left-[calc(var(--lane)*100%/var(--lanes)+2px)] h-[calc(var(--span)*var(--r)-2px)] w-[calc(100%/var(--lanes)-4px)] @max-[30rem]:ps-[5px] @max-[30rem]:pe-0.5',
                         match ($state) {
                             'moved' => 'border-[1.5px] border-warning bg-[color-mix(in_oklab,var(--chain)_9%,var(--color-base-100))] shadow-[inset_3px_0_0_var(--chain)]',
                             'new' => 'border-[1.5px] border-info bg-[color-mix(in_oklab,var(--chain)_9%,var(--color-base-100))] shadow-[inset_3px_0_0_var(--chain)]',
@@ -55,14 +58,14 @@
                             'fixed' => 'border border-dashed border-base-content/30 bg-base-200 text-neutral shadow-[inset_3px_0_0_color-mix(in_oklab,var(--color-neutral)_45%,var(--color-base-200))]',
                             default => 'border border-base-300 bg-base-100 text-neutral shadow-[inset_3px_0_0_color-mix(in_oklab,var(--chain)_40%,var(--color-base-100))]',
                         },
-                    ]) style="--top: {{ $item['top'] }}; --span: {{ $item['span'] }}; --lane: {{ $item['lane'] }}; --lanes: {{ $item['lanes'] }}" title="{{ $label }}" data-state="{{ $state }}">
-                        <span @class(['truncate font-mono text-[11px] leading-tight text-base-content [word-spacing:-0.3em] @max-[30rem]:hidden', 'font-semibold' => in_array($state, ['moved', 'new', 'hard'], true), 'font-medium' => ! in_array($state, ['moved', 'new', 'hard'], true)])>{{ $item['title'] }}</span>
-                        @if ($item['span'] > 1 || in_array($state, ['same', 'fixed'], true))
+                    ]) }}" style="--top: {{ $item['top'] }}; --span: {{ $item['span'] }}; --lane: {{ $item['lane'] }}; --lanes: {{ $item['lanes'] }}" title="{{ $label }}" data-state="{{ $state }}">
+                        <span @class(['truncate font-mono text-[11px] text-base-content [word-spacing:-0.3em] @max-[30rem]:hidden', 'leading-tight' => $item['span'] > 1, 'leading-none pt-px' => $item['span'] <= 1, 'font-semibold' => $changed, 'font-medium' => ! $changed])>{{ $item['title'] }}</span>
+                        @if ($item['span'] > 1 || $quiet)
                             <span class="truncate font-mono text-[11px] leading-tight text-neutral @max-[30rem]:hidden">{{ $state === 'fixed' ? $item['mark'] : ($item['room'] ?? 'Sin salón') }}</span>
                         @endif
                         @if ($mark)
-                            <span class="mt-px flex min-w-0">
-                                <span class="inline-flex h-[15px] max-w-full items-center gap-[3px] overflow-hidden rounded-[4px] border px-1 text-[11px] leading-none font-semibold whitespace-nowrap @max-[30rem]:px-0.5 {{ $mark['tone'] }}">
+                            <span @class(['flex min-w-0', 'mt-px' => $item['span'] > 1])>
+                                <span class="inline-flex h-[14px] max-w-full items-center gap-[3px] overflow-hidden rounded-[4px] border px-1 text-[11px] leading-none font-semibold whitespace-nowrap @max-[30rem]:px-0.5 {{ $mark['tone'] }}">
                                     <x-icon :name="$mark['icon']" class="h-[11px] w-[11px] shrink-0" />
                                     <span @class(['truncate @max-[30rem]:hidden', 'font-mono' => $mark['mono']])>{{ $mark['text'] }}</span>
                                 </span>

@@ -67,7 +67,7 @@
         <h4 class="{{ $cap }}">{{ $isPedido ? 'Lo que se mueve' : 'Cadena de movimientos' }}</h4>
         <ol class="grid gap-3.5" data-testid="alternative-chain">
             @foreach ($option['chain'] as $row)
-                <li @class(['relative min-w-0 ps-[22px]', $row['color'] === null ? '[--chain:var(--color-neutral)]' : $chains[$row['color'] % count($chains)]])>
+                <li class="{{ \Illuminate\Support\Arr::toCssClasses(['relative min-w-0 ps-[22px]', $row['color'] === null ? '[--chain:var(--color-neutral)]' : $chains[$row['color'] % count($chains)]]) }}">
                     <span class="absolute start-0 top-1 h-3 w-3 rounded-[4px] border-[1.5px] border-(--chain) bg-[color-mix(in_oklab,var(--chain)_18%,var(--color-base-100))]" aria-hidden="true"></span>
                     <div class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
                         <span class="font-mono font-semibold whitespace-nowrap [word-spacing:-0.25em]">{{ $row['label'] }}</span>

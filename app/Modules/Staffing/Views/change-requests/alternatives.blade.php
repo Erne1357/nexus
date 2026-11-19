@@ -68,11 +68,11 @@
                             @endphp
                             <button type="button" role="tab" id="tab-{{ $tab['key'] }}" aria-controls="alternative-panel" aria-selected="{{ $on ? 'true' : 'false' }}" tabindex="{{ $on ? 0 : -1 }}"
                                 wire:click="$set('alternative', '{{ $tab['key'] }}')" data-testid="tab-{{ $tab['key'] }}"
-                                @class([
+                                class="{{ \Illuminate\Support\Arr::toCssClasses([
                                     '-mb-px grid min-w-0 content-center gap-0.5 border-b-2 px-3 pt-2.5 pb-2 text-start hover:bg-base-200 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary @max-[30rem]:px-2 max-md:min-h-11',
                                     'border-primary bg-[color-mix(in_oklab,var(--color-secondary)_35%,var(--color-base-100))]' => $on,
                                     'border-transparent' => ! $on,
-                                ])>
+                                ]) }}">
                                 <span @class(['truncate text-sm whitespace-nowrap', 'font-semibold' => $on, 'font-medium' => ! $on])>
                                     <span class="@max-[30rem]:hidden">{{ $tab['name'] }}</span><span class="hidden @max-[30rem]:inline">{{ $tab['short'] }}</span>
                                 </span>

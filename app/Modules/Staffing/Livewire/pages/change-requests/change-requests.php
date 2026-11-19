@@ -337,14 +337,15 @@ new #[Title('Solicitudes de cambio')] class extends Component
     }
 
     /**
-     * Aprueba la solicitud con la alternativa de la pestaña abierta (CR-03). Si algo cambió desde que se calcularon, no
-     * aprueba y marca las alternativas vencidas.
+     * Aprueba la solicitud con la alternativa de la pestaña abierta (CR-03; el pie manda su id, porque la de omisión no
+     * está en `$alternative`). Si algo cambió desde que se calcularon, no aprueba y marca las alternativas vencidas.
      */
-    public function approveWithAlternative(Actor $context, ChangeRequestsQuery $query, ChooseChangeAlternative $choose): void
+    public function approveWithAlternative(Actor $context, ChangeRequestsQuery $query, ChooseChangeAlternative $choose, string $alternativeId = ''): void
     {
         $request = $this->selectedOrFail($context, $query);
         $this->authorize('decide', $request);
         $this->validateComment(required: false);
+        $this->alternative = $alternativeId !== '' ? $alternativeId : $this->alternative;
 
         if (ChangeAlternativesStatus::of($request->alternatives) !== ChangeAlternativesStatus::Ready || ! collect($request->alternatives['items'] ?? [])->contains('id', $this->alternative)) {
             $this->addError('alternative', 'Elige una de las alternativas del motor.');
