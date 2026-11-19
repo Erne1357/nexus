@@ -31,9 +31,10 @@ use App\Modules\Solver\Queries\BuildSolverInput;
 use App\Modules\Solver\Rules\InputFingerprint;
 
 /*
-| ProposePlacements (tareas 8.7 y 8.3b; docs/arquitectura/solver.md, «Acomodos en la petición»): pide al motor, en la
-| petición, acomodos alternativos para unos grupos con todo lo demás fijo. Cada alternativa es completa, sin violaciones
-| duras, distinta de las demás y cambia algo. Las siguientes apartan las horas de las anteriores. Tiene un plazo.
+| ProposePlacements (tareas 8.7 y 8.3b; docs/arquitectura/solver.md, «Acomodos de unos grupos»): pide al motor, directo
+| y con un tope chico, acomodos alternativos para unos grupos con todo lo demás fijo. Cada alternativa es completa, sin
+| violaciones duras nuevas, distinta de las demás y cambia algo; las siguientes apartan las horas de las anteriores. Dice
+| por qué paró (todas, sin más acomodos o el tiempo).
 */
 
 /**

@@ -23,9 +23,10 @@ use Closure;
 use InvalidArgumentException;
 
 /**
- * Pide al motor, en la misma petición, acomodos alternativos para unos grupos con todo lo demás fijo (tareas 8.7 y 8.3b;
- * docs/arquitectura/solver.md, «Acomodos en la petición»). Es la puerta única de las alternativas de una solicitud de
- * cambio (Staffing, ADR-0029) y de abrir un grupo en el re-análisis. No escribe nada: ni sesiones ni `solver_runs`.
+ * Pide al motor, directo y con un tope chico, acomodos alternativos para unos grupos con todo lo demás fijo (tareas 8.7 y 8.3b;
+ * docs/arquitectura/solver.md, «Acomodos de unos grupos»). Es la puerta única de las alternativas de una solicitud de
+ * cambio (Staffing, ADR-0029; las calcula en un job) y de abrir un grupo en el re-análisis. No escribe nada: ni sesiones
+ * ni `solver_runs`.
  *
  * - La entrada es la de BuildSolverInput::forGroups(): los grupos pedidos y los virtuales se mueven; lo demás, fijo.
  * - `$pinnedSessions` fija las sesiones de algunos de esos grupos (la propuesta del coordinador en una cadena de
@@ -57,8 +58,8 @@ use InvalidArgumentException;
 final class ProposePlacements
 {
     /**
-     * Segundos de motor para todas las alternativas de una llamada (supuesto por confirmar): corre en la petición, así
-     * que es chico. Medido el 18 de noviembre de 2026 (docs/arquitectura/solver.md, «Acomodos en la petición»): tres
+     * Segundos de motor para todas las alternativas de una llamada (supuesto por confirmar): es chico porque quien llama
+     * espera la respuesta (la 8.7, en su job). Medido el 18 de noviembre de 2026 (docs/arquitectura/solver.md, «Acomodos de unos grupos»): tres
      * alternativas de un grupo de la demo masiva toman de 0.08 a 0.17 s de motor. Armar la entrada (la foto de la
      * modalidad) va aparte y no cuenta en este plazo.
      */
