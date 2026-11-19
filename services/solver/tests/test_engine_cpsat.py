@@ -231,3 +231,106 @@ def test_los_motivos_salen_de_las_reglas_que_quitaron_opciones():
         "HC-09: el docente no está disponible en 5 de sus 6 opciones.",
         "HC-01: el docente ya tiene clase en 1 de sus 6 opciones, con 1 grupo programado.",
     ]
+
+
+def test_hc08_sale_una_sola_vez_por_grupo():
+    """HC-08 no depende del horario (PS-08): `verify.py` ya la trae de la entrada, así que cada grupo movible del
+    docente lleva una sola violación. g1 y g2 de 2 horas con un docente al que le quedan 3: dos HC-08, no cuatro."""
+    data = parse_input(
+        instance(
+            groups=[group("g1", 2, teacher_id="t1"), group("g2", 2, teacher_id="t1")],
+            teachers=[teacher("t1", remaining_hours=3)],
+            rooms=[room("r1"), room("r2")],
+        )
+    )
+
+    output = CpSatEngine().solve(data, context())
+
+    hours = [violation for violation in output.hard_violations if violation.rule == "HC-08"]
+    assert sorted(group_id for violation in hours for group_id in violation.group_ids) == ["g1", "g2"]
+    assert output.status is RunStatus.PARTIAL
+
+
+def test_con_muchos_grupos_sin_lugar_todos_llevan_su_regla_y_no_se_arma_uno_por_uno(monkeypatch):
+    """40 grupos de 50 alumnos sin salón que les quepa (HC-05) y uno que sí cabe. Un solo modelo con todos los que no
+    quedaron da las reglas de cada uno: a ninguno de los 40 se le arma su propia entrada (`_alone`), y todos salen con
+    HC-05 al frente, sin «no se alcanzó». Uno con lugar se programa."""
+    from app.model import solve as solve_module
+
+    alone = solve_module._alone
+    tried: list[str] = []
+
+    def counted(data, search, group_id, *args):
+        tried.append(group_id)
+        return alone(data, search, group_id, *args)
+
+    monkeypatch.setattr(solve_module, "_alone", counted)
+    big = [group(f"grande{i:02d}", 2, capacity=50) for i in range(40)]
+    data = parse_input(instance(groups=[group("cabe", 2), *big], rooms=[room("r1"), room("r2")]))
+
+    output = CpSatEngine().solve(data, context())
+
+    reasons = {entry.group_id: entry.reasons for entry in output.unscheduled}
+    assert set(reasons) == {entry["id"] for entry in big}
+    assert all(entry[0].startswith("HC-05:") for entry in reasons.values())
+    assert not set(tried) & set(reasons)
+    assert {session.group_id for session in output.sessions} == {"cabe"}
+    assert output.status is RunStatus.PARTIAL
+
+
+def test_infactible_solo_si_a_todos_los_que_faltan_se_lo_impiden_sus_reglas():
+    """`infeasible` es «no cabe»: ningún grupo quedó y a todos los que faltan se lo impiden sus reglas. Si a alguno le
+    faltó tiempo, la corrida es `partial`, aunque no haya quedado ninguno."""
+    from app.model.solve import Unplaced, run_status
+
+    rules, time_out = Unplaced(["HC-05: …"], by_rules=True), Unplaced(["No se alcanzó…"], by_rules=False)
+
+    assert run_status(True, False, [rules, rules], False) is RunStatus.INFEASIBLE
+    assert run_status(True, False, [rules, time_out], False) is RunStatus.PARTIAL
+    assert run_status(True, True, [rules], False) is RunStatus.PARTIAL
+    assert run_status(True, True, [], True) is RunStatus.PARTIAL
+    assert run_status(True, True, [], False) is RunStatus.FEASIBLE
+
+    only_big = parse_input(instance(groups=[group("grande", 2, capacity=50)], rooms=[room("r1")]))
+    output = CpSatEngine().solve(only_big, context())
+    assert output.status is RunStatus.INFEASIBLE
+    assert output.unscheduled[0].reasons[0].startswith("HC-05:")
+
+
+def test_sin_tiempo_en_la_reserva_el_grupo_con_opciones_dice_que_falto_tiempo_y_sus_reglas_siguen():
+    """Si la reserva se acabó, un grupo que sí tiene opciones con lo demás fijo sale con «no se alcanzó» (y la corrida
+    no sería `infeasible`), mientras que uno sin opciones sale con su regla: los dos llevan motivo."""
+    from app.model.data import ModelData
+    from app.model.phases import SearchLimits
+    from app.model.search import Search
+    from app.model.solve import _complete
+
+    data = ModelData.of(
+        parse_input(instance(groups=[group("cabe", 2), group("grande", 2, capacity=50)], rooms=[room("r1")]))
+    )
+    search = Search(unplaced=["cabe", "grande"])
+
+    found = _complete(data, search, time.perf_counter() - 1, SearchLimits(), seed=0)
+
+    assert found["cabe"].reasons[0].startswith("No se alcanzó a programar en el plazo de la corrida")
+    assert not found["cabe"].by_rules
+    assert found["grande"].reasons[0].startswith("HC-05:")
+    assert found["grande"].by_rules
+
+
+def test_sin_todos_programados_no_hay_mejor_puntaje_ni_soluciones_completas():
+    """El mejor puntaje del avance es de una solución con todos los grupos: con uno que no cabe, nunca se reporta (la
+    corrida pone el de la salida al terminar), e `intermediate_solutions` cuenta soluciones completas: 0. Con todos,
+    al menos la primera."""
+    reports: list[int | None] = []
+    data = parse_input(
+        instance(groups=[group("cabe", 2), group("grande", 2, capacity=50)], rooms=[room("r1"), room("r2")])
+    )
+
+    partial = CpSatEngine().solve(data, context(report=lambda percent, best: reports.append(best)))
+
+    assert reports
+    assert all(best is None for best in reports)
+    assert partial.metrics.intermediate_solutions == 0
+    complete = CpSatEngine().solve(fixture("tiny")[0], context())
+    assert complete.metrics.intermediate_solutions >= 1

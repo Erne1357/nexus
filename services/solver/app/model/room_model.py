@@ -32,6 +32,7 @@ from .data import ModelData
 from .pattern import minutes
 from .phases import FEASIBLE, SearchLimits, run_solver
 from .score import Score, SoftScorer, hours
+from .solution import current_slots, in_room
 from .variables import ModelTooLarge
 
 #: Salones por edificio que se ofrecen a una ventana pegada a una sesión de ese edificio: los más ajustados.
@@ -61,10 +62,12 @@ def improve_rooms(
     limits: SearchLimits | None = None,
     scope: set[str] | None = None,
     groups: set[str] | None = None,
+    seed: int = 0,
 ) -> list[ProposedSession]:
     """Las mismas sesiones con los salones que bajan SC-03 y SC-06; con `groups`, solo cambian los salones de esos
-    grupos. Si no hay nada que ganar, no alcanza el tiempo o el modelo no mejora, las de entrada."""
-    return improve_rooms_scored(data, sessions, deadline, limits, scope, groups)[0]
+    grupos. Si no hay nada que ganar, no alcanza el tiempo o el modelo no mejora, las de entrada. Una sesión que
+    cambia de salón lleva `changed` vuelto a calcular contra `current_sessions`."""
+    return improve_rooms_scored(data, sessions, deadline, limits, scope, groups, seed=seed)[0]
 
 
 def improve_rooms_scored(
@@ -75,6 +78,7 @@ def improve_rooms_scored(
     scope: set[str] | None = None,
     groups: set[str] | None = None,
     scorer: SoftScorer | None = None,
+    seed: int = 0,
 ) -> tuple[list[ProposedSession], Score]:
     """`improve_rooms` con el puntaje de lo que devuelve (de `score.py`, con `scorer` si ya se tiene uno)."""
     limits = limits or SearchLimits()
@@ -101,14 +105,14 @@ def improve_rooms_scored(
             break
         share = (deadline - now) / (len(days) - index)
         try:
-            rooms.update(_solve_day(data, scorer, by_day[day], involved, scope, now + share, limits))
+            rooms.update(_solve_day(data, scorer, by_day[day], involved, scope, now + share, limits, seed))
         except ModelTooLarge:
             # Un día que pasa del tope de variables se queda con los salones del emparejamiento.
             continue
 
     room_of = {index: rooms[window] for window in windows for index in window.sessions}
     improved = [
-        session.model_copy(update={"room_id": room_of[index]})
+        in_room(session, room_of[index], current_slots(data.groups[session.group_id]))
         if room_of.get(index, session.room_id) != session.room_id
         else session
         for index, session in enumerate(sessions)
@@ -201,6 +205,7 @@ def _solve_day(
     scope: set[str],
     deadline: float,
     limits: SearchLimits,
+    seed: int,
 ) -> dict[_Window, str]:
     pairs = _adjacent_pairs(data, scorer, windows)
     buildings_near: dict[_Window, set[str]] = defaultdict(set)
@@ -283,6 +288,7 @@ def _solve_day(
     )
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max(0.05, deadline - time.perf_counter())
+    solver.parameters.random_seed = seed
     if run_solver(solver, model, limits) not in FEASIBLE:
         return {}
 

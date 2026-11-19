@@ -411,7 +411,14 @@ def improve(
                 # Los salones del vecindario los repartió la fase B sin ver edificios: se ajustan antes de comparar.
                 room_deadline = min(deadline, time.perf_counter() + IMPROVE_ROOM_SECONDS)
                 proposed, score = improve_rooms_scored(
-                    data, proposed, room_deadline, limits, scope, groups=movable, scorer=scorer
+                    data,
+                    proposed,
+                    room_deadline,
+                    limits,
+                    scope,
+                    groups=movable,
+                    scorer=scorer,
+                    seed=seed + result.steps,
                 )
                 tiers = sum({**search.tiers, **step.tiers}.values())
                 if tiers < result.tiers or (tiers == result.tiers and score.total < result.best.total):

@@ -14,7 +14,7 @@ from app.model.phases import SearchLimits
 from app.model.room_model import improve_rooms
 from app.model.score import SoftScorer
 from app.model.verify import hard_violations
-from tests.instances import campus, group, instance, room, teacher
+from tests.instances import campus, group, instance, room, session, teacher
 
 DAY = [campus(day_end="14:00")]
 
@@ -67,6 +67,30 @@ def test_sc03_lleva_la_materia_a_su_salon_por_defecto():
 
     assert score(data, result).by_rule["SC-03"] == 0
     assert rooms_of(result, "g1") == {"r2"}
+
+
+def test_al_cambiar_de_salon_changed_se_vuelve_a_calcular_contra_el_horario_actual():
+    """`changed` incluye el salón (PS-07), así que la fase B con objetivo lo vuelve a calcular cuando mueve una sesión.
+    g1 está hoy en r1 lunes y martes a las 07:00 y tiene a r2 por defecto (SC-03, peso 10): sale en r2 y cambiada. Al
+    revés, si r1 es su salón por defecto y la propuesta lo puso en r2, regresa a r1 y ya no está cambiada."""
+    current = [session(1, "07:00", "08:00", "r1"), session(2, "07:00", "08:00", "r1")]
+
+    def data_with(default: str) -> dict[str, Any]:
+        return instance(
+            campuses=DAY,
+            groups=[group("g1", 2, current_sessions=current)],
+            rooms=[room("r1"), room("r2")],
+            subject_room_defaults=[{"subject_code": "MAT-g1", "campus_code": "C1", "room_id": default, "priority": 1}],
+            soft_weights=weights(sc_03=10),
+        )
+
+    def proposed(room_id: str, changed: bool) -> list[ProposedSession]:
+        return [one_hour("g1", day, "07:00", room_id).model_copy(update={"changed": changed}) for day in (1, 2)]
+
+    moved = improved(data_with("r2"), proposed("r1", changed=False))
+    assert [(s.room_id, s.changed) for s in moved] == [("r2", True), ("r2", True)]
+    back = improved(data_with("r1"), proposed("r2", changed=True))
+    assert [(s.room_id, s.changed) for s in back] == [("r1", False), ("r1", False)]
 
 
 def test_el_modelo_de_salones_de_un_dia_respeta_el_tope_de_variables():

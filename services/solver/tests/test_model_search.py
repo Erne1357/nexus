@@ -165,8 +165,9 @@ def test_la_cancelacion_detiene_a_cp_sat_mientras_resuelve():
 
 
 def test_los_limites_salen_del_contexto_de_la_corrida(monkeypatch):
-    """Los hilos son los del servicio (`SOLVER_THREADS`); con 0, los núcleos del contenedor, nunca todos los de la
-    máquina. El tope de variables y la cancelación también vienen del contexto."""
+    """Los hilos son los del servicio (`SOLVER_THREADS`) o los de la entrada; con 0, los núcleos del contenedor, nunca
+    todos los de la máquina, y nunca más que los núcleos del contenedor (`threads=64` en uno de 2 CPU son 2). El tope
+    de variables y la cancelación también vienen del contexto."""
     from app.engine import RunContext
     from app.model import phases
 
@@ -177,8 +178,21 @@ def test_los_limites_salen_del_contexto_de_la_corrida(monkeypatch):
     assert limits.workers == 2
     assert limits.max_variables == 123
     assert limits.check_cancelled == context.check_cancelled
-    assert phases.SearchLimits.of(RunContext(threads=3)).workers == 3
+    assert phases.SearchLimits.of(RunContext(threads=1)).workers == 1
+    assert phases.SearchLimits.of(RunContext(threads=64)).workers == 2
     assert limits.budget(1.0).max_variables == 123
+
+
+def test_un_modelo_invalido_no_se_esconde_como_infactible():
+    """`MODEL_INVALID` es un defecto del motor: `run_solver` lanza `InvalidModel` con el mensaje de CP-SAT, y la
+    corrida queda `failed` en vez de reportar «no cabe»."""
+    from app.model.phases import InvalidModel, SearchLimits, run_solver
+
+    model = cp_model.CpModel()
+    model.new_int_var(5, 1, "vacía")
+
+    with pytest.raises(InvalidModel, match="no es válido"):
+        run_solver(cp_model.CpSolver(), model, SearchLimits())
 
 
 def test_el_benchmark_reproduce_la_tabla_con_un_fixture():

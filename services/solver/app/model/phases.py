@@ -53,10 +53,12 @@ class SearchLimits:
 
     @classmethod
     def of(cls, context: Any) -> "SearchLimits":
-        """Los de un `RunContext`: `threads` (0 son los núcleos del contenedor, nunca más),
-        `max_model_variables` y `check_cancelled`."""
+        """Los de un `RunContext`: `threads` (0 son los núcleos del contenedor; más que esos, también: la memoria de
+        CP-SAT crece con los hilos y el tope de variables se midió con 2), `max_model_variables` y
+        `check_cancelled`."""
+        cpus = available_cpus()
         return cls(
-            workers=context.threads if context.threads > 0 else available_cpus(),
+            workers=min(context.threads, cpus) if context.threads > 0 else cpus,
             max_variables=context.max_model_variables,
             check_cancelled=context.check_cancelled,
         )
@@ -80,6 +82,11 @@ class _OnSolution(cp_model.CpSolverSolutionCallback):
         self._handler(self)
 
 
+class InvalidModel(RuntimeError):
+    """CP-SAT dijo que el modelo no es válido (`MODEL_INVALID`): es un defecto del motor, no de la entrada, así que la
+    corrida falla con el mensaje de CP-SAT en vez de esconderlo como «no cabe»."""
+
+
 def run_solver(
     solver: cp_model.CpSolver,
     model: cp_model.CpModel,
@@ -88,11 +95,12 @@ def run_solver(
 ) -> Any:
     """`solver.solve(model)` con los hilos de los límites y revisando la cancelación cada `CANCEL_POLL_SECONDS`: si
     la cancelan, detiene la búsqueda (`stop_search`) y vuelve a lanzar la excepción de la cancelación. Con
-    `on_solution`, lo llama en cada solución intermedia (no debe lanzar excepciones: corre en un hilo de CP-SAT)."""
+    `on_solution`, lo llama en cada solución intermedia (no debe lanzar excepciones: corre en un hilo de CP-SAT). Un
+    `MODEL_INVALID` lanza `InvalidModel`."""
     solver.parameters.num_workers = limits.workers
     callback = _OnSolution(on_solution) if on_solution is not None else None
     if limits.check_cancelled is None:
-        return solver.solve(model, callback)
+        return _valid(solver.solve(model, callback), model)
 
     done = threading.Event()
     raised: list[BaseException] = []
@@ -115,6 +123,13 @@ def run_solver(
         watcher.join()
     if raised:
         raise raised[0]
+
+    return _valid(status, model)
+
+
+def _valid(status: Any, model: cp_model.CpModel) -> Any:
+    if status == cp_model.MODEL_INVALID:
+        raise InvalidModel(f"CP-SAT dice que el modelo no es válido: {model.validate() or 'sin detalle'}")
 
     return status
 

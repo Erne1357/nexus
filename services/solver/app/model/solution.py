@@ -12,7 +12,7 @@ fase B (`assign_rooms`, `rooms.match`).
 
 from ortools.sat.python import cp_model
 
-from app.contract.input import SessionKind
+from app.contract.input import GroupInput, SessionKind
 from app.contract.output import ProposedSession
 
 from .data import ModelData
@@ -22,6 +22,25 @@ from .variables import GroupDomain, Option, Variables, Window, practice_units
 
 #: El salón de cada ventana del conjunto: (grupo, día) -> salón.
 PooledRooms = dict[tuple[str, int], str]
+
+#: Una sesión del horario actual de un grupo: (día, inicio, fin en minutos, salón, tipo).
+CurrentSlot = tuple[int, int, int, str | None, SessionKind]
+
+
+def current_slots(group: GroupInput) -> set[CurrentSlot]:
+    """El horario actual del grupo (`current_sessions`), para marcar `changed` (PS-07)."""
+    return {
+        (slot.day, minutes(slot.starts_at), minutes(slot.ends_at), slot.room_id, slot.kind)
+        for slot in group.current_sessions
+    }
+
+
+def in_room(session: ProposedSession, room_id: str | None, current: set[CurrentSlot]) -> ProposedSession:
+    """La sesión en otro salón, con `changed` vuelto a calcular: el salón también cuenta. Lo usa la fase B con objetivo
+    (`room_model.py`), que mueve salones después de armar las sesiones."""
+    slot = (session.day, minutes(session.starts_at), minutes(session.ends_at), room_id, session.kind)
+
+    return session.model_copy(update={"room_id": room_id, "changed": slot not in current})
 
 
 def chosen_option(solver: cp_model.CpSolver, domain: GroupDomain) -> Option | None:
@@ -100,10 +119,7 @@ def _group_sessions(
         or (window.rooms and all(data.is_practice_space(room_id) for room_id in window.rooms))
     }
     practice = _practice_by_day(domain, option, rooms, lab_days, data)
-    current = {
-        (slot.day, minutes(slot.starts_at), minutes(slot.ends_at), slot.room_id, slot.kind)
-        for slot in group.current_sessions
-    }
+    current = current_slots(group)
 
     sessions = []
     for window in option.windows:
