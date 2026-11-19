@@ -525,6 +525,15 @@ La unidad de corrida es la carga: un departamento en una modalidad, con sus grup
 
 Una parte aceptada se vuelve fija para las siguientes corridas. Si una parte queda `partial`, se puede relanzar con más tiempo o después de ajustar lo que dicen los motivos de `unscheduled` (en v1 ningún motor relaja una regla dura).
 
+**Con CP-SAT, de punta a punta (tarea 7.8).** No hizo falta código nuevo para la secuencia: `RunOrderQuery` sugiere el orden, `BuildSolverInput` pone lo aceptado de otras cargas como grupos con `movable = false` y sus sesiones de la base en `fixed_sessions`, y el modelo los toma como ocupación de su docente, sus salones y sus cohortes (`data.py`). Lo prueban:
+
+- `tests/Feature/Solver/CpSatDecompositionTest.php`, con el servicio simulado por respuestas grabadas del servicio real (`tests/Fixtures/solver/cpsat/sequence/`; la prueba explica cómo volver a grabarlas con `CPSAT_RECORD_URL`). Las grabaciones guardan los grupos, salones y docentes por su clave de negocio (`<materia>/<grupo>`, `<campus>/<salón>`, RFC), porque la base de la prueba genera ids nuevos en cada corrida:
+  - dos cargas de una misma cohorte con un docente y dos salones compartidos, en una jornada corta: se lanza y se acepta la primera que sugiere `RunOrderQuery` (`LaunchSolverRun`, `RequestApplySolverRun` y `ApplySolverRunJob` con la cola síncrona); la entrada de la segunda trae las sesiones aceptadas como fijas, su salida no las propone ni se empalma con ellas, y al aceptarla lo de la primera sigue igual y el validador de la fase 3 no encuentra choques duros;
+  - en la demo al punto `asignacion`, las dos primeras cargas del orden sugerido (Ciencias Económico-Administrativas, 150 grupos, y después Ciencias Básicas, 47), corridas con CP-SAT con 60 s y aceptadas en secuencia: lo aceptado de la primera entra fijo a la segunda con sus sesiones, y al final ni el validador (`ScheduleValidator::validateLoad`) ni `schedule_conflicts` tienen choques duros. Es la prueba de que una solución de CP-SAT aceptada pasa el validador.
+- `services/solver/tests/test_engine_decomposition.py`: con lo fijo ocupando las 07:00 de la semana, dos grupos que comparten con él docente y cohorte, o salón, solo caben a las 08:00 y ahí quedan; y `medium` en dos corridas por carrera (la segunda con lo de la primera fijo), sin nada propuesto para lo fijo ni empalmes con él, revisado con `hard_violations` y con un verificador propio de la prueba.
+
+La secuencia en la demo encontró un hueco al aceptar: CP-SAT dejó sin acomodar un grupo de CEA (Taller de Informática I; HC-06 y HC-03 en sus motivos), que según SV-06 se queda con su horario de hoy, y escribió encima a otros de su cohorte. `ApplyPlan` solo retenía por docente y salón; ahora también retiene al grupo cuyas sesiones nuevas se empalman con un grupo que comparte una de sus claves de cohorte en lo que no se mueve (SV-06, supuesto por confirmar).
+
 ## Límites de tiempo y soluciones parciales
 
 - Toda corrida tiene `time_limit_seconds`; por defecto 60 por carrera y 300 por departamento (parámetros en `settings`).

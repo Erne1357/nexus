@@ -22,10 +22,12 @@ use App\Modules\Solver\Contract\SolverOutput;
  *   los de una violación dura de acomodo (`hard_violations[].group_ids` que no son de INPUT_RULES, con la regla y
  *   el mensaje; las de INPUT_RULES son `inputProblems` y no retienen), los que no recibieron ninguna
  *   sesión y los que chocarían con lo que se queda (supuesto por confirmar): si las sesiones nuevas de un grupo se
- *   empalman con las de su docente (HC-01) o de su salón (HC-02) en lo que no se mueve (las sesiones fijas de la
- *   entrada, la ocupación de docentes y salones fuera de la corrida y las de hoy de los grupos que se quedan) o con las
- *   nuevas de un grupo anterior (en el orden de la entrada), ese grupo también se queda. Como quedarse devuelve sus
- *   sesiones de hoy, se repite hasta que nada cambia.
+ *   empalman con las de su docente (HC-01), de su salón (HC-02) o de un grupo con una de sus claves de cohorte (HC-03,
+ *   desde el 19 de noviembre de 2026) en lo que no se mueve (las sesiones fijas de la entrada, la ocupación de docentes
+ *   y salones fuera de la corrida y las de hoy de los grupos que se quedan) o con las nuevas de un grupo anterior (en el
+ *   orden de la entrada), ese grupo también se queda. Como quedarse devuelve sus sesiones de hoy, se repite hasta que
+ *   nada cambia. Sin la cohorte, un grupo que el motor no acomodó se quedaba con su horario de hoy y los de su cohorte
+ *   se escribían encima (la secuencia de la 7.8 en la demo lo encontró).
  */
 final readonly class ApplyPlan
 {
@@ -132,15 +134,18 @@ final readonly class ApplyPlan
     private static function withoutClashes(SolverInput $input, array $groups): array
     {
         $teacherOf = [];
+        $cohortsOf = [];
 
         foreach ($input->groups as $group) {
             $teacherOf[$group->id] = $group->teacherId;
+            $cohortsOf[$group->id] = $group->cohorts;
         }
 
         do {
             $teachers = [];
             $rooms = [];
-            $add = function (?string $teacherId, ?string $roomId, int $day, string $startsAt, string $endsAt) use (&$teachers, &$rooms): void {
+            $cohorts = [];
+            $add = function (?string $teacherId, ?string $roomId, array $cohortKeys, int $day, string $startsAt, string $endsAt) use (&$teachers, &$rooms, &$cohorts): void {
                 $range = [WeekTime::minutes($startsAt), WeekTime::minutes($endsAt), $day, $startsAt, $endsAt];
 
                 if ($teacherId !== null) {
@@ -150,17 +155,21 @@ final readonly class ApplyPlan
                 if ($roomId !== null) {
                     $rooms[$roomId][$day][] = $range;
                 }
+
+                foreach ($cohortKeys as $key) {
+                    $cohorts[$key][$day][] = $range;
+                }
             };
 
             foreach ($input->teachers as $teacher) {
                 foreach ($teacher->busy as $slot) {
-                    $add($teacher->id, null, $slot->day, $slot->startsAt, $slot->endsAt);
+                    $add($teacher->id, null, [], $slot->day, $slot->startsAt, $slot->endsAt);
                 }
             }
 
             foreach ($input->rooms as $room) {
                 foreach ($room->busy as $slot) {
-                    $add(null, $room->id, $slot->day, $slot->startsAt, $slot->endsAt);
+                    $add(null, $room->id, [], $slot->day, $slot->startsAt, $slot->endsAt);
                 }
             }
 
@@ -168,7 +177,7 @@ final readonly class ApplyPlan
                 $sessions = $group->movable ? (($groups[$group->id]['status'] ?? null) === self::WRITE ? [] : $groups[$group->id]['current']) : array_map(self::slot(...), $group->fixedSessions);
 
                 foreach ($sessions as $session) {
-                    $add($group->teacherId, $session['room_id'], $session['day'], $session['starts_at'], $session['ends_at']);
+                    $add($group->teacherId, $session['room_id'], $group->cohorts, $session['day'], $session['starts_at'], $session['ends_at']);
                 }
             }
 
@@ -179,7 +188,7 @@ final readonly class ApplyPlan
                     continue;
                 }
 
-                $clash = self::clash($group['proposed'], $teacherOf[$groupId], $teachers, $rooms);
+                $clash = self::clash($group['proposed'], $teacherOf[$groupId], $cohortsOf[$groupId], $teachers, $rooms, $cohorts);
 
                 if ($clash !== null) {
                     $groups[$groupId]['status'] = self::KEPT;
@@ -190,7 +199,7 @@ final readonly class ApplyPlan
                 }
 
                 foreach ($group['proposed'] as $session) {
-                    $add($teacherOf[$groupId], $session['room_id'], $session['day'], $session['starts_at'], $session['ends_at']);
+                    $add($teacherOf[$groupId], $session['room_id'], $cohortsOf[$groupId], $session['day'], $session['starts_at'], $session['ends_at']);
                 }
             }
         } while ($changed);
@@ -202,10 +211,12 @@ final readonly class ApplyPlan
      * El motivo del primer empalme de las sesiones nuevas con lo ocupado, o null.
      *
      * @param  list<array{day: int, starts_at: string, ends_at: string, room_id: ?string}>  $sessions
+     * @param  list<string>  $cohortKeys
      * @param  array<string, array<int, list<array{0: int, 1: int, 2: int, 3: string, 4: string}>>>  $teachers
      * @param  array<string, array<int, list<array{0: int, 1: int, 2: int, 3: string, 4: string}>>>  $rooms
+     * @param  array<string, array<int, list<array{0: int, 1: int, 2: int, 3: string, 4: string}>>>  $cohorts
      */
-    private static function clash(array $sessions, ?string $teacherId, array $teachers, array $rooms): ?string
+    private static function clash(array $sessions, ?string $teacherId, array $cohortKeys, array $teachers, array $rooms, array $cohorts): ?string
     {
         foreach ($sessions as $session) {
             $start = WeekTime::minutes($session['starts_at']);
@@ -221,6 +232,14 @@ final readonly class ApplyPlan
             foreach ($session['room_id'] === null ? [] : ($rooms[$session['room_id']][$session['day']] ?? []) as [$from, $to]) {
                 if ($start < $to && $from < $end) {
                     return "HC-02: su salón ya está ocupado el {$when}; se queda como está.";
+                }
+            }
+
+            foreach ($cohortKeys as $key) {
+                foreach ($cohorts[$key][$session['day']] ?? [] as [$from, $to]) {
+                    if ($start < $to && $from < $end) {
+                        return "HC-03: un grupo de su cohorte ya tiene clase el {$when}; se queda como está.";
+                    }
                 }
             }
         }
