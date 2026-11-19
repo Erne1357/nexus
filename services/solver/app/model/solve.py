@@ -436,8 +436,9 @@ def _output(
     largest = max(search.steps, key=lambda step: step.variables, default=None)
     log = [
         f"Programó {placed} de {len(model_data.movable)} grupos; {off_pattern} fuera de su patrón de días (PS-04).",
-        f"Búsqueda con objetivo: revisó {improvement.steps} vecindarios y aceptó {improvement.accepted}; el puntaje "
-        f"blando pasó de {improvement.initial.total} a {improvement.best.total} y, con los salones, a {score.total}.",
+        f"Búsqueda con objetivo: revisó {improvement.steps} vecindarios y aceptó {improvement.accepted} "
+        f"({improvement.lowered} regresaron grupos hacia su patrón); el puntaje blando pasó de "
+        f"{improvement.initial.total} a {improvement.best.total} y, con los salones, a {score.total}.",
         "No se probó el óptimo: la búsqueda por vecindarios no da una cota, así que la salida nunca es «optimal».",
     ]
     if unscheduled:

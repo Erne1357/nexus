@@ -416,6 +416,8 @@ Cómo se cumple cada nivel, sin una escala que crezca con los pesos:
 
 Con los 300 s de una corrida de departamento (`solver.time_limits`, el `time_limit_seconds` del fixture), CP-SAT le gana a la heurística por un 1.9 %: 23 168 contra 23 608 (con el motor de la 7.7, 23 191). Deja menos huecos al docente (SC-05, 4 776 contra 5 217) y al alumno tipo (SC-01, 60 contra 360) y menos traslados justos (SC-09, 244 contra 296), pero más cambios de edificio (SC-06, 884 contra 546) y casi las mismas horas fuera de los preferidos (SC-04). Con el límite del servicio por omisión (60 s) queda peor, 29 027 (con el motor, 28 579): `lns` tardó de 37 a 39 s solo en programar a todos sin objetivo (en la medición anterior, con la máquina libre, de 29 a 30 s) y quedan unos 15 s para mejorar. Los 65 grupos que quedaron fuera de su patrón son los que `lns` no pudo programar en él, y ningún vecindario los regresó; contra la versión con el nivel escalado en el objetivo, el tope por grupo baja el puntaje (de 29 336 a 29 027 con 60 s y de 23 388 a 23 168 con 300 s); lo más probable es que sea porque los vecindarios ya no llevan los otros juegos de días de los grupos que están en su patrón, así que sus modelos son más chicos. Con cuatro corridas a la vez en la máquina (medición anterior, cada una con sus 2 CPU) da peor: de 23 479 a 23 649 con 300 s y de 31 023 a 32 077 con 60 s. SC-04 casi no baja en ninguno de los dos motores: la cota que da la heurística es 15 272 (ver «Heurística PHP: búsqueda local»).
 
+*Con las dos resoluciones por vecindario* (la primera baja los niveles; segunda pasada del Riel A), una comparación a 300 s con la máquina más cargada (carga de 3 a 4; `lns` tardó de 46 a 60 s) dio 27 667 con ellas y 28 276 con el código anterior, el de la tabla. No hay pérdida medible. De 383 vecindarios, ninguno bajó los niveles: los 65 grupos fuera de su patrón no caben en él con lo demás como está. Los números absolutos de esa comparación no se comparan con la tabla, por la carga.
+
 *Con el puntaje por encima del patrón* (la primera versión de este objetivo, que dejaba ir a un grupo de su patrón a otros días si bajaba el puntaje), en 300 s daba de 21 718 a 22 128 (de 6 a 8 % menos que la heurística), pero con más de 100 grupos fuera de su patrón. El usuario decidió el 18 de noviembre de 2026 que el patrón va primero (PS-10), así que ese orden no se usa.
 
 En `tiny`, `small`, `medium` e `infeasible`, con el plazo de su entrada y 2 hilos, da 36, 42, 49 y 12 (la heurística, 44, 79, 64 y 12), en menos de un segundo; las salidas de `small` y `medium` guardadas en `cpsat-output.json` son de un hilo.
@@ -471,7 +473,7 @@ El mejor puntaje va solo cuando todos los grupos están programados; antes es `N
 | 60 s | 60.3 s | 24 (24) | 28 579 | 290 | 156 | 0 | 17 092 | 9 111 | 1 190 | 30 | 362 | 348 |
 | 300 s | 300.3 s | 404 (180) | 23 191 | 60 | 162 | 0 | 16 756 | 4 701 | 898 | 6 | 350 | 258 |
 
-La heurística da 23 608 con su búsqueda local. Con 60 s, `lns` tardó 38 s en programar a todos y quedaron 16 s para mejorar.
+La heurística da 23 608 con su búsqueda local. Con 60 s, `lns` tardó 38 s en programar a todos y quedaron 16 s para mejorar. Esta tabla es de antes de las dos resoluciones por vecindario (segunda pasada del Riel A, ver «Modelo CP-SAT: objetivo»). La comparación a 300 s de la 7.6 con y sin ellas no mostró pérdida, y la reserva nueva solo cambia algo cuando quedan grupos sin programar.
 
 **Pruebas** (`services/solver/tests/test_engine_cpsat.py`):
 - el ciclo completo por la API con `SOLVER_ENGINE=cpsat` sobre `tiny`;

@@ -371,6 +371,9 @@ IMPROVE_STEP_SECONDS = 0.4
 #: Hasta cuántos segundos se le dan a un vecindario cuando las vueltas no mejoran (el doble en cada vuelta).
 IMPROVE_MAX_STEP_SECONDS = 8.0
 
+#: La parte del tiempo de un vecindario para bajar los niveles, cuando algún grupo puede (PS-10).
+LEVEL_SHARE = 0.25
+
 #: Segundos para ajustar los salones de un vecindario (SC-03 y SC-06) antes de compararlo.
 IMPROVE_ROOM_SECONDS = 0.3
 
@@ -387,6 +390,8 @@ class Improvement:
     steps: int = 0
     accepted: int = 0
     too_large: int = 0
+    #: Los aceptados que bajaron la suma de los niveles (PS-10).
+    lowered: int = 0
 
 
 def improve(
@@ -453,6 +458,7 @@ def improve(
                 )
                 tiers = sum({**search.tiers, **step.tiers}.values())
                 if tiers < result.tiers or (tiers == result.tiers and score.total < result.best.total):
+                    result.lowered += tiers < result.tiers
                     search.sessions = defaultdict(list)
                     for session in proposed:
                         search.sessions[session.group_id].append(session)
@@ -537,9 +543,10 @@ def _improve_step(
 ) -> _Step:
     """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT. Cada grupo lleva los
     niveles hasta el que ya tiene (`keep_tiers`). Es lexicográfico (PS-10): si algún grupo del vecindario está fuera de
-    su patrón, una primera resolución busca la menor suma de niveles (así un grupo que ya cabe en su patrón regresa a
-    él) y la segunda, con esa suma como tope, el menor objetivo; cada una con la mitad del tiempo. El tope de variables
-    cuenta el dominio y el objetivo: un vecindario que lo pasa se descarta."""
+    su patrón y tiene en su dominio una opción de un nivel menor, una primera resolución busca la menor suma de niveles
+    (así un grupo que ya cabe en su patrón regresa a él), con la cuarta parte del tiempo, y la segunda, con esa suma
+    como tope, el menor objetivo. Si los niveles no bajaron, la pista de la segunda sigue siendo lo que había. El tope
+    de variables cuenta el dominio y el objetivo: un vecindario que lo pasa se descarta."""
     step_deadline = min(deadline, time.perf_counter() + step_seconds)
     sub = ModelData.of(_sub_input(data.source, search, movable))
     model = cp_model.CpModel()
@@ -564,19 +571,35 @@ def _improve_step(
             model.add_hint(option.literal, (option.spread, option.block) == hint)
     first: cp_model.CpSolver | None = None
     leveled = True
-    if any(search.tiers.get(group, 0) > 0 for group in variables.groups):
+    # Solo hace falta bajar niveles si algún grupo tiene en su dominio una opción de un nivel menor que el suyo.
+    if any(
+        option.tier < search.tiers.get(domain.id, 0)
+        for domain in variables.groups.values()
+        for option in domain.options
+    ):
         options_of = [option for domain in variables.groups.values() for option in domain.options]
         tiers = cp_model.LinearExpr.weighted_sum([o.literal for o in options_of], [o.tier for o in options_of])
+        current = sum(search.tiers.get(group, 0) for group in variables.groups)
         model.minimize(tiers)
         now = time.perf_counter()
-        first, status = solve_until(model, now + (step_deadline - now) / 2, limits, seed)
+        first, status = solve_until(model, now + (step_deadline - now) * LEVEL_SHARE, limits, seed)
         if status not in FEASIBLE:
             return _Step()
         leveled = status == cp_model.OPTIMAL
-        model.clear_hints()
-        for option in options_of:
-            model.add_hint(option.literal, first.boolean_value(option.literal))
-        model.add(tiers <= round(first.value(tiers)))
+        lowest = round(first.value(tiers))
+        model.add(tiers <= lowest)
+        if lowest < current:
+            # Bajó el nivel: la pista de las reglas es esa solución solo en los grupos que bajaron; los demás siguen
+            # con lo que tenían, que tiene su mismo nivel y mejor puntaje que una solución que solo ve los niveles.
+            model.clear_hints()
+            for domain in variables.groups.values():
+                lowered = chosen_option(first, domain)
+                keep = lowered is None or lowered.tier >= search.tiers.get(domain.id, 0)
+                hint = search.chosen.get(domain.id) if keep else (lowered.spread, lowered.block)
+                for option in domain.options:
+                    model.add_hint(option.literal, (option.spread, option.block) == hint)
+        else:
+            first = None
     model.minimize(objective.expression())
     solver, status = solve_until(model, step_deadline, limits, seed)
     if status not in FEASIBLE:
