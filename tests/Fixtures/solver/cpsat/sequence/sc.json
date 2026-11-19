@@ -1,0 +1,111 @@
+{
+    "submitted": {
+        "status": 202,
+        "body": {
+            "run_id": "83654623-5fc6-44fe-a007-c4fbdc6f2d06",
+            "status": "queued"
+        }
+    },
+    "done": {
+        "status": 200,
+        "body": {
+            "run_id": "83654623-5fc6-44fe-a007-c4fbdc6f2d06",
+            "status": "done",
+            "progress": 100,
+            "best_score": 6,
+            "output": {
+                "version": 1,
+                "run_id": "{run_id}",
+                "status": "feasible",
+                "sessions": [
+                    {
+                        "group_id": "AEF-1041/1A",
+                        "day": 4,
+                        "starts_at": "08:00",
+                        "ends_at": "09:00",
+                        "room_id": "C2/A-01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/1A",
+                        "day": 5,
+                        "starts_at": "08:00",
+                        "ends_at": "09:00",
+                        "room_id": "C2/A-02",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "AEF-1041/1A",
+                        "day": 5,
+                        "starts_at": "09:00",
+                        "ends_at": "10:00",
+                        "room_id": "C2/A-02",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCD-1008/1A",
+                        "day": 1,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A-01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCD-1008/1A",
+                        "day": 2,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A-01",
+                        "kind": "teoria",
+                        "changed": true
+                    },
+                    {
+                        "group_id": "SCD-1008/1A",
+                        "day": 3,
+                        "starts_at": "07:00",
+                        "ends_at": "08:00",
+                        "room_id": "C2/A-01",
+                        "kind": "teoria",
+                        "changed": true
+                    }
+                ],
+                "teacher_suggestions": [],
+                "unscheduled": [],
+                "hard_violations": [],
+                "soft_score": {
+                    "total": 6,
+                    "by_rule": {
+                        "SC-01": 0,
+                        "SC-02": 6,
+                        "SC-03": 0,
+                        "SC-04": 0,
+                        "SC-05": 0,
+                        "SC-06": 0,
+                        "SC-07": 0,
+                        "SC-08": 0,
+                        "SC-09": 0
+                    }
+                },
+                "relaxed_rules": [],
+                "metrics": {
+                    "elapsed_seconds": 0.045,
+                    "engine": "cpsat",
+                    "engine_version": "1.0.0",
+                    "variables": 38,
+                    "constraints": 15,
+                    "iterations": 3,
+                    "intermediate_solutions": 1
+                },
+                "log": [
+                    "Programó 2 de 2 grupos; 1 fuera de su patrón de días (PS-04).",
+                    "Búsqueda con objetivo: revisó 1 vecindarios y aceptó 0 (0 regresaron grupos hacia su patrón); el puntaje blando pasó de 6 a 6 y, con los salones, a 6.",
+                    "No se probó el óptimo: la búsqueda por vecindarios no da una cota, así que la salida nunca es «optimal»."
+                ]
+            }
+        }
+    }
+}
