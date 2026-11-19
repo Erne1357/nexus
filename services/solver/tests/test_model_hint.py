@@ -53,7 +53,9 @@ def two_groups() -> SolverInput:
     )
 
 
-def hinted(group_id: str, days: list[int], starts_at: str, ends_at: str, room_id: str | None) -> list[ProposedSession]:
+def hinted(
+    group_id: str, days: list[int], starts_at: str, ends_at: str, room_id: str | None, kind: str = "teoria"
+) -> list[ProposedSession]:
     return [
         ProposedSession(
             group_id=group_id,
@@ -61,7 +63,7 @@ def hinted(group_id: str, days: list[int], starts_at: str, ends_at: str, room_id
             starts_at=starts_at,
             ends_at=ends_at,
             room_id=room_id,
-            kind="teoria",
+            kind=kind,
             changed=True,
         )
         for day in days
@@ -124,12 +126,26 @@ def test_una_pista_valida_da_la_opcion_el_nivel_y_las_sesiones_de_cada_grupo():
         (hinted("g2", [1, 2], "08:00", "09:00", "chico"), "HC-05"),
         (hinted("g2", [1, 2], "08:00", "09:00", None), "va sin salón"),
         (hinted("g2", [1], "08:00", "09:00", "r2") + hinted("g2", [2], "08:00", "09:00", "otro"), "no es de su campus"),
+        (
+            hinted("g2", [1], "08:00", "09:00", "r2") + hinted("g2", [2], "08:00", "09:00", "r2", "practica"),
+            "horas de práctica",
+        ),
     ],
-    ids=["fuera de la jornada", "no alineada", "tres horas", "otra hora", "salón chico", "sin salón", "otro campus"],
+    ids=[
+        "fuera de la jornada",
+        "no alineada",
+        "tres horas",
+        "otra hora",
+        "salón chico",
+        "sin salón",
+        "otro campus",
+        "práctica de más",
+    ],
 )
 def test_la_pista_invalida_de_un_grupo_se_ignora_con_su_motivo(g2: list[ProposedSession], reason: str):
-    """Una hora fuera de la rejilla, un salón que no cabe o unas sesiones que no son opción del patrón (3 horas de un
-    grupo de 2, o una hora distinta cada día): la pista de g2 se ignora con su motivo y la de g1 entra."""
+    """Una hora fuera de la rejilla, un salón que no cabe, unas sesiones que no son opción del patrón (3 horas de un
+    grupo de 2, o una hora distinta cada día) o una hora de práctica en un grupo sin práctica (el modelo nunca la
+    escribiría así): la pista de g2 se ignora con su motivo y la de g1 entra."""
     hint = read_hint(ModelData.of(with_hint(two_groups(), VALID_G1 + g2)))
 
     assert set(hint.groups) == {"g1"}
@@ -159,13 +175,23 @@ def test_la_pista_de_un_grupo_que_no_esta_o_de_un_grupo_fijo_no_cuenta():
     assert hint.ignored == {"nadie": "el grupo no está en la entrada"}
 
 
-def test_dos_grupos_con_pista_que_chocan_se_ignoran_los_dos():
-    """g1 y g2 a la misma hora en r1 (HC-02): el verificador les encuentra la dura a los dos y ninguno entra."""
-    hint = read_hint(ModelData.of(with_hint(two_groups(), VALID_G1 + hinted("g2", [1, 2], "07:00", "08:00", "r1"))))
+def test_de_un_choque_entre_grupos_con_pista_solo_sale_uno():
+    """g2 y g3 a la misma hora que g1 en r1 (HC-02): g1 choca con los dos y sale; g2 y g3 ya no chocan entre sí, así
+    que entran. Con un solo choque entre dos (g1 y g2), sale el que la pista trae después."""
+    data = parse_input(
+        instance(groups=[group("g1", 2), group("g2", 2), group("g3", 2)], rooms=[room("r1"), room("r2"), room("r3")])
+    )
+    g2 = hinted("g2", [1], "07:00", "08:00", "r1") + hinted("g2", [2], "07:00", "08:00", "r2")
+    g3 = hinted("g3", [1], "07:00", "08:00", "r3") + hinted("g3", [2], "07:00", "08:00", "r1")
 
-    assert hint.groups == {}
-    assert set(hint.ignored) == {"g1", "g2"}
-    assert all(reason.startswith("HC-02") for reason in hint.ignored.values())
+    three = read_hint(ModelData.of(with_hint(data, VALID_G1 + g2 + g3)))
+    two = read_hint(ModelData.of(with_hint(two_groups(), VALID_G1 + hinted("g2", [1, 2], "07:00", "08:00", "r1"))))
+
+    assert set(three.groups) == {"g2", "g3"}
+    assert list(three.ignored) == ["g1"]
+    assert three.ignored["g1"].startswith("HC-02")
+    assert set(two.groups) == {"g1"}
+    assert two.ignored["g2"].startswith("HC-02")
 
 
 def test_una_pista_invalida_no_rompe_la_corrida_y_el_log_lo_dice():
@@ -178,8 +204,8 @@ def test_una_pista_invalida_no_rompe_la_corrida_y_el_log_lo_dice():
     assert output.status is RunStatus.FEASIBLE
     assert {entry.group_id for entry in output.sessions} == {"g1", "g2"}
     assert hard_violations(data, output.sessions) == []
-    assert "Pista de la entrada: 1 grupos entraron ya programados con ella." in output.log
-    assert any(line.startswith("Ignoró la pista de 1 grupos") and "g2 (" in line for line in output.log)
+    assert "Pista de la entrada: 1 grupo entró ya programado con ella." in output.log
+    assert any(line.startswith("Ignoró la pista de 1 grupo, que se programó sin ella: g2 (") for line in output.log)
 
 
 def test_con_la_pista_completa_no_hay_primera_vuelta():

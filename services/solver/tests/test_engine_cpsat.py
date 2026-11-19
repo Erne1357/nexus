@@ -416,7 +416,8 @@ def test_en_la_carga_real_los_que_necesitan_otros_dias_entran_en_la_segunda_rond
     de su patrón (otros días o un día de 2 horas) y 20 que no. La primera ronda de la reserva, con los niveles por
     necesidad, deja fuera a algunos de los primeros (de 2 a 4 al medirlo); la segunda, con todos sus niveles y solo
     para ellos, los programa, así que ninguno cae en `_alone`. Sin la segunda ronda, `_alone` los intentaba uno por uno
-    y, con la máquina cargada, a algunos no les alcanzaba la reserva de 3 s."""
+    y, con la máquina cargada, a algunos no les alcanzaba la reserva de 3 s. Aquí la reserva es de 6 s para que un
+    runner lento no la haga fallar: sin la segunda ronda, `_alone` se llama igual, con cualquier reserva."""
     from app.contract.input import HintSession
     from app.model import solve as solve_module
     from app.model.data import ModelData
@@ -444,7 +445,7 @@ def test_en_la_carga_real_los_que_necesitan_otros_dias_entran_en_la_segunda_rond
     }
     off_pattern = sorted(group_id for group_id, tier in tiers.items() if tier)
     in_pattern = sorted(group_id for group_id, tier in tiers.items() if not tier)
-    taken = off_pattern[:20] + in_pattern[:: len(in_pattern) // 20][:20]
+    taken = off_pattern[:20] + in_pattern[:: max(1, len(in_pattern) // 20)][:20]
     by_group: dict[str, list] = defaultdict(list)
     for session in saved.sessions:
         by_group[session.group_id].append(session)
@@ -454,7 +455,7 @@ def test_en_la_carga_real_los_que_necesitan_otros_dias_entran_en_la_segunda_rond
     )
     started = time.perf_counter()
 
-    found = solve_module._complete(ModelData.of(source), search, started + 3, started + 10, SearchLimits(workers=2), 0)
+    found = solve_module._complete(ModelData.of(source), search, started + 6, started + 12, SearchLimits(workers=2), 0)
 
     assert found == {}
     assert set(taken) <= set(search.sessions)

@@ -8,18 +8,22 @@ demás) y, en cada vecindario donde se mueven, lo que llevan va como pista de CP
 Una pista inválida no rompe la corrida: ese grupo se ignora, se programa como si no la trajera y el `log` lo dice. La
 pista de un grupo es válida si:
 
-- el grupo está en la entrada y es movible (la de un grupo fijo no hace nada, como dice el contrato, y no se reporta);
+- el grupo está en la entrada (el contrato ya rechaza otra cosa al validar la entrada; esto cubre entradas armadas sin
+  validar, como las de los scripts) y es movible (la de un grupo fijo no hace nada, como dice el contrato, y no se
+  reporta);
 - cada sesión cae en la rejilla de su campus, alineada a sus bloques, sin repetir una hora;
 - sus días y horas son una opción del patrón: unidades seguidas en cada día, el mismo bloque de inicio todos los días
   y un reparto de `pattern.tiers` para unas horas que da la rejilla (HC-12, PS-01 a PS-06);
 - en un campus con salones, cada día va en un solo salón de su campus (y de sus candidatos, si los trae), las sesiones
-  son de teoría o práctica y, si su práctica pide laboratorio, sus días en espacio de práctica alcanzan sus unidades de
-  práctica (HC-06); en uno sin salones, sin salón y virtuales;
-- el verificador (`verify.py`) no le encuentra duras con lo fijo y con los demás grupos con pista: un choque entre dos
-  grupos con pista los deja fuera a los dos. HC-08 no cuenta: es de la entrada, no del horario (PS-08).
+  de práctica son tantas como sus unidades de práctica (como las escribe el modelo, `solution._practice_by_day`) y, si
+  su práctica pide laboratorio, sus días en espacio de práctica las alcanzan (HC-06); en uno sin salones, sin salón y
+  virtuales;
+- el verificador (`verify.py`) no le encuentra duras con lo fijo y con los demás grupos con pista. De cada choque
+  entre grupos con pista sale solo uno: el que tiene más duras y, si empatan, el que la pista trae después; así una
+  sesión mala no deja fuera a todos los que toca. HC-08 no cuenta: es de la entrada, no del horario (PS-08).
 """
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from app.contract.input import GroupInput, HintSession, SessionKind
@@ -56,13 +60,20 @@ class Hint:
         """Las líneas del `log` de la salida: cuántos entraron con la pista y cuáles se ignoraron, con su motivo."""
         if not self.groups and not self.ignored:
             return []
-        lines = [f"Pista de la entrada: {len(self.groups)} grupos entraron ya programados con ella."]
+        placed = len(self.groups)
+        entered = "1 grupo entró" if placed == 1 else f"{placed} grupos entraron"
+        lines = [f"Pista de la entrada: {entered} ya programado{'' if placed == 1 else 's'} con ella."]
         if self.ignored:
             named = list(self.ignored.items())[:LOGGED_IGNORED]
             listed = "; ".join(f"{group_id} ({reason})" for group_id, reason in named)
             rest = len(self.ignored) - len(named)
             tail = f" y {rest} más" if rest else ""
-            lines.append(f"Ignoró la pista de {len(self.ignored)} grupos, que se programaron sin ella: {listed}{tail}.")
+            which = (
+                "1 grupo, que se programó"
+                if len(self.ignored) == 1
+                else f"{len(self.ignored)} grupos, que se programaron"
+            )
+            lines.append(f"Ignoró la pista de {which} sin ella: {listed}{tail}.")
 
         return lines
 
@@ -92,17 +103,21 @@ def read_hint(data: ModelData) -> Hint:
             shaped[group_id] = result
 
     proposed = [session for hinted in shaped.values() for session in hinted.sessions]
-    breaking: dict[str, str] = {}
-    for violation in hard_violations(data.source, proposed):
-        if violation.rule == "HC-08":
+    violations = [
+        (violation, [group_id for group_id in violation.group_ids if group_id in shaped])
+        for violation in hard_violations(data.source, proposed)
+        if violation.rule != "HC-08"
+    ]
+    counts = Counter(group_id for _, groups in violations for group_id in groups)
+    order = {group_id: index for index, group_id in enumerate(shaped)}
+    for violation, groups in violations:
+        if not groups or any(group_id in hint.ignored for group_id in groups):
             continue
-        for group_id in violation.group_ids:
-            if group_id in shaped:
-                breaking.setdefault(group_id, f"{violation.rule}: {violation.message}")
+        # Quitar a uno de los grupos de la pista basta para que esta dura ya no esté.
+        worst = max(groups, key=lambda group_id: (counts[group_id], order[group_id]))
+        hint.ignored[worst] = f"{violation.rule}: {violation.message}"
     for group_id, hinted in shaped.items():
-        if group_id in breaking:
-            hint.ignored[group_id] = breaking[group_id]
-        else:
+        if group_id not in hint.ignored:
             hint.groups[group_id] = hinted
 
     return hint
@@ -134,7 +149,8 @@ def _shape(data: ModelData, group: GroupInput, sessions: list[HintSession]) -> H
         return "sus días y horas no son una opción del patrón de sesiones"
     spread, block, tier = option
 
-    problem = _room_problem(data, group, grid, spread, rooms_by_day, set(kinds.values()))
+    practice_count = sum(kind == SessionKind.PRACTICE for kind in kinds.values())
+    problem = _room_problem(data, group, grid, spread, rooms_by_day, set(kinds.values()), practice_count)
     if problem is not None:
         return problem
     rooms = {day: next(iter(day_rooms)) for day, day_rooms in rooms_by_day.items()}
@@ -195,6 +211,7 @@ def _room_problem(
     spread: DaySpread,
     rooms_by_day: dict[int, set[str | None]],
     kinds: set[SessionKind],
+    practice_count: int,
 ) -> str | None:
     """Por qué los salones y tipos de la pista no le sirven al grupo, o `None`. Lo que depende de la hora (ocupación,
     bloqueos, préstamos) lo revisa el verificador."""
@@ -219,10 +236,13 @@ def _room_problem(
         if group.candidate_room_ids and room_id not in group.candidate_room_ids:
             return f"el salón {room_id} no está entre sus candidatos"
         rooms[day] = room_id
-    if group.needs_lab and group.practice_hours > 0 and data.active("HC-06"):
-        total = sum(count for _, count in spread)
+    total = sum(count for _, count in spread)
+    practice = practice_units(group, grid, total) if group.practice_hours > 0 else 0
+    if practice_count != practice:
+        return f"lleva {practice_count} horas de práctica y el grupo tiene {practice}"
+    if group.needs_lab and practice and data.active("HC-06"):
         in_labs = sum(count for day, count in spread if data.is_practice_space(rooms[day]))
-        if in_labs < practice_units(group, grid, total):
+        if in_labs < practice:
             return "HC-06: sus días en laboratorio, taller o sala de cómputo no alcanzan sus horas de práctica"
 
     return None

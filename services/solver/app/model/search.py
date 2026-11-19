@@ -110,6 +110,8 @@ def lns(
         search.chosen[group_id] = hinted.chosen
         search.tiers[group_id] = hinted.tier
     hinted_count = len(search.sessions)
+    if report is not None and hinted_count:
+        report(hinted_count)
     missing = {group.id for group in data.movable if group.id not in search.sessions}
     if missing:
         first_deadline = started + max(step_seconds, time_limit * first_share)
@@ -119,8 +121,7 @@ def lns(
         first_data = ModelData.of(_sub_input(data.source, search, missing)) if hinted_count else data
 
         def first_report(placed: int) -> None:
-            if report is not None:
-                report(hinted_count + placed)
+            report(hinted_count + placed)
 
         variables, solved = _place_most(
             first_data,
@@ -440,6 +441,10 @@ IMPROVE_MAX_STEP_SECONDS = 8.0
 #: La parte del tiempo de un vecindario para bajar los niveles, cuando algún grupo puede (PS-10).
 LEVEL_SHARE = 0.25
 
+#: Hasta cuántos segundos puede tardar en armarse un vecindario de la mejora (en la carga real, de 0.3 a 0.6 s): uno
+#: que tarda más se descarta y no se come el plazo de los demás.
+IMPROVE_BUILD_SECONDS = 2.0
+
 #: Segundos para ajustar los salones de un vecindario (SC-03 y SC-06) antes de compararlo.
 IMPROVE_ROOM_SECONDS = 0.3
 
@@ -609,19 +614,21 @@ def _improve_step(
 ) -> _Step:
     """Un vecindario: sus grupos con el objetivo y lo demás fijo, con `step_seconds` de CP-SAT contados después de
     armarlo (en la carga real, armar uno tarda de 0.3 a 0.6 s, más que el paso de 0.4 s: contado desde antes, CP-SAT se
-    quedaba sin tiempo y casi ningún vecindario se resolvía). El armado tiene hasta `deadline`. Cada grupo lleva los
+    quedaba sin tiempo y casi ningún vecindario se resolvía). El armado tiene hasta `IMPROVE_BUILD_SECONDS`: uno que
+    tarda más se descarta. Cada grupo lleva los
     niveles hasta el que ya tiene (`keep_tiers`). Es lexicográfico (PS-10): si algún grupo del vecindario está fuera de
     su patrón y tiene en su dominio una opción de un nivel menor, una primera resolución busca la menor suma de niveles
     (así un grupo que ya cabe en su patrón regresa a él), con la cuarta parte del tiempo, y la segunda, con esa suma
     como tope, el menor objetivo. Si los niveles no bajaron, la pista de la segunda sigue siendo lo que había. El tope
     de variables cuenta el dominio y el objetivo: un vecindario que lo pasa se descarta."""
+    build_deadline = min(deadline, time.perf_counter() + IMPROVE_BUILD_SECONDS)
     sub = ModelData.of(_sub_input(data.source, search, movable))
     model = cp_model.CpModel()
     options = DomainOptions(
         keep_tiers={group: search.tiers[group] for group in movable if group in search.tiers},
         long_window_rooms=LONG_WINDOW_ROOMS,
     )
-    budget = limits.budget(deadline)
+    budget = limits.budget(build_deadline)
     try:
         variables = build_variables(model, sub, options, budget)
         if variables.unplaceable():
