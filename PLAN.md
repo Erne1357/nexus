@@ -27,7 +27,7 @@
 | 4 | Cierre, publicación y piloto Campus II | R1 | 30 nov – 18 dic 2026 | 3 en paralelo | ⬜ | [fase-4-cierre-publicacion-piloto.md](docs/plan/fase-4-cierre-publicacion-piloto.md) |
 | 5 | Proyección de demanda | R2 | feb 2027 | 3 en paralelo | ✅ | [fase-5-demanda.md](docs/plan/fase-5-demanda.md) |
 | 6 | Heurística de horarios y contrato del motor | R2 | feb – mar 2027 | 3 en paralelo | ✅ | [fase-6-heuristica-y-contrato.md](docs/plan/fase-6-heuristica-y-contrato.md) |
-| 7 | Solver CP-SAT (Python + OR-Tools) | R2 | mar – abr 2027 | 3 en paralelo | 🟨 | [fase-7-solver-cpsat.md](docs/plan/fase-7-solver-cpsat.md) |
+| 7 | Solver CP-SAT (Python + OR-Tools) | R2 | mar – abr 2027 | 3 en paralelo | ✅ | [fase-7-solver-cpsat.md](docs/plan/fase-7-solver-cpsat.md) |
 | 8 | Re-análisis, impacto de cambios y junta digital | R2 | abr 2027 | Paralelo | 🟨 | [fase-8-reanalisis.md](docs/plan/fase-8-reanalisis.md) |
 | 9 | Inscripción Campus II | R3 | may – jul 2027 | Paralelo | 🟦 | [fase-9-inscripcion-campus-ii.md](docs/plan/fase-9-inscripcion-campus-ii.md) |
 | 10 | Otras modalidades: EAD, EnLínea, TecNM Virtual | R4 | por definir | — | 🟦 | [fase-10-otras-modalidades.md](docs/plan/fase-10-otras-modalidades.md) |

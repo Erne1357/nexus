@@ -1,6 +1,6 @@
 # Fase 7 — Solver CP-SAT (Python + OR-Tools)
 
-**Entrega:** R2 · **Ventana:** mar – abr 2027 · **Modo:** paralelo · **Estado:** 🟨 (abierta el 17 de noviembre de 2026) · **Milestone:** `Fase 7 — Solver CP-SAT`
+**Entrega:** R2 · **Ventana:** mar – abr 2027 · **Modo:** paralelo · **Estado:** ✅ (abierta el 17 y cerrada el 19 de noviembre de 2026) · **Milestone:** `Fase 7 — Solver CP-SAT`
 
 ## Objetivo
 
