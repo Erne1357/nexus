@@ -344,3 +344,17 @@ it('al abrir, una corrida que se quedó aplicándose más del límite vuelve a e
 
     expect($recent->fresh()->status)->toBe(SolverRunStatus::Applying);
 });
+
+it('E-10: con la carga cerrada o aprobada, «Aceptar» sale deshabilitado con su motivo y sin el aviso de publicada', function (LoadStatus $status, string $reason) {
+    $page = launchFromRunsPage($this->jefe);
+    AcademicLoad::query()->sole()->forceFill(['status' => $status])->save();
+
+    $page->call('$refresh')
+        ->assertSeeHtml('data-testid="run-accept-disabled"')
+        ->assertDontSeeHtml('data-testid="run-accept"')
+        ->assertSee($reason)
+        ->assertDontSeeHtml('data-testid="run-published-note"');
+})->with([
+    'cerrada' => [LoadStatus::Closed, 'La carga ya no se puede editar: está cerrada.'],
+    'aprobada' => [LoadStatus::Approved, 'La carga ya no se puede editar: está aprobada.'],
+]);

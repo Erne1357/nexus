@@ -2,8 +2,6 @@
 
 use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
-use App\Modules\AcademicLoad\Enums\LoadStatus;
-use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Modality;
@@ -462,11 +460,12 @@ new #[Title('Corridas del motor')] class extends Component
         $this->runId = $row['run']->id ?? '';
         $run = $row === null ? null : KeyLookup::find(SolverRun::query(), $row['run']->id);
         $gate = Gate::forUser($user);
-        $loadStatus = AcademicLoad::query()->ofDepartment($term->id, $modality->id, $department?->id ?? $career?->department_id)->value('status');
+        $acceptBlock = $run?->scope_kind === RunScope::Department ? app(ApplySolverRun::class)->loadBlockReason($run) : null;
 
         return [
             ...$base,
-            'loadPublished' => $loadStatus === LoadStatus::Published,
+            'acceptBlock' => $acceptBlock,
+            'loadPublished' => $acceptBlock === ApplySolverRun::PUBLISHED_MESSAGE,
             'softRules' => self::SOFT_RULES,
             'term' => $term,
             'shownModality' => $modality,
