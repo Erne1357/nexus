@@ -5,6 +5,7 @@ namespace App\Modules\Core\Models;
 use App\Modules\Core\Database\Factories\UserFactory;
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\StaffType;
 use App\Modules\Core\Notifications\RoutesMailAddress;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -51,6 +52,7 @@ class User extends Authenticatable
             'access_invited_at' => 'immutable_datetime',
             'deactivated_at' => 'immutable_datetime',
             'last_role' => Role::class,
+            'staff_type' => StaffType::class,
             'authz_version' => 'integer',
         ];
     }
