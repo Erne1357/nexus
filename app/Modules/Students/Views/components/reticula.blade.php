@@ -5,7 +5,7 @@
     estados y, debajo, las materias que esperan semestre (D18). `$record` es el StudentRecord. Con `:interactive="false"`
     es solo lectura, como la ve el alumno: mosaicos sin resaltado, sin la leyenda de cadenas y sin la barra de selección.
 --}}
-@props(['record', 'interactive' => true])
+@props(['record', 'interactive' => true, 'audience' => 'personal'])
 @use('App\Modules\Students\Enums\ChainColor')
 @use('App\Modules\Students\Enums\SubjectStanding')
 @php
@@ -14,7 +14,7 @@
     $standings = SubjectStanding::cases();
 @endphp
 @if ($record->semesters === [] && $record->unplaced === [])
-    <p class="text-neutral" data-testid="student-grid-empty">Su plan todavía no tiene materias en la retícula.</p>
+    <p class="text-neutral" data-testid="student-grid-empty">{{ $audience === 'alumno' ? 'Tu plan todavía no tiene materias en la retícula.' : 'Su plan todavía no tiene materias en la retícula.' }}</p>
 @else
 @if ($record->semesters !== [])
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] text-neutral" data-testid="standing-legend">

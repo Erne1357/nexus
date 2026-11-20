@@ -1,5 +1,5 @@
 {{--
-    «Mi expediente» del alumno (AC-15), con tres pestañas (`?tab=`). «Mis datos»: sus datos escolares como los ficha del alumno (nombre, número de control, estatus y
+    «Mis datos» del alumno (AC-15), con tres pestañas (`?tab=`). «Mis datos»: sus datos escolares como los ficha del alumno (nombre, número de control, estatus y
     la línea de carrera, plan, campus y semestre) y, debajo, su acceso: usuario, correo institucional, de dónde sale su
     contraseña y el enlace para cambiarla.
     «Perfil»: su retícula y su kárdex, solo lectura (students::reticula y students::kardex, las mismas de la ficha del personal, sin
@@ -33,10 +33,10 @@
                 </div>
 
                 <h2 class="text-lg font-bold leading-tight">Retícula</h2>
-                <x-students::reticula :record="$record" :interactive="false" />
+                <x-students::reticula :record="$record" :interactive="false" audience="alumno" />
 
                 <h2 class="text-lg font-bold leading-tight">Kárdex</h2>
-                <x-students::kardex :record="$record" />
+                <x-students::kardex :record="$record" audience="alumno" />
             </section>
         @endif
     @elseif ($tab === 'credencial')

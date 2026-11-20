@@ -28,7 +28,7 @@ final class StudentCredentialQuery
             'career' => $student->career->name,
             'campus' => $student->campus->name,
             'term' => $credential['term'],
-            'initials' => $credential['initials'],
+            'initials' => $this->credentials->initials($student->name),
         ];
     }
 }

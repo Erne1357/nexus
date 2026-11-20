@@ -114,3 +114,39 @@ it('la ficha del personal sigue igual: pestañas Retícula y Kárdex, con resalt
         ->assertSeeHtml('data-testid="student-kardex"')
         ->assertSee('Aprobada');
 });
+
+it('AC-15: una pestaña con formato inválido en la URL (?tab[]=x) cae en «Mis datos» con 200', function () {
+    $this->actingAs($this->user)->get('/my-record?tab[]=x')->assertOk()->assertSee('Tu acceso');
+});
+
+it('AC-15: el alumno sin fila de alumno ve un vacío claro en Perfil y Credencial', function (string $tab) {
+    $user = User::factory()->withRole(Role::Alumno)->create();
+
+    Livewire::actingAs($user)->withQueryParams(['tab' => $tab])->test('students::pages.my-record')
+        ->assertOk()
+        ->assertSee('Todavía no encontramos tus datos escolares.')
+        ->assertDontSeeHtml('data-testid="my-profile"')
+        ->assertDontSeeHtml('data-testid="my-credential"');
+})->with(['perfil', 'credencial']);
+
+it('AC-15: el Perfil habla de tú y la ficha del personal conserva su tercera persona', function () {
+    KardexRecord::query()->delete();
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
+
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'perfil'])->test('students::pages.my-record')
+        ->assertSee('Tu kárdex todavía no se importa.')
+        ->assertSee('Cada materia que has cursado')
+        ->assertDontSee('El kárdex de este alumno');
+
+    Livewire::actingAs($coordinator)->withQueryParams(['tab' => 'kardex'])->test('students::pages.student', ['student' => $this->student->id])
+        ->assertSee('El kárdex de este alumno todavía no se importa.')
+        ->assertSee('Cada materia que ha cursado');
+});
+
+it('AC-15: las iniciales de la credencial salen del nombre del alumno que se muestra', function () {
+    $this->student->forceFill(['name' => 'María Zamora'])->save();
+
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'credencial'])->test('students::pages.my-record')
+        ->assertSee('María Zamora')
+        ->assertSeeInOrder(['data-testid="credential-photo"', 'MZ']);
+});

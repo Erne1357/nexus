@@ -1,6 +1,6 @@
 {{-- El kárdex del alumno por periodo, el mismo en la ficha del personal y en el «Perfil» del alumno. `$record` es el StudentRecord. --}}
-@props(['record'])
-    <p class="text-neutral">Cada materia que ha cursado, por periodo y desde el primero, como viene en la última importación de kárdex.</p>
+@props(['record', 'audience' => 'personal'])
+    <p class="text-neutral">{{ $audience === 'alumno' ? 'Cada materia que has cursado' : 'Cada materia que ha cursado' }}, por periodo y desde el primero, como viene en la última importación de kárdex.</p>
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100" data-testid="student-kardex" wire:key="student-kardex">
         @forelse ($record->kardex as $term)
             <div class="flex flex-wrap items-center justify-between gap-2 border-base-300 bg-base-200/60 px-5 py-2.5 font-bold [&:not(:first-child)]:border-t">
@@ -17,6 +17,6 @@
                 </div>
             @endforeach
         @empty
-            <p class="px-5 py-6 text-center text-neutral">El kárdex de este alumno todavía no se importa.</p>
+            <p class="px-5 py-6 text-center text-neutral">{{ $audience === 'alumno' ? 'Tu kárdex todavía no se importa.' : 'El kárdex de este alumno todavía no se importa.' }}</p>
         @endforelse
     </div>

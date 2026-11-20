@@ -22,7 +22,7 @@ new #[Title('Mis datos')] class extends Component
 {
     /** 'datos', 'perfil' o 'credencial'; va en la URL y otro valor muestra «Mis datos». */
     #[Url]
-    public string $tab = 'datos';
+    public mixed $tab = 'datos';
 
     public function mount(Actor $context): void
     {
@@ -32,7 +32,7 @@ new #[Title('Mis datos')] class extends Component
 
     public function updatedTab(): void
     {
-        $this->tab = in_array($this->tab, ['perfil', 'credencial'], true) ? $this->tab : 'datos';
+        $this->tab = is_string($this->tab) && in_array($this->tab, ['perfil', 'credencial'], true) ? $this->tab : 'datos';
     }
 
     /**
