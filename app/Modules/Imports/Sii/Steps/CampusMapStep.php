@@ -36,6 +36,7 @@ final class CampusMapStep implements SiiStep
         $rows = $report['rooms_created'] + $changed;
         $unmatched = count($report['rooms_unmatched']);
 
+        $conflicts = count($report['conflicts']);
         $notes = [
             "Edificios: {$report['buildings_created']} creados, {$report['buildings_updated']} renombrados o reactivados, {$report['buildings_deactivated']} desactivados.",
             "Campus II: {$report['c2_buildings_created']} edificios creados y {$report['c2_rooms_moved']} salones movidos.",
@@ -44,6 +45,10 @@ final class CampusMapStep implements SiiStep
 
         if ($unmatched > 0) {
             $notes[] = "{$unmatched} salones del SII sin lugar en el mapa se dejaron como estaban.";
+        }
+
+        if ($conflicts > 0) {
+            $notes[] = "{$conflicts} conflictos (salones o edificios borrados o con la clave ocupada) se dejaron sin tocar; el detalle sale con facilities:sync-campus-map.";
         }
 
         yield new SiiBatchReport('campus_map', 'campus-map-c1.php', $rows, $rows, 0, 0, $report['rooms_created'], $changed, notes: $notes);

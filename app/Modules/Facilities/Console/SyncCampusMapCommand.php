@@ -39,6 +39,10 @@ final class SyncCampusMapCommand extends Command
             $this->line('Sin cruzar: '.implode(', ', $report['rooms_unmatched']));
         }
 
+        foreach ($report['conflicts'] as $conflict) {
+            $this->warn($conflict);
+        }
+
         return self::SUCCESS;
     }
 }

@@ -4,8 +4,11 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Actions\SyncCampusMap;
 use App\Modules\Facilities\Enums\RoomType;
+use App\Modules\Facilities\Events\RoomCreated;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use Illuminate\Support\Facades\Event;
+use Spatie\Activitylog\Models\Activity;
 
 /*
 | SyncCampusMap (1.24.2): normaliza edificios, salones y departamentos con el mapa del Campus I. Decisiones del usuario
@@ -171,7 +174,7 @@ it('es idempotente: la segunda corrida no cambia nada', function () {
     $report = ($this->sync)();
 
     expect($snapshot())->toEqual($first)
-        ->and(array_filter($report, fn (mixed $value, string $key): bool => $key !== 'rooms_unmatched' && $value !== 0, ARRAY_FILTER_USE_BOTH))->toBe([]);
+        ->and(array_filter($report, fn (mixed $value, string $key): bool => ! in_array($key, ['rooms_unmatched', 'conflicts'], true) && $value !== 0, ARRAY_FILTER_USE_BOTH))->toBe([]);
 });
 
 it('con --dry-run imprime el resumen y no escribe nada', function () {
@@ -196,4 +199,75 @@ it('el dataset versionado del mapa trae los 25 edificios del Campus I y los 6 de
         ->and(collect($map['rooms'])->pluck('map_key')->unique())->toHaveCount(count($map['rooms']))
         ->and(collect($map['rooms'])->pluck('code')->unique())->toHaveCount(count($map['rooms']))
         ->and(array_values($map['aliases']))->each->toBeIn(collect($map['rooms'])->pluck('map_key')->all());
+});
+
+it('un salón borrado que cruza se deja borrado, no se crea otro con su clave y el sync sigue', function () {
+    $byCode = oldRoom(oldBuilding($this->c1, 'U'), '701');
+    $byCode->delete();
+    $byKey = oldRoom(Building::query()->where('code', 'U')->firstOrFail(), '710', ['map_key' => 'Edificio Sistemas|710']);
+    $byKey->delete();
+
+    $report = ($this->sync)();
+
+    expect(Room::withTrashed()->where('code', '701')->count())->toBe(1)->and($byCode->fresh())->deleted_at->not->toBeNull()
+        ->and(Room::withTrashed()->where('code', '710')->count())->toBe(1)
+        ->and($report['conflicts'])->toHaveCount(2)
+        ->and(Room::query()->where('code', 'G-LATL')->exists())->toBeTrue();
+});
+
+it('un edificio borrado del mapa se restaura con su entrada en la bitácora', function () {
+    $building = oldBuilding($this->c1, 'SC');
+    $building->delete();
+
+    $report = ($this->sync)();
+
+    $building->refresh();
+    expect($building->deleted_at)->toBeNull()->and($building->is_active)->toBeTrue()->and($building->map_key)->toBe('Edificio Sistemas')
+        ->and($report['buildings_updated'])->toBeGreaterThan(0)
+        ->and(Activity::query()->where('event', 'restored')->where('subject_id', $building->id)->count())->toBe(1);
+});
+
+it('un conflicto de clave se reporta y el sync sigue con lo demás', function () {
+    $other = oldBuilding($this->c1, 'X');
+    oldRoom($other, 'G-LATL', ['map_key' => 'Otro|punto']);
+    Building::factory()->create(['campus_id' => $this->c1->id, 'code' => 'CB', 'name' => 'Ligado', 'map_key' => 'Otro edificio']);
+
+    $report = ($this->sync)();
+
+    expect($report['conflicts'])->toHaveCount(3)
+        ->and(Building::query()->where('map_key', 'Otro edificio')->value('name'))->toBe('Ligado')
+        ->and(Room::query()->where('code', '710')->exists())->toBeTrue();
+});
+
+it('en Campus II un edificio de letra borrado o inactivo se restaura y se activa antes de recibir salones', function () {
+    $campusII = oldBuilding($this->c2, 'CAMPUSII');
+    $a = oldBuilding($this->c2, 'A');
+    $a->update(['is_active' => false]);
+    $a->delete();
+    oldRoom($campusII, 'A2');
+
+    ($this->sync)();
+
+    expect($a->fresh())->deleted_at->toBeNull()->is_active->toBeTrue()
+        ->and(Room::query()->where('code', 'A2')->firstOrFail()->building_id)->toBe($a->id);
+});
+
+it('un salón de otro campus con la misma clave no se toca', function () {
+    $foreign = oldRoom(oldBuilding($this->c2, 'CAMPUSII'), '701');
+
+    ($this->sync)();
+
+    expect($foreign->fresh())->building_id->toBe($foreign->building_id)->map_key->toBeNull()
+        ->and(Room::query()->where('campus_id', $this->c1->id)->where('code', '701')->firstOrFail()->map_key)->toBe('Edificio Sistemas|701');
+});
+
+it('en un ensayo no salen los eventos de las Actions', function () {
+    $created = 0;
+    Event::listen(RoomCreated::class, function () use (&$created): void {
+        $created++;
+    });
+
+    ($this->sync)(true);
+
+    expect($created)->toBe(0)->and(Room::query()->count())->toBe(0);
 });

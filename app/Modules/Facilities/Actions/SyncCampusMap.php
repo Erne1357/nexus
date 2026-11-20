@@ -8,8 +8,10 @@ use App\Modules\Core\Models\Campus;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * Normaliza edificios, salones y departamentos con el mapa del Campus I (tarea 1.24.2). Idempotente: corrida otra
@@ -34,11 +36,19 @@ use RuntimeException;
  * Departamentos: la ubicación y el contacto del mapa, con UpdateDepartmentContact; la clave y el nombre del SII no
  * cambian. Los dueños de los salones no se tocan.
  *
- * Con `$dryRun` hace todo dentro de una transacción que revierte y devuelve el mismo reporte.
+ * Borrados: un salón borrado que cruza se deja borrado (no se restaura ni se crea otro con su clave) y va a `conflicts`;
+ * un edificio borrado sí se restaura, con RestoreBuilding. Un conflicto de clave (otro salón o edificio ya la tiene) se
+ * reporta en `conflicts` y el sync sigue. Los campus salen por parámetro (C1 y C2 por omisión; supuesto por confirmar).
+ *
+ * Con `$dryRun` hace todo dentro de una transacción que revierte y devuelve el mismo reporte; los eventos
+ * `afterCommit` no salen.
  */
 final class SyncCampusMap
 {
     public const string MAP_PATH = __DIR__.'/../Database/Seeders/data/campus-map-c1.php';
+
+    /** El edificio de Campus II que se reparte por letra (decisión D1). */
+    public const string SPLIT_BUILDING = 'CAMPUSII';
 
     private const array ZERO = [
         'buildings_created' => 0, 'buildings_updated' => 0, 'buildings_deactivated' => 0,
@@ -49,6 +59,7 @@ final class SyncCampusMap
     public function __construct(
         private readonly CreateBuilding $createBuilding,
         private readonly UpdateBuilding $updateBuilding,
+        private readonly RestoreBuilding $restoreBuilding,
         private readonly CreateRoom $createRoom,
         private readonly UpdateRoom $updateRoom,
         private readonly UpdateDepartmentContact $updateContact,
@@ -56,28 +67,28 @@ final class SyncCampusMap
 
     /**
      * @param  array<string, mixed>|null  $map  el dataset; por omisión el versionado
-     * @return array{buildings_created: int, buildings_updated: int, buildings_deactivated: int, rooms_moved: int, rooms_linked: int, rooms_created: int, rooms_unmatched: list<string>, c2_buildings_created: int, c2_rooms_moved: int, departments_updated: int}
+     * @param  string  $campusCode  el campus del mapa
+     * @param  string|null  $splitCampusCode  el campus cuyo edificio CAMPUSII se reparte por letra; null no lo reparte
+     * @return array{buildings_created: int, buildings_updated: int, buildings_deactivated: int, rooms_moved: int, rooms_linked: int, rooms_created: int, rooms_unmatched: list<string>, conflicts: list<string>, c2_buildings_created: int, c2_rooms_moved: int, departments_updated: int}
      */
-    public function handle(bool $dryRun = false, ?array $map = null): array
+    public function handle(bool $dryRun = false, ?array $map = null, string $campusCode = 'C1', ?string $splitCampusCode = 'C2'): array
     {
         $map ??= require self::MAP_PATH;
-        $report = ['rooms_unmatched' => [], ...self::ZERO];
+        $report = ['rooms_unmatched' => [], 'conflicts' => [], ...self::ZERO];
+
+        DB::beginTransaction();
 
         try {
-            DB::transaction(function () use ($map, &$report, $dryRun): void {
-                $this->syncC1($map, $report);
-                $this->syncC2($report);
-                $this->syncDepartments($map, $report);
+            $this->syncMapCampus($map, $campusCode, $report);
+            $this->syncSplitCampus($splitCampusCode, $report);
+            $this->syncDepartments($map, $report);
+        } catch (Throwable $exception) {
+            DB::rollBack();
 
-                if ($dryRun) {
-                    throw new RuntimeException('dry-run');
-                }
-            });
-        } catch (RuntimeException $exception) {
-            if (! $dryRun || $exception->getMessage() !== 'dry-run') {
-                throw $exception;
-            }
+            throw $exception;
         }
+
+        $dryRun ? DB::rollBack() : DB::commit();
 
         return $report;
     }
@@ -86,9 +97,9 @@ final class SyncCampusMap
      * @param  array<string, mixed>  $map
      * @param  array<string, mixed>  $report
      */
-    private function syncC1(array $map, array &$report): void
+    private function syncMapCampus(array $map, string $campusCode, array &$report): void
     {
-        $campus = Campus::query()->where('code', 'C1')->first();
+        $campus = Campus::query()->where('code', $campusCode)->first();
 
         if ($campus === null) {
             return;
@@ -105,11 +116,18 @@ final class SyncCampusMap
             $aliases[$key][] = $siiCode;
         }
 
-        $byCode = Room::query()->where('campus_id', $campus->getKey())->get()->keyBy('code');
+        $byCode = Room::withTrashed()->where('campus_id', $campus->getKey())->get()->keyBy('code');
         $byKey = $byCode->whereNotNull('map_key')->keyBy('map_key');
 
         foreach ($map['rooms'] as $item) {
-            $building = $buildings[$item['building']];
+            $building = $buildings[$item['building']] ?? null;
+
+            if ($building === null) {
+                $report['conflicts'][] = "Salón {$item['code']}: su edificio {$item['building']} no se pudo preparar.";
+
+                continue;
+            }
+
             $room = $byKey->get($item['map_key']);
 
             foreach ($aliases[$item['map_key']] ?? [] as $siiCode) {
@@ -118,31 +136,16 @@ final class SyncCampusMap
 
             $room ??= $this->free($byCode->get($item['code']));
 
-            if ($room === null) {
-                $created = $this->createRoom->handle($campus, [
-                    'building_id' => $building->getKey(), 'code' => $item['code'], 'name' => $item['name'], 'map_key' => $item['map_key'],
-                    'type' => $item['type'], 'capacity' => RoomType::from($item['type']) === RoomType::Laboratorio ? 20 : 30,
-                ]);
-
-                if (($item['active'] ?? true) === false) {
-                    $this->updateRoom->handle($created, ['is_active' => false]);
+            try {
+                if ($room === null) {
+                    $this->createMapRoom($campus, $building, $item, $byCode, $report);
+                } elseif ($room->trashed()) {
+                    $report['conflicts'][] = "Salón {$room->code}: está borrado y cruza con {$item['map_key']}; se deja borrado.";
+                } else {
+                    $this->linkRoom($room, $building, $item, $report);
                 }
-                $report['rooms_created']++;
-
-                continue;
-            }
-
-            $data = ['building_id' => $building->getKey(), 'map_key' => $item['map_key']];
-
-            if ($item['name'] !== null) {
-                $data['name'] = $item['name'];
-            }
-
-            $moved = $room->building_id !== $building->getKey();
-            $this->updateRoom->handle($room, $data);
-
-            if ($room->wasChanged()) {
-                $report[$moved ? 'rooms_moved' : 'rooms_linked']++;
+            } catch (ValidationException $exception) {
+                $report['conflicts'][] = "Salón {$item['code']}: ".implode(' ', array_merge(...array_values($exception->errors())));
             }
         }
 
@@ -162,6 +165,53 @@ final class SyncCampusMap
     }
 
     /**
+     * Un espacio del mapa sin salón: se crea, salvo que otro salón (de otro punto del mapa, o borrado) ya tenga su clave.
+     *
+     * @param  array<string, mixed>  $item
+     * @param  Collection<string, Room>  $byCode
+     * @param  array<string, mixed>  $report
+     */
+    private function createMapRoom(Campus $campus, Building $building, array $item, $byCode, array &$report): void
+    {
+        if ($byCode->has($item['code'])) {
+            $report['conflicts'][] = "Salón {$item['code']}: la clave ya la tiene otro salón ligado a otro punto del mapa; no se crea {$item['map_key']}.";
+
+            return;
+        }
+
+        $created = $this->createRoom->handle($campus, [
+            'building_id' => $building->getKey(), 'code' => $item['code'], 'name' => $item['name'], 'map_key' => $item['map_key'],
+            'type' => $item['type'], 'capacity' => RoomType::from($item['type']) === RoomType::Laboratorio ? 20 : 30,
+        ]);
+
+        if (($item['active'] ?? true) === false) {
+            $this->updateRoom->handle($created, ['is_active' => false]);
+        }
+
+        $report['rooms_created']++;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, mixed>  $report
+     */
+    private function linkRoom(Room $room, Building $building, array $item, array &$report): void
+    {
+        $data = ['building_id' => $building->getKey(), 'map_key' => $item['map_key']];
+
+        if ($item['name'] !== null) {
+            $data['name'] = $item['name'];
+        }
+
+        $moved = $room->building_id !== $building->getKey();
+        $this->updateRoom->handle($room, $data);
+
+        if ($room->wasChanged()) {
+            $report[$moved ? 'rooms_moved' : 'rooms_linked']++;
+        }
+    }
+
+    /**
      * Un salón del SII solo cruza con un espacio si aún no está ligado a otro.
      */
     private function free(?Room $room): ?Room
@@ -170,10 +220,13 @@ final class SyncCampusMap
     }
 
     /**
+     * Se busca por `map_key` y, si no, por la clave de un edificio sin ligar; uno ligado a otro punto del mapa no se
+     * reescribe. Un edificio borrado se restaura; si la clave nueva la tiene otro edificio, se reporta y se queda como está.
+     *
      * @param  array{map_key: string, code: string, name: string}  $item
      * @param  array<string, mixed>  $report
      */
-    private function upsertBuilding(Campus $campus, array $item, array &$report): Building
+    private function upsertBuilding(Campus $campus, array $item, array &$report): ?Building
     {
         $scope = fn () => Building::withTrashed()->where('campus_id', $campus->getKey());
         $building = $scope()->where('map_key', $item['map_key'])->first() ?? $scope()->where('code', $item['code'])->first();
@@ -184,13 +237,25 @@ final class SyncCampusMap
             return $this->createBuilding->handle($campus, ['code' => $item['code'], 'name' => $item['name'], 'map_key' => $item['map_key']]);
         }
 
+        if ($building->map_key !== null && $building->map_key !== $item['map_key']) {
+            $report['conflicts'][] = "Edificio {$item['code']}: la clave la tiene un edificio ligado a otro punto del mapa ({$building->map_key}).";
+
+            return null;
+        }
+
         $restored = $building->trashed();
 
         if ($restored) {
-            $building->restore();
+            $building = $this->restoreBuilding->handle($building);
         }
 
-        $this->updateBuilding->handle($building, ['code' => $item['code'], 'name' => $item['name'], 'map_key' => $item['map_key'], 'is_active' => true]);
+        try {
+            $this->updateBuilding->handle($building, ['code' => $item['code'], 'name' => $item['name'], 'map_key' => $item['map_key'], 'is_active' => true]);
+        } catch (ValidationException) {
+            $report['conflicts'][] = "Edificio {$item['code']}: la clave ya la tiene otro edificio; {$building->code} no se renombra.";
+
+            return $building;
+        }
 
         if ($restored || $building->wasChanged()) {
             $report['buildings_updated']++;
@@ -202,10 +267,10 @@ final class SyncCampusMap
     /**
      * @param  array<string, mixed>  $report
      */
-    private function syncC2(array &$report): void
+    private function syncSplitCampus(?string $campusCode, array &$report): void
     {
-        $campus = Campus::query()->where('code', 'C2')->first();
-        $source = $campus === null ? null : Building::query()->where('campus_id', $campus->getKey())->where('code', 'CAMPUSII')->first();
+        $campus = $campusCode === null ? null : Campus::query()->where('code', $campusCode)->first();
+        $source = $campus === null ? null : Building::query()->where('campus_id', $campus->getKey())->where('code', self::SPLIT_BUILDING)->first();
 
         if ($source === null) {
             return;
@@ -221,6 +286,9 @@ final class SyncCampusMap
             if ($target === null) {
                 $target = $this->createBuilding->handle($campus, ['code' => $letter, 'name' => "Edificio {$letter}"]);
                 $report['c2_buildings_created']++;
+            } elseif ($target->trashed() || ! $target->is_active) {
+                $target = $this->restoreBuilding->handle($target);
+                $this->updateBuilding->handle($target, ['is_active' => true]);
             }
 
             $this->updateRoom->handle($room, ['building_id' => $target->getKey()]);
