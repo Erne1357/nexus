@@ -26,6 +26,8 @@ function miniMap(): array
             ['map_key' => 'Edificio Sistemas|710', 'building' => 'SC', 'code' => '710', 'name' => null, 'type' => 'aula'],
             ['map_key' => 'Ciencias basicas|Laboratorio de ciencias básicas', 'building' => 'CB', 'code' => 'CB-LCB', 'name' => 'Laboratorio de ciencias básicas', 'type' => 'laboratorio'],
             ['map_key' => 'Edificio Guillot|Laboratorio de Alta Tecnología (LAT)', 'building' => 'G', 'code' => 'G-LATL', 'name' => 'Laboratorio de Alta Tecnología (LAT)', 'type' => 'laboratorio'],
+            ['map_key' => 'Edificio Guillot|Sala de Humanismo', 'building' => 'G', 'code' => 'G-SH', 'name' => 'Sala de Humanismo', 'type' => 'aula', 'active' => false],
+            ['map_key' => 'Edificio Guillot|Sala de Titulación (X)', 'building' => 'G', 'code' => 'G-ST', 'name' => 'Sala de Titulación (X)', 'type' => 'aula', 'active' => false],
         ],
         'aliases' => [
             'LABCB' => 'Ciencias basicas|Laboratorio de ciencias básicas',
@@ -86,6 +88,22 @@ it('crea los espacios del mapa que no tienen salón, sin dueño y con la capacid
     expect($lab->capacity)->toBe(20)->and($lab->type)->toBe(RoomType::Laboratorio)->and($lab->department_id)->toBeNull()
         ->and($aula->capacity)->toBe(30)->and($aula->type)->toBe(RoomType::Aula)->and($aula->building->code)->toBe('SC')
         ->and($aula->campus_id)->toBe($this->c1->id);
+});
+
+it('crea inactivos los espacios del mapa que no son para dar clase y activos los demás (supuesto por confirmar)', function () {
+    ($this->sync)();
+
+    expect(Room::query()->where('code', 'G-SH')->firstOrFail())->is_active->toBeFalse()->map_key->toBe('Edificio Guillot|Sala de Humanismo')
+        ->and(Room::query()->where('code', 'G-ST')->value('is_active'))->toBeFalse()
+        ->and(Room::query()->where('code', 'G-LATL')->value('is_active'))->toBeTrue();
+});
+
+it('un salón del SII que cruza con un espacio no docente conserva su estado activo', function () {
+    $room = oldRoom(oldBuilding($this->c1, 'G'), 'G-SH');
+
+    ($this->sync)();
+
+    expect($room->fresh())->is_active->toBeTrue()->map_key->toBe('Edificio Guillot|Sala de Humanismo');
 });
 
 it('deja intacto el salón del SII que no tiene lugar en el mapa', function () {

@@ -21,7 +21,9 @@ use RuntimeException;
  *  b. Cada salón del mapa se busca por `map_key`, luego por los alias del SII (clave del SII => `map_key`, solo con
  *     evidencia) y luego por la clave (los números como 105 son la clave del salón en el SII). Si existe se mueve al
  *     edificio del mapa y recibe `map_key` y nombre; se queda con su clave, tipo, capacidad y dueño.
- *  c. Los espacios del mapa sin salón se crean: aula 30 lugares, laboratorio 20, sin dueño (supuesto por confirmar).
+ *  c. Los espacios del mapa sin salón se crean: aula 30 lugares, laboratorio 20, sin dueño (supuesto por confirmar). Los
+ *     que el dataset marca `active => false` (cubículos, salas de titulación, cuartos…) nacen inactivos; un salón del SII
+ *     que cruza con uno de ellos conserva su estado (supuesto por confirmar, 20 de noviembre de 2026).
  *  d. Un salón del SII sin lugar en el mapa se deja como está, en su edificio y con su dueño (decisión del usuario,
  *     20 de noviembre de 2026).
  *  e. Un edificio de C1 que no es del mapa y se quedó sin salones activos se desactiva (nunca se borra).
@@ -117,10 +119,14 @@ final class SyncCampusMap
             $room ??= $this->free($byCode->get($item['code']));
 
             if ($room === null) {
-                $this->createRoom->handle($campus, [
+                $created = $this->createRoom->handle($campus, [
                     'building_id' => $building->getKey(), 'code' => $item['code'], 'name' => $item['name'], 'map_key' => $item['map_key'],
                     'type' => $item['type'], 'capacity' => RoomType::from($item['type']) === RoomType::Laboratorio ? 20 : 30,
                 ]);
+
+                if (($item['active'] ?? true) === false) {
+                    $this->updateRoom->handle($created, ['is_active' => false]);
+                }
                 $report['rooms_created']++;
 
                 continue;
