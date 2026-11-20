@@ -16,6 +16,7 @@ use App\Modules\Core\Support\WeekTime;
 use Carbon\CarbonImmutable;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use RuntimeException;
 
 /**
  * Lo común de los PDF públicos de lo publicado (tarea 4.5; ADR-0021): uno por carrera y semestre, docente o salón,
@@ -30,9 +31,9 @@ abstract class PublishedPdf implements PublishedExport
 {
     /**
      * La forma del archivo, en su llave: sube cuando cambia lo que el PDF dice, para no servir uno armado antes con las
-     * mismas versiones. 2: la fecha arriba y las marcas de lo que cambió (tarea 8.5).
+     * mismas versiones. 2: la fecha arriba y las marcas de lo que cambió (tarea 8.5). 3: el escudo del ITCJ en el encabezado (1.24.5).
      */
-    public const int FORMAT = 2;
+    public const int FORMAT = 3;
 
     /** Los tokens `chain-N` del tema claro de DESIGN.md: el PDF no carga `app.css`. */
     public const array CHAINS = ['#6d4fc2', '#0f7c8c', '#b0457f', '#c2661a', '#3b56b8', '#6b7a1f', '#1f86c7', '#8a5a3c', '#4d6b7a', '#9c4fd1', '#2f8f5b', '#c24f9b'];
@@ -94,18 +95,44 @@ abstract class PublishedPdf implements PublishedExport
 
     public function build(): string
     {
+        [$html, $orientation] = $this->compose();
+        $pdf = new Dompdf(self::options());
+        $pdf->loadHtml($html, 'UTF-8');
+        $pdf->setPaper('letter', $orientation);
+        $pdf->render();
+
+        return (string) $pdf->output();
+    }
+
+    /** El HTML que DomPDF convierte, con el escudo del ITCJ como data URI (ADR-0021). */
+    public function html(): string
+    {
+        return $this->compose()[0];
+    }
+
+    /** @return array{0: string, 1: string} El HTML y la orientación del papel. */
+    private function compose(): array
+    {
         $term = Term::query()->findOrFail($this->termId);
         $modality = Modality::withTrashed()->findOrFail($this->modalityId);
         $campus = $this->campusCode === null ? null : Campus::withTrashed()->where('code', $this->campusCode)->first();
         $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $modality, $this->snapshotIds)->onlyCampus($this->campusCode);
         [$view, $data, $orientation] = $this->document($schedule, $term, $modality);
 
-        $pdf = new Dompdf(self::options());
-        $pdf->loadHtml(view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus])->render(), 'UTF-8');
-        $pdf->setPaper('letter', $orientation);
-        $pdf->render();
+        return [view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus, 'crest' => self::crest()])->render(), $orientation];
+    }
 
-        return (string) $pdf->output();
+    /** El escudo del ITCJ (`resources/images/pdf/escudo-itcj.jpg`, JPEG sobre blanco: DomPDF sin la extensión GD solo lee JPEG) en base64. */
+    public static function crest(): string
+    {
+        $path = resource_path('images/pdf/escudo-itcj.jpg');
+        $bytes = is_file($path) ? file_get_contents($path) : false;
+
+        if ($bytes === false || $bytes === '') {
+            throw new RuntimeException("Falta el escudo del ITCJ para el encabezado de los PDF: {$path}");
+        }
+
+        return 'data:image/jpeg;base64,'.base64_encode($bytes);
     }
 
     /**

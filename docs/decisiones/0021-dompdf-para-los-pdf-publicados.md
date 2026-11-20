@@ -11,7 +11,7 @@ El servidor del ITCJ es on-premise ([ADR-0013](0013-despliegue-on-premise-itcj.m
 1. `dompdf/dompdf` ^3.1, directo y sin el envoltorio de Laravel (`barryvdh/laravel-dompdf`): una clase de AcademicLoad le pasa el HTML de una vista Blade y recibe los bytes. Trae `dompdf/php-font-lib`, `dompdf/php-svg-lib`, `masterminds/html5` y `sabberworm/php-css-parser`, sin extensiones nuevas (usa `dom` y `mbstring`, que ya están en la imagen).
 2. Las plantillas usan tablas y CSS 2.1, que es lo que DomPDF maneja bien: la semana es una tabla con `rowspan`, no la cuadrícula CSS de la pantalla. Los colores salen de los tokens de DESIGN.md escritos en la plantilla, porque el PDF no carga `app.css`.
 3. Fuente: DejaVu Sans, que viene con DomPDF y trae acentos y la «ñ». Atkinson Hyperlegible no se incrusta por ahora; si se pide, es otra decisión, por el peso de cada PDF.
-4. Sin acceso remoto: `isRemoteEnabled` apagado, así que una plantilla no puede pedir nada por la red. Las imágenes, como la liebre, van como data URI.
+4. Sin acceso remoto: `isRemoteEnabled` apagado, así que una plantilla no puede pedir nada por la red. Las imágenes, como la liebre, van como data URI. El contenedor no trae la extensión GD y DomPDF la exige para leer PNG, así que las imágenes de los PDF son JPEG sobre fondo blanco (el escudo del ITCJ del encabezado está en `resources/images/pdf/escudo-itcj.jpg`, armado con `PublishedPdf::crest()`).
 
 ## Consecuencias
 - La licencia es LGPL-2.1: se usa como librería sin modificarla, lo que la licencia permite en una aplicación propia.
