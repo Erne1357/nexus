@@ -326,8 +326,12 @@ describe('tablero', function () {
     it('Subdirección y el admin no validan ni reabren, ni llamando los métodos directo', function (string $who) {
         $user = $who === 'admin' ? User::factory()->admin()->create() : User::factory()->withRole(Role::Subdireccion, [])->create();
 
-        reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES])->call('confirm', 'validate', 'subjects')->assertForbidden();
-        reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES])->call('confirm', 'reopen', 'subjects')->assertForbidden();
+        if ($who === 'admin') {
+            reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES])->call('confirm', 'validate', 'subjects')->assertForbidden();
+            reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES])->call('confirm', 'reopen', 'subjects')->assertForbidden();
+        } else {
+            reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
+        }
         reviewPage($user, ['department' => $this->sis->id])->call('confirm', 'validate', 'teachers')->assertForbidden();
 
         expect(reviewOf(Catalog::Subjects)->status)->toBe(ReviewStatus::Pending);
@@ -562,18 +566,17 @@ describe('observaciones', function () {
             ->assertDontSee('Capacidad incorrecta');
     });
 
-    it('resuelve una observación y el jefe, el admin y Subdirección pueden', function (string $who) {
+    it('resuelve una observación de Servicios Escolares y el jefe y el admin pueden; Subdirección no (CV-S1)', function (string $who) {
         $user = match ($who) {
             'jefe' => $this->escolares,
             'admin' => User::factory()->admin()->create(),
-            'subdirección' => User::factory()->withRole(Role::Subdireccion, [])->create(),
         };
         $flag = CatalogReviewFlag::factory()->on($this->subject)->create(['review_id' => reviewOf(Catalog::Subjects)->id]);
 
         reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES, 'catalogo' => 'subjects'])->call('edit', $this->subject->id)->call('resolveFlag', $flag->id)->assertHasNoErrors();
 
         expect($flag->fresh()->resolved_at)->not->toBeNull()->and($flag->fresh()->resolved_by)->toBe($user->id);
-    })->with(['jefe', 'admin', 'subdirección']);
+    })->with(['jefe', 'admin']);
 
     it('una observación de otra revisión no se resuelve desde esta pantalla', function () {
         $teacher = Teacher::factory()->adscribedTo($this->ele)->create();
@@ -1218,8 +1221,8 @@ describe('revisión por registro (opción A)', function () {
             ->assertSeeHtml('data-row="'.$this->subject->id.'"');
     });
 
-    it('CV-S1: admin y Subdirección ven el avance y las marcas, sin casillas, «Marcar revisado», atajos ni selección', function (string $who) {
-        $user = $who === 'admin' ? User::factory()->admin()->create() : User::factory()->withRole(Role::Subdireccion, [])->create();
+    it('CV-S1: el admin ve el avance y las marcas, sin casillas, «Marcar revisado», atajos ni selección', function () {
+        $user = User::factory()->admin()->create();
 
         reviewPage($user, ['department' => ReviewOwner::SCHOOL_SERVICES, 'catalogo' => 'subjects'])
             ->assertSee('Por revisar')
@@ -1228,7 +1231,7 @@ describe('revisión por registro (opción A)', function () {
             ->assertDontSeeHtml('data-testid="mark-SCD-1027"')
             ->assertDontSeeHtml('data-testid="keyboard-hint"')
             ->assertDontSeeHtml('data-testid="selection-bar"');
-    })->with(['admin', 'subdirección']);
+    });
 
     it('CV8: la confirmación de la baja dice qué pasa: sin otro departamento queda inactivo; con otro, sigue allá', function () {
         $alone = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'ALON800101AA1', 'name' => 'Martha Ríos']);

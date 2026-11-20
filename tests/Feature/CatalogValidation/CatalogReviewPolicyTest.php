@@ -52,12 +52,12 @@ it('permite según el rol y su alcance en la revisión general del departamento'
     'jefe de otro departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(11)], [false, false, false, false, false, false, false]],
 ]);
 
-it('CV15: en la revisión de Servicios Escolares, su jefe lo hace todo; el jefe de un departamento, nada; Subdirección ve y resuelve', function (Closure $user, array $expected) {
+it('CV15: en la revisión de Servicios Escolares, su jefe lo hace todo; el jefe de un departamento, nada; Subdirección nada; el admin ve y resuelve', function (Closure $user, array $expected) {
     expect(reviewAbilitiesOf($user(), $this->schoolServices))->toBe(reviewAbilities(...$expected));
 })->with([
     'jefe de Servicios Escolares' => [fn () => schoolServicesHead(), [true, true, true, true, true, true, true]],
     'jefe de un departamento académico' => [fn () => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(), [false, false, false, false, false, false, false]],
-    'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), [true, false, false, false, false, true, false]],
+    'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), [false, false, false, false, false, false, false]],
     'admin' => [fn () => User::factory()->admin()->create(), [true, false, false, false, false, true, false]],
 ]);
 

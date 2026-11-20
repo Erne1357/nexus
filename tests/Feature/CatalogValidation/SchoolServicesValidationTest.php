@@ -14,8 +14,10 @@ use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
+use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
@@ -42,7 +44,8 @@ use Spatie\Activitylog\Models\Activity;
 | con su propio tablero: una revisión por catálogo y periodo para todo el Tec, con todos sus registros. El jefe de un
 | departamento académico ya no las ve ni las valida; sigue validando sus docentes y sus salones, una revisión por
 | departamento. La carga de cualquier departamento no sale de borrador mientras las de Servicios Escolares abiertas no
-| estén validadas (HC-14). Subdirección y el admin ven y resuelven observaciones (CV-S1).
+| estén validadas (HC-14). El admin ve y resuelve observaciones; la Subdirección Académica no (CV-S1, desde el 20 de
+| noviembre de 2026).
 */
 
 beforeEach(function () {
@@ -176,17 +179,26 @@ describe('CV15: quién ve y quién actúa', function () {
             ->and($this->jefe->can('validate', schoolServicesReview(Catalog::Rooms, $this->sis)))->toBeTrue();
     })->with([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
 
-    it('CV-S1: Subdirección y el admin ven la revisión de Servicios Escolares y resuelven sus observaciones, nada más', function (string $who) {
-        $user = $who === 'admin' ? $this->admin : $this->subdireccion;
+    it('CV-S1: el admin ve la revisión de Servicios Escolares y resuelve sus observaciones, nada más', function () {
         $review = schoolServicesReview(Catalog::Subjects);
 
-        expect($user->can('view', $review))->toBeTrue()
-            ->and($user->can('resolveFlag', $review))->toBeTrue()
-            ->and($user->can('correct', $review))->toBeFalse()
-            ->and($user->can('validate', $review))->toBeFalse()
-            ->and($user->can('reopen', $review))->toBeFalse()
-            ->and($user->can('flag', $review))->toBeFalse();
-    })->with(['admin', 'subdirección']);
+        expect($this->admin->can('view', $review))->toBeTrue()
+            ->and($this->admin->can('resolveFlag', $review))->toBeTrue()
+            ->and($this->admin->can('correct', $review))->toBeFalse()
+            ->and($this->admin->can('validate', $review))->toBeFalse()
+            ->and($this->admin->can('reopen', $review))->toBeFalse()
+            ->and($this->admin->can('flag', $review))->toBeFalse();
+    });
+
+    it('CV-S1: la Subdirección Académica no ve ni resuelve nada de las revisiones de Servicios Escolares, y sí las de los departamentos', function () {
+        $review = schoolServicesReview(Catalog::Subjects);
+        $own = schoolServicesReview(Catalog::Teachers, $this->sis);
+
+        expect($this->subdireccion->can('view', $review))->toBeFalse()
+            ->and($this->subdireccion->can('resolveFlag', $review))->toBeFalse()
+            ->and($this->subdireccion->can('view', $own))->toBeTrue()
+            ->and($this->subdireccion->can('resolveFlag', $own))->toBeTrue();
+    });
 
     it('AZ-02: el jefe de Servicios Escolares recibe solo los permisos de sus revisiones, ningún otro académico', function () {
         $this->actingAs($this->escolares);
@@ -206,7 +218,8 @@ describe('CV15: quién ve y quién actúa', function () {
         expect($this->subdireccion->can('validate', schoolServicesReview(Catalog::Teachers, $this->sis)))->toBeTrue()
             ->and($this->subdireccion->can('validate', $review))->toBeFalse()
             ->and($this->subdireccion->can('correct', $review))->toBeFalse()
-            ->and($this->subdireccion->can('view', $review))->toBeTrue()
+            ->and($this->subdireccion->can('view', $review))->toBeFalse()
+            ->and($this->subdireccion->can('resolveFlag', $review))->toBeFalse()
             ->and(collect(app(CatalogReviewQuery::class)->holdersOf(ReviewOwner::SCHOOL_SERVICES, CatalogValidationPermission::ReviewValidate))->pluck('user.id')->all())->toBe([$this->escolares->id]);
     });
 
@@ -235,15 +248,34 @@ describe('CV15: quién ve y quién actúa', function () {
         schoolServicesPage($boss, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
     });
 
-    it('AZ-03: un directivo de Planeación ve lo de Servicios Escolares pero no lo valida ni corrige, aunque el panel le diera esos permisos', function () {
+    it('CV-S1: un directivo (lee todo el Tec) no ve ni resuelve lo de Servicios Escolares, aunque el panel le diera permisos', function () {
         $directivo = User::factory()->withRole(Role::Directivo, ['org_unit_id' => schoolServicesUnit()->parent_id])->create();
         PermissionSet::factory()->withPermissions([CatalogValidationPermission::ReviewValidate, CatalogValidationPermission::ReviewCorrect])->assignedTo(Role::Directivo)->create();
         app()->forgetScopedInstances();
         $review = schoolServicesReview(Catalog::Subjects);
+        $own = schoolServicesReview(Catalog::Teachers, $this->sis);
 
-        expect($directivo->can('view', $review))->toBeTrue()
+        expect($directivo->can('view', $review))->toBeFalse()
+            ->and($directivo->can('resolveFlag', $review))->toBeFalse()
             ->and($directivo->can('validate', $review))->toBeFalse()
-            ->and($directivo->can('correct', $review))->toBeFalse();
+            ->and($directivo->can('correct', $review))->toBeFalse()
+            ->and($directivo->can('view', $own))->toBeTrue();
+    });
+
+    it('CV-S1: el directivo no tiene a Servicios Escolares en el selector, ?department= da 403 y el avance no trae su renglón ni sus observaciones', function () {
+        $directivo = User::factory()->withRole(Role::Directivo, ['org_unit_id' => schoolServicesUnit()->parent_id])->create();
+        $flag = CatalogReviewFlag::factory()->on($this->sisSubject)->create(['review_id' => schoolServicesReview(Catalog::Subjects)->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar.', 'flagged_by' => $this->escolares->id]);
+
+        schoolServicesPage($directivo)->assertViewHas('departments', fn ($owners): bool => $owners->pluck('id')->all() === [$this->ele->id, $this->sis->id]);
+        schoolServicesPage($directivo, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
+
+        $page = fn () => Livewire::actingAs($directivo)->test('catalog-validation::pages.progress');
+        $page()->assertDontSeeHtml('data-testid="progress-row-SE"')->call('open', ReviewOwner::SCHOOL_SERVICES)->assertNotFound();
+        $page()->call('resolveFlag', $flag->id)->assertForbidden();
+        expect($flag->fresh()->resolved_at)->toBeNull();
+
+        actingAsRole($directivo, Role::Directivo);
+        Livewire::test('core::pages.home')->assertSee('0 de 2 departamentos validados');
     });
 
     it('CV15: el menú le muestra «Validar catálogos» al jefe de Servicios Escolares', function () {
@@ -320,14 +352,32 @@ describe('CV15: la pantalla', function () {
         'editar' => ['edit', [fakeKey(1)]],
     ]);
 
-    it('CV-S1: Subdirección elige Servicios Escolares en el selector y lo ve en lectura', function () {
-        schoolServicesPage($this->subdireccion)
+    it('CV-S1: el admin elige Servicios Escolares en el selector y lo ve en lectura', function () {
+        schoolServicesPage($this->admin)
             ->assertViewHas('departments', fn ($owners): bool => $owners->pluck('id')->all() === [ReviewOwner::SCHOOL_SERVICES, $this->ele->id, $this->sis->id]);
 
-        schoolServicesPage($this->subdireccion, ['department' => ReviewOwner::SCHOOL_SERVICES])
+        schoolServicesPage($this->admin, ['department' => ReviewOwner::SCHOOL_SERVICES])
             ->assertOk()
             ->assertViewHas('viewOnly', true)
             ->assertSeeHtml('data-testid="tab-subjects"');
+    });
+
+    it('CV-S1: Subdirección no tiene a Servicios Escolares en el selector y pedirlo por la dirección da 403', function () {
+        schoolServicesPage($this->subdireccion)
+            ->assertViewHas('departments', fn ($owners): bool => $owners->pluck('id')->all() === [$this->ele->id, $this->sis->id]);
+
+        schoolServicesPage($this->subdireccion, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
+        schoolServicesPage($this->subdireccion, ['department' => $this->sis->id])->assertOk();
+    });
+
+    it('CV-S1: Subdirección no resuelve una observación de Servicios Escolares desde la revisión, ni por la acción de Livewire', function () {
+        $flag = CatalogReviewFlag::factory()->on($this->sisSubject)->create(['review_id' => schoolServicesReview(Catalog::Subjects)->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar.', 'flagged_by' => $this->escolares->id]);
+
+        schoolServicesPage($this->subdireccion, ['department' => $this->sis->id])->call('resolveFlag', $flag->id)->assertNotFound();
+        expect($flag->fresh()->resolved_at)->toBeNull();
+
+        schoolServicesPage($this->admin, ['department' => ReviewOwner::SCHOOL_SERVICES, 'catalogo' => 'subjects'])->call('resolveFlag', $flag->id);
+        expect($flag->fresh()->resolved_at)->not->toBeNull();
     });
 });
 
@@ -465,15 +515,47 @@ describe('CV15: avance, Inicio y avisos', function () {
         Livewire::test('core::pages.home')->assertSee('Tienes 2 catálogos por validar');
     });
 
-    it('CV-S13: a Subdirección le cuenta a Servicios Escolares como un departamento más', function () {
+    it('CV-S13: al admin le cuenta a Servicios Escolares como un departamento más; a Subdirección, no (CV-S1)', function () {
         foreach ([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
             validateAllReviewed(schoolServicesReview($catalog), $this->escolares);
         }
 
-        expect(app(ValidationProgressQuery::class)->departmentsValidated($this->term))->toBe(['validated' => 1, 'total' => 3]);
+        expect(app(ValidationProgressQuery::class)->departmentsValidated($this->term))->toBe(['validated' => 1, 'total' => 3])
+            ->and(app(ValidationProgressQuery::class)->departmentsValidated($this->term, false))->toBe(['validated' => 0, 'total' => 2]);
+
+        actingAsRole($this->admin, Role::Admin);
+        Livewire::test('core::pages.home')->assertSee('1 de 3 departamentos validados');
 
         actingAsRole($this->subdireccion, Role::Subdireccion);
-        Livewire::test('core::pages.home')->assertSee('1 de 3 departamentos validados');
+        Livewire::test('core::pages.home')->assertSee('0 de 2 departamentos validados');
+    });
+
+    it('CV-S1: el tablero de avance de Subdirección no trae el renglón de Servicios Escolares ni sus observaciones; el del admin sí', function () {
+        $flag = CatalogReviewFlag::factory()->on($this->sisSubject)->create(['review_id' => schoolServicesReview(Catalog::Subjects)->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar la clave.', 'flagged_by' => $this->escolares->id]);
+        $progress = app(ValidationProgressQuery::class);
+
+        $board = $progress->board($this->term, withSchoolServices: false);
+
+        expect(array_map(fn (array $row): string => $row['department']->id, $board['rows']))->toBe([$this->ele->id, $this->sis->id])
+            ->and($board['flags']['open'])->toBe(0)
+            ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'rooms', 'subjects', 'study_plans', 'careers'])
+            ->and($progress->allOpenFlags($this->term, false))->toBeEmpty()
+            ->and($progress->allOpenFlags($this->term)->pluck('id')->all())->toBe([$flag->id]);
+
+        $page = fn (User $user) => Livewire::actingAs($user)->test('catalog-validation::pages.progress');
+
+        $page($this->subdireccion)->call('open', ReviewOwner::SCHOOL_SERVICES)->assertNotFound();
+        $page($this->subdireccion)->call('remind', departmentId: ReviewOwner::SCHOOL_SERVICES)->assertNotFound();
+        $page($this->subdireccion)->call('resolveFlag', $flag->id)->assertForbidden();
+        expect($flag->fresh()->resolved_at)->toBeNull();
+
+        $page($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)->assertOk();
+    });
+
+    it('CV-S1: el aviso de una observación resuelta de Servicios Escolares no le llega a la Subdirección', function () {
+        $holders = collect(app(CatalogReviewQuery::class)->holdersOf(ReviewOwner::SCHOOL_SERVICES, CatalogValidationPermission::ReviewResolveFlag))->pluck('user.id')->all();
+
+        expect($holders)->toBe([$this->escolares->id]);
     });
 
     it('CV11: el aviso de apertura le llega al jefe de Servicios Escolares con sus catálogos y al académico sin ellos', function () {
