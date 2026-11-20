@@ -151,7 +151,7 @@ it('deja en la bitácora cada fila que elimina, con lo que tenía y la que se qu
         ->and($entry->subject_id)->toBe($gone)
         ->and($entry->causer_id)->toBeNull()
         ->and($entry->event)->toBe('deleted')
-        ->and($entry->description)->toBe('Juntó la asignación del docente 1234567 a SIS en C1 con la que se queda, porque la asignación ya no lleva campus')
+        ->and($entry->description)->toBe('Juntó la adscripción del docente 1234567 a SIS en C1 con la que se queda, porque la adscripción ya no lleva campus')
         ->and($entry->attribute_changes->all())->toBe(['old' => [
             'department_id' => $this->sis->id,
             'campus_id' => $this->c1->id,
