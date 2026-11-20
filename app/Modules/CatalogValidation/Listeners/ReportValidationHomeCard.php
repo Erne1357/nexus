@@ -15,7 +15,7 @@ use App\Modules\Core\Support\StageTimeline;
 /**
  * La tarjeta de Inicio de la validación de catálogos (CV-S13, supuesto por confirmar), solo mientras la validación del
  * periodo activo está abierta (OpenValidationQuery, MN-03). A quien ve el avance (Subdirección y el admin): «X de Y
- * departamentos validados», contando a Servicios Escolares (CV15), con «Ver avance». Al jefe que valida: cuántos de sus
+ * departamentos validados», contando a Servicios Escolares (CV15) solo a quien ve sus revisiones (el admin y el directivo, no la Subdirección; CV-S1 desde el 20 de noviembre de 2026), con «Ver avance». Al jefe que valida: cuántos de sus
  * catálogos le faltan en sus departamentos activos o, al de Servicios Escolares, de las materias, los planes y las
  * carreras (CV15), con la fecha límite si la etapa tiene ventana (CV11) y «Ir a validar»; si ya no le falta ninguno, no
  * hay tarjeta. Contesta HomeCardsRequested de Core sin escribir nada.
@@ -39,7 +39,7 @@ final class ReportValidationHomeCard
         }
 
         if ($context->allowsAny(CatalogValidationPermission::ProgressView)) {
-            $summary = $this->progress->departmentsValidated($term);
+            $summary = $this->progress->departmentsValidated($term, CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewView, ReviewOwner::SCHOOL_SERVICES));
 
             $event->add(new HomeCard(
                 key: 'catalog-validation',

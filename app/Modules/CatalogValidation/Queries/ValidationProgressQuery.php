@@ -91,7 +91,8 @@ final class ValidationProgressQuery
      * `status` (`pending`: con algo sin validar; `validated`: todo validado) solo filtran `rows` y `totals`.
      *
      * Con `$ownerId` (un id de departamento o ReviewOwner::SCHOOL_SERVICES), solo ese (para el drawer de uno que los
-     * filtros dejaron fuera).
+     * filtros dejaron fuera). Con `$withSchoolServices` falso (quien no ve las revisiones de Servicios Escolares: la
+     * Subdirección Académica, CV-S1 desde el 20 de noviembre de 2026) no sale su renglón ni cuenta en nada.
      *
      * @return array{
      *     columns: list<array{key: string, catalog: Catalog}>,
@@ -102,7 +103,7 @@ final class ValidationProgressQuery
      *     remindable: array{departments: int, heads: int}
      * }
      */
-    public function board(Term $term, string $search = '', string $status = '', ?string $ownerId = null): array
+    public function board(Term $term, string $search = '', string $status = '', ?string $ownerId = null, bool $withSchoolServices = true): array
     {
         $catalogs = $this->catalogReviews->openedCatalogs($term);
         $ordered = [
@@ -112,6 +113,7 @@ final class ValidationProgressQuery
         $columns = array_map(fn (Catalog $catalog): array => ['key' => $catalog->value, 'catalog' => $catalog], array_values($ordered));
 
         $owners = $this->catalogReviews->activeOwners($ownerId === null ? null : [$ownerId])
+            ->reject(fn (ReviewOwner $owner): bool => ! $withSchoolServices && $owner->isSchoolServices())
             ->filter(fn (ReviewOwner $owner): bool => array_filter($owner->catalogs(), fn (Catalog $catalog): bool => in_array($catalog, $catalogs, true)) !== [])
             ->values();
         $departmentIds = $owners->pluck('departmentId')->filter()->values()->all();
@@ -241,10 +243,10 @@ final class ValidationProgressQuery
      *
      * @return Collection<int, CatalogReviewFlag>
      */
-    public function allOpenFlags(Term $term): Collection
+    public function allOpenFlags(Term $term, bool $withSchoolServices = true): Collection
     {
         return $this->openFlagsQuery($term)
-            ->whereHas('review', fn ($query) => $query->whereNull('department_id')->orWhereHas('department', fn ($query) => $query->where('is_active', true)))
+            ->whereHas('review', fn ($query) => $query->where(fn ($query) => $query->when($withSchoolServices, fn ($query) => $query->whereNull('department_id'))->orWhereHas('department', fn ($query) => $query->where('is_active', true))))
             ->get()
             ->sortBy([fn (CatalogReviewFlag $a, CatalogReviewFlag $b): int => ($a->review->department?->code ?? '') <=> ($b->review->department?->code ?? ''), fn (CatalogReviewFlag $a, CatalogReviewFlag $b): int => $b->created_at <=> $a->created_at])
             ->values();
@@ -261,12 +263,13 @@ final class ValidationProgressQuery
     /**
      * Cuántos departamentos ya validaron todo lo que les toca de lo que el admin abrió en el periodo, de cuántos (la
      * tarjeta de Inicio de la validación, CV-S13): Servicios Escolares y los departamentos activos (CV15), cada uno con
-     * sus propios catálogos; solo cuentan los que tienen alguno abierto. Una revisión que falta cuenta como pendiente,
+     * sus propios catálogos; solo cuentan los que tienen alguno abierto. Con `$withSchoolServices` falso no cuenta a Servicios
+     * Escolares (lo ve la Subdirección Académica, CV-S1 desde el 20 de noviembre de 2026). Una revisión que falta cuenta como pendiente,
      * igual que en el tablero.
      *
      * @return array{validated: int, total: int}
      */
-    public function departmentsValidated(Term $term): array
+    public function departmentsValidated(Term $term, bool $withSchoolServices = true): array
     {
         $opened = $this->catalogReviews->openedCatalogs($term);
         $validated = CatalogReview::query()
@@ -277,6 +280,7 @@ final class ValidationProgressQuery
             ->map(fn (Collection $reviews): array => $reviews->pluck('catalog')->all());
 
         $counted = $this->catalogReviews->activeOwners()
+            ->reject(fn (ReviewOwner $owner): bool => ! $withSchoolServices && $owner->isSchoolServices())
             ->mapWithKeys(fn (ReviewOwner $owner): array => [$owner->id => array_values(array_filter($owner->catalogs(), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)))])
             ->filter(fn (array $catalogs): bool => $catalogs !== []);
         $done = $counted->filter(fn (array $catalogs, string $ownerId): bool => array_diff(

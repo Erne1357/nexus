@@ -72,16 +72,17 @@ function progressMakeFlag(Department $department, ReviewFlag $flag = ReviewFlag:
 }
 
 describe('quién entra', function () {
-    it('Subdirección y el admin ven el avance global, la matriz y los totales', function (string $who) {
-        progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
+    it('Subdirección y el admin ven el avance global, la matriz y los totales; Servicios Escolares, solo el admin (CV-S1)', function (string $who) {
+        $page = progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
             ->assertOk()
             ->assertSee('Avance de validación')
-            ->assertSee('0 de 7')
+            ->assertSee($who === 'admin' ? '0 de 7' : '0 de 4')
             ->assertSee('Sistemas y Computación')
-            ->assertSee('Servicios Escolares')
             ->assertSee('Dra. Ana Soto')
             ->assertSee('Salones')
             ->assertSee('Total del Tec');
+
+        $who === 'admin' ? $page->assertSeeHtml('data-testid="progress-row-SE"') : $page->assertDontSeeHtml('data-testid="progress-row-SE"');
     })->with(['admin', 'subdirección']);
 
     it('la ruta responde con su entrada en el menú', function () {
@@ -196,7 +197,7 @@ describe('conteos', function () {
         CatalogReviewMark::factory()->for($review, 'review')->on($subject)->create();
         $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['department_id' => $this->sis->id]);
 
-        progressPage()
+        progressPage($this->admin)
             ->assertSeeHtml('data-testid="reviewed">1 de 2 revisados</span>')
             ->assertSeeHtml('data-testid="reviewed">0 de 1 revisados</span>')
             ->assertSee('Pendiente · 0 de 1 revisados');
@@ -210,7 +211,7 @@ describe('conteos', function () {
         CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
         progressMakeFlag($this->sis);
 
-        progressPage()
+        progressPage($this->admin)
             ->assertSee('4 de 7')
             ->assertSee('1 en revisión')
             ->assertSee('2 pendientes')
@@ -328,7 +329,7 @@ describe('drawer', function () {
         CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Careers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefeSis->id, 'validated_at' => now()]);
         progressMakeFlag($this->sis);
 
-        progressPage()->call('open', ReviewOwner::SCHOOL_SERVICES)
+        progressPage($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)
             ->assertSet('showDrawer', true)
             ->assertSee('Validó Dra. Ana Soto')
             ->assertSee('ACF-0901')->assertSee('Contabilidad financiera')->assertSee('Las horas deben ser 3.')
@@ -348,7 +349,7 @@ describe('drawer', function () {
         $flag = progressMakeFlag($this->sis);
         CatalogReviewFlag::factory()->on($flag->flaggable)->create(['review_id' => $flag->review_id, 'flag' => ReviewFlag::Duplicate, 'comment' => 'Otra más.', 'flagged_by' => $this->jefeSis->id]);
 
-        $html = progressPage()->call('open', ReviewOwner::SCHOOL_SERVICES)->html();
+        $html = progressPage($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)->html();
 
         expect(substr_count($html, 'data-testid="drawer-record-'))->toBe(1)
             ->and($html)->toContain('Las horas deben ser 3.')->toContain('Otra más.');
@@ -387,15 +388,19 @@ describe('drawer', function () {
         progressPage()->call('open', fakeKey(999))->assertNotFound();
     });
 
-    it('Subdirección y el admin resuelven una observación desde el drawer', function (string $who) {
+    it('el admin resuelve una observación de Servicios Escolares desde el drawer; Subdirección ni la abre ni la resuelve (CV-S1)', function () {
         $flag = progressMakeFlag($this->sis);
-        $user = $who === 'admin' ? $this->admin : $this->subdireccion;
 
-        $page = progressPage($user)->call('open', ReviewOwner::SCHOOL_SERVICES)->call('resolveFlag', $flag->id);
+        $page = progressPage($this->admin)->call('open', ReviewOwner::SCHOOL_SERVICES)->call('resolveFlag', $flag->id);
 
-        expect($flag->fresh()->resolved_by)->toBe($user->id)
+        expect($flag->fresh()->resolved_by)->toBe($this->admin->id)
             ->and(lastToastOf($page)['title'])->toBe('Observación resuelta');
-    })->with(['admin', 'subdirección']);
+
+        $other = CatalogReviewFlag::factory()->on($flag->flaggable)->create(['review_id' => $flag->review_id, 'flag' => ReviewFlag::Duplicate, 'comment' => 'Otra.', 'flagged_by' => $this->jefeSis->id]);
+        progressPage($this->subdireccion)->call('open', ReviewOwner::SCHOOL_SERVICES)->assertNotFound();
+        progressPage($this->subdireccion)->call('resolveFlag', $other->id)->assertForbidden();
+        expect($other->fresh()->resolved_at)->toBeNull();
+    });
 
     it('no resuelve con un id ajeno ni un usuario sin permiso', function () {
         $flag = progressMakeFlag($this->sis);
@@ -534,20 +539,22 @@ describe('CV10: observaciones abiertas de todos los departamentos', function () 
             ->assertSeeHtml('data-testid="open-all-flags"')
             ->call('openFlags')
             ->assertSet('showFlags', true)
-            ->assertSee('Observaciones abiertas (2)');
+            ->assertSee($who === 'admin' ? 'Observaciones abiertas (2)' : 'Observaciones abiertas (1)');
 
         $who === 'admin'
             ? $page->assertSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"')->assertSeeHtml('href="'.e(route('academic.subjects', ValidationReturn::params($sis->review->owner_id, 'subjects'))).'"')
             : $page->assertDontSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"');
-        expect($page->html())->toMatch('/data-testid="flags-drawer".*Servicios Escolares.*ACF-0901.*Eléctrica y Electrónica.*ELC-1001/s');
+        $who === 'admin'
+            ? expect($page->html())->toMatch('/data-testid="flags-drawer".*Servicios Escolares.*ACF-0901.*Eléctrica y Electrónica.*ELC-1001/s')
+            : expect($page->html())->toMatch('/data-testid="flags-drawer".*Eléctrica y Electrónica.*ELC-1001/s')->not->toContain('ACF-0901');
     })->with(['admin', 'subdirección']);
 
     it('se resuelve desde la lista con la nota de lo que se hizo', function () {
         $flag = progressMakeFlag($this->sis);
 
-        $page = progressPage()->call('openFlags')->assertSeeHtml('data-testid="resolve-submit-'.$flag->id.'"')->call('resolveFlag', $flag->id, 'Se corrigieron las horas.');
+        $page = progressPage($this->admin)->call('openFlags')->assertSeeHtml('data-testid="resolve-submit-'.$flag->id.'"')->call('resolveFlag', $flag->id, 'Se corrigieron las horas.');
 
-        expect($flag->fresh())->resolution_note->toBe('Se corrigieron las horas.')->resolved_by->toBe($this->subdireccion->id)
+        expect($flag->fresh())->resolution_note->toBe('Se corrigieron las horas.')->resolved_by->toBe($this->admin->id)
             ->and(lastToastOf($page)['title'])->toBe('Observación resuelta');
         $page->assertDontSee('Las horas deben ser 3.');
     });

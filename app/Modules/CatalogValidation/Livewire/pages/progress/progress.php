@@ -4,9 +4,11 @@ use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\CatalogValidation\Queries\ValidationWindowQuery;
 use App\Modules\Core\Authorization\Actor;
@@ -82,17 +84,18 @@ new #[Title('Avance de validación')] class extends Component
             return ['term' => $term, 'open' => $open, 'board' => null, 'window' => null, 'detail' => null, 'canOpen' => $canOpen, 'options' => [], 'allFlags' => null, 'roomsWithoutOwner' => 0];
         }
 
-        $board = $progress->board($term, $this->search, $this->status);
+        $withSchoolServices = $this->seesSchoolServices($context);
+        $board = $progress->board($term, $this->search, $this->status, withSchoolServices: $withSchoolServices);
 
         return [
             'term' => $term,
             'open' => $open,
             'board' => $board,
             'window' => $this->window($windows, $term),
-            'detail' => $this->showDrawer && $this->detailId !== null ? $this->detail($progress, $term, $board) : null,
+            'detail' => $this->showDrawer && $this->detailId !== null ? $this->detail($progress, $term, $board, $withSchoolServices) : null,
             'canOpen' => $canOpen,
             'options' => $reviews->openingOptions($term),
-            'allFlags' => $this->showFlags ? $progress->allOpenFlags($term) : null,
+            'allFlags' => $this->showFlags ? $progress->allOpenFlags($term, $withSchoolServices) : null,
             'roomsWithoutOwner' => $canOpen && $this->showOpen ? $rooms->withoutOwnerCount() : 0,
         ];
     }
@@ -146,11 +149,12 @@ new #[Title('Avance de validación')] class extends Component
     /**
      * Abre el drawer de un departamento activo o de Servicios Escolares (CV15).
      */
-    public function open(string $id, CatalogReviewQuery $reviews): void
+    public function open(string $id, CatalogReviewQuery $reviews, Actor $context): void
     {
         Gate::authorize('viewProgress', CatalogReview::class);
 
         $owner = $reviews->activeOwners([$id])->first() ?? abort(404);
+        abort_if($owner->isSchoolServices() && ! $this->seesSchoolServices($context), 404);
 
         $this->detailId = $owner->id;
         $this->showDrawer = true;
@@ -178,7 +182,7 @@ new #[Title('Avance de validación')] class extends Component
         $term = $context->activeTerm() ?? abort(404);
 
         if ($departmentId === null) {
-            $ids = collect($progress->board($term, $this->search, $this->status)['rows'])
+            $ids = collect($progress->board($term, $this->search, $this->status, withSchoolServices: $this->seesSchoolServices($context))['rows'])
                 ->filter(fn (array $row): bool => $row['remind_blocked_reason'] === null)
                 ->map(fn (array $row): string => $row['department']->id)
                 ->values()
@@ -197,6 +201,7 @@ new #[Title('Avance de validación')] class extends Component
         }
 
         $department = $reviews->activeOwners([$departmentId])->first() ?? abort(404);
+        abort_if($department->isSchoolServices() && ! $this->seesSchoolServices($context), 404);
         $notified = $remind->handle($term, $this->user(), [$department->id]);
 
         if ($notified === 0) {
@@ -260,12 +265,21 @@ new #[Title('Avance de validación')] class extends Component
      * @param  array<string, mixed>  $board
      * @return array<string, mixed>|null
      */
-    private function detail(ValidationProgressQuery $progress, Term $term, array $board): ?array
+    private function detail(ValidationProgressQuery $progress, Term $term, array $board, bool $withSchoolServices): ?array
     {
         $row = collect($board['rows'])->first(fn (array $candidate): bool => $candidate['department']->id === $this->detailId)
-            ?? ($progress->board($term, ownerId: $this->detailId)['rows'][0] ?? null);
+            ?? ($progress->board($term, ownerId: $this->detailId, withSchoolServices: $withSchoolServices)['rows'][0] ?? null);
 
         return $row === null ? null : ['row' => $row, 'flags' => $progress->openFlags($term, $row['department'])];
+    }
+
+    /**
+     * Si quien mira ve el renglón, las observaciones y el avisar de Servicios Escolares: solo su jefe, el admin y quien
+     * lee en todo el Tec; la Subdirección Académica no (CV-S1, desde el 20 de noviembre de 2026).
+     */
+    private function seesSchoolServices(Actor $context): bool
+    {
+        return CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewView, ReviewOwner::SCHOOL_SERVICES);
     }
 
     private function user(): User

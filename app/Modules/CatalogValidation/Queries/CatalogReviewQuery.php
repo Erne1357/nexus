@@ -28,10 +28,10 @@ use Illuminate\Support\Str;
  */
 final class CatalogReviewQuery
 {
-    /** Lo que la Subdirección Académica, el admin y quien lee en todo el Tec pueden en las de Servicios Escolares (CV-S1). */
+    /** Lo que el admin y quien lee en todo el Tec (el directivo) pueden en las de Servicios Escolares, además de su jefe (CV-S1, desde el 20 de noviembre de 2026 la Subdirección Académica no). */
     private const array SCHOOL_SERVICES_OVERSIGHT = [CatalogValidationPermission::ReviewView, CatalogValidationPermission::ReviewResolveFlag];
 
-    /** Por qué no se abren materias, planes ni carreras sin jefe de Servicios Escolares (CV15, supuesto por confirmar). */
+    /** Por qué no se abren materias, planes ni carreras sin jefe de Servicios Escolares (CV15, confirmado el 20 de noviembre de 2026). */
     public const string SCHOOL_SERVICES_HEADLESS = 'Nombra al jefe de Servicios Escolares antes de abrir materias, planes y carreras: sin él nadie los valida y ninguna carga saldría de borrador.';
 
     public function __construct(
@@ -138,7 +138,7 @@ final class CatalogReviewQuery
     /**
      * Los catálogos del periodo para el drawer «Abrir validación»: cada uno con si ya está abierto y, si no se puede
      * abrir, el motivo: los salones sin un campus abierto que use salones; materias, planes y carreras sin jefe de
-     * Servicios Escolares vigente (CV15, supuesto por confirmar).
+     * Servicios Escolares vigente (CV15, confirmado el 20 de noviembre de 2026).
      *
      * @return list<array{catalog: Catalog, open: bool, blocked: ?string}>
      */
@@ -224,11 +224,10 @@ final class CatalogReviewQuery
     /**
      * Sobre qué se pide `$permission` en las revisiones de `$ownerId` (un id de departamento o
      * ReviewOwner::SCHOOL_SERVICES). Las revisiones no son de un campus ni de una modalidad (AZ-S17), así que solo cuenta
-     * la unidad: la del departamento o, en las de Servicios Escolares (CV15), su unidad y, solo para ver y resolver
-     * observaciones, la Subdirección Académica (CV-S1), aunque Servicios Escolares no cuelgue de ella (R-V2-5). Un permiso
-     * que escribe nunca se pide sobre la Subdirección: aunque el panel (CF-01) se lo diera a uno de sus puestos, no alcanza
-     * lo de Servicios Escolares. Sin esas unidades en el organigrama, solo las alcanza quien no se acota por unidad (el
-     * admin).
+     * la unidad: la del departamento o, en las de Servicios Escolares (CV15), solo la suya. La Subdirección Académica ya
+     * no entra ni en lectura: no ve ni resuelve las observaciones de Servicios Escolares (CV-S1, desde el 20 de
+     * noviembre de 2026), aunque el panel (CF-01) le diera permisos a uno de sus puestos. Sin esa unidad en el
+     * organigrama, solo la alcanza quien no se acota por unidad (el admin).
      */
     public static function targetOf(string $ownerId, CatalogValidationPermission $permission): Target
     {
@@ -236,14 +235,7 @@ final class CatalogReviewQuery
             return Target::of(unit: $ownerId);
         }
 
-        $tree = app(OrgTree::class);
-        $units = [$tree->idOf(OrgTree::SCHOOL_SERVICES)];
-
-        if (in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)) {
-            $units[] = $tree->idOf(OrgTree::ACADEMIC);
-        }
-
-        return Target::of(unit: array_values(array_filter($units)));
+        return Target::of(unit: array_values(array_filter([app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES)])));
     }
 
     /**
@@ -252,8 +244,8 @@ final class CatalogReviewQuery
      *
      * En las de Servicios Escolares (CV15) la unidad se compara exacta: su jefe es quien tiene un nombramiento sobre la
      * unidad de Servicios Escolares, no el de una unidad que la contenga si alguien la moviera en el Organigrama (AZ-S16
-     * deja que un nombramiento cubra a las descendientes de su unidad). Ver y resolver observaciones también lo pueden la
-     * Subdirección Académica, el admin y quien lee en todo el Tec (CV-S1, AZ-03).
+     * deja que un nombramiento cubra a las descendientes de su unidad). Ver y resolver observaciones también lo pueden el
+     * admin y quien lee en todo el Tec (CV-S1, AZ-03); la Subdirección Académica no (desde el 20 de noviembre de 2026).
      */
     public static function allowsOn(Actor $context, CatalogValidationPermission $permission, string $ownerId): bool
     {
@@ -261,8 +253,7 @@ final class CatalogReviewQuery
             return $context->allows($permission, self::targetOf($ownerId, $permission));
         }
 
-        $tree = app(OrgTree::class);
-        $schoolServices = $tree->idOf(OrgTree::SCHOOL_SERVICES);
+        $schoolServices = app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES);
 
         if ($schoolServices !== null
             && $context->allows($permission, Target::of(unit: $schoolServices))
@@ -270,8 +261,13 @@ final class CatalogReviewQuery
             return true;
         }
 
+        // Fuera de su jefe, solo el admin y quien lee en todo el Tec: ningún nombramiento de unidad (ni la Subdirección
+        // Académica, ni uno que contenga a Servicios Escolares) la alcanza por esta vía.
+        $target = self::targetOf($ownerId, $permission);
+
         return in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)
-            && $context->allows($permission, Target::of(unit: $tree->idOf(OrgTree::ACADEMIC)));
+            && $context->allows($permission, $target)
+            && array_all($context->rolesAllowing($permission, $target), fn (Role $role): bool => $role->readsWholeTec());
     }
 
     /**

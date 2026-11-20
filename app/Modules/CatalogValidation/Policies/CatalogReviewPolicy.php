@@ -27,7 +27,8 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  * - Ver el tablero de avance de validación y recordar a los jefes sus pendientes (tarea 2.5): solo Subdirección y
  *   el admin; los jefes, coordinadores y demás roles no (supuesto por confirmar).
  * - Ver la revisión y sus observaciones, y marcar una observación como resuelta: ese jefe, el admin y
- *   Subdirección (CV-S1, supuesto por confirmar).
+ *   Subdirección (CV-S1, supuesto por confirmar); en las de Servicios Escolares, solo su jefe y el admin, y quien lee en
+ *   todo el Tec en lectura: la Subdirección Académica ya no (desde el 20 de noviembre de 2026).
  *
  * Se resuelve con los permisos de CatalogValidationPermission (`catalog_validation.review.*`, que solo
  * declaran la unidad: las revisiones no son de un campus ni de una modalidad, así que las cubre cualquier nombramiento
