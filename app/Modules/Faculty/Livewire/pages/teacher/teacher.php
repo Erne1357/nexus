@@ -293,7 +293,7 @@ new #[Title('Ficha del docente')] class extends Component
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
             ...$this->accessActions($teacher, $record, $access),
-            'canOpenPerson' => $canSeeHeadships,
+            'canOpenPerson' => $record->user !== null && Gate::allows('reactivate', $record->user),
             'resetMinutes' => $tokens->minutes(),
             'institutionalDomain' => config('nexus.institutional_email_domain'),
             'institutionalEmailReason' => $this->showDataModal ? $this->institutionalEmailReason($teacher) : null,

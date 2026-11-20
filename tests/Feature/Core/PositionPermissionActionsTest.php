@@ -177,7 +177,7 @@ it('CF-03 y CF-04: un permiso suelto no es candado ni amplía el alcance del pue
     expect(positionActionErrors($action))->toBe(['permission' => [$problem]])
         ->and(DB::table('position_permissions')->exists())->toBeFalse();
 })->with([
-    'candado' => [Role::JefeDepartamento, CorePermission::OrgUnitView, '«Ver el organigrama» es solo del admin: no se da a otro puesto.'],
+    'candado' => [Role::JefeDepartamento, CorePermission::OrgUnitView, '«Ver el organigrama» es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.'],
     'el docente no recibe gestión' => [Role::Docente, CorePermission::TermView, '«Ver periodos» no se da a Docente: el puesto no lleva alcance y solo recibe permisos personales.'],
     'el coordinador no lleva departamento' => [Role::Coordinador, FacultyPermission::TeacherView, '«Ver docentes» no se da a Coordinador de carrera: el puesto no lleva departamento y el permiso valdría en todos los departamentos.'],
     'con unidad y carrera, al jefe de proyecto docente le basta el departamento' => [Role::JefeProyectoDocente, StudentsPermission::StudentView, null],

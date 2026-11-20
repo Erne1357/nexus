@@ -17,6 +17,8 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\PermissionSetsQuery;
+use App\Modules\Core\Support\ActivityProtectedProperties;
+use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
@@ -95,7 +97,7 @@ describe('CF-03: el panel sigue sin darlas', function () {
         $rules = app(PermissionGrantRules::class);
 
         foreach (directivoLockedReads() as $permission) {
-            expect($rules->grantProblem($role, $permission))->toBe("«{$permission->label()}» es solo del admin: no se da a otro puesto.")
+            expect($rules->grantProblem($role, $permission))->toBe("«{$permission->label()}» es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.")
                 ->and($rules->grantProblem(Role::Directivo, $permission))->toBeNull();
         }
 
@@ -110,6 +112,15 @@ describe('CF-03: el panel sigue sin darlas', function () {
 
         expect(app(GrantTable::class)->grants($role, CorePermission::AssignmentView))->toBeFalse();
     })->with([Role::Subdireccion, Role::JefeDepartamento, Role::JefeProyectoDocente, Role::Coordinador]);
+
+    it('CF-03: «¿Quién puede…?» dice que esas lecturas son del admin y del directivo; los demás candados, solo del admin', function () {
+        $badge = fn (string $key): string => textOf(domOf(Livewire::withQueryParams(['vista' => 'quien', 'permiso' => $key])->actingAs($this->admin)->test('core::pages.permissions'))
+            ->querySelector('[data-testid="who-result"] [data-testid="lock-badge"]'));
+
+        expect($badge(CorePermission::ActivityView->value))->toBe('Solo del admin y Directivo')
+            ->and($badge(CorePermission::OrgUnitView->value))->toBe('Solo del admin y Directivo')
+            ->and($badge(CorePermission::AuthzView->value))->toBe('Solo del admin');
+    });
 
     it('CF-02: editar el rol de fábrica del directivo conserva sus lecturas de candado', function () {
         $this->actingAs($this->admin);
@@ -273,6 +284,62 @@ describe('Bitácora', function () {
             ->assertSet('entryId', $entry->id);
 
         expect(activitySince()->count())->toBe(0);
+    });
+});
+
+describe('Bitácora: lo reservado', function () {
+    beforeEach(function () {
+        $this->teacher = Teacher::factory()->create(['rfc' => 'TODO800101AAA', 'name' => 'Tomás Docente']);
+        $this->discharged = activity()->performedOn($this->teacher)->causedBy($this->admin)->event('discharged')
+            ->withProperties(['review_id' => null, 'department_id' => null, 'deactivated' => true, 'reason' => ['kind' => 'other', 'text' => 'Motivo reservado D8']])
+            ->log('Quitó al docente TODO800101AAA de Sistemas y Computación en la validación de docentes');
+        $this->deactivated = activity()->performedOn($this->subdireccion)->causedBy($this->admin)->event('deactivated')
+            ->withProperties(['reason' => 'renuncia', 'note' => 'Nota reservada de la baja', 'ended_assignment_ids' => [], 'removed_assignment_ids' => []])
+            ->log('Dio de baja la cuenta de 19110003 (Renuncia)');
+    });
+
+    it('D8: el directivo ve la salida de un docente (quién, a quién, cuándo) sin su motivo', function () {
+        Livewire::actingAs($this->directivo)->test('core::pages.activity')
+            ->assertSee('Quitó al docente TODO800101AAA de Sistemas y Computación')
+            ->call('openEntry', $this->discharged->id)
+            ->assertViewHas('detail', fn ($detail): bool => ! array_key_exists('reason', $detail->properties) && $detail->properties['deactivated'] === true)
+            ->assertSee('Ada Admin')
+            ->assertDontSee('Motivo reservado D8');
+    });
+
+    it('CF-05: el directivo ve el motivo de la baja de una cuenta, no su nota', function () {
+        Livewire::actingAs($this->directivo)->test('core::pages.activity')
+            ->call('openEntry', $this->deactivated->id)
+            ->assertViewHas('detail', fn ($detail): bool => $detail->properties['reason'] === 'renuncia' && ! array_key_exists('note', $detail->properties))
+            ->assertSee('renuncia')
+            ->assertDontSee('Nota reservada de la baja');
+    });
+
+    it('el admin sigue viendo el motivo D8 y la nota de la baja', function () {
+        Livewire::actingAs($this->admin)->test('core::pages.activity')
+            ->call('openEntry', $this->discharged->id)
+            ->assertSee('Motivo reservado D8')
+            ->call('openEntry', $this->deactivated->id)
+            ->assertSee('Nota reservada de la baja');
+    });
+
+    it('D8: el motivo de salida lo ven quien da de baja docentes (admin y Subdirección); la nota de la baja de una cuenta, solo el admin', function () {
+        $visible = function (User $user, string $event, array $properties): array {
+            $this->actingAs($user);
+            app()->forgetScopedInstances();
+
+            return app(ActivityProtectedProperties::class)->visibleTo(app(Actor::class), $event, $properties);
+        };
+        $reason = ['reason' => ['kind' => 'other', 'text' => 'Motivo reservado D8'], 'deactivated' => true];
+        $account = ['reason' => 'renuncia', 'note' => 'Nota reservada de la baja'];
+
+        expect($visible($this->subdireccion, 'discharged', $reason))->toBe($reason)
+            ->and($visible($this->admin, 'discharged', $reason))->toBe($reason)
+            ->and($visible($this->directivo, 'discharged', $reason))->toBe(['deactivated' => true])
+            ->and($visible($this->admin, 'deactivated', $account))->toBe($account)
+            ->and($visible($this->subdireccion, 'deactivated', $account))->toBe(['reason' => 'renuncia'])
+            ->and($visible($this->directivo, 'deactivated', $account))->toBe(['reason' => 'renuncia'])
+            ->and($visible($this->directivo, 'updated', $account))->toBe($account);
     });
 });
 

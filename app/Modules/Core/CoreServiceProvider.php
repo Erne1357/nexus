@@ -66,6 +66,7 @@ use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
+use App\Modules\Core\Support\ActivityProtectedProperties;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
@@ -146,6 +147,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->getProviders(ModuleServiceProvider::class),
         ));
 
+        // Singleton porque es inmutable: las propiedades reservadas de la bitácora que declaran los módulos, sin nada de
+        // quien mira (lo dice el Actor de cada llamada).
+        $this->app->singleton(ActivityProtectedProperties::class, fn (Application $app): ActivityProtectedProperties => ActivityProtectedProperties::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
+
         // Singleton porque es inmutable: el catálogo de permisos, lo de fábrica por puesto y los candados de todos
         // los módulos, sin nada del usuario ni de la petición. Lo que vale hoy lo dice GrantTable.
         $this->app->singleton(PermissionRegistry::class, fn (Application $app): PermissionRegistry => PermissionRegistry::fromModules(
@@ -223,6 +230,15 @@ final class CoreServiceProvider extends ModuleServiceProvider
             PermissionSet::class => ['name' => 'Nombre del puesto', 'description' => 'Descripción'],
             User::class => ['name' => 'Nombre', 'is_active' => 'Activo'],
         ];
+    }
+
+    /**
+     * CF-05 (confirmado el 20 de noviembre de 2026): la nota libre de la baja de una cuenta solo la ve quien da de baja
+     * cuentas, el admin (`core.user.deactivate`, candado); su motivo sale a quien ve la bitácora.
+     */
+    public function activityProtectedProperties(): array
+    {
+        return ['deactivated' => ['note' => CorePermission::UserDeactivate]];
     }
 
     public function navigation(): array

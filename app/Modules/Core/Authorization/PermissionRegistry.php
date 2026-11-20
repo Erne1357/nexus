@@ -288,6 +288,19 @@ final class PermissionRegistry
     }
 
     /**
+     * CF-03: los puestos que tienen el candado de fábrica por su excepción (factoryLockExceptions()), en el orden del
+     * enum; vacío si no es candado o nadie lo tiene. Lanza LogicException si no está declarado.
+     *
+     * @return list<Role>
+     */
+    public function factoryLockHolders(Permission $permission): array
+    {
+        $key = $this->declared($permission)->value;
+
+        return array_values(array_filter(Role::cases(), fn (Role $role): bool => isset($this->lockExceptions[$role->value][$key])));
+    }
+
+    /**
      * Las claves candado (CF-03), ordenadas.
      *
      * @return list<string>

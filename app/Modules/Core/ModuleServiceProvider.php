@@ -208,6 +208,18 @@ abstract class ModuleServiceProvider extends ServiceProvider
         return [];
     }
 
+    /**
+     * Las propiedades de los eventos del módulo en la bitácora (CF-S5) que solo ve quien tiene un permiso:
+     * `evento => [propiedad => permiso]`. A quien no lo tiene, el detalle de la entrada no se las muestra (lo guardado no
+     * cambia). Para algo solo del admin, un permiso candado (CF-03). Lo junta ActivityProtectedProperties.
+     *
+     * @return array<string, array<string, Permission>>
+     */
+    public function activityProtectedProperties(): array
+    {
+        return [];
+    }
+
     protected function moduleAlias(): string
     {
         return Str::kebab(basename($this->modulePath()));

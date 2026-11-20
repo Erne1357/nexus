@@ -59,9 +59,36 @@ final class PermissionGrantRules
             return null;
         }
 
-        return $this->registry->isAdminOnly($permission)
-            ? "«{$permission->label()}» es solo del admin: no se da a otro puesto."
-            : null;
+        if (! $this->registry->isAdminOnly($permission)) {
+            return null;
+        }
+
+        return "«{$permission->label()}» es solo del admin".self::lockHoldersText($this->registry->factoryLockHolders($permission)).': no se da a otro puesto.';
+    }
+
+    /**
+     * CF-03: quién tiene el candado, para la pantalla: «Solo del admin» o, con su excepción de fábrica, «Solo del admin y
+     * Directivo».
+     */
+    public function lockLabel(Permission $permission): ?string
+    {
+        if (! $this->registry->isAdminOnly($permission)) {
+            return null;
+        }
+
+        $holders = $this->registry->factoryLockHolders($permission);
+
+        return 'Solo del admin'.($holders === [] ? '' : ' y '.implode(', ', array_map(fn (Role $role): string => $role->listLabel(), $holders)));
+    }
+
+    /**
+     * « y, de fábrica, de Directivo» si el candado tiene excepción de fábrica (CF-03); vacío si no.
+     *
+     * @param  list<Role>  $holders
+     */
+    private static function lockHoldersText(array $holders): string
+    {
+        return $holders === [] ? '' : ' y, de fábrica, de '.implode(', ', array_map(fn (Role $role): string => $role->listLabel(), $holders));
     }
 
     /**

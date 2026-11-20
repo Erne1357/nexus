@@ -125,7 +125,9 @@ it('CF-03: un candado de lectura que el código da de fábrica a quien lee en to
         ->and($registry->isFactoryLockException(Role::Subdireccion, FakePermission::ViewAny))->toBeFalse()
         ->and($registry->isFactoryLockException(Role::Directivo, FakePermission::ViewCampus))->toBeFalse()
         ->and($rules->grantProblem(Role::Directivo, FakePermission::ViewAny))->toBeNull()
-        ->and($rules->lockProblem(FakePermission::ViewAny))->toBe('«fake.thing.view_any» es solo del admin: no se da a otro puesto.')
+        ->and($registry->factoryLockHolders(FakePermission::ViewAny))->toBe([Role::Directivo])
+        ->and($registry->factoryLockHolders(FakePermission::ViewCampus))->toBe([])
+        ->and($rules->lockProblem(FakePermission::ViewAny))->toBe('«fake.thing.view_any» es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.')
         ->and($rules->lockProblem(FakePermission::ViewAny, Role::Directivo))->toBeNull()
         ->and($rules->grantProblem(Role::Subdireccion, FakePermission::ViewAny))->toBe($rules->lockProblem(FakePermission::ViewAny))
         ->and($rules->grantProblem(Role::Coordinador, FakePermission::ViewAny))->toBe($rules->lockProblem(FakePermission::ViewAny));

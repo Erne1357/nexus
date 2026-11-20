@@ -93,7 +93,7 @@ it('CF-S2 y CF-03: un rol lleva al menos un permiso declarado y ningún candado'
     expect(permissionSetErrors(fn () => app(CreatePermissionSet::class)->handle('Vacío', null, [])))
         ->toBe(['permissions' => ['Elige al menos un permiso.']])
         ->and(permissionSetErrors(fn () => app(CreatePermissionSet::class)->handle('Panel', null, [CorePermission::ActivityView->value, 'nadie.declaro.esto', CorePermission::SettingView->value])))
-        ->toBe(['permissions' => ['«Ver la bitácora» es solo del admin: no se da a otro puesto.', 'El permiso «nadie.declaro.esto» no existe.']])
+        ->toBe(['permissions' => ['«Ver la bitácora» es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.', 'El permiso «nadie.declaro.esto» no existe.']])
         ->and(PermissionSet::query()->whereNull('factory_role')->exists())->toBeFalse()
         ->and(Activity::count())->toBe(0);
 });

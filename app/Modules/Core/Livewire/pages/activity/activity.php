@@ -11,11 +11,13 @@ use Livewire\WithPagination;
 use Spatie\Activitylog\Models\Activity;
 
 /**
- * «Bitácora» (CF-S5), solo del administrador (CF-03) y de solo lectura (HC-18): la bitácora de la más nueva a la más
- * vieja, con la barra de filtros estándar (texto de la descripción, quién, tipo de registro, evento y fechas), y un
- * drawer con el detalle de la entrada que se toca: lo de antes y lo de después por campo, el puesto con que actuó, las
- * propiedades y el registro afectado. No escribe nada: ni siquiera abrir el detalle deja bitácora. Autoriza con
- * ActivityPolicy en mount(), al renderizar y en cada acción.
+ * «Bitácora» (CF-S5), del administrador y, de fábrica, del directivo (CF-03 con su excepción, AZ-03), y de solo lectura
+ * (HC-18): la bitácora de la más nueva a la más vieja, con la barra de filtros estándar (texto de la descripción, quién,
+ * tipo de registro, evento y fechas), y un drawer con el detalle de la entrada que se toca: lo de antes y lo de después
+ * por campo, el puesto con que actuó, las propiedades (sin las reservadas que quien mira no puede ver, como el motivo D8
+ * de la salida de un docente o la nota de la baja de una cuenta; ActivityProtectedProperties) y el registro afectado. No
+ * escribe nada: ni siquiera abrir el detalle deja bitácora. Autoriza con ActivityPolicy en mount(), al renderizar y en
+ * cada acción.
  */
 new #[Title('Bitácora')] class extends Component
 {
