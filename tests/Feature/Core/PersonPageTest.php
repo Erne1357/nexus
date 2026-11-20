@@ -191,7 +191,7 @@ it('muestra en español los errores de la Action junto al campo', function () {
 it('P1: nombra jefe de departamento pidiendo solo el departamento académico, y jefe de proyecto docente con modalidad, campus y departamento', function () {
     $page = personPage($this->beto)->call('openAppoint')
         ->set('role', 'jefe_departamento')
-        ->assertSee('Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.')
+        ->assertSee('Este puesto pide un departamento (académico o no), una división o una oficina. Tiene un solo jefe vigente; si la unidad no es académica, solo lleva su título.')
         ->assertSeeHtml('data-testid="field-unit"')
         ->assertDontSeeHtml('data-testid="field-campus"')
         ->assertDontSeeHtml('data-testid="field-career"')

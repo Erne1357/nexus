@@ -51,12 +51,12 @@ it('nombra cada rol como lo nombran PROJECT.md y el glosario, para la credencial
     [Role::Docente, 'Docente'],
 ]);
 
-it('unitKinds: el directivo pide la Dirección o una subdirección; la Subdirección, una subdirección; el jefe y el jefe de proyecto docente, un departamento académico; los demás, ninguna', function (Role $role, array $kinds) {
+it('unitKinds: el directivo pide la Dirección o una subdirección; la Subdirección, una subdirección; el jefe, un departamento (académico o no), una división o una oficina; el jefe de proyecto docente, un departamento académico; los demás, ninguna', function (Role $role, array $kinds) {
     expect($role->unitKinds())->toBe($kinds);
 })->with([
     [Role::Subdireccion, [OrgUnitKind::Subdireccion]],
     [Role::Directivo, [OrgUnitKind::Direccion, OrgUnitKind::Subdireccion]],
-    [Role::JefeDepartamento, [OrgUnitKind::DepartamentoAcademico]],
+    [Role::JefeDepartamento, [OrgUnitKind::DepartamentoAcademico, OrgUnitKind::Departamento, OrgUnitKind::Division, OrgUnitKind::Oficina]],
     [Role::JefeProyectoDocente, [OrgUnitKind::DepartamentoAcademico]],
     [Role::Coordinador, []],
     [Role::Docente, []],
@@ -118,8 +118,23 @@ it('la pista del formulario «Nombrar» dice qué alcance pide cada puesto', fun
     [Role::Admin, 'Este puesto no tiene alcance: vale en todo el sistema.'],
     [Role::Subdireccion, 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.'],
     [Role::Directivo, 'Este puesto pide la Dirección o una subdirección que no sea la Académica. Tiene un solo titular vigente.'],
-    [Role::JefeDepartamento, 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.'],
+    [Role::JefeDepartamento, 'Este puesto pide un departamento (académico o no), una división o una oficina. Tiene un solo jefe vigente; si la unidad no es académica, solo lleva su título.'],
     [Role::JefeProyectoDocente, 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.'],
     [Role::Coordinador, 'Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.'],
     [Role::Docente, null],
 ]);
+
+it('R-V2-4: los títulos de unidad no académica', function () {
+    $hr = ['kind' => OrgUnitKind::Departamento, 'code' => 'RECURSOS-HUMANOS', 'name' => 'Departamento de Recursos Humanos'];
+    $division = ['kind' => OrgUnitKind::Division, 'code' => 'DIV-PROFESIONAL', 'name' => 'División de Estudios Profesionales'];
+    $office = ['kind' => OrgUnitKind::Oficina, 'code' => 'COORDINACION-CAMPUS-II', 'name' => 'Coordinación General Campus II'];
+
+    expect(Role::JefeDepartamento->titleOn([$hr]))->toBe('Jefe del Departamento de Recursos Humanos')
+        ->and(Role::JefeDepartamento->titleOn([$division]))->toBe('Jefe de la División de Estudios Profesionales')
+        ->and(Role::JefeDepartamento->titleOn([[...$division, 'name' => 'Estudios de Posgrado']]))->toBe('Jefe de la División de Estudios de Posgrado')
+        ->and(Role::JefeDepartamento->titleOn([$office]))->toBe('Titular de la Coordinación General Campus II')
+        ->and(Role::JefeDepartamento->titleOn([$hr, $office]))->toBe('Jefe de departamento')
+        ->and(Role::JefeDepartamento->descriptionOn([$hr]))->toBe('Tu área todavía no tiene funciones en Nexus.')
+        ->and(Role::JefeDepartamento->descriptionOn([$division]))->toBe('Tu área todavía no tiene funciones en Nexus.')
+        ->and(Role::JefeDepartamento->unitLabel())->toBe('Unidad');
+});

@@ -251,7 +251,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
     $this->services->update(['is_active' => false]);
 
     expect($this->query->detail($this->services->id)->activationBlocker)->toBe('Activa primero Subdirección de Planeación y Vinculación.')
-        ->and($this->query->detail($division->id)->titularNote)->toBe('Esta unidad todavía no tiene un puesto de titular en Nexus.');
+        ->and($this->query->detail($division->id)->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en «Personas y puestos» o aquí.');
 
     RoleAssignment::query()->where('role', Role::Subdireccion)->delete();
 
@@ -315,7 +315,7 @@ it('detail da por puesto su id, su fin, su motivo para no terminarse y su primer
         ->and($row['earliestLastDay']->toDateString())->toBe('2026-11-03');
 });
 
-it('detail dice por qué no se nombra sobre la unidad: sin puesto que la admita, o inactiva', function () {
+it('detail dice por qué no se nombra sobre la unidad: inactiva; una oficina ya admite jefe (R-V2-4)', function () {
     $inactive = OrgUnit::factory()->inactive()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id, 'name' => 'Departamento Dormido']);
     $active = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
 
@@ -328,9 +328,9 @@ it('detail dice por qué no se nombra sobre la unidad: sin puesto que la admita,
 
     expect($root->appointRoles)->toBe([Role::Directivo])
         ->and($root->appointBlocker)->toBeNull()
-        ->and($none->appointRoles)->toBe([])
-        ->and($none->appointBlocker)->toBe('Ningún puesto se nombra sobre esta unidad.')
-        ->and($none->titularNote)->toBe('Esta unidad todavía no tiene un puesto de titular en Nexus.')
+        ->and($none->appointRoles)->toBe([Role::JefeDepartamento])
+        ->and($none->appointBlocker)->toBeNull()
+        ->and($none->titularNote)->toBe('Sin jefe vigente. El jefe se nombra en «Personas y puestos» o aquí.')
         ->and($dormant->appointBlocker)->toBe('Departamento Dormido está inactiva.')
         ->and($open->appointRoles)->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente])
         ->and($open->appointBlocker)->toBeNull();

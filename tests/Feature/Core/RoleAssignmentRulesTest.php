@@ -29,12 +29,15 @@ it('allowsUnit y titularRoleOf: la Subdirección solo va en Subdirección Acadé
         ->and($rules->allowsUnit(Role::Directivo, $department))->toBeFalse()
         ->and($rules->allowsUnit(Role::Directivo, $office))->toBeFalse()
         ->and($rules->allowsUnit(Role::JefeDepartamento, $department))->toBeTrue()
+        ->and($rules->allowsUnit(Role::JefeDepartamento, $office))->toBeTrue()
+        ->and($rules->allowsUnit(Role::JefeDepartamento, $planning))->toBeFalse()
+        ->and($rules->allowsUnit(Role::JefeProyectoDocente, $office))->toBeFalse()
         ->and($rules->allowsUnit(Role::JefeProyectoDocente, $department))->toBeTrue()
         ->and($rules->allowsUnit(Role::Coordinador, $department))->toBeFalse()
         ->and($rules->titularRoleOf($academic))->toBe(Role::Subdireccion)
         ->and($rules->titularRoleOf($department))->toBe(Role::JefeDepartamento)
         ->and($rules->titularRoleOf($planning))->toBe(Role::Directivo)
-        ->and($rules->titularRoleOf($office))->toBeNull();
+        ->and($rules->titularRoleOf($office))->toBe(Role::JefeDepartamento);
 });
 
 it('managedElsewhere: el docente y el alumno se manejan en otra parte (AZ-S11, AC-10)', function () {
@@ -166,7 +169,7 @@ describe('deactivationGap (AZ-S12, P3)', function () {
     ]);
 });
 
-it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto docente; Subdirección Académica, la Subdirección; la Dirección y las demás subdirecciones, el directivo (AZ-03); las demás unidades, ninguno', function () {
+it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto docente; Subdirección Académica, la Subdirección; la Dirección y las demás subdirecciones, el directivo (AZ-03); divisiones, departamentos y oficinas, el jefe de departamento con su título (R-V2-4)', function () {
     $rules = app(RoleAssignmentRules::class);
     $academic = OrgUnit::find(app(OrgTree::class)->idOf(OrgTree::ACADEMIC));
     $planning = OrgUnit::factory()->create(['kind' => OrgUnitKind::Subdireccion]);
@@ -176,6 +179,6 @@ it('rolesForUnit: un departamento académico admite jefe y jefe de proyecto doce
     expect($rules->rolesForUnit($department))->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente])
         ->and($rules->rolesForUnit($academic))->toBe([Role::Subdireccion])
         ->and($rules->rolesForUnit($planning))->toBe([Role::Directivo])
-        ->and($rules->rolesForUnit($office))->toBe([])
+        ->and($rules->rolesForUnit($office))->toBe([Role::JefeDepartamento])
         ->and($rules->rolesForUnit(OrgUnit::where('code', 'DIRECCION')->sole()))->toBe([Role::Directivo]);
 });

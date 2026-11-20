@@ -131,7 +131,7 @@ it('scopeOptions: lo que cada puesto ofrece para elegir', function () {
     $coordinador = $this->people->scopeOptions(Role::Coordinador, $this->c2->id);
 
     expect($subdireccion['units'])->toBe([['id' => $academic, 'name' => OrgUnit::find($academic)->name]])
-        ->and(array_column($jefe['units'], 'id'))->toContain($systems->id, $services->id)->not->toContain($oficina->id)->not->toContain($linkage->id)
+        ->and(array_column($jefe['units'], 'id'))->toContain($systems->id, $services->id)->toContain($oficina->id, $linkage->id)->not->toContain($academic)
         ->and(array_column($this->people->scopeOptions(Role::JefeProyectoDocente, null)['units'], 'id'))->toContain($systems->id)->not->toContain($services->id)
         ->and(array_column($jefe['units'], 'name'))->not->toContain('Metal Mecánica')
         ->and($jefe['careers'])->toBe([])
