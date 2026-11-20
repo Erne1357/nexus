@@ -33,7 +33,7 @@ use Mary\Traits\Toast;
  * «Puestos y permisos» (tarea 1.22-B; maqueta B «por puesto», elegida por el usuario): qué puede hacer cada puesto con
  * sus roles y sus permisos sueltos (CF-01). Tres pestañas:
  *
- * - **Puestos:** a la izquierda las tarjetas de los siete puestos; a la derecha el elegido (`?puesto=`), con sus roles,
+ * - **Puestos:** a la izquierda las tarjetas de los ocho puestos; a la derecha el elegido (`?puesto=`), con sus roles,
  *   sus permisos sueltos y sus permisos efectivos por grupo con su origen. Administración sale de solo lectura: todo
  *   menos sus excepciones, que se listan (CF-S1).
  * - **Roles:** la tabla de roles con la barra de catálogo, «Nuevo rol», «Editar» y el menú «Acciones».
