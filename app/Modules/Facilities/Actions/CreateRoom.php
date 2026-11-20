@@ -26,7 +26,7 @@ final class CreateRoom
     public function __construct(private readonly RoomRules $rules) {}
 
     /**
-     * @param  array{building_id: string, code: string, name?: ?string, type: string, capacity: int, department_id?: ?string, features?: array<array-key, mixed>}  $data
+     * @param  array{building_id: string, code: string, name?: ?string, map_key?: ?string, type: string, capacity: int, department_id?: ?string, features?: array<array-key, mixed>}  $data
      *
      * @throws ValidationException
      */
@@ -40,6 +40,7 @@ final class CreateRoom
             'building_id' => $data['building_id'],
             'code' => $code,
             'name' => $this->rules->normalizeName($data['name'] ?? null),
+            'map_key' => $data['map_key'] ?? null,
             'type' => $type,
             'capacity' => $data['capacity'],
             'department_id' => ($data['department_id'] ?? '') === '' ? null : $data['department_id'],
@@ -61,7 +62,7 @@ final class CreateRoom
             activity()
                 ->performedOn($room)
                 ->event(ActivityEvent::Created)
-                ->withChanges(['attributes' => [...$room->only(['campus_id', 'building_id', 'code', 'name', 'capacity', 'department_id', 'features', 'is_active']), 'type' => $room->type->value]])
+                ->withChanges(['attributes' => [...$room->only(['campus_id', 'building_id', 'code', 'name', 'map_key', 'capacity', 'department_id', 'features', 'is_active']), 'type' => $room->type->value]])
                 ->log("Dio de alta el salón {$room->code}");
 
             RoomCreated::dispatch($room);
