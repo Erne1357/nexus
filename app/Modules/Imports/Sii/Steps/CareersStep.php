@@ -40,7 +40,7 @@ use App\Modules\Imports\Sii\SiiStep;
  * (KardexCodes::term(), termina en 1 o 3); si tiene menos de la mitad de alumnos distintos que el regular anterior,
  * todavía se está abriendo y cuentan los inscritos en los dos (el umbral de la mitad, supuesto por confirmar). Un
  * alumno está inscrito si tiene un renglón de la selección en ese periodo; su retícula es la de `alumnos_todos`, y un
- * plan con varias retículas del SII (el curado ya no junta, pero lo admite) es vivo si cualquiera tiene un inscrito.
+ * plan con varias retículas del SII (el curado ya no junta; checkGroups() lo rechaza) sería vivo si cualquiera tuviera un inscrito.
  * Con un plan por retícula, el de distancia o mixta de una carrera queda vivo si tiene inscritos, y no es el de nuevo
  * ingreso mientras la presencial reciba más (R-V2-6, confirmado el 19 de noviembre de 2026; si un plan sin retícula
  * presencial resulta el de nuevo ingreso, queda así y se avisa por carrera). La selección se lee una sola vez y

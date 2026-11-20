@@ -96,6 +96,9 @@ it('marca lo que valdría en todo el Tec: de gestión, sin unidad ni carrera, y 
     'campus, no para el jefe de proyecto docente (lo admite)' => [Role::JefeProyectoDocente, FakePermission::ViewCampus, false],
     'con unidad, no' => [Role::JefeDepartamento, FakePermission::ViewModalityUnit, false],
     'personal, no' => [Role::Docente, FakePermission::ViewOwn, false],
+    'AZ-03: lo que lee el directivo vale en todo el Tec, aunque declare unidad' => [Role::Directivo, FakePermission::ViewCampusUnit, true],
+    'AZ-03: lo que lee el directivo vale en todo el Tec, aunque declare carrera' => [Role::Directivo, FakePermission::ViewCareer, true],
+    'AZ-03: lo personal del directivo no' => [Role::Directivo, FakePermission::ViewOwn, false],
 ]);
 
 it('CF-03: el registro rechaza conceder un candado de fábrica o hacerlo excepción del admin', function () {
