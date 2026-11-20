@@ -40,6 +40,7 @@ use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Console\ImportLoadProjectionCommand;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\ReanalysisChangesDemoSeeder;
@@ -149,7 +150,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         Event::listen(ParallelGroupsArranged::class, NotifyCareersOnParallelGroupsArranged::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([RecomputeConflicts::class]);
+            $this->commands([RecomputeConflicts::class, ImportLoadProjectionCommand::class]);
         }
     }
 
