@@ -215,6 +215,14 @@ describe('MN-05: el interruptor en «Parámetros»', function () {
         expect(app(AcademicLoadVisibility::class)->isHidden())->toBeFalse();
     });
 
+    it('lo leído vale para una petición: la siguiente vuelve a leerlo, aunque el cambio no pase por la pantalla', function () {
+        $this->actingAs($this->subdireccion)->get(route('staffing.closing-board'))->assertOk();
+
+        Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => AcademicLoadVisibility::SETTING, 'value' => false]);
+
+        $this->get(route('staffing.closing-board'))->assertForbidden();
+    });
+
     it('un valor guardado que no es sí o no cuenta como visible', function () {
         Setting::query()->create(['scope' => SettingScope::Global, 'scope_id' => null, 'key' => AcademicLoadVisibility::SETTING, 'value' => 'no']);
 

@@ -24,7 +24,8 @@ use Illuminate\Support\Str;
  * Quien tiene `core.academic_load.view_hidden` (solo el admin: es candado, CF-03) la sigue viendo y abriendo, con la marca
  * «Oculta para los demás» (MN-02).
  *
- * `scoped` (Octane): lee el parámetro una vez por petición; SettingsUpdated lo olvida si cambia en la misma petición.
+ * `scoped` (Octane): lee el parámetro una vez por petición. ForgetAcademicLoadVisibility lo olvida si cambia en la misma
+ * petición (SettingsUpdated) y al terminar cada una (RequestHandled), también sin Octane.
  */
 final class AcademicLoadVisibility
 {

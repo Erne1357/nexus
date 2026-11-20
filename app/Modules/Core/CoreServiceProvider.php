@@ -67,6 +67,7 @@ use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Event;
@@ -159,7 +160,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         }
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
-        Event::listen(SettingsUpdated::class, ForgetAcademicLoadVisibility::class);
+        Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
 
