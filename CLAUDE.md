@@ -6,6 +6,7 @@
 
 Nexus es la nueva fuente de verdad académica del Instituto Tecnológico de Ciudad Juárez y reemplaza por etapas al SII. La primera entrega (R1) construye y publica la **carga académica** de Campus II para Ene-Jun 2027; después vienen el motor de horarios (R2) y la inscripción (R3).
 
+- **Dominio de producción: `https://nexus.cdjuarez.tecnm.mx`** (confirmado por el usuario el 20 de noviembre de 2026). En producción `APP_URL` es ese; los QR, los enlaces de los correos y las URL absolutas salen de él.
 - Contexto, alcance, decisiones y riesgos: [PROJECT.md](PROJECT.md)
 - Estado de fases y módulos: [PLAN.md](PLAN.md) (la fase activa está en su encabezado)
 - Proceso: `docs/proceso/`. Dominio: `docs/dominio/`. Arquitectura: `docs/arquitectura/`. Fases: `docs/plan/`.

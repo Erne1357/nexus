@@ -19,6 +19,8 @@
     --font-sans: 'Atkinson Hyperlegible Next', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
         'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
     --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, monospace;
+    /* Solo la credencial del alumno (tarea 1.27): la tipografía de la plantilla del TecNM. */
+    --font-credential: 'Montserrat', ui-sans-serif, system-ui, sans-serif;
 
     --ease-open: cubic-bezier(0.3, 1.06, 0.5, 1);
     --ease-settle: cubic-bezier(0.22, 1, 0.36, 1);

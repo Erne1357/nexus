@@ -184,6 +184,8 @@ Fondo `#0a1826`, superficies `#0f2133`, banda `#071a2b`, selección `#26384a`, f
 | Cifra de tablero: la cifra grande de un resumen (Choques y avance, Avance del cierre y sus condiciones, Demanda por materia; agregada el 17 de noviembre de 2026 porque ya era un patrón de cuatro pantallas) | Mono 26 px, 600, cifras tabulares |
 | Palabra de inicio (solo en inicios por rol) | 112 px, 200, minúsculas, espaciado -0.045em |
 
+**Excepción, la credencial del alumno** (tarea 1.27, AC-20): reproduce la plantilla institucional del TecNM y el ITCJ, así que su texto va en **Montserrat** 500/600 blanca (`font-credential`) y sus medidas en `cqw`, proporcionales a la tarjeta de 1017 × 642 (`resources/images/credencial/frente.webp`). No se usa en ninguna otra pantalla.
+
 ### Named Rules
 - **Ningún texto funcional por debajo de 11 px.**
 - **Las claves y las cifras van en Mono,** para que las columnas se alineen. Mono no es adorno: solo datos, claves y atajos.

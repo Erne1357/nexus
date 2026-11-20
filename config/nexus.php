@@ -19,4 +19,10 @@ return [
     */
     'campus_map_3d' => (bool) env('CAMPUS_MAP_3D', true),
 
+    /*
+    | La dirección pública con la que el QR de la credencial arma su enlace de verificación (AC-20). Vacía, se usa APP_URL
+    | (en producción https://nexus.cdjuarez.tecnm.mx). Sirve para una demo detrás de un túnel cuyo APP_URL es local.
+    */
+    'credential_url' => env('NEXUS_CREDENTIAL_URL'),
+
 ];
