@@ -34,6 +34,7 @@ Calificaciones y actas, pagos, servicio social y residencias, titulación, contr
 |---|---|---|
 | `admin` | Equipo de desarrollo / sistemas | Todo |
 | `subdireccion` | Subdirección Académica | Todo el Tec |
+| `directivo` | Director y subdirecciones que no son la Académica | Su unidad (la Dirección o una subdirección) para la credencial; consulta todo lo académico del Tec, sin escribir (AZ-03) |
 | `jefe_departamento` | Jefe de departamento académico | Departamento, en todo el Tec |
 | `jefe_proyecto_docente` | Jefe de proyecto docente | Departamento en una modalidad; campus opcional (AZ-S17) |
 | `coordinador` | Coordinador de carrera | Una o varias carreras en una modalidad; campus opcional (AZ-S17) |
