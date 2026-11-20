@@ -3,7 +3,7 @@
 namespace App\Modules\Scheduling\Rules;
 
 /**
- * Los días de clase de un grupo según sus créditos (regla de datos R-V2-7, reglas-de-negocio.md), para cargar la
+ * Los días de clase de un grupo según sus créditos (regla de datos R-PRY-1, reglas-de-negocio.md), para cargar la
  * proyección del departamento, que solo trae la hora de inicio: una hora de clase por crédito a la semana, a la misma
  * hora cada día.
  *

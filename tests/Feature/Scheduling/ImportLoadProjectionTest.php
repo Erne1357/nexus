@@ -16,7 +16,7 @@ use OpenSpout\Writer\XLSX\Writer;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| ImportLoadProjection y `academic-load:import-projection` (tarea 1.24.8, R-V2-7): carga la proyección de carga del
+| ImportLoadProjection y `academic-load:import-projection` (tarea 1.24.8, R-PRY-1): carga la proyección de carga del
 | departamento desde su xlsx en el periodo, la modalidad y el campus indicados. Días por créditos: 5 = lunes a viernes,
 | 4 = lunes a jueves, 1 = viernes (confirmado); 6 = lunes a viernes con la sexta hora el lunes (supuesto por confirmar).
 | El archivo se arma aquí, sin datos reales.
@@ -68,7 +68,7 @@ beforeEach(function () {
     $this->import = fn (array $rows, bool $dry = false) => app(ImportLoadProjection::class)->handle(projectionFile($rows), $this->term, $this->campus, $this->pres, $dry);
 });
 
-it('carga el grupo con cupo, cuota dueña y sesiones de cinco créditos de lunes a viernes (R-V2-7)', function () {
+it('carga el grupo con cupo, cuota dueña y sesiones de cinco créditos de lunes a viernes (R-PRY-1)', function () {
     $report = ($this->import)([[$this->block, 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 30, '9 - 10']]);
 
     $group = Group::query()->sole();

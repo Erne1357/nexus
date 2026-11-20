@@ -10,7 +10,7 @@ use Illuminate\Console\Command;
 use RuntimeException;
 
 /**
- * Carga la proyección de carga de un departamento desde su xlsx (ImportLoadProjection, R-V2-7). Con `--dry-run` calcula y
+ * Carga la proyección de carga de un departamento desde su xlsx (ImportLoadProjection, R-PRY-1). Con `--dry-run` calcula y
  * reporta sin escribir. Días por créditos: 5 = lunes a viernes, 4 = lunes a jueves y 1 = viernes (confirmado); 2, 3 y 6
  * son supuestos por confirmar (2 y 3: los primeros días; 6: lunes a viernes y la sexta hora el lunes).
  */

@@ -23,7 +23,7 @@ use RuntimeException;
 /**
  * Carga en Nexus la proyección de carga de un departamento (hoja «formato proyecto docente», ProjectionSheet): por cada
  * fila válida, un grupo planeado del periodo, la modalidad y el campus indicados, con su cupo dueño y sus sesiones de
- * una hora, sin salón ni docente (D4, confirmado el 20 de noviembre de 2026; reglas-de-negocio.md, R-V2-7).
+ * una hora, sin salón ni docente (D4, confirmado el 20 de noviembre de 2026; reglas-de-negocio.md, R-PRY-1).
  *
  * - **Plan:** la clave está en el texto de la columna PLAN (`ISIC-2010-224. INGENIERÍA…`): se busca en `study_plans.code`. El
  *   plan da la carrera dueña. Sin clave o sin plan, la fila se reporta.
