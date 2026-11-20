@@ -501,7 +501,7 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
+        expect(menuAreasIn($page))->toBe(['Mi espacio' => ['Resumen'], 'Académico' => ['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
@@ -523,7 +523,7 @@ describe('menú', function () {
         Teacher::factory()->create(['user_id' => $docente->id]);
         $this->actingAs($docente);
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta']]);
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Resumen', 'Mi carga', 'Oferta']]);
     });
 
     it('Inicio va aparte, primero en la franja y fuera de las áreas, para cualquier usuario activo', function () {
