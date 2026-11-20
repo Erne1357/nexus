@@ -22,6 +22,7 @@ use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\TermCalendarQuery;
+use App\Modules\Core\Support\ValidationReturn;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use Illuminate\Support\Facades\Cache;
@@ -536,7 +537,7 @@ describe('CV10: observaciones abiertas de todos los departamentos', function () 
             ->assertSee('Observaciones abiertas (2)');
 
         $who === 'admin'
-            ? $page->assertSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"')->assertSeeHtml('href="'.route('academic.subjects').'"')
+            ? $page->assertSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"')->assertSeeHtml('href="'.e(route('academic.subjects', ValidationReturn::params($sis->review->owner_id, 'subjects'))).'"')
             : $page->assertDontSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"');
         expect($page->html())->toMatch('/data-testid="flags-drawer".*Servicios Escolares.*ACF-0901.*Eléctrica y Electrónica.*ELC-1001/s');
     })->with(['admin', 'subdirección']);

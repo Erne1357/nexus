@@ -6,6 +6,7 @@ use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Academic\Queries\SubjectQuery;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
@@ -30,7 +31,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Materias')] class extends Component
 {
-    use Toast, WithPagination;
+    use ReturnsToValidation, Toast, WithPagination;
 
     /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]

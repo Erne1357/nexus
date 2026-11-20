@@ -18,9 +18,7 @@
     resalta.
 --}}
 <div class="space-y-5">
-    <a href="{{ route('academic.plans') }}" wire:navigate data-testid="back-to-plans" class="inline-flex items-center gap-1.5 font-medium text-primary">
-        <x-icon name="o-chevron-left" class="w-4 h-4" />Planes de estudio
-    </a>
+    <x-core::back-link :validation="$this->validationReturnUrl()" :href="route('academic.plans')" label="Planes de estudio" data-testid="back-to-plans" />
 
     <div>
         <h1 class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[1.625rem] font-bold leading-tight md:text-3xl">

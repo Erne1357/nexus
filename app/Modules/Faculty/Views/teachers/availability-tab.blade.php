@@ -11,7 +11,7 @@
         <h2 id="h-disponibilidad" class="text-lg font-bold">Disponibilidad @if ($term)<span class="ms-1.5 text-base font-normal text-neutral">{{ $term->name }}</span>@endif</h2>
         @if ($term)
             @if ($editReason === null)
-                <x-button label="Editar disponibilidad" icon="o-calendar-days" class="btn-outline btn-sm" :link="route('faculty.teachers.availability', $teacher->id)" data-testid="edit-availability" />
+                <x-button label="Editar disponibilidad" icon="o-calendar-days" class="btn-outline btn-sm" :link="route('faculty.teachers.availability', ['teacher' => $teacher->id, ...($back ?? [])])" data-testid="edit-availability" />
             @else
                 <span class="tooltip tooltip-left" data-tip="{{ $editReason }}">
                     <x-button label="Editar disponibilidad" icon="o-calendar-days" class="btn-outline btn-sm" disabled aria-label="Editar disponibilidad: {{ $editReason }}" data-testid="edit-availability" />

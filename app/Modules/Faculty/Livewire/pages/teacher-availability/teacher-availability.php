@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\TermQuery;
 use App\Modules\Faculty\Actions\SetTeacherAvailability;
@@ -33,7 +34,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Disponibilidad')] class extends Component
 {
-    use Toast;
+    use ReturnsToValidation, Toast;
 
     /** El docente del editor. El navegador no lo puede cambiar. */
     #[Locked]

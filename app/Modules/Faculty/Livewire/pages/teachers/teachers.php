@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use App\Modules\Faculty\Actions\AddAdscription;
 use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\DischargeTeacherFromDepartment;
@@ -53,7 +54,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Docentes')] class extends Component
 {
-    use EditsInstitutionalEmail, Toast, WithPagination;
+    use EditsInstitutionalEmail, ReturnsToValidation, Toast, WithPagination;
 
     /** El número es de un docente borrado: no se reutiliza ni se adscribe. */
     private const string DELETED_RFC = 'Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.';

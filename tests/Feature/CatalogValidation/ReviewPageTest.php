@@ -682,7 +682,7 @@ describe('captura de docentes (2.6, CV6)', function () {
         $inactive = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => '00009', 'name' => 'Ya Baja', 'is_active' => false]);
 
         $component = reviewPage($this->jefe, ['catalogo' => 'teachers', 'revision' => 'todos']);
-        $component->set('search', 'Ya Baja')->assertSee('Ya Baja')->assertSeeHtml('Sin dato: docente inactivo')->assertSee('Docente inactivo');
+        $component->assertDontSee('Ya Baja')->set('status', 'inactivos')->set('search', 'Ya Baja')->assertSee('Ya Baja')->assertSeeHtml('Sin dato: docente inactivo')->assertSee('Docente inactivo');
 
         reviewPage()->assertSeeHtml('data-testid="missing-disponibilidad"');
         expect(app(TeacherTermReadinessQuery::class)->counts($this->sis, $this->term)['no_availability'])->toBe(2);

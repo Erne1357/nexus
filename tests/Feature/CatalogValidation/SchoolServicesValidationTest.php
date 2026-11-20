@@ -280,6 +280,11 @@ describe('CV15: la pantalla', function () {
             ->assertSeeHtml('data-testid="filter-department"');
     });
 
+    it('CV15: los enlaces a un registro de Servicios Escolares regresan a su revisión', function () {
+        expect(ValidationProgressQuery::recordUrl($this->sisSubject, schoolServicesReview(Catalog::Subjects)))
+            ->toBe(route('academic.subjects', ['desde' => 'validacion', 'depto' => ReviewOwner::SCHOOL_SERVICES, 'cat' => 'subjects']));
+    });
+
     it('CV15: el jefe de Servicios Escolares no abre un departamento', function () {
         schoolServicesPage($this->escolares, ['department' => $this->sis->id])->assertForbidden();
     });

@@ -50,6 +50,7 @@ final class FlagRecord
 
             $this->rules->ensureOpen($review);
             $this->rules->ensureContains($review, $record);
+            $this->rules->ensureNoInactiveTeachers($review, [$record->getKey()]); // CV14
 
             $created = $review->flags()->create([
                 'flaggable_type' => $record->getMorphClass(),

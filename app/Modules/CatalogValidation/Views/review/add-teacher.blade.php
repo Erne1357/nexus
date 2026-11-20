@@ -58,7 +58,7 @@
 
         <div class="flex gap-2.5 rounded-box border border-base-300 bg-base-200 p-3 text-sm">
             <x-icon name="o-information-circle" class="h-5 w-5 shrink-0 text-neutral" aria-hidden="true" />
-            <p>¿No aparece? Si es nuevo, dalo de alta en <a href="{{ route('faculty.teachers') }}" wire:navigate class="font-medium underline underline-offset-4">Docentes</a>: entra a esta revisión por revisar.</p>
+            <p>¿No aparece? Si es nuevo, dalo de alta en <a href="{{ route('faculty.teachers', \App\Modules\Core\Support\ValidationReturn::params($review->owner_id, $review->catalog->value)) }}" wire:navigate class="font-medium underline underline-offset-4">Docentes</a>: entra a esta revisión por revisar.</p>
         </div>
     </div>
 </div>

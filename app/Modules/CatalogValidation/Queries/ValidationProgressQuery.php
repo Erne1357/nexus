@@ -19,6 +19,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ModalityQuery;
+use App\Modules\Core\Support\ValidationReturn;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use Carbon\CarbonImmutable;
@@ -333,20 +334,22 @@ final class ValidationProgressQuery
     /**
      * Dónde se actúa sobre el registro observado, en su catálogo (CV10): la ficha del plan o del docente, y la lista de
      * carreras, materias o salones, que no abren un registro por su dirección (supuesto por confirmar). Null si el
-     * registro ya no existe o está borrado. Quién lo ve lo decide la Policy del registro en la pantalla.
+     * registro ya no existe o está borrado. Con la revisión, la página abierta ofrece «Regresar» a ella (ValidationReturn). Quién lo ve lo decide la Policy del registro en la pantalla.
      */
-    public static function recordUrl(?Model $record): ?string
+    public static function recordUrl(?Model $record, ?CatalogReview $review = null): ?string
     {
         if ($record === null || (method_exists($record, 'trashed') && $record->trashed())) {
             return null;
         }
 
+        $back = $review === null ? [] : ValidationReturn::params($review->owner_id, $review->catalog->value);
+
         return match (true) {
-            $record instanceof StudyPlan => route('academic.plans.show', $record),
-            $record instanceof Teacher => route('faculty.teachers.show', $record),
-            $record instanceof Career => route('academic.careers'),
-            $record instanceof Subject => route('academic.subjects'),
-            $record instanceof Room => route('facilities.rooms'),
+            $record instanceof StudyPlan => route('academic.plans.show', ['plan' => $record, ...$back]),
+            $record instanceof Teacher => route('faculty.teachers.show', ['teacher' => $record, ...$back]),
+            $record instanceof Career => route('academic.careers', $back),
+            $record instanceof Subject => route('academic.subjects', $back),
+            $record instanceof Room => route('facilities.rooms', $back),
             default => null,
         };
     }

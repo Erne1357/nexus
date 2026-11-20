@@ -9,6 +9,7 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Support\ValidationReturn;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -31,8 +32,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[UseFactory(CatalogReviewFactory::class)]
 class CatalogReview extends Model
 {
-    /** De quién es una revisión sin departamento: Servicios Escolares (CV15; owner_id, `?department=` de la pantalla). */
-    public const string SCHOOL_SERVICES = 'servicios-escolares';
+    /**
+     * De quién es una revisión sin departamento: Servicios Escolares (CV15; owner_id, `?department=` de la pantalla). Es
+     * el mismo valor que acepta el regreso a la validación (ValidationReturn::SCHOOL_SERVICES).
+     */
+    public const string SCHOOL_SERVICES = ValidationReturn::SCHOOL_SERVICES;
 
     /** @use HasFactory<CatalogReviewFactory> */
     use HasFactory, HasUuids;

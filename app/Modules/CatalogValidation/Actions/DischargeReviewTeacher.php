@@ -56,6 +56,7 @@ final class DischargeReviewTeacher
 
             $this->rules->ensureOpen($review);
             $this->rules->ensureContains($review, $teacher);
+            $this->rules->ensureNoInactiveTeachers($review, [$teacher->getKey()]); // CV14
 
             $result = $this->discharge->handle($this->records->teacherAdscriptions($review, [$teacher->getKey()])[$teacher->getKey()]);
             $review->marks()->where('record_id', $teacher->getKey())->delete();

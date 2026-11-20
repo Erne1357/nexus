@@ -44,6 +44,7 @@ final class MarkRecordsReviewed
 
             $this->rules->ensureOpen($review);
             $this->rules->ensureContainsAll($review, $ids);
+            $this->rules->ensureNoInactiveTeachers($review, $ids); // CV14
 
             $new = array_values(array_diff($ids, $review->marks()->whereIn('record_id', $ids)->pluck('record_id')->all()));
 
