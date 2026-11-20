@@ -7,6 +7,9 @@ use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Settings\SettingDefinition;
 use App\Modules\Core\Settings\SettingType;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
 
 /**
@@ -117,6 +120,27 @@ final class AcademicLoadVisibility
     public function hiddenFrom(Actor $context): bool
     {
         return $this->isHidden() && ! $context->allowsAny(CorePermission::AcademicLoadViewHidden);
+    }
+
+    /**
+     * Acota una consulta de `notifications` a lo que el usuario del contexto puede abrir: sin los avisos que llevan a una
+     * pantalla de la carga mientras la tiene oculta (la campana no los cuenta, no los muestra ni los marca leídos; no se
+     * borran y vuelven al mostrarla). Si la ve, la deja igual.
+     *
+     * @template TQuery of Builder<DatabaseNotification>|QueryBuilder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public function withoutHiddenNotifications(Builder|QueryBuilder $query, Actor $context): Builder|QueryBuilder
+    {
+        if (! $this->hiddenFrom($context)) {
+            return $query;
+        }
+
+        return $query->where(fn (Builder|QueryBuilder $notifications) => $notifications
+            ->whereNull('data->route')
+            ->orWhereNotIn('data->route', self::ROUTES));
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Rules\SnapshotDiffText;
 use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Notifications\RoutesMailAddress;
@@ -36,9 +37,10 @@ use Illuminate\Support\Str;
  * regla de CV11); nunca al personal, y a una cuenta dada de baja no le llega correo (supuesto por confirmar). Sin
  * dirección, solo la campana. Al docente sin usuario, que también se tiene que enterar, le llega solo el correo, a su
  * institucional (una notificación por ruta, `Notification::route('mail', …)`, que no tiene campana). Sale de la cola,
- * después del commit; la campana se guarda en el momento (`viaConnections`, conexión `sync`).
+ * después del commit; la campana se guarda en el momento (`viaConnections`, conexión `sync`). Mientras el admin tiene
+ * oculta la carga académica, el correo no sale (AcademicLoadNotice, MN-05).
  */
-final class LoadRepublished extends NexusNotification implements RoutesMailAddress, ShouldQueue
+final class LoadRepublished extends NexusNotification implements AcademicLoadNotice, RoutesMailAddress, ShouldQueue
 {
     use Queueable;
 

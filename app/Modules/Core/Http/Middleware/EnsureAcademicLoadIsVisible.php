@@ -5,7 +5,11 @@ namespace App\Modules\Core\Http\Middleware;
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use Closure;
+use Illuminate\Auth\Middleware\Authenticate;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route;
+use Illuminate\Routing\Router;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -23,6 +27,7 @@ final class EnsureAcademicLoadIsVisible
     public function __construct(
         private readonly AcademicLoadVisibility $visibility,
         private readonly Actor $context,
+        private readonly Router $router,
     ) {}
 
     /**
@@ -36,7 +41,7 @@ final class EnsureAcademicLoadIsVisible
             return $next($request);
         }
 
-        if (! in_array('auth', $route->gatherMiddleware(), true)) {
+        if (! $this->needsLogin($route)) {
             abort(Response::HTTP_NOT_FOUND);
         }
 
@@ -45,5 +50,19 @@ final class EnsureAcademicLoadIsVisible
         }
 
         abort(Response::HTTP_FORBIDDEN, 'La carga académica no está disponible por ahora.');
+    }
+
+    /**
+     * Si la ruta pide sesión: alguno de sus middleware, ya resueltos (`auth`, `auth:<guardia>`), es Authenticate o lo extiende.
+     */
+    private function needsLogin(Route $route): bool
+    {
+        foreach ($this->router->gatherRouteMiddleware($route) as $middleware) {
+            if (is_string($middleware) && is_a(Str::before($middleware, ':'), Authenticate::class, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

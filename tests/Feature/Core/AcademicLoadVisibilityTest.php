@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Actions\MarkAllNotificationsRead;
 use App\Modules\Core\Actions\UpdateSetting;
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
@@ -9,6 +10,7 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\SettingScope;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\Setting;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -16,11 +18,13 @@ use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\MenuEntry;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\PageTrailQuery;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Settings\SettingType;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Illuminate\Testing\TestResponse;
@@ -42,6 +46,25 @@ final class HiddenLoadNotice extends NexusNotification
     public function message(object $notifiable): NotificationMessage
     {
         return new NotificationMessage(title: $this->title, body: 'Detalle', icon: 'o-bell', route: $this->route);
+    }
+}
+
+/** Un aviso de la carga que sale por la campana y por correo, sin cola. */
+final class HiddenLoadMailNotice extends NexusNotification implements AcademicLoadNotice
+{
+    public function via(object $notifiable): array
+    {
+        return ['database', 'mail'];
+    }
+
+    public function message(object $notifiable): NotificationMessage
+    {
+        return new NotificationMessage(title: 'Cambió tu carga', body: 'Detalle', icon: 'o-bell', route: 'staffing.my-load');
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)->subject('Cambió tu carga')->action('Ver mi carga', route('staffing.my-load'));
     }
 }
 
@@ -301,6 +324,8 @@ describe('MN-05: el menú', function () {
 });
 
 describe('MN-05: las rutas', function () {
+    // Deriva: compara la lista con las rutas del área y con las de los módulos de la carga por el prefijo de su nombre
+    // (`academic-load.`, `published.`, `scheduling.`, `staffing.`, `solver.`); una ruta de carga con otro prefijo no la ve.
     it('la lista nombra rutas que existen y cubre las del área Carga académica y todas las de sus módulos; ninguna otra área lleva a ellas', function () {
         $items = collect(app(Navigation::class)->items());
         $routesOf = fn (NavigationItem $item): array => [$item->route, ...$item->childRoutes];
@@ -397,6 +422,17 @@ describe('MN-05: las rutas', function () {
 
         loadVisibilityRefresh($snapshot)->assertForbidden();
     });
+
+    it('oculta, una acción de Livewire en la consulta pública ya abierta le responde 404 al invitado', function () {
+        $snapshot = loadVisibilitySnapshotIn($this->get(route('published.index'))->assertOk(), 'academic-load::pages.published.index');
+
+        loadVisibilityRefresh($snapshot)->assertOk();
+
+        setAcademicLoadVisible(false);
+        Livewire::flushState();
+
+        loadVisibilityRefresh($snapshot)->assertNotFound();
+    });
 });
 
 describe('MN-05: la campana', function () {
@@ -433,6 +469,53 @@ describe('MN-05: la campana', function () {
             ->assertNoRedirect();
 
         expect(lastToastOf($component))->toMatchArray(['type' => 'warning', 'title' => 'La carga académica no está disponible por ahora.']);
+    });
+
+    it('oculta, «Marcar todas como leídas» no marca los avisos de la carga: vuelven como nuevos al mostrarla', function () {
+        setAcademicLoadVisible(false);
+        $this->actingAs($this->coordinador);
+
+        expect(app(MarkAllNotificationsRead::class)->handle($this->coordinador))->toBe(2)
+            ->and($this->coordinador->unreadNotifications()->pluck('data')->pluck('title')->all())->toBe(['Tu horario cambió']);
+
+        setAcademicLoadVisible(true);
+
+        Livewire::actingAs($this->coordinador)->test('core::components.bell')
+            ->assertSeeHtml('aria-label="Notificaciones: 1 sin leer"')
+            ->assertSee('Tu horario cambió');
+    });
+
+    it('oculta, sus avisos no salen por correo, a nadie; la campana los guarda igual y vuelven al mostrarla', function () {
+        $this->docente->forceFill(['email' => 'docente@itcj.edu.mx'])->save();
+        $this->admin->forceFill(['email' => 'admin@itcj.edu.mx'])->save();
+        setAcademicLoadVisible(false);
+
+        $this->docente->notify(new HiddenLoadMailNotice);
+        $this->admin->notify(new HiddenLoadMailNotice);
+
+        expect(MailLog::query()->count())->toBe(0)
+            ->and($this->docente->notifications()->where('data->title', 'Cambió tu carga')->count())->toBe(1);
+
+        setAcademicLoadVisible(true);
+        $this->docente->notify(new HiddenLoadMailNotice);
+
+        expect(MailLog::query()->pluck('to')->all())->toBe(['docente@itcj.edu.mx']);
+    });
+
+    it('los avisos de la carga que salen por correo llevan la marca de Core', function () {
+        $unmarked = [];
+
+        foreach (['AcademicLoad', 'Scheduling', 'Staffing', 'Solver'] as $module) {
+            foreach (glob(app_path("Modules/{$module}/Notifications/*.php")) as $file) {
+                $class = "App\\Modules\\{$module}\\Notifications\\".basename($file, '.php');
+
+                if (method_exists($class, 'toMail') && ! is_subclass_of($class, AcademicLoadNotice::class)) {
+                    $unmarked[] = $class;
+                }
+            }
+        }
+
+        expect($unmarked)->toBe([]);
     });
 
     it('oculta, el admin sigue viendo y abriendo los suyos', function () {

@@ -154,13 +154,7 @@ final class NotificationQuery
      */
     private function withoutHiddenLoad(Builder|QueryBuilder $query): Builder|QueryBuilder
     {
-        if (! $this->visibility->hiddenFrom($this->context)) {
-            return $query;
-        }
-
-        return $query->where(fn (Builder|QueryBuilder $notifications) => $notifications
-            ->whereNull('data->route')
-            ->orWhereNotIn('data->route', AcademicLoadVisibility::ROUTES));
+        return $this->visibility->withoutHiddenNotifications($query, $this->context);
     }
 
     /**

@@ -40,6 +40,7 @@ use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
+use App\Modules\Core\Listeners\HoldAcademicLoadMail;
 use App\Modules\Core\Listeners\LogFailedQueuedMail;
 use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
@@ -69,6 +70,7 @@ use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -161,6 +163,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
+        Event::listen(NotificationSending::class, HoldAcademicLoadMail::class);
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
 
