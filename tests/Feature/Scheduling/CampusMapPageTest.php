@@ -58,3 +58,12 @@ it('con la bandera en false no carga el visor 3D y muestra el marcador estático
         ->assertSee('data-testid="campus-map-static"', false)
         ->assertSee('Mapa del campus');
 });
+
+it('un usuario con sesión pero sin puesto también ve el mapa (D6: el Inicio es para todos los que tienen sesión)', function () {
+    config(['nexus.campus_map_3d' => true]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/')
+        ->assertOk()
+        ->assertSee('data-testid="campus-map"', false);
+});

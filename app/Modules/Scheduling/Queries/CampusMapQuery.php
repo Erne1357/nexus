@@ -39,7 +39,7 @@ final class CampusMapQuery
      *     departments: list<array{id: string, name: string, b: ?string, room: ?string, location: ?string, phone: ?string, email: ?string, web: ?string}>,
      *     subjects: list<array{id: string, name: string, area: ?string, cred: ?int}>,
      *     groups: list<array{id: string, subject: string, code: string, area: ?string, career: ?string, turno: string}>,
-     *     profs: list<array{id: string, name: string, title: ?string, area: ?string, email: ?string}>,
+     *     profs: list<array{id: string, name: string, title: ?string, area: ?string, email: null}>,
      *     classes: list<array{subject: string, group: string, prof: ?string, room: ?string, roomLabel: ?string, days: list<int>, hour: int, end: int}>
      * }
      */
@@ -92,7 +92,9 @@ final class CampusMapQuery
             default => collect(),
         };
 
-        $subjects = $this->subjects($sessions->pluck('subject_id')->unique()->values());
+        $subjects = $this->subjects($sessions->pluck('subject_id')->filter()->unique()->values());
+        // Una sesión cuya materia no se encuentra no tumba el Inicio de nadie: se omite.
+        $sessions = $sessions->filter(fn (object $session): bool => isset($subjects[$session->subject_id]))->values();
         $teacherIds = $sessions->pluck('teacher_id')->filter()->unique()->values();
 
         return [
@@ -274,13 +276,14 @@ final class CampusMapQuery
         return DB::table('teachers')
             ->whereIn('id', $ids)
             ->orderBy('name')
-            ->get(['id', 'name', 'degree', 'institutional_email'])
+            ->get(['id', 'name', 'degree'])
             ->map(fn (object $teacher): array => [
                 'id' => $teacher->id,
                 'name' => $teacher->name,
                 'title' => $teacher->degree,
                 'area' => $primary[$teacher->id] ?? null,
-                'email' => $teacher->institutional_email,
+                // El mapa lo ve todo el que tiene sesión, alumnos incluidos (D6): el correo del docente no va (supuesto por confirmar).
+                'email' => null,
             ])->values()->all();
     }
 

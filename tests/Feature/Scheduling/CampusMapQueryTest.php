@@ -60,7 +60,7 @@ it('toma el periodo que contiene el día y junta las sesiones del SII en clases 
         ->and($map['subjects'])->toBe([['id' => 'AED-1285', 'name' => 'Fundamentos de Programación', 'area' => '110600', 'cred' => 5]])
         ->and($map['groups'])->toHaveCount(1)
         ->and($map['groups'][0])->toMatchArray(['id' => 'AED-1285·C', 'code' => 'C', 'area' => '110600', 'turno' => 'Matutino'])
-        ->and($map['profs'])->toBe([['id' => $this->teacher->id, 'name' => 'Docente Uno', 'title' => $this->teacher->degree, 'area' => '110600', 'email' => 'uno@cdjuarez.tecnm.mx']])
+        ->and($map['profs'])->toBe([['id' => $this->teacher->id, 'name' => 'Docente Uno', 'title' => $this->teacher->degree, 'area' => '110600', 'email' => null]])
         ->and($map['classes'])->toBe([[
             'subject' => 'AED-1285',
             'group' => 'AED-1285·C',
@@ -134,4 +134,13 @@ it('toma la carrera del grupo histórico para el grupo del mapa', function () {
         [['day' => 1, 'starts_at' => '20:00', 'ends_at' => '21:00', 'room_code' => '701', 'teacher_rfc' => null]]);
 
     expect(app(CampusMapQuery::class)->forDay($this->day)['groups'][0])->toMatchArray(['career' => 'ISC', 'turno' => 'Vespertino']);
+});
+
+it('no manda el correo de los docentes: el mapa lo ve todo el que tiene sesión (supuesto por confirmar)', function () {
+    siiGroup(['term_code' => '20263', 'campus_id' => $this->campus->id, 'subject_id' => $this->subject->id, 'group_code' => 'C'],
+        [['day' => 1, 'starts_at' => '09:00', 'ends_at' => '10:00', 'room_code' => '701', 'teacher_rfc' => 'AAAA800101AA1']]);
+
+    $json = json_encode(app(CampusMapQuery::class)->forDay($this->day));
+
+    expect($json)->not->toContain('uno@cdjuarez.tecnm.mx');
 });
