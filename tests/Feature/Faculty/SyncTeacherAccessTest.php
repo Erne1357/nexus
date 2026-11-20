@@ -186,7 +186,7 @@ it('un usuario con su número ligado a otro docente da conflict y no toca nada',
         ->and(Activity::count())->toBe(0);
 });
 
-it('adscrito a dos departamentos tiene un solo alcance de docente, sin campus', function () {
+it('asignado a dos departamentos tiene un solo alcance de docente, sin campus', function () {
     $teacher = Teacher::factory()->adscribedTo($this->sis)->adscribedTo($this->ind, false)->create();
 
     syncAccess($teacher);

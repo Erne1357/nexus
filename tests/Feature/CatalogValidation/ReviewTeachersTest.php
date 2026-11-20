@@ -24,7 +24,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Docentes en la revisión de su catálogo: el jefe corrige su correo institucional (CV1, con las reglas de AC-06), los
-| da de baja de su departamento (CV8, confirmado el 12 de noviembre de 2026: si no les queda otra adscripción, quedan
+| da de baja de su departamento (CV8, confirmado el 12 de noviembre de 2026: si no les queda otra asignación, quedan
 | dados de baja) y agrega a uno que ya existe, activo o dado de baja, que se reactiva (CV-S9, supuesto por confirmar).
 | Agregar lo marca como revisado (CV7); el que se da de baja sale de la revisión. Todo con la revisión abierta.
 */
@@ -127,7 +127,7 @@ describe('correo institucional desde la fila (CV1, CV-S2, AC-06; D4 y D11)', fun
 });
 
 describe('dar de baja (CV8)', function () {
-    it('CV8: sin otra adscripción, sale de la revisión y queda dado de baja; la revisión pasa a en revisión', function () {
+    it('CV8: sin otra asignación, sale de la revisión y queda dado de baja; la revisión pasa a en revisión', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['user_id' => User::factory()->create()->id]);
 
         $result = app(DischargeReviewTeacher::class)->handle($this->review, $teacher, $this->jefe);
@@ -139,7 +139,7 @@ describe('dar de baja (CV8)', function () {
             ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
     });
 
-    it('CV8: con otra adscripción solo sale de este departamento y sigue activo; su marca se quita (CV-S7)', function () {
+    it('CV8: con otra asignación solo sale de este departamento y sigue activo; su marca se quita (CV-S7)', function () {
         $teacher = Teacher::factory()->adscribedTo($this->sc)->adscribedTo($this->ii, primary: false)->create();
         CatalogReviewMark::factory()->for($this->review, 'review')->on($teacher)->create();
 
@@ -213,7 +213,7 @@ describe('agregar docente (CV-S9)', function () {
             ->and($this->review->fresh()->status)->toBe(ReviewStatus::InReview);
     });
 
-    it('CV-S9: a uno dado de baja lo reactiva, con su usuario, y su adscripción queda como principal', function () {
+    it('CV-S9: a uno dado de baja lo reactiva, con su usuario, y su asignación queda como principal', function () {
         $user = User::factory()->create(['is_active' => false]);
         $teacher = Teacher::factory()->inactive()->create(['user_id' => $user->id]);
 

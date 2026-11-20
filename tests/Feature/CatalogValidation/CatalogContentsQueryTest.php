@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 /*
 | CatalogContentsQuery: los registros que revisa el jefe en cada catálogo de su departamento (docs/dominio/
-| modelo-de-datos.md, "CatalogValidation"), sin los borrados: docentes con una adscripción sin borrar al
+| modelo-de-datos.md, "CatalogValidation"), sin los borrados: docentes con una asignación sin borrar al
 | departamento y salones del departamento en todos los campus (decisión 6, confirmada el 12 de noviembre de 2026); en
 | las de Servicios Escolares, todas las materias, carreras y planes (de carreras sin borrar) del Tec (CV15). La foto de
 | una validación son los activos.
@@ -82,7 +82,7 @@ it('CV15: lista los planes de las carreras sin borrar de todo el Tec', function 
     expect(contentsCodes(contentsReview(Catalog::StudyPlans, $this->department)))->toBe(['INDU-2010', 'ISIC-2004', 'ISIC-2010']);
 });
 
-it('lista los docentes con una adscripción sin borrar al departamento, aunque no sea la principal, por RFC', function () {
+it('lista los docentes con una asignación sin borrar al departamento, aunque no sea la principal, por RFC', function () {
     Teacher::factory()->adscribedTo($this->department)->create(['rfc' => '200', 'name' => 'Ana']);
     Teacher::factory()->adscribedTo($this->other)->adscribedTo($this->department, primary: false)->create(['rfc' => '100']);
     Teacher::factory()->adscribedTo($this->department)->create()->delete();

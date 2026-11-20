@@ -25,7 +25,7 @@ use Illuminate\Support\Str;
  * Lecturas de docentes para las pantallas (tarea 1.12). Los docentes son de todo el Tec: nada aquí depende de un
  * campus. El listado deja ver lo mismo que TeacherPolicy (`view`): con `faculty.teacher.view_all` (el admin y la
  * Subdirección), todos, también los que no tienen departamento (confirmado el 30 de octubre de 2026); a los demás,
- * filtrado en SQL con Actor::constrain() y `faculty.teacher.view`, los docentes con una adscripción sin borrar
+ * filtrado en SQL con Actor::constrain() y `faculty.teacher.view`, los docentes con una asignación sin borrar
  * a un departamento que cubren. Incluye a los inactivos; los borrados no.
  */
 final class TeacherQuery
@@ -33,10 +33,10 @@ final class TeacherQuery
     public function __construct(private readonly TeacherBaseHoursQuery $baseHours) {}
 
     /**
-     * La tabla de Docentes, por RFC, con sus adscripciones sin borrar (la principal primero y luego
+     * La tabla de Docentes, por RFC, con sus asignaciones sin borrar (la principal primero y luego
      * de la más antigua a la más nueva, el orden en que RemoveAdscription escoge la principal que queda) y su
      * departamento, aunque esté borrado. Busca `$search` en el número o el nombre con TextSearch. `$departmentId`
-     * filtra por una adscripción sin borrar (un id que no es uuid no trae a nadie); `$kind`, por una plaza de ese
+     * filtra por una asignación sin borrar (un id que no es uuid no trae a nadie); `$kind`, por una plaza de ese
      * tipo vigente el primer día del periodo activo (S1, supuesto por confirmar; sin periodo, hoy); `$active`, por
      * estado; `$withInstitutionalEmail`, por si tiene correo institucional (AC-06). `null` no filtra. Cada docente
      * trae su usuario con lo que pide el estado de su acceso (AC-04): si tiene contraseña (`has_password`), si se le
@@ -140,7 +140,7 @@ final class TeacherQuery
     }
 
     /**
-     * Las opciones del filtro de departamento: los departamentos de las adscripciones de los docentes que ve, en el
+     * Las opciones del filtro de departamento: los departamentos de las asignaciones de los docentes que ve, en el
      * formato de los select de MaryUI, con los inactivos marcados.
      *
      * @return array{departments: list<array{id: string, name: string}>}
@@ -158,7 +158,7 @@ final class TeacherQuery
     }
 
     /**
-     * En qué departamentos puede dar de alta (o adscribir) docentes: los sin borrar en los que tiene
+     * En qué departamentos puede dar de alta (o asignar) docentes: los sin borrar en los que tiene
      * `faculty.teacher.create` (Actor::constrain()), como TeacherPolicy::create(). Al admin, todos; a la
      * Subdirección, los de Subdirección Académica; a un jefe, el suyo. Con `code` para nombrar el destino y los
      * inactivos marcados.
@@ -175,7 +175,7 @@ final class TeacherQuery
     }
 
     /**
-     * El docente que se va a editar, activar o desactivar, sin los borrados y con sus adscripciones, que usa
+     * El docente que se va a editar, activar o desactivar, sin los borrados y con sus asignaciones, que usa
      * TeacherPolicy. El id llega del navegador: uno que no es uuid no existe (ADR-0014).
      *
      * @throws ModelNotFoundException<Teacher>
@@ -186,7 +186,7 @@ final class TeacherQuery
     }
 
     /**
-     * La adscripción sin borrar que se va a quitar, con su departamento (aunque esté borrado) y su docente, que usa
+     * La asignación sin borrar que se va a quitar, con su departamento (aunque esté borrado) y su docente, que usa
      * TeacherPolicy para no dejar que alguien se quite a sí mismo. El id llega del navegador (ADR-0014).
      *
      * @throws ModelNotFoundException<TeacherDepartment>
@@ -213,7 +213,7 @@ final class TeacherQuery
     }
 
     /**
-     * El docente con ese RFC (ya normalizado), para ofrecer adscribirlo en lugar de darlo de alta otra
+     * El docente con ese RFC (ya normalizado), para ofrecer asignarlo en lugar de darlo de alta otra
      * vez (S9, supuesto por confirmar); con `$withTrashed`, también si está borrado, para decir por qué no se puede.
      */
     public function findByRfc(string $number, bool $withTrashed = false): ?Teacher
@@ -226,7 +226,7 @@ final class TeacherQuery
     }
 
     /**
-     * El docente que se va a adscribir (S9), aunque se haya borrado mientras tanto, para decirlo en el formulario en
+     * El docente que se va a asignar (S9), aunque se haya borrado mientras tanto, para decirlo en el formulario en
      * lugar de un 404; null si el id no existe o no es uuid (ADR-0014).
      */
     public function findForAdscription(string $id): ?Teacher
@@ -236,7 +236,7 @@ final class TeacherQuery
 
     /**
      * Los docentes que el usuario puede ver, como TeacherPolicy::view(): todos con `faculty.teacher.view_all` (el admin
-     * y la Subdirección); si no, con Actor::constrain() y `faculty.teacher.view`, los que tienen una adscripción
+     * y la Subdirección); si no, con Actor::constrain() y `faculty.teacher.view`, los que tienen una asignación
      * sin borrar a un departamento de su unidad o de su subárbol.
      *
      * @return Builder<Teacher>
@@ -288,13 +288,13 @@ final class TeacherQuery
     }
 
     /**
-     * Qué pasa si se quita al docente de esa adscripción (D10, confirmado el 14 de noviembre de 2026), para la
+     * Qué pasa si se quita al docente de esa asignación (D10, confirmado el 14 de noviembre de 2026), para la
      * confirmación de «Quitar de <Departamento>» en la lista y en la ficha: si era su último departamento, queda dado
      * de baja y su cuenta se inhabilita (CV8); si no, solo sale de ese departamento, y si era la principal dice cuál
      * queda, con la regla de RemoveAdscription (la más antigua de las que quedan: `$adscriptions` llegan en ese orden
      * detrás de la principal, con su departamento).
      *
-     * @param  iterable<int, TeacherDepartment>  $adscriptions  las adscripciones sin borrar del docente
+     * @param  iterable<int, TeacherDepartment>  $adscriptions  las asignaciones sin borrar del docente
      */
     public function removalConsequence(TeacherDepartment $adscription, iterable $adscriptions): string
     {
@@ -303,8 +303,8 @@ final class TeacherQuery
 
         return match (true) {
             $rest->isEmpty() => 'Es su último departamento: queda dado de baja y su cuenta se inhabilita.',
-            $adscription->is_primary => "Solo sale de {$name}: sigue activo y su adscripción principal pasa a {$rest->first()->department?->name}.",
-            default => "Solo sale de {$name}: sigue activo y su adscripción principal no cambia.",
+            $adscription->is_primary => "Solo sale de {$name}: sigue activo y su asignación principal pasa a {$rest->first()->department?->name}.",
+            default => "Solo sale de {$name}: sigue activo y su asignación principal no cambia.",
         };
     }
 

@@ -97,7 +97,7 @@ it('el panel muestra la unidad elegida', function () {
         ->assertSee('SUB-PLANEACION')
         ->assertSee('Dirección › Subdirección de Planeación y Vinculación')
         ->assertSee('Sin titular vigente.')
-        ->assertSee('con adscripción o puesto vigente en la unidad y en las que cuelgan de ella')
+        ->assertSee('con asignación o puesto vigente en la unidad y en las que cuelgan de ella')
         ->assertSee('Departamento de Gestión Tecnológica y Vinculación');
 
     $panel->dispatch('org-unit-picked', id: $this->academic->id)

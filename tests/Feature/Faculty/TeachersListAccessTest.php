@@ -141,7 +141,7 @@ it('AC-04: la columna «Acceso» dice el estado del acceso de cada docente; sin 
     $response = $this->actingAs($this->admin)->get(route('faculty.teachers'))->assertOk();
     $rows = accessRowsFor($this->admin);
 
-    $response->assertSeeInOrder(['RFC', 'Nombre', 'Adscripción', 'Horas base', 'Acceso', 'Estado']);
+    $response->assertSeeInOrder(['RFC', 'Nombre', 'Asignación', 'Horas base', 'Acceso', 'Estado']);
     expect($rows['PRUE000001AB1'])->toContain('Sin acceso')
         ->and($rows['PRUE000002AB1'])->toContain('Sin acceso')
         ->and($rows['PRUE000003AB1'])->toContain('Invitación enviada')
@@ -244,8 +244,8 @@ describe('«Quitar de <Departamento>» (D10)', function () {
         expect($items->keys()->all())->toContain('Quitar de Sistemas y Computación', 'Quitar de Ingeniería Industrial')
             ->and(implode(' ', $items->keys()->all()))->not->toContain('Quitar de SC')
             ->and($items['Quitar de Sistemas y Computación']->getAttribute('data-confirm-title'))->toBe('¿Quitar al docente PRUE000001AB1 de Sistemas y Computación?')
-            ->and($items['Quitar de Sistemas y Computación']->getAttribute('x-confirm'))->toBe('Solo sale de Sistemas y Computación: sigue activo y su adscripción principal pasa a Ingeniería Industrial.')
-            ->and($items['Quitar de Ingeniería Industrial']->getAttribute('x-confirm'))->toBe('Solo sale de Ingeniería Industrial: sigue activo y su adscripción principal no cambia.');
+            ->and($items['Quitar de Sistemas y Computación']->getAttribute('x-confirm'))->toBe('Solo sale de Sistemas y Computación: sigue activo y su asignación principal pasa a Ingeniería Industrial.')
+            ->and($items['Quitar de Ingeniería Industrial']->getAttribute('x-confirm'))->toBe('Solo sale de Ingeniería Industrial: sigue activo y su asignación principal no cambia.');
 
         $only = collect(domOf($this->actingAs($this->admin)->get(route('faculty.teachers'))->assertOk())->querySelectorAll('table tbody tr'))
             ->first(fn ($row): bool => textOf($row->querySelector('td')) === 'PRUE000002AB1')

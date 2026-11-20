@@ -6,7 +6,7 @@ use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Validation\ValidationException;
 
 /*
-| Borrar un departamento se veta si tiene docentes adscritos (S10, supuesto por confirmar), con
+| Borrar un departamento se veta si tiene docentes asignados (S10, supuesto por confirmar), con
 | DepartmentDeleting.
 */
 
@@ -25,10 +25,10 @@ function departmentDeletionReasons(Department $department): ?array
     return null;
 }
 
-it('rechaza borrar un departamento con un docente adscrito', function () {
+it('rechaza borrar un departamento con un docente asignado', function () {
     Teacher::factory()->adscribedTo($this->department)->create();
 
-    expect(departmentDeletionReasons($this->department))->toBe(['Tiene 1 docente adscrito.'])
+    expect(departmentDeletionReasons($this->department))->toBe(['Tiene 1 docente asignado.'])
         ->and(Department::find($this->department->id))->not->toBeNull();
 });
 
@@ -36,10 +36,10 @@ it('usa el plural con varios docentes y cuenta una vez al que también está en 
     Teacher::factory()->count(2)->adscribedTo($this->department)->create();
     Teacher::factory()->adscribedTo(Department::factory()->create())->adscribedTo($this->department, false)->create();
 
-    expect(departmentDeletionReasons($this->department))->toBe(['Tiene 3 docentes adscritos.']);
+    expect(departmentDeletionReasons($this->department))->toBe(['Tiene 3 docentes asignados.']);
 });
 
-it('con la adscripción borrada sí se borra', function () {
+it('con la asignación borrada sí se borra', function () {
     $teacher = Teacher::factory()->adscribedTo($this->department)->create();
     $teacher->adscriptions()->get()->each->delete();
 
@@ -53,7 +53,7 @@ it('un departamento sin docentes se borra', function () {
     expect(departmentDeletionReasons($this->department))->toBeNull();
 });
 
-it('un docente borrado cuya adscripción sigue en pie no bloquea', function () {
+it('un docente borrado cuya asignación sigue en pie no bloquea', function () {
     Teacher::factory()->adscribedTo($this->department)->create()->delete();
 
     expect(departmentDeletionReasons($this->department))->toBeNull();

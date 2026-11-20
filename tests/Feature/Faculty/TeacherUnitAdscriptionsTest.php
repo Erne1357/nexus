@@ -8,12 +8,12 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Queries\TeacherUnitAdscriptions;
 
 /*
-| Faculty le dice al Organigrama de Core quiénes están adscritos a cada departamento (el contrato UnitAdscriptions):
-| el id de un departamento es el de su unidad. Cuentan las adscripciones sin borrar de los docentes activos, sin
+| Faculty le dice al Organigrama de Core quiénes están asignados a cada departamento (el contrato UnitAdscriptions):
+| el id de un departamento es el de su unidad. Cuentan las asignaciones sin borrar de los docentes activos, sin
 | borrar y con usuario.
 */
 
-it('da los usuarios activos adscritos a cada departamento', function () {
+it('da los usuarios activos asignados a cada departamento', function () {
     $systems = Department::factory()->create(['code' => 'SC']);
     $basics = Department::factory()->create(['code' => 'CB']);
     $ana = User::factory()->create();

@@ -12,7 +12,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Cambiar la principal de un docente (SetPrimaryAdscription): deja una sola principal, registra el valor anterior,
-| no escribe si ya lo es y rechaza una adscripción quitada. Quitar adscripciones es RemoveAdscription (RemoveAdscriptionTest).
+| no escribe si ya lo es y rechaza una asignación quitada. Quitar asignaciones es RemoveAdscription (RemoveAdscriptionTest).
 */
 
 beforeEach(function () {
@@ -64,7 +64,7 @@ describe('principal', function () {
         Event::assertNotDispatched(AdscriptionChanged::class);
     });
 
-    it('rechaza una adscripción quitada', function () {
+    it('rechaza una asignación quitada', function () {
         $this->second->delete();
 
         $errors = adscriptionErrorsOf(fn () => app(SetPrimaryAdscription::class)->handle($this->second));

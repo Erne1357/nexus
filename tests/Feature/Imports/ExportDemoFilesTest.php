@@ -233,7 +233,7 @@ it('lo exportado se vuelve a importar completo, en orden, con el motor real', fu
         ->and(DB::table('teacher_positions')->count())->toBe($exported['positions']->count());
 });
 
-it('exporta un renglón por adscripción con la principal primero y una plaza por renglón, sin borrados', function () {
+it('exporta un renglón por asignación con la principal primero y una plaza por renglón, sin borrados', function () {
     $this->artisan('imports:export-demo')->assertSuccessful();
 
     $adscriptions = DB::table('teacher_departments as td')->join('teachers as t', 't.id', '=', 'td.teacher_id')

@@ -171,7 +171,7 @@ it('HC-01: lee el horario de ahora aunque el validador (scoped) ya tenga una fot
     expect(StaffingRanking::query()->where('group_id', $group->id)->where('teacher_id', $busy->id)->sole()->breakdown['flags'])->toContain('choque');
 });
 
-it('Ranking docente: volver a calcular reemplaza las filas y saca a quien ya no está adscrito', function () {
+it('Ranking docente: volver a calcular reemplaza las filas y saca a quien ya no está asignado', function () {
     $group = ($this->group)();
     ($this->teacher)('Ana', 20);
     $beatriz = ($this->teacher)('Beatriz', 10);

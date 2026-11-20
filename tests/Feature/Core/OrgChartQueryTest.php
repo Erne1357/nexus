@@ -125,7 +125,7 @@ it('da el titular de cada departamento académico, de Subdirección Académica y
         ->and($this->query->chart()->headless)->toBe(2);
 });
 
-it('cuenta personas distintas con adscripción o puesto vigente en el subárbol', function () {
+it('cuenta personas distintas con asignación o puesto vigente en el subárbol', function () {
     $c2 = Campus::factory()->create(['code' => 'C2']);
     $office = OrgUnit::factory()->create(['parent_id' => $this->services->id, 'code' => 'OF-TITULOS', 'kind' => OrgUnitKind::Oficina]);
     $systems = Department::factory()->create(['code' => 'SC']);

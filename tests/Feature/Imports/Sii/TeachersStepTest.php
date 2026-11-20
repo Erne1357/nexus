@@ -22,7 +22,7 @@ use Tests\Unit\Imports\Sii\SiiFixtures;
 /*
 | Paso `docentes` de imports:migrate-sii (D4, D9, D10): unión de docentes y docentes2 por RFC, solo nombramiento D o
 | con grupos, el RFC viejo de estatus 04 se funde con el nuevo, activo por el periodo vigente, departamento de la
-| adscripción o de los grupos recientes. Todo con datos sintéticos (RFC inventados, nada del SII real).
+| asignación o de los grupos recientes. Todo con datos sintéticos (RFC inventados, nada del SII real).
 */
 
 /**
@@ -256,7 +256,7 @@ it('si docentes2 trae el nombre en blanco usa el de docentes', function () {
     expect(teachersStepRun($this->dir)['rows'][0]['name'])->toBe('Juan Perez de la Cruz');
 });
 
-it('la adscripción de docentes2 manda sobre el área de docentes', function () {
+it('la asignación de docentes2 manda sobre el área de docentes', function () {
     SiiFixtures::writeStaff($this->dir, [teacherStaffRow('PRUE800101AB1', ['clave_area' => '110100'])], [teacherStaff2Row('PRUE800101AB1', ['id_unidad_organica' => '110600'])]);
     SiiFixtures::writeGroups($this->dir, []);
 

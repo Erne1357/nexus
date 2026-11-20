@@ -39,7 +39,7 @@ beforeEach(function () {
     $this->adscribed = fn (array $teacher = []): Teacher => tap(Teacher::factory()->create($teacher), fn (Teacher $t) => TeacherDepartment::factory()->create(['teacher_id' => $t->id, 'department_id' => $this->department->id]));
 });
 
-it('Ranking docente: trae a los adscritos y a los preferentes de otro departamento, sin duplicados', function () {
+it('Ranking docente: trae a los asignados y a los preferentes de otro departamento, sin duplicados', function () {
     $own = ($this->adscribed)();
     TeacherSubjectQualification::factory()->for($own)->for($this->subject)->preferente()->create();
     $other = Teacher::factory()->create();
@@ -55,7 +55,7 @@ it('Ranking docente: trae a los adscritos y a los preferentes de otro departamen
         ->and($inputs[$other->id]->name)->toBe($other->name);
 });
 
-it('Ranking docente: excluye al apto de otro departamento, a los inactivos, borrados y adscripciones borradas', function () {
+it('Ranking docente: excluye al apto de otro departamento, a los inactivos, borrados y asignaciones borradas', function () {
     $apto = Teacher::factory()->create();
     TeacherSubjectQualification::factory()->for($apto)->for($this->subject)->apto()->create();
     ($this->adscribed)(['is_active' => false]);
