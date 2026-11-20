@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
 use App\Modules\CatalogValidation\Actions\OpenCatalogValidation;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
@@ -36,13 +37,23 @@ beforeEach(function () {
     $this->jefeBasicas = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->basicas->id])->create();
 });
 
+/**
+ * Las revisiones del periodo con `$status`: las del departamento (docentes y salones) y, si faltan, las de Servicios
+ * Escolares (materias, planes y carreras, una del Tec; CV15).
+ */
 function reviewsFor(Term $term, Campus $campus, Department $department, ReviewStatus $status): void
 {
     foreach (Catalog::cases() as $catalog) {
+        $owned = $catalog->owner() === CatalogOwner::Department;
+
+        if (! $owned && CatalogReview::query()->where('term_id', $term->id)->where('catalog', $catalog)->exists()) {
+            continue;
+        }
+
         CatalogReview::factory()->create([
             'term_id' => $term->id,
             'campus_id' => null,
-            'department_id' => $department->id,
+            'department_id' => $owned ? $department->id : null,
             'catalog' => $catalog,
             'status' => $status,
         ]);
@@ -61,7 +72,7 @@ it('avisa al jefe de cada departamento con catálogos pendientes y dice cuáles'
         $message = $notification->message($this->jefeSistemas);
 
         return $message->title === 'Tienes catálogos por validar'
-            && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes, materias, planes de estudio, carreras y salones'
+            && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes y salones'
             && $message->route === 'catalog-validation.review'
             && $message->parameters === ['department' => $this->sistemas->id]
             && $message->termId === $this->term->id
@@ -133,11 +144,11 @@ it('CV9: avisa una vez por jefe y departamento, sin campus, con solo los catálo
     reviewsFor($this->term, $this->c2, $this->basicas, ReviewStatus::Validated);
     Notification::fake();
 
-    app(NotifyPendingReviews::class)->notifyOpened($this->term, [Catalog::Subjects, Catalog::Careers]);
+    app(NotifyPendingReviews::class)->notifyOpened($this->term, [Catalog::Teachers, Catalog::Careers]);
 
     Notification::assertSentToTimes($this->jefeSistemas, CatalogReviewsPending::class, 1);
     Notification::assertSentTo($this->jefeSistemas, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification, array $channels, User $notifiable): bool => $notification->message($notifiable)->campusId === null
-        && str_ends_with($notification->message($notifiable)->body, ': materias y carreras'));
+        && str_ends_with($notification->message($notifiable)->body, ': docentes'));
     Notification::assertNotSentTo($this->jefeBasicas, CatalogReviewsPending::class);
 });
 

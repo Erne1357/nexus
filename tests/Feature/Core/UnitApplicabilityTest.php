@@ -76,8 +76,12 @@ function managementKeys(array $keys): array
 }
 
 describe('AZ-02: lo que cada puesto ejerce', function () {
-    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate y los exportes del personal de lo publicado, con los archivos para el SII', function () {
-        expect(effectivePermissions($this->servicesHead))->toBe(['academic.placement.validate', 'academic_load.load.export', 'academic_load.load.export_sii']);
+    it('AZ-02: el jefe de Servicios Escolares solo ejerce academic.placement.validate, los exportes del personal de lo publicado, con los archivos para el SII, y la revisión de sus catálogos (CV15)', function () {
+        expect(effectivePermissions($this->servicesHead))->toBe([
+            'academic.placement.validate', 'academic_load.load.export', 'academic_load.load.export_sii',
+            'catalog_validation.review.correct', 'catalog_validation.review.flag', 'catalog_validation.review.reopen',
+            'catalog_validation.review.resolve_flag', 'catalog_validation.review.validate', 'catalog_validation.review.view',
+        ]);
     });
 
     it('AZ-S16: el jefe de un departamento académico conserva todo lo de su puesto salvo academic.placement.validate y los archivos para el SII, que no ejerce', function () {

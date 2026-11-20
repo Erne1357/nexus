@@ -63,7 +63,7 @@
 
             @if ($isTeacher)
                 <p class="text-sm"><span class="text-neutral">Correo institucional</span> <span class="font-mono">{{ $record->institutional_email ?? 'Sin correo institucional' }}</span></p>
-                <p class="text-sm"><a href="{{ route('faculty.teachers.show', ['teacher' => $record->id, ...\App\Modules\Core\Support\ValidationReturn::params($review->department_id, $review->catalog->value)]) }}" wire:navigate class="font-medium text-primary underline underline-offset-4" data-testid="teacher-record-link">Abrir la ficha de {{ $record->name }}</a></p>
+                <p class="text-sm"><a href="{{ route('faculty.teachers.show', ['teacher' => $record->id, ...\App\Modules\Core\Support\ValidationReturn::params($review->owner_id, $review->catalog->value)]) }}" wire:navigate class="font-medium text-primary underline underline-offset-4" data-testid="teacher-record-link">Abrir la ficha de {{ $record->name }}</a></p>
             @elseif (! $locked)
                 <form id="review-record-form" wire:submit="save" class="space-y-3">
                     <x-input label="Nombre" name="name" wire:model="name" />

@@ -493,7 +493,10 @@ new #[Title('Bandeja del departamento')] class extends Component
     private function acceptBlock(DepartmentInbox $inbox): string
     {
         if ($inbox->pendingCatalogs !== []) {
-            return 'Valida los catálogos del departamento para poder aceptar.';
+            // CV15: si solo falta lo de Servicios Escolares, el jefe no tiene nada que validar.
+            return $inbox->pendingOwnCatalogs()
+                ? 'Valida los catálogos del departamento para poder aceptar.'
+                : 'Falta que Servicios Escolares valide materias, planes y carreras para poder aceptar.';
         }
 
         return "{$inbox->department->code} no tiene carga en ".($inbox->modality?->name ?? 'esta modalidad').' para este periodo.';

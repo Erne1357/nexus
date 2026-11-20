@@ -7,6 +7,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -41,17 +42,13 @@ function openAllCatalogs(AcademicLoad $load): void
     $other = Department::factory()->create();
 
     foreach (Catalog::cases() as $catalog) {
-        CatalogReview::factory()->create(['catalog' => $catalog, 'term_id' => $load->term_id, 'department_id' => $other->id]);
+        CatalogReview::factory()->general($catalog)->create(['term_id' => $load->term_id, ...($catalog->owner() === CatalogOwner::Department ? ['department_id' => $other->id] : [])]);
     }
 }
 
 function validateGenerals(AcademicLoad $load, array $except = []): void
 {
-    foreach (Catalog::general() as $catalog) {
-        if (! in_array($catalog, $except, true)) {
-            CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
-        }
-    }
+    validateGeneralCatalogs($load->term_id, $load->department_id, $except);
 }
 
 function validateRooms(AcademicLoad $load): void
@@ -116,7 +113,7 @@ it('HC-14 y HC-20: con los cuatro generales y los salones validados y una parte 
 it('HC-14: bloquea y nombra el catálogo general pendiente', function () {
     $load = loadWith();
     validateGenerals($load, [Catalog::Subjects]);
-    CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $load->term_id, 'department_id' => $load->department_id]);
+    CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $load->term_id]);
     validateRooms($load);
 
     expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Materias.')
@@ -164,13 +161,13 @@ it('HC-14: exige salones si el perfil de la modalidad los usa', function () {
     expect(blockedReasons($load))->toBe(['HC-14: faltan por validar los catálogos de Salones.']);
 });
 
-it('HC-14: las revisiones generales de otro departamento no cuentan', function () {
+it('HC-14: los docentes de otro departamento no cuentan; las de Servicios Escolares, sí, porque son de todo el Tec (CV15)', function () {
     $load = loadWith();
     validateRooms($load);
     $other = AcademicLoad::factory()->create(['term_id' => $load->term_id, 'modality_id' => $load->modality_id]);
     validateGenerals($other);
 
-    expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Docentes, Materias, Planes de estudio y Carreras.');
+    expect(blockedReason($load))->toBe('HC-14: faltan por validar los catálogos de Docentes.');
 });
 
 it('HC-14: la revisión de salones es una para todos los campus: validada, vale en el campus de la carga (decisión 6)', function () {

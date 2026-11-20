@@ -22,6 +22,8 @@ use RuntimeException;
  * Usuarios de prueba del demo, con su nombramiento (`role_assignments`) vigente desde hoy:
  *
  * - `subdir`: Subdirección Académica, una para todo el Tec (sin campus), sobre la unidad Subdirección Académica.
+ * - `jefe.se`: jefe del Departamento de Servicios Escolares (OrgTree::SCHOOL_SERVICES), si el organigrama ya tiene la
+ *   unidad (OrgChartSeeder): valida las materias, los planes y las carreras de todo el Tec (CV15) y «Por validar» (D19).
  * - `jefe.<depto>`: jefe de cada departamento activo de los campus de `$campuses`, de todo el Tec (sin campus).
  * - `jpd.<depto>.<campus>`: jefe de proyecto docente del departamento en Presencial y en cada campus de `$campuses`.
  * - `coord.<carrera>.<campus>`: coordinador de cada carrera ofrecida en el campus, en Presencial y en ese campus
@@ -34,9 +36,9 @@ use RuntimeException;
  * Entran con la contraseña `password` sin tener que cambiarla (supuesto S5, por confirmar). Requiere el catálogo
  * (AcademicDemoSeeder), la unidad Subdirección Académica y la modalidad `PRES` (la siembra su migración). A un usuario que ya existe solo
  * se le completan el rol y el nombramiento si le faltan, y un departamento que ya tiene jefe vigente lo conserva.
- * Los puestos exclusivos son uno por unidad (AZ-S7): si la Subdirección Académica o un departamento ya tienen, de
- * otro usuario, un nombramiento de Subdirección o de jefe vigente o por empezar, no se crea `subdir` o
- * `jefe.<depto>`. No corre en producción.
+ * Los puestos exclusivos son uno por unidad (AZ-S7): si la Subdirección Académica, Servicios Escolares o un departamento
+ * ya tienen, de otro usuario, un nombramiento de Subdirección o de jefe vigente o por empezar, no se crea `subdir`,
+ * `jefe.se` o `jefe.<depto>`. No corre en producción.
  */
 class DemoStaffSeeder extends Seeder
 {
@@ -64,6 +66,12 @@ class DemoStaffSeeder extends Seeder
 
         if (! $this->seatTaken(Role::Subdireccion, $academic, 'subdir')) {
             $this->user('subdir', 'Subdirección Académica', Role::Subdireccion, ['org_unit_id' => $academic]);
+        }
+
+        $schoolServices = app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES);
+
+        if ($schoolServices !== null && ! $this->seatTaken(Role::JefeDepartamento, $schoolServices, 'jefe.se')) {
+            $this->user('jefe.se', 'Jefatura de Servicios Escolares', Role::JefeDepartamento, ['org_unit_id' => $schoolServices]);
         }
 
         foreach ($campuses as $code) {

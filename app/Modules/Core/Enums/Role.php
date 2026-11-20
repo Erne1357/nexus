@@ -108,7 +108,8 @@ enum Role: string
 
     /**
      * Lo que el puesto hace en Nexus para quien lo ocupa sobre `$units`, para Inicio (AZ-02): el jefe del Departamento de
-     * Servicios Escolares solo valida las materias de la migración del SII que esperan semestre (D19); el de otra
+     * Servicios Escolares valida las materias, los planes y las carreras de todo el Tec (CV15) y las materias de la
+     * migración del SII que esperan semestre (D19); el de otra
      * unidad que no es departamento académico no tiene funciones todavía (R-V2-4). Si alguna de sus unidades es un departamento
      * académico, o el puesto no es el de jefe de departamento, description().
      *
@@ -121,7 +122,7 @@ enum Role: string
         }
 
         return array_all($units, fn (array $unit): bool => $unit['code'] === OrgTree::SCHOOL_SERVICES)
-            ? 'Asignas semestre a las materias de la migración del SII que esperan validación, en la pestaña «Por validar» de cada plan de estudios.'
+            ? 'Validas cada periodo las materias, los planes de estudio y las carreras de todo el Tec, y asignas semestre a las materias de la migración del SII que esperan validación, en la pestaña «Por validar» de cada plan de estudios.'
             : 'Tu área todavía no tiene funciones en Nexus.';
     }
 

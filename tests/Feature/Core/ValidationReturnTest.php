@@ -72,6 +72,16 @@ describe('con la marca de la validación', function () {
             ->assertSee('Regresar');
     })->with(array_keys(backPages()));
 
+    it('CV15: desde una revisión de Servicios Escolares, «Regresar» vuelve a la de Servicios Escolares', function () {
+        $url = route('academic.subjects').'?'.http_build_query(ValidationReturn::params(ValidationReturn::SCHOOL_SERVICES, 'subjects'));
+
+        $this->actingAs($this->admin)->get($url)->assertOk()
+            ->assertSeeHtml('href="'.e(route('catalog-validation.review', ['department' => 'servicios-escolares', 'catalogo' => 'subjects'])).'"');
+        expect(ValidationReturn::url('validacion', 'servicios-escolares', 'careers'))->toBe(route('catalog-validation.review', ['department' => 'servicios-escolares', 'catalogo' => 'careers']))
+            ->and(ValidationReturn::url('validacion', 'servicios-escolares-x', 'careers'))->toBeNull()
+            ->and(ValidationReturn::url('validacion', 'SERVICIOS-ESCOLARES', 'careers'))->toBeNull();
+    });
+
     it('la ruta de regreso es la de la validación y no se arma con texto de la query', function () {
         expect(ValidationReturn::url('validacion', $this->dept->id, 'rooms'))->toBe(route('catalog-validation.review', ['department' => $this->dept->id, 'catalogo' => 'rooms']));
     });

@@ -5,7 +5,8 @@
     - El renglón de la revisión: nombre, estado, «N de M revisados» con su barra, las cifras y «Validar catálogo», que
       solo se habilita con todos los activos revisados (CV7) y, si no, lleva su motivo escrito al lado.
     - La barra: búsqueda, el filtro segmentado Por revisar · Revisados · Con observación · Todos (`?revision=`), los filtros
-      del catálogo (Falta en docentes; Campus y Edificio en salones; Cambio si hay foto anterior) y, en docentes,
+      del catálogo (Falta en docentes; Campus y Edificio en salones; Departamento en las de Servicios Escolares, CV15;
+      Cambio si hay foto anterior) y, en docentes,
       «Agregar docente» (CV-S9) a la derecha. Debajo, a quien marca, los atajos de teclado.
     - La tabla: una casilla por registro sin revisar (a quien marca), la clave, el nombre con sus insignias y, en
       docentes, su correo institucional (o «Sin correo institucional» y «Agregar», que abre el recuadro del correo) y sus
@@ -88,6 +89,9 @@
             @if ($isRooms)
                 <x-select wire:model.live="roomCampus" aria-label="Campus" :options="$roomFilters['campuses']" placeholder="Campus" data-testid="filter-campus" />
                 <x-select wire:model.live="roomBuilding" aria-label="Edificio" :options="$roomFilters['buildings']" placeholder="Edificio" data-testid="filter-building" />
+            @endif
+            @if ($departmentFilters !== [])
+                <x-select wire:model.live="recordDepartment" aria-label="Departamento" :options="$departmentFilters" placeholder="Departamento" data-testid="filter-department" />
             @endif
             @if ($hasPrevious)
                 <x-select wire:model.live="change" aria-label="Cambio" :options="$changeFilters" placeholder="Cambio" data-testid="filter-change" />

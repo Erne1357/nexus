@@ -34,6 +34,8 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->d1 = Department::factory()->create(['code' => 'D1']);
     Department::factory()->create(['code' => 'D2']);
+    // Sin jefe de Servicios Escolares no se abren materias, planes ni carreras (CV15).
+    $this->escolares = schoolServicesHead();
     $this->actingAs($this->admin);
     app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
 });
@@ -55,10 +57,11 @@ it('CV9: abrir el periodo ya no crea revisiones ni avisa a los jefes', function 
         ->and(array_keys(Queue::pushedJobs()))->toBe([ComputeDemandForecasts::class]);
 });
 
-it('CV9: abrir crea las revisiones solo de los catálogos elegidos en cada departamento activo', function () {
+it('CV9: abrir crea las revisiones solo de los catálogos elegidos, de docentes en cada departamento activo y de carreras una de Servicios Escolares (CV15)', function () {
     Department::factory()->inactive()->create();
 
-    expect(openValidation([Catalog::Teachers, Catalog::Careers]))->toBe(4)
+    expect(openValidation([Catalog::Teachers, Catalog::Careers]))->toBe(3)
+        ->and(CatalogReview::query()->where('catalog', Catalog::Careers)->pluck('department_id')->all())->toBe([null])
         ->and(CatalogReview::query()->where('term_id', $this->term->id)->pluck('catalog')->unique()->map->value->sort()->values()->all())->toBe(['careers', 'teachers'])
         ->and(CatalogReview::query()->whereNotNull('campus_id')->count())->toBe(0);
 });
@@ -68,8 +71,8 @@ it('CV9: es idempotente y se puede abrir después un catálogo que faltó, sin q
     openValidation([Catalog::Teachers]);
 
     expect(openValidation([Catalog::Teachers]))->toBe(0)
-        ->and(openValidation([Catalog::Teachers, Catalog::Subjects]))->toBe(2)
-        ->and(CatalogReview::count())->toBe(4);
+        ->and(openValidation([Catalog::Teachers, Catalog::Subjects]))->toBe(1)
+        ->and(CatalogReview::count())->toBe(3);
     Queue::assertPushed(NotifyPendingReviewsJob::class, 2);
 });
 
@@ -105,17 +108,23 @@ it('CV9: deja una entrada en la bitácora del periodo con los catálogos y quié
     expect($log->subject_id)->toBe($this->term->id)
         ->and($log->causer_id)->toBe($this->admin->id)
         ->and($log->properties['catalogs'])->toBe(['teachers', 'subjects'])
-        ->and($log->properties['reviews'])->toBe(4)
+        ->and($log->properties['reviews'])->toBe(3)
         ->and($log->description)->toContain('docentes, materias');
 });
 
-it('CV9: avisa a los jefes solo de los catálogos que se abrieron', function () {
+it('CV9: avisa a los jefes solo de los catálogos que se abrieron; las carreras, al de Servicios Escolares (CV15)', function () {
     Notification::fake();
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->d1->id])->create();
+    $escolares = $this->escolares;
 
     openValidation([Catalog::Careers]);
 
-    Notification::assertSentTo($jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification) => $notification->message($jefe)->body === 'Ene-Jun 2027 · '.$this->d1->name.': carreras');
+    Notification::assertSentTo($escolares, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification) => $notification->message($escolares)->body === 'Ene-Jun 2027 · Servicios Escolares: carreras');
+    Notification::assertNotSentTo($jefe, CatalogReviewsPending::class);
+
+    openValidation([Catalog::Teachers]);
+
+    Notification::assertSentTo($jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notification) => $notification->message($jefe)->body === 'Ene-Jun 2027 · '.$this->d1->name.': docentes');
 });
 
 it('CV9: abrir la validación es solo del admin: Subdirección y el jefe no pueden', function (Role $role, array $scope) {
@@ -160,13 +169,13 @@ it('CV9: un jefe de todo el Tec recibe un solo aviso aunque haya varios campus a
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->d1->id])->create();
     // C1 es de Presencial, donde el periodo ya está abierto (M4): hay dos campus abiertos.
     Campus::factory()->create(['code' => 'C1']);
-    openValidation([Catalog::Teachers]);
+    openValidation([Catalog::Careers]);
     Notification::fake();
 
-    openValidation([Catalog::Careers, Catalog::Subjects]);
+    openValidation([Catalog::Teachers, Catalog::Rooms, Catalog::Subjects]);
 
     Notification::assertSentToTimes($jefe, CatalogReviewsPending::class, 1);
-    Notification::assertSentTo($jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $n) => str_ends_with($n->message($jefe)->body, ': materias y carreras'));
+    Notification::assertSentTo($jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $n) => str_ends_with($n->message($jefe)->body, ': docentes y salones'));
 });
 
 describe('CV-S12: un departamento nuevo o reactivado', function () {
@@ -177,7 +186,8 @@ describe('CV-S12: un departamento nuevo o reactivado', function () {
         openValidation([Catalog::Teachers, Catalog::Careers]);
         $new = app(CreateDepartment::class)->handle(['code' => 'D8', 'name' => 'Otro nuevo']);
 
-        expect(CatalogReview::query()->where('department_id', $new->id)->pluck('catalog')->map->value->sort()->values()->all())->toBe(['careers', 'teachers']);
+        expect(CatalogReview::query()->where('department_id', $new->id)->pluck('catalog')->map->value->sort()->values()->all())->toBe(['teachers'])
+            ->and(CatalogReview::query()->where('catalog', Catalog::Careers)->count())->toBe(1);
     });
 
     it('al reactivarse recibe las suyas; desactivar o cambiar el nombre no crea nada, y un periodo ya terminado no se toca', function () {
