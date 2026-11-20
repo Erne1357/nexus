@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Un grupo que se abrió en un periodo pasado, de lo migrado del SII o de lo que Nexus publicó (tarea 5.6). Registro
@@ -77,5 +78,13 @@ class HistoricalGroup extends Model
     public function loadSnapshot(): BelongsTo
     {
         return $this->belongsTo(LoadSnapshot::class);
+    }
+
+    /**
+     * @return HasMany<HistoricalGroupSession, $this>
+     */
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(HistoricalGroupSession::class);
     }
 }
