@@ -25,7 +25,7 @@ use Spatie\Activitylog\Models\Activity;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| `imports:migrate-sii` con los catorce pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
+| `imports:migrate-sii` con los dieciséis pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
 | una exportación sintética pequeña que toca cada paso: corre sin filas con error, la verificación contra el SII no
 | encuentra diferencias y repetirla no da ni altas ni cambios en ningún lote.
 */
@@ -123,9 +123,9 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los quince pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
+it('corre los dieciséis pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(15);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(16);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful()
         ->doesntExpectOutputToContain('con diferencias');
@@ -145,7 +145,7 @@ it('corre los quince pasos de producción sin errores ni diferencias y repetirla
         ->and(StudyPlanSubjectPending::query()->count())->toBe(1)
         ->and(SubjectPrerequisite::query()->count())->toBe(1)
         ->and(StudyPlanPrerequisitePending::query()->count())->toBe(1)
-        ->and(Room::query()->count())->toBe(2)
+        ->and(Room::query()->whereNull('map_key')->count())->toBe(2)
         ->and(Teacher::query()->sole()->history()->count())->toBe(2)
         ->and(Teacher::query()->sole()->positions()->orderBy('kind')->pluck('base_hours', 'kind')->map(fn ($hours): int => (int) $hours)->all())->toBe(['asignatura' => 4, 'tres_cuartos' => 30])
         ->and(User::query()->where('username', 'PRUE800101AB1')->sole()->staff_type)->toBe(StaffType::Docente)
