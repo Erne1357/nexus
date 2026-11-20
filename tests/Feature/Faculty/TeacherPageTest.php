@@ -433,7 +433,8 @@ describe('acceso (AC-04, CF-07 y CF-09)', function () {
         $this->ana->update(['institutional_email' => 'ana.perez@cdjuarez.tecnm.mx']);
         app(DeactivateUser::class)->handle($this->docente, DeactivationReason::Otro, null, $this->admin);
 
-        $dom = domOf($this->actingAs($this->{$who})->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
+        $viewer = $who === 'directivo' ? User::factory()->withRole(Role::Directivo)->create() : $this->{$who};
+        $dom = domOf($this->actingAs($viewer)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
         $item = $dom->querySelector('[data-testid="reactivate-from-panel"]');
 
         expect(textOf($dom->querySelector('[data-testid="user-deactivated"]')))->toBe('Cuenta dada de baja por el admin')
@@ -449,6 +450,7 @@ describe('acceso (AC-04, CF-07 y CF-09)', function () {
     })->with([
         'el admin, con el enlace' => ['admin', true],
         'el jefe, sin enlace' => ['jefe', false],
+        'el directivo, que ve la ficha pero no reactiva: sin enlace (AZ-03)' => ['directivo', false],
     ]);
 });
 

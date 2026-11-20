@@ -91,7 +91,8 @@ function directivoWorld(object $test): array
 
 /**
  * Los permisos de lectura del directivo, de fábrica (spec «Demo SII v2», sección 4): lo académico que se consulta, sin
- * los archivos para el SII (de Servicios Escolares), sin lo que es candado del admin y sin lo personal.
+ * los archivos para el SII (de Servicios Escolares) y sin lo personal. De los candados del admin, solo ver Personas y
+ * puestos, el Organigrama y la Bitácora (AZ-03, confirmado el 20 de noviembre de 2026).
  *
  * @return list<string>
  */
@@ -112,8 +113,11 @@ function directivoFactoryReads(): array
         'academic_load.proposal_review.view',
         'catalog_validation.progress.view',
         'catalog_validation.review.view',
+        'core.activity.view',
+        'core.assignment.view',
         'core.campus.view',
         'core.modality.view',
+        'core.org_unit.view',
         'core.term.view',
         'facilities.building.view',
         'facilities.room.view',
@@ -246,8 +250,8 @@ describe('R-V2-4: nada que escriba', function () {
         ));
         sort($reads);
 
-        // Lo que se lee: lo de la sección 4 del spec, más los archivos para el SII, lo que es candado del admin (Bitácora,
-        // nombramientos, organigrama, roles, correos y colas, ver la carga académica oculta), lo que no es académico (campus y modalidades inactivos,
+        // Lo que se lee: lo de la sección 4 del spec y Personas y puestos, Organigrama y Bitácora (AZ-03), más los archivos
+        // para el SII, lo que sigue siendo solo del admin (roles, correos y colas, ver la carga académica oculta), lo que no es académico (campus y modalidades inactivos,
         // avisos y atajos del login, parámetros, lo no disponible del menú, importaciones) y lo personal.
         expect($reads)->toBe([
             'academic.career.view',
@@ -367,11 +371,11 @@ describe('R-V2-4: credencial', function () {
             ->assertSeeInOrder(['Subdirección de Servicios Administrativos', 'Consultas en modo lectura todo lo académico del Tec.']);
     });
 
-    it('R-V2-4: su menú tiene lo académico de lectura y no Personas y puestos, Organigrama ni Bitácora', function () {
+    it('R-V2-4: su menú tiene lo académico de lectura, y Personas y puestos, Organigrama y Bitácora (AZ-03), sin lo demás del admin', function () {
         $this->actingAs($this->directivo);
         $menu = array_map(fn (NavigationItem $item): string => $item->label, app(Navigation::class)->visibleTo(app(Actor::class)));
 
-        expect($menu)->toContain('Docentes', 'Alumnos', 'Planes de estudio', 'Departamentos', 'Carreras', 'Materias')
-            ->not->toContain('Personas y puestos', 'Organigrama', 'Bitácora', 'Puestos y permisos', 'Materias por colocar', 'Importaciones');
+        expect($menu)->toContain('Docentes', 'Alumnos', 'Planes de estudio', 'Departamentos', 'Carreras', 'Materias', 'Personas y puestos', 'Organigrama', 'Bitácora')
+            ->not->toContain('Puestos y permisos', 'Correos y colas', 'Materias por colocar', 'Importaciones');
     });
 });

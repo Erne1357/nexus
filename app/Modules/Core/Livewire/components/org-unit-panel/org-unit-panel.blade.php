@@ -2,7 +2,8 @@
     Panel de la unidad elegida en el Organigrama (DESIGN.md, «Organigrama»): la cabecera con el nombre, «clave · tipo»,
     su estado y su ruta; «Titular» (con «Ver en Personas y puestos»), «Puestos vigentes aquí», «Personas», «Unidades
     hijas» (chips que la eligen) y «Acciones». Lo que no se puede hacer queda deshabilitado con su motivo escrito
-    debajo; un departamento académico solo dice dónde se edita (AZ-S13). Desde 1400 px va a la derecha del diagrama,
+    debajo; un departamento académico solo dice dónde se edita (AZ-S13). Cada botón que escribe sale solo con su ability
+    (`$may`): quien solo consulta (el directivo, AZ-03) ve la unidad sin «Nombrar», «Terminar…» ni «Acciones». Desde 1400 px va a la derecha del diagrama,
     pegado arriba al desplazarse; antes, debajo. El formulario (core::org-chart.unit-form) va fuera del panel, para que
     su `sticky` no lo encierre.
 --}}
@@ -63,10 +64,12 @@
                         Puestos vigentes aquí
                         <span class="rounded bg-base-200 px-1.5 font-mono tracking-normal">{{ count($detail->assignments) }}</span>
                     </h3>
-                    <x-button label="Nombrar" icon="o-plus" class="btn-outline btn-sm max-md:h-11" wire:click="openAppoint" spinner="openAppoint" :disabled="$detail->appointBlocker !== null" data-testid="unit-appoint" />
+                    @if ($may['appoint'])
+                        <x-button label="Nombrar" icon="o-plus" class="btn-outline btn-sm max-md:h-11" wire:click="openAppoint" spinner="openAppoint" :disabled="$detail->appointBlocker !== null" data-testid="unit-appoint" />
+                    @endif
                 </div>
 
-                @if ($detail->appointBlocker !== null)
+                @if ($may['appoint'] && $detail->appointBlocker !== null)
                     <p class="-mt-1 mb-2 text-sm text-neutral" data-testid="unit-appoint-blocker">{{ $detail->appointBlocker }}</p>
                 @endif
 
@@ -87,9 +90,9 @@
                                     </div>
                                 </div>
 
-                                @if ($endingId === $row['id'])
+                                @if ($may['end'] && $endingId === $row['id'])
                                     @include('core::people.end-box', ['status' => $row['status'], 'from' => $row['from'], 'earliestLastDay' => $row['earliestLastDay']])
-                                @else
+                                @elseif ($may['end'])
                                     <div class="mt-2 flex flex-col items-start gap-1">
                                         @if ($row['endBlocker'] === null)
                                             <x-button label="Terminar…" wire:click="confirmEnd('{{ $row['id'] }}')" class="btn-outline btn-sm max-md:h-11" data-testid="end-{{ $row['id'] }}" />
@@ -142,55 +145,67 @@
                 </section>
             @endif
 
-            <section aria-labelledby="unit-actions-title">
-                <h3 id="unit-actions-title" class="{{ $label }} mb-2">Acciones</h3>
+            @if ($may['update'] || $may['move'] || $may['create'] || $may['setActive'])
+                <section aria-labelledby="unit-actions-title">
+                    <h3 id="unit-actions-title" class="{{ $label }} mb-2">Acciones</h3>
 
-                <div class="flex flex-wrap gap-2 [&_.btn]:max-md:h-11">
-                    <x-button label="Renombrar" icon="o-pencil" class="btn-outline btn-sm" wire:click="openEdit" spinner="openEdit" :disabled="$detail->lockedReason !== null" data-testid="unit-rename" />
-                    <x-button label="Mover" icon="o-arrows-right-left" class="btn-outline btn-sm" wire:click="openMove" spinner="openMove" :disabled="$detail->moveBlocker !== null" data-testid="unit-move" />
+                    <div class="flex flex-wrap gap-2 [&_.btn]:max-md:h-11">
+                        @if ($may['update'])
+                            <x-button label="Renombrar" icon="o-pencil" class="btn-outline btn-sm" wire:click="openEdit" spinner="openEdit" :disabled="$detail->lockedReason !== null" data-testid="unit-rename" />
+                        @endif
 
-                    @if ($detail->lockedReason === null)
-                        <x-button label="Agregar hija" icon="o-plus" class="btn-outline btn-sm" wire:click="openCreate" spinner="openCreate" :disabled="$detail->childBlocker !== null" data-testid="unit-add-child" />
+                        @if ($may['move'])
+                            <x-button label="Mover" icon="o-arrows-right-left" class="btn-outline btn-sm" wire:click="openMove" spinner="openMove" :disabled="$detail->moveBlocker !== null" data-testid="unit-move" />
+                        @endif
+
+                        @if ($may['create'] && $detail->lockedReason === null)
+                            <x-button label="Agregar hija" icon="o-plus" class="btn-outline btn-sm" wire:click="openCreate" spinner="openCreate" :disabled="$detail->childBlocker !== null" data-testid="unit-add-child" />
+                        @endif
+
+                        @if ($may['setActive'] && $unit->is_active)
+                            <x-button
+                                label="Desactivar"
+                                icon="o-minus-circle"
+                                class="btn-outline btn-error btn-sm"
+                                wire:click="setActive(false)"
+                                x-confirm="Deja de verse en el organigrama; queda en la bitácora."
+                                data-confirm-title="¿Desactivar {{ $unit->name }}?"
+                                data-confirm-button="Desactivar"
+                                data-confirm-tone="error"
+                                spinner="setActive"
+                                :disabled="$detail->deactivationBlockers !== []"
+                                data-testid="unit-deactivate"
+                            />
+                        @elseif ($may['setActive'])
+                            <x-button label="Activar" icon="o-check-circle" class="btn-outline btn-sm" wire:click="setActive(true)" spinner="setActive" :disabled="$detail->activationBlocker !== null" data-testid="unit-activate" />
+                        @endif
+                    </div>
+
+                    @if ($reasons !== [])
+                        <ul class="mt-2 grid gap-1 text-sm text-neutral" data-testid="unit-blockers">
+                            @foreach ($reasons as $reason)
+                                <li>{{ $reason }}</li>
+                            @endforeach
+                        </ul>
                     @endif
 
-                    @if ($unit->is_active)
-                        <x-button
-                            label="Desactivar"
-                            icon="o-minus-circle"
-                            class="btn-outline btn-error btn-sm"
-                            wire:click="setActive(false)"
-                            x-confirm="Deja de verse en el organigrama; queda en la bitácora."
-                            data-confirm-title="¿Desactivar {{ $unit->name }}?"
-                            data-confirm-button="Desactivar"
-                            data-confirm-tone="error"
-                            spinner="setActive"
-                            :disabled="$detail->deactivationBlockers !== []"
-                            data-testid="unit-deactivate"
-                        />
-                    @else
-                        <x-button label="Activar" icon="o-check-circle" class="btn-outline btn-sm" wire:click="setActive(true)" spinner="setActive" :disabled="$detail->activationBlocker !== null" data-testid="unit-activate" />
+                    @if ($errors->has('unit') && ! $showForm && ! $showAppoint)
+                        <x-alert icon="o-x-circle" class="alert-error alert-soft mt-3" data-testid="unit-error">
+                            @foreach ($errors->get('unit') as $message)
+                                <span class="block">{{ $message }}</span>
+                            @endforeach
+                        </x-alert>
                     @endif
-                </div>
-
-                @if ($reasons !== [])
-                    <ul class="mt-2 grid gap-1 text-sm text-neutral" data-testid="unit-blockers">
-                        @foreach ($reasons as $reason)
-                            <li>{{ $reason }}</li>
-                        @endforeach
-                    </ul>
-                @endif
-
-                @if ($errors->has('unit') && ! $showForm && ! $showAppoint)
-                    <x-alert icon="o-x-circle" class="alert-error alert-soft mt-3" data-testid="unit-error">
-                        @foreach ($errors->get('unit') as $message)
-                            <span class="block">{{ $message }}</span>
-                        @endforeach
-                    </x-alert>
-                @endif
-            </section>
+                </section>
+            @endif
         </div>
     </aside>
 
-    @include('core::org-chart.unit-form')
-    @include('core::org-chart.appoint-form')
+    @if ($may['create'] || $may['update'] || $may['move'])
+        @include('core::org-chart.unit-form')
+    @endif
+
+    @if ($may['appoint'])
+        @include('core::org-chart.appoint-form')
+    @endif
 </div>

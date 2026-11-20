@@ -337,6 +337,31 @@ describe('alcance', function () {
         'Subdirección' => [Role::Subdireccion],
     ]);
 
+    it('AZ-03: el directivo ve las jefaturas de solo lectura, sin «Nombrar jefatura» ni «Terminar», y sus métodos dan 403', function () {
+        $user = User::factory()->create();
+        $this->ana->update(['user_id' => $user->id]);
+        $head = headshipFor($user, Role::JefeDepartamento, $this->sc->id, null, ['valid_from' => today()->subMonth()->toDateString()]);
+        $directivo = User::factory()->withRole(Role::Directivo)->create();
+
+        headshipRecord($this->admin, $this->ana)->assertSeeHtml(['data-testid="add-headship"', 'data-testid="end-headship-'.$head->id.'"']);
+
+        headshipRecord($directivo, $this->ana)
+            ->assertSeeHtml('data-testid="headships"')
+            ->assertSee('Sistemas y Computación')
+            ->assertDontSeeHtml(['data-testid="add-headship"', 'data-testid="end-headship-'.$head->id.'"', 'data-testid="save-headship"', 'data-testid="confirm-end-headship"'])
+            ->assertViewHas('canAppoint', false);
+
+        headshipRecord($directivo, $this->ana)->call('createHeadship')->assertForbidden();
+        headshipRecord($directivo, $this->ana)
+            ->set('headKind', 'jefe_departamento')->set('headDepartmentId', $this->ii->id)->set('headFrom', today()->toDateString())
+            ->call('saveHeadship')->assertForbidden();
+        headshipRecord($directivo, $this->ana)->call('confirmEndHeadship', $head->id)->assertForbidden();
+        headshipRecord($directivo, $this->ana)->call('endHeadship')->assertForbidden();
+
+        expect($head->fresh()->valid_to)->toBeNull()
+            ->and(RoleAssignment::where('role', Role::JefeDepartamento)->count())->toBe(1);
+    });
+
     it('la misma persona, admin y coordinadora, con Coordinación activa ve la ficha como admin pero recibe 403 con Coordinación activa', function () {
         $both = User::factory()->admin()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();
 

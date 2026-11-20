@@ -102,10 +102,12 @@ it('da cuatro créditos de lunes a jueves y un crédito el viernes, y resuelve l
         ->and(projectionDays(Group::query()->where('subject_id', $this->poo->id)->sole()))->toBe([5 => '10:00-11:00']);
 });
 
-it('da seis créditos lunes a viernes con la sexta hora el lunes (supuesto por confirmar)', function () {
-    ($this->import)([[$this->block, 4, 'SEIS', 'AID-2501', 6, 'E', 22, '11 - 12']]);
+it('R-PRY-1: da seis créditos de lunes a viernes y deja la sexta hora por acomodar a mano (confirmado el 20 de noviembre de 2026)', function () {
+    $report = ($this->import)([[$this->block, 4, 'SEIS', 'AID-2501', 6, 'E', 22, '11 - 12']]);
 
-    expect(projectionDays(Group::query()->sole()))->toBe([1 => '11:00-13:00', 2 => '11:00-12:00', 3 => '11:00-12:00', 4 => '11:00-12:00', 5 => '11:00-12:00']);
+    expect(projectionDays(Group::query()->sole()))->toBe([1 => '11:00-12:00', 2 => '11:00-12:00', 3 => '11:00-12:00', 4 => '11:00-12:00', 5 => '11:00-12:00'])
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, 'falta acomodar a mano 1 hora')))->toBeTrue()
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, '6 créditos usan la regla de días que es supuesto')))->toBeFalse();
 });
 
 it('omite las filas sin hora o #N/A y reporta lo que no carga: materia, plan, bloque sin clave y créditos', function () {
@@ -221,13 +223,13 @@ it('un grupo igual en otro campus o en otro plan de la misma carrera no es dupli
     expect($inOtherCampus['created'])->toBe(1)->and($inOtherPlan['created'])->toBe(1)->and(Group::query()->count())->toBe(3);
 });
 
-it('avisa de los créditos con regla supuesta y rechaza una sesión que pasaría de medianoche', function () {
+it('avisa de los créditos con regla supuesta (2 y 3) y no los de regla confirmada', function () {
     $report = ($this->import)([
         [$this->block, 1, 'DOS', 'AID-2501', 2, 'O', 30, '21 - 22'],
-        ['', 2, 'SEIS', 'CBD-2415', 6, 'O', 30, '23 - 24'],
+        ['', 2, 'CINCO', 'CBD-2415', 5, 'O', 30, '21 - 22'],
     ]);
 
-    expect($report['created'])->toBe(1)
-        ->and($report['skipped_by_kind'])->toBe(['bad_credits' => 1])
-        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, '2 créditos')))->toBeTrue();
+    expect($report['created'])->toBe(2)
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, '2 créditos usan la regla')))->toBeTrue()
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, '5 créditos usan la regla')))->toBeFalse();
 });

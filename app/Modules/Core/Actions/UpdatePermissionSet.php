@@ -51,7 +51,7 @@ final class UpdatePermissionSet
 
         if (array_key_exists('permissions', $data)) {
             $stale = array_filter($this->rules->keysOf($set), fn (string $key): bool => ! $this->rules->isDeclared($key));
-            $data['permissions'] = $this->rules->permissionKeys(array_values(array_diff($data['permissions'], $stale)));
+            $data['permissions'] = $this->rules->permissionKeys(array_values(array_diff($data['permissions'], $stale)), position: $set->factory_role);
         }
 
         $set = DB::transaction(function () use ($set, $data): PermissionSet {

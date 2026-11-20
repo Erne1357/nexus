@@ -1,7 +1,7 @@
 {{--
     «Organigrama» (DESIGN.md, «Organigrama»), la maqueta B: encabezado; la barra común con la búsqueda (Alpine, sin ir
     al servidor: atenúa las cajas que no coinciden), «Mostrar inactivas», el aviso de departamentos académicos sin jefe
-    y «Nueva unidad»; el diagrama de cajas (core::org-chart.box y core::org-chart.branch), con la Dirección arriba, el
+    y «Nueva unidad» (solo a quien da de alta unidades, no al directivo, que solo consulta); el diagrama de cajas (core::org-chart.box y core::org-chart.branch), con la Dirección arriba, el
     primer nivel en un renglón y los demás colgados de rieles, todo con utilidades de tokens; y el panel de la unidad
     elegida (core::components.org-unit-panel), a la derecha desde 1400 px y debajo antes. Debajo de 768 px el primer
     nivel también cuelga de un riel: el diagrama es una lista.
@@ -61,9 +61,11 @@
             </p>
         @endif
 
-        <x-slot:action>
-            <x-button label="Nueva unidad" icon="o-plus" class="btn-primary" x-on:click="$dispatch('org-unit-create')" data-testid="org-new-unit" />
-        </x-slot:action>
+        @if ($mayCreate)
+            <x-slot:action>
+                <x-button label="Nueva unidad" icon="o-plus" class="btn-primary" x-on:click="$dispatch('org-unit-create')" data-testid="org-new-unit" />
+            </x-slot:action>
+        @endif
     </x-core::catalog-toolbar>
 
     <div class="grid gap-5 min-[1400px]:grid-cols-[minmax(0,1fr)_22rem]">
