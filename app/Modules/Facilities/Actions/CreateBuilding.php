@@ -25,7 +25,7 @@ final class CreateBuilding
     public function __construct(private readonly BuildingRules $rules) {}
 
     /**
-     * @param  array{code: string, name: string}  $data
+     * @param  array{code: string, name: string, map_key?: ?string}  $data
      *
      * @throws ValidationException
      */
@@ -34,11 +34,11 @@ final class CreateBuilding
         $code = $this->rules->normalizeCode($data['code']);
         $name = $this->rules->normalizeName($data['name']);
 
-        return DB::transaction(function () use ($campus, $code, $name): Building {
+        return DB::transaction(function () use ($campus, $code, $name, $data): Building {
             $this->rules->ensureCodeIsFree($campus, $code);
 
             try {
-                $building = Building::create(['campus_id' => $campus->getKey(), 'code' => $code, 'name' => $name, 'is_active' => true]);
+                $building = Building::create(['campus_id' => $campus->getKey(), 'code' => $code, 'name' => $name, 'map_key' => $data['map_key'] ?? null, 'is_active' => true]);
             } catch (UniqueConstraintViolationException) {
                 throw $this->rules->codeTaken($code);
             }
@@ -46,7 +46,7 @@ final class CreateBuilding
             activity()
                 ->performedOn($building)
                 ->event(ActivityEvent::Created)
-                ->withChanges(['attributes' => $building->only(['campus_id', 'code', 'name', 'is_active'])])
+                ->withChanges(['attributes' => $building->only(array_filter(['campus_id', 'code', 'name', $building->map_key === null ? null : 'map_key', 'is_active']))])
                 ->log("Dio de alta el edificio {$building->code}");
 
             BuildingCreated::dispatch($building);

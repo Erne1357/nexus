@@ -30,12 +30,12 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  */
 final class UpdateRoom
 {
-    private const array COLUMNS = ['code', 'name', 'building_id', 'type', 'capacity', 'department_id', 'features', 'is_active'];
+    private const array COLUMNS = ['code', 'name', 'map_key', 'building_id', 'type', 'capacity', 'department_id', 'features', 'is_active'];
 
     public function __construct(private readonly RoomRules $rules) {}
 
     /**
-     * @param  array{code?: string, name?: ?string, building_id?: string, type?: string, capacity?: int, department_id?: ?string, features?: array<array-key, mixed>, is_active?: bool}  $data
+     * @param  array{code?: string, name?: ?string, map_key?: ?string, building_id?: string, type?: string, capacity?: int, department_id?: ?string, features?: array<array-key, mixed>, is_active?: bool}  $data
      *
      * @throws ValidationException
      */
