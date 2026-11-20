@@ -84,10 +84,15 @@ final class PermissionGrantRules
      * declara ni unidad ni carrera, y el puesto no fija en su nombramiento ninguna de las dimensiones que declara (el
      * campus o la modalidad; el jefe y la Subdirección son generales en ellas). Se puede dar, pero el panel lo avisa
      * («Valdrá en todo el Tec»). Crear periodos, abrir la validación o importar lo son para cualquier puesto; abrir el
-     * periodo en una modalidad, para el jefe y la Subdirección, no para el coordinador, que lleva modalidad.
+     * periodo en una modalidad, para el jefe y la Subdirección, no para el coordinador, que lleva modalidad. Un puesto que
+     * lee en todo el Tec (el directivo, AZ-03) solo recibe permisos de lectura, y cada uno vale en todo el Tec.
      */
     public function isInstitutionWide(Role $role, Permission $permission): bool
     {
+        if ($role->readsWholeTec() && $permission->isReadOnly() && ! $permission->isPersonal()) {
+            return true;
+        }
+
         if ($permission->isPersonal() || ! self::declaresNoUnitNorCareer($permission)) {
             return false;
         }

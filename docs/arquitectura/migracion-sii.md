@@ -79,7 +79,7 @@ El penúltimo paso le da a cada alumno su usuario con su NIP del SII (AC-10 a AC
 
 ## Titulares del organigrama (`nombramientos`)
 
-Antes de `verificacion`, el paso nombra a los titulares del organigrama oficial (R-V2-6, confirmado el 19 de noviembre de 2026; reglas-de-negocio.md, «Nombramientos del organigrama»).
+Antes de `verificacion`, el paso nombra a los titulares del organigrama oficial (R-V2-5, confirmado el 19 de noviembre de 2026; reglas-de-negocio.md, «Nombramientos del organigrama»).
 
 - **Qué lee.** `titulares.csv`, un archivo **opcional** de la carpeta del SII, fuera de git: `unidad` (el código de la unidad en Nexus), `nombre` (completo, como lo imprime el organigrama oficial) y `desde` (AAAA-MM-DD). No se archiva en `sii_archivo` y no entra en `verificacion`. Sin él, el paso avisa una vez y no hace nada.
 - **Quién es.** El RFC sale del nombre: se normaliza (mayúsculas, sin acentos ni puntuación) y coincide con la persona de `docentes` o `docentes2` cuando todas sus palabras están en su nombre completo. Con exactamente un RFC, se nombra; con ninguno o con varios, avisa y no nombra.

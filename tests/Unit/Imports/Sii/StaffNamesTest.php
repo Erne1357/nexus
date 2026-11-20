@@ -3,7 +3,7 @@
 use App\Modules\Imports\Sii\StaffNames;
 
 /*
-| Búsqueda del RFC de un titular por su nombre (R-V2-6): sin acentos ni puntuación, todas sus palabras dentro del
+| Búsqueda del RFC de un titular por su nombre (R-V2-5): sin acentos ni puntuación, todas sus palabras dentro del
 | nombre del SII, y exactamente una persona o nada. Datos sintéticos.
 */
 

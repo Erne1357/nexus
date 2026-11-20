@@ -4,12 +4,14 @@ namespace App\Modules\Imports\Sii\Steps;
 
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Actions\SyncStaffMember;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
+use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Imports\Sii\SiiBatchReport;
 use App\Modules\Imports\Sii\SiiFile;
@@ -22,7 +24,7 @@ use Carbon\Exceptions\InvalidFormatException;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Los titulares del organigrama oficial (R-V2-6, confirmado el 19 de noviembre de 2026; que la División de Estudios
+ * Los titulares del organigrama oficial (R-V2-5, confirmado el 19 de noviembre de 2026; que la División de Estudios
  * de Posgrado e Investigación se nombre sobre el departamento 110900 es supuesto por confirmar: el archivo trae la
  * unidad, aquí no hay nada fijo). Lee `titulares.csv` (`unidad`, `nombre`, `desde`; opcional: sin él avisa una vez y
  * no hace nada), busca el RFC de cada nombre entre el personal del SII (StaffNames: exactamente una persona o no se
@@ -67,7 +69,7 @@ final class AppointmentsStep implements SiiStep
         $staff2 = $this->byRfc($export->reader(SiiFile::Docentes2)->rows(StaffStep::COLUMNS2));
         $names = new StaffNames($staff, $staff2);
 
-        $rows = $appointed = $unchanged = 0;
+        $rows = $appointed = $unchanged = $conflicts = 0;
         $incidents = [];
 
         foreach ($export->reader(SiiFile::Titulares)->rows() as $line => $row) {
@@ -118,12 +120,16 @@ final class AppointmentsStep implements SiiStep
             }
 
             try {
-                $user = $this->userFor($rfc, $staff[$rfc] ?? null, $staff2[$rfc] ?? null);
+                $user = $this->userFor($rfc, $staff[$rfc] ?? null, $staff2[$rfc] ?? null, $conflicts);
                 app(AppointRole::class)->handle($user, $role, null, $unit, null, $from);
                 $appointed++;
             } catch (ValidationException) {
                 $warn('Las reglas de nombramiento lo rechazan (usuario inactivo o fechas que chocan): no se nombra.');
             }
+        }
+
+        if ($conflicts > 0) {
+            $incidents[] = ['level' => 'warning', 'ref' => $file, 'message' => "{$conflicts} docente(s) titulares tienen un usuario que ya no se puede ligar a su ficha (otro docente o un puesto que no es de docente): quedaron sin ligar y el admin lo resuelve."];
         }
 
         $dry = $migration->dryRun();
@@ -146,7 +152,7 @@ final class AppointmentsStep implements SiiStep
     private function roleFor(OrgUnit $unit): Role
     {
         return match (true) {
-            $unit->code === 'SUB-ACADEMICA' => Role::Subdireccion,
+            $unit->code === OrgTree::ACADEMIC => Role::Subdireccion,
             $unit->kind === OrgUnitKind::Direccion, $unit->kind === OrgUnitKind::Subdireccion => Role::Directivo,
             default => Role::JefeDepartamento,
         };
@@ -176,11 +182,11 @@ final class AppointmentsStep implements SiiStep
      * @param  array<string, string>|null  $d
      * @param  array<string, string>|null  $d2
      */
-    private function userFor(string $rfc, ?array $d, ?array $d2): User
+    private function userFor(string $rfc, ?array $d, ?array $d2, int &$conflicts): User
     {
         $teacher = Teacher::query()->where('rfc', $rfc)->whereNull('user_id')->first();
-        if ($teacher !== null) {
-            app(SyncTeacherAccess::class)->handle($teacher);
+        if ($teacher !== null && app(SyncTeacherAccess::class)->handle($teacher) === AccessSync::Conflict) {
+            $conflicts++;
         }
 
         return User::query()->where('username', $rfc)->first()

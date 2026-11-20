@@ -3,6 +3,7 @@
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Imports\Sii\SiiExport;
@@ -14,7 +15,7 @@ use Spatie\Activitylog\Models\Activity;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| Paso `nombramientos` de imports:migrate-sii (R-V2-6): nombra a los titulares de titulares.csv por el RFC que se
+| Paso `nombramientos` de imports:migrate-sii (R-V2-5): nombra a los titulares de titulares.csv por el RFC que se
 | encuentra por nombre en el personal del SII. Datos sintéticos.
 */
 
@@ -145,4 +146,20 @@ it('un ensayo no escribe nada y reporta lo que haría', function () {
 
     expect($reports[0]->created)->toBe(1)
         ->and(User::query()->count())->toBe(0);
+});
+
+it('avisa en agregado, sin nombres ni RFC, cuando el usuario de un docente titular no se puede ligar a su ficha', function () {
+    $existing = User::factory()->create(['username' => 'GOLM800101AA1']);
+    RoleAssignment::factory()->for($existing)->create(['role' => Role::Admin, 'valid_from' => '2026-01-01', 'valid_to' => null]);
+    Teacher::factory()->create(['rfc' => 'GOLM800101AA1', 'user_id' => null]);
+    ($this->titulares)([['DIRECCION', 'Maria Gomez Luna', '2026-03-04']]);
+
+    $reports = ($this->run)();
+
+    $aggregate = collect($reports[0]->incidents)->filter(fn (array $i): bool => str_contains($i['message'], 'no se puede ligar'))->values();
+
+    expect($aggregate)->toHaveCount(1)
+        ->and($aggregate[0]['message'])->toContain('1 docente(s)')
+        ->and(json_encode($reports[0]->incidents))->not->toContain('GOLM')->not->toContain('Gomez')
+        ->and($reports[0]->warnings)->toBe(1);
 });

@@ -139,7 +139,7 @@ it('CF-03 y CF-04: el catálogo marca para el drawer de agregar lo que valdría 
         ->and($catalog['core.term.open']['institution_wide_for'])->toBe([Role::Subdireccion, Role::JefeDepartamento])
         ->and($catalog['core.modality.view']['institution_wide_for'])->toBe([Role::Subdireccion, Role::Directivo, Role::JefeDepartamento])
         ->and($catalog['students.student.view']['institution_wide'])->toBeFalse()
-        ->and($catalog['students.student.view']['institution_wide_for'])->toBe([])
+        ->and($catalog['students.student.view']['institution_wide_for'])->toBe([Role::Directivo])
         ->and($catalog['staffing.my_load.view']['institution_wide'])->toBeFalse()
         ->and($catalog['core.campus.update']['blocked_for'])->toBe(array_fill_keys(
             ['subdireccion', 'directivo', 'jefe_departamento', 'jefe_proyecto_docente', 'coordinador', 'docente', 'alumno'],
