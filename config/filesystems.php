@@ -55,6 +55,8 @@ return [
         'student_photos' => [
             'driver' => 'local',
             'root' => env('STUDENT_PHOTOS_PATH', storage_path('app/fotos')),
+            // Nexus solo lee (en el servidor es un montaje de solo lectura): no crea la carpeta; si no existe, no hay fotos.
+            'lazy_root_creation' => true,
             'throw' => false,
             'report' => false,
         ],

@@ -68,6 +68,18 @@ it('AC-20: la foto se busca en <AAAA>/<número de control> con jpg, jpeg, png o 
         ->and(app(StudentPhotos::class)->locate('../2021/21111182'))->toBeNull();
 });
 
+it('AC-20: si la carpeta de fotos no existe, no hay foto y nada truena (Nexus no la crea)', function () {
+    $missing = storage_path('framework/testing/sin-fotos-'.bin2hex(random_bytes(4)));
+    config(['filesystems.disks.student_photos.root' => $missing]);
+    Storage::forgetDisk('student_photos');
+
+    expect(app(StudentPhotos::class)->locate('21111182'))->toBeNull()
+        ->and(is_dir($missing))->toBeFalse();
+
+    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'credencial'])->test('students::pages.my-record')
+        ->assertOk()->assertSeeInOrder(['data-testid="credential-photo"', 'AL']);
+});
+
 it('AC-20: el alumno ve su propia foto por su ruta y sin foto recibe 404', function () {
     $this->actingAs($this->user)->get(route('students.my-record.photo'))->assertNotFound();
 
