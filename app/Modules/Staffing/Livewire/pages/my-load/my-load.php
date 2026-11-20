@@ -193,7 +193,7 @@ new #[Title('Mi carga')] class extends Component
      */
     private function inProgressTerm(Actor $context): ?Term
     {
-        return Term::containing(CarbonImmutable::now(config('app.timezone'))) ?? $context->activeTerm();
+        return Term::query()->containing(CarbonImmutable::now(config('app.timezone')))->orderByDesc('code')->first() ?? $context->activeTerm();
     }
 
     /**

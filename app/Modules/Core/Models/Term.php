@@ -72,12 +72,15 @@ class Term extends Model
     }
 
     /**
-     * El periodo en curso: el que contiene el día por sus fechas (`starts_on` a `ends_on`), sin importar cuál es el
-     * activo para capturar carga. Si dos lo contienen, el de código mayor. Nulo si ninguno (entre semestres).
+     * Los periodos cuyas fechas (`starts_on` a `ends_on`) contienen el día: el periodo en curso, sin importar cuál es el
+     * activo para capturar carga (P9). Si dos lo contienen, quien llama toma el de código mayor; ninguno entre semestres.
+     *
+     * @param  Builder<self>  $query
      */
-    public static function containing(CarbonInterface $day): ?self
+    #[Scope]
+    protected function containing(Builder $query, CarbonInterface $day): void
     {
-        return self::query()->whereDate('starts_on', '<=', $day)->whereDate('ends_on', '>=', $day)->orderByDesc('code')->first();
+        $query->whereDate('starts_on', '<=', $day)->whereDate('ends_on', '>=', $day);
     }
 
     /**

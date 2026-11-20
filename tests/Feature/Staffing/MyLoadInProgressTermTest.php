@@ -115,13 +115,13 @@ function mlTermSessions(): array
 }
 
 it('el periodo en curso es el que contiene hoy por sus fechas, en la zona del Tec, y no el activo', function () {
-    expect(Term::containing(now('America/Ciudad_Juarez'))->code)->toBe('20263');
+    expect(Term::query()->containing(now('America/Ciudad_Juarez'))->orderByDesc('code')->first()->code)->toBe('20263');
 
     $this->travelTo(CarbonImmutable::parse('2027-02-01 10:00', 'America/Ciudad_Juarez'));
-    expect(Term::containing(now('America/Ciudad_Juarez'))->code)->toBe('20271');
+    expect(Term::query()->containing(now('America/Ciudad_Juarez'))->orderByDesc('code')->first()->code)->toBe('20271');
 
     $this->travelTo(CarbonImmutable::parse('2026-12-20 10:00', 'America/Ciudad_Juarez'));
-    expect(Term::containing(now('America/Ciudad_Juarez')))->toBeNull();
+    expect(Term::query()->containing(now('America/Ciudad_Juarez'))->orderByDesc('code')->first())->toBeNull();
 });
 
 it('con el SII muestra el horario del periodo en curso por RFC, con materia, grupo, horario y salón, en solo lectura', function () {
