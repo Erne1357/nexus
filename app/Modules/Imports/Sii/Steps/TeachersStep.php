@@ -13,7 +13,8 @@ use App\Modules\Imports\Sii\TeacherRoster;
  * `TeacherRoster` para quién es docente, el cambio de RFC (estatus 04), el departamento, el nombre, el correo y
  * la fecha de ingreso. Un solo lote `teachers` con un renglón por docente (su adscripción es el departamento);
  * el grado queda vacío con un aviso agregado. Recuerda `teacher_for_rfc`: cada RFC del SII, también los viejos
- * de estatus 04, al RFC del docente en Nexus.
+ * de estatus 04, al RFC del docente en Nexus, y `active_teacher_rfcs`: los RFC de los docentes activos, que el paso
+ * `personal` suma a la plantilla.
  */
 final class TeachersStep implements SiiStep
 {
@@ -30,6 +31,8 @@ final class TeachersStep implements SiiStep
         /** @var TeacherRoster $roster */
         $roster = $migration->remember('teacher_roster', fn (): TeacherRoster => TeacherRoster::build($migration, $departmentForArea));
         $migration->remember('teacher_for_rfc', fn (): array => $roster->teacherFor);
+
+        $migration->remember('active_teacher_rfcs', fn (): array => array_column(array_filter($roster->rows, fn (array $row): bool => $row['active'] === 'Sí'), 'rfc'));
 
         yield new SiiBatch('teachers', 'docentes.csv', $roster->rows, incidents: $roster->incidents);
     }

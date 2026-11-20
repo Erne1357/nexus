@@ -364,3 +364,12 @@ it('migra docentes e historial de punta a punta sin filas con error', function (
 
     File::deleteDirectory($curated);
 });
+
+it('recuerda los RFC de los docentes activos para el paso personal', function () {
+    SiiFixtures::writeStaff($this->dir, [teacherStaffRow('ACTI800101AB1'), teacherStaffRow('INAC800202AB2')], []);
+    SiiFixtures::writeGroups($this->dir, [['20263', 'X', 'A', 'ACTI800101AB1'], ['20231', 'X', 'A', 'INAC800202AB2']]);
+
+    $run = teachersStepRun($this->dir);
+
+    expect($run['migration']->remember('active_teacher_rfcs', fn () => []))->toBe(['ACTI800101AB1']);
+});

@@ -32,11 +32,15 @@ use Illuminate\Support\Facades\DB;
  *   KardexSubjects). Los renglones de un alumno que caen en la misma fila del kárdex (alumno, materia de Nexus y periodo)
  *   se ordenan como en KardexStep (la aprobada, la de mayor calificación y la última línea): los que pierden «se quedan
  *   uno». Un estatus distinto de A, R y P no pasa al kárdex y es «sin explicar» antes que cualquier otro diagnóstico.
+ * - Una línea es aprobada con la regla K4: `estatus_materia` A, salvo la de calificación 0 o vacía y tipo de evaluación de
+ *   examen (KardexCodes::EXAM_TYPES), que el kárdex guarda como reprobada. `materias.aprobada_k4` lo dice.
  * - `alumnos`: un renglón por alumno de `alumnos_todos`. Según el SII (regla confirmada), está completo cuando los
- *   créditos de sus materias aprobadas (`estatus_materia` A) que están en su propia retícula llegan a los créditos
+ *   créditos de sus materias aprobadas (K4; `estatus_materia` A que no es una reprobada vieja) que están en su propia retícula llegan a los créditos
  *   totales de esa retícula (GridTotalCredits, la regla del paso `carreras`: solo un entero mayor que cero; sin él no
  *   está completo); una materia aprobada dos veces cuenta una vez. Según Nexus, cuando `student_progress.credits_approved`
  *   llega a `study_plans.total_credits` (el avance ya cuenta lo aprobado en materias pendientes del plan).
+ *   `completo_sii_exportado` es lo mismo con el SII tal cual (toda A aprobada, sin K4): la diferencia de egresados y
+ *   titulados (EGR y TIT) se avisa aparte, no es un error.
  *   `reticula_migrada` dice si su retícula está en `$planFor` (la migración la pasa a Nexus).
  * - `_corrida`: un renglón con la carpeta de la exportación, cuándo se verificó, el estado (VerificationState) y la
  *   razón.
@@ -164,7 +168,8 @@ final class VerifySiiMigration
             creditos_nexus integer,
             resultado_nexus text,
             clave_nexus_esperada text,
-            diagnostico text not null
+            diagnostico text not null,
+            aprobada_k4 boolean not null
         )");
         DB::statement("comment on table {$schema}.materias is 'Un renglón por renglón de sii_archivo.historia_alumno (_linea): la materia y el plan de Nexus a los que llegó y su diagnóstico.'");
 
@@ -186,7 +191,8 @@ final class VerifySiiMigration
             creditos_nexus integer,
             materias_nexus integer,
             completo_nexus boolean,
-            creditos_perdidos numeric not null
+            creditos_perdidos numeric not null,
+            completo_sii_exportado boolean not null
         )");
         DB::statement("comment on table {$schema}.alumnos is 'Un renglón por alumno de sii_archivo.alumnos_todos (_linea): créditos y si está completo según el SII y según Nexus.'");
     }
@@ -248,6 +254,16 @@ final class VerifySiiMigration
         }
     }
 
+    /**
+     * La condición SQL de una línea aprobada con K4: A, salvo calificación 0 o vacía con tipo de evaluación de examen.
+     */
+    private function approvedSql(string $alias): string
+    {
+        $types = implode(', ', array_map(fn (string $type): string => "'{$type}'", KardexCodes::EXAM_TYPES));
+
+        return "(upper({$alias}.estatus_materia) = 'A' and not ({$alias}.calificacion ~ '^[[:space:]]*0*[[:space:]]*$' and upper(trim({$alias}.tipo_evaluacion)) in ({$types})))";
+    }
+
     private function subjectsSql(): string
     {
         $schema = self::SCHEMA;
@@ -255,17 +271,18 @@ final class VerifySiiMigration
         $credits = $this->numeric('creditos_materia');
         $first = KardexCodes::FIRST_YEAR;
         $last = (int) date('Y') + 1;
+        $approved = $this->approvedSql('h');
         $diagnosis = fn (VerificationDiagnosis $case): string => "'".str_replace("'", "''", $case->value)."'";
 
         return <<<SQL
             insert into {$schema}.materias (_linea, no_de_control, periodo, periodo_nexus, clave_sii, estatus_sii, calificacion_sii,
                 reticula_sii, en_reticula_sii, creditos_sii, plan_nexus, clave_nexus, creditos_nexus, resultado_nexus, clave_nexus_esperada,
-                diagnostico)
+                diagnostico, aprobada_k4)
             with historia as (
                 select h._linea, h.no_de_control, h.periodo, h.materia, h.estatus_materia, h.calificacion,
                     case when h.periodo ~ '^[0-9]{4}[123]$' then case when left(h.periodo, 4)::int between {$first} and {$last} then h.periodo end end as periodo_nexus,
                     upper(h.estatus_materia) in ('A', 'R', 'P') as estatus_valido,
-                    upper(h.estatus_materia) = 'A' as aprobada,
+                    {$approved} as aprobada,
                     case when h.calificacion ~ '^[0-9]{1,3}$' then case when h.calificacion::int <= 100 then h.calificacion::int else 0 end else 0 end as calificacion_valida
                 from sii_archivo.historia_alumno h
             ), alumno as (
@@ -329,7 +346,8 @@ final class VerifySiiMigration
                     when not x.en_reticula then {$diagnosis(VerificationDiagnosis::OutsideSiiGrid)}
                     when x.creditos is distinct from s.credits then {$diagnosis(VerificationDiagnosis::CreditsDiffer)}
                     else {$diagnosis(VerificationDiagnosis::Same)}
-                end
+                end,
+                x.aprobada
             from renglon x
             left join kardex k on k.student_id = x.student_id and k.periodo = coalesce(x.periodo_nexus, '') and k.clave = upper(x.materia)
             left join subjects s on s.id = k.subject_id
@@ -345,11 +363,12 @@ final class VerifySiiMigration
         $grids = self::GRIDS;
         $credits = $this->numeric('creditos_materia');
         $field = $this->numeric('a.creditos_aprobados');
+        $approved = $this->approvedSql('h');
 
         return <<<SQL
             insert into {$schema}.alumnos (_linea, no_de_control, reticula_sii, estatus_sii, creditos_requeridos_sii, creditos_campo_sii,
                 creditos_sii, materias_sii, completo_sii, reticula_migrada, en_nexus, plan_nexus, estatus_nexus, creditos_requeridos_nexus,
-                creditos_nexus, materias_nexus, completo_nexus, creditos_perdidos)
+                creditos_nexus, materias_nexus, completo_nexus, creditos_perdidos, completo_sii_exportado)
             with alumno as (
                 select distinct on (no_de_control) _linea, no_de_control, carrera, reticula, estatus_alumno, creditos_aprobados
                 from sii_archivo.alumnos_todos
@@ -359,14 +378,17 @@ final class VerifySiiMigration
                 from sii_archivo.materias_carreras
                 group by carrera, reticula, materia
             ), aprobadas as (
-                select h.no_de_control, h.materia, max(l.creditos) as creditos, bool_or(l.materia is not null) as en_reticula
+                select h.no_de_control, h.materia, max(l.creditos) as creditos, bool_or(l.materia is not null) as en_reticula,
+                    bool_or({$approved}) as aprobada_k4, max(l.creditos) filter (where {$approved}) as creditos_k4
                 from sii_archivo.historia_alumno h
                 join alumno a on a.no_de_control = h.no_de_control
                 left join lugar l on l.carrera = a.carrera and l.reticula = a.reticula and l.materia = h.materia
                 where h.estatus_materia in ('A', 'a')
                 group by h.no_de_control, h.materia
             ), sii as (
-                select no_de_control, coalesce(sum(creditos) filter (where en_reticula), 0) as creditos, count(*) filter (where en_reticula) as materias
+                select no_de_control, coalesce(sum(creditos_k4) filter (where en_reticula and aprobada_k4), 0) as creditos,
+                    count(*) filter (where en_reticula and aprobada_k4) as materias,
+                    coalesce(sum(creditos) filter (where en_reticula), 0) as creditos_exportado
                 from aprobadas
                 group by no_de_control
             )
@@ -374,7 +396,8 @@ final class VerifySiiMigration
                 coalesce(x.creditos, 0), coalesce(x.materias, 0), coalesce(coalesce(x.creditos, 0) >= c.total, false), coalesce(c.migrada, false),
                 st.id is not null, sp.code, st.status, sp.total_credits, p.credits_approved, p.subjects_approved,
                 case when st.id is not null then coalesce(p.credits_approved >= sp.total_credits, false) end,
-                coalesce(x.creditos, 0) - coalesce(p.credits_approved, 0)
+                coalesce(x.creditos, 0) - coalesce(p.credits_approved, 0),
+                coalesce(coalesce(x.creditos_exportado, 0) >= c.total, false)
             from alumno a
             left join {$grids} c on c.carrera = a.carrera and c.reticula = a.reticula
             left join sii x on x.no_de_control = a.no_de_control
@@ -443,7 +466,7 @@ final class VerifySiiMigration
 
         $byKey = fn (VerificationDiagnosis $diagnosis, bool $approvedInSiiGrid = false): array => $subjects()
             ->where('diagnostico', $diagnosis->value)
-            ->when($approvedInSiiGrid, fn ($query) => $query->where('en_reticula_sii', true)->whereRaw("upper(estatus_sii) = 'A'"))
+            ->when($approvedInSiiGrid, fn ($query) => $query->where('en_reticula_sii', true)->where('aprobada_k4', true))
             ->selectRaw("clave_sii, string_agg(distinct clave_nexus, ', ' order by clave_nexus) as claves_nexus, count(*) as renglones")
             ->groupBy('clave_sii')->orderBy('clave_sii')->get()
             ->map(fn (object $row): array => ['materia' => (string) $row->clave_sii, 'subjects' => (string) $row->claves_nexus, 'rows' => (int) $row->renglones])
@@ -475,6 +498,8 @@ final class VerifySiiMigration
             $byKey(VerificationDiagnosis::OutsideSiiGrid),
             $creditsDiffer,
             $progressSeconds,
+            (int) $students()->whereIn('estatus_sii', ['EGR', 'TIT'])->where('completo_sii_exportado', true)->count(),
+            (int) $students()->whereIn('estatus_sii', ['EGR', 'TIT'])->where('completo_sii', true)->count(),
         );
     }
 

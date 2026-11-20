@@ -32,7 +32,7 @@ it('no conoce otro tipo de evaluación', function (string $type) {
 })->with(['vacío' => [''], 'número' => ['8'], 'otro' => ['XX']]);
 
 it('A es aprobada y R y P son reprobadas', function (string $status, ?KardexResult $result) {
-    expect(KardexCodes::result($status))->toBe($result);
+    expect(KardexCodes::result($status, '85', 'O1'))->toBe($result);
 })->with([
     'A' => ['A', KardexResult::Aprobada],
     'R' => ['R', KardexResult::Reprobada],
@@ -41,6 +41,27 @@ it('A es aprobada y R y P son reprobadas', function (string $status, ?KardexResu
     'otro' => ['X', null],
     'vacío' => ['', null],
 ]);
+
+it('K4: una A con 0 o vacía y tipo de examen es reprobada', function (string $type, string $grade) {
+    expect(KardexCodes::result('A', $grade, $type))->toBe(KardexResult::Reprobada)
+        ->and(KardexCodes::grade('0', KardexResult::Reprobada))->toBe(0);
+})->with(function () {
+    foreach (KardexCodes::EXAM_TYPES as $type) {
+        foreach (['0', '', '00'] as $grade) {
+            yield "{$type} con «{$grade}»" => [$type, $grade];
+        }
+    }
+});
+
+it('K2: una A con 0 de convalidación sigue aprobada sin calificación', function (string $type) {
+    expect(KardexCodes::result('A', '0', $type))->toBe(KardexResult::Aprobada)
+        ->and(KardexCodes::grade('0', KardexResult::Aprobada))->toBeNull();
+})->with(['RC', 'RU', 'AC', 'EA', 'CG']);
+
+it('una A de 1 a 69 sigue aprobada con su calificación', function () {
+    expect(KardexCodes::result('A', '65', 'O1'))->toBe(KardexResult::Aprobada)
+        ->and(KardexCodes::grade('65', KardexResult::Aprobada))->toBe(65);
+});
 
 it('guarda la calificación, salvo el 0 de una aprobada (K2)', function (string $value, KardexResult $result, ?int $grade) {
     expect(KardexCodes::grade($value, $result))->toBe($grade);

@@ -67,7 +67,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
         ->assertOk()
         ->assertSee('<title>Organigrama · Nexus</title>', false)
         ->assertSee('La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Administración › Departamentos.')
-        ->assertSee('Mostrar inactivas (1)')
+        ->assertSee('Mostrar inactivas (2)')
         ->assertSee('1 departamento académico sin jefe')
         ->assertSee('Nueva unidad');
 
@@ -175,12 +175,12 @@ it('da de alta, renombra, mueve, desactiva y activa desde el panel, y avisa al d
 it('mover a la misma madre o guardar sin cambios no avisa al diagrama', function () {
     $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $this->services->id);
 
-    $panel->call('openMove')->assertSet('parent', $this->academic->id)->call('move')
+    $panel->call('openMove')->assertSet('parent', $this->planning->id)->call('move')
         ->assertHasNoErrors()
         ->assertNotDispatched('org-chart-changed')
         ->assertSet('showForm', false);
 
-    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección Académica');
+    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección de Planeación y Vinculación');
 
     $panel->call('openEdit')->call('save')
         ->assertHasNoErrors()
@@ -206,7 +206,7 @@ it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
 
     expect($dom->querySelector('[data-testid="unit-deactivate"]')->hasAttribute('disabled'))->toBeTrue()
         ->and($dom->querySelector('[data-testid="unit-move"]')->hasAttribute('disabled'))->toBeTrue()
-        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 6 unidades hijas activas; muévelas o desactívalas primero.')
+        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 5 unidades hijas activas; muévelas o desactívalas primero.')
         ->toContain('Mover: Nexus usa la Subdirección Académica: no se mueve.');
 
     $panel->dispatch('org-unit-picked', id: $this->systems->id);
@@ -554,7 +554,7 @@ describe('otros perfiles', function () {
         expect(OrgUnit::where('code', 'BECAS')->exists())->toBeFalse()
             ->and($this->head->roleAssignments()->sole()->valid_to)->toBeNull()
             ->and($this->coordinator->roleAssignments()->count())->toBe(1)
-            ->and($this->services->fresh())->parent_id->toBe($this->academic->id)->is_active->toBeTrue()
+            ->and($this->services->fresh())->parent_id->toBe($this->planning->id)->is_active->toBeTrue()
             ->and(activitySince()->count())->toBe(0);
     })->with(['pick', 'openCreate', 'openEdit', 'openMove', 'save', 'move', 'setActive', 'openAppoint', 'choosePerson', 'appoint', 'confirmEnd', 'cancelEnd', 'end']);
 });

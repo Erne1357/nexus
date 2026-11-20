@@ -31,6 +31,7 @@ use App\Modules\Imports\Sii\SiiVerification;
  * - un error por alumno completo en el SII e incompleto o ausente en Nexus, con su número de control
  *   (`_incidencias.csv` vive en `storage/`);
  * - un error por clave del SII de los renglones que no pasaron sin explicación;
+ * - una advertencia (K4) si los egresados y titulados completos con el SII tal cual y con K4 no coinciden;
  * - una advertencia por clave del SII aprobada en la retícula del alumno en el SII que en Nexus no cuenta, una por
  *   clave fuera de esa retícula que en Nexus sí cuenta y una por materia con créditos distintos.
  * A la consola va solo el resumen: nunca un número de control.
@@ -153,6 +154,10 @@ final class VerificationStep implements SiiStep
 
         foreach ($verification->missingFromNexus as $student) {
             $incidents[] = $this->issue('error', $student['control'], "Completo en el SII ({$student['sii']} de {$student['required']} créditos de la retícula {$student['grid']}), que se migra, y no está en Nexus.");
+        }
+
+        if ($verification->graduatesCompleteAsExported !== $verification->graduatesCompleteK4) {
+            $incidents[] = $this->issue('warning', 'K4', "Egresados y titulados (EGR y TIT) completos: {$verification->graduatesCompleteAsExported} con el SII tal cual y {$verification->graduatesCompleteK4} con K4 (la A con calificación 0 o vacía de examen es reprobada): ".($verification->graduatesCompleteAsExported - $verification->graduatesCompleteK4).' dejan de estar completos.');
         }
 
         $errors = count($verification->incompleteInNexus) + count($verification->missingFromNexus);

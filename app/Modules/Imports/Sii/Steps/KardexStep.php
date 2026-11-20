@@ -21,7 +21,7 @@ use RuntimeException;
  * Kárdex del SII (reglas-de-negocio.md, "Migración del kárdex del SII"). `historia_alumno` es el kárdex: cada renglón
  * de un alumno que ya está en Nexus pasa con la materia de su retícula (`subject_for_plan` con el plan del alumno; si
  * su plan no tiene esa clave del SII, el alias general `subject_for`), la clave original del SII, su resultado, su
- * calificación y su oportunidad (KardexCodes, K1 y K2). En los periodos cerrados el kárdex sale solo de la historia (K3, confirmado el
+ * calificación y su oportunidad (KardexCodes, K1, K2 y K4). En los periodos cerrados el kárdex sale solo de la historia (K3, confirmado el
  * 9 de noviembre de 2026): lo que la selección trae y la historia no, solo se cuenta. Un periodo de
  * `seleccion_materias` que todavía no pasó a la historia (menos de la mitad de sus inscritos están en ella) está en
  * curso, y sus inscritos (`status_seleccion` I) pasan como «cursando», con oportunidad 2 si `repeticion` es S;
@@ -88,7 +88,7 @@ final class KardexStep implements SiiStep
         }
 
         $students = $this->students();
-        $tally = ['lines' => [], 'students' => 0, 'subjects' => [], 'types' => [], 'repeated' => 0];
+        $tally = ['lines' => [], 'students' => 0, 'subjects' => [], 'types' => [], 'repeated' => 0, 'failed' => []];
         $best = $this->rank($export, $subjects, $students, $tally);
         [$current, $selectionIncidents] = $this->current($export, $subjects, $students, $best);
 
@@ -107,7 +107,7 @@ final class KardexStep implements SiiStep
      * Primera pasada por la historia: por llave, el valor de la línea que gana.
      *
      * @param  array<string|int, string>  $students  plan de Nexus por número de control
-     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int}  $tally
+     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>}  $tally
      * @return array<int, int>
      */
     private function rank(SiiExport $export, KardexSubjects $subjects, array $students, array &$tally): array
@@ -138,7 +138,7 @@ final class KardexStep implements SiiStep
      * lo que no pasa o no se entiende (solo en la primera pasada).
      *
      * @param  array<string|int, string>  $students  plan de Nexus por número de control
-     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int}|null  $tally
+     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>}|null  $tally
      * @return Generator<int, array{key: int, fingerprint: int, rank: int, row: array<string, string|int>}>
      */
     private function history(SiiExport $export, KardexSubjects $subjects, array $students, ?array &$tally = null): Generator
@@ -146,7 +146,7 @@ final class KardexStep implements SiiStep
         $file = $export->fileName(SiiFile::HistoriaAlumno);
 
         foreach ($export->reader(SiiFile::HistoriaAlumno)->rows(self::HISTORY_COLUMNS) as $line => $row) {
-            $result = KardexCodes::result($row['estatus_materia']);
+            $result = KardexCodes::result($row['estatus_materia'], $row['calificacion'], $row['tipo_evaluacion']);
             $unreadable = match (true) {
                 $row['no_de_control'] === '' => 'Esta línea no trae número de control: no pasa al kárdex.',
                 $result === null => 'El estatus de la materia de esta línea no es A, R ni P: no pasa al kárdex.',
@@ -177,6 +177,11 @@ final class KardexStep implements SiiStep
             $attempt = KardexCodes::attempt($row['tipo_evaluacion']);
 
             if ($tally !== null) {
+                if ($result === KardexResult::Reprobada && strtoupper(trim($row['estatus_materia'])) === 'A') {
+                    $decade = $term === '' ? 'sin periodo' : substr($term, 0, 3).'0s';
+                    $tally['failed'][$decade] = ($tally['failed'][$decade] ?? 0) + 1;
+                }
+
                 if ($term === '') {
                     $tally['lines'][] = $this->warning("{$file}:{$line}", "El periodo «{$row['periodo']}» de esta línea no es un periodo del SII (año de ".KardexCodes::FIRST_YEAR.' al próximo y 1, 2 o 3): pasa al kárdex sin periodo, para que Servicios Escolares capture el bueno.');
                 }
@@ -378,7 +383,7 @@ final class KardexStep implements SiiStep
     }
 
     /**
-     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int}  $tally
+     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>}  $tally
      * @return list<array{level: 'warning', ref: string, message: string}>
      */
     private function historyIncidents(array $tally): array
@@ -403,6 +408,13 @@ final class KardexStep implements SiiStep
             $incidents[] = $this->warning('kardex', $type === ''
                 ? "{$count} renglones de la historia no traen tipo de evaluación: cuentan como oportunidad 1."
                 : "{$count} renglones de la historia traen el tipo de evaluación «{$type}», que no se conoce: cuentan como oportunidad 1.");
+        }
+
+        if ($tally['failed'] !== []) {
+            ksort($tally['failed'], SORT_STRING);
+            $total = array_sum($tally['failed']);
+            $decades = implode(', ', array_map(fn (string $decade, int $count): string => "{$decade}: {$count}", array_keys($tally['failed']), $tally['failed']));
+            $incidents[] = $this->warning('kardex', "K4: {$total} línea(s) con estatus A y calificación 0 o vacía de examen pasaron a reprobadas ({$decades}).");
         }
 
         if ($tally['repeated'] > 0) {
