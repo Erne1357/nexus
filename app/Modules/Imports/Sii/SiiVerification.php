@@ -22,6 +22,8 @@ final readonly class SiiVerification
      * @param  list<array{materia: string, subjects: string, rows: int}>  $outsideSiiGrid  por clave del SII, con las materias de Nexus a las que llegó
      * @param  list<array{materia: string, subject: string, sii: string|null, nexus: int, rows: int}>  $creditsDiffer  por clave del SII y materia de Nexus
      * @param  float  $progressSeconds  lo que tardó recalcular el avance de los alumnos
+     * @param  int  $graduatesCompleteAsExported  egresados y titulados completos con el SII tal cual (toda A aprobada)
+     * @param  int  $graduatesCompleteK4  egresados y titulados completos con K4 (la A con 0 de examen es reprobada)
      */
     public function __construct(
         public int $historyRows,
@@ -36,6 +38,8 @@ final readonly class SiiVerification
         public array $outsideSiiGrid,
         public array $creditsDiffer,
         public float $progressSeconds,
+        public int $graduatesCompleteAsExported = 0,
+        public int $graduatesCompleteK4 = 0,
     ) {}
 
     /**

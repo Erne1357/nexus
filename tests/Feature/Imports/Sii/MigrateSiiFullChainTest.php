@@ -104,7 +104,7 @@ beforeEach(function () {
     ]);
     SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [
         $history('20253', 'S1', 'CD1', '60', 'O1', 'P'),
-        $history('20043', 'S2', 'ZZZ', '0', 'E1', 'A'),
+        $history('20043', 'S2', 'ZZZ', '0', 'RC', 'A'),
     ]);
     SiiFixtures::write($this->dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, [
         SiiFixtures::line(SiiFile::SeleccionMaterias, ['periodo' => "'20263'", 'no_de_control' => "'S1'", 'materia' => "'CD1'", 'repeticion' => "'S'", 'status_seleccion' => "'I'", 'calificacion' => '']),
