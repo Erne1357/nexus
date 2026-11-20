@@ -10,7 +10,10 @@ use App\Modules\Core\Enums\Role;
  *
  * - CF-S1: el admin no se edita; tiene todo lo declarado menos adminDenies(), en código.
  * - CF-03: un candado (adminOnly()) no se da a otro puesto, ni suelto ni dentro de un rol. Un rol puede llevar
- *   cualquier otro permiso: lo demás se revisa al darlo a un puesto.
+ *   cualquier otro permiso: lo demás se revisa al darlo a un puesto. La excepción de fábrica
+ *   (PermissionRegistry::isFactoryLockException(), confirmado el 20 de noviembre de 2026 para el directivo, AZ-03): el
+ *   candado de lectura que el código le concede a un puesto no bloquea a ese puesto (en su rol de fábrica o suelto);
+ *   para todos los demás puestos y para un rol propio sigue siendo candado.
  * - CF-04 (confirmado el 14 de noviembre de 2026, «departamento o carrera»): un permiso de gestión solo se le da a un
  *   puesto que acota (Role::boundedDimensions()) el campus y la modalidad que el permiso declare y, si declara unidad
  *   o carrera, al menos una de las que declare: el departamento o la carrera bastan para acotarlo. Si no, valdría
@@ -31,7 +34,7 @@ final class PermissionGrantRules
      * Versión de estas reglas en la huella de GrantTable. Súbela cada vez que cambie lo que bloquean, para que un
      * despliegue que solo cambie las reglas no lea el mapa que armaron las anteriores.
      */
-    public const int VERSION = 3;
+    public const int VERSION = 4;
 
     public function __construct(private readonly PermissionRegistry $registry) {}
 
@@ -46,10 +49,16 @@ final class PermissionGrantRules
     }
 
     /**
-     * CF-03: el motivo por el que el permiso no puede ir en un rol ni darse suelto (es candado), o null.
+     * CF-03: el motivo por el que el permiso no puede ir en un rol ni darse suelto (es candado), o null. Con
+     * `$position`, el puesto que lo recibe (suelto o en su rol de fábrica): el candado que el código le concede de fábrica
+     * (la excepción de CF-03) no lo bloquea a él.
      */
-    public function lockProblem(Permission $permission): ?string
+    public function lockProblem(Permission $permission, ?Role $position = null): ?string
     {
+        if ($position !== null && $this->registry->isFactoryLockException($position, $permission)) {
+            return null;
+        }
+
         return $this->registry->isAdminOnly($permission)
             ? "«{$permission->label()}» es solo del admin: no se da a otro puesto."
             : null;
@@ -57,13 +66,13 @@ final class PermissionGrantRules
 
     /**
      * CF-S1, CF-03, AZ-03 y CF-04: el motivo por el que `$permission` no se le puede dar a `$role`, o null si se puede.
-     * Lo que el código le concede de fábrica al puesto se puede salvo un candado o, a quien lee en todo el Tec, algo que
-     * no es de lectura.
+     * Lo que el código le concede de fábrica al puesto se puede salvo un candado que no sea su excepción de fábrica o, a
+     * quien lee en todo el Tec, algo que no es de lectura.
      */
     public function grantProblem(Role $role, Permission $permission): ?string
     {
         return $this->positionProblem($role)
-            ?? $this->lockProblem($permission)
+            ?? $this->lockProblem($permission, $role)
             ?? $this->readOnlyProblem($role, $permission)
             ?? ($this->registry->grants($role, $permission) ? null : $this->scopeProblem($role, $permission));
     }

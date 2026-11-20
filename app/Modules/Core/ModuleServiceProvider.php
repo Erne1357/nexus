@@ -125,11 +125,25 @@ abstract class ModuleServiceProvider extends ServiceProvider
 
     /**
      * Candados (CF-03): permisos declarados que solo tiene el admin y que el panel no deja dar a otro puesto, ni
-     * sueltos ni dentro de un rol. Tampoco se conceden en grants(): PermissionRegistry falla al arrancar.
+     * sueltos ni dentro de un rol. Tampoco se conceden en grants(), salvo los de factoryLockExceptions():
+     * PermissionRegistry falla al arrancar.
      *
      * @return list<Permission>
      */
     public function adminOnly(): array
+    {
+        return [];
+    }
+
+    /**
+     * CF-03, la excepción de fábrica: candados que el código sí concede en grants() a un puesto, con llave
+     * `Role->value`. Una lista explícita y corta: solo permisos de lectura y solo a un puesto que lee en todo el Tec
+     * (AZ-03). PermissionRegistry falla al arrancar si una excepción no está en grants(), no es candado, escribe o es de
+     * otro puesto. El panel sigue sin darlos a ningún otro puesto: valen solo para el puesto exceptuado.
+     *
+     * @return array<string, list<Permission>>
+     */
+    public function factoryLockExceptions(): array
     {
         return [];
     }

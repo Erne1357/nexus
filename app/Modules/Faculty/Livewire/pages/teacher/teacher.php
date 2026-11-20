@@ -264,7 +264,11 @@ new #[Title('Ficha del docente')] class extends Component
             default => [],
         };
 
-        $canAppoint = Gate::allows('viewAny', RoleAssignment::class);
+        // Ver las jefaturas es ver nombramientos (el admin y, de solo lectura, el directivo, AZ-03); nombrarlas y terminarlas,
+        // solo con su ability.
+        $canSeeHeadships = Gate::allows('viewAny', RoleAssignment::class);
+        $canAppoint = Gate::allows('create', RoleAssignment::class);
+        $canEndHeadships = Gate::allows('end', RoleAssignment::class);
         $headOptions = $canAppoint && $this->showHeadshipModal ? $people->scopeOptions(Role::JefeProyectoDocente, null, $this->headModalityId) : ['modalities' => [], 'campuses' => [], 'units' => []];
 
         $removing = $this->removingAdscriptionId === null ? null : $record->adscriptions->firstWhere('id', $this->removingAdscriptionId);
@@ -273,8 +277,10 @@ new #[Title('Ficha del docente')] class extends Component
             'subjectOptions' => collect(),
             ...$tabData,
             'canAppoint' => $canAppoint,
-            'headships' => $canAppoint && $this->tab === 'datos' ? $records->headships($teacher) : collect(),
-            'endingHeadship' => $canAppoint && $this->endingHeadshipId !== null ? $records->findHeadship($teacher, $this->endingHeadshipId) : null,
+            'canSeeHeadships' => $canSeeHeadships,
+            'canEndHeadships' => $canEndHeadships,
+            'headships' => $canSeeHeadships && $this->tab === 'datos' ? $records->headships($teacher) : collect(),
+            'endingHeadship' => $canEndHeadships && $this->endingHeadshipId !== null ? $records->findHeadship($teacher, $this->endingHeadshipId) : null,
             'headKinds' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->label()], Role::HEADSHIPS),
             'departmentOptions' => $headOptions['units'],
             'campusOptions' => $headOptions['campuses'],
@@ -287,7 +293,7 @@ new #[Title('Ficha del docente')] class extends Component
             'removingPosition' => $this->removingPositionId === null ? null : $record->positions->firstWhere('id', $this->removingPositionId),
             'positionCounts' => $this->showPositionModal ? $this->positionCountsInTerm($record->term) : false,
             ...$this->accessActions($teacher, $record, $access),
-            'canOpenPerson' => $canAppoint,
+            'canOpenPerson' => $canSeeHeadships,
             'resetMinutes' => $tokens->minutes(),
             'institutionalDomain' => config('nexus.institutional_email_domain'),
             'institutionalEmailReason' => $this->showDataModal ? $this->institutionalEmailReason($teacher) : null,
@@ -551,6 +557,7 @@ new #[Title('Ficha del docente')] class extends Component
     public function endHeadship(TeacherQuery $teachers, TeacherRecordQuery $records, EndRoleAssignment $endRoleAssignment): void
     {
         $this->authorize('viewAny', RoleAssignment::class);
+        $this->authorize('end', RoleAssignment::class);
 
         if ($this->endingHeadshipId === null) {
             return;

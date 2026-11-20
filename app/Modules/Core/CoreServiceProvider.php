@@ -280,6 +280,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 CorePermission::CampusView,
                 CorePermission::ModalityView,
                 CorePermission::TermView,
+                ...$this->factoryLockExceptions()[Role::Directivo->value],
             ],
             Role::Subdireccion->value => [
                 CorePermission::CampusView,
@@ -303,7 +304,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
      * todos (confirmado). El perfil de flujo de una modalidad no es candado: la Subdirección lo tiene de fábrica. Los
      * avisos y atajos del login y los parámetros sí se pueden dar. Desde la tarea 1.24.6, también el interruptor de la carga
      * académica y verla oculta (`core.academic_load.*`, MN-05): la oculta a todos menos al admin (supuesto por confirmar
-     * que no se puedan dar).
+     * que no se puedan dar). Siguen siendo candados aunque el directivo tenga de fábrica tres lecturas
+     * (factoryLockExceptions()).
      */
     public function adminOnly(): array
     {
@@ -316,6 +318,23 @@ final class CoreServiceProvider extends ModuleServiceProvider
             )),
             CorePermission::CampusUpdate,
             CorePermission::ModalityUpdate,
+        ];
+    }
+
+    /**
+     * AZ-03 (confirmado el 20 de noviembre de 2026): el directivo consulta, de fábrica y de solo lectura, «Personas y
+     * puestos» (la lista y la ficha), el Organigrama y la Bitácora, de todo el Tec. Siguen siendo candados (CF-03): el
+     * panel no los da a otro puesto. Lo demás del admin (roles y permisos, usuarios, correos y colas, nombrar, terminar,
+     * editar el organigrama, la carga oculta) no lo tiene (supuesto por confirmar).
+     */
+    public function factoryLockExceptions(): array
+    {
+        return [
+            Role::Directivo->value => [
+                CorePermission::AssignmentView,
+                CorePermission::OrgUnitView,
+                CorePermission::ActivityView,
+            ],
         ];
     }
 

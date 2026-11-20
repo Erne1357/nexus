@@ -1,7 +1,7 @@
 {{--
     «Personas y puestos» (DESIGN.md, «Personas y puestos»), con la anatomía de una pantalla de catálogo: encabezado,
     barra con la búsqueda, los filtros «Puesto», «Estado», «Tipo de personal» y «Acceso» y la acción principal «Dar de alta» (1.22-C1, un
-    cajón con usuario, nombre y correo institucional), y una tabla con el usuario en Mono, la persona, un chip por puesto
+    cajón con usuario, nombre y correo institucional; solo para quien puede, no para el directivo, que solo consulta), y una tabla con el usuario en Mono, la persona, un chip por puesto
     vigente, el estado y el acceso (AC-04); «Ver puestos» abre la ficha. Debajo de 768 px la tabla cede su lugar a
     renglones apilados, que no repiten los data-testid de la tabla. La pestaña «Nombramientos» (U3 opción A) es una
     tabla plana de nombramientos con modalidad, campus y vigencia, y sus filtros.
@@ -38,13 +38,11 @@
         <x-select wire:model.live="staffType" aria-label="Tipo de personal" :options="$staffTypes" placeholder="Tipo de personal" data-testid="filter-staff-type" />
         <x-select wire:model.live="access" aria-label="Acceso" :options="$accesses" placeholder="Acceso" data-testid="filter-access" />
 
-        <x-slot:action>
-            @if ($canCreate)
+        @if ($canCreate)
+            <x-slot:action>
                 <x-button label="Dar de alta" icon="o-plus" class="btn-primary" wire:click="openCreate" spinner="openCreate" data-testid="create-user" />
-            @else
-                <x-button label="Dar de alta" icon="o-plus" class="btn-primary w-full" disabled data-testid="create-user" />
-            @endif
-        </x-slot:action>
+            </x-slot:action>
+        @endif
     </x-core::catalog-toolbar>
 
     <div class="overflow-hidden rounded-box border border-base-300 bg-base-100">
@@ -142,8 +140,10 @@
         @endif
     </div>
 
-    <x-drawer wire:model.live="showCreate" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="create-user-title" data-testid="create-user-drawer">
-        @include('core::people.create-drawer')
-    </x-drawer>
+    @if ($canCreate)
+        <x-drawer wire:model.live="showCreate" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="create-user-title" data-testid="create-user-drawer">
+            @include('core::people.create-drawer')
+        </x-drawer>
+    @endif
     @endif
 </div>

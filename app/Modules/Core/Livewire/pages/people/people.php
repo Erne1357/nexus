@@ -26,9 +26,9 @@ use Mary\Traits\Toast;
  * principal es «Dar de alta» (CF-S3, UserPolicy): un cajón pide usuario, nombre y correo institucional opcional,
  * CreateStaffUser la da de alta sin acceso, con correo le llega la invitación (InviteUser, CF-07) y la pantalla lleva a
  * su ficha.
- * Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy);
- * el componente autoriza en mount(), al renderizar y en cada cambio, porque una petición puede llegar con una página
- * que abrió otra sesión.
+ * La ven el admin con ese perfil activo y, de solo lectura, el directivo (AZ-03; RoleAssignmentPolicy), que no ve
+ * «Dar de alta» porque no tiene `create` de UserPolicy; el componente autoriza en mount(), al renderizar y en cada
+ * cambio, porque una petición puede llegar con una página que abrió otra sesión.
  *
  * La pestaña «Nombramientos» lista un renglón por nombramiento (AppointmentsQuery) con modalidad y campus
  * («Todos los campus» si no lo fija), y sus filtros: persona, puesto, modalidad, campus y vigencia.
