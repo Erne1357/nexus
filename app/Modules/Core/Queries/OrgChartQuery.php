@@ -19,7 +19,8 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
  * memoriza el mapa por petición y daría el árbol de antes de una escritura en la misma petición.
  *
  * - Titular (AZ-S7): quien ocupa hoy el puesto exclusivo de la unidad (RoleAssignmentRules::titularRoleOf()): el jefe
- *   de un departamento académico y la Subdirección de Subdirección Académica (AZ-S10).
+ *   de un departamento académico, la Subdirección de Subdirección Académica (AZ-S10) y el directivo de la Dirección y
+ *   de las demás subdirecciones (AZ-03).
  * - Personas: usuarios distintos con adscripción (UnitAdscriptions, que pone Faculty) o nombramiento vigente en la
  *   unidad o en su subárbol.
  * - Los motivos de bloqueo son los de OrgUnitRules, los mismos que aplican las Actions (AZ-S13).
@@ -382,9 +383,7 @@ final class OrgChartQuery
         $role = $this->rules->titularRoleOf($unit);
 
         if ($role === null) {
-            return [null, $unit->kind === OrgUnitKind::Direccion
-                ? 'La Dirección no tiene un puesto en Nexus.'
-                : 'Esta unidad todavía no tiene un puesto de titular en Nexus.'];
+            return [null, 'Esta unidad todavía no tiene un puesto de titular en Nexus.'];
         }
 
         $assignment = RoleAssignment::query()->current()->where('role', $role)->where('org_unit_id', $unit->id)->with('user:id,name')->orderBy('valid_from')->first();

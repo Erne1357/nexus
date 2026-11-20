@@ -8,12 +8,14 @@ use App\Modules\Core\Authorization\OrgTree;
 /**
  * Puestos de R1 (PROJECT.md, "Actores y roles"). El valor es el de `role_assignments.role`. El de `alumno` llega antes
  * que R3 (AC-10): lo da la migración del SII a cada alumno, sin alcance y solo con funciones personales. R3 añade
- * `servicios_escolares`.
+ * `servicios_escolares`. El de `directivo` (AZ-03, R-V2-4) es del Director y de las subdirecciones que no son la
+ * Académica: lee todo lo académico del Tec y no escribe nada.
  */
 enum Role: string
 {
     case Admin = 'admin';
     case Subdireccion = 'subdireccion';
+    case Directivo = 'directivo';
     case JefeDepartamento = 'jefe_departamento';
     case JefeProyectoDocente = 'jefe_proyecto_docente';
     case Coordinador = 'coordinador';
@@ -38,6 +40,7 @@ enum Role: string
         return match ($this) {
             self::Admin => 'Administración',
             self::Subdireccion => 'Subdirección Académica',
+            self::Directivo => 'Directivo',
             self::JefeDepartamento => 'Jefe de departamento académico',
             self::JefeProyectoDocente => 'Jefe de proyecto docente',
             self::Coordinador => 'Coordinador de carrera',
@@ -54,6 +57,7 @@ enum Role: string
         return match ($this) {
             self::Admin => 'Tienes acceso a todo Nexus. Tus acciones quedan en la bitácora como las de cualquier usuario.',
             self::Subdireccion => 'Cuando se pide, das el visto bueno final antes de publicar la carga académica.',
+            self::Directivo => 'Consultas en modo lectura todo lo académico del Tec.',
             self::JefeDepartamento => 'Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.',
             self::JefeProyectoDocente => 'Junto con el jefe de departamento, asignas docentes a los grupos de tu modalidad según la prioridad de base; si tu nombramiento es de un campus, solo los de ese campus.',
             self::Coordinador => 'Analizas el avance de los alumnos de tu carrera en tu modalidad, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre; si tu nombramiento es de un campus, ves toda la propuesta y cambias lo de tu campus.',
@@ -67,12 +71,19 @@ enum Role: string
      * nombra su unidad). El jefe de departamento de una sola unidad que no es departamento académico la nombra: «Jefe
      * del Departamento de Servicios Escolares» (si el nombre de la unidad no empieza con «Departamento», se lo
      * antepone). Con varias unidades que no lo son, o mezcladas con departamentos académicos, «Jefe de departamento»
-     * (supuesto por confirmar). En los demás casos, label().
+     * (supuesto por confirmar). El directivo es el nombre de su unidad: «Dirección», «Subdirección de Planeación y
+     * Vinculación» (AZ-03); con varias unidades, label() (supuesto por confirmar). En los demás casos, label().
      *
      * @param  list<array{kind: OrgUnitKind, code: string, name: string}>  $units
      */
     public function titleOn(array $units): string
     {
+        if ($this === self::Directivo) {
+            $names = array_values(array_unique(array_column($units, 'name')));
+
+            return count($names) === 1 ? $names[0] : $this->label();
+        }
+
         $outside = array_filter($units, fn (array $unit): bool => $unit['kind'] !== OrgUnitKind::DepartamentoAcademico);
 
         if ($this !== self::JefeDepartamento || $outside === []) {
@@ -127,6 +138,7 @@ enum Role: string
         return match ($this) {
             self::Admin => 'Este puesto no tiene alcance: vale en todo el sistema.',
             self::Subdireccion => 'Este puesto pide la Subdirección Académica. Tiene un solo titular vigente.',
+            self::Directivo => 'Este puesto pide la Dirección o una subdirección que no sea la Académica. Tiene un solo titular vigente.',
             self::JefeDepartamento => 'Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.',
             self::JefeProyectoDocente => 'Este puesto pide modalidad y departamento académico. El campus es opcional: sin campus, trabaja todos los de su modalidad.',
             self::Coordinador => 'Pide una modalidad y una o varias carreras; el campus es opcional: sin campus, trabaja todos los de su modalidad. Se crea un nombramiento por carrera.',
@@ -136,13 +148,15 @@ enum Role: string
 
     /**
      * Cómo se llama la unidad sobre la que se nombra el puesto, para el formulario «Nombrar» y la ficha de la persona:
-     * la subdirección; el departamento del jefe, académico o Servicios Escolares (D19); el departamento académico del
-     * jefe de proyecto docente. Nulo si el puesto no lleva unidad.
+     * la del directivo (la Dirección o una subdirección); la subdirección; el departamento del jefe, académico o
+     * Servicios Escolares (D19); el departamento académico del jefe de proyecto docente. Nulo si el puesto no lleva
+     * unidad.
      */
     public function unitLabel(): ?string
     {
         return match ($this) {
             self::Subdireccion => 'Subdirección',
+            self::Directivo => 'Unidad',
             self::JefeDepartamento => 'Departamento',
             self::JefeProyectoDocente => 'Departamento académico',
             default => null,
@@ -197,7 +211,8 @@ enum Role: string
      * dos en todo el Tec y en todas las modalidades: no piden campus ni modalidad, y sin ellos valen en todos los
      * activos. El jefe de proyecto docente va sobre su departamento y una modalidad, y el coordinador sobre su carrera
      * y una modalidad (AZ-S17; M5 y M9): el campus es opcional para los dos (optionalScopeColumns()). Un nombramiento
-     * con un campus que su puesto no pide sigue valiendo solo en ese campus.
+     * con un campus que su puesto no pide sigue valiendo solo en ese campus. El directivo va sobre su unidad (la
+     * Dirección o una subdirección, AZ-03), que nombra su credencial y no acota lo que lee (readsWholeTec()).
      *
      * @return list<'org_unit_id'|'career_id'|'modality_id'>
      */
@@ -205,7 +220,7 @@ enum Role: string
     {
         return match ($this) {
             self::Admin, self::Docente, self::Alumno => [],
-            self::Subdireccion, self::JefeDepartamento => ['org_unit_id'],
+            self::Directivo, self::Subdireccion, self::JefeDepartamento => ['org_unit_id'],
             self::JefeProyectoDocente => ['modality_id', 'org_unit_id'],
             self::Coordinador => ['modality_id', 'career_id'],
         };
@@ -230,14 +245,16 @@ enum Role: string
      * CF-04: las dimensiones del alcance que el puesto acota, en el orden de Dimension: las que lleva en su nombramiento
      * (scopeColumns() y optionalScopeColumns()) y en las que es general por regla. El jefe de departamento y la
      * Subdirección son de todo el Tec en campus y modalidad (AZ-S17). El admin es general en todas, pero no se edita
-     * (CF-S1). El docente y el alumno no acotan ninguna: solo reciben permisos personales.
+     * (CF-S1). El directivo es general en todas para leer (AZ-03): solo recibe permisos de lectura
+     * (PermissionGrantRules), que lee en todo el Tec. El docente y el alumno no acotan ninguna: solo reciben permisos
+     * personales.
      *
      * @return list<Dimension>
      */
     public function boundedDimensions(): array
     {
         $general = match ($this) {
-            self::Admin => Dimension::cases(),
+            self::Admin, self::Directivo => Dimension::cases(),
             self::Subdireccion, self::JefeDepartamento => [Dimension::Campus, Dimension::Modality],
             default => [],
         };
@@ -250,28 +267,42 @@ enum Role: string
     }
 
     /**
-     * Si el puesto es uno solo por unidad en cada fecha (AZ-S7): lo garantizan las exclusiones
-     * `role_assignments_one_jefe` y `role_assignments_one_subdireccion`.
+     * Si el puesto es uno solo por unidad en cada fecha (AZ-S7, AZ-03): lo garantizan las exclusiones
+     * `role_assignments_one_jefe`, `role_assignments_one_subdireccion` y `role_assignments_one_directivo`.
      */
     public function isExclusive(): bool
     {
         return match ($this) {
-            self::JefeDepartamento, self::Subdireccion => true,
+            self::Directivo, self::JefeDepartamento, self::Subdireccion => true,
             default => false,
         };
     }
 
     /**
-     * El tipo de unidad del organigrama sobre la que se nombra el puesto: la Subdirección, sobre una subdirección (y
-     * solo sobre Subdirección Académica, AZ-S10); el jefe y el jefe de proyecto docente, sobre un departamento
-     * académico. Los demás puestos no llevan unidad.
+     * R-V2-4 (AZ-03): si el puesto lee en todo el Tec. Actor no acota por unidad ni por carrera sus permisos de lectura
+     * (Permission::isReadOnly()), y el panel solo le da permisos de lectura (PermissionGrantRules). Su unidad nombra
+     * su credencial. Solo el directivo.
      */
-    public function unitKind(): ?OrgUnitKind
+    public function readsWholeTec(): bool
+    {
+        return $this === self::Directivo;
+    }
+
+    /**
+     * Los tipos de unidad del organigrama sobre los que se nombra el puesto: el directivo, sobre la Dirección o una
+     * subdirección (que no sea la Académica, AZ-03); la Subdirección, sobre una subdirección (y solo sobre Subdirección
+     * Académica, AZ-S10); el jefe y el jefe de proyecto docente, sobre un departamento académico. Los demás puestos no
+     * llevan unidad: vacío.
+     *
+     * @return list<OrgUnitKind>
+     */
+    public function unitKinds(): array
     {
         return match ($this) {
-            self::Subdireccion => OrgUnitKind::Subdireccion,
-            self::JefeDepartamento, self::JefeProyectoDocente => OrgUnitKind::DepartamentoAcademico,
-            default => null,
+            self::Subdireccion => [OrgUnitKind::Subdireccion],
+            self::Directivo => [OrgUnitKind::Direccion, OrgUnitKind::Subdireccion],
+            self::JefeDepartamento, self::JefeProyectoDocente => [OrgUnitKind::DepartamentoAcademico],
+            default => [],
         };
     }
 }

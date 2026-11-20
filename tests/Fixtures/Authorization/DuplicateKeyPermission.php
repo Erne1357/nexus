@@ -3,10 +3,13 @@
 namespace Tests\Fixtures\Authorization;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 enum DuplicateKeyPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case Clash = 'fake.thing.view_campus';
 
     public function label(): string

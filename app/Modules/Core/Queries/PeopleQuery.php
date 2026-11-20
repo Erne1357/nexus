@@ -151,7 +151,7 @@ final class PeopleQuery
             ->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])
             ->all() : [];
 
-        $units = $role->unitKind() === null ? [] : OrgUnit::query()
+        $units = $role->unitKinds() === [] ? [] : OrgUnit::query()
             ->where('is_active', true)
             ->orderBy('name')
             ->get()

@@ -248,6 +248,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function grants(): array
     {
         return [
+            Role::Directivo->value => [
+                CorePermission::CampusView,
+                CorePermission::ModalityView,
+                CorePermission::TermView,
+            ],
             Role::Subdireccion->value => [
                 CorePermission::CampusView,
                 CorePermission::ModalityView,

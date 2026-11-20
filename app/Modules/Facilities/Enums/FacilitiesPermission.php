@@ -4,6 +4,7 @@ namespace App\Modules\Facilities\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -11,6 +12,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum FacilitiesPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case BuildingView = 'facilities.building.view';
     case BuildingCreate = 'facilities.building.create';
     case BuildingUpdate = 'facilities.building.update';

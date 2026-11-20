@@ -123,6 +123,7 @@ final class PositionsQuery
         return match ($role) {
             Role::Admin => 'Sin alcance: vale en todo Nexus',
             Role::Subdireccion => 'Su unidad; todo el Tec en campus y modalidad',
+            Role::Directivo => 'Su unidad, solo para su credencial; lee en todo el Tec',
             Role::JefeDepartamento => 'Su departamento; todo el Tec en campus y modalidad',
             Role::JefeProyectoDocente => 'Su departamento y su modalidad; el campus, si lo lleva',
             Role::Coordinador => 'Su carrera y su modalidad; el campus, si lo lleva',

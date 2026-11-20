@@ -210,6 +210,9 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
     public function grants(): array
     {
         return [
+            Role::Directivo->value => [
+                SchedulingPermission::ScheduleView,
+            ],
             Role::Subdireccion->value => [
                 SchedulingPermission::ScheduleView,
             ],

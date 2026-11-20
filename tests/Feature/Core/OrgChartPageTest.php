@@ -79,7 +79,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
     expect($boxes[0])->toBe('DIRECCION')
         ->and($boxes)->toEqualCanonicalizing(OrgUnit::query()->where('is_active', true)->pluck('code')->all())
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-SC"]')))->toContain('Departamento académico')->toContain('Sistemas y Computación')->toContain('Sin jefe vigente')
-        ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular en Nexus')
+        ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular vigente')
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-legend"]')))->toBe('Se edita en Administración › Departamentos · n personas en la unidad y en las que cuelgan de ella');
 });
 
@@ -88,7 +88,7 @@ it('el panel muestra la unidad elegida', function () {
 
     $panel = orgUnitPanel($this->admin)
         ->assertSet('unitId', $this->root->id)
-        ->assertSee('La Dirección no tiene un puesto en Nexus.')
+        ->assertSee('Sin titular vigente.')
         ->assertDontSeeHtml('data-testid="unit-path"');
 
     $panel->dispatch('org-unit-picked', id: $this->planning->id)
@@ -96,7 +96,7 @@ it('el panel muestra la unidad elegida', function () {
         ->assertSee('Subdirección de Planeación y Vinculación')
         ->assertSee('SUB-PLANEACION')
         ->assertSee('Dirección › Subdirección de Planeación y Vinculación')
-        ->assertSee('Esta unidad todavía no tiene un puesto de titular en Nexus.')
+        ->assertSee('Sin titular vigente.')
         ->assertSee('con adscripción o puesto vigente en la unidad y en las que cuelgan de ella')
         ->assertSee('Departamento de Gestión Tecnológica y Vinculación');
 
@@ -392,7 +392,8 @@ it('sin persona elegida pide elegirla', function () {
 });
 
 it('«Nombrar» queda deshabilitado con su motivo en una unidad sin puestos y en una inactiva', function () {
-    $panel = orgUnitPanel($this->admin);
+    $office = OrgUnit::factory()->create(['parent_id' => $this->planning->id, 'code' => 'BECAS', 'name' => 'Oficina de Becas', 'kind' => OrgUnitKind::Oficina]);
+    $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $office->id);
     $dom = domOf($panel);
 
     expect($dom->querySelector('[data-testid="unit-appoint"]')->hasAttribute('disabled'))->toBeTrue()

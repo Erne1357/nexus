@@ -4,6 +4,7 @@ namespace Tests\Fixtures\Authorization;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -11,6 +12,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum FakePermission: string implements Permission
 {
+    use ReadsByAction;
+
     case ViewCampus = 'fake.thing.view_campus';
     case ViewUnit = 'fake.thing.view_unit';
     case ViewCareer = 'fake.thing.view_career';

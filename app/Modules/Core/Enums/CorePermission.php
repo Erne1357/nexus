@@ -4,6 +4,7 @@ namespace App\Modules\Core\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -15,6 +16,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum CorePermission: string implements Permission
 {
+    use ReadsByAction;
+
     case CampusView = 'core.campus.view';
     case CampusViewInactive = 'core.campus.view_inactive';
     case CampusCreate = 'core.campus.create';

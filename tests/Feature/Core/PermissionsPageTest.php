@@ -94,7 +94,7 @@ function nonAdminHolder(Role $role): User
 }
 
 describe('Puestos', function () {
-    it('lista los siete puestos con sus personas, roles, sueltos y permisos, y abre el primero que se edita', function () {
+    it('lista los ocho puestos con sus personas, roles, sueltos y permisos, y abre el primero que se edita', function () {
         $html = $this->actingAs($this->admin)->get(route('core.permissions'))->assertOk();
         $dom = domOf($html);
         $cards = $dom->querySelectorAll('[data-testid="position-card"]');
@@ -103,7 +103,8 @@ describe('Puestos', function () {
 
         expect(array_map(fn ($card): string => $card->getAttribute('data-position'), iterator_to_array($cards)))->toBe(array_map(fn (Role $role): string => $role->value, Role::cases()))
             ->and(textOf($cards->item(0)))->toContain('Administración', "Todo menos {$exceptions} excepciones", '1')
-            ->and(textOf($cards->item(4)))->toContain('Coordinador de carrera', '1 rol · 0 sueltos · '.count($admin->matrix()['coordinador']).' permisos')
+            ->and(textOf($cards->item(2)))->toContain('Directivo', '1 rol · 0 sueltos · '.count($admin->matrix()['directivo']).' permisos')
+            ->and(textOf($cards->item(5)))->toContain('Coordinador de carrera', '1 rol · 0 sueltos · '.count($admin->matrix()['coordinador']).' permisos')
             ->and($cards->item(1)->getAttribute('aria-current'))->toBe('true')
             ->and(textOf($dom->querySelector('[data-testid="position-detail"] h2')))->toBe('Subdirección Académica')
             ->and(textOf($dom->querySelector('[data-testid="position-detail"]')))->toContain('Su unidad; todo el Tec en campus y modalidad');
@@ -483,7 +484,7 @@ describe('Roles', function () {
         $page = permissionsPage(['vista' => 'roles']);
         $dom = domOf($page);
 
-        expect(count($dom->querySelectorAll('table tbody tr')))->toBe(8)
+        expect(count($dom->querySelectorAll('table tbody tr')))->toBe(9)
             ->and(textOf($dom->querySelector('[data-testid="catalog-toolbar"] .btn-primary')))->toBe('Nuevo rol')
             ->and(textOf($dom->querySelector('[data-testid="role-row-Docente (de fábrica)"]')))->toContain('Sigue al código', 'Docente')
             ->and(textOf($dom->querySelector('[data-testid="role-row-Consulta de catálogos"]')))->toContain('Activo', 'Coordinador de carrera')

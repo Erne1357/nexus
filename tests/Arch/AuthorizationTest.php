@@ -196,6 +196,8 @@ it('nadie importa el enum Role con otro nombre', function () {
 const GRANT_TABLES_READERS = [
     'app/Modules/Core/Authorization/',
     'app/Modules/Core/Database/Migrations/2026_11_15_0001',
+    // El rol de fábrica del directivo (AZ-03).
+    'app/Modules/Core/Database/Migrations/2026_11_19_000001_add_directivo_role.php',
     'app/Modules/Core/Models/PermissionSet.php',
     'app/Modules/Core/Database/Factories/PermissionSetFactory.php',
     'app/Modules/Core/Rules/PermissionSetRules.php',

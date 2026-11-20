@@ -203,7 +203,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
 
     /**
      * El jefe de departamento lanza, ve y acepta las corridas de su carga; el coordinador lanza y ve las de su carrera;
-     * Subdirección ve todas (decisión del usuario, 17 de noviembre de 2026).
+     * Subdirección ve todas (decisión del usuario, 17 de noviembre de 2026), y el directivo también (AZ-03).
      */
     public function grants(): array
     {
@@ -221,6 +221,10 @@ final class SolverServiceProvider extends ModuleServiceProvider
                 SolverPermission::DepartmentRunView,
                 SolverPermission::CareerRunView,
                 SolverPermission::SettingUpdate,
+            ],
+            Role::Directivo->value => [
+                SolverPermission::DepartmentRunView,
+                SolverPermission::CareerRunView,
             ],
         ];
     }

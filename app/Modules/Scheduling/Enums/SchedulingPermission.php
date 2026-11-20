@@ -4,6 +4,7 @@ namespace App\Modules\Scheduling\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -18,6 +19,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum SchedulingPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case ScheduleView = 'scheduling.schedule.view';
     case GroupManage = 'scheduling.group.manage';
     case SessionEdit = 'scheduling.session.edit';

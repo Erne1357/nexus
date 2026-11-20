@@ -58,6 +58,11 @@ use LogicException;
  * - constrain(): la misma regla en SQL, para las listas, con una cláusula por nombramiento que lo aporta.
  * - rolesAllowing(): los puestos (todos los que tiene, sin el admin) con que allows() daría que sí sobre un objetivo; de ahí salen los
  *   destinatarios de un aviso (RecipientsQuery::holders()).
+ * - Lectura en todo el Tec (AZ-03, R-V2-4): un nombramiento de un puesto que lee en todo el Tec (Role::readsWholeTec(),
+ *   el directivo) aporta sus permisos de lectura (Permission::isReadOnly()) sin mirar a qué unidades aplican, y en ellos
+ *   no fija la unidad ni la carrera: cubre cualquiera, como uno que no las lleva. El campus y la modalidad siguen la
+ *   regla de siempre (el directivo no los lleva: los activos). Sus permisos que no son de lectura, que el panel y el
+ *   registro no le dejan tener, seguirían la regla normal. Su unidad sigue en el snapshot para la credencial.
  *
  * El contenedor la registra con `scoped` (una instancia por petición, por Octane) para el usuario
  * autenticado; forUser() da, y recuerda en esta instancia, la de otro usuario, que comparte con esta los campus y las
@@ -555,9 +560,10 @@ final class Actor
     }
 
     /**
-     * AZ-02 (mecanismo, AZ-S16): los nombramientos de `$roles` que aportan `$permission`: sin unidad, o con una unidad
-     * a la que el permiso aplica (ella o una descendiente, OrgTree::fits()). Sin aplicabilidad declarada, todos. No
-     * revisa que el puesto lo tenga: eso es de rolesGranting(), que pasa antes.
+     * AZ-02 (mecanismo, AZ-S16): los nombramientos de `$roles` que aportan `$permission`: sin unidad, con una unidad a
+     * la que el permiso aplica (ella o una descendiente, OrgTree::fits()) o, si el permiso es de lectura, de un puesto
+     * que lee en todo el Tec (AZ-03). Sin aplicabilidad declarada, todos. No revisa que el puesto lo tenga: eso es de
+     * rolesGranting(), que pasa antes.
      *
      * @param  list<Role>  $roles
      * @return list<AssignmentScope>
@@ -573,8 +579,32 @@ final class Actor
 
         return array_values(array_filter(
             $scopes,
-            fn (AssignmentScope $scope): bool => $scope->unitId === null || $this->orgTree->fits($scope->unitId, $applicability),
+            fn (AssignmentScope $scope): bool => $scope->unitId === null
+                || $this->readsEverywhere($scope, $permission)
+                || $this->orgTree->fits($scope->unitId, $applicability),
         ));
+    }
+
+    /**
+     * AZ-03: si el nombramiento lee `$permission` en todo el Tec: es de un puesto que lee en todo el Tec y el permiso es
+     * de lectura.
+     */
+    private function readsEverywhere(AssignmentScope $scope, Permission $permission): bool
+    {
+        return $scope->role->readsWholeTec() && $permission->isReadOnly();
+    }
+
+    /**
+     * El valor que el nombramiento fija en la dimensión para `$permission`: el suyo, salvo la unidad y la carrera de uno
+     * que lo lee en todo el Tec (readsEverywhere()), que no fija.
+     */
+    private function fixedValue(AssignmentScope $scope, Permission $permission, Dimension $dimension): ?string
+    {
+        if (in_array($dimension, [Dimension::Unit, Dimension::Career], true) && $this->readsEverywhere($scope, $permission)) {
+            return null;
+        }
+
+        return $scope->value($dimension);
     }
 
     /**
@@ -613,7 +643,7 @@ final class Actor
      */
     private function coversValues(AssignmentScope $scope, Permission $permission, Dimension $dimension, ?array $values): bool
     {
-        $fixed = $scope->value($dimension);
+        $fixed = $this->fixedValue($scope, $permission, $dimension);
 
         if ($fixed === null) {
             return match ($dimension) {
@@ -671,7 +701,7 @@ final class Actor
      */
     private function constrainDimension(Builder $clause, AssignmentScope $scope, Permission $permission, Dimension $dimension, string|Closure $mapping): void
     {
-        $fixed = $scope->value($dimension);
+        $fixed = $this->fixedValue($scope, $permission, $dimension);
 
         if ($dimension === Dimension::Campus && is_string($mapping)) {
             if ($fixed === null) {
