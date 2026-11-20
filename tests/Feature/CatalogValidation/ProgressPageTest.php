@@ -12,6 +12,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Models\Campus;
@@ -59,10 +60,13 @@ function progressPage(?User $user = null, array $query = [])
     return Livewire::withQueryParams($query)->actingAs($user ?? test()->subdireccion)->test('catalog-validation::pages.progress');
 }
 
+/**
+ * Una observación sobre una materia del departamento, en la revisión de materias de Servicios Escolares (CV15).
+ */
 function progressMakeFlag(Department $department, ReviewFlag $flag = ReviewFlag::Other, ?string $comment = 'Las horas deben ser 3.'): CatalogReviewFlag
 {
     $subject = Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Contabilidad financiera', 'department_id' => $department->id]);
-    $review = CatalogReview::query()->where('department_id', $department->id)->where('catalog', Catalog::Subjects)->sole();
+    $review = CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Subjects)->sole();
 
     return CatalogReviewFlag::factory()->on($subject)->create(['review_id' => $review->id, 'flag' => $flag, 'comment' => $comment, 'flagged_by' => test()->jefeSis->id]);
 }
@@ -72,8 +76,9 @@ describe('quién entra', function () {
         progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
             ->assertOk()
             ->assertSee('Avance de validación')
-            ->assertSee('0 de 10')
+            ->assertSee('0 de 7')
             ->assertSee('Sistemas y Computación')
+            ->assertSee('Servicios Escolares')
             ->assertSee('Dra. Ana Soto')
             ->assertSee('Salones')
             ->assertSee('Total del Tec');
@@ -187,7 +192,7 @@ describe('conteos', function () {
     it('CV7: cada catálogo sin validar dice cuántos registros van revisados, también Salones', function () {
         $subject = Subject::factory()->create(['department_id' => $this->sis->id]);
         Subject::factory()->create(['department_id' => $this->sis->id]);
-        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Subjects)->sole();
+        $review = CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Subjects)->sole();
         CatalogReviewMark::factory()->for($review, 'review')->on($subject)->create();
         $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['department_id' => $this->sis->id]);
 
@@ -200,16 +205,18 @@ describe('conteos', function () {
     });
 
     it('cuenta las validadas y en revisión del periodo activo, y las observaciones abiertas', function () {
-        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', '!=', Catalog::Rooms)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
+        CatalogReview::query()->whereNull('department_id')->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
         CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::InReview]);
         progressMakeFlag($this->sis);
 
         progressPage()
-            ->assertSee('4 de 10')
+            ->assertSee('4 de 7')
             ->assertSee('1 en revisión')
-            ->assertSee('5 pendientes')
+            ->assertSee('2 pendientes')
             ->assertSeeInOrder(['Observaciones abiertas', '1', 'en 1 departamento'])
-            ->assertSee('4 de 5');
+            ->assertSee('3 de 3')
+            ->assertSee('1 de 2');
     });
 
     it('muestra la ventana de validación de catálogos con los días que quedan, y nada si no existe', function () {
@@ -317,11 +324,11 @@ describe('recordar', function () {
 });
 
 describe('drawer', function () {
-    it('muestra los catálogos con quién y cuándo validó y las observaciones abiertas', function () {
-        CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefeSis->id, 'validated_at' => now()]);
+    it('muestra los catálogos con quién y cuándo validó y las observaciones abiertas, también los de Servicios Escolares (CV15)', function () {
+        CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Careers)->update(['status' => ReviewStatus::Validated, 'validated_by' => $this->jefeSis->id, 'validated_at' => now()]);
         progressMakeFlag($this->sis);
 
-        progressPage()->call('open', $this->sis->id)
+        progressPage()->call('open', ReviewOwner::SCHOOL_SERVICES)
             ->assertSet('showDrawer', true)
             ->assertSee('Validó Dra. Ana Soto')
             ->assertSee('ACF-0901')->assertSee('Contabilidad financiera')->assertSee('Las horas deben ser 3.')
@@ -341,7 +348,7 @@ describe('drawer', function () {
         $flag = progressMakeFlag($this->sis);
         CatalogReviewFlag::factory()->on($flag->flaggable)->create(['review_id' => $flag->review_id, 'flag' => ReviewFlag::Duplicate, 'comment' => 'Otra más.', 'flagged_by' => $this->jefeSis->id]);
 
-        $html = progressPage()->call('open', $this->sis->id)->html();
+        $html = progressPage()->call('open', ReviewOwner::SCHOOL_SERVICES)->html();
 
         expect(substr_count($html, 'data-testid="drawer-record-'))->toBe(1)
             ->and($html)->toContain('Las horas deben ser 3.')->toContain('Otra más.');
@@ -384,7 +391,7 @@ describe('drawer', function () {
         $flag = progressMakeFlag($this->sis);
         $user = $who === 'admin' ? $this->admin : $this->subdireccion;
 
-        $page = progressPage($user)->call('open', $this->sis->id)->call('resolveFlag', $flag->id);
+        $page = progressPage($user)->call('open', ReviewOwner::SCHOOL_SERVICES)->call('resolveFlag', $flag->id);
 
         expect($flag->fresh()->resolved_by)->toBe($user->id)
             ->and(lastToastOf($page)['title'])->toBe('Observación resuelta');
@@ -414,6 +421,7 @@ describe('abrir la validación (CV9)', function () {
     });
 
     it('el drawer lista cada catálogo, con los abiertos ya marcados, y abrir agrega su columna', function () {
+        schoolServicesHead();
         CatalogReview::query()->whereNotIn('catalog', [Catalog::Teachers->value])->delete();
 
         progressPage($this->admin)
@@ -428,7 +436,7 @@ describe('abrir la validación (CV9)', function () {
 
         progressPage($this->admin)->assertSeeHtml('data-testid="column-subjects"')->assertDontSeeHtml('data-testid="column-careers"');
 
-        expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(2);
+        expect(CatalogReview::query()->where('catalog', Catalog::Subjects->value)->count())->toBe(1);
     });
 
     it('el aviso de «nada abierto» dice la razón: ya abiertos, salones sin modalidad abierta que los use', function () {
@@ -477,7 +485,9 @@ describe('etiquetas y lista (1.21)', function () {
     });
 
     it('solo los departamentos activos están en la matriz y en «Observaciones abiertas»', function () {
-        $flag = progressMakeFlag($this->ele);
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['code' => 'ELC-1', 'department_id' => $this->ele->id]);
+        $review = CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Rooms)->sole();
+        $flag = CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar la capacidad.', 'flagged_by' => $this->jefeSis->id]);
         $this->ele->update(['is_active' => false]);
 
         progressPage()->assertDontSeeHtml('data-testid="progress-row-ELE"');
@@ -487,6 +497,7 @@ describe('etiquetas y lista (1.21)', function () {
 
 describe('abrir la validación vuelve a pintar la página (1.21)', function () {
     it('después de abrir, la página se recarga a sí misma con el aviso', function () {
+        schoolServicesHead();
         CatalogReview::query()->whereNot('catalog', Catalog::Teachers->value)->delete();
 
         $page = progressPage($this->admin)->set('toOpen', [Catalog::Subjects->value])->call('openValidation');
@@ -515,9 +526,9 @@ describe('abrir la validación vuelve a pintar la página (1.21)', function () {
 describe('CV10: observaciones abiertas de todos los departamentos', function () {
     it('Subdirección y el admin las ven juntas por departamento; el enlace al registro, si su Policy lo deja ver', function (string $who) {
         $sis = progressMakeFlag($this->sis);
-        $subject = Subject::factory()->create(['code' => 'ELC-1001', 'name' => 'Circuitos', 'department_id' => $this->ele->id]);
-        $review = CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Subjects)->sole();
-        CatalogReviewFlag::factory()->on($subject)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Duplicate, 'flagged_by' => $this->jefeSis->id]);
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->c2->id]))->create(['code' => 'ELC-1001', 'name' => 'Circuitos', 'department_id' => $this->ele->id]);
+        $review = CatalogReview::query()->where('department_id', $this->ele->id)->where('catalog', Catalog::Rooms)->sole();
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id, 'flag' => ReviewFlag::Duplicate, 'flagged_by' => $this->jefeSis->id]);
 
         $page = progressPage($who === 'admin' ? $this->admin : $this->subdireccion)
             ->assertSeeHtml('data-testid="open-all-flags"')
@@ -526,9 +537,9 @@ describe('CV10: observaciones abiertas de todos los departamentos', function () 
             ->assertSee('Observaciones abiertas (2)');
 
         $who === 'admin'
-            ? $page->assertSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"')->assertSeeHtml('href="'.e(route('academic.subjects', ValidationReturn::params($sis->review->department_id, 'subjects'))).'"')
+            ? $page->assertSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"')->assertSeeHtml('href="'.e(route('academic.subjects', ValidationReturn::params($sis->review->owner_id, 'subjects'))).'"')
             : $page->assertDontSeeHtml('data-testid="record-link-'.$sis->flaggable_id.'"');
-        expect($page->html())->toMatch('/data-testid="flags-drawer".*Eléctrica y Electrónica.*ELC-1001.*Sistemas y Computación.*ACF-0901/s');
+        expect($page->html())->toMatch('/data-testid="flags-drawer".*Servicios Escolares.*ACF-0901.*Eléctrica y Electrónica.*ELC-1001/s');
     })->with(['admin', 'subdirección']);
 
     it('se resuelve desde la lista con la nota de lo que se hizo', function () {

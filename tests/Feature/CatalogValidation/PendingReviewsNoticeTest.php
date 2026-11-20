@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Actions\NotifyPendingReviews;
 use App\Modules\CatalogValidation\Actions\RemindPendingReviews;
@@ -17,6 +16,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\TermCalendarQuery;
+use App\Modules\Facilities\Models\Room;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\SendQueuedNotifications;
@@ -41,7 +41,7 @@ beforeEach(function () {
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create(['name' => 'Ana Soto', 'email' => 'ana.soto@cdjuarez.tecnm.mx']);
     $this->actor = User::factory()->withRole(Role::Subdireccion, [])->create();
 
-    app(CreateTermReviews::class)->handle($this->term, [Catalog::Teachers, Catalog::Subjects]);
+    app(CreateTermReviews::class)->handle($this->term, [Catalog::Teachers, Catalog::Rooms]);
 });
 
 function noticeWindow(string $startsOn, string $endsOn, ?string $modalityId = null): void
@@ -64,7 +64,7 @@ describe('CV11: la fecha límite (D6)', function () {
         Notification::fake();
 
         app(NotifyPendingReviews::class)->handle($this->term);
-        Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice) => $notice->message($this->jefe)->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes y materias');
+        Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice) => $notice->message($this->jefe)->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes y salones');
 
         noticeWindow('2026-11-16', '2026-11-27');
         Notification::fake();
@@ -74,7 +74,7 @@ describe('CV11: la fecha límite (D6)', function () {
             $message = $notice->message($this->jefe);
 
             return $message->title === 'Tienes catálogos por validar'
-                && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes y materias · fecha límite 27 nov'
+                && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes y salones · fecha límite 27 nov'
                 && $message->campusId === null
                 && $message->parameters === ['department' => $this->sis->id];
         });
@@ -84,9 +84,9 @@ describe('CV11: la fecha límite (D6)', function () {
 describe('CV11: el recordatorio (D3)', function () {
     it('tiene su propio título y dice cuánto lleva revisado de cada catálogo que falta', function () {
         noticeWindow('2026-11-16', '2026-11-27');
-        $subjects = Subject::factory()->count(3)->create(['department_id' => $this->sis->id]);
-        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Subjects)->sole();
-        CatalogReviewMark::factory()->create(['catalog_review_id' => $review->id, 'record_id' => $subjects[0]->id, 'reviewed_by' => $this->jefe->id]);
+        $rooms = Room::factory()->count(3)->create(['department_id' => $this->sis->id]);
+        $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->sole();
+        CatalogReviewMark::factory()->create(['catalog_review_id' => $review->id, 'record_id' => $rooms[0]->id, 'reviewed_by' => $this->jefe->id]);
         Notification::fake();
 
         app(RemindPendingReviews::class)->handle($this->term, $this->actor);
@@ -95,7 +95,7 @@ describe('CV11: el recordatorio (D3)', function () {
             $message = $notice->message($this->jefe);
 
             return $message->title === 'Recordatorio: te faltan catálogos por validar'
-                && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes (sin registros) y materias (1 de 3 revisados) · fecha límite 27 nov';
+                && $message->body === 'Ene-Jun 2027 · Sistemas y Computación: docentes (sin registros) y salones (1 de 3 revisados) · fecha límite 27 nov';
         });
     });
 
@@ -105,7 +105,7 @@ describe('CV11: el recordatorio (D3)', function () {
 
         app(RemindPendingReviews::class)->handle($this->term, $this->actor);
 
-        Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice) => $notice->message($this->jefe)->body === 'Ene-Jun 2027 · Sistemas y Computación: materias (sin registros)');
+        Notification::assertSentTo($this->jefe, CatalogReviewsPending::class, fn (CatalogReviewsPending $notice) => $notice->message($this->jefe)->body === 'Ene-Jun 2027 · Sistemas y Computación: salones (sin registros)');
     });
 });
 
@@ -132,7 +132,7 @@ describe('CV11: por correo (D3)', function () {
             return $mail->subject === 'Recordatorio: te faltan catálogos por validar'
                 && $mail->greeting === 'Hola, Ana Soto'
                 && str_contains($text, 'En Sistemas y Computación te falta validar en Ene-Jun 2027:')
-                && str_contains($text, 'Materias: sin registros')
+                && str_contains($text, 'Salones: sin registros')
                 && str_contains($text, 'La fecha límite es el 27 de noviembre.')
                 && $mail->actionText === 'Ir a validar'
                 && $mail->actionUrl === route('catalog-validation.review', ['department' => $this->sis->id]);

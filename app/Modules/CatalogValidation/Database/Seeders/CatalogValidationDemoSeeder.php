@@ -19,7 +19,8 @@ use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
-use App\Modules\Core\Authorization\Target;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Database\Seeders\Concerns\RefusesProduction;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -27,7 +28,6 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\CampusQuery;
-use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\UpdateRoom;
 use App\Modules\Facilities\Enums\RoomType;
@@ -51,16 +51,16 @@ use Spatie\Activitylog\Models\Activity;
  * periodos abiertos (term_openings) en orden cronológico, después de que el admin abre su validación con todos los catálogos
  * (OpenCatalogValidation, CV9); sin periodos abiertos, no hace nada.
  *
- * - Los periodos abiertos anteriores al último se validan completos con ValidateReview y el jefe de cada departamento,
- *   para que quede su foto. Antes de validar una revisión, el jefe marca todos sus registros como revisados
+ * - Los periodos abiertos anteriores al último se validan completos con ValidateReview y el jefe de cada departamento
+ *   (o el de Servicios Escolares; sin jefe, el administrador), para que quede su foto. Antes de validar una revisión, el jefe marca todos sus registros como revisados
  *   (MarkRecordsReviewed, CV7). Luego se simulan los cambios hacia el último con las Actions de cada módulo (docentes y
  *   salones desactivados, reactivados y nuevos, materias nuevas): son las altas y bajas de `summary()`.
  * - El último periodo queda con estados fijos por código de departamento, de los que depende el seeder de propuestas:
- *   CB, SC, II y EE todo validado, para que sus partes de propuesta se puedan aceptar (HC-14). CEA y MM dependen del
- *   perfil. En `demo`, CEA queda todo validado (el demo solo trae materias de CB, CEA, II y SC, y así CEA tiene
- *   grupos) y MM queda con docentes y carreras validados y reabiertos, salones en revisión (con las observaciones de
- *   capacidad), materias validadas y lo demás pendiente. En `massive`, MM queda todo validado y CEA con docentes y
- *   materias validados, salones en revisión, carreras validadas y reabiertas y lo demás pendiente. Cualquier otro
+ *   Servicios Escolares (materias, planes y carreras de todo el Tec, CV15) todo validado, con algunas observaciones en
+ *   materias, y CB, SC, II y EE todo validado, para que sus partes de propuesta se puedan aceptar (HC-14). CEA y MM
+ *   dependen del perfil. En `demo`, CEA queda todo validado (el demo solo trae materias de CB, CEA, II y SC, y así CEA
+ *   tiene grupos) y MM queda con docentes validados y reabiertos y salones en revisión (con las observaciones de
+ *   capacidad). En `massive`, MM queda todo validado y CEA con docentes validados y salones en revisión. Cualquier otro
  *   departamento queda pendiente.
  * - Observaciones con FlagRecord de todos los tipos que admite cada catálogo, y algunas resueltas con ResolveFlag;
  *   recordatorios a CEA, EE y MM (solo reciben los que aún tienen algo pendiente: CEA en `massive`, MM en `demo`) para el «último recordatorio» del tablero.
@@ -138,7 +138,7 @@ class CatalogValidationDemoSeeder extends Seeder
         private readonly FlagRecord $flag,
         private readonly ResolveFlag $resolve,
         private readonly RemindPendingReviews $remind,
-        private readonly RecipientsQuery $recipients,
+        private readonly CatalogReviewQuery $reviews,
     ) {}
 
     /**
@@ -219,7 +219,7 @@ class CatalogValidationDemoSeeder extends Seeder
     {
         $any = false;
         $reviews = CatalogReview::query()->where('term_id', $term->getKey())->where('status', '!=', ReviewStatus::Validated)
-            ->with(['department', 'campus', 'term'])->orderBy('department_id')->orderBy('catalog')->orderBy('campus_id')->get();
+            ->with(['department', 'campus', 'term'])->orderByRaw('department_id nulls first')->orderBy('catalog')->orderBy('campus_id')->get();
 
         foreach ($reviews as $review) {
             $head = $this->headOf($review);
@@ -370,7 +370,7 @@ class CatalogValidationDemoSeeder extends Seeder
      */
     private function seedCurrent(Term $term, array $config, string $profile): void
     {
-        $reviews = CatalogReview::query()->where('term_id', $term->getKey())->with(['department', 'campus', 'term'])->get()->groupBy('department_id');
+        $reviews = CatalogReview::query()->where('term_id', $term->getKey())->with(['department', 'campus', 'term'])->get()->groupBy(fn (CatalogReview $review): string => $review->owner_id);
 
         $order = array_flip(array_map(fn (Catalog $catalog): string => $catalog->value, Catalog::cases()));
 
@@ -379,7 +379,8 @@ class CatalogValidationDemoSeeder extends Seeder
                 continue;
             }
 
-            $code = $group->first()->department->code;
+            $owner = ReviewOwner::of($group->first());
+            $code = $owner->isSchoolServices() ? ReviewOwner::SCHOOL_SERVICES : $owner->code;
             $flags = [];
 
             foreach ($group->sort(fn (CatalogReview $a, CatalogReview $b): int => [$order[$a->catalog->value], $a->campus?->code] <=> [$order[$b->catalog->value], $b->campus?->code]) as $review) {
@@ -408,22 +409,21 @@ class CatalogValidationDemoSeeder extends Seeder
 
     /**
      * El estado final de una revisión: `validated`, `reopened` (validada y reabierta), `review` (en revisión) o
-     * `pending`. Fijo por departamento y perfil: AcademicLoad depende de él.
+     * `pending`. Fijo por departamento (o Servicios Escolares, ReviewOwner::SCHOOL_SERVICES, CV15) y perfil: AcademicLoad depende de él, y las
+     * cargas de todos los departamentos necesitan validados los catálogos de Servicios Escolares (HC-14).
      */
     private function target(string $department, Catalog $catalog, string $profile): string
     {
         return match ($department) {
-            'CB', 'SC', 'II', 'EE' => 'validated',
+            ReviewOwner::SCHOOL_SERVICES, 'CB', 'SC', 'II', 'EE' => 'validated',
             'CEA' => match (true) {
                 $profile === 'demo' => 'validated',
-                in_array($catalog, [Catalog::Teachers, Catalog::Subjects], true) => 'validated',
+                $catalog === Catalog::Teachers => 'validated',
                 $catalog === Catalog::Rooms => 'review',
-                $catalog === Catalog::Careers => 'reopened',
                 default => 'pending',
             },
             'MM' => $profile === 'massive' ? 'validated' : match ($catalog) {
-                Catalog::Teachers, Catalog::Careers => 'reopened',
-                Catalog::Subjects => 'validated',
+                Catalog::Teachers => 'reopened',
                 Catalog::Rooms => 'review',
                 default => 'pending',
             },
@@ -445,7 +445,9 @@ class CatalogValidationDemoSeeder extends Seeder
             default => 0,
         };
 
-        if ($review->department->code === 'CEA' && $target === 'validated') {
+        $owner = ReviewOwner::of($review)->code;
+
+        if ($owner === 'CEA' && $target === 'validated') {
             $count = intdiv($config['flags'], 2);
         }
 
@@ -453,7 +455,7 @@ class CatalogValidationDemoSeeder extends Seeder
             return [];
         }
 
-        $records = collect((new Randomizer(new Mt19937(crc32($review->department->code.'/'.$review->catalog->value))))->shuffleArray($this->contents->query($review)->get()->filter(fn (Model $record): bool => $review->catalog !== Catalog::Teachers || $record->is_active)->values()->all())); // CV14: a un docente inactivo no se le observa
+        $records = collect((new Randomizer(new Mt19937(crc32($owner.'/'.$review->catalog->value))))->shuffleArray($this->contents->query($review)->get()->filter(fn (Model $record): bool => $review->catalog !== Catalog::Teachers || $record->is_active)->values()->all())); // CV14: a un docente inactivo no se le observa
         $types = array_values(array_filter(ReviewFlag::cases(), fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog)));
         $created = [];
 
@@ -497,18 +499,19 @@ class CatalogValidationDemoSeeder extends Seeder
     }
 
     /**
-     * El jefe del departamento de la revisión (las revisiones no son de un campus); si no hay, el administrador.
+     * El jefe del departamento de la revisión, o el de Servicios Escolares en las suyas (CV15; las revisiones no son de
+     * un campus); si no hay, el administrador.
      */
     private function headOf(CatalogReview $review): User
     {
-        $key = $review->term_id.'/'.$review->department_id;
+        $key = $review->term_id.'/'.$review->owner_id;
 
         return $this->heads[$key] ??= $this->findHead($review);
     }
 
     private function findHead(CatalogReview $review): User
     {
-        return $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $review->department_id))[0]['user']
+        return $this->reviews->holdersOf($review->owner_id, CatalogValidationPermission::ReviewValidate)[0]['user']
             ?? User::query()->where('username', 'admin')->firstOrFail();
     }
 }

@@ -87,8 +87,8 @@ describe('StartReview', function () {
 describe('ValidateReview', function () {
     it('CV3: valida desde pendiente o en revisión y guarda la foto de los activos, quién y cuándo', function (ReviewStatus $status) {
         $review = CatalogReview::factory()->general(Catalog::Careers)->create(['status' => $status]);
-        $active = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas', 'department_id' => $review->department_id]);
-        Career::factory()->inactive()->create(['department_id' => $review->department_id]);
+        $active = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas']);
+        Career::factory()->inactive()->create();
         markAllReviewed($review, $this->actor);
 
         app(ValidateReview::class)->handle($review, $this->actor);
@@ -101,7 +101,7 @@ describe('ValidateReview', function () {
     })->with([ReviewStatus::Pending, ReviewStatus::InReview]);
 
     it('deja en la bitácora el estado anterior y el nuevo, quién validó y cuántos registros tiene la foto', function () {
-        Career::factory()->count(2)->create(['department_id' => $this->review->department_id]);
+        Career::factory()->count(2)->create();
         markAllReviewed($this->review, $this->actor);
 
         app(ValidateReview::class)->handle($this->review, $this->actor);
@@ -191,7 +191,7 @@ describe('ReopenReview', function () {
 
     it('una reabierta deja de contar como la validación anterior del periodo siguiente', function () {
         $this->validated->term->update(['starts_on' => '2020-01-20', 'ends_on' => '2020-06-10']);
-        $next = CatalogReview::factory()->general(Catalog::Careers)->create(['department_id' => $this->validated->department_id]);
+        $next = CatalogReview::factory()->general(Catalog::Careers)->create();
 
         expect(app(CatalogReviewQuery::class)->previousValidation($next)?->is($this->validated))->toBeTrue();
 
@@ -242,7 +242,7 @@ describe('ReopenReview', function () {
 describe('ValidateEmptyReviews (CV7, D5)', function () {
     beforeEach(function () {
         $this->department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
-        $this->careers = CatalogReview::factory()->general(Catalog::Careers)->create(['department_id' => $this->department->id]);
+        $this->careers = CatalogReview::factory()->general(Catalog::Careers)->create();
         $this->rooms = CatalogReview::factory()->rooms()->create(['department_id' => $this->department->id, 'term_id' => $this->careers->term_id]);
     });
 
@@ -261,14 +261,14 @@ describe('ValidateEmptyReviews (CV7, D5)', function () {
         Career::factory()->create(['department_id' => $this->department->id]);
 
         expect(cvErrorsOf(fn () => app(ValidateEmptyReviews::class)->handle([$this->rooms, $this->careers], $this->actor)))
-            ->toBe(['status' => ['La revisión de Carreras de Ciencias Básicas ya tiene registros activos: valídala desde su lista.']])
+            ->toBe(['status' => ['La revisión de Carreras de todo el Tec ya tiene registros activos: valídala desde su lista.']])
             ->and($this->rooms->fresh()->status)->toBe(ReviewStatus::Pending)
             ->and($this->careers->fresh()->status)->toBe(ReviewStatus::Pending)
             ->and(Activity::query()->where('event', 'validated')->exists())->toBeFalse();
     });
 
     it('una ya validada se rechaza como en Validar, y sin revisiones no hace nada', function () {
-        $validated = CatalogReview::factory()->general(Catalog::Subjects)->validated()->create(['department_id' => $this->department->id]);
+        $validated = CatalogReview::factory()->general(Catalog::Subjects)->validated()->create();
 
         expect(cvErrorsOf(fn () => app(ValidateEmptyReviews::class)->handle([$this->rooms, $validated], $this->actor)))->toBe(['status' => ['La revisión ya está validada.']])
             ->and($this->rooms->fresh()->status)->toBe(ReviewStatus::Pending)

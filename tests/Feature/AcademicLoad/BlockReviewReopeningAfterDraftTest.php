@@ -8,6 +8,7 @@ use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Modality;
@@ -41,11 +42,15 @@ function reopeningLoad(Modality $modality, LoadStatus $status, array $attributes
     ]);
 }
 
+/**
+ * La revisión validada del catálogo en el periodo: la del departamento en docentes y salones, la de Servicios Escolares,
+ * sin departamento, en materias, planes y carreras (CV15).
+ */
 function reopeningReview(Catalog $catalog): CatalogReview
 {
     $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog);
 
-    return $factory->validated()->create(['term_id' => test()->term->id, 'department_id' => test()->department->id]);
+    return $factory->validated()->create(['term_id' => test()->term->id, 'department_id' => $catalog->owner() === CatalogOwner::Department ? test()->department->id : null]);
 }
 
 function reopeningErrors(CatalogReview $review): array
@@ -62,7 +67,7 @@ function reopeningErrors(CatalogReview $review): array
 it('CV5: veta reabrir una revisión general si una carga del departamento salió de borrador en cualquier modalidad', function () {
     reopeningLoad($this->ead, LoadStatus::Draft);
     reopeningLoad($this->presencial, LoadStatus::Proposed);
-    $review = reopeningReview(Catalog::Subjects);
+    $review = reopeningReview(Catalog::Teachers);
 
     expect(reopeningErrors($review))->toBe(['status' => ['La carga académica de SIS ya salió de borrador en Presencial.']])
         ->and($review->fresh()->status)->toBe(ReviewStatus::Validated);
@@ -72,7 +77,7 @@ it('CV5: nombra todas las modalidades donde la carga ya salió de borrador', fun
     reopeningLoad($this->presencial, LoadStatus::Staffing);
     reopeningLoad($this->ead, LoadStatus::Proposed);
 
-    expect(reopeningErrors(reopeningReview(Catalog::Careers)))->toBe(['status' => ['La carga académica de SIS ya salió de borrador en EAD y Presencial.']]);
+    expect(reopeningErrors(reopeningReview(Catalog::Teachers)))->toBe(['status' => ['La carga académica de SIS ya salió de borrador en EAD y Presencial.']]);
 });
 
 it('CV5: con todas las cargas del departamento en borrador, se reabre', function () {
@@ -95,7 +100,27 @@ it('CV5: la de salones, una para todos los campus, se veta si la carga salió de
 it('no cuentan las cargas de otro departamento ni de otro periodo', function () {
     reopeningLoad($this->presencial, LoadStatus::Proposed, ['department_id' => Department::factory()->create()->id]);
     reopeningLoad($this->presencial, LoadStatus::Proposed, ['term_id' => Term::factory()->create()->id]);
+    $review = reopeningReview(Catalog::Rooms);
+
+    app(ReopenReview::class)->handle($review, $this->actor);
+
+    expect($review->fresh()->status)->toBe(ReviewStatus::InReview);
+});
+
+it('CV5 y CV15: la de Servicios Escolares se veta con la carga de cualquier departamento fuera de borrador y los nombra (supuesto por confirmar)', function () {
+    reopeningLoad($this->presencial, LoadStatus::Proposed, ['department_id' => Department::factory()->create(['code' => 'ELE'])->id]);
+    reopeningLoad($this->ead, LoadStatus::Staffing);
+    reopeningLoad($this->presencial, LoadStatus::Proposed, ['term_id' => Term::factory()->create()->id]);
     $review = reopeningReview(Catalog::StudyPlans);
+
+    expect(reopeningErrors($review))->toBe(['status' => ['La carga académica de ELE y SIS ya salió de borrador.']])
+        ->and($review->fresh()->status)->toBe(ReviewStatus::Validated);
+});
+
+it('CV15: la de Servicios Escolares se reabre con todas las cargas del periodo en borrador', function () {
+    reopeningLoad($this->presencial, LoadStatus::Draft);
+    reopeningLoad($this->presencial, LoadStatus::Proposed, ['term_id' => Term::factory()->create()->id]);
+    $review = reopeningReview(Catalog::Careers);
 
     app(ReopenReview::class)->handle($review, $this->actor);
 

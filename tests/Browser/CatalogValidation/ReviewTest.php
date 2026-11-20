@@ -24,9 +24,10 @@ use Spatie\Activitylog\Models\Activity;
 | con el teclado (J, Espacio, R), captura un correo institucional en el recuadro de la fila (AC-06), quita a un
 | docente de su departamento desde «Acciones», con su consecuencia y el motivo «Jubilación» (CV8, D8, D10), marca los
 | que faltan juntos con «Elegir los N por revisar» y, con todo revisado, valida el catálogo desde «Revisaste los N
-| docentes». En la segunda prueba, el jefe valida en un paso los catálogos sin registros (CV7, D5) y, con Docentes ya
+| docentes». En la segunda prueba, el jefe valida en un paso el catálogo sin registros (CV7, D5) y, con Docentes ya
 | validado, sigue el enlace «N sin correo institucional» y captura el correo en la fila: la revisión sigue validada
-| (CV-S2, D11), y ve quién validó sin recargar. En la tercera, abre una materia con «Agregar observación», elige el tipo
+| (CV-S2, D11), y ve quién validó sin recargar. En la tercera, el jefe de Servicios Escolares, que valida las materias
+| (CV15), abre una materia con «Agregar observación», elige el tipo
 | y oprime «Guardar»: no guarda y le pide agregarla o quitarla (CV13); la agrega y entonces guarda. En la cuarta, en
 | celular, elige el tipo, sube a corregir el nombre y oprime «Guardar»: la vista baja al tipo, con su error y el foco.
 */
@@ -140,16 +141,16 @@ it('el jefe valida en un paso los catálogos sin registros y, ya validados sus d
         ->assertPathIs('/')
         ->click('#nexus-menu a[data-label="Validar catálogos"]')
         ->assertPathIs('/catalog-validation')
-        ->assertSeeIn('@empty-reviews', '3 catálogos sin registros')
-        ->assertSeeIn('@empty-reviews', 'Salones, Planes de estudio y Carreras')
+        ->assertSeeIn('@empty-reviews', '1 catálogo sin registros')
+        ->assertSeeIn('@empty-reviews', 'Salones')
         ->click('@validate-empty')
-        ->waitForText('Vas a validar Salones, Planes de estudio y Carreras de Ciencias Básicas')
+        ->waitForText('Vas a validar Salones de Ciencias Básicas')
         ->click('@confirm-empty')
-        ->waitForText('3 catálogos validados')
+        ->waitForText('1 catálogo validado')
         ->assertMissing('@empty-reviews')
-        ->assertSee('3 de 5');
+        ->assertSee('1 de 2');
 
-    expect(CatalogReview::query()->where('status', ReviewStatus::Validated)->pluck('catalog')->map->value->sort()->values()->all())->toBe(['careers', 'rooms', 'study_plans']);
+    expect(CatalogReview::query()->where('status', ReviewStatus::Validated)->pluck('catalog')->map->value->sort()->values()->all())->toBe(['rooms']);
 
     $page->click('@tab-teachers')
         ->waitForText('0 de 2 revisados')
@@ -183,7 +184,7 @@ it('CV13: el jefe no pierde una observación a medias al oprimir «Guardar»: la
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     TermOpening::factory()->create(['term_id' => Term::query()->sole()->id, 'modality_id' => modalityOf('PRES')->id]);
     app(CreateTermReviews::class)->handle(Term::query()->sole(), [Catalog::Subjects]);
-    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);
+    schoolServicesHead(['username' => 'jefe']);
     $subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
 
     $page = visit('/login')
@@ -218,7 +219,7 @@ it('CV13: en celular, «Guardar» con el tipo elegido y la vista arriba lleva la
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     TermOpening::factory()->create(['term_id' => Term::query()->sole()->id, 'modality_id' => modalityOf('PRES')->id]);
     app(CreateTermReviews::class)->handle(Term::query()->sole(), [Catalog::Subjects]);
-    User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['username' => 'jefe']);
+    schoolServicesHead(['username' => 'jefe']);
     $subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Programación Orientada a Objetos', 'department_id' => $sis->id]);
 
     $page = visit('/login')

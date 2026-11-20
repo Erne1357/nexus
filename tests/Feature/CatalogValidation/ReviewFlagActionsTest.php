@@ -24,8 +24,9 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->actor = User::factory()->create();
+    // La de materias es de Servicios Escolares, con todas las del Tec (CV15).
     $this->review = CatalogReview::factory()->general(Catalog::Subjects)->create();
-    $this->subject = Subject::factory()->create(['department_id' => $this->review->department_id]);
+    $this->subject = Subject::factory()->create();
 });
 
 function cvFlagErrors(Closure $action): array
@@ -67,8 +68,8 @@ describe('FlagRecord', function () {
             ->and(CatalogReviewFlag::count())->toBe(0)
             ->and($this->review->fresh()->status)->toBe(ReviewStatus::Pending);
     })->with([
-        'materia de otro departamento' => fn () => Subject::factory()->create(),
-        'carrera del departamento' => fn () => Career::factory()->create(['department_id' => test()->review->department_id]),
+        'materia borrada' => fn () => tap(Subject::factory()->create())->delete(),
+        'carrera' => fn () => Career::factory()->create(),
     ]);
 
     it('CV-S2: rechaza observar una revisión validada', function () {
@@ -133,7 +134,7 @@ describe('ResolveFlag', function () {
     });
 
     it('rechaza una observación que no es de la revisión que se pasa', function () {
-        $other = CatalogReview::factory()->general(Catalog::Careers)->create(['department_id' => $this->review->department_id]);
+        $other = CatalogReview::factory()->general(Catalog::Careers)->create();
 
         expect(fn () => app(ResolveFlag::class)->handle($other, $this->flag, $this->actor))->toThrow(ValidationException::class)
             ->and($this->flag->fresh()->resolved_at)->toBeNull();

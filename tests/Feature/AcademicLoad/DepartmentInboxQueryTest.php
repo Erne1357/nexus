@@ -363,9 +363,7 @@ it('da la carga del departamento en la modalidad (M1) y bloquea aceptar sin ella
 
     $load = AcademicLoad::factory()->inStatus(LoadStatus::Proposed)->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
     AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('EAD')->id, 'department_id' => $this->cb->id]);
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
-    }
+    validateGeneralCatalogs($this->term->id, $this->cb->id);
 
     $inbox = inboxOf();
 
@@ -375,11 +373,11 @@ it('da la carga del departamento en la modalidad (M1) y bloquea aceptar sin ella
         ->and($inbox->canAccept())->toBeTrue();
 });
 
-it('HC-14: avisa de los catálogos del departamento sin validar y bloquea aceptar', function () {
+it('HC-14: avisa de los catálogos sin validar, también los de Servicios Escolares (CV15), y bloquea aceptar', function () {
     AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
     CatalogReview::factory()->general(Catalog::Teachers)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
     foreach ([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
-        CatalogReview::factory()->general($catalog)->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
+        CatalogReview::factory()->general($catalog)->create(['term_id' => $this->term->id]);
     }
 
     $inbox = inboxOf();

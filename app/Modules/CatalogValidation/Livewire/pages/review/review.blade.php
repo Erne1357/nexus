@@ -9,12 +9,16 @@
     revisados mientras no está validada (CV7). El modal de confirmación de Validar y Reabrir es de la página: un modal
     dentro de una tarjeta quedaría encerrado en ella. La cabecera le habla a quien valida o, a quien solo mira
     (Subdirección, el admin; `$viewOnly`), a él (tarea 1.21). Los textos nombran el departamento, no su clave.
+    `$departments` y `$department` son ReviewOwner: un departamento o Servicios Escolares, que valida las materias, los
+    planes y las carreras de todo el Tec (CV15).
 --}}
 <div>
     <x-header title="Validación de catálogos" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             @if ($viewOnly)
-                Consulta cómo va la revisión de los catálogos de cada departamento y resuelve sus observaciones. Cada jefe de departamento corrige y valida los suyos.
+                Consulta cómo va la revisión de los catálogos de cada departamento y resuelve sus observaciones. Cada jefe de departamento corrige y valida sus docentes y salones; Servicios Escolares, las materias, los planes y las carreras de todo el Tec.
+            @elseif ($department?->isSchoolServices())
+                Revisa cada registro de las materias, los planes de estudio y las carreras de todo el Tec. Con todos revisados, valida el catálogo; mientras no esté validado, la carga académica de ningún departamento puede salir de borrador.
             @else
                 Revisa cada registro de los catálogos del departamento. Con todos revisados, valida el catálogo; con los catálogos validados, la carga académica puede salir de borrador.
             @endif
@@ -31,13 +35,13 @@
                 <x-select
                     wire:model.live="department"
                     aria-label="Departamento"
-                    :options="$departments->map(fn ($option) => ['id' => $option->id, 'name' => $option->code.' · '.$option->name])->all()"
+                    :options="$departments->map(fn ($option) => ['id' => $option->id, 'name' => $option->label()])->all()"
                     placeholder="Elige un departamento"
                     placeholder-value=""
                 />
             </div>
         @elseif ($department)
-            <p><span class="text-neutral">Depto.</span> <span class="font-semibold">{{ $department->name }}</span></p>
+            <p><span class="text-neutral">Depto.</span> <span class="font-semibold">{{ $department->name }}</span>@if ($department->isSchoolServices()) <span class="text-neutral">· todo el Tec</span>@endif</p>
         @endif
     </div>
     @endif
@@ -111,7 +115,7 @@
             <div class="space-y-3 text-sm" data-testid="confirm-body">
                 @if ($confirmAction === 'reopen')
                     <p>Vas a reabrir <strong>{{ $confirmReview->heading }}</strong>: queda en revisión, sin quién ni cuándo se validó, y podrás corregir y observar de nuevo.</p>
-                    <p class="text-neutral">Hasta que la valides otra vez, la carga académica del departamento no podrá salir de borrador.</p>
+                    <p class="text-neutral">{{ $confirmReview->department_id === null ? 'Hasta que la valides otra vez, la carga académica de ningún departamento podrá salir de borrador.' : 'Hasta que la valides otra vez, la carga académica del departamento no podrá salir de borrador.' }}</p>
                 @else
                     @php($active = $confirming['summary']['active'])
                     @php($flags = $confirming['summary']['open_flags'])

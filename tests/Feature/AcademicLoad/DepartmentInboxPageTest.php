@@ -79,9 +79,7 @@ function inboxPageProposal(Career $career, int $expected, int $groups): CareerPr
 
 function inboxPageValidate(Department $department): void
 {
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => test()->term->id, 'department_id' => $department->id]);
-    }
+    validateGeneralCatalogs(test()->term->id, $department->id);
 }
 
 /**
@@ -547,6 +545,17 @@ describe('textos de la sugerencia de paralelos y del detalle', function () {
 describe('HC-14: aceptar bloqueado sin validación', function () {
     beforeEach(function () {
         CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Teachers)->update(['status' => 'pending']);
+    });
+
+    it('CV15: si solo falta lo de Servicios Escolares, lo dice sin el enlace a validar', function () {
+        CatalogReview::query()->where('department_id', $this->cb->id)->update(['status' => 'validated']);
+        CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Subjects)->update(['status' => 'pending']);
+
+        inboxPageAs($this->jefe, ['carrera' => $this->isc->id])
+            ->assertSeeHtml('data-testid="pending-catalogs"')
+            ->assertSee('Materias, planes y carreras los valida Servicios Escolares.')
+            ->assertDontSeeHtml('data-testid="validate-catalogs"')
+            ->assertSee('Falta que Servicios Escolares valide materias, planes y carreras para poder aceptar.');
     });
 
     it('avisa de los catálogos pendientes con el enlace, y deshabilita aceptar con su motivo', function () {

@@ -22,7 +22,7 @@
 {{-- CV14: un docente inactivo no se valida: solo ficha, disponibilidad y ver. --}}
 @php($inactive = $teachers && ! $record->is_active)
 {{-- 1.24.3: las páginas a las que se sale de aquí ofrecen «Regresar» a este departamento y catálogo. --}}
-@php($back = \App\Modules\Core\Support\ValidationReturn::params($current['review']->department_id, $current['review']->catalog->value))
+@php($back = \App\Modules\Core\Support\ValidationReturn::params($current['review']->owner_id, $current['review']->catalog->value))
 @php($departmentName = $current['review']->department?->name)
 <div @class(['flex items-center gap-1', 'justify-end whitespace-nowrap' => $inTable])>
     @unless ($teachers)
