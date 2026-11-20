@@ -123,9 +123,11 @@ final class CatalogRecordsQuery
         $base = fn (): Builder => $this->contents->query($review)->when($active !== null, fn (Builder $query) => $query->where($model->qualifyColumn('is_active'), $active));
 
         return [
-            'pending' => $this->contents->unreviewedCount($review),
+            // CV14: «Por revisar» son activos; con «Solo inactivos» no hay ninguno.
+            'pending' => $active === false ? 0 : $this->contents->unreviewedCount($review),
             'reviewed' => $base()->whereIn($id, $review->marks()->select('record_id'))->count(),
-            'flagged' => $base()->whereIn($id, $this->openFlagged($review, $model))->count(),
+            // CV14 (supuesto): con observación abierta se cuenta siempre, sin importar «Estado».
+            'flagged' => $this->contents->query($review)->whereIn($id, $this->openFlagged($review, $model))->count(),
             'all' => $base()->count(),
         ];
     }

@@ -1016,7 +1016,9 @@ new #[Title('Validación de catálogos')] class extends Component
         $onlyIds = $this->onlyIds($review, $current['summary']);
         [$campusId, $buildingId] = $isRooms ? [$this->roomCampus, $this->roomBuilding] : ['', ''];
         $active = $review->catalog === Catalog::Teachers ? $this->activeFilter() : null;
-        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, $active, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
+        // CV14 (supuesto): «Con observación» muestra siempre los registros con observación abierta, sin importar «Estado».
+        $pageActive = $this->segment === 'con-observacion' ? null : $active;
+        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, $pageActive, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
             'por-revisar' => 'pending',
             'revisados' => 'reviewed',
             default => '',

@@ -291,7 +291,7 @@
                 </section>
             </div>
         @elseif ($tab === 'disponibilidad')
-            @include('faculty::teachers.availability-tab', ['teacher' => $record->teacher, 'term' => $record->term, 'availability' => $availability, 'editReason' => $availabilityReason])
+            @include('faculty::teachers.availability-tab', ['teacher' => $record->teacher, 'term' => $record->term, 'availability' => $availability, 'editReason' => $availabilityReason, 'back' => $this->validationReturnParams()])
         @else
             <div class="grid items-start gap-5 desktop:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
                 <section class="@container overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-datos">

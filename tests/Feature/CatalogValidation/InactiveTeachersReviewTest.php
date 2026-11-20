@@ -170,3 +170,19 @@ describe('un docente inactivo solo se ve (CV14)', function () {
         Livewire::withQueryParams(['catalogo' => 'teachers', 'department' => $this->sis->id])->actingAs($otro)->test('catalog-validation::pages.review')->assertForbidden();
     });
 });
+
+describe('observaciones y cifras con el filtro «Estado» (CV14)', function () {
+    it('CV14: «Con observación» muestra siempre a quien tiene observación abierta, aunque ya esté inactivo, y Validar no se bloquea (CV4)', function () {
+        CatalogReviewFlag::factory()->on($this->inactivo)->create(['review_id' => $this->review->id, 'flag' => ReviewFlag::Other, 'comment' => 'x', 'flagged_by' => $this->jefe->id]);
+
+        inactiveReviewPage()->set('segment', 'con-observacion')->assertSee('Ivo Inactivo');
+        expect(app(CatalogRecordsQuery::class)->segmentCounts($this->review, true)['flagged'])->toBe(1)
+            ->and(app(CatalogContentsQuery::class)->unreviewedCount($this->review))->toBe(1);
+    });
+
+    it('CV14: con «Solo inactivos» «Por revisar» vale 0 y los demás cuentan según el filtro', function () {
+        $counts = app(CatalogRecordsQuery::class)->segmentCounts($this->review, false);
+
+        expect($counts['pending'])->toBe(0)->and($counts['all'])->toBe(1);
+    });
+});

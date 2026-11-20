@@ -236,7 +236,7 @@ class CatalogValidationDemoSeeder extends Seeder
     private function validateReviewed(CatalogReview $review, User $head): CatalogReview
     {
         // CV14: los docentes inactivos no se marcan.
-        $ids = array_column(array_filter($this->contents->records($review), fn (array $record): bool => $record['is_active'] || $review->catalog !== Catalog::Teachers), 'id');
+        $ids = array_column(array_filter($this->contents->records($review), fn (array $record): bool => $review->catalog !== Catalog::Teachers || $record['is_active']), 'id');
 
         if ($ids !== []) {
             $this->mark->handle($review, $ids, $head);

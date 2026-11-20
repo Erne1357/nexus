@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -37,6 +38,29 @@ function backPages(): array
         'docentes' => fn () => route('faculty.teachers'),
     ];
 }
+
+describe('la lista de catálogos', function () {
+    it('coincide con los valores del enum Catalog de la validación', function () {
+        expect(ValidationReturn::CATALOGS)->toEqualCanonicalizing(array_map(fn (Catalog $catalog): string => $catalog->value, Catalog::cases()));
+    });
+});
+
+describe('la ficha conserva el regreso hacia la disponibilidad', function () {
+    it('el enlace «Editar disponibilidad» de la ficha lleva desde, depto y cat', function () {
+        $expected = route('faculty.teachers.availability', ['teacher' => $this->teacher->id, ...$this->back]);
+
+        $html = Livewire::withQueryParams($this->back)->actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])
+            ->set('tab', 'disponibilidad')->html();
+
+        expect(str_contains($html, 'href="'.e($expected).'"') || str_contains($html, 'href="'.$expected.'"'))->toBeTrue();
+    });
+
+    it('sin la marca el enlace queda como siempre', function () {
+        Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->teacher->id])
+            ->set('tab', 'disponibilidad')
+            ->assertSeeHtml('href="'.e(route('faculty.teachers.availability', $this->teacher->id)).'"');
+    });
+});
 
 describe('con la marca de la validación', function () {
     it('muestra «Regresar» a la validación, al mismo departamento y catálogo', function (string $page) {

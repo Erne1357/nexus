@@ -21,6 +21,17 @@ trait ReturnsToValidation
     #[Url(as: 'cat')]
     public string $fromCatalog = '';
 
+    /**
+     * Los parámetros que las páginas hijas (p. ej. del ficha al editor de disponibilidad) llevan para conservar el
+     * regreso; vacío si no se entró desde la validación.
+     *
+     * @return array<string, string>
+     */
+    public function validationReturnParams(): array
+    {
+        return $this->validationReturnUrl() === null ? [] : ['desde' => $this->from, 'depto' => $this->fromDepartment, 'cat' => $this->fromCatalog];
+    }
+
     /** A dónde vuelve «Regresar» si se entró desde la validación; null si no. */
     public function validationReturnUrl(): ?string
     {
