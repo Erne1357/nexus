@@ -11,7 +11,7 @@ use RuntimeException;
 
 /**
  * Carga la proyección de carga de un departamento desde su xlsx (ImportLoadProjection, R-PRY-1). Con `--dry-run` calcula y
- * reporta sin escribir. Días por créditos: 5 = lunes a viernes, 4 = lunes a jueves y 1 = viernes (confirmado); 2, 3 y 6
+ * reporta sin escribir. Días por créditos: 5 = lunes a viernes, 4 = lunes a jueves y 1 = viernes; 6 = lunes a viernes con la sexta hora por acomodar a mano (confirmado); 2 y 3
  * son supuestos por confirmar (2 y 3: los primeros días; 6: lunes a viernes y la sexta hora el lunes).
  */
 final class ImportLoadProjectionCommand extends Command
@@ -60,7 +60,7 @@ final class ImportLoadProjectionCommand extends Command
             $this->warn($warning);
         }
 
-        $this->line('Días por créditos: 5 = lunes a viernes, 4 = lunes a jueves, 1 = viernes (confirmado); 2 y 3 = primeros días hábiles, 6 = lunes a viernes y la sexta hora el lunes (supuestos por confirmar).');
+        $this->line('Días por créditos: 5 = lunes a viernes, 4 = lunes a jueves, 1 = viernes, 6 = lunes a viernes con la sexta hora por acomodar a mano (confirmado); 2 y 3 = primeros días hábiles (supuesto por confirmar).');
 
         if ($report['conflicts'] !== null) {
             $this->line("Choques recalculados: {$report['conflicts']['opened']} nuevos, {$report['conflicts']['kept']} vigentes, {$report['conflicts']['resolved']} resueltos.");
