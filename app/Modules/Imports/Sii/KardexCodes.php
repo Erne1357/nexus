@@ -14,14 +14,20 @@ use App\Modules\Students\Enums\KardexResult;
  *   son convalidaciones y acreditaciones: no gastan oportunidad y cuentan como 1.
  * - `estatus_materia` A es aprobada; R y P son reprobadas (P es la que se reprobó en ese periodo y se acreditó en
  *   otro posterior, `periodo_acredita_materia`).
- * - Una aprobada con 0 queda sin calificación: son equivalencias acreditadas sin número (K2, confirmado el 9 de
- *   noviembre de 2026); las de 1 a 69 conservan la suya.
+ * - Una A con calificación 0 o vacía y tipo de evaluación de examen (EXAM_TYPES) es reprobada: en los kárdex viejos
+ *   (casi todos de 1990 a 2009) el SII marca así la materia que no se pasó (K4, confirmado el 19 de noviembre de 2026;
+ *   la lista exacta de tipos de examen, supuesto por confirmar).
+ * - Una aprobada con 0 que no es de examen (convalidaciones y acreditaciones) queda sin calificación: son equivalencias
+ *   acreditadas sin número (K2, confirmado el 9 de noviembre de 2026, acotada por K4); las de 1 a 69 conservan la suya.
  * - Un periodo es el código del SII, año y 1, 2 o 3, del año en que se fundó el ITCJ (1964) al próximo (supuesto por
  *   confirmar).
  */
 final class KardexCodes
 {
     public const int FIRST_YEAR = 1964;
+
+    /** @var list<string> tipos de evaluación de examen: con A y 0 o vacía, la materia se reprobó (K4) */
+    public const array EXAM_TYPES = ['O1', 'O2', 'R1', 'R2', 'E1', 'E2', 'CE', 'EE'];
 
     /** @var array<string, int> oportunidad por tipo de evaluación */
     private const array ATTEMPTS = [
@@ -40,15 +46,27 @@ final class KardexCodes
     }
 
     /**
-     * El resultado de `estatus_materia`, o null si no es A, R ni P.
+     * El resultado de `estatus_materia`, o null si no es A, R ni P. Una A con calificación 0 o vacía y tipo de
+     * evaluación de examen es reprobada (K4).
      */
-    public static function result(string $status): ?KardexResult
+    public static function result(string $status, string $grade, string $type): ?KardexResult
     {
         return match (strtoupper(trim($status))) {
-            'A' => KardexResult::Aprobada,
+            'A' => self::failedExam($grade, $type) ? KardexResult::Reprobada : KardexResult::Aprobada,
             'R', 'P' => KardexResult::Reprobada,
             default => null,
         };
+    }
+
+    /**
+     * Si la calificación es 0 o está vacía y el tipo de evaluación es de examen (K4).
+     */
+    public static function failedExam(string $grade, string $type): bool
+    {
+        $grade = trim($grade);
+
+        return ($grade === '' || (preg_match('/^0+$/', $grade) === 1))
+            && in_array(strtoupper(trim($type)), self::EXAM_TYPES, true);
     }
 
     /**

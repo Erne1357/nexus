@@ -98,9 +98,28 @@ it('convierte la historia en filas del kárdex de Nexus', function () {
         kardexStepRow('S1', 'ACF-0901', '20251', 85, 'aprobada', 1),
         kardexStepRow('S1', 'AEF-1001', '20253', 0, 'reprobada', 2),
         kardexStepRow('S1', 'AEF-1001', '20261', 90, 'aprobada', 3),
-        kardexStepRow('S2', 'ACF-0901', '20043', '', 'aprobada', 1),
+        kardexStepRow('S2', 'ACF-0901', '20043', 0, 'reprobada', 1),
         kardexStepRow('S2', 'AEF-1001', '20051', 60, 'reprobada', 1),
     ]);
+});
+
+it('K4: la reprobada vieja entra como reprobada y la aprobada posterior de la misma materia queda aprobada', function () {
+    writeSiiHistory($this->dir, [
+        ['19951', 'S1', 'CD1', '0', 'O1', 'A'],
+        ['19953', 'S1', 'CD1', '85', 'O1', 'A'],
+        ['20001', 'S1', 'QU1', '', 'E1', 'A'],
+        ['20011', 'S1', 'CD2', '0', 'RC', 'A'],
+    ]);
+
+    $run = kardexStepRun($this->dir);
+
+    expect($run['rows'])->toBe([
+        kardexStepRow('S1', 'ACF-0901', '19951', 0, 'reprobada', 1),
+        kardexStepRow('S1', 'ACF-0901', '19953', 85, 'aprobada', 1),
+        kardexStepRow('S1', 'AEF-1001', '20001', '', 'reprobada', 1),
+        kardexStepRow('S1', 'ACF-0901', '20011', '', 'aprobada', 1),
+    ])
+        ->and(kardexMessages($run['incidents']))->toContain('kardex K4: 2 línea(s) con estatus A y calificación 0 o vacía de examen pasaron a reprobadas (1990s: 1, 2000s: 1).');
 });
 
 it('no migra la materia sin equivalente en Nexus y avisa por clave del SII', function () {
