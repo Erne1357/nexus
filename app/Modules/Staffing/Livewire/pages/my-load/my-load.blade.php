@@ -120,10 +120,12 @@
 
         @include('staffing::my-load.requests')
 
+        @if ($canRequest)
         <x-modal wire:model="showRequest" box-class="max-w-xl" aria-labelledby="request-title" data-testid="request-modal">
             @if ($showRequest)
                 @include('staffing::my-load.request-form')
             @endif
         </x-modal>
+        @endif
     @endif
 </div>

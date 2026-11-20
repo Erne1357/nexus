@@ -1,8 +1,13 @@
 <?php
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\Core\Actions\UpdateSetting;
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Settings\SettingRegistry;
+use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
 use App\Modules\Staffing\Enums\ChangeRequestKind;
 use App\Modules\Staffing\Enums\ChangeRequestStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
@@ -11,6 +16,7 @@ use App\Modules\Staffing\Queries\MyChangeRequestsQuery;
 use Illuminate\Support\Facades\DB;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 require_once __DIR__.'/ChangeRequestScreensSupport.php';
 
@@ -246,4 +252,47 @@ it('la consulta de sus solicitudes hace un número constante de consultas', func
     }
 
     expect($count())->toBe($few)->toBeLessThanOrEqual(6);
+});
+
+/**
+ * El admin oculta o muestra la carga académica (MN-05).
+ */
+function crSetLoadVisible(bool $visible): void
+{
+    app(UpdateSetting::class)->handle(app(SettingRegistry::class)->get(AcademicLoadVisibility::SETTING), $visible);
+}
+
+it('MN-05: con la carga oculta Mi carga es de solo lectura: sin botón ni modal, con su línea, y el servidor rechaza pedir', function () {
+    crSetLoadVisible(false);
+
+    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+        ->assertDontSeeHtml('data-testid="request-change"')
+        ->assertDontSeeHtml('data-testid="request-modal"')
+        ->assertSee('Las solicitudes de cambio no están disponibles por ahora.')
+        ->assertSee('Mis solicitudes');
+
+    $open = fn () => Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load');
+
+    $open()->call('openRequest')->assertForbidden();
+    $open()->call('openRequest', groupId: $this->group->id)->assertForbidden();
+    $open()->set('requestGroupId', $this->group->id)->set('proposal', 'Martes de 10 a 12')->set('reason', 'Motivo')->call('sendRequest')->assertForbidden();
+
+    $this->actingAs($this->w->teacherUser);
+    app(Actor::class)->refresh();
+
+    expect(fn () => app(RequestChange::class)->handle($this->group, $this->w->teacherUser, ChangeRequestKind::Schedule, 'Martes de 10 a 12', 'Motivo'))
+        ->toThrow(HttpException::class)
+        ->and(ChangeRequest::query()->count())->toBe(0);
+});
+
+it('MN-05: con la carga visible el botón aparece, sin la línea, y la Action crea la solicitud', function () {
+    Livewire::actingAs($this->w->teacherUser)->test('staffing::pages.my-load')
+        ->assertSeeHtml('data-testid="request-change"')
+        ->assertDontSee('Las solicitudes de cambio no están disponibles por ahora.');
+
+    $this->actingAs($this->w->teacherUser);
+    app(Actor::class)->refresh();
+    app(RequestChange::class)->handle($this->group, $this->w->teacherUser, ChangeRequestKind::Schedule, 'Martes de 10 a 12', 'Motivo');
+
+    expect(ChangeRequest::query()->count())->toBe(1);
 });
