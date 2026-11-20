@@ -15,8 +15,10 @@ use App\Modules\Students\Enums\KardexResult;
  * - `estatus_materia` A es aprobada; R y P son reprobadas (P es la que se reprobó en ese periodo y se acreditó en
  *   otro posterior, `periodo_acredita_materia`).
  * - Una A con calificación 0 o vacía y tipo de evaluación de examen (EXAM_TYPES) es reprobada: en los kárdex viejos
- *   (casi todos de 1990 a 2009) el SII marca así la materia que no se pasó (K4, confirmado el 19 de noviembre de 2026;
- *   la lista exacta de tipos de examen, supuesto por confirmar).
+ *   (casi todos de 1990 a 2009) el SII marca así la materia que no se pasó (K4). Regla «mixta» (confirmada el 20 de
+ *   noviembre de 2026): si el alumno tiene otra línea de la misma materia del SII, después o en el mismo periodo, es
+ *   reprobada; si nunca se volvió a cursar, es aprobada sin calificación cuando el alumno es EGR o TIT y reprobada con
+ *   cualquier otro estatus. La lista exacta de tipos de examen, supuesto por confirmar.
  * - Una aprobada con 0 que no es de examen (convalidaciones y acreditaciones) queda sin calificación: son equivalencias
  *   acreditadas sin número (K2, confirmado el 9 de noviembre de 2026, acotada por K4); las de 1 a 69 conservan la suya.
  * - Un periodo es el código del SII, año y 1, 2 o 3, del año en que se fundó el ITCJ (1964) al próximo (supuesto por
@@ -45,17 +47,30 @@ final class KardexCodes
         return self::ATTEMPTS[strtoupper(trim($type))] ?? null;
     }
 
+    /** @var list<string> estatus del alumno (`alumnos_todos.estatus_alumno`) de egresados y titulados */
+    public const array GRADUATE_STATUSES = ['EGR', 'TIT'];
+
     /**
      * El resultado de `estatus_materia`, o null si no es A, R ni P. Una A con calificación 0 o vacía y tipo de
-     * evaluación de examen es reprobada (K4).
+     * evaluación de examen es reprobada (K4), salvo la de un egresado o titulado que nunca volvió a cursar esa materia
+     * (`$graduateNeverRetaken`, ver graduateNeverRetaken()), que es aprobada sin calificación.
      */
-    public static function result(string $status, string $grade, string $type): ?KardexResult
+    public static function result(string $status, string $grade, string $type, bool $graduateNeverRetaken = false): ?KardexResult
     {
         return match (strtoupper(trim($status))) {
-            'A' => self::failedExam($grade, $type) ? KardexResult::Reprobada : KardexResult::Aprobada,
+            'A' => self::failedExam($grade, $type) && ! $graduateNeverRetaken ? KardexResult::Reprobada : KardexResult::Aprobada,
             'R', 'P' => KardexResult::Reprobada,
             default => null,
         };
+    }
+
+    /**
+     * Si el alumno es egresado o titulado y la materia nunca se volvió a cursar: lo único que vuelve aprobada a la A con
+     * 0 de examen (K4 mixta).
+     */
+    public static function graduateNeverRetaken(string $studentStatus, bool $neverRetaken): bool
+    {
+        return $neverRetaken && in_array(strtoupper(trim($studentStatus)), self::GRADUATE_STATUSES, true);
     }
 
     /**

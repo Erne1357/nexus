@@ -3,6 +3,7 @@
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
 use Tests\Fixtures\Authorization\FakePermission;
 
@@ -107,6 +108,41 @@ it('CF-03: el registro rechaza conceder un candado de fábrica o hacerlo excepci
         ->and(fn () => PermissionRegistry::fromDeclarations([FakePermission::class], [], [FakePermission::ViewAny], [FakePermission::ViewAny]))
         ->toThrow(LogicException::class, 'fake.thing.view_any');
 });
+
+it('CF-03: un candado de lectura que el código da de fábrica a quien lee en todo el Tec vale solo para ese puesto', function () {
+    $registry = PermissionRegistry::fromDeclarations(
+        [FakePermission::class],
+        [Role::Directivo->value => [FakePermission::ViewAny, FakePermission::ViewCampus]],
+        [],
+        [FakePermission::ViewAny],
+        [Role::Directivo->value => [FakePermission::ViewAny]],
+    );
+    $rules = new PermissionGrantRules($registry);
+
+    expect($registry->isAdminOnly(FakePermission::ViewAny))->toBeTrue()
+        ->and($registry->rolesGranting(FakePermission::ViewAny))->toBe([Role::Directivo])
+        ->and($registry->isFactoryLockException(Role::Directivo, FakePermission::ViewAny))->toBeTrue()
+        ->and($registry->isFactoryLockException(Role::Subdireccion, FakePermission::ViewAny))->toBeFalse()
+        ->and($registry->isFactoryLockException(Role::Directivo, FakePermission::ViewCampus))->toBeFalse()
+        ->and($rules->grantProblem(Role::Directivo, FakePermission::ViewAny))->toBeNull()
+        ->and($registry->factoryLockHolders(FakePermission::ViewAny))->toBe([Role::Directivo])
+        ->and($registry->factoryLockHolders(FakePermission::ViewCampus))->toBe([])
+        ->and($rules->lockProblem(FakePermission::ViewAny))->toBe('«fake.thing.view_any» es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.')
+        ->and($rules->lockProblem(FakePermission::ViewAny, Role::Directivo))->toBeNull()
+        ->and($rules->grantProblem(Role::Subdireccion, FakePermission::ViewAny))->toBe($rules->lockProblem(FakePermission::ViewAny))
+        ->and($rules->grantProblem(Role::Coordinador, FakePermission::ViewAny))->toBe($rules->lockProblem(FakePermission::ViewAny));
+});
+
+it('CF-03: el registro rechaza un candado en grants() fuera de la lista de excepciones, y una excepción que no sea candado de lectura concedido a quien lee en todo el Tec', function (array $grants, array $adminOnly, array $exceptions, string $message) {
+    expect(fn () => PermissionRegistry::fromDeclarations([FakePermission::class, CorePermission::class], $grants, [], $adminOnly, $exceptions))
+        ->toThrow(LogicException::class, $message);
+})->with([
+    'candado concedido sin excepción' => [[Role::Directivo->value => [FakePermission::ViewAny]], [FakePermission::ViewAny], [], 'El permiso «fake.thing.view_any» es candado (CF-03): solo lo tiene el admin y no se concede a «directivo» en grants().'],
+    'excepción para otro puesto' => [[Role::Directivo->value => [FakePermission::ViewAny]], [FakePermission::ViewAny], [Role::Subdireccion->value => [FakePermission::ViewAny]], 'La excepción de candado «fake.thing.view_any» de «subdireccion» no está concedida en grants().'],
+    'excepción que no es candado' => [[Role::Directivo->value => [FakePermission::ViewAny]], [], [Role::Directivo->value => [FakePermission::ViewAny]], 'La excepción de candado «fake.thing.view_any» de «directivo» no es candado (CF-03).'],
+    'excepción a quien no lee en todo el Tec' => [[Role::Subdireccion->value => [FakePermission::ViewAny]], [FakePermission::ViewAny], [Role::Subdireccion->value => [FakePermission::ViewAny]], 'La excepción de candado «fake.thing.view_any» es para «subdireccion», que no lee en todo el Tec (AZ-03).'],
+    'excepción que escribe' => [[Role::JefeDepartamento->value => [CorePermission::OrgUnitCreate]], [CorePermission::OrgUnitCreate], [Role::JefeDepartamento->value => [CorePermission::OrgUnitCreate]], 'La excepción de candado «core.org_unit.create» no es de lectura.'],
+]);
 
 it('el registro da los candados, busca por clave y cambia de huella si cambia lo de fábrica', function () {
     $registry = PermissionRegistry::fromDeclarations([FakePermission::class], [Role::Coordinador->value => [FakePermission::ViewCampus]], [], [FakePermission::ViewAny]);

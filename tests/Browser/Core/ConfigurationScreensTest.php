@@ -39,6 +39,22 @@ it('CF-S5: «Detalle» abre el cajón de una entrada de la bitácora sin errores
         ->assertNoJavaScriptErrors();
 });
 
+it('CF-S5: tocar el renglón abre el cajón aunque el renglón que lleva la página sea solo su id', function () {
+    $rosa = User::factory()->create(['username' => 'RURR800101AB1', 'name' => 'Rosa Ruiz Rivas']);
+    activity()->performedOn($rosa)->causedBy($this->admin)->event('deactivated')
+        ->withProperties(['reason' => 'renuncia', 'note' => 'Nota reservada de la baja'])
+        ->log('Dio de baja la cuenta de RURR800101AB1 (Renuncia)');
+
+    signInToConfiguration()
+        ->navigate('/configuracion/bitacora')
+        ->assertSee('Dio de baja la cuenta de RURR800101AB1 (Renuncia)')
+        ->assertSourceMissing('Nota reservada de la baja')
+        ->click('table tbody tr:first-child td:nth-child(4)')
+        ->assertSeeIn('@activity-drawer', 'Dio de baja la cuenta de RURR800101AB1 (Renuncia)')
+        ->assertSeeIn('@activity-properties', 'Nota reservada de la baja')
+        ->assertNoJavaScriptErrors();
+});
+
 it('CF-S8: las tres pestañas de «Correos y colas» cambian sin errores de JavaScript', function () {
     MailLog::factory()->create(['to' => 'rebeca.lopez@cdjuarez.tecnm.mx', 'subject' => 'Tu acceso a Nexus']);
     User::factory()->create([

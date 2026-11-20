@@ -124,8 +124,9 @@ final class PermissionSetsQuery
     }
 
     /**
-     * CF-03 y CF-S2: lo que no se le puede agregar al rol con id `$setId` en su editor, con su motivo: los candados, y
-     * lo que algún puesto que ya tiene el rol no puede recibir (CF-04), como UpdatePermissionSet. Lo que el rol ya trae
+     * CF-03 y CF-S2: lo que no se le puede agregar al rol con id `$setId` en su editor, con su motivo: los candados (salvo,
+     * en un rol de fábrica, los que el código le concede a su puesto), y lo que algún puesto que ya tiene el rol no
+     * puede recibir (CF-04), como UpdatePermissionSet. Lo que el rol ya trae
      * no sale: se puede dejar o quitar. Con null, un rol nuevo: solo los candados. `$sets` es all(), si ya se leyó.
      *
      * @param  list<array<string, mixed>>|null  $sets
@@ -144,7 +145,7 @@ final class PermissionSetsQuery
                 continue;
             }
 
-            $problem = $this->grantRules->lockProblem($permission);
+            $problem = $this->grantRules->lockProblem($permission, $set['factory_role'] ?? null);
 
             foreach ($set['positions'] ?? [] as $role) {
                 $problem ??= $this->grantRules->grantProblem($role, $permission);
