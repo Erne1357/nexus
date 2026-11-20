@@ -275,3 +275,22 @@ it('MS13: arma el PDF del semestre con una foto vieja, con el campus en la raíz
     $this->get(publishedPdfUrl('published.semester.pdf', ['carrera' => 'ISC', 'reticula' => 'ISIC-2010-224', 'semestre' => 3]))
         ->assertOk()->assertHeader('Content-Type', 'application/pdf');
 });
+
+it('1.24.5: el encabezado de los PDF lleva el escudo del ITCJ y «Nexus · Horarios · Carga académica», y el PDF se arma sin errores', function () {
+    $ids = LoadSnapshot::query()->pluck('id')->all();
+    $modality = modalityOf('PRES');
+    $documents = [
+        new SemesterPdf($this->term->id, $modality->id, '20271', 'PRES', $ids, $this->career['id'], 'ISC', $this->plan['id'], 'ISIC-2010-224', 3, 'C2'),
+        new TeacherPdf($this->term->id, $modality->id, '20271', 'PRES', $ids, $this->teacher['id'], $this->teacher['name'], 'C2'),
+    ];
+
+    foreach ($documents as $document) {
+        $html = $document->html();
+
+        expect($html)->toContain('<img src="data:image/jpeg;base64,')
+            ->toContain('Nexus · Horarios · Carga académica')
+            ->toContain('Instituto Tecnológico de Ciudad Juárez')
+            ->not->toContain('src="http');
+        expect($document->build())->toStartWith('%PDF');
+    }
+});

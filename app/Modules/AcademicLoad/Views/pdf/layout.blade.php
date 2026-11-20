@@ -1,5 +1,5 @@
 {{-- Marco común de los PDF de lo publicado (ADR-0021): carta, DejaVu Sans, los colores de DESIGN.md escritos aquí porque
-     DomPDF no carga app.css. Encabezado con la institución a la izquierda y, a la derecha, la modalidad (o el campus del
+     DomPDF no carga app.css. Encabezado con el escudo del ITCJ (data URI, ADR-0021) y la institución a la izquierda y, a la derecha, la modalidad (o el campus del
      filtro) y el periodo y debajo «Actualizado el …» con la fecha y la hora de la versión vigente (tarea 8.5); pie con la
      leyenda oficial y el número de página. `.change` es la marca discreta de un grupo que cambió en la última
      publicación (en `info`; el nuevo en `success` y el cancelado en `error`), sin versión ni cupos. --}}
@@ -9,9 +9,9 @@
     <meta charset="utf-8">
     <title>{{ $title }}</title>
     <style>
-        @page { margin: 66px 34px 44px; }
+        @page { margin: 68px 34px 44px; }
         body { font-family: 'DejaVu Sans', sans-serif; font-size: 8.5pt; color: #092d48; }
-        header { position: fixed; top: -50px; left: 0; right: 0; height: 38px; border-bottom: 2px solid #c2201e; }
+        header { position: fixed; top: -52px; left: 0; right: 0; height: 40px; border-bottom: 2px solid #c2201e; }
         header .org { font-size: 7.5pt; color: #666567; }
         header .brand { font-size: 10pt; font-weight: bold; }
         footer { position: fixed; bottom: -30px; left: 0; right: 0; height: 18px; font-size: 7pt; color: #666567; }
@@ -37,8 +37,9 @@
 <body>
     <header>
         <table><tr>
-            <td style="border: 0; padding: 0;"><span class="brand">Nexus · Horarios</span><br><span class="org">Instituto Tecnológico de Ciudad Juárez</span></td>
-            <td style="border: 0; padding: 0; text-align: right;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}@if ($updated)<br>Actualizado el {{ $updated }}@endif</td>
+            <td style="border: 0; padding: 0 6px 2px 0; width: 32px; vertical-align: bottom;"><img src="{{ \App\Modules\AcademicLoad\Exports\PublishedPdf::crest() }}" alt="Escudo del ITCJ" style="height: 34px; width: auto;"></td>
+            <td style="border: 0; padding: 0 0 2px;"><span class="brand">Nexus · Horarios · Carga académica</span><br><span class="org">Instituto Tecnológico de Ciudad Juárez</span></td>
+            <td style="border: 0; padding: 0 0 2px; text-align: right; vertical-align: bottom;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}@if ($updated)<br>Actualizado el {{ $updated }}@endif</td>
         </tr></table>
     </header>
     <footer>
