@@ -157,7 +157,7 @@ final class VerificationStep implements SiiStep
         }
 
         if ($verification->graduatesCompleteAsExported !== $verification->graduatesCompleteK4) {
-            $incidents[] = $this->issue('warning', 'K4', "Egresados y titulados (EGR y TIT) completos: {$verification->graduatesCompleteAsExported} con el SII tal cual y {$verification->graduatesCompleteK4} con K4 (la A con calificación 0 o vacía de examen es reprobada): ".($verification->graduatesCompleteAsExported - $verification->graduatesCompleteK4).' dejan de estar completos.');
+            $incidents[] = $this->issue('warning', 'K4', "Egresados y titulados (EGR y TIT) completos: {$verification->graduatesCompleteAsExported} con el SII tal cual y {$verification->graduatesCompleteK4} con K4 mixta (la A con calificación 0 o vacía de examen es reprobada, salvo en el egresado o titulado que nunca volvió a cursar la materia): ".($verification->graduatesCompleteAsExported - $verification->graduatesCompleteK4).' dejan de estar completos.');
         }
 
         $errors = count($verification->incompleteInNexus) + count($verification->missingFromNexus);
