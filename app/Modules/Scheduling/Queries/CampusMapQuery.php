@@ -55,7 +55,7 @@ final class CampusMapQuery
 
     private function termOn(CarbonImmutable $day): ?Term
     {
-        return Term::query()->whereDate('starts_on', '<=', $day)->whereDate('ends_on', '>=', $day)->orderByDesc('code')->first()
+        return Term::query()->containing($day)->orderByDesc('code')->first()
             ?? Term::query()->whereDate('ends_on', '<', $day)->orderByDesc('ends_on')->first();
     }
 

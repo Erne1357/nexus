@@ -3,6 +3,7 @@
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Models\Term;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\ChangeRequests\RequestChange;
@@ -13,9 +14,11 @@ use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\MyChangeRequestsQuery;
 use App\Modules\Staffing\Queries\MyLoadQuery;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
+use Carbon\CarbonImmutable;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Title;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Mary\Traits\Toast;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -52,6 +55,10 @@ new #[Title('Mi carga')] class extends Component
     public string $requestKind = 'schedule';
 
     public string $proposal = '';
+
+    /** El periodo que se ve: vacío es el periodo en curso; el id del periodo en planeación solo si se ofrece (#755). */
+    #[Url(as: 'periodo')]
+    public string $period = '';
 
     public string $reason = '';
 
@@ -154,24 +161,81 @@ new #[Title('Mi carga')] class extends Component
         $user = $context->user();
         abort_unless($user !== null && $context->allows(StaffingPermission::MyLoadView, Target::ownedBy((string) $user->getKey())), 403);
 
-        $term = $context->activeTerm();
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
+        $planning = $context->activeTerm();
+        $offer = $teacher !== null && $this->offersPlanning($context, $teacher, $query);
+        $term = $this->selectedTerm($context, $teacher, $query);
         $load = $term === null || $teacher === null ? null : $query->forTeacher($teacher, $term);
+        $fromSii = ($load['source'] ?? 'nexus') === 'sii';
 
         $mine = $load === null ? null : $requests->forTeacher($teacher, (string) $user->getKey(), $term);
         $options = $load === null ? [] : self::optionsFor($load['groups'], $mine['groups']);
 
         return [
             'term' => $term,
+            'planning' => $offer ? $planning : null,
+            'inProgress' => $this->inProgressTerm($context),
+            'fromSii' => $fromSii,
             'teacher' => $teacher,
             'load' => $load,
             'mine' => $mine,
-            'canRequest' => $this->canRequest($context),
+            'canRequest' => ! $fromSii && $term !== null && $term->id === $planning?->id && $this->canRequest($context),
             'requestsHidden' => app(AcademicLoadVisibility::class)->hiddenFrom($context),
             'requestOptions' => $options,
             'requestBlocked' => self::blockedReason($options, $mine['groups'] ?? []),
             'maxText' => ChangeRequestRules::MAX_TEXT_LENGTH,
         ];
+    }
+
+    /**
+     * El periodo en curso (#755, confirmado el 20 de noviembre de 2026): el que contiene hoy por sus fechas, en la zona
+     * del Tec. Si ninguno lo contiene (entre semestres), el activo para capturar carga.
+     */
+    private function inProgressTerm(Actor $context): ?Term
+    {
+        return Term::query()->containing(CarbonImmutable::now(config('app.timezone')))->orderByDesc('code')->first() ?? $context->activeTerm();
+    }
+
+    /**
+     * Si se ofrece el selector «Periodo» (supuesto por confirmar): la carga académica no está oculta para quien mira
+     * (`hiddenFrom`; el admin que ve lo oculto se rige por lo mismo), el periodo en planeación (el activo) no es el
+     * que está en curso y el docente ya tiene grupos de Nexus en él, asignados o publicados.
+     */
+    private function offersPlanning(Actor $context, Teacher $teacher, MyLoadQuery $query): bool
+    {
+        $planning = $context->activeTerm();
+
+        return $planning !== null
+            && ! app(AcademicLoadVisibility::class)->hiddenFrom($context)
+            && $planning->id !== $this->inProgressTerm($context)?->id
+            && $query->hasNexusGroups($teacher, $planning);
+    }
+
+    /**
+     * El periodo que se ve: el que pide `$period` si es el de planeación y se ofrece; si no, el periodo en curso.
+     */
+    private function selectedTerm(Actor $context, ?Teacher $teacher, MyLoadQuery $query): ?Term
+    {
+        $planning = $context->activeTerm();
+
+        if ($teacher !== null && $this->period !== '' && $planning !== null && $this->period === $planning->id && $this->offersPlanning($context, $teacher, $query)) {
+            return $planning;
+        }
+
+        return $this->inProgressTerm($context);
+    }
+
+    /**
+     * El periodo donde se pide un cambio: el que se ve, solo si es el activo para capturar carga. En el periodo en
+     * curso que sale del SII (u otro que no se planea) no se pide: 403.
+     */
+    private function requestTerm(Actor $context, Teacher $teacher): ?Term
+    {
+        $term = $this->selectedTerm($context, $teacher, app(MyLoadQuery::class));
+
+        abort_if($term !== null && $term->id !== $context->activeTerm()?->id, 403);
+
+        return $term;
     }
 
     /**
@@ -205,8 +269,8 @@ new #[Title('Mi carga')] class extends Component
         abort_unless($this->canRequest($context), 403);
 
         $user = $context->user();
-        $term = $context->activeTerm();
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
+        $term = $teacher === null ? null : $this->requestTerm($context, $teacher);
 
         abort_if($term === null || $teacher === null, 404);
 
@@ -286,8 +350,8 @@ new #[Title('Mi carga')] class extends Component
         abort_if(app(AcademicLoadVisibility::class)->hiddenFrom($context), 403);
 
         $user = $context->user();
-        $term = $context->activeTerm();
         $teacher = $user === null ? null : Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
+        $term = $teacher === null ? null : $this->requestTerm($context, $teacher);
 
         abort_if($term === null || $teacher === null, 404);
 

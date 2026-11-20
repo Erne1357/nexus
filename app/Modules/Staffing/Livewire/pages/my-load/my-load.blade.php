@@ -13,6 +13,18 @@
         @if ($term)
             <p class="mt-1.5 text-sm text-neutral">Tus grupos de {{ $term->name }}, día por día.</p>
         @endif
+        @if ($fromSii)
+            <p class="mt-0.5 text-sm text-neutral" data-testid="my-load-sii-source">Horario del SII del periodo {{ $term->name }}. Solo lectura.</p>
+        @endif
+        @if ($planning)
+            <div class="mt-2 flex items-center gap-2" data-testid="my-load-term-picker">
+                <label for="my-load-period" class="text-sm text-neutral">Periodo</label>
+                <select id="my-load-period" wire:model.live="period" class="select select-sm w-auto">
+                    <option value="">{{ $inProgress->name }} (en curso)</option>
+                    <option value="{{ $planning->id }}">{{ $planning->name }} (en planeación)</option>
+                </select>
+            </div>
+        @endif
         @if (($load['published'] ?? []) !== [])
             <p class="mt-0.5 flex flex-wrap gap-x-4 text-sm text-neutral" data-testid="my-load-published">@include('staffing::shared.published', ['stamps' => $load['published']])</p>
         @endif

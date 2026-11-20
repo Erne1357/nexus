@@ -86,7 +86,7 @@ final class SessionLabels
      * @param  list<array{0: int, 1: string, 2: string}>  $sessions  día, inicio y fin
      * @return list<array{days: string, time: string}>
      */
-    private static function lines(array $sessions): array
+    public static function lines(array $sessions): array
     {
         usort($sessions, fn (array $a, array $b): int => [$a[0], Minutes::of($a[1])] <=> [$b[0], Minutes::of($b[1])]);
 
