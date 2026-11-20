@@ -75,7 +75,7 @@ final class ArchiveSiiExport
      */
     public function handle(SiiExport $export, bool $dryRun = false): array
     {
-        $files = array_values(array_filter(SiiFile::cases(), fn (SiiFile $file): bool => $export->has($file)));
+        $files = array_values(array_filter(SiiFile::cases(), fn (SiiFile $file): bool => $file !== SiiFile::Titulares && $export->has($file)));
 
         if ($dryRun) {
             return array_combine(

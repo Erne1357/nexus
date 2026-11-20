@@ -66,7 +66,7 @@ final class StaffStep implements SiiStep
         foreach ($rfcs as $rfc) {
             $d = $staff[$rfc] ?? null;
             $d2 = $staff2[$rfc] ?? null;
-            $type = $this->typeOf($d);
+            $type = self::typeOf($d);
             $existing = User::query()->where('username', $rfc)->first();
             $untyped += $type === null ? 1 : 0;
 
@@ -133,7 +133,7 @@ final class StaffStep implements SiiStep
     /**
      * @param  array<string, string>|null  $d
      */
-    private function typeOf(?array $d): ?StaffType
+    public static function typeOf(?array $d): ?StaffType
     {
         return match (strtoupper(trim($d['nombramiento'] ?? ''))) {
             'D' => StaffType::Docente,
