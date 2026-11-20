@@ -28,7 +28,7 @@ use Illuminate\Support\Str;
  */
 final class CatalogReviewQuery
 {
-    /** Lo que el admin y quien lee en todo el Tec (el directivo) pueden en las de Servicios Escolares, además de su jefe (CV-S1, desde el 20 de noviembre de 2026 la Subdirección Académica no). */
+    /** Lo que el admin puede en las de Servicios Escolares, además de su jefe (CV-S1, desde el 20 de noviembre de 2026: solo ellos). */
     private const array SCHOOL_SERVICES_OVERSIGHT = [CatalogValidationPermission::ReviewView, CatalogValidationPermission::ReviewResolveFlag];
 
     /** Por qué no se abren materias, planes ni carreras sin jefe de Servicios Escolares (CV15, confirmado el 20 de noviembre de 2026). */
@@ -244,8 +244,8 @@ final class CatalogReviewQuery
      *
      * En las de Servicios Escolares (CV15) la unidad se compara exacta: su jefe es quien tiene un nombramiento sobre la
      * unidad de Servicios Escolares, no el de una unidad que la contenga si alguien la moviera en el Organigrama (AZ-S16
-     * deja que un nombramiento cubra a las descendientes de su unidad). Ver y resolver observaciones también lo pueden el
-     * admin y quien lee en todo el Tec (CV-S1, AZ-03); la Subdirección Académica no (desde el 20 de noviembre de 2026).
+     * deja que un nombramiento cubra a las descendientes de su unidad). Ver y resolver observaciones también lo puede el
+     * admin (CV-S1); ni la Subdirección Académica ni quien lee en todo el Tec (AZ-03) lo pueden (desde el 20 de noviembre de 2026).
      */
     public static function allowsOn(Actor $context, CatalogValidationPermission $permission, string $ownerId): bool
     {
@@ -261,13 +261,13 @@ final class CatalogReviewQuery
             return true;
         }
 
-        // Fuera de su jefe, solo el admin y quien lee en todo el Tec: ningún nombramiento de unidad (ni la Subdirección
-        // Académica, ni uno que contenga a Servicios Escolares) la alcanza por esta vía.
+        // Fuera de su jefe, solo el admin (allows() sí y ningún puesto con nombramiento lo concede): ni la Subdirección
+        // Académica, ni el directivo, ni uno que contenga a Servicios Escolares.
         $target = self::targetOf($ownerId, $permission);
 
         return in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)
             && $context->allows($permission, $target)
-            && array_all($context->rolesAllowing($permission, $target), fn (Role $role): bool => $role->readsWholeTec());
+            && $context->rolesAllowing($permission, $target) === [];
     }
 
     /**

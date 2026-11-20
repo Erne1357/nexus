@@ -248,15 +248,34 @@ describe('CV15: quién ve y quién actúa', function () {
         schoolServicesPage($boss, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
     });
 
-    it('AZ-03: un directivo de Planeación ve lo de Servicios Escolares pero no lo valida ni corrige, aunque el panel le diera esos permisos', function () {
+    it('CV-S1: un directivo (lee todo el Tec) no ve ni resuelve lo de Servicios Escolares, aunque el panel le diera permisos', function () {
         $directivo = User::factory()->withRole(Role::Directivo, ['org_unit_id' => schoolServicesUnit()->parent_id])->create();
         PermissionSet::factory()->withPermissions([CatalogValidationPermission::ReviewValidate, CatalogValidationPermission::ReviewCorrect])->assignedTo(Role::Directivo)->create();
         app()->forgetScopedInstances();
         $review = schoolServicesReview(Catalog::Subjects);
+        $own = schoolServicesReview(Catalog::Teachers, $this->sis);
 
-        expect($directivo->can('view', $review))->toBeTrue()
+        expect($directivo->can('view', $review))->toBeFalse()
+            ->and($directivo->can('resolveFlag', $review))->toBeFalse()
             ->and($directivo->can('validate', $review))->toBeFalse()
-            ->and($directivo->can('correct', $review))->toBeFalse();
+            ->and($directivo->can('correct', $review))->toBeFalse()
+            ->and($directivo->can('view', $own))->toBeTrue();
+    });
+
+    it('CV-S1: el directivo no tiene a Servicios Escolares en el selector, ?department= da 403 y el avance no trae su renglón ni sus observaciones', function () {
+        $directivo = User::factory()->withRole(Role::Directivo, ['org_unit_id' => schoolServicesUnit()->parent_id])->create();
+        $flag = CatalogReviewFlag::factory()->on($this->sisSubject)->create(['review_id' => schoolServicesReview(Catalog::Subjects)->id, 'flag' => ReviewFlag::Other, 'comment' => 'Revisar.', 'flagged_by' => $this->escolares->id]);
+
+        schoolServicesPage($directivo)->assertViewHas('departments', fn ($owners): bool => $owners->pluck('id')->all() === [$this->ele->id, $this->sis->id]);
+        schoolServicesPage($directivo, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
+
+        $page = fn () => Livewire::actingAs($directivo)->test('catalog-validation::pages.progress');
+        $page()->assertDontSeeHtml('data-testid="progress-row-SE"')->call('open', ReviewOwner::SCHOOL_SERVICES)->assertNotFound();
+        $page()->call('resolveFlag', $flag->id)->assertForbidden();
+        expect($flag->fresh()->resolved_at)->toBeNull();
+
+        actingAsRole($directivo, Role::Directivo);
+        Livewire::test('core::pages.home')->assertSee('0 de 2 departamentos validados');
     });
 
     it('CV15: el menú le muestra «Validar catálogos» al jefe de Servicios Escolares', function () {

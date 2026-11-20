@@ -274,8 +274,8 @@ new #[Title('Avance de validación')] class extends Component
     }
 
     /**
-     * Si quien mira ve el renglón, las observaciones y el avisar de Servicios Escolares: solo su jefe, el admin y quien
-     * lee en todo el Tec; la Subdirección Académica no (CV-S1, desde el 20 de noviembre de 2026).
+     * Si quien mira ve el renglón, las observaciones y el avisar de Servicios Escolares: solo su jefe y el admin; ni la Subdirección
+     * Académica ni el directivo (CV-S1, desde el 20 de noviembre de 2026).
      */
     private function seesSchoolServices(Actor $context): bool
     {
