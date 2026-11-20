@@ -67,7 +67,7 @@ final class UpdateExternalLoad
                 ->event(ActivityEvent::Updated)
                 ->withChanges(['attributes' => Arr::only($new, $changed), 'old' => Arr::only($old, $changed)])
                 ->withProperties(['teacher_id' => $locked->teacher_id, 'term_id' => $locked->term_id])
-                ->log('Cambió unas horas fuera del ITCJ del docente');
+                ->log('Cambió carga académica en otra modalidad del docente');
 
             ExternalLoadChanged::dispatch($locked, auth()->user());
 
@@ -95,14 +95,14 @@ final class UpdateExternalLoad
             ->event(ActivityEvent::Deleted)
             ->withChanges(['old' => $old])
             ->withProperties(['teacher_id' => $edited->teacher_id, 'term_id' => $edited->term_id])
-            ->log('Quitó unas horas fuera del ITCJ del docente al cambiarlas a un origen quitado');
+            ->log('Quitó carga académica en otra modalidad del docente al cambiarla a un origen quitado');
 
         activity()
             ->performedOn($removed)
             ->event(ActivityEvent::Created)
             ->withChanges(['attributes' => $new, 'old' => $before])
             ->withProperties(['teacher_id' => $removed->teacher_id, 'term_id' => $removed->term_id])
-            ->log('Restauró unas horas fuera del ITCJ del docente');
+            ->log('Restauró carga académica en otra modalidad del docente');
 
         ExternalLoadChanged::dispatch($edited, auth()->user());
         ExternalLoadChanged::dispatch($removed, auth()->user());

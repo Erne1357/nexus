@@ -111,7 +111,7 @@ it('muestra la ecuación de horas: base, externas con su fuente, asignadas y res
 
     Livewire::actingAs($this->user)->test('staffing::pages.my-load')
         ->assertSeeHtml('data-testid="hours-base"')
-        ->assertSeeInOrder(['Horas base', '20', 'Externas', '3', 'Colegio Bachilleres', 'Asignadas', '8', '2 grupos', 'Restantes', '9']);
+        ->assertSeeInOrder(['Horas base', '20', 'Otra modalidad', '3', 'Colegio Bachilleres', 'Asignadas', '8', '2 grupos', 'Restantes', '9']);
 });
 
 it('un docente sin grupos igual ve base y externas con asignadas en 0', function () {

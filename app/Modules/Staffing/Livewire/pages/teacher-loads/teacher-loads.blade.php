@@ -57,7 +57,7 @@
                 @php
                     $kpis = [
                         ['Docentes', $totals['teachers'], $totals['honorarios'].' honorarios'.($board->pending > 0 ? ' · '.$board->pending.' sin calcular' : ''), ''],
-                        ['Horas base', $totals['base'], $totals['external'].' externas', ''],
+                        ['Horas base', $totals['base'], $totals['external'].' en otra modalidad', ''],
                         ['Asignadas', $totals['assigned'], collect($totals['byCampus'])->map(fn ($hours, $code) => "{$code} {$hours}")->implode(' · ').'|'.$totals['groups'].' grupos', ''],
                         ['Restantes', $totals['remaining'], 'sin contar honorarios', ''],
                         ['Sin carga', $totals['none'], 'sin grupos en el periodo', $totals['none'] > 0 ? 'text-warning' : ''],
@@ -89,7 +89,7 @@
                 @foreach (array_keys($totals['byCampus']) as $code)
                     <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm {{ $campusBar[$campusTones[$code] % count($campusBar)] }}"></i>{{ $code }}</span>
                 @endforeach
-                <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm bg-base-content/35"></i>Externas</span>
+                <span class="flex items-center gap-1.5"><i class="inline-block h-2.5 w-2.5 rounded-sm bg-base-content/35"></i>Otra modalidad</span>
                 <span class="flex items-center gap-1.5"><i class="inline-block h-3 w-0.5 bg-base-content"></i>Horas base</span>
             </div>
 

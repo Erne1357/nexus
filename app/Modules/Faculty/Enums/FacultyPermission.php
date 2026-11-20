@@ -45,7 +45,7 @@ enum FacultyPermission: string implements Permission
             self::TeacherUpdate => 'Editar los datos de un docente',
             self::TeacherManagePositions => 'Administrar las plazas de un docente',
             self::TeacherManageAvailability => 'Administrar la disponibilidad de un docente',
-            self::TeacherManageExternalLoads => 'Administrar las horas fuera del ITCJ de un docente',
+            self::TeacherManageExternalLoads => 'Administrar la carga académica en otra modalidad de un docente',
             self::TeacherAdscribe => 'Asignar a un docente que ya existe',
             self::TeacherDeactivate => 'Dar de baja o reactivar a un docente',
             self::TeacherQualificationManage => 'Administrar el perfil de materias de un docente',
