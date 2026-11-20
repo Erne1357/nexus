@@ -61,7 +61,7 @@ it('un coordinador no ve la opción Campus en el menú', function () {
         ->assertVisible('#nexus-menu [data-menu-home]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Campus')
         ->click('@hare')
-        ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"]')
+        ->assertVisible('[data-menu-area="carga_academica"] [data-menu-flip="name"]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Campus')
         ->assertNoJavaScriptErrors();
 });

@@ -67,7 +67,7 @@ describe('AZ-02: menú', function () {
         expect(menuOf($this->servicesHead))->toBe(['Validar catálogos', 'Materias por colocar', 'Planes de estudio']);
     });
 
-    // Las listas van en el orden del menú (MN-01): Mi espacio, Académico por etapas, Servicios escolares,
+    // Las listas van en el orden del menú (MN-01): Mi espacio, Académico (la validación), Carga académica por etapas (MN-05), Servicios escolares,
     // Recursos humanos y Administración. Inicio no es una entrada: el menú lo pinta aparte.
     it('AZ-S16: cada puesto ve su menú, en el orden de MN-01', function (Closure $user, array $menu) {
         expect(menuOf($user($this)))->toBe($menu);

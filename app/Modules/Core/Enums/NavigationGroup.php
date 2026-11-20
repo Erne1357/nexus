@@ -3,8 +3,8 @@
 namespace App\Modules\Core\Enums;
 
 /**
- * Grupo del menú dentro de un área (DESIGN.md "Navigation", MN-01): Académico se agrupa por etapa del
- * semestre, en el orden de Stage, y Administración por propósito. El orden de los casos es el orden del
+ * Grupo del menú dentro de un área (DESIGN.md "Navigation", MN-01): Académico lleva la validación de catálogos, Carga
+ * académica se agrupa por etapa del semestre, en el orden de Stage (tarea 1.24.6), y Administración por propósito. El orden de los casos es el orden del
  * menú dentro de su área. El encabezado del grupo solo se muestra si el área tiene al menos dos grupos
  * visibles y suficientes entradas (Navigation::visibleByArea).
  */
@@ -44,7 +44,8 @@ enum NavigationGroup: string
     public function area(): NavigationArea
     {
         return match ($this) {
-            self::Validacion, self::Propuesta, self::Horarios, self::Asignacion, self::CierrePublicacion => NavigationArea::Academico,
+            self::Validacion => NavigationArea::Academico,
+            self::Propuesta, self::Horarios, self::Asignacion, self::CierrePublicacion => NavigationArea::CargaAcademica,
             self::Institucion, self::Catalogos, self::Datos, self::Configuracion => NavigationArea::Administracion,
         };
     }

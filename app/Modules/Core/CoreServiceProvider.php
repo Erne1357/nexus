@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core;
 
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\AuthorizationSnapshots;
 use App\Modules\Core\Authorization\DefaultScopeLabels;
@@ -33,9 +34,13 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\Stage;
 use App\Modules\Core\Enums\StageStatus;
 use App\Modules\Core\Enums\UserAccess;
+use App\Modules\Core\Events\SettingsUpdated;
 use App\Modules\Core\Events\TermCalendarChanged;
+use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
+use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
+use App\Modules\Core\Listeners\HoldAcademicLoadMail;
 use App\Modules\Core\Listeners\LogFailedQueuedMail;
 use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
@@ -63,11 +68,14 @@ use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Livewire\ComponentHookRegistry;
+use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
 final class CoreServiceProvider extends ModuleServiceProvider
@@ -108,6 +116,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
+
+        // `scoped` por lo mismo: lee una vez por petición si el admin ocultó la carga académica (MN-05).
+        $this->app->scoped(AcademicLoadVisibility::class);
 
         // Singleton porque es inmutable: las entradas de todos los módulos, sin nada del usuario.
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
@@ -151,8 +162,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
         }
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
+        Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
+        Event::listen(NotificationSending::class, HoldAcademicLoadMail::class);
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
+
+        // MN-05: el bloqueo de la carga oculta (va en el grupo `web`, bootstrap/app.php) también se revisa en cada acción de
+        // Livewire, con la ruta de la página que pintó el componente.
+        Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
 
@@ -245,6 +262,14 @@ final class CoreServiceProvider extends ModuleServiceProvider
         return [CorePermission::class];
     }
 
+    /**
+     * El interruptor de la carga académica (MN-05), que solo cambia el admin.
+     */
+    public function settings(): array
+    {
+        return [AcademicLoadVisibility::definition()];
+    }
+
     public function grants(): array
     {
         return [
@@ -273,11 +298,13 @@ final class CoreServiceProvider extends ModuleServiceProvider
      * colas son solo del admin. El organigrama también, porque decide el alcance de todos (supuesto por confirmar). Y,
      * desde el 15 de noviembre de 2026, editar un campus o una modalidad, porque desactivarlos les quita el alcance a
      * todos (confirmado). El perfil de flujo de una modalidad no es candado: la Subdirección lo tiene de fábrica. Los
-     * avisos y atajos del login y los parámetros sí se pueden dar.
+     * avisos y atajos del login y los parámetros sí se pueden dar. Desde la tarea 1.24.6, también el interruptor de la carga
+     * académica y verla oculta (`core.academic_load.*`, MN-05): la oculta a todos menos al admin (supuesto por confirmar
+     * que no se puedan dar).
      */
     public function adminOnly(): array
     {
-        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit'];
+        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load'];
 
         return [
             ...array_values(array_filter(

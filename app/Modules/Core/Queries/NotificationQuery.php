@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
@@ -12,6 +13,7 @@ use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -21,12 +23,16 @@ use Illuminate\Support\Str;
  * recientes, de la más nueva a la más vieja. Solo las suyas: la consulta parte de su relación `notifications`. El
  * puesto de cada aviso se nombra como en su credencial (RoleTitleQuery: el jefe de Servicios Escolares, por su unidad,
  * AZ-02), una consulta por puesto en cada lista.
+ *
+ * Mientras el admin tiene oculta la carga académica (MN-05), a quien no la ve no se le cuentan ni se le muestran los
+ * avisos que llevan a una de sus pantallas (AcademicLoadVisibility::ROUTES): no se borran, y vuelven al mostrarla.
  */
 final class NotificationQuery
 {
     public function __construct(
         private readonly Actor $context,
         private readonly RoleTitleQuery $titles,
+        private readonly AcademicLoadVisibility $visibility,
     ) {}
 
     /** Cuántas muestra la tarjeta de la campana. */
@@ -37,13 +43,13 @@ final class NotificationQuery
 
     public function unreadCount(User $user): int
     {
-        return $user->unreadNotifications()->count();
+        return $this->withoutHiddenLoad($user->unreadNotifications()->getQuery())->count();
     }
 
     /** Cuántas notificaciones tiene el usuario en total, leídas o no. */
     public function total(User $user): int
     {
-        return $user->notifications()->count();
+        return $this->withoutHiddenLoad($user->notifications()->getQuery())->count();
     }
 
     /**
@@ -55,7 +61,7 @@ final class NotificationQuery
      */
     public function counts(User $user, array $classes = []): array
     {
-        $query = $user->notifications()->reorder()->toBase();
+        $query = $this->withoutHiddenLoad($user->notifications()->reorder()->toBase());
 
         if ($classes !== []) {
             $query->whereIn('type', $classes);
@@ -93,7 +99,7 @@ final class NotificationQuery
     {
         $map = [];
 
-        foreach ($user->notifications()->reorder()->toBase()->distinct()->pluck('type') as $class) {
+        foreach ($this->withoutHiddenLoad($user->notifications()->reorder()->toBase())->distinct()->pluck('type') as $class) {
             $key = $this->typeKey($class);
             $map[$key]['label'] = $this->typeLabel($class);
             $map[$key]['classes'][] = $class;
@@ -135,7 +141,20 @@ final class NotificationQuery
      */
     private function newestFirst(User $user): Builder
     {
-        return $user->notifications()->getQuery()->reorder()->orderByDesc('created_at')->orderByDesc('id');
+        return $this->withoutHiddenLoad($user->notifications()->getQuery())->reorder()->orderByDesc('created_at')->orderByDesc('id');
+    }
+
+    /**
+     * Sin los avisos que llevan a una pantalla de la carga académica si está oculta para el usuario (MN-05); si no, igual.
+     *
+     * @template TQuery of Builder<DatabaseNotification>|QueryBuilder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    private function withoutHiddenLoad(Builder|QueryBuilder $query): Builder|QueryBuilder
+    {
+        return $this->visibility->withoutHiddenNotifications($query, $this->context);
     }
 
     /**

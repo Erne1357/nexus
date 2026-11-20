@@ -4,8 +4,8 @@ use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\NavigationGroup;
 
 /*
-| Grupos del menú dentro de un área (MN-01): Académico por etapa del semestre, en el orden de Stage, y
-| Administración por propósito. El orden de los casos es el del menú dentro de su área.
+| Grupos del menú dentro de un área (MN-01): Académico lleva la validación, Carga académica va por etapa del semestre, en
+| el orden de Stage (tarea 1.24.6), y Administración por propósito. El orden de los casos es el del menú dentro de su área.
 */
 
 it('MN-01: declara los grupos en el orden del menú', function () {
@@ -27,10 +27,10 @@ it('MN-01: cada grupo vive en un área y se nombra en español', function (Navig
         ->and($group->label())->toBe($label);
 })->with([
     'validación' => [NavigationGroup::Validacion, NavigationArea::Academico, 'Validación'],
-    'propuesta' => [NavigationGroup::Propuesta, NavigationArea::Academico, 'Propuesta'],
-    'horarios' => [NavigationGroup::Horarios, NavigationArea::Academico, 'Horarios'],
-    'asignación' => [NavigationGroup::Asignacion, NavigationArea::Academico, 'Asignación'],
-    'cierre y publicación' => [NavigationGroup::CierrePublicacion, NavigationArea::Academico, 'Cierre y publicación'],
+    'propuesta' => [NavigationGroup::Propuesta, NavigationArea::CargaAcademica, 'Propuesta'],
+    'horarios' => [NavigationGroup::Horarios, NavigationArea::CargaAcademica, 'Horarios'],
+    'asignación' => [NavigationGroup::Asignacion, NavigationArea::CargaAcademica, 'Asignación'],
+    'cierre y publicación' => [NavigationGroup::CierrePublicacion, NavigationArea::CargaAcademica, 'Cierre y publicación'],
     'institución' => [NavigationGroup::Institucion, NavigationArea::Administracion, 'Institución'],
     'catálogos' => [NavigationGroup::Catalogos, NavigationArea::Administracion, 'Catálogos'],
     'datos' => [NavigationGroup::Datos, NavigationArea::Administracion, 'Datos'],

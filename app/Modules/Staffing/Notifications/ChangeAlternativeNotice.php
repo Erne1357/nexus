@@ -4,6 +4,7 @@ namespace App\Modules\Staffing\Notifications;
 
 use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\RoutesMailAddress;
 use Illuminate\Bus\Queueable;
@@ -16,9 +17,10 @@ use Illuminate\Notifications\AnonymousNotifiable;
  * de su ficha de docente o, si no tiene, el de su usuario si es institucional; nunca el personal, y a una cuenta dada
  * de baja no le llega correo). Sin dirección, solo la campana; a quien no tiene usuario (un docente sin acceso), solo
  * el correo (`Notification::route('mail', …)`). Salen de la cola después del commit; la campana se guarda en el
- * momento (conexión `sync`).
+ * momento (conexión `sync`). Mientras el admin tiene oculta la carga académica, el correo no sale (AcademicLoadNotice,
+ * MN-05).
  */
-abstract class ChangeAlternativeNotice extends NexusNotification implements RoutesMailAddress, ShouldQueue
+abstract class ChangeAlternativeNotice extends NexusNotification implements AcademicLoadNotice, RoutesMailAddress, ShouldQueue
 {
     use Queueable;
 

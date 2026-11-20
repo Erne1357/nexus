@@ -148,24 +148,24 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
         $loadInProgress = LoadProgressQuery::menuCondition();
 
         return [
-            new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
+            new NavigationItem('Propuesta de carrera', 'academic-load.proposal', 'o-clipboard-document-list', NavigationArea::CargaAcademica, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalView)),
             // «Paralelos» (Scheduling, tarea 8.8) es una pestaña de la bandeja: va como su pantalla hija, sin entrada propia.
-            new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
+            new NavigationItem('Bandeja del departamento', 'academic-load.inbox', 'o-inbox-arrow-down', NavigationArea::CargaAcademica, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 childRoutes: ['scheduling.parallels'],
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ProposalReviewView)),
             // Evalúa periodos ya cursados: no depende de que haya carga en curso (MN-04 no la nombra; supuesto por confirmar).
-            new NavigationItem('Precisión de la proyección', 'academic-load.forecast-accuracy', 'o-scale', NavigationArea::Academico, group: NavigationGroup::Propuesta, order: 1,
+            new NavigationItem('Precisión de la proyección', 'academic-load.forecast-accuracy', 'o-scale', NavigationArea::CargaAcademica, group: NavigationGroup::Propuesta, order: 1,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::ForecastEvaluationView)),
-            new NavigationItem('Demanda por materia', 'academic-load.demand', 'o-chart-bar', NavigationArea::Academico, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
+            new NavigationItem('Demanda por materia', 'academic-load.demand', 'o-chart-bar', NavigationArea::CargaAcademica, group: NavigationGroup::Propuesta, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::DemandViewDepartment) || $context->allowsAny(AcademicLoadPermission::DemandViewCareer)),
             // Después del cierre y del re-análisis («Re-análisis de la carga», Scheduling, orden 1) y antes de la consulta
             // publicada: es la trazabilidad de lo publicado (tarea 8.10). Como Horarios publicados, no depende de que haya
             // carga en curso: las versiones siguen ahí al cerrar el periodo.
-            new NavigationItem('Versiones publicadas', 'academic-load.versions', 'o-rectangle-stack', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 2,
+            new NavigationItem('Versiones publicadas', 'academic-load.versions', 'o-rectangle-stack', NavigationArea::CargaAcademica, group: NavigationGroup::CierrePublicacion, order: 2,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView)),
             // Al final de «Cierre y publicación» (MN-01).
-            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 3,
+            new NavigationItem('Horarios publicados', 'published.index', 'o-calendar-days', NavigationArea::CargaAcademica, group: NavigationGroup::CierrePublicacion, order: 3,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];
     }

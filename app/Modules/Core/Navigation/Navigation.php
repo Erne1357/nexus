@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Navigation;
 
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\NavigationArea;
@@ -110,7 +111,8 @@ final readonly class Navigation
      * Ve una entrada quien tiene permiso de verla (NavigationItem::isVisibleTo) y, si no está disponible
      * en el periodo activo, solo quien tiene `core.navigation.view_unavailable`, con el motivo en
      * MenuEntry::$hiddenReason (MN-02). Cada condición de disponibilidad se evalúa una sola vez por llamada,
-     * aunque la compartan varias entradas, y nunca la de una entrada que el usuario no puede ver.
+     * aunque la compartan varias entradas, y nunca la de una entrada que el usuario no puede ver. Si el admin ocultó la
+     * carga académica (MN-05), quien aún ve sus entradas (el admin) las ve con ese motivo, que gana al del periodo.
      *
      * @return list<array{area: NavigationArea, headings: bool, groups: non-empty-list<array{group: ?NavigationGroup, entries: non-empty-list<MenuEntry>}>}>
      */
@@ -119,10 +121,17 @@ final readonly class Navigation
         /** @var SplObjectStorage<Closure, ?string> $reasons */
         $reasons = new SplObjectStorage;
         $seesUnavailable = null;
+        $loadHidden = null;
         $byArea = [];
 
         foreach ($this->menuOrder as $item) {
             if (! $item->isVisibleTo($context)) {
+                continue;
+            }
+
+            if ($item->area === NavigationArea::CargaAcademica && ($loadHidden ??= app(AcademicLoadVisibility::class)->isHidden())) {
+                $byArea[$item->area->value][$item->group->value ?? ''][] = new MenuEntry($item, AcademicLoadVisibility::HIDDEN_REASON);
+
                 continue;
             }
 
@@ -193,10 +202,15 @@ final readonly class Navigation
     /**
      * El motivo por el que los demás no ven una entrada en el periodo activo, si el usuario del contexto la ve
      * marcada (MN-02): la puede ver, tiene `core.navigation.view_unavailable` y la entrada no está disponible. En
-     * cualquier otro caso, null. Es lo que el aviso de la pantalla le dice al admin.
+     * cualquier otro caso, null. Es lo que el aviso de la pantalla le dice al admin. Una entrada de Carga académica oculta
+     * por el admin (MN-05) da ese motivo a quien aún la ve, como en el menú.
      */
     public function hiddenReasonFor(NavigationItem $item, Actor $context): ?string
     {
+        if ($item->area === NavigationArea::CargaAcademica && $item->isVisibleTo($context) && app(AcademicLoadVisibility::class)->isHidden()) {
+            return AcademicLoadVisibility::HIDDEN_REASON;
+        }
+
         if ($item->whyUnavailable === null || ! $item->isVisibleTo($context) || ! $context->allowsAny(CorePermission::NavigationViewUnavailable)) {
             return null;
         }
