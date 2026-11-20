@@ -32,6 +32,7 @@ final class UnmarkRecordReviewed
 
             $this->rules->ensureOpen($review);
             $this->rules->ensureContains($review, $record);
+            $this->rules->ensureNoInactiveTeachers($review, [$record->getKey()]); // CV14
 
             if ($review->marks()->where('record_id', $record->getKey())->delete() === 0) {
                 return;

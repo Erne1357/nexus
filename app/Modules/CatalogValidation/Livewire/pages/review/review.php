@@ -84,6 +84,9 @@ new #[Title('Validación de catálogos')] class extends Component
     /** Por qué un docente dado de baja que ocupa un puesto no se agrega desde aquí (CV-S9). */
     private const string STAFF_REACTIVATION = 'Está dado de baja y ocupa un puesto: lo reactivan el administrador o la Subdirección.';
 
+    /** Por qué un docente inactivo solo se ve (CV14). */
+    private const string INACTIVE_TEACHER = 'Un docente inactivo no se valida: solo se puede ver.';
+
     /** Por qué el correo institucional de quien ocupa otro puesto no se cambia desde aquí (AC-06). */
     private const string STAFF_EMAIL = 'El correo institucional de un docente que ocupa otro puesto solo lo cambia el administrador.';
 
@@ -103,6 +106,10 @@ new #[Title('Validación de catálogos')] class extends Component
     public string $missing = '';
 
     public string $search = '';
+
+    /** Solo docentes (CV14): '' (solo los activos, por omisión), 'inactivos' o 'todos'. Los inactivos no se validan, solo se ven. */
+    #[Url(as: 'estado')]
+    public string $status = '';
 
     /** Solo con foto anterior: '' (todos) o 'added' (las altas); 'removed' no se queda, abre el drawer de bajas. */
     public string $change = '';
@@ -215,7 +222,13 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->department = $state['department']->getKey();
         }
 
+        $this->status = in_array($this->status, ['inactivos', 'todos'], true) ? $this->status : '';
         $this->segment = $this->segmentOrDefault($this->segment);
+
+        // CV14: los inactivos no entran en «Por revisar» (CV7); con ellos a la vista, la entrada es «Todos».
+        if ($this->status !== '' && $this->segment === 'por-revisar') {
+            $this->segment = 'todos';
+        }
     }
 
     /**
@@ -266,7 +279,7 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->resolved = null;
         }
 
-        if (in_array($property, ['search', 'segment', 'missing', 'change', 'roomCampus', 'roomBuilding', 'department', 'catalog'], true)) {
+        if (in_array($property, ['search', 'segment', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'department', 'catalog'], true)) {
             $this->resetPage();
         }
 
@@ -285,6 +298,15 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->segment = 'todos';
         }
 
+        /*
+        | CV14: «Estado» solo tiene dos valores además de los activos; los inactivos no entran en «Por revisar» (CV7), así
+        | que al verlos el filtro segmentado pasa a «Todos».
+        */
+        if ($property === 'status') {
+            $this->status = in_array($this->status, ['inactivos', 'todos'], true) ? $this->status : '';
+            $this->segment = $this->status === '' ? $this->segmentOrDefault('') : 'todos';
+        }
+
         if ($property === 'segment') {
             $this->segment = $this->segmentOrDefault($this->segment);
         }
@@ -294,7 +316,7 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'segment', 'missing', 'change', 'roomCampus', 'roomBuilding', 'showDrawer', 'showRemoved', 'showAddTeacher', 'teacherSearch', 'editingId', 'showDischarge', 'dischargeId', 'dischargeKind', 'dischargeText', 'showEmpty', 'emptyIds');
+            $this->reset('search', 'segment', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'showDrawer', 'showRemoved', 'showAddTeacher', 'teacherSearch', 'editingId', 'showDischarge', 'dischargeId', 'dischargeKind', 'dischargeText', 'showEmpty', 'emptyIds');
             $this->segment = $this->segmentOrDefault('');
         }
     }
@@ -304,7 +326,7 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     public function clearFilters(): void
     {
-        $this->reset('search', 'missing', 'change', 'roomCampus', 'roomBuilding');
+        $this->reset('search', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding');
         $this->segment = 'todos';
         $this->resetPage();
     }
@@ -993,7 +1015,8 @@ new #[Title('Validación de catálogos')] class extends Component
         $isRooms = $review->catalog === Catalog::Rooms;
         $onlyIds = $this->onlyIds($review, $current['summary']);
         [$campusId, $buildingId] = $isRooms ? [$this->roomCampus, $this->roomBuilding] : ['', ''];
-        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, null, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
+        $active = $review->catalog === Catalog::Teachers ? $this->activeFilter() : null;
+        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, $active, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
             'por-revisar' => 'pending',
             'revisados' => 'reviewed',
             default => '',
@@ -1025,10 +1048,10 @@ new #[Title('Validación de catálogos')] class extends Component
             }
         }
 
-        $segmentCounts = $records->segmentCounts($review);
+        $segmentCounts = $records->segmentCounts($review, $active);
         $buildingGroups = $isRooms && ($editing['canEdit'] ?? false) ? app(BuildingQuery::class)->groupedByActiveCampus() : [];
         $marks = $this->describeMarks($records->marksOf($review, $ids));
-        $onlySegment = $this->search === '' && $this->missing === '' && $this->change === '' && $this->roomCampus === '' && $this->roomBuilding === '';
+        $onlySegment = $this->search === '' && $this->status === '' && $this->missing === '' && $this->change === '' && $this->roomCampus === '' && $this->roomBuilding === '';
 
         return [
             'page' => $page,
@@ -1058,11 +1081,25 @@ new #[Title('Validación de catálogos')] class extends Component
             'emailDomain' => (string) config('nexus.institutional_email_domain'),
             'removed' => $current['summary']['removed'] ?? [],
             'changeFilters' => [['id' => 'added', 'name' => 'Altas'], ['id' => 'removed', 'name' => 'Bajas']],
-            'hasFilters' => $this->search !== '' || ! in_array($this->segment, ['', 'todos'], true) || $this->missing !== '' || $this->change !== '' || $this->roomCampus !== '' || $this->roomBuilding !== '',
+            'statusFilters' => [['id' => 'inactivos', 'name' => 'Solo inactivos'], ['id' => 'todos', 'name' => 'Activos e inactivos']],
+            'hasFilters' => $this->search !== '' || $this->status !== '' || ! in_array($this->segment, ['', 'todos'], true) || $this->missing !== '' || $this->change !== '' || $this->roomCampus !== '' || $this->roomBuilding !== '',
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
+    }
+
+    /**
+     * El filtro «Estado» de docentes como lo pide CatalogRecordsQuery::page(): solo activos por omisión, solo inactivos
+     * o ambos (null). CV14.
+     */
+    private function activeFilter(): ?bool
+    {
+        return match ($this->status) {
+            'inactivos' => false,
+            'todos' => null,
+            default => true,
+        };
     }
 
     /**
@@ -1220,6 +1257,10 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function editableOf(array $current, Model $record): array
     {
+        if ($record instanceof Teacher && ! $record->is_active) {
+            return ['canEdit' => false, 'editReason' => self::INACTIVE_TEACHER]; // CV14
+        }
+
         if ($current['canEdit'] && $record instanceof Teacher && ! Gate::allows('updateInstitutionalEmail', $record)) {
             return ['canEdit' => false, 'editReason' => self::STAFF_EMAIL];
         }

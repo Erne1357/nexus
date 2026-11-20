@@ -69,8 +69,27 @@ describe('ficha', function () {
 
     it('en Datos muestra sus datos y sus adscripciones con la principal primero', function () {
         teacherRecord($this->admin, $this->ana)
-            ->assertSeeInOrder(['RFC', '1000001', 'Correo', 'ana@example.test', 'Usuario'])
-            ->assertSeeInOrder(['Adscripciones', 'Ingeniería Industrial', 'Principal', 'Sistemas y Computación', 'Hacer principal']);
+            ->assertSeeInOrder(['RFC', '1000001', 'Correo institucional', 'Correo personal', 'ana@example.test', 'Usuario'])
+            ->assertSeeInOrder(['Asignaciones', 'Ingeniería Industrial', 'Principal', 'Sistemas y Computación', 'Hacer principal']);
+    });
+
+    it('1.24.3: dice «Asignación» y «Plazas con las que cuenta», y ya no «Adscripción» ni «Plazas que cuentan»', function () {
+        $page = teacherRecord($this->admin, $this->ana)->assertSee('Asignación principal')->assertSee('Asignaciones')->assertSee('Plazas con las que cuenta');
+
+        foreach (['datos', 'plazas', 'disponibilidad', 'perfil', 'historial'] as $tab) {
+            $html = teacherRecord($this->admin, $this->ana)->set('tab', $tab)->html();
+
+            expect($html)->not->toContain('Adscripci')->not->toContain('Plazas que cuentan')->not->toContain('fuera del ITCJ');
+        }
+
+        expect($page->html())->not->toContain('Adscripci');
+    });
+
+    it('1.24.3: en Datos el correo institucional va primero y el otro se llama «Correo personal», también en el modal', function () {
+        teacherRecord($this->admin, $this->ana)
+            ->assertSeeInOrder(['Correo institucional', 'Correo personal'])
+            ->call('editData')
+            ->assertSeeInOrder(['Correo institucional', 'Correo personal']);
     });
 
     it('recuerda la pestaña en la URL y una que no existe muestra Datos', function () {
@@ -221,7 +240,7 @@ describe('adscripciones', function () {
         $page = teacherRecord($this->jefe, $this->ana)->call('setPrimary', $sc->id);
 
         expect($this->ana->adscriptions()->where('is_primary', true)->pluck('id')->all())->toBe([$sc->id])
-            ->and(lastToastOf($page))->title->toBe('Adscripción principal cambiada');
+            ->and(lastToastOf($page))->title->toBe('Asignación principal cambiada');
     });
 
     it('el jefe ve la adscripción de otro departamento con «Quitar» deshabilitado y su motivo', function () {
@@ -685,13 +704,14 @@ describe('perfil', function () {
     });
 });
 
-describe('horas fuera del ITCJ', function () {
+describe('carga académica en otra modalidad', function () {
     it('S16: las muestra por origen con el total, contra las horas base', function () {
         TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'TecNM Virtual', 'hours' => 6]);
         TeacherExternalLoad::factory()->for($this->ana)->for($this->term)->create(['source' => 'Otra escuela', 'hours' => 4]);
 
         teacherRecord($this->admin, $this->ana)->set('tab', 'perfil')
-            ->assertSeeInOrder(['Horas fuera del ITCJ', 'Ene-Jun 2027', 'Otra escuela', 'TecNM Virtual', '10 h'])
+            ->assertSee('Carga académica en otra modalidad')
+            ->assertSeeInOrder(['Ene-Jun 2027', 'Otra escuela', 'TecNM Virtual', 'En otra modalidad', '10 h'])
             ->assertSeeHtml('data-testid="external-loads"');
     });
 
@@ -752,7 +772,7 @@ describe('horas fuera del ITCJ', function () {
 });
 
 describe('historial', function () {
-    it('muestra los grupos por periodo, del más antiguo al más reciente, y las evaluaciones por tipo', function () {
+    it('muestra los grupos por periodo, del más reciente al más antiguo, y las evaluaciones por tipo', function () {
         $subject = Subject::factory()->create(['code' => 'SCC-1', 'name' => 'Redes de computadoras']);
         $campus = Campus::factory()->create(['code' => 'C2']);
         TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20243', 'campus_id' => $campus->id, 'group_code' => '5B']);
@@ -761,10 +781,25 @@ describe('historial', function () {
         TeacherEvaluation::factory()->for($this->ana)->departamental()->create(['term_code' => '20241', 'score' => 3.8]);
 
         teacherRecord($this->admin, $this->ana)->set('tab', 'historial')
-            ->assertSeeInOrder(['Historial', 'Ene-Jun 2024', 'SCC-1', '3A', 'C2', 'Ago-Dic 2024', '5B'])
+            ->assertSeeInOrder(['Historial', 'Ago-Dic 2024', '5B', 'Ene-Jun 2024', 'SCC-1', '3A', 'C2'])
             ->assertSeeInOrder(['Evaluaciones', 'Ene-Jun 2024', 'Estudiantil', '4.50', 'Departamental', '3.80'])
             ->assertSeeHtml('data-testid="history"')
             ->assertSeeHtml('data-testid="evaluations"');
+    });
+
+    it('1.24.3: lo más reciente va primero y dentro del periodo conserva su orden', function () {
+        $subject = Subject::factory()->create(['code' => 'SCC-1']);
+        $other = Subject::factory()->create(['code' => 'SCC-2']);
+        $campus = Campus::factory()->create(['code' => 'C2']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($other)->create(['term_code' => '20241', 'campus_id' => $campus->id, 'group_code' => '4B']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20241', 'campus_id' => $campus->id, 'group_code' => '3A']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20253', 'campus_id' => $campus->id, 'group_code' => '5C']);
+        TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20243', 'campus_id' => $campus->id, 'group_code' => '5B']);
+
+        teacherRecord($this->admin, $this->ana)->set('tab', 'historial')
+            ->assertSee('del más reciente al más antiguo')
+            ->assertDontSee('del más antiguo al más reciente')
+            ->assertSeeInOrder(['20253', '5C', '20243', '5B', '20241', 'SCC-1', '3A', 'SCC-2', '4B']);
     });
 
     it('es de solo lectura: no hay botones de captura ni métodos que escriban', function () {

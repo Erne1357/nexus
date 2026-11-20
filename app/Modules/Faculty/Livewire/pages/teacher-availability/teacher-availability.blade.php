@@ -10,9 +10,8 @@
     elegirlo.
 --}}
 <div class="space-y-5">
-    <a href="{{ route('faculty.teachers.show', ['teacher' => $teacher->id, 'tab' => 'disponibilidad']) }}" wire:navigate class="inline-flex max-w-full items-center gap-1.5 font-medium text-primary">
-        <x-icon name="o-chevron-left" class="w-4 h-4 shrink-0" /><span class="truncate">{{ $teacher->name }}</span>
-    </a>
+    {-- Desde la validación (`?desde=validacion`), «Regresar» vuelve a ella y no a la ficha (1.24.3). --}
+    <x-core::back-link :validation="$this->validationReturnUrl()" :href="route('faculty.teachers.show', ['teacher' => $teacher->id, 'tab' => 'disponibilidad'])" :label="$teacher->name" />
 
     @if ($term === null)
         <h1 class="text-[1.625rem] font-bold leading-tight md:text-3xl">Disponibilidad</h1>

@@ -4,17 +4,15 @@
     «Acciones» (baja o reactivación y, según su acceso, «Enviar invitación» o «Reenviar invitación» si su usuario no
     tiene contraseña, CF-07 y AC-07, o «Restablecer contraseña» por enlace si la tiene, CF-08, cada una deshabilitada con
     su motivo para quien no la puede; con la cuenta dada de baja en el panel, CF-09, solo «Se reactiva desde el panel»);
-    una franja de cifras (horas base del periodo activo, plazas que cuentan y adscripciones) y cinco
-    pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Horas fuera del
-    ITCJ») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
+    una franja de cifras (horas base del periodo activo, plazas con las que cuenta y asignaciones) y cinco
+    pestañas (`tabs tabs-border`): Datos, Plazas, Disponibilidad, Perfil (materias apto/preferente y «Carga académica en
+    otra modalidad») e Historial (grupos por periodo y evaluaciones, de solo lectura). Disponibilidad es la vista de solo lectura
     del periodo activo con el enlace al editor (faculty::teachers.availability-tab). Agregar o editar una plaza y quitar
-    una adscripción o una plaza
-    se hacen en un modal. Los renglones de adscripciones y plazas son una cuadrícula que se apila debajo de 768 px.
+    una asignación o una plaza
+    se hacen en un modal. Los renglones de asignaciones y plazas son una cuadrícula que se apila debajo de 768 px.
 --}}
 <div class="space-y-5">
-    <a href="{{ route('faculty.teachers') }}" wire:navigate class="inline-flex items-center gap-1.5 font-medium text-primary">
-        <x-icon name="o-chevron-left" class="w-4 h-4" />Docentes
-    </a>
+    <x-core::back-link :validation="$this->validationReturnUrl()" :href="route('faculty.teachers')" label="Docentes" />
 
     <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div class="min-w-0">
@@ -25,7 +23,7 @@
             </h1>
             <p class="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-neutral">
                 @php($primary = $record->adscriptions->first())
-                <span>Adscripción principal <span class="font-medium text-base-content">@if ($primary)<span class="font-mono">{{ $primary->department?->code }}</span> · {{ $primary->department?->name }}@else — @endif</span></span>
+                <span>Asignación principal <span class="font-medium text-base-content">@if ($primary)<span class="font-mono">{{ $primary->department?->code }}</span> · {{ $primary->department?->name }}@else — @endif</span></span>
                 @if ($record->adscriptions->count() > 1)
                     <span>y <span class="font-medium text-base-content">{{ $record->adscriptions->count() - 1 }} {{ $record->adscriptions->count() === 2 ? 'otra' : 'otras' }}</span></span>
                 @endif
@@ -108,11 +106,11 @@
             <span class="font-mono text-2xl font-semibold tabular-nums">{{ $record->baseHours ?? '—' }}<span class="text-base font-normal text-neutral"> h</span></span>
         </div>
         <div class="flex flex-col gap-1.5 border-base-300 px-5 py-3.5 max-[559px]:border-t min-[560px]:border-l">
-            <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Plazas que cuentan</span>
+            <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Plazas con las que cuenta</span>
             <span class="font-mono text-2xl font-semibold tabular-nums">{{ count(array_filter($record->countsInTerm)) }}<span class="text-base font-normal text-neutral"> de {{ $record->positions->count() }}</span></span>
         </div>
         <div class="flex flex-col gap-1.5 border-base-300 px-5 py-3.5 max-[559px]:border-t min-[560px]:border-l">
-            <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Adscripciones</span>
+            <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Asignaciones</span>
             <span class="font-mono text-2xl font-semibold tabular-nums">{{ $record->adscriptions->count() }}</span>
         </div>
     </div>
@@ -204,14 +202,14 @@
 
             <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-loads" data-testid="external-loads">
                 <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-base-300 px-5 py-3">
-                    <h2 id="h-loads" class="text-lg font-bold">Horas fuera del ITCJ @if ($record->term)<span class="font-normal text-neutral">· {{ $record->term->name }}</span>@endif</h2>
+                    <h2 id="h-loads" class="text-lg font-bold">Carga académica en otra modalidad @if ($record->term)<span class="font-normal text-neutral">· {{ $record->term->name }}</span>@endif</h2>
                     @if ($record->term && $canManageLoads)
                         <x-button label="Agregar horas" icon="o-plus" class="btn-outline btn-sm" wire:click="createLoad" spinner="createLoad" data-testid="add-load" />
                     @endif
                 </header>
 
                 @if ($record->term === null)
-                    <p class="px-5 py-6 text-center text-neutral" data-testid="loads-no-term">Elige un periodo en la credencial para capturar las horas que da fuera del ITCJ.</p>
+                    <p class="px-5 py-6 text-center text-neutral" data-testid="loads-no-term">Elige un periodo en la credencial para capturar la carga académica que da en otra modalidad.</p>
                 @else
                     @forelse ($loads as $load)
                         <div wire:key="load-{{ $load->id }}" class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3 md:grid-cols-[minmax(0,1fr)_6rem_minmax(0,1fr)_auto]">
@@ -226,11 +224,11 @@
                             </span>
                         </div>
                     @empty
-                        <p class="px-5 py-6 text-center text-neutral" data-testid="loads-empty">No tiene horas fuera del ITCJ en {{ $record->term->name }}.</p>
+                        <p class="px-5 py-6 text-center text-neutral" data-testid="loads-empty">No tiene carga académica en otra modalidad en {{ $record->term->name }}.</p>
                     @endforelse
 
                     <footer class="flex flex-wrap items-center justify-between gap-2 px-5 py-2.5 text-sm text-neutral">
-                        <span>Fuera del ITCJ: <span class="font-mono font-semibold text-base-content">{{ $loads->sum('hours') }} h</span></span>
+                        <span>En otra modalidad: <span class="font-mono font-semibold text-base-content">{{ $loads->sum('hours') }} h</span></span>
                         <span>Se restan de lo que se le puede asignar. Horas base: <span class="font-mono font-semibold text-base-content">{{ $record->baseHours }} h</span></span>
                     </footer>
                 @endif
@@ -242,7 +240,7 @@
                 <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-hist" data-testid="history">
                     <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-base-300 px-5 py-3">
                         <h2 id="h-hist" class="text-lg font-bold">Historial <span class="font-mono text-neutral">{{ $groupCount }}</span></h2>
-                        <span class="text-sm text-neutral">Grupos por periodo, del más antiguo al más reciente</span>
+                        <span class="text-sm text-neutral">Grupos por periodo, del más reciente al más antiguo</span>
                     </header>
 
                     @forelse ($history->filter(fn ($term) => $term['groups']->isNotEmpty()) as $term)
@@ -304,8 +302,8 @@
                         @foreach ([
                             ['RFC', '<span class="font-mono">'.e($record->teacher->rfc).'</span>'],
                             ['Nombre', e($record->teacher->name)],
-                            ['Correo', $record->teacher->email ? e($record->teacher->email) : '<span class="text-neutral">Sin correo</span>'],
                             ['Correo institucional', $record->teacher->institutional_email ? e($record->teacher->institutional_email) : '<span class="text-neutral">Sin correo institucional</span>'],
+                            ['Correo personal', $record->teacher->email ? e($record->teacher->email) : '<span class="text-neutral">Sin correo personal</span>'],
                             ['Grado', $record->teacher->degree ? e($record->teacher->degree->label()) : '<span class="text-neutral">Sin grado</span>'],
                             ['Fecha de ingreso', $record->teacher->hired_on ? e($record->teacher->hired_on->format('d/m/Y')) : '<span class="text-neutral">Sin fecha</span>'],
                         ] as [$term, $value])
@@ -334,7 +332,7 @@
 
                 <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-ads" data-testid="adscriptions">
                     <header class="flex items-center justify-between gap-2 border-b border-base-300 px-5 py-3">
-                        <h2 id="h-ads" class="text-lg font-bold">Adscripciones <span class="font-mono text-neutral">{{ $record->adscriptions->count() }}</span></h2>
+                        <h2 id="h-ads" class="text-lg font-bold">Asignaciones <span class="font-mono text-neutral">{{ $record->adscriptions->count() }}</span></h2>
                     </header>
 
                     @foreach ($record->adscriptions as $adscription)
@@ -479,10 +477,10 @@
                     <x-input label="Nombre" name="name" wire:model="name" />
                 </div>
                 <div class="md:col-span-3">
-                    <x-input label="Correo" name="email" wire:model="email" type="email" />
+                    @include('faculty::teachers.institutional-email-field', ['reason' => $institutionalEmailReason, 'domain' => $institutionalDomain])
                 </div>
                 <div class="md:col-span-3">
-                    @include('faculty::teachers.institutional-email-field', ['reason' => $institutionalEmailReason, 'domain' => $institutionalDomain])
+                    <x-input label="Correo personal" name="email" wire:model="email" type="email" />
                 </div>
                 <div class="md:col-span-3">
                     <x-select label="Grado" name="degree" wire:model="degree" :options="$degrees" placeholder="Sin grado" />
@@ -583,7 +581,7 @@
         </x-form>
     </x-modal>
 
-    <x-modal wire:model="showLoadModal" :title="$editingLoadId === null ? 'Agregar horas fuera del ITCJ' : 'Editar horas fuera del ITCJ'" :subtitle="$record->term?->name" box-class="max-w-xl" separator>
+    <x-modal wire:model="showLoadModal" :title="$editingLoadId === null ? 'Agregar carga en otra modalidad' : 'Editar carga en otra modalidad'" :subtitle="$record->term?->name" box-class="max-w-xl" separator>
         <x-form wire:submit="saveLoad" no-separator>
             <div class="grid gap-4 md:grid-cols-3">
                 <div class="md:col-span-2">

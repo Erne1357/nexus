@@ -10,6 +10,7 @@ use App\Modules\Core\Enums\AssignmentEnding;
 use App\Modules\Core\Enums\CorePermission;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\AssignmentLabels;
@@ -57,7 +58,7 @@ use Mary\Traits\Toast;
 /**
  * Ficha del docente (tarea 1.13, spec 4.3 y S8), con la forma de la ficha del alumno: encabezado con sus datos y
  * cifras, y cinco pestañas: Datos (sus datos, sus adscripciones: quitar y hacer principal), Plazas (agregar,
- * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y sus «Horas fuera del ITCJ» del periodo
+ * editar y quitar), Perfil (las materias que puede dar, apto o preferente, y su «Carga académica en otra modalidad» del periodo
  * activo; S16 y S17, supuestos por confirmar) e Historial (grupos por periodo y evaluaciones, de solo lectura).
  * Disponibilidad muestra la del periodo activo, de solo lectura (AvailabilityGridQuery), y lleva al editor
  * (faculty::pages.teacher-availability). «Acciones» trae darlo de baja o reactivarlo y, según su acceso, «Enviar
@@ -75,7 +76,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Ficha del docente')] class extends Component
 {
-    use EditsInstitutionalEmail, Toast;
+    use EditsInstitutionalEmail, ReturnsToValidation, Toast;
 
     /** Las pestañas de la ficha, en su orden. */
     private const array TABS = ['datos', 'plazas', 'disponibilidad', 'perfil', 'historial'];
@@ -637,7 +638,7 @@ new #[Title('Ficha del docente')] class extends Component
         $this->authorize('setPrimaryAdscription', [Teacher::class, $adscription]);
 
         if ($this->attempt(fn () => $setPrimaryAdscription->handle($adscription), 'No se pudo cambiar la principal')) {
-            $this->success('Adscripción principal cambiada', 'Queda en la bitácora.');
+            $this->success('Asignación principal cambiada', 'Queda en la bitácora.');
         }
     }
 

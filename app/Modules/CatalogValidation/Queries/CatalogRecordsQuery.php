@@ -116,16 +116,17 @@ final class CatalogRecordsQuery
      *
      * @return array{pending: int, reviewed: int, flagged: int, all: int}
      */
-    public function segmentCounts(CatalogReview $review): array
+    public function segmentCounts(CatalogReview $review, ?bool $active = null): array
     {
         $model = $this->contents->query($review)->getModel();
         $id = $model->qualifyColumn('id');
+        $base = fn (): Builder => $this->contents->query($review)->when($active !== null, fn (Builder $query) => $query->where($model->qualifyColumn('is_active'), $active));
 
         return [
             'pending' => $this->contents->unreviewedCount($review),
-            'reviewed' => $this->contents->query($review)->whereIn($id, $review->marks()->select('record_id'))->count(),
-            'flagged' => $this->contents->query($review)->whereIn($id, $this->openFlagged($review, $model))->count(),
-            'all' => $this->contents->query($review)->count(),
+            'reviewed' => $base()->whereIn($id, $review->marks()->select('record_id'))->count(),
+            'flagged' => $base()->whereIn($id, $this->openFlagged($review, $model))->count(),
+            'all' => $base()->count(),
         ];
     }
 
