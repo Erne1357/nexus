@@ -43,12 +43,16 @@
         @if ($credential === null)
             <x-alert title="Todavía no encontramos tus datos escolares." description="Si eres alumno, acude a Servicios Escolares." icon="o-information-circle" class="alert-info" data-testid="my-record-empty" />
         @else
-            {{-- La credencial con la estética de la del login (1.23): cabecera azul con la liebre y la marca, franja roja y la ficha. Sin foto ni código QR todavía: no hay datos; la foto es un hueco con las iniciales. --}}
+            {{-- La credencial con la estética de la del login (1.23): cabecera azul con la liebre y la marca, franja roja y la ficha. La foto va en el hueco de las iniciales si hay fuente (hoy no la hay, AC-15); el QR lleva solo el número de control (ADR-0031). --}}
             <article class="@container mx-auto w-full max-w-[400px] overflow-hidden rounded-[12px] bg-base-100 shadow-[0_18px_44px_rgb(9_45_72/0.22),0_2px_6px_rgb(9_45_72/0.12)]" style="--hare: url('{{ Vite::asset('resources/images/liebre-512.png') }}')" aria-label="Credencial de alumno" data-testid="my-credential">
                 <x-core::login.badge-header standalone />
                 <div class="grid grid-cols-[70px_minmax(0,1fr)] items-start gap-4 px-[22px] pt-5 pb-6">
                     <div class="grid aspect-[4/5] place-items-center overflow-hidden rounded-lg border border-dashed border-base-300 bg-base-200" data-testid="credential-photo">
-                        <span class="text-[26px] font-bold tracking-[-0.02em] text-primary" aria-hidden="true">{{ $credential['initials'] }}</span>
+                        @if ($credential['photo'] !== null)
+                            <img src="{{ $credential['photo'] }}" alt="Foto de {{ $credential['name'] }}" class="size-full object-cover" data-testid="credential-photo-img">
+                        @else
+                            <span class="text-[26px] font-bold tracking-[-0.02em] text-primary" aria-hidden="true">{{ $credential['initials'] }}</span>
+                        @endif
                     </div>
                     <dl class="grid grid-cols-2 gap-x-3.5 gap-y-[7px]">
                         @foreach ([
@@ -64,6 +68,10 @@
                             </div>
                         @endforeach
                     </dl>
+                </div>
+                <div class="flex items-center gap-3 border-t border-base-300 px-[22px] py-4">
+                    <div role="img" aria-label="Código QR con tu número de control" class="size-28 shrink-0 bg-white p-1 [&>svg]:size-full" data-testid="credential-qr">{!! $credential['qr'] !!}</div>
+                    <p class="text-[12.5px] text-neutral">Código QR con tu número de control.</p>
                 </div>
             </article>
         @endif

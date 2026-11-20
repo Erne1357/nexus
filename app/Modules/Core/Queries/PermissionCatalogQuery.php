@@ -14,7 +14,8 @@ use App\Modules\Core\Enums\Role;
 /**
  * El catálogo de permisos para «Puestos y permisos» (CF-S1): cada permiso declarado, en el orden de declaración, con
  * su módulo, su grupo en la pantalla, su etiqueta, sus dimensiones (y cómo se dicen), si es personal, a qué unidades
- * aplica (AZ-02, de solo lectura, también dicho en una línea), si es candado (CF-03) o excepción del admin, qué puestos
+ * aplica (AZ-02, de solo lectura, también dicho en una línea), si es candado (CF-03, y quién lo tiene: `lock_label`,
+ * «Solo del admin» o, con su excepción de fábrica, «Solo del admin y Directivo») o excepción del admin, qué puestos
  * lo tienen hoy y por qué (los orígenes de PositionsQuery, en texto y como dato), y cuántas personas distintas lo
  * tienen hoy por alguno de esos puestos.
  *
@@ -79,6 +80,7 @@ final class PermissionCatalogQuery
      *     applies_to: UnitApplicability|null,
      *     applies_label: string|null,
      *     admin_only: bool,
+     *     lock_label: string|null,
      *     admin_denied: bool,
      *     positions: list<array{role: Role, origins: list<string>, sources: list<array{kind: string, name: string|null}>}>,
      *     people: int,
@@ -123,6 +125,7 @@ final class PermissionCatalogQuery
                 'applies_to' => $permission->appliesTo(),
                 'applies_label' => $this->appliesLabel($permission->appliesTo()),
                 'admin_only' => $this->registry->isAdminOnly($permission),
+                'lock_label' => $this->rules->lockLabel($permission),
                 'admin_denied' => in_array($key, $denied, true),
                 'positions' => $holders,
                 'people' => array_sum(array_filter($people, fn (string $set): bool => array_intersect(explode(',', $set), $roles) !== [], ARRAY_FILTER_USE_KEY)),

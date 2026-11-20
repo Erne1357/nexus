@@ -10,8 +10,9 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  * Lo que se hace con la cuenta de una persona desde «Personas y puestos»: darla de alta (CF-S3), editar su nombre y su
  * correo, darla de baja (CF-05), reactivarla (CF-06), mandarle el enlace para restablecer su contraseña (CF-08) e
  * invitarla a activar su acceso (CF-07). Cada ability es un permiso `core.user.*`, candado de CF-03: no se
- * concede a ningún puesto, así que solo el admin, que tiene todo. Que la cuenta sea de un alumno (CF-S4), la de uno
- * mismo o la del último admin (AZ-S12) lo deciden UserAccountRules y las Actions.
+ * concede a ningún puesto, así que solo el admin, que tiene todo (el directivo ve la ficha, AZ-03, pero no hace nada
+ * de esto). Que la cuenta sea de un alumno (CF-S4), la de uno mismo o la del último admin (AZ-S12) lo deciden
+ * UserAccountRules y las Actions.
  */
 final class UserPolicy
 {

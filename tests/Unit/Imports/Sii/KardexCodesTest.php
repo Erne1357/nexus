@@ -53,6 +53,29 @@ it('K4: una A con 0 o vacía y tipo de examen es reprobada', function (string $t
     }
 });
 
+it('K4 mixta: la A con 0 de examen que se volvió a cursar, después o en el mismo periodo, es reprobada aunque sea egresado', function (string $student) {
+    $neverRetaken = false; // hay otra línea de la misma materia: no es «nunca se volvió a cursar»
+
+    expect(KardexCodes::result('A', '0', 'O1', KardexCodes::graduateNeverRetaken($student, $neverRetaken)))->toBe(KardexResult::Reprobada);
+})->with(['EGR', 'TIT', 'ACT']);
+
+it('K4 mixta: la A con 0 de examen que nunca se volvió a cursar es aprobada sin calificación si el alumno es EGR o TIT', function (string $student) {
+    $result = KardexCodes::result('A', '0', 'O1', KardexCodes::graduateNeverRetaken($student, true));
+
+    expect($result)->toBe(KardexResult::Aprobada)
+        ->and(KardexCodes::grade('0', $result))->toBeNull();
+})->with(['EGR', 'TIT', 'egr', ' TIT ']);
+
+it('K4 mixta: la A con 0 de examen que nunca se volvió a cursar es reprobada para cualquier otro estatus', function (string $student) {
+    expect(KardexCodes::result('A', '', 'E1', KardexCodes::graduateNeverRetaken($student, true)))->toBe(KardexResult::Reprobada);
+})->with(['ACT', 'BD', 'BT', '']);
+
+it('K4 mixta no toca las convalidaciones ni las calificaciones de 1 a 69', function () {
+    expect(KardexCodes::result('A', '50', 'O1', true))->toBe(KardexResult::Aprobada)
+        ->and(KardexCodes::result('R', '0', 'O1', true))->toBe(KardexResult::Reprobada)
+        ->and(KardexCodes::result('A', '0', 'RC', false))->toBe(KardexResult::Aprobada);
+});
+
 it('K2: una A con 0 de convalidación sigue aprobada sin calificación', function (string $type) {
     expect(KardexCodes::result('A', '0', $type))->toBe(KardexResult::Aprobada)
         ->and(KardexCodes::grade('0', KardexResult::Aprobada))->toBeNull();

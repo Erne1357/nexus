@@ -2,10 +2,12 @@
 
 namespace App\Modules\Core\Queries;
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityEvents;
+use App\Modules\Core\Support\ActivityProtectedProperties;
 use App\Modules\Core\Support\ActivityRecordTypes;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\Paginator;
@@ -19,14 +21,23 @@ use Throwable;
  * Lecturas de «Bitácora» (CF-S5, HC-18): la bitácora de la más nueva a la más vieja, filtrada por quién hizo el cambio
  * (por nombre o usuario), tipo de registro, evento, texto de la descripción y fechas, y el detalle de una entrada. La
  * tabla tiene decenas de miles de filas, así que la lista pagina sin contar el total (`simplePaginate`) y se ordena por
- * `id`, que sigue el orden de las fechas. Solo lee: la tabla es inmutable.
+ * `id`, que sigue el orden de las fechas. Solo lee: la tabla es inmutable. El detalle no trae las propiedades
+ * reservadas que quien mira no puede ver (ActivityProtectedProperties: el motivo D8 de la salida de un docente, la nota
+ * de la baja de una cuenta).
  */
 final class ActivityLogQuery
 {
-    public function __construct(private readonly ActivityAttributes $attributeLabels) {}
+    public function __construct(
+        private readonly ActivityAttributes $attributeLabels,
+        private readonly ActivityProtectedProperties $protectedProperties,
+        private readonly Actor $viewer,
+    ) {}
 
     /**
-     * Cada entrada lleva `acting_as_label`, el nombre del puesto con que actuó la persona, o null.
+     * Cada entrada lleva `acting_as_label`, el nombre del puesto con que actuó la persona, o null. Al convertirse en
+     * arreglo o JSON solo lleva su `id`: la tabla de la pantalla pone el renglón entero en la página para «row-click», y
+     * así no van ahí las propiedades (ni las reservadas, ActivityProtectedProperties) ni los cambios, que solo salen en el
+     * detalle.
      *
      * @return Paginator<int, Activity>
      */
@@ -45,7 +56,9 @@ final class ActivityLogQuery
             ->orderByDesc('id')
             ->simplePaginate($perPage);
 
-        $page->getCollection()->each(fn (Activity $activity) => $activity->setAttribute('acting_as_label', $this->actingAsLabel($activity->properties?->get('acting_as'))));
+        $page->getCollection()->each(fn (Activity $activity) => $activity
+            ->setAttribute('acting_as_label', $this->actingAsLabel($activity->properties?->get('acting_as')))
+            ->setVisible(['id']));
 
         return $page;
     }
@@ -98,7 +111,7 @@ final class ActivityLogQuery
             ];
         }
 
-        $properties = $activity->properties?->all() ?? [];
+        $properties = $this->protectedProperties->visibleTo($this->viewer, $activity->event, $activity->properties?->all() ?? []);
         $actingAs = $properties['acting_as'] ?? null;
         unset($properties['acting_as']);
 

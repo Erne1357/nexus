@@ -13,9 +13,12 @@ use LogicException;
  *
  * El admin tiene implícitamente todo lo declarado menos adminDenies. Lo que un puesto tiene hoy lo decide GrantTable
  * (CF-01, roles editables): sus roles de fábrica siguen lo que aquí se concede mientras nadie los edite (CF-02). Los
- * candados (adminOnly, CF-03) no se conceden a ningún puesto, y a un puesto que lee en todo el Tec (el directivo, AZ-03)
- * solo se le conceden permisos de lectura. Core lo arma una vez y lo comparte entre peticiones (Octane): es inmutable,
- * no guarda nada del usuario ni de la petición.
+ * candados (adminOnly, CF-03) no se conceden a ningún puesto, salvo la excepción de fábrica que un módulo declara en
+ * factoryLockExceptions(): un candado de lectura que el código le da a un puesto que lee en todo el Tec (desde el 20 de
+ * noviembre de 2026, ver Personas y puestos, el Organigrama y la Bitácora al directivo, AZ-03). Cada excepción debe estar
+ * también en grants() y todo candado en grants() debe ser excepción, así que nada se cuela sin las dos. A un puesto que
+ * lee en todo el Tec solo se le conceden permisos de lectura. Core lo arma una vez y lo comparte entre peticiones
+ * (Octane): es inmutable, no guarda nada del usuario ni de la petición.
  */
 final class PermissionRegistry
 {
@@ -31,6 +34,9 @@ final class PermissionRegistry
     /** @var array<string, true> */
     private array $locked = [];
 
+    /** @var array<string, array<string, true>> por `Role->value`: los candados que se le conceden de fábrica (CF-03) */
+    private array $lockExceptions = [];
+
     private readonly string $fingerprint;
 
     /**
@@ -38,8 +44,9 @@ final class PermissionRegistry
      * @param  array<string, list<Permission>>  $grants  llave: `Role->value`
      * @param  list<Permission>  $adminDenies
      * @param  list<Permission>  $adminOnly
+     * @param  array<string, list<Permission>>  $lockExceptions  llave: `Role->value`
      */
-    private function __construct(array $permissionEnums, array $grants, array $adminDenies, array $adminOnly)
+    private function __construct(array $permissionEnums, array $grants, array $adminDenies, array $adminOnly, array $lockExceptions)
     {
         foreach ($permissionEnums as $enum) {
             foreach ($enum::cases() as $permission) {
@@ -83,13 +90,32 @@ final class PermissionRegistry
                 throw new LogicException("El permiso «{$key}» es candado (CF-03) y excepción del admin a la vez: nadie lo tendría.");
             }
 
-            foreach ($this->granted as $role => $keys) {
-                if (isset($keys[$key])) {
+            $this->locked[$key] = true;
+        }
+
+        foreach ($lockExceptions as $role => $permissions) {
+            $position = Role::tryFrom((string) $role)
+                ?? throw new LogicException("Se exceptúa un candado para un puesto que no existe: «{$role}».");
+
+            foreach ($permissions as $permission) {
+                $key = $this->declared($permission)->value;
+
+                match (true) {
+                    ! isset($this->granted[$role][$key]) => throw new LogicException("La excepción de candado «{$key}» de «{$role}» no está concedida en grants()."),
+                    ! isset($this->locked[$key]) => throw new LogicException("La excepción de candado «{$key}» de «{$role}» no es candado (CF-03)."),
+                    ! $permission->isReadOnly() => throw new LogicException("La excepción de candado «{$key}» no es de lectura."),
+                    ! $position->readsWholeTec() => throw new LogicException("La excepción de candado «{$key}» es para «{$role}», que no lee en todo el Tec (AZ-03)."),
+                    default => $this->lockExceptions[$role][$key] = true,
+                };
+            }
+        }
+
+        foreach ($this->granted as $role => $keys) {
+            foreach (array_keys($keys) as $key) {
+                if (isset($this->locked[$key]) && ! isset($this->lockExceptions[$role][$key])) {
                     throw new LogicException("El permiso «{$key}» es candado (CF-03): solo lo tiene el admin y no se concede a «{$role}» en grants().");
                 }
             }
-
-            $this->locked[$key] = true;
         }
 
         $this->fingerprint = hash('xxh128', (string) json_encode([
@@ -112,6 +138,7 @@ final class PermissionRegistry
         $grants = [];
         $adminDenies = [];
         $adminOnly = [];
+        $lockExceptions = [];
 
         foreach ($modules as $module) {
             array_push($enums, ...$module->permissions());
@@ -121,9 +148,13 @@ final class PermissionRegistry
             foreach ($module->grants() as $role => $permissions) {
                 $grants[$role] = [...($grants[$role] ?? []), ...$permissions];
             }
+
+            foreach ($module->factoryLockExceptions() as $role => $permissions) {
+                $lockExceptions[$role] = [...($lockExceptions[$role] ?? []), ...$permissions];
+            }
         }
 
-        return new self($enums, $grants, $adminDenies, $adminOnly);
+        return new self($enums, $grants, $adminDenies, $adminOnly, $lockExceptions);
     }
 
     /**
@@ -131,10 +162,11 @@ final class PermissionRegistry
      * @param  array<string, list<Permission>>  $grants  llave: `Role->value`
      * @param  list<Permission>  $adminDenies
      * @param  list<Permission>  $adminOnly
+     * @param  array<string, list<Permission>>  $lockExceptions  llave: `Role->value`
      */
-    public static function fromDeclarations(array $permissionEnums, array $grants, array $adminDenies, array $adminOnly = []): self
+    public static function fromDeclarations(array $permissionEnums, array $grants, array $adminDenies, array $adminOnly = [], array $lockExceptions = []): self
     {
-        return new self($permissionEnums, $grants, $adminDenies, $adminOnly);
+        return new self($permissionEnums, $grants, $adminDenies, $adminOnly, $lockExceptions);
     }
 
     /**
@@ -244,6 +276,28 @@ final class PermissionRegistry
     public function isAdminOnly(Permission $permission): bool
     {
         return isset($this->locked[$this->declared($permission)->value]);
+    }
+
+    /**
+     * CF-03, la excepción de fábrica: si el permiso es un candado que el código le concede de fábrica a ese puesto
+     * (factoryLockExceptions()). Lanza LogicException si no está declarado.
+     */
+    public function isFactoryLockException(Role $role, Permission $permission): bool
+    {
+        return isset($this->lockExceptions[$role->value][$this->declared($permission)->value]);
+    }
+
+    /**
+     * CF-03: los puestos que tienen el candado de fábrica por su excepción (factoryLockExceptions()), en el orden del
+     * enum; vacío si no es candado o nadie lo tiene. Lanza LogicException si no está declarado.
+     *
+     * @return list<Role>
+     */
+    public function factoryLockHolders(Permission $permission): array
+    {
+        $key = $this->declared($permission)->value;
+
+        return array_values(array_filter(Role::cases(), fn (Role $role): bool => isset($this->lockExceptions[$role->value][$key])));
     }
 
     /**

@@ -20,6 +20,7 @@ use App\Modules\Core\Rules\OrgUnitRules;
 use App\Modules\Core\Rules\RoleAssignmentRules;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -37,8 +38,9 @@ use Mary\Traits\Toast;
  *
  * Arranca en la raíz; la página le pide otra unidad con `org-unit-picked` y el alta con `org-unit-create`. Después de
  * cada escritura avisa al diagrama con `org-chart-changed` (y la unidad que queda elegida); mover a la misma madre o
- * guardar sin cambios solo dice «Sin cambios». Solo lo usa el admin con
- * ese perfil activo (OrgUnitPolicy): autoriza al pintar y en cada método, cada escritura con su ability.
+ * guardar sin cambios solo dice «Sin cambios». Lo usan el admin con ese perfil activo y, de solo lectura, el directivo
+ * (AZ-03; OrgUnitPolicy): autoriza al pintar y en cada método, cada escritura con su ability, y cada botón que escribe
+ * («Nombrar», «Terminar…» y las «Acciones» de la unidad) sale solo a quien tiene la suya (`may`).
  *
  * Los puestos que van sobre la unidad se nombran y terminan aquí (P1, confirmado el 3 de noviembre de 2026): «Nombrar»
  * es el formulario de «Personas y puestos» (AppointsRoles) con la unidad fija y la persona por buscar, y «Terminar…» es
@@ -104,6 +106,14 @@ new class extends Component
 
         return [
             'detail' => $detail,
+            'may' => [
+                'create' => Gate::allows('create', OrgUnit::class),
+                'update' => Gate::allows('update', $detail->unit),
+                'move' => Gate::allows('move', $detail->unit),
+                'setActive' => Gate::allows('setActive', $detail->unit),
+                'appoint' => Gate::allows('create', RoleAssignment::class),
+                'end' => Gate::allows('end', RoleAssignment::class),
+            ],
             'reasons' => $this->reasons($detail),
             'parentOptions' => match ($this->mode) {
                 'create' => $query->parentOptions(),
@@ -307,6 +317,7 @@ new class extends Component
     public function end(EndRoleAssignment $endRoleAssignment, OrgChartQuery $query, RoleAssignmentRules $rules): void
     {
         $this->authorize('viewAny', OrgUnit::class);
+        $this->authorize('end', RoleAssignment::class);
 
         if ($this->endingId === null) {
             return;

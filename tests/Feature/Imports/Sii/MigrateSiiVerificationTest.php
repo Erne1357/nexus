@@ -133,11 +133,11 @@ it('compara la corrida con Nexus, avisa de lo que no cuadra y marca la corrida �
         ->and(count(array_filter($allRows, fn (array $row): bool => $row[4] === 'info')))->toBeGreaterThan(0);
 });
 
-it('K4: la verificaci처n compara con la regla K4 y reporta aparte los egresados que dejan de estar completos', function () {
+it('K4 mixta: la verificaci처n compara con la regla y reporta aparte los egresados que dejan de estar completos (la materia se volvi처 a cursar)', function () {
     $line = fn (string $term, string $control, string $materia, string $grade): string => SiiFixtures::line(SiiFile::HistoriaAlumno, [
         'periodo' => "'{$term}'", 'no_de_control' => "'{$control}'", 'materia' => "'{$materia}'", 'calificacion' => $grade, 'tipo_evaluacion' => "'O1'", 'estatus_materia' => "'A'",
     ]);
-    SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [$line('19951', 'S1', 'CD1', '0'), $line('19953', 'S1', 'QU1', '90')]);
+    SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [$line('19951', 'S1', 'CD1', '0'), $line('19953', 'S1', 'CD1', '0'), $line('19953', 'S1', 'QU1', '90')]);
     SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, [SiiFixtures::line(SiiFile::Alumnos, [
         'no_de_control' => "'S1'", 'carrera' => "'A'", 'reticula' => "'1'", 'estatus_alumno' => "'EGR'", 'campus' => "'1'", 'semestre' => '9',
     ])]);
@@ -149,11 +149,32 @@ it('K4: la verificaci처n compara con la regla K4 y reporta aparte los egresados 
 
     expect(DB::table('sii_verificacion.alumnos')->first(['completo_sii', 'completo_sii_exportado', 'creditos_sii', 'completo_nexus']))
         ->completo_sii->toBeFalse()->completo_sii_exportado->toBeTrue()->completo_nexus->toBeFalse()
-        ->and(DB::table('sii_verificacion.materias')->orderBy('_linea')->value('aprobada_k4'))->toBeFalse()
+        ->and(DB::table('sii_verificacion.materias')->orderBy('_linea')->pluck('aprobada_k4')->all())->toBe([false, false, true])
         ->and(array_filter($incidents, fn (array $row): bool => $row[4] === 'error'))->toBe([])
         ->and($k4)->toHaveCount(1)
         ->and($k4[0][4])->toBe('warning')
-        ->and($k4[0][5])->toContain('1 con el SII tal cual y 0 con K4');
+        ->and($k4[0][5])->toContain('1 con el SII tal cual y 0 con K4 mixta');
+});
+
+it('K4 mixta: el egresado que nunca volvi처 a cursar la A con 0 de examen queda completo y no hay aviso; el que no es egresado, no', function () {
+    $line = fn (string $term, string $control, string $materia, string $grade): string => SiiFixtures::line(SiiFile::HistoriaAlumno, [
+        'periodo' => "'{$term}'", 'no_de_control' => "'{$control}'", 'materia' => "'{$materia}'", 'calificacion' => $grade, 'tipo_evaluacion' => "'O1'", 'estatus_materia' => "'A'",
+    ]);
+    SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [
+        $line('19951', 'S1', 'CD1', '0'), $line('19953', 'S1', 'QU1', '90'),
+        $line('19951', 'S2', 'CD1', '0'), $line('19953', 'S2', 'QU1', '90'),
+    ]);
+    SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, array_map(fn (string $control, string $status): string => SiiFixtures::line(SiiFile::Alumnos, [
+        'no_de_control' => "'{$control}'", 'carrera' => "'A'", 'reticula' => "'1'", 'estatus_alumno' => "'{$status}'", 'campus' => "'1'", 'semestre' => '9',
+    ]), ['S1', 'S2'], ['TIT', 'ACT']));
+
+    expect(($this->migrate)())->toBe(0);
+
+    $incidents = verificationIncidentRows($this->dir);
+
+    expect(DB::table('sii_verificacion.alumnos')->orderBy('no_de_control')->pluck('completo_sii', 'no_de_control')->all())->toBe(['S1' => true, 'S2' => false])
+        ->and(DB::table('sii_verificacion.materias')->orderBy('_linea')->pluck('aprobada_k4')->all())->toBe([true, true, false, true])
+        ->and(array_filter($incidents, fn (array $row): bool => $row[2] === 'K4'))->toBe([]);
 });
 
 it('sin diferencias termina como siempre', function () {
