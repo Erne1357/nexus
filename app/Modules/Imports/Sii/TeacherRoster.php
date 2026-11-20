@@ -127,7 +127,7 @@ final class TeacherRoster
             $d = $staff[$rfc] ?? null;
             $d2 = $staff2[$rfc] ?? null;
 
-            $name = $this->name($d, $d2);
+            $name = self::personName($d, $d2);
             if ($name === '') {
                 $nameless++;
                 $this->incidents[] = $this->warning($lineOf[$rfc], 'El docente de esta línea no trae nombre: no se migra.');
@@ -326,10 +326,13 @@ final class TeacherRoster
     }
 
     /**
+     * El nombre de una persona en tipo título: el de `docentes2` si lo trae y si no el de `docentes`. Lo usan también
+     * los pasos que dan de alta personal (`StaffStep`), para que el nombre salga igual que el del docente.
+     *
      * @param  array<string, string>|null  $d
      * @param  array<string, string>|null  $d2
      */
-    private function name(?array $d, ?array $d2): string
+    public static function personName(?array $d, ?array $d2): string
     {
         $join = fn (array $parts): string => SubjectName::title(implode(' ', array_filter($parts, fn (string $part): bool => trim($part) !== '')));
         $name = $d2 === null ? '' : $join([$d2['nombre_empleado'], $d2['apellidop'], $d2['apellidom']]);

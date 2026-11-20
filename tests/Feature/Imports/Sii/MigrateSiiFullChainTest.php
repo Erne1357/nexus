@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\StudyPlanPrerequisitePending;
 use App\Modules\Academic\Models\StudyPlanSubjectPending;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\Core\Enums\StaffType;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Models\Room;
@@ -24,7 +25,7 @@ use Spatie\Activitylog\Models\Activity;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| `imports:migrate-sii` con los trece pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
+| `imports:migrate-sii` con los catorce pasos de producción (ImportsServiceProvider::SII_STEPS, sin sustituirlos) sobre
 | una exportación sintética pequeña que toca cada paso: corre sin filas con error, la verificación contra el SII no
 | encuentra diferencias y repetirla no da ni altas ni cambios en ningún lote.
 */
@@ -41,7 +42,7 @@ beforeEach(function () {
 
     File::copy(base_path('app/Modules/Imports/Sii/Curated/organigrama.csv'), $this->curated.'/organigrama.csv');
     File::put($this->curated.'/carreras.csv', "carrera,nombre,departamento,departamento_nombre,nota\nAAA,Carrera Triple A,110700,Económico Administrativas,\n");
-    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\nA,3,AAA-2004-100,AAA,presencial,si,0,\n");
+    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,\nA,3,AAA-2004-100,AAA-2004-100,AAA,presencial,si,0,\n");
     File::put($this->curated.'/aulas.csv', "aula,incluir,campus,edificio,nombre,tipo,capacidad,departamento,sesiones_desde_20251,nota\nA1,si,C1,ED1,,aula,30,,5,\nA2,si,C2,ED2,Aula dos,aula,25,,3,\n");
 
     $areas = array_column((new SiiMigration(SiiExport::open($this->dir), $this->curated))->curated('organigrama'), 'clave_sii');
@@ -104,7 +105,7 @@ beforeEach(function () {
     ]);
     SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [
         $history('20253', 'S1', 'CD1', '60', 'O1', 'P'),
-        $history('20043', 'S2', 'ZZZ', '0', 'E1', 'A'),
+        $history('20043', 'S2', 'ZZZ', '0', 'RC', 'A'),
     ]);
     SiiFixtures::write($this->dir.'/seleccion_materias.csv', SiiFile::SeleccionMaterias, [
         SiiFixtures::line(SiiFile::SeleccionMaterias, ['periodo' => "'20263'", 'no_de_control' => "'S1'", 'materia' => "'CD1'", 'repeticion' => "'S'", 'status_seleccion' => "'I'", 'calificacion' => '']),
@@ -118,9 +119,9 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los trece pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
+it('corre los catorce pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(13);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(14);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful()
         ->doesntExpectOutputToContain('con diferencias');
@@ -143,6 +144,7 @@ it('corre los trece pasos de producción sin errores ni diferencias y repetirla 
         ->and(Room::query()->count())->toBe(2)
         ->and(Teacher::query()->sole()->history()->count())->toBe(2)
         ->and(Teacher::query()->sole()->positions()->orderBy('kind')->pluck('base_hours', 'kind')->map(fn ($hours): int => (int) $hours)->all())->toBe(['asignatura' => 4, 'tres_cuartos' => 30])
+        ->and(User::query()->where('username', 'PRUE800101AB1')->sole()->staff_type)->toBe(StaffType::Docente)
         ->and(Student::query()->count())->toBe(2)
         ->and(KardexRecord::query()->orderBy('term_code')->get()->map(fn (KardexRecord $record): array => [$record->term_code, $record->result->value, $record->grade === null ? null : (int) $record->grade, $record->attempt])->all())->toBe([
             ['20043', 'aprobada', null, 1],

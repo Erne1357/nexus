@@ -3,6 +3,7 @@
 use App\Modules\Core\Actions\CreateStaffUser;
 use App\Modules\Core\Actions\InviteUser;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\StaffType;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
@@ -20,7 +21,7 @@ use Mary\Traits\Toast;
 
 /**
  * Lista de «Personas y puestos» (3.P7, maqueta C): todos los usuarios con sus puestos vigentes y el estado de su acceso
- * (AC-04), con búsqueda por número o nombre y filtros por puesto, por estado de la cuenta y por acceso (1.22-C1).
+ * (AC-04), con búsqueda por número o nombre y filtros por puesto, por estado de la cuenta, por acceso (1.22-C1) y por tipo de personal (R-V2-3).
  * Nombrar y terminar se hacen en la ficha de la persona (core::pages.person), a la que lleva «Ver puestos». La acción
  * principal es «Dar de alta» (CF-S3, UserPolicy): un cajón pide usuario, nombre y correo institucional opcional,
  * CreateStaffUser la da de alta sin acceso, con correo le llega la invitación (InviteUser, CF-07) y la pantalla lleva a
@@ -52,6 +53,10 @@ new #[Title('Personas y puestos')] class extends Component
     /** '' (todos) o el valor de un UserAccess; se recuerda en la sesión del usuario. */
     #[Session]
     public string $access = '';
+
+    /** '' (todos), un valor de StaffType o `none` (sin tipo); se recuerda en la sesión del usuario. */
+    #[Session]
+    public string $staffType = '';
 
     public bool $showCreate = false;
 
@@ -102,6 +107,8 @@ new #[Title('Personas y puestos')] class extends Component
                 default => null,
             },
             access: UserAccess::tryFrom($this->access),
+            staffType: StaffType::tryFrom($this->staffType),
+            withoutStaffType: $this->staffType === PeopleQuery::NO_STAFF_TYPE,
         );
         $described = $labels->describe($page->getCollection()->flatMap(fn (User $user) => $user->roleAssignments));
 
@@ -120,6 +127,7 @@ new #[Title('Personas y puestos')] class extends Component
             'headers' => [
                 ['key' => 'username', 'label' => 'Usuario'],
                 ['key' => 'name', 'label' => 'Persona', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
+                ['key' => 'staff_type', 'label' => 'Tipo de personal', 'sortable' => false],
                 ['key' => 'roles', 'label' => 'Puestos vigentes', 'sortable' => false],
                 ['key' => 'is_active', 'label' => 'Estado', 'sortable' => false],
                 ['key' => 'access', 'label' => 'Acceso', 'sortable' => false],
@@ -128,6 +136,7 @@ new #[Title('Personas y puestos')] class extends Component
             'roles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], Role::cases()),
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'accesses' => array_map(fn (UserAccess $access): array => ['id' => $access->value, 'name' => $access->label()], UserAccess::cases()),
+            'staffTypes' => [...array_map(fn (StaffType $type): array => ['id' => $type->value, 'name' => $type->label()], StaffType::cases()), ['id' => PeopleQuery::NO_STAFF_TYPE, 'name' => 'Sin tipo']],
             'canCreate' => Gate::allows('create', User::class),
         ];
     }
@@ -277,7 +286,7 @@ new #[Title('Personas y puestos')] class extends Component
             $this->resetPage('appointmentsPage');
         }
 
-        if (in_array($property, ['search', 'role', 'status', 'access'], true)) {
+        if (in_array($property, ['search', 'role', 'status', 'access', 'staffType'], true)) {
             $this->resetPage();
         }
     }

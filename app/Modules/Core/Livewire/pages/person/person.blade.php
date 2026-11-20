@@ -39,6 +39,10 @@
                     @endunless
                     <x-core::status-badge :tone="$access->tone()" :label="$access->label()" data-testid="user-access" />
                 </p>
+
+                @if ($person->staff_type !== null)
+                    <p class="mt-1 text-sm text-neutral" data-testid="staff-type">Tipo de personal: <span class="font-medium text-base-content">{{ $person->staff_type->label() }}</span></p>
+                @endif
             </div>
         </div>
 

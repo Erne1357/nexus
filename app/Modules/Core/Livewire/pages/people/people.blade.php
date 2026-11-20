@@ -1,6 +1,6 @@
 {{--
     «Personas y puestos» (DESIGN.md, «Personas y puestos»), con la anatomía de una pantalla de catálogo: encabezado,
-    barra con la búsqueda, los filtros «Puesto», «Estado» y «Acceso» y la acción principal «Dar de alta» (1.22-C1, un
+    barra con la búsqueda, los filtros «Puesto», «Estado», «Tipo de personal» y «Acceso» y la acción principal «Dar de alta» (1.22-C1, un
     cajón con usuario, nombre y correo institucional), y una tabla con el usuario en Mono, la persona, un chip por puesto
     vigente, el estado y el acceso (AC-04); «Ver puestos» abre la ficha. Debajo de 768 px la tabla cede su lugar a
     renglones apilados, que no repiten los data-testid de la tabla. La pestaña «Nombramientos» (U3 opción A) es una
@@ -35,6 +35,7 @@
 
         <x-select wire:model.live="role" aria-label="Puesto" :options="$roles" placeholder="Puesto" />
         <x-select wire:model.live="status" aria-label="Estado" :options="$statuses" placeholder="Estado" data-testid="filter-status" />
+        <x-select wire:model.live="staffType" aria-label="Tipo de personal" :options="$staffTypes" placeholder="Tipo de personal" data-testid="filter-staff-type" />
         <x-select wire:model.live="access" aria-label="Acceso" :options="$accesses" placeholder="Acceso" data-testid="filter-access" />
 
         <x-slot:action>
@@ -59,6 +60,14 @@
 
             @scope('cell_name', $user)
                 <span @class(['font-semibold' => $user->is_active])>{{ $user->name }}</span>
+            @endscope
+
+            @scope('cell_staff_type', $user)
+                @if ($user->staff_type !== null)
+                    <span class="text-sm">{{ $user->staff_type->label() }}</span>
+                @else
+                    <span class="text-sm text-neutral">—</span>
+                @endif
             @endscope
 
             @scope('cell_roles', $user, $summaries)
@@ -95,6 +104,10 @@
                         <span class="font-mono text-[15px] tabular-nums">{{ $user->username }}</span>
                         <span @class(['min-w-0 flex-1', 'font-semibold' => $user->is_active])>{{ $user->name }}</span>
                     </div>
+
+                    @if ($user->staff_type !== null)
+                        <p class="text-sm text-neutral">{{ $user->staff_type->label() }}</p>
+                    @endif
 
                     <div class="flex flex-wrap gap-1.5">
                         @include('core::people.status-cell', ['user' => $user])

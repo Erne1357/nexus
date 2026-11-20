@@ -90,3 +90,35 @@ it('updated() rechaza a quien ya no es admin, sobre un componente que abrió el 
 
     $page->set('search', 'rosa')->assertForbidden();
 });
+
+it('Personas y puestos muestra y filtra el tipo de personal', function () {
+    $this->rosa->forceFill(['staff_type' => 'administrativo'])->save();
+    $this->beto->forceFill(['staff_type' => 'docente'])->save();
+
+    $this->actingAs($this->admin)
+        ->get(route('core.people'))
+        ->assertOk()
+        ->assertSeeInOrder(['Persona', 'Tipo de personal', 'Puestos vigentes'])
+        ->assertSee('Administrativo')
+        ->assertSee('Docente');
+
+    Livewire::actingAs($this->admin)->test('core::pages.people')
+        ->set('staffType', 'docente')->assertViewHas('people', fn ($people): bool => $people->pluck('name')->all() === ['Beto Sin Puesto'])
+        ->set('staffType', 'administrativo')->assertViewHas('people', fn ($people): bool => $people->pluck('name')->all() === ['Rosa Ruiz'])
+        ->set('staffType', 'none')->assertViewHas('people', fn ($people): bool => $people->pluck('name')->all() === ['Ada Admin', 'Cris Inactivo'])
+        ->set('staffType', 'nada')->assertViewHas('people', fn ($people): bool => $people->count() === 4);
+});
+
+it('la ficha de la persona muestra su tipo de personal', function () {
+    $this->beto->forceFill(['staff_type' => 'docente'])->save();
+
+    $this->actingAs($this->admin)
+        ->get(route('core.people.show', $this->beto->id))
+        ->assertOk()
+        ->assertSeeHtml('data-testid="staff-type"')->assertSeeInOrder(['Tipo de personal', 'Docente']);
+});
+
+it('el tipo de personal sigue siendo solo del admin', function () {
+    $this->actingAs($this->rosa)->get(route('core.people'))->assertForbidden();
+    $this->actingAs($this->rosa)->get(route('core.people.show', $this->beto->id))->assertForbidden();
+});
