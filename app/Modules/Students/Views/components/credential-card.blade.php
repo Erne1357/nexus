@@ -46,7 +46,7 @@
 
                 <div class="absolute top-0 right-0 h-[48.3%] w-[23.1%] overflow-hidden rounded-bl-[1.1cqw] bg-white p-[0.45cqw]" data-testid="credential-photo">
                     @if ($credential['has_photo'])
-                        <img src="{{ route('students.my-record.photo') }}" alt="Foto de {{ $credential['name'] }}" class="size-full rounded-bl-[0.8cqw] object-cover object-top" data-testid="credential-photo-img">
+                        <img src="{{ $credential['photo_url'] }}" alt="Foto de {{ $credential['name'] }}" class="size-full rounded-bl-[0.8cqw] object-cover object-top" data-testid="credential-photo-img">
                     @else
                         <div class="grid size-full place-items-center rounded-bl-[0.8cqw] bg-base-200">
                             <span class="font-credential text-[5.4cqw] font-semibold text-primary" aria-hidden="true">{{ $credential['initials'] }}</span>

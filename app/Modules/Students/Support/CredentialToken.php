@@ -2,8 +2,6 @@
 
 namespace App\Modules\Students\Support;
 
-use Illuminate\Support\Str;
-
 /**
  * El token del QR de la credencial (AC-20, tarea 1.27): cambia cada 30 s y solo lo puede armar el servidor. Lleva el id
  * del alumno y la ventana de 30 s cifrados y autenticados con AES-256-GCM (llave derivada de APP_KEY), así que la URL no
@@ -74,12 +72,13 @@ final class CredentialToken
         return intdiv($now, self::WINDOW_SECONDS);
     }
 
+    /**
+     * La llave de AES-256-GCM, derivada de la llave de la aplicación (`app('encrypter')`, que falla si APP_KEY falta) y
+     * separada por propósito, así que no sirve para descifrar otra cosa de Laravel.
+     */
     private function key(): string
     {
-        $appKey = (string) config('app.key');
-        $raw = Str::startsWith($appKey, 'base64:') ? base64_decode(substr($appKey, 7)) : $appKey;
-
-        return hash_hmac('sha256', 'nexus.student-credential.v1', $raw, true);
+        return hash_hmac('sha256', 'nexus.student-credential.v1', app('encrypter')->getKey(), true);
     }
 
     private static function base64url(string $bytes): string

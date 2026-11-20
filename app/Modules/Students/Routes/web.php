@@ -17,7 +17,9 @@ Route::middleware('auth')->group(function () {
 });
 
 // La verificación pública del QR de la credencial (AC-20): sin sesión, con token firmado de 30 s y límite de peticiones.
+// Fuera del grupo `web`: un escaneo anónimo no abre sesión ni deja cookies, y a quien tiene sesión no lo redirige nada.
 Route::middleware('throttle:credential-verify')
+    ->withoutMiddleware('web')
     ->get('/credencial/verificar/{token}', VerifyCredential::class)
     ->where('token', '[A-Za-z0-9_-]{20,100}')
     ->name('credential.verify');

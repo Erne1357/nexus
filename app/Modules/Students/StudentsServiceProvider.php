@@ -45,8 +45,12 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
         Event::listen(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
 
-        // AC-20: la verificación pública del QR de la credencial, 30 por minuto por dirección.
-        RateLimiter::for('credential-verify', fn (Request $request): Limit => Limit::perMinute(30)->by((string) $request->ip()));
+        // AC-20: la verificación pública del QR de la credencial. 30 por minuto por dirección y código, y 300 por dirección:
+        // detrás del NAT del campus muchos teléfonos comparten dirección.
+        RateLimiter::for('credential-verify', fn (Request $request): array => [
+            Limit::perMinute(30)->by('code|'.$request->ip().'|'.hash('sha256', (string) $request->route('token'))),
+            Limit::perMinute(300)->by('ip|'.$request->ip()),
+        ]);
     }
 
     public function navigation(): array

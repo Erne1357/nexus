@@ -49,11 +49,12 @@ return [
 
         // Fotos de los alumnos para la credencial (Students, tarea 1.27, AC-20): una carpeta por año de ingreso,
         // `<AAAA>/<número de control>.jpg` (p. ej. `2021/21111182.jpg`). Datos personales: fuera de git
-        // (storage/app/.gitignore) y fuera de public/; se sirven solo por rutas que autorizan. En el servidor,
+        // (storage/app/.gitignore), fuera de public/ y fuera de la raíz del disco `local` (que sirve archivos);
+        // se sirven solo por rutas que autorizan. En el servidor,
         // STUDENT_PHOTOS_PATH apunta al directorio montado (compose.prod.yaml).
         'student_photos' => [
             'driver' => 'local',
-            'root' => env('STUDENT_PHOTOS_PATH', storage_path('app/private/fotos')),
+            'root' => env('STUDENT_PHOTOS_PATH', storage_path('app/fotos')),
             'throw' => false,
             'report' => false,
         ],

@@ -73,12 +73,14 @@ it('AC-20: el alumno ve su propia foto por su ruta y sin foto recibe 404', funct
 
     Storage::disk('student_photos')->put('2021/21111182.jpg', CREDENTIAL_FAKE_JPEG);
 
-    $this->actingAs($this->user)->get(route('students.my-record.photo'))
+    $response = $this->actingAs($this->user)->get(route('students.my-record.photo'))
         ->assertOk()
         ->assertHeader('Content-Type', 'image/jpeg')
         ->assertHeader('X-Content-Type-Options', 'nosniff');
 
-    expect($this->actingAs($this->user)->get(route('students.my-record.photo'))->getContent())->toBe(CREDENTIAL_FAKE_JPEG);
+    // La URL es la misma para todos: sin caché, en una computadora compartida el siguiente alumno no ve la foto del anterior.
+    expect($response->headers->get('Cache-Control'))->toContain('no-store')->toContain('private')
+        ->and($response->streamedContent())->toBe(CREDENTIAL_FAKE_JPEG);
 
 });
 
@@ -105,7 +107,7 @@ it('AC-20: el egresado ve «Egresado», la carrera abreviada como la plantilla y
 
     Livewire::actingAs($this->user)->withQueryParams(['tab' => 'credencial'])->test('students::pages.my-record')
         ->assertSeeHtml('data-testid="credential-photo-img"')
-        ->assertSeeHtml(route('students.my-record.photo'));
+        ->assertSeeHtml(route('students.my-record.photo').'?v=');
 });
 
 it('AC-20: la carrera se abrevia como la plantilla y el estatus solo da credencial al activo y al egresado', function () {
@@ -176,6 +178,8 @@ it('AC-20: la verificación pública con el código vigente muestra foto, nombre
         ->assertOk()
         ->assertHeader('X-Robots-Tag', 'noindex, nofollow')
         ->assertHeader('Cache-Control', 'no-store, private')
+        ->assertHeader('Referrer-Policy', 'no-referrer')
+        ->assertCookieMissing(config('session.cookie'))
         ->assertSee('Credencial vigente')
         ->assertSee('Ana López Ruiz')
         ->assertSee('21111182')
@@ -202,7 +206,7 @@ it('AC-20: con el código vencido, alterado o de una credencial de baja no muest
     $this->get('/credencial/verificar/'.urlencode('../../etc'))->assertNotFound();
 });
 
-it('AC-20: la verificación pública tiene límite de peticiones por dirección', function () {
+it('AC-20: la verificación pública tiene límite por dirección y código, y otro código de la misma dirección sigue', function () {
     $token = app(CredentialToken::class)->issue((string) $this->student->id, now()->getTimestamp());
 
     foreach (range(1, 30) as $ignored) {
@@ -210,4 +214,41 @@ it('AC-20: la verificación pública tiene límite de peticiones por dirección'
     }
 
     $this->get(route('credential.verify', ['token' => $token]))->assertTooManyRequests();
+
+    $other = app(CredentialToken::class)->issue((string) $this->other->id, now()->getTimestamp());
+    $this->get(route('credential.verify', ['token' => $other]))->assertOk();
+});
+
+it('AC-20: el token de un alumno que no existe, de otra APP_KEY, de una ventana futura o de largo malo no da datos', function () {
+    $tokens = app(CredentialToken::class);
+    $now = now()->getTimestamp();
+
+    expect($tokens->verify($tokens->issue('0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b', $now), $now))->not->toBeNull();
+    $this->get(route('credential.verify', ['token' => $tokens->issue('0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b', $now)]))
+        ->assertOk()->assertSee('Código no reconocido');
+
+    $future = $tokens->issue((string) $this->student->id, $now + 60);
+    expect($tokens->verify($future, $now))->toBe('expired');
+
+    $raw = base64_decode(strtr($tokens->issue((string) $this->student->id, $now), '-_', '+/').'==');
+    $encode = fn (string $bytes): string => rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
+    expect(strlen($raw))->toBe(48)
+        ->and($tokens->verify($encode(substr($raw, 0, 47)), $now))->toBeNull()
+        ->and($tokens->verify($encode($raw."\x00"), $now))->toBeNull();
+
+    $token = $tokens->issue((string) $this->student->id, $now);
+    config(['app.key' => 'base64:'.base64_encode(random_bytes(32))]);
+    app()->forgetInstance('encrypter');
+    expect(app(CredentialToken::class)->verify($token, $now))->toBeNull();
+});
+
+it('AC-20: el QR apunta a APP_URL aunque se entre por otro host, y una foto más pesada que el tope no se usa', function () {
+    config(['app.url' => 'https://nexus.cdjuarez.tecnm.mx']);
+    $qr = app(StudentCredentialQuery::class)->qrFor($this->student, now()->getTimestamp());
+
+    expect($qr['url'])->toStartWith('https://nexus.cdjuarez.tecnm.mx/credencial/verificar/');
+
+    Storage::disk('student_photos')->put('2021/21111182.jpg', str_repeat('x', StudentPhotos::MAX_BYTES + 1));
+    expect(app(StudentPhotos::class)->locate('21111182'))->toBeNull()
+        ->and(app(StudentPhotos::class)->read('21111182'))->toBeNull();
 });
