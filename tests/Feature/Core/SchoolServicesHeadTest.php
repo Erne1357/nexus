@@ -8,6 +8,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
+use App\Modules\Core\Authorization\UnitApplicability;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -41,7 +42,7 @@ beforeEach(function () {
     AcademicLoad::factory()->for($term)->create();
     $this->services = OrgUnit::factory()->create([
         'code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento,
-        'parent_id' => app(OrgTree::class)->idOf(OrgTree::ACADEMIC),
+        'parent_id' => OrgUnit::factory()->create(['code' => 'SUB-PLANEACION', 'name' => 'Subdirección de Planeación y Vinculación', 'kind' => OrgUnitKind::Subdireccion, 'parent_id' => app(OrgTree::class)->idOf(OrgTree::ROOT)])->id,
     ]);
     $this->systems = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $this->isc = Career::factory()->create(['code' => 'ISC', 'department_id' => $this->systems->id]);
@@ -120,6 +121,16 @@ describe('AZ-02: pantallas y acciones', function () {
             ->and($gate->allows('viewAny', StudyPlan::class))->toBeTrue()
             ->and($gate->allows('validatePlacements', StudyPlan::class))->toBeTrue()
             ->and(Gate::forUser($this->academicHead)->allows('validatePlacements', StudyPlan::class))->toBeFalse();
+    });
+});
+
+describe('R-V2-5: Servicios Escolares bajo Planeación y Vinculación', function () {
+    it('la Subdirección Académica no cubre Servicios Escolares y su jefe sigue validando «Por validar»', function () {
+        $subdirection = User::factory()->withRole(Role::Subdireccion)->create();
+
+        expect(Gate::forUser($subdirection)->allows('validatePlacements', StudyPlan::class))->toBeFalse()
+            ->and(app(OrgTree::class)->fits($this->services->id, UnitApplicability::academic()))->toBeFalse()
+            ->and(Gate::forUser($this->servicesHead)->allows('validatePlacements', StudyPlan::class))->toBeTrue();
     });
 });
 
