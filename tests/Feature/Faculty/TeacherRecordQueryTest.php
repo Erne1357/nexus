@@ -138,7 +138,7 @@ describe('perfil, horas fuera del ITCJ e historial', function () {
             ->and($loads->sum('hours'))->toBe(10);
     });
 
-    it('el historial va del periodo más antiguo al más reciente, con sus grupos y evaluaciones por tipo', function () {
+    it('el historial va del periodo más reciente al más antiguo, con sus grupos y evaluaciones por tipo', function () {
         $subject = Subject::factory()->create(['code' => 'SCD-1', 'name' => 'Programación']);
         $campus = Campus::factory()->create(['code' => 'C2']);
         TeacherSubjectHistory::factory()->for($this->ana)->for($subject)->create(['term_code' => '20243', 'campus_id' => $campus->id, 'group_code' => '5B']);
@@ -152,14 +152,14 @@ describe('perfil, horas fuera del ITCJ e historial', function () {
 
         $history = app(TeacherRecordQuery::class)->history($this->ana);
 
-        expect($history->pluck('code')->all())->toBe(['20232', '20241', '20243'])
-            ->and($history->pluck('label')->all())->toBe(['Verano 2023', 'Ene-Jun 2024', 'Ago-Dic 2024'])
-            ->and($history[0]['groups'])->toHaveCount(0)
+        expect($history->pluck('code')->all())->toBe(['20243', '20241', '20232'])
+            ->and($history->pluck('label')->all())->toBe(['Ago-Dic 2024', 'Ene-Jun 2024', 'Verano 2023'])
+            ->and($history[2]['groups'])->toHaveCount(0)
             ->and($history[1]['groups']->pluck('group_code')->all())->toBe(['3A', '3B'])
             ->and($history[1]['groups']->first()->subject->code)->toBe('SCD-1')
             ->and($history[1]['groups']->first()->campus->code)->toBe('C2')
             ->and($history[1]['evaluations']->mapWithKeys(fn ($e) => [$e->kind->value => (float) $e->score])->all())->toBe(['departamental' => 3.8, 'estudiantil' => 4.5])
-            ->and($history[2]['evaluations'])->toHaveCount(0);
+            ->and($history[0]['evaluations'])->toHaveCount(0);
     });
 
     it('con el mismo grupo en dos campus, el orden es fijo por clave de campus', function () {

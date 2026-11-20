@@ -116,16 +116,19 @@ final class CatalogRecordsQuery
      *
      * @return array{pending: int, reviewed: int, flagged: int, all: int}
      */
-    public function segmentCounts(CatalogReview $review): array
+    public function segmentCounts(CatalogReview $review, ?bool $active = null): array
     {
         $model = $this->contents->query($review)->getModel();
         $id = $model->qualifyColumn('id');
+        $base = fn (): Builder => $this->contents->query($review)->when($active !== null, fn (Builder $query) => $query->where($model->qualifyColumn('is_active'), $active));
 
         return [
-            'pending' => $this->contents->unreviewedCount($review),
-            'reviewed' => $this->contents->query($review)->whereIn($id, $review->marks()->select('record_id'))->count(),
+            // CV14: «Por revisar» son activos; con «Solo inactivos» no hay ninguno.
+            'pending' => $active === false ? 0 : $this->contents->unreviewedCount($review),
+            'reviewed' => $base()->whereIn($id, $review->marks()->select('record_id'))->count(),
+            // CV14 (supuesto): con observación abierta se cuenta siempre, sin importar «Estado».
             'flagged' => $this->contents->query($review)->whereIn($id, $this->openFlagged($review, $model))->count(),
-            'all' => $this->contents->query($review)->count(),
+            'all' => $base()->count(),
         ];
     }
 

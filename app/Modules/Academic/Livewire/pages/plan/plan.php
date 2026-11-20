@@ -20,6 +20,7 @@ use App\Modules\Academic\Queries\PlanGridEditorQuery;
 use App\Modules\Academic\Queries\StudyPlanQuery;
 use App\Modules\Academic\Rules\PlacementRules;
 use App\Modules\Academic\Rules\SeriationRules;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use App\Modules\Core\Support\SemesterGrid;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Gate;
@@ -60,7 +61,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Retícula del plan')] class extends Component
 {
-    use Toast;
+    use ReturnsToValidation, Toast;
 
     /** Cuántas materias de la retícula muestra «Agregar requisito», como en la maqueta. */
     private const int REQUISITE_LIMIT = 8;

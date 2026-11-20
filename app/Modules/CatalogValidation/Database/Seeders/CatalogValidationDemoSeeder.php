@@ -37,6 +37,7 @@ use App\Modules\Faculty\Actions\CreateTeacher;
 use App\Modules\Faculty\Actions\SetTeacherActive;
 use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -234,7 +235,8 @@ class CatalogValidationDemoSeeder extends Seeder
      */
     private function validateReviewed(CatalogReview $review, User $head): CatalogReview
     {
-        $ids = array_column($this->contents->records($review), 'id');
+        // CV14: los docentes inactivos no se marcan.
+        $ids = array_column(array_filter($this->contents->records($review), fn (array $record): bool => $review->catalog !== Catalog::Teachers || $record['is_active']), 'id');
 
         if ($ids !== []) {
             $this->mark->handle($review, $ids, $head);
@@ -451,7 +453,7 @@ class CatalogValidationDemoSeeder extends Seeder
             return [];
         }
 
-        $records = collect((new Randomizer(new Mt19937(crc32($review->department->code.'/'.$review->catalog->value))))->shuffleArray($this->contents->query($review)->get()->all()));
+        $records = collect((new Randomizer(new Mt19937(crc32($review->department->code.'/'.$review->catalog->value))))->shuffleArray($this->contents->query($review)->get()->filter(fn (Model $record): bool => $review->catalog !== Catalog::Teachers || $record->is_active)->values()->all())); // CV14: a un docente inactivo no se le observa
         $types = array_values(array_filter(ReviewFlag::cases(), fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog)));
         $created = [];
 

@@ -32,7 +32,7 @@
         <p class="text-sm text-neutral">Este registro no tiene observaciones.</p>
     @endforelse
 
-    @if ($card['canFlag'])
+    @if ($card['canFlag'] && ! ($card['review']->catalog === \App\Modules\CatalogValidation\Enums\Catalog::Teachers && ! $editing['record']->is_active)) {{-- CV14 --}}
         <form wire:submit="addFlag" class="space-y-3 border-t border-dashed border-base-300 pt-4" data-testid="flag-form"
             x-on:pending-flag.window="$nextTick(() => { const field = $el.querySelector('[name=' + $event.detail.field + ']'); field?.scrollIntoView({ block: 'center' }); field?.focus({ preventScroll: true }) })">
             <x-select label="Tipo de observación" name="flag" wire:model="flag" :options="$flagOptions" placeholder="Elige el tipo" placeholder-value="" />

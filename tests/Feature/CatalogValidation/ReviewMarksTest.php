@@ -204,7 +204,7 @@ describe('validar con todo revisado', function () {
         expect($this->review->fresh()->status)->toBe(ReviewStatus::Validated);
     });
 
-    it('CV7: un inactivo también se puede marcar', function () {
+    it('CV7: un inactivo también se puede marcar (salvo los docentes, CV14)', function () {
         expect(app(MarkRecordsReviewed::class)->handle($this->review, [$this->second->id], $this->actor))->toBe(1);
     });
 

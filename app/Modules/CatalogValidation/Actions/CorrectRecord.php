@@ -65,6 +65,7 @@ final class CorrectRecord
 
             $this->rules->ensureOpen($review);
             $this->rules->ensureContains($review, $record);
+            $this->rules->ensureNoInactiveTeachers($review, [$record->getKey()]); // CV14
 
             $record->discardChanges();
             $record->syncChanges();
