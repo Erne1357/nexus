@@ -3,40 +3,49 @@
 namespace App\Modules\Imports\Sii;
 
 /**
- * La retícula de Nexus que sale de los lugares del SII (D8, D15, D18; reglas-de-negocio.md "Reglas de datos"). No lee
- * archivos ni la base: recibe los lugares ya llevados a su plan de Nexus y devuelve uno por plan y materia de Nexus,
- * con lo que corrigió en incidents(). Los renglones se ordenan primero por retícula y clave del SII, así que el
- * resultado no depende del orden del archivo.
+ * La retícula de Nexus que sale de los lugares del SII (D8, D15, D18, R-V2-1; reglas-de-negocio.md "Reglas de datos").
+ * No lee archivos ni la base: recibe los lugares ya llevados a su plan de Nexus, con su grupo, y devuelve uno por plan y
+ * materia de Nexus, con lo que corrigió en incidents(). Cada retícula del SII es su propio plan (R-V2-1, confirmado el
+ * 19 de noviembre de 2026), pero el catálogo de materias se arma como cuando las variantes por modalidad se fundían en un
+ * plan: por grupo, la clave oficial que juntaba esas retículas (`grupo` de `planes.csv`). Así la clave, las horas y el
+ * nombre de cada materia de Nexus no cambian por separarlas; los lugares, los pendientes y el mapa por plan sí van al plan
+ * de cada retícula. Los renglones se ordenan primero por retícula y clave del SII, así que el resultado no depende del
+ * orden del archivo.
  *
  * 1. Clave (D8): la clave TecNM del lugar si la tiene; si no, su clave del SII. Los lugares de una clave TecNM votan
- *    por su combinación de créditos y horas, un voto por plan: la más votada se queda la clave TecNM y los lugares
- *    con otra conservan su clave del SII, con advertencia. En un empate gana la combinación del plan de versión más
+ *    por su combinación de créditos y horas, un voto por grupo: la más votada se queda la clave TecNM y los lugares
+ *    con otra conservan su clave del SII, con advertencia. En un empate gana la combinación del grupo de versión más
  *    reciente, con advertencia (supuestos por confirmar). Dos materias distintas de una misma retícula del SII nunca
  *    quedan con la misma clave (supuesto por confirmar, con aviso): si el SII les da la misma clave TecNM, antes del
  *    voto la conserva la única que se llama como esa clave en las retículas donde nadie se la disputa (hasta dos
  *    letras de diferencia) y las otras se quedan sin ella; si la clave TecNM de una es la clave del SII de otra, la
  *    conserva esta y la primera vuelve a su clave del SII.
- * 2. Variantes (D15, R14): dentro de un plan, las materias de retículas distintas del SII con el mismo nombre
+ * 2. Variantes (D15, R14): dentro de un grupo, las materias de retículas distintas del SII con el mismo nombre
  *    normalizado (sin importar singular o plural), los mismos créditos y la misma especialidad (o ninguna) son una
- *    sola, aunque repartan distinto las horas de teoría y práctica. Si las horas coinciden, se queda la clave TecNM si
- *    alguna la tiene; si no, la clave del SII de la variante presencial, y si no hay, la menor. Si difieren, se queda
- *    la materia de la variante presencial, con sus horas, y se avisa (decidido el 9 de noviembre de 2026 como
- *    supuesto por confirmar con Servicios Escolares). Dos claves TecNM distintas no se funden (D8). Las materias con
- *    el mismo nombre dentro de una misma retícula no se funden y se avisa; si además hay otra variante, cada una se
- *    empareja con la primera libre, en orden de clave (supuestos por confirmar).
- * 3. Lugar: los renglones que caen en el mismo plan y clave son un solo lugar. El semestre es el de la variante
- *    presencial, o el de la primera, entre las que traen semestre; si traen semestres distintos, avisa.
- * 4. Horas: una materia de Nexus tiene unas solas horas y créditos. Si una clave queda en planes con combinaciones
+ *    sola materia de Nexus, aunque repartan distinto las horas de teoría y práctica. Si las horas coinciden, se queda la
+ *    clave TecNM si alguna la tiene; si no, la clave del SII de la variante presencial, y si no hay, la menor. Si
+ *    difieren, se queda la materia de la variante presencial, con sus horas, y se avisa (decidido el 9 de noviembre de
+ *    2026 como supuesto por confirmar con Servicios Escolares). Entre varias presenciales va primero la de la retícula
+ *    que conserva la clave oficial del grupo (supuesto por confirmar: hasta el 19 de noviembre de 2026 era la única
+ *    presencial de cada grupo). Dos claves TecNM distintas no se funden (D8). Las materias con el mismo nombre dentro de
+ *    una misma retícula no se funden y se avisa; si además hay otra variante, cada una se empareja con la primera libre,
+ *    en orden de clave (supuestos por confirmar).
+ * 3. Lugar: los renglones de una retícula que caen en el mismo plan y clave son un solo lugar, con el semestre, el
+ *    renglón y la especialidad de su propia retícula: los de la variante presencial, o de la primera, entre las que
+ *    traen semestre; si traen semestres distintos, avisa. Sus horas y su nombre son los de su materia de Nexus.
+ * 4. Horas: una materia de Nexus tiene unas solas horas y créditos. Si una clave queda en grupos con combinaciones
  *    distintas (una clave del SII que el SII repite en retículas con otras horas, o igual a una clave TecNM), todos
- *    sus lugares toman la de más planes; en empate, la del plan de versión más reciente. Avisa (supuesto por confirmar).
+ *    sus lugares toman la de más grupos; en empate, la del grupo de versión más reciente. Avisa (supuesto por
+ *    confirmar). La versión de un grupo es la mayor de sus planes (en el curado, todos llevan el año de la clave oficial).
  * 5. Nombre: el de la clave de Nexus es el más frecuente entre sus renglones del SII (SubjectName::key()); en empate,
- *    el del plan de versión más reciente y luego el primero en orden alfabético. Si el SII trae otros, avisa.
- * 6. Estatus N: un lugar cuyas variantes del SII traen todas estatus `N` (ya no se ofrece) no entra a la retícula: pasa
- *    a pending() con aviso, para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por confirmar, 10
- *    de noviembre de 2026; antes no se migraba y se perdía el kárdex de quien lo aprobó). Si otra variante sigue
- *    vigente, se funde con ella como cualquier variante. En una retícula viva sugiere su semestre del SII si lo trae
- *    (es dato del SII, no una decisión de Nexus) y si no, el de su misma carrera, como en el punto 7. En una retícula
- *    histórica pasa sin sugerencia ni aviso propio: cuenta aparte, como «ya no se ofrece», en el aviso del plan.
+ *    el del grupo de versión más reciente y luego el primero en orden alfabético. Si el SII trae otros, avisa.
+ * 6. Estatus N: un lugar cuyas variantes del SII traen todas estatus `N` (ya no se ofrece) no entra a la retícula de su
+ *    plan: pasa a pending() con aviso, para que Servicios Escolares decida, y lo aprobado en él cuenta (supuesto por
+ *    confirmar, 10 de noviembre de 2026; antes no se migraba y se perdía el kárdex de quien lo aprobó). Sigue siendo la
+ *    misma materia de Nexus que su variante vigente de otra retícula del grupo. En una retícula viva sugiere su semestre
+ *    del SII si lo trae (es dato del SII, no una decisión de Nexus) y si no, el de su misma carrera, como en el punto 7.
+ *    En una retícula histórica pasa sin sugerencia ni aviso propio: cuenta aparte, como «ya no se ofrece», en el aviso
+ *    del plan.
  * 7. Sin semestre (D18, R10; confirmado, 10 de noviembre de 2026): Nexus nunca decide un semestre; ningún lugar entra a
  *    la retícula con un semestre que no venga del SII. Un lugar con semestre 0 no entra a la retícula: queda en
  *    pending(). En una retícula viva lleva un semestre sugerido (`suggested`): el más frecuente, y en empate el menor,
@@ -46,10 +55,11 @@ namespace App\Modules\Imports\Sii;
  *    inscrito en el periodo actual y no es vigente) queda como en el SII, sin sugerencia, y avisa una sola vez por
  *    plan cuántas materias quedaron sin semestre.
  *
- * @phpstan-type Placement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
- * @phpstan-type CodedPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
- * @phpstan-type GridPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>}
- * @phpstan-type PendingPlacement array{plan: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>, suggested: int|null}
+ * @phpstan-type Placement array{plan: string, group: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
+ * @phpstan-type CodedPlacement array{plan: string, group: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool}
+ * @phpstan-type GroupSubject array{group: string, code: string, career: string, credits: string, theory: string, practice: string, name: string, materias: list<string>, sources: list<string>, listed: bool}
+ * @phpstan-type GridPlacement array{plan: string, group: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>}
+ * @phpstan-type PendingPlacement array{plan: string, group: string, career: string, modality: string, key: string, materia: string, tecnm: string|null, code: string, origin: string, unified: bool, name: string, credits: string, theory: string, practice: string, semester: int, specialty: string, position: int, retired: bool, materias: list<string>, sources: list<string>, suggested: int|null}
  */
 final class SubjectPlacements
 {
@@ -60,6 +70,12 @@ final class SubjectPlacements
 
     /** @var array<string, PendingPlacement> */
     private array $pending = [];
+
+    /** @var array<string, string> la versión de cada grupo: la mayor de sus planes */
+    private array $groupVersions = [];
+
+    /** @var array<string, list<array{career: string, materias: list<string>}>> */
+    private array $subjects = [];
 
     /**
      * @param  array<string, array{name: string, type: string, area: string}>  $catalog  materias del SII por clave
@@ -79,8 +95,30 @@ final class SubjectPlacements
     {
         usort($placements, fn (array $a, array $b): int => strcmp($a['key'], $b['key']) ?: strcmp($a['materia'], $b['materia']));
         $this->warnRepeatedNames($placements);
+        $this->groupVersions = [];
+        foreach ($placements as $placement) {
+            $this->groupVersions[$placement['group']] = max($this->groupVersions[$placement['group']] ?? '', $this->versions[$placement['plan']] ?? '');
+        }
 
-        return $this->withSemesters($this->named($this->sharedHours($this->merged($this->fused($this->coded($placements))))));
+        $coded = $this->fused($this->coded($placements));
+        $subjects = $this->named($this->sharedHours($this->subjectsByGroup($coded)));
+        $this->subjects = $this->sourcesByCode($subjects);
+
+        return $this->withSemesters($this->placed($coded, $subjects));
+    }
+
+    /**
+     * Las claves del SII de cada materia de Nexus, para decidir su departamento y su tipo (SubjectsStep): una entrada por
+     * grupo donde está, con la carrera de su variante elegida y sus claves del SII, la de esa variante primero. Van
+     * primero los grupos donde la materia entra a la retícula y luego los demás, cada parte en orden de grupo: el orden
+     * que tenían los lugares cuando las retículas de un grupo eran un plan, así que el primer departamento y el primer
+     * tipo no cambian por separarlas. Vacío hasta llamar a grid().
+     *
+     * @return array<string, list<array{career: string, materias: list<string>}>>
+     */
+    public function subjects(): array
+    {
+        return $this->subjects;
     }
 
     /**
@@ -97,8 +135,9 @@ final class SubjectPlacements
 
     /**
      * Los alias (R11): cada clave del SII de un lugar emitido, o pendiente (`$pending`), apunta a su materia de Nexus,
-     * con el primer plan donde se vio. Si una clave del SII quedó en varias materias de Nexus (en un plan se unió por la clave TecNM y en otro
-     * conservó la suya), el alias apunta a la que está en más planes, en empate a la menor, y se avisa. El cuarto
+     * con el plan donde se vio: del primer grupo donde se vio, el plan que conserva la clave oficial si la trae, y si no,
+     * el primero. Si una clave del SII quedó en varias materias de Nexus (en un grupo se unió por la clave TecNM y en
+     * otro conservó la suya), el alias apunta a la que está en más grupos, en empate a la menor, y se avisa. El cuarto
      * elemento es el mapa por plan (plan → clave del SII → materia de Nexus), que no depende de esa elección: el
      * kárdex lo usa con el plan del alumno.
      *
@@ -112,7 +151,7 @@ final class SubjectPlacements
         $byPlan = [];
         foreach ([...$grid, ...$pending] as $placement) {
             foreach ($placement['materias'] as $materia) {
-                $targets[$materia][$placement['code']][] = $placement['plan'];
+                $targets[$materia][$placement['code']][$placement['group']][] = $placement['plan'];
                 $byPlan[$placement['plan']][$materia] ??= $placement['code'];
             }
         }
@@ -136,8 +175,10 @@ final class SubjectPlacements
                 $incidents[] = ['level' => 'warning', 'ref' => (string) $materia, 'message' => "La clave del SII {$materia} quedó en varias materias de Nexus (".implode(', ', array_map('strval', array_keys($codes)))."): su alias apunta a {$subject} (supuesto por confirmar)."];
             }
 
+            $group = (string) array_key_first($codes[$subject]);
+            $plans = $codes[$subject][$group];
             $subjectFor[$materia] = $subject;
-            $rows[] = ['code' => (string) $materia, 'subject' => $subject, 'plan' => $codes[$subject][0]];
+            $rows[] = ['code' => (string) $materia, 'subject' => $subject, 'plan' => in_array($group, $plans, true) ? $group : $plans[0]];
         }
 
         return [$subjectFor, $rows, $incidents, $byPlan];
@@ -184,7 +225,7 @@ final class SubjectPlacements
         $votes = [];
         foreach ($placements as $placement) {
             if ($placement['tecnm'] !== null) {
-                $votes[$placement['tecnm']][$this->combination($placement)][$placement['plan']] = true;
+                $votes[$placement['tecnm']][$this->combination($placement)][$placement['group']] = true;
             }
         }
         ksort($votes, SORT_STRING);
@@ -354,7 +395,7 @@ final class SubjectPlacements
     /**
      * La combinación de créditos y horas que se queda la clave TecNM.
      *
-     * @param  array<string, array<string, true>>  $combinations  combinación → planes que la traen
+     * @param  array<string, array<string, true>>  $combinations  combinación → grupos que la traen
      */
     private function winner(string $tecnm, array $combinations): string
     {
@@ -366,37 +407,37 @@ final class SubjectPlacements
         }
 
         usort($tied, fn (string $a, string $b): int => $this->newest($combinations[$b]) <=> $this->newest($combinations[$a]) ?: strcmp($a, $b));
-        [$version, $plan] = $this->newest($combinations[$tied[0]]);
-        $this->warn($tecnm, "Clave TecNM {$tecnm}: empate de créditos/teoría/práctica entre ".implode(', ', $tied)."; gana {$tied[0]}, la del plan más reciente {$plan} ({$version}) (supuesto por confirmar).");
+        [$version, $group] = $this->newest($combinations[$tied[0]]);
+        $this->warn($tecnm, "Clave TecNM {$tecnm}: empate de créditos/teoría/práctica entre ".implode(', ', $tied)."; gana {$tied[0]}, la del grupo de planes más reciente {$group} ({$version}) (supuesto por confirmar).");
 
         return $tied[0];
     }
 
     /**
-     * La versión y la clave del plan más reciente de una lista de planes.
+     * La versión y la clave del grupo más reciente de una lista de grupos.
      *
-     * @param  array<string, true>  $plans
+     * @param  array<string, mixed>  $groups  por clave del grupo
      * @return array{string, string}
      */
-    private function newest(array $plans): array
+    private function newest(array $groups): array
     {
-        return max(array_map(fn (string|int $plan): array => [$this->versions[$plan] ?? '', (string) $plan], array_keys($plans)));
+        return max(array_map(fn (string|int $group): array => [$this->groupVersions[$group] ?? '', (string) $group], array_keys($groups)));
     }
 
     /**
-     * R14: dentro de cada plan, junta bajo una sola clave las materias de variantes distintas que son la misma.
+     * R14: dentro de cada grupo, junta bajo una sola clave las materias de variantes distintas que son la misma.
      *
      * @param  list<CodedPlacement>  $placements
      * @return list<CodedPlacement>
      */
     private function fused(array $placements): array
     {
-        $byPlan = [];
+        $byGroup = [];
         foreach ($placements as $index => $placement) {
-            $byPlan[$placement['plan']][$placement['code']][] = $index;
+            $byGroup[$placement['group']][$placement['code']][] = $index;
         }
 
-        foreach ($byPlan as $plan => $codes) {
+        foreach ($byGroup as $group => $codes) {
             $alike = [];
 
             foreach ($codes as $code => $indexes) {
@@ -413,6 +454,7 @@ final class SubjectPlacements
                     'keys' => array_values(array_unique(array_column($rows, 'key'))),
                     'tecnm' => array_any($rows, fn (array $row): bool => $row['unified']) ? (string) $code : null,
                     'presencial' => array_any($rows, fn (array $row): bool => $row['modality'] === 'presencial'),
+                    'official' => array_any($rows, fn (array $row): bool => $row['modality'] === 'presencial' && $row['plan'] === $row['group']),
                     'combinations' => array_values(array_unique(array_map($this->combination(...), $rows))),
                     'materias' => array_values(array_unique(array_column($rows, 'materia'))),
                 ];
@@ -420,7 +462,7 @@ final class SubjectPlacements
 
             foreach ($alike as $units) {
                 foreach (count($units) > 1 ? $this->clusters($units) : [] as $cluster) {
-                    $kept = $this->keptCode((string) $plan, $cluster);
+                    $kept = $this->keptCode((string) $group, $cluster);
 
                     foreach ($cluster as $unit) {
                         foreach ($unit['indexes'] as $index) {
@@ -435,11 +477,11 @@ final class SubjectPlacements
     }
 
     /**
-     * Agrupa las materias iguales de un plan sin juntar dos de la misma retícula ni dos claves TecNM distintas: las de
+     * Agrupa las materias iguales de un grupo sin juntar dos de la misma retícula ni dos claves TecNM distintas: las de
      * clave TecNM primero y luego por clave, cada una entra al primer grupo libre. Devuelve los grupos de más de una.
      *
-     * @param  list<array{code: string, indexes: list<int>, keys: list<string>, tecnm: string|null, presencial: bool, combinations: list<string>, materias: list<string>}>  $units
-     * @return list<list<array{code: string, indexes: list<int>, keys: list<string>, tecnm: string|null, presencial: bool, combinations: list<string>, materias: list<string>}>>
+     * @param  list<array{code: string, indexes: list<int>, keys: list<string>, tecnm: string|null, presencial: bool, official: bool, combinations: list<string>, materias: list<string>}>  $units
+     * @return list<list<array{code: string, indexes: list<int>, keys: list<string>, tecnm: string|null, presencial: bool, official: bool, combinations: list<string>, materias: list<string>}>>
      */
     private function clusters(array $units): array
     {
@@ -465,16 +507,16 @@ final class SubjectPlacements
     }
 
     /**
-     * La clave que se queda un grupo de R14. Si sus horas difieren, la de la variante presencial, con sus horas, y
-     * avisa (supuesto por confirmar); si no hay presencial o las horas coinciden, la TecNM si alguna la tiene; si no,
-     * la de la variante presencial; si no hay, la menor.
+     * La clave que se queda un grupo de R14. Si sus horas difieren, la de la variante presencial (la de la retícula con
+     * la clave oficial, si es una), con sus horas, y avisa (supuesto por confirmar); si no hay presencial o las horas
+     * coinciden, la TecNM si alguna la tiene; si no, la de la variante presencial; si no hay, la menor.
      *
-     * @param  list<array{code: string, tecnm: string|null, presencial: bool, combinations: list<string>, materias: list<string>}>  $cluster
+     * @param  list<array{code: string, tecnm: string|null, presencial: bool, official: bool, combinations: list<string>, materias: list<string>}>  $cluster
      */
-    private function keptCode(string $plan, array $cluster): string
+    private function keptCode(string $group, array $cluster): string
     {
         $combinations = array_values(array_unique(array_merge(...array_column($cluster, 'combinations'))));
-        $presencial = array_find($cluster, fn (array $unit): bool => $unit['presencial']);
+        $presencial = array_find($cluster, fn (array $unit): bool => $unit['official']) ?? array_find($cluster, fn (array $unit): bool => $unit['presencial']);
 
         if (count($combinations) > 1) {
             sort($combinations);
@@ -482,7 +524,7 @@ final class SubjectPlacements
             $codes = array_map(fn (array $unit): string => $unit['materias'] === [$unit['code']] ? $unit['code'] : $unit['code'].' (del SII '.implode(', ', $unit['materias']).')', $cluster);
             sort($codes, SORT_STRING);
             $from = $presencial === null ? 'no hay variante presencial: queda con sus horas' : 'con las horas de la variante presencial';
-            $this->warn("{$plan}/{$kept}", "En el plan {$plan}, ".implode(', ', $codes).' son la misma materia con horas distintas (créditos/teoría/práctica '.implode(', ', $combinations)."): queda {$kept}, {$from} (supuesto por confirmar).");
+            $this->warn("{$group}/{$kept}", "En el grupo de planes {$group}, ".implode(', ', $codes).' son la misma materia con horas distintas (créditos/teoría/práctica '.implode(', ', $combinations)."): queda {$kept}, {$from} (supuesto por confirmar).");
 
             return $kept;
         }
@@ -491,9 +533,10 @@ final class SubjectPlacements
     }
 
     /**
-     * La TecNM si alguna la tiene; si no, la de la variante presencial; si no hay, la menor.
+     * La TecNM si alguna la tiene; si no, la de la variante presencial (las de la retícula con la clave oficial
+     * primero); si no hay, la menor.
      *
-     * @param  list<array{code: string, tecnm: string|null, presencial: bool, combinations: list<string>, materias: list<string>}>  $cluster
+     * @param  list<array{code: string, tecnm: string|null, presencial: bool, official: bool, combinations: list<string>, materias: list<string>}>  $cluster
      */
     private function tecnmOrSmallest(array $cluster): string
     {
@@ -503,7 +546,8 @@ final class SubjectPlacements
             return $tecnm['code'];
         }
 
-        $presencial = array_values(array_filter($cluster, fn (array $unit): bool => $unit['presencial']));
+        $official = array_values(array_filter($cluster, fn (array $unit): bool => $unit['official']));
+        $presencial = $official !== [] ? $official : array_values(array_filter($cluster, fn (array $unit): bool => $unit['presencial']));
         $codes = array_column($presencial === [] ? $cluster : $presencial, 'code');
         sort($codes, SORT_STRING);
 
@@ -511,23 +555,83 @@ final class SubjectPlacements
     }
 
     /**
+     * Las materias de Nexus de cada grupo, por `"{grupo}/{clave}"` en orden, como eran los lugares cuando las retículas
+     * de un grupo eran un plan: las horas de la variante que se quedó con la clave (la elegida si lo es), `materias` con
+     * todas las claves del SII que se juntaron, la de la elegida primero, y `listed` si ese lugar habría entrado a la
+     * retícula (trae semestre y no todas sus variantes tienen estatus `N`).
+     *
      * @param  list<CodedPlacement>  $placements
-     * @return array<string, GridPlacement>
+     * @return array<string, GroupSubject>
      */
-    private function merged(array $placements): array
+    private function subjectsByGroup(array $placements): array
     {
         $groups = [];
         foreach ($placements as $placement) {
-            $groups["{$placement['plan']}/{$placement['code']}"][] = $placement;
+            $groups["{$placement['group']}/{$placement['code']}"][] = $placement;
         }
         ksort($groups, SORT_STRING);
 
-        $grid = [];
+        $subjects = [];
         foreach ($groups as $ref => $variants) {
-            $dated = array_values(array_filter($variants, fn (array $variant): bool => $variant['semester'] > 0));
-            $pool = $dated === [] ? $variants : $dated;
-            $chosen = array_find($pool, fn (array $variant): bool => $variant['modality'] === 'presencial') ?? $pool[0];
-            $semesters = array_values(array_unique(array_column($dated, 'semester')));
+            $chosen = $this->chosen($variants);
+            $hours = $chosen['origin'] === $chosen['code'] ? $chosen : (array_find($variants, fn (array $variant): bool => $variant['origin'] === $variant['code']) ?? $chosen);
+
+            $subjects[(string) $ref] = [
+                'group' => $chosen['group'],
+                'code' => $chosen['code'],
+                'career' => $chosen['career'],
+                'credits' => $hours['credits'],
+                'theory' => $hours['theory'],
+                'practice' => $hours['practice'],
+                'name' => '',
+                'materias' => array_values(array_unique([$chosen['materia'], ...array_column($variants, 'materia')])),
+                'sources' => array_column($variants, 'materia'),
+                'listed' => $chosen['semester'] > 0 && ! array_all($variants, fn (array $variant): bool => $variant['retired']),
+            ];
+        }
+
+        return $subjects;
+    }
+
+    /**
+     * Las claves del SII de cada materia de Nexus para subjects(): primero los grupos que entran a la retícula y luego
+     * los demás, cada parte en orden de grupo.
+     *
+     * @param  array<string, GroupSubject>  $subjects
+     * @return array<string, list<array{career: string, materias: list<string>}>>
+     */
+    private function sourcesByCode(array $subjects): array
+    {
+        $listed = array_filter($subjects, fn (array $subject): bool => $subject['listed']);
+        $byCode = [];
+
+        foreach ([...$listed, ...array_diff_key($subjects, $listed)] as $subject) {
+            $byCode[$subject['code']][] = ['career' => $subject['career'], 'materias' => $subject['materias']];
+        }
+
+        return $byCode;
+    }
+
+    /**
+     * Regla 3: un lugar por plan y clave de Nexus, por `"{plan}/{clave}"` en orden, con el semestre, el renglón, la
+     * especialidad y el estatus de su propia retícula, y las horas y el nombre de su materia de Nexus.
+     *
+     * @param  list<CodedPlacement>  $placements
+     * @param  array<string, GroupSubject>  $subjects
+     * @return array<string, GridPlacement>
+     */
+    private function placed(array $placements, array $subjects): array
+    {
+        $places = [];
+        foreach ($placements as $placement) {
+            $places["{$placement['plan']}/{$placement['code']}"][] = $placement;
+        }
+        ksort($places, SORT_STRING);
+
+        $grid = [];
+        foreach ($places as $ref => $variants) {
+            $chosen = $this->chosen($variants);
+            $semesters = array_values(array_unique(array_column(array_filter($variants, fn (array $variant): bool => $variant['semester'] > 0), 'semester')));
 
             if (count($semesters) > 1) {
                 sort($semesters);
@@ -535,15 +639,15 @@ final class SubjectPlacements
                 $this->warn((string) $ref, "Lugar {$ref}: sus renglones del SII traen semestres distintos (".implode(', ', $semesters)."); queda el {$chosen['semester']}, de {$from}.");
             }
 
+            $subject = $subjects["{$chosen['group']}/{$chosen['code']}"];
             $specialty = $chosen['specialty'] !== '' ? $chosen['specialty'] : (array_find($variants, fn (array $variant): bool => $variant['specialty'] !== '')['specialty'] ?? '');
-            $hours = $chosen['origin'] === $chosen['code'] ? $chosen : (array_find($variants, fn (array $variant): bool => $variant['origin'] === $variant['code']) ?? $chosen);
 
             $grid[(string) $ref] = [
                 ...$chosen,
-                'credits' => $hours['credits'],
-                'theory' => $hours['theory'],
-                'practice' => $hours['practice'],
-                'name' => '',
+                'credits' => $subject['credits'],
+                'theory' => $subject['theory'],
+                'practice' => $subject['practice'],
+                'name' => $subject['name'],
                 'specialty' => $specialty,
                 'retired' => array_all($variants, fn (array $variant): bool => $variant['retired']),
                 'materias' => array_values(array_unique([$chosen['materia'], ...array_column($variants, 'materia')])),
@@ -555,18 +659,36 @@ final class SubjectPlacements
     }
 
     /**
-     * Regla 4: una materia de Nexus tiene unas solas horas y créditos. Si una clave quedó en planes con combinaciones
-     * distintas (una clave del SII que el SII repite en retículas con otras horas, o que es igual a una clave TecNM),
-     * todos sus lugares toman la de más planes; en empate, la del plan de versión más reciente, y luego la menor.
+     * La variante que da el semestre, el renglón y la carrera: entre las que traen semestre (o todas, si ninguna), la
+     * presencial de la retícula con la clave oficial del grupo; si no, la primera presencial; si no, la primera.
      *
-     * @param  array<string, GridPlacement>  $grid
-     * @return array<string, GridPlacement>
+     * @param  non-empty-list<CodedPlacement>  $variants
+     * @return CodedPlacement
      */
-    private function sharedHours(array $grid): array
+    private function chosen(array $variants): array
+    {
+        $dated = array_values(array_filter($variants, fn (array $variant): bool => $variant['semester'] > 0));
+        $pool = $dated === [] ? $variants : $dated;
+
+        return array_find($pool, fn (array $variant): bool => $variant['modality'] === 'presencial' && $variant['plan'] === $variant['group'])
+            ?? array_find($pool, fn (array $variant): bool => $variant['modality'] === 'presencial')
+            ?? $pool[0];
+    }
+
+    /**
+     * Regla 4: una materia de Nexus tiene unas solas horas y créditos. Si una clave quedó en grupos con combinaciones
+     * distintas (una clave del SII que el SII repite en retículas con otras horas, o que es igual a una clave TecNM),
+     * todas sus materias de grupo toman la de más grupos; en empate, la del grupo de versión más reciente, y luego la
+     * menor.
+     *
+     * @param  array<string, GroupSubject>  $subjects
+     * @return array<string, GroupSubject>
+     */
+    private function sharedHours(array $subjects): array
     {
         $byCode = [];
-        foreach ($grid as $ref => $placement) {
-            $byCode[$placement['code']][$this->combination($placement)][$placement['plan']] = (string) $ref;
+        foreach ($subjects as $ref => $subject) {
+            $byCode[$subject['code']][$this->combination($subject)][$subject['group']] = (string) $ref;
         }
         ksort($byCode, SORT_STRING);
 
@@ -584,32 +706,32 @@ final class SubjectPlacements
             $changed = [];
 
             foreach (array_slice($ranked, 1) as $combination) {
-                foreach ($combinations[$combination] as $plan => $ref) {
-                    $grid[$ref] = [...$grid[$ref], 'credits' => $credits, 'theory' => $theory, 'practice' => $practice];
-                    $changed[] = "{$plan} ({$combination})";
+                foreach ($combinations[$combination] as $group => $ref) {
+                    $subjects[$ref] = [...$subjects[$ref], 'credits' => $credits, 'theory' => $theory, 'practice' => $practice];
+                    $changed[] = "{$group} ({$combination})";
                 }
             }
 
             sort($changed, SORT_STRING);
             $count = count($combinations[$winner]);
-            $this->warn((string) $code, "La materia {$code} trae créditos/teoría/práctica distintos según el plan: {$winner} en {$count} ".($count === 1 ? 'plan' : 'planes').' y otros en '.implode(', ', $changed).". En Nexus una materia tiene unas solas horas: queda {$winner} en todos sus planes; revisar (supuesto por confirmar).");
+            $this->warn((string) $code, "La materia {$code} trae créditos/teoría/práctica distintos según el grupo de planes: {$winner} en {$count} ".($count === 1 ? 'grupo' : 'grupos').' y otros en '.implode(', ', $changed).". En Nexus una materia tiene unas solas horas: queda {$winner} en todos sus planes; revisar (supuesto por confirmar).");
         }
 
-        return $grid;
+        return $subjects;
     }
 
     /**
-     * Le pone a cada lugar el nombre de su materia de Nexus: el más frecuente entre todos sus renglones del SII.
+     * Le pone a cada materia de grupo el nombre de su materia de Nexus: el más frecuente entre todos sus renglones del SII.
      *
-     * @param  array<string, GridPlacement>  $grid
-     * @return array<string, GridPlacement>
+     * @param  array<string, GroupSubject>  $subjects
+     * @return array<string, GroupSubject>
      */
-    private function named(array $grid): array
+    private function named(array $subjects): array
     {
         $sources = [];
-        foreach ($grid as $placement) {
-            foreach ($placement['sources'] as $materia) {
-                $sources[$placement['code']][] = ['materia' => $materia, 'plan' => $placement['plan']];
+        foreach ($subjects as $subject) {
+            foreach ($subject['sources'] as $materia) {
+                $sources[$subject['code']][] = ['materia' => $materia, 'group' => $subject['group']];
             }
         }
 
@@ -618,15 +740,15 @@ final class SubjectPlacements
             $names[$code] = $this->representativeName((string) $code, $rows);
         }
 
-        foreach ($grid as $ref => $placement) {
-            $grid[$ref]['name'] = $names[$placement['code']];
+        foreach ($subjects as $ref => $subject) {
+            $subjects[$ref]['name'] = $names[$subject['code']];
         }
 
-        return $grid;
+        return $subjects;
     }
 
     /**
-     * @param  list<array{materia: string, plan: string}>  $rows
+     * @param  list<array{materia: string, group: string}>  $rows
      */
     private function representativeName(string $code, array $rows): string
     {
@@ -635,7 +757,7 @@ final class SubjectPlacements
             $name = $this->catalog[$row['materia']]['name'];
             $key = SubjectName::key($name);
             $byKey[$key]['count'] = ($byKey[$key]['count'] ?? 0) + 1;
-            $byKey[$key]['version'] = max($byKey[$key]['version'] ?? '', $this->versions[$row['plan']] ?? '');
+            $byKey[$key]['version'] = max($byKey[$key]['version'] ?? '', $this->groupVersions[$row['group']] ?? '');
             $byKey[$key]['name'] ??= $name;
         }
 
