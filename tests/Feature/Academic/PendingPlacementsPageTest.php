@@ -540,7 +540,7 @@ describe('Materias por colocar, en Servicios escolares (tarea 1.21)', function (
     });
 
     it('IN-02: el Inicio del jefe de Servicios Escolares enlaza a ella', function () {
-        $page = domOf($this->actingAs($this->servicesHead)->get(route('home'))->assertOk());
+        $page = domOf($this->actingAs($this->servicesHead)->get(route('core.summary'))->assertOk());
         $link = $page->querySelector('[data-testid="role-block"] a[href="'.route('academic.placements').'"]');
 
         expect(textOf($link))->toBe('Materias por colocar');
