@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Notification;
 
 /*
 | CF-09 (confirmado el 14 de noviembre de 2026): la baja que el admin da en el panel se respeta. El docente sigue en el
-| catálogo, pero ningún camino que sincroniza su acceso (SyncTeacherAccess: adscripciones, «Dar de alta usuarios»,
+| catálogo, pero ningún camino que sincroniza su acceso (SyncTeacherAccess: asignaciones, «Dar de alta usuarios»,
 | validar el catálogo) le reactiva la cuenta (`users.deactivated_at`), así que tampoco le llega una invitación (AC-09).
 | Tampoco la migración del SII a quien además es alumno. Solo el admin la reactiva desde el panel (CF-06).
 */

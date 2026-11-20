@@ -17,7 +17,7 @@ use App\Modules\Faculty\Policies\TeacherPolicy;
 | Tec), según reglas-de-negocio.md, "Aprobaciones y permisos":
 | - el admin y la Subdirección, a todos los docentes, también a los que no tienen departamento;
 | - el jefe de departamento de D (sin campus) y el jefe de proyecto docente de D (en un campus), a los docentes con
-|   una adscripción sin borrar a D, aunque su principal sea otra;
+|   una asignación sin borrar a D, aunque su principal sea otra;
 | - la baja (desactivar o reactivar), solo el admin y la Subdirección; los jefes y los JPD solo quitan de su
 |   departamento («Quitar de <código>» en la pantalla);
 | - nadie se da de baja ni se quita a sí mismo (supuesto por confirmar);
@@ -32,18 +32,18 @@ beforeEach(function () {
     $this->ii = Department::factory()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
 
-    // Principal en II y otra adscripción a SC.
+    // Principal en II y otra asignación a SC.
     $this->inSc = Teacher::factory()->adscribedTo($this->ii)->adscribedTo($this->sc, primary: false)->create();
     // Solo II.
     $this->onlyIi = Teacher::factory()->adscribedTo($this->ii)->create();
-    // Estuvo en SC, pero esa adscripción se quitó; queda II.
+    // Estuvo en SC, pero esa asignación se quitó; queda II.
     $this->formerSc = Teacher::factory()->adscribedTo($this->ii)->create();
     TeacherDepartment::factory()->for($this->formerSc)->for($this->sc)->create(['is_primary' => false])->delete();
     // Sin departamento.
     $this->loose = Teacher::factory()->create();
 });
 
-/** Las abilities sobre un docente que da la cobertura de una adscripción (la baja va aparte). */
+/** Las abilities sobre un docente que da la cobertura de una asignación (la baja va aparte). */
 const TEACHER_ABILITIES = ['view', 'update', 'managePositions', 'manageAvailability', 'manageExternalLoads'];
 
 function teacherAbilitiesOf(User $user, Teacher $teacher): array
@@ -57,7 +57,7 @@ function allTeacherAbilities(bool $allowed): array
 }
 
 /**
- * El docente cuyo usuario es `$user`, adscrito a `$department`.
+ * El docente cuyo usuario es `$user`, asignado a `$department`.
  */
 function teacherOfUser(User $user, Department $department): Teacher
 {
@@ -120,7 +120,7 @@ it('ver a todos (`view_all`) solo amplía las acciones que el puesto tiene: sin 
     }
 });
 
-it('el jefe de SC, de todo el Tec, cubre a un adscrito a SC aunque su principal sea otra, pero no lo da de baja', function () {
+it('el jefe de SC, de todo el Tec, cubre a un asignado a SC aunque su principal sea otra, pero no lo da de baja', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
 
     expect($jefe->can('viewAny', Teacher::class))->toBeTrue()
@@ -130,7 +130,7 @@ it('el jefe de SC, de todo el Tec, cubre a un adscrito a SC aunque su principal 
         ->and($jefe->can('deactivate', $this->inSc))->toBeFalse();
 });
 
-it('el jefe de proyecto docente de SC en C2 cubre a los adscritos a SC, porque el docente no es de un campus', function () {
+it('el jefe de proyecto docente de SC en C2 cubre a los asignados a SC, porque el docente no es de un campus', function () {
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
 
     expect($jpd->can('viewAny', Teacher::class))->toBeTrue()
@@ -139,7 +139,7 @@ it('el jefe de proyecto docente de SC en C2 cubre a los adscritos a SC, porque e
         ->and($jpd->can('deactivate', $this->inSc))->toBeFalse();
 });
 
-it('el jefe de SC no cubre a uno solo de II, ni a uno cuya adscripción a SC se quitó, ni a uno sin departamento', function (Role $role, array $scope) {
+it('el jefe de SC no cubre a uno solo de II, ni a uno cuya asignación a SC se quitó, ni a uno sin departamento', function (Role $role, array $scope) {
     $jefe = User::factory()->withRole($role, ['department_id' => $this->sc->id, ...$scope])->create();
 
     expect(teacherAbilitiesOf($jefe, $this->onlyIi))->toBe(allTeacherAbilities(false))
@@ -183,7 +183,7 @@ it('manageQualification del jefe de SC con una materia de CB es falso, y con una
         ->and($jefe->can('manageQualification', [$this->onlyIi, $systems]))->toBeFalse();
 });
 
-it('removeAdscription cubre la adscripción del departamento del jefe o del JPD y no la de otro', function (Role $role, array $scope) {
+it('removeAdscription cubre la asignación del departamento del jefe o del JPD y no la de otro', function (Role $role, array $scope) {
     $jefe = User::factory()->withRole($role, ['department_id' => $this->sc->id, ...$scope])->create();
     $own = $this->inSc->adscriptions()->where('department_id', $this->sc->id)->sole();
     $other = $this->inSc->adscriptions()->where('department_id', $this->ii->id)->sole();
@@ -209,7 +209,7 @@ it('nadie se da de baja ni se quita a sí mismo de un departamento, ni el admin 
     'jefe de SC' => fn ($test) => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $test->sc->id])->create(),
 ]);
 
-it('adscribir a un docente que ya existe es solo del admin y la Subdirección (S9, supuesto por confirmar)', function () {
+it('asignar a un docente que ya existe es solo del admin y la Subdirección (S9, supuesto por confirmar)', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
     $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->c2->id, 'career_id' => careerKey(20)])->create();

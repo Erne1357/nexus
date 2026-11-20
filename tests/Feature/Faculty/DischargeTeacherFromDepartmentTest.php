@@ -11,7 +11,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | La baja del docente por el jefe (CV8, confirmado el 12 de noviembre de 2026), en la validación y en «Quitar de mi
-| departamento»: se da de baja de ese departamento y, si ya no está adscrito a otro, su cuenta se inhabilita (queda dado
+| departamento»: se da de baja de ese departamento y, si ya no está asignado a otro, su cuenta se inhabilita (queda dado
 | de baja, SetTeacherActive); si sí, solo se quita de ese departamento y, si hacía falta, tiene un nuevo departamento
 | principal (RemoveAdscription). A un docente que ocupa un puesto solo lo quitan el admin o la Subdirección (CV-S8).
 | Agregar a un docente que ya existe a su departamento es del jefe que da de alta ahí (CV-S9); a uno dado de baja que
@@ -28,7 +28,7 @@ function dischargeFrom(Teacher $teacher, Department $department): array
     return app(DischargeTeacherFromDepartment::class)->handle(TeacherDepartment::query()->where('teacher_id', $teacher->id)->where('department_id', $department->id)->sole());
 }
 
-it('CV8: con otra adscripción solo lo quita de ese departamento y la principal pasa a la que le queda; sigue activo', function () {
+it('CV8: con otra asignación solo lo quita de ese departamento y la principal pasa a la que le queda; sigue activo', function () {
     $user = User::factory()->create();
     $teacher = Teacher::factory()->adscribedTo($this->sc)->adscribedTo($this->ii, primary: false)->create(['user_id' => $user->id]);
 
@@ -42,7 +42,7 @@ it('CV8: con otra adscripción solo lo quita de ese departamento y la principal 
         ->and($teacher->adscriptions()->sole()->is_primary)->toBeTrue();
 });
 
-it('CV8: sin otra adscripción queda dado de baja y su cuenta se inhabilita, con bitácora', function () {
+it('CV8: sin otra asignación queda dado de baja y su cuenta se inhabilita, con bitácora', function () {
     $user = User::factory()->create();
     $teacher = Teacher::factory()->adscribedTo($this->sc)->create(['user_id' => $user->id, 'rfc' => 'AAAA800101AA1']);
 
@@ -56,7 +56,7 @@ it('CV8: sin otra adscripción queda dado de baja y su cuenta se inhabilita, con
         ->and(Activity::query()->where('subject_id', $teacher->id)->pluck('description')->all())->toContain('Dio de baja al docente AAAA800101AA1');
 });
 
-it('CV8: sin otra adscripción, a un docente ya inactivo solo lo quita del departamento', function () {
+it('CV8: sin otra asignación, a un docente ya inactivo solo lo quita del departamento', function () {
     $teacher = Teacher::factory()->inactive()->adscribedTo($this->sc)->create();
 
     expect(dischargeFrom($teacher, $this->sc)['deactivated'])->toBeFalse()
@@ -90,7 +90,7 @@ describe('quién da de baja y quién agrega', function () {
         'coordinador' => fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => Campus::factory()->create()->id, 'career_id' => careerKey(21)])->create(),
     ]);
 
-    it('la última adscripción solo la quita el jefe de departamento; el jefe de proyecto docente, si le queda otro departamento (confirmado)', function () {
+    it('la última asignación solo la quita el jefe de departamento; el jefe de proyecto docente, si le queda otro departamento (confirmado)', function () {
         $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => Campus::factory()->create()->id, 'department_id' => $this->sc->id])->create();
         $twoDepartments = Teacher::factory()->adscribedTo($this->ii)->adscribedTo($this->sc, primary: false)->create();
 

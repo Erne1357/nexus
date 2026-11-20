@@ -8,7 +8,7 @@ use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
- * Permisos del módulo Faculty: docentes, sus adscripciones, su perfil y sus usuarios. La clave es
+ * Permisos del módulo Faculty: docentes, sus asignaciones, su perfil y sus usuarios. La clave es
  * `faculty.<recurso>.<accion>`. Los docentes son de todo el Tec: lo que es de un departamento declara la unidad y
  * nada declara campus. `faculty.teacher.view_all` no declara dimensiones: ve a todo docente, también al que no tiene
  * departamento. Solo lee; con él, las acciones que el puesto tiene alcanzan a todos (TeacherPolicy): es la regla
@@ -46,12 +46,12 @@ enum FacultyPermission: string implements Permission
             self::TeacherManagePositions => 'Administrar las plazas de un docente',
             self::TeacherManageAvailability => 'Administrar la disponibilidad de un docente',
             self::TeacherManageExternalLoads => 'Administrar las horas fuera del ITCJ de un docente',
-            self::TeacherAdscribe => 'Adscribir a un docente que ya existe',
+            self::TeacherAdscribe => 'Asignar a un docente que ya existe',
             self::TeacherDeactivate => 'Dar de baja o reactivar a un docente',
             self::TeacherQualificationManage => 'Administrar el perfil de materias de un docente',
             self::TeacherDepartmentRemove => 'Quitar a un docente de un departamento',
             self::TeacherDepartmentRemoveLast => 'Quitar a un docente de su último departamento (lo da de baja)',
-            self::TeacherDepartmentSetPrimary => 'Hacer principal una adscripción',
+            self::TeacherDepartmentSetPrimary => 'Hacer principal una asignación',
             self::TeacherUserProvision => 'Dar de alta los usuarios de los docentes',
             self::TeacherUserInvite => 'Capturar el correo institucional de un docente y reenviar su invitación de acceso',
             self::TeacherStaffEmailUpdate => 'Cambiar el correo institucional de un docente que tiene otro puesto',

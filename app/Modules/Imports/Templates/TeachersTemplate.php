@@ -13,16 +13,16 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Docentes del SII (tarea 10): RFC, nombre, departamento de su adscripción, correo, grado, activo y
+ * Docentes del SII (tarea 10): RFC, nombre, departamento de su asignación, correo, grado, activo y
  * fecha de ingreso.
  *
- * Los docentes son de toda la institución y su adscripción no tiene campus (confirmado el 30 de octubre de 2026).
+ * Los docentes son de toda la institución y su asignación no tiene campus (confirmado el 30 de octubre de 2026).
  * Si el archivo del SII trae una columna de campus, simplemente no se mapea (supuesto por confirmar).
  *
- * Un docente con varias adscripciones viene en un renglón por departamento, y la clave del archivo es el docente
+ * Un docente con varias asignaciones viene en un renglón por departamento, y la clave del archivo es el docente
  * con su departamento, para que esos renglones no cuenten como repetidos (S5, supuesto por confirmar). El registro
  * se busca por el RFC, que se normaliza con `TeacherRules` igual que uno capturado. La primera
- * adscripción de un docente es la principal; si ya tenía otra principal, la conserva y avisa. Los renglones de un
+ * asignación de un docente es la principal; si ya tenía otra principal, la conserva y avisa. Los renglones de un
  * mismo docente deben traer el mismo nombre, correo, grado y fecha de ingreso: si uno posterior trae otro, avisa y
  * se queda el del primero.
  *
@@ -44,7 +44,7 @@ class TeachersTemplate extends ImportTemplate
     /** @var array<string, Teacher> docente por RFC, en esta corrida (solo los que existen) */
     private array $teachers = [];
 
-    /** @var array<string, true> docentes cuya última fila aplicada solo agregó una adscripción */
+    /** @var array<string, true> docentes cuya última fila aplicada solo agregó una asignación */
     private array $adscriptionOnly = [];
 
     public function key(): string
@@ -132,9 +132,9 @@ class TeachersTemplate extends ImportTemplate
     }
 
     /**
-     * Como la base, y además la adscripción del renglón: la principal si el docente no tiene otra. Un grado que
+     * Como la base, y además la asignación del renglón: la principal si el docente no tiene otra. Un grado que
      * Nexus no conoce deja al docente sin grado también en un cambio: el cambio no pisa con null lo que el
-     * archivo trae vacío, y aquí el archivo sí trajo un grado. Un renglón que solo agrega la adscripción cuenta
+     * archivo trae vacío, y aquí el archivo sí trajo un grado. Un renglón que solo agrega la asignación cuenta
      * como cambio del docente.
      */
     public function apply(array $row, ImportContext $context): Model
@@ -210,11 +210,11 @@ class TeachersTemplate extends ImportTemplate
             ->first(['id', 'deleted_at']);
 
         if ($adscription?->trashed()) {
-            return $issues->withError('department', "La adscripción del docente a {$row['department']} está borrada; una importación no la restaura.");
+            return $issues->withError('department', "La asignación del docente a {$row['department']} está borrada; una importación no la restaura.");
         }
 
         if ($adscription === null && TeacherDepartment::query()->where('teacher_id', $teacher->getKey())->where('is_primary', true)->exists()) {
-            $issues = $issues->withWarning('department', 'El docente ya tiene otra adscripción principal: esta se agrega como no principal.');
+            $issues = $issues->withWarning('department', 'El docente ya tiene otra asignación principal: esta se agrega como no principal.');
         }
 
         return $issues;

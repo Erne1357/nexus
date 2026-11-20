@@ -509,7 +509,7 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * Quita al docente del modal de su departamento y, sin otra adscripción, lo deja dado de baja con su cuenta
+     * Quita al docente del modal de su departamento y, sin otra asignación, lo deja dado de baja con su cuenta
      * inhabilitada (CV8), con el motivo en la bitácora (DischargeReviewTeacher, D8): uno de DischargeReason o ninguno;
      * «Otro» pide escribirlo.
      */
@@ -524,7 +524,7 @@ new #[Title('Validación de catálogos')] class extends Component
         ], ['dischargeKind.enum' => 'Elige un motivo de la lista.']);
 
         /*
-        | Que «Otro» lleve su texto lo dice la Action; sus errores, y los de quitar la adscripción (otra sesión ya lo
+        | Que «Otro» lleve su texto lo dice la Action; sus errores, y los de quitar la asignación (otra sesión ya lo
         | quitó, la revisión se validó), salen en el modal.
         */
         try {
@@ -889,8 +889,8 @@ new #[Title('Validación de catálogos')] class extends Component
             'title' => "¿Quitar a {$teacher->name} de {$department}?",
             'message' => match (true) {
                 $other === null => 'Es su único departamento: queda dado de baja y su cuenta se inhabilita. Puedes volver a agregarlo con «Agregar docente».',
-                $own['here_primary'] => "Sigue como docente de {$other['name']}, que pasa a ser su adscripción principal. Deja de aparecer en tu departamento y conserva su cuenta.",
-                default => "Sigue como docente de {$other['name']}, su adscripción principal. Solo deja de aparecer en tu departamento y conserva su cuenta.",
+                $own['here_primary'] => "Sigue como docente de {$other['name']}, que pasa a ser su asignación principal. Deja de aparecer en tu departamento y conserva su cuenta.",
+                default => "Sigue como docente de {$other['name']}, su asignación principal. Solo deja de aparecer en tu departamento y conserva su cuenta.",
             },
             'button' => "Quitar de {$department}",
         ];
@@ -1257,7 +1257,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 ! $teacher->is_active && $teacher->user_id !== null && isset($staff[$teacher->user_id]) && ! $canReactivateStaff => ['blocked', $primaryName === null ? 'Ocupa un puesto.' : "Ocupa un puesto. Su principal es {$primaryName}."],
                 ! $teacher->is_active => ['reactivate', $primaryName === null ? "Se reactiva y queda con {$department->name} como principal." : "Se reactiva y se agrega a {$department->name}; su principal sigue siendo {$primaryName}."],
                 $primaryName === null => ['add', "Sin departamento. Queda con {$department->name} como principal."],
-                default => ['add', "Principal en {$primaryName}. Se agrega a {$department->name} como adscripción adicional; su principal no cambia."],
+                default => ['add', "Principal en {$primaryName}. Se agrega a {$department->name} como asignación adicional; su principal no cambia."],
             };
 
             return ['id' => $teacher->getKey(), 'rfc' => $teacher->rfc, 'name' => $teacher->name, 'active' => (bool) $teacher->is_active, 'state' => $state, 'note' => $note, 'reason' => $state === 'blocked' ? self::STAFF_REACTIVATION : null];
@@ -1299,7 +1299,7 @@ new #[Title('Validación de catálogos')] class extends Component
     {
         /*
         | La regla de TeacherPolicy::removeAdscription para toda la página, con dos consultas y no una por docente:
-        | dischargeTeacher() vuelve a preguntar a la policy al pedirlo. La última adscripción solo la quita quien tiene
+        | dischargeTeacher() vuelve a preguntar a la policy al pedirlo. La última asignación solo la quita quien tiene
         | `remove_last` en el departamento (CV8: el jefe de proyecto docente no).
         */
         $adscriptions = $records->teacherAdscriptions($current['review'], $ids);

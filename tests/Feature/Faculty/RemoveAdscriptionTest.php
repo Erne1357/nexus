@@ -14,8 +14,8 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| «Quitar de <Departamento>» (RemoveAdscription; reglas-de-negocio.md, "Adscripciones"): quita la adscripción con
-| borrado lógico; si era la principal, la principal pasa a la adscripción más antigua que le quede, y si no le queda
+| «Quitar de <Departamento>» (RemoveAdscription; reglas-de-negocio.md, "Asignaciones"): quita la asignación con
+| borrado lógico; si era la principal, la principal pasa a la asignación más antigua que le quede, y si no le queda
 | ninguna el docente sigue activo y sin departamento (confirmado el 30 de octubre de 2026). Deja bitácora de la
 | quitada y de la principal nueva, y avisa con AdscriptionChanged después del commit.
 */
@@ -32,7 +32,7 @@ function adscriptionOf(Teacher $teacher, Department $department): TeacherDepartm
 }
 
 /**
- * La adscripción que pasó a ser la principal, o null.
+ * La asignación que pasó a ser la principal, o null.
  */
 function removeAdscription(TeacherDepartment $adscription): ?TeacherDepartment
 {
@@ -52,7 +52,7 @@ function teacherInThreeDepartments(Department $sis, Department $ind, Department 
     return $teacher;
 }
 
-it('quitar la principal pasa la principal a la adscripción más antigua que le queda', function () {
+it('quitar la principal pasa la principal a la asignación más antigua que le queda', function () {
     $teacher = teacherInThreeDepartments($this->sis, $this->ind, $this->civ);
 
     $primary = removeAdscription(adscriptionOf($teacher, $this->sis));
@@ -77,7 +77,7 @@ it('a igual antigüedad, la principal pasa a la de id menor', function () {
     expect(removeAdscription(adscriptionOf($teacher, $this->sis))->id)->toBe(fakeKey(2));
 });
 
-it('deja en la bitácora la adscripción quitada y la principal nueva', function () {
+it('deja en la bitácora la asignación quitada y la principal nueva', function () {
     $teacher = teacherInThreeDepartments($this->sis, $this->ind, $this->civ);
     $sis = adscriptionOf($teacher, $this->sis);
     $ind = adscriptionOf($teacher, $this->ind);
@@ -89,11 +89,11 @@ it('deja en la bitácora la adscripción quitada y la principal nueva', function
 
     expect(Activity::count())->toBe(2)
         ->and($removed->event)->toBe('deleted')
-        ->and($removed->description)->toBe('Quitó al docente 1234567 del departamento SIS; su adscripción principal pasa a IND')
+        ->and($removed->description)->toBe('Quitó al docente 1234567 del departamento SIS; su asignación principal pasa a IND')
         ->and($removed->attribute_changes->all())->toBe(['old' => ['department_id' => $this->sis->id, 'is_primary' => true]])
         ->and($removed->properties->all())->toBe(['teacher_id' => $teacher->id, 'primary_adscription_id' => $ind->id])
         ->and($promoted->event)->toBe('updated')
-        ->and($promoted->description)->toBe('Hizo principal la adscripción del docente 1234567 a IND al quitarlo de SIS')
+        ->and($promoted->description)->toBe('Hizo principal la asignación del docente 1234567 a IND al quitarlo de SIS')
         ->and($promoted->attribute_changes->all())->toBe(['attributes' => ['is_primary' => true], 'old' => ['is_primary' => false]])
         ->and($promoted->properties->all())->toBe(['teacher_id' => $teacher->id]);
 });
@@ -137,12 +137,12 @@ it('quitar una que no es la principal no cambia la principal', function () {
         ->and($entry->properties->all())->toBe(['teacher_id' => $teacher->id, 'primary_adscription_id' => $sis->id]);
 });
 
-it('una adscripción ya quitada es un error en adscription y no deja otra bitácora', function () {
+it('una asignación ya quitada es un error en adscription y no deja otra bitácora', function () {
     $teacher = Teacher::factory()->adscribedTo($this->sis)->adscribedTo($this->ind, false)->create();
     $ind = adscriptionOf($teacher, $this->ind);
     removeAdscription($ind);
 
-    expect(fn () => removeAdscription($ind))->toThrow(ValidationException::class, 'Esa adscripción ya se quitó.')
+    expect(fn () => removeAdscription($ind))->toThrow(ValidationException::class, 'Esa asignación ya se quitó.')
         ->and(Activity::count())->toBe(1);
 });
 
@@ -184,7 +184,7 @@ it('avisa con AdscriptionChanged solo después del commit', function () {
     expect($heard)->toBe([$sis->id]);
 });
 
-it('devuelve la principal nueva, cuántas adscripciones le quedan y el resultado con el mismo texto de la bitácora', function () {
+it('devuelve la principal nueva, cuántas asignaciones le quedan y el resultado con el mismo texto de la bitácora', function () {
     $teacher = teacherInThreeDepartments($this->sis, $this->ind, $this->civ);
     $alone = Teacher::factory()->adscribedTo($this->sis)->create();
 
@@ -193,7 +193,7 @@ it('devuelve la principal nueva, cuántas adscripciones le quedan y el resultado
     $last = app(RemoveAdscription::class)->handle(adscriptionOf($alone, $this->sis));
 
     expect($primaryMoved['promoted']->is(adscriptionOf($teacher, $this->ind)))->toBeTrue()
-        ->and($primaryMoved)->remaining->toBe(2)->outcome->toBe('su adscripción principal pasa a IND')
+        ->and($primaryMoved)->remaining->toBe(2)->outcome->toBe('su asignación principal pasa a IND')
         ->and($notPrimary)->promoted->toBeNull()->remaining->toBe(1)->outcome->toBeNull()
         ->and($last)->promoted->toBeNull()->remaining->toBe(0)->outcome->toBe('queda sin departamento');
 });

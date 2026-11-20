@@ -1102,7 +1102,7 @@ describe('docentes: baja y alta (CV8, CV-S8, CV-S9)', function () {
             ->set('teacherSearch', 'pe')
             ->assertSee('Ya está en Sistemas y Computación.')
             ->assertDontSeeHtml('data-testid="add-HERE800101AA1"')
-            ->assertSee('Principal en Eléctrica-Electrónica. Se agrega a Sistemas y Computación como adscripción adicional')
+            ->assertSee('Principal en Eléctrica-Electrónica. Se agrega a Sistemas y Computación como asignación adicional')
             ->assertSee('Sin departamento. Queda con Sistemas y Computación como principal.')
             ->call('addTeacher', $here->id)->assertHasErrors('candidate');
 
@@ -1243,9 +1243,9 @@ describe('revisión por registro (opción A)', function () {
             ->assertSee('Es su único departamento: queda dado de baja y su cuenta se inhabilita.')
             ->call('askDischarge', $mainHere->id)
             ->assertSee('¿Quitar a Eduardo Carrasco de Sistemas y Computación?')
-            ->assertSee('Sigue como docente de Eléctrica-Electrónica, que pasa a ser su adscripción principal.')
+            ->assertSee('Sigue como docente de Eléctrica-Electrónica, que pasa a ser su asignación principal.')
             ->call('askDischarge', $mainThere->id)
-            ->assertSee('Sigue como docente de Eléctrica-Electrónica, su adscripción principal. Solo deja de aparecer en tu departamento')
+            ->assertSee('Sigue como docente de Eléctrica-Electrónica, su asignación principal. Solo deja de aparecer en tu departamento')
             ->call('dischargeTeacher')
             ->assertHasNoErrors();
 
