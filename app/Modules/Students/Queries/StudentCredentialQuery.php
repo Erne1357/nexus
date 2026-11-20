@@ -59,9 +59,9 @@ final class StudentCredentialQuery
      */
     public function qrFor(Student $student, int $now): array
     {
-        // Con APP_URL (en producción https://nexus.cdjuarez.tecnm.mx) y no con el host de la petición: el QR lo escanea otro
+        // Con NEXUS_CREDENTIAL_URL o APP_URL (en producción https://nexus.cdjuarez.tecnm.mx) y no con el host de la petición: el QR lo escanea otro
         // teléfono, que debe llegar a la dirección pública aunque el alumno haya entrado por un proxy o un túnel.
-        $url = rtrim((string) config('app.url'), '/').route('credential.verify', ['token' => $this->tokens->issue((string) $student->getKey(), $now)], false);
+        $url = rtrim((string) (config('nexus.credential_url') ?: config('app.url')), '/').route('credential.verify', ['token' => $this->tokens->issue((string) $student->getKey(), $now)], false);
 
         return ['url' => $url, 'svg' => $this->qr($url), 'window' => CredentialToken::window($now), 'seconds_left' => CredentialToken::secondsLeft($now)];
     }

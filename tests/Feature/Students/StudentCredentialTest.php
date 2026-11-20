@@ -248,6 +248,9 @@ it('AC-20: el QR apunta a APP_URL aunque se entre por otro host, y una foto más
 
     expect($qr['url'])->toStartWith('https://nexus.cdjuarez.tecnm.mx/credencial/verificar/');
 
+    config(['nexus.credential_url' => 'https://demo.example.net/']);
+    expect(app(StudentCredentialQuery::class)->qrFor($this->student, now()->getTimestamp())['url'])->toStartWith('https://demo.example.net/credencial/verificar/');
+
     Storage::disk('student_photos')->put('2021/21111182.jpg', str_repeat('x', StudentPhotos::MAX_BYTES + 1));
     expect(app(StudentPhotos::class)->locate('21111182'))->toBeNull()
         ->and(app(StudentPhotos::class)->read('21111182'))->toBeNull();
