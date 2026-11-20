@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 | Rutas de Core. El login, el logout y `PUT /user/password` los registra Fortify
-| (config/fortify.php); aquí, la invitación de acceso, el restablecimiento de contraseña por correo, la página de inicio, la pantalla de cambio de contraseña y la lista de notificaciones, el CRUD de
+| (config/fortify.php); aquí, la invitación de acceso, el restablecimiento de contraseña por correo, la página «Resumen» (el Inicio de antes), la pantalla de cambio de contraseña y la lista de notificaciones, el CRUD de
 | Campus, el de Modalidades, el de Periodos, la ficha de un periodo, «Personas y puestos» con su ficha y el Organigrama. Quién entra a cada página lo decide la página con su policy, no la ruta.
 */
 
@@ -39,7 +39,9 @@ Route::middleware('throttle:60,1')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
-    Route::livewire('/', 'core::pages.home')->name('home');
+    // El Inicio (`/`, nombre `home`) es el mapa del campus y lo registra Scheduling (tarea 1.24.1); lo que era el Inicio
+    // —saludo, bloque del puesto, calendario y tarjetas— queda como «Resumen» en Mi espacio.
+    Route::livewire('/resumen', 'core::pages.home')->name('core.summary');
     Route::view('/user/password', 'core::auth.change-password')->name('user-password.edit');
     Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses');
     Route::livewire('/modalidades', 'core::pages.modalities')->name('core.modalities');

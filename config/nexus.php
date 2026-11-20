@@ -12,4 +12,11 @@ return [
     */
     'institutional_email_domain' => env('NEXUS_INSTITUTIONAL_EMAIL_DOMAIN', 'cdjuarez.tecnm.mx'),
 
+    /*
+    | Visor 3D del mapa del campus en el Inicio (1.24.1, ADR-0030). Con false la página no carga los assets de ubicatec
+    | (three.js) ni arranca el visor: muestra un marcador estático. phpunit.xml lo apaga para que las pruebas de navegador
+    | que solo pasan por el Inicio no paguen WebGL por CPU.
+    */
+    'campus_map_3d' => (bool) env('CAMPUS_MAP_3D', true),
+
 ];

@@ -13,7 +13,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 /**
- * Página de inicio: saludo y el bloque del perfil activo (Actor::activeRole()), con su nombre y lo que ese puesto hace
+ * «Resumen» en Mi espacio (`/resumen`; hasta la tarea 1.24.1 era el Inicio, que ahora es el mapa del campus): saludo y el bloque del perfil activo (Actor::activeRole()), con su nombre y lo que ese puesto hace
  * en Nexus según el glosario, para quien lo ocupa (RoleTitleQuery: el jefe de Servicios Escolares se nombra por su
  * unidad, AZ-02). A quien tiene al menos un rol le muestra además el bloque «Calendario»
  * (core::terms.mini-timeline): las etapas en curso y las dos que siguen del periodo activo, según TermCalendarQuery,
@@ -30,7 +30,7 @@ use Livewire\Component;
  * si el usuario ve esa entrada en su menú (Navigation), así Inicio no depende del módulo que la declara. El jefe de
  * Servicios Escolares, por ejemplo, ve «Materias por colocar» (tarea 1.21); los demás jefes no la ven en el menú.
  */
-new #[Title('Inicio')] class extends Component
+new #[Title('Resumen')] class extends Component
 {
     /**
      * @return array{name: string, blocks: list<array{title: string, description: string, account: array{username: string, email: ?string}|null, links: list<array{label: string, url: string, icon: string}>}>, cards: list<HomeCard>, calendar: array{timeline: StageTimeline, caption: string, termUrl: ?string}|null}

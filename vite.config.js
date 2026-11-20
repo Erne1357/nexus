@@ -6,7 +6,14 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
     plugins: [
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js', 'resources/js/login.js'],
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.js',
+                'resources/js/login.js',
+                // El mapa del campus del Inicio (UbicaTec, ADR-0030): entradas propias para no cargar three.js en las demás páginas.
+                'resources/css/ubicatec.css',
+                'resources/js/ubicatec/main.js',
+            ],
             refresh: true,
             // Imágenes que Blade usa con Vite::asset() sin importarlas en JS (la liebre).
             assets: ['resources/images/**'],
@@ -27,6 +34,10 @@ export default defineConfig({
         }),
         tailwindcss(),
     ],
+    build: {
+        // El mapa usa top-level await y módulos dinámicos de three.js (ADR-0030).
+        target: 'es2022',
+    },
     server: {
         // Accesible desde fuera del contenedor; el navegador conecta por localhost.
         host: '0.0.0.0',
