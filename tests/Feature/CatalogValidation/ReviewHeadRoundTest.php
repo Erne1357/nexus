@@ -19,6 +19,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Navigation\RecentPages;
+use App\Modules\Core\Support\ValidationReturn;
 use App\Modules\Facilities\Models\Building;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
@@ -432,7 +433,7 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
             ->assertDontSee('Agregar docente')
             ->assertDontSee('Agregar correo institucional')
             ->assertSeeHtml('data-testid="observations-AAAA800101AA1"')
-            ->assertSeeHtml('href="'.route('faculty.teachers.show', $teacher->id).'"');
+            ->assertSeeHtml('href="'.e(route('faculty.teachers.show', ['teacher' => $teacher->id, ...ValidationReturn::params($this->sis->id, 'teachers')])).'"');
     })->with(['admin', 'subdirección']);
 
     it('la cabecera le habla a quien mira; al jefe, a quien revisa', function (string $who) {

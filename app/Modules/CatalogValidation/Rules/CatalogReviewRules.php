@@ -2,6 +2,7 @@
 
 namespace App\Modules\CatalogValidation\Rules;
 
+use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
@@ -49,6 +50,28 @@ final class CatalogReviewRules
     {
         if (! $this->contents->containsAll($review, $ids)) {
             throw ValidationException::withMessages(['record' => 'El registro no es de esta revisión.']);
+        }
+    }
+
+    /**
+     * CV14 (confirmado el 20 de noviembre de 2026): los docentes inactivos no se validan, solo se ven. En la revisión de
+     * docentes no se marcan ni se desmarcan, no se corrigen, no se les pone observación ni se quitan del departamento.
+     * Los demás catálogos no cambian. Si uno de los ids es de un docente inactivo, ninguno cuenta.
+     *
+     * @param  list<string>  $ids
+     *
+     * @throws ValidationException
+     */
+    public function ensureNoInactiveTeachers(CatalogReview $review, array $ids): void
+    {
+        if ($review->catalog !== Catalog::Teachers || $ids === []) {
+            return;
+        }
+
+        $model = $this->contents->query($review)->getModel();
+
+        if ($this->contents->query($review)->whereIn($model->qualifyColumn('id'), $ids)->where($model->qualifyColumn('is_active'), false)->exists()) {
+            throw ValidationException::withMessages(['record' => 'Los docentes inactivos no se validan: solo se pueden ver.']);
         }
     }
 

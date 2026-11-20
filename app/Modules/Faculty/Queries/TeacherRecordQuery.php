@@ -255,7 +255,7 @@ final class TeacherRecordQuery
     }
 
     /**
-     * El historial del docente, del periodo más antiguo al más reciente (como el kárdex): por cada código de periodo
+     * El historial del docente, del periodo más reciente al más antiguo (1.24.3; dentro de cada periodo, materia, grupo y campus): por cada código de periodo
      * del SII con grupos o evaluaciones, su nombre, los grupos que impartió (materia y campus; una fila por grupo) y
      * sus evaluaciones por tipo. Cuatro consultas sin importar cuántos periodos sean.
      *
@@ -279,7 +279,7 @@ final class TeacherRecordQuery
                 <=> [$b->term_code, (string) $b->subject?->code, $b->group_code, (string) $b->campus?->code, $b->id])
             ->groupBy('term_code');
         $evaluations = TeacherEvaluation::query()->where('teacher_id', $teacher->getKey())->orderBy('kind')->get()->groupBy('term_code');
-        $codes = $groups->keys()->merge($evaluations->keys())->unique()->sort()->values();
+        $codes = $groups->keys()->merge($evaluations->keys())->unique()->sortDesc()->values();
         $names = Term::query()->whereIn('code', $codes->all())->pluck('name', 'code');
 
         return $codes->map(fn (string $code): array => [

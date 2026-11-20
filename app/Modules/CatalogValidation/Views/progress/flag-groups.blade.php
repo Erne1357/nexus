@@ -10,7 +10,7 @@
         <p class="text-sm font-semibold">{{ $review->catalog->label() }} <span class="font-mono font-normal text-neutral tabular-nums">{{ $catalogFlags->count() }}</span></p>
         @foreach ($catalogFlags->groupBy(fn ($flag) => $flag->flaggable_type.'|'.$flag->flaggable_id) as $recordFlags)
             @php($record = $recordFlags->first()->flaggable)
-            @php($recordUrl = \App\Modules\CatalogValidation\Queries\ValidationProgressQuery::recordUrl($record))
+            @php($recordUrl = \App\Modules\CatalogValidation\Queries\ValidationProgressQuery::recordUrl($record, $review))
             <article wire:key="record-{{ $recordFlags->first()->flaggable_type }}-{{ $recordFlags->first()->flaggable_id }}" class="space-y-2 rounded-box border border-base-300 bg-base-100 p-3.5" data-testid="drawer-record-{{ \Illuminate\Support\Str::kebab(class_basename($recordFlags->first()->flaggable_type)) }}-{{ $recordFlags->first()->flaggable_id }}">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                     <p class="font-semibold"><span class="font-mono">{{ $record?->code ?? $record?->rfc }}</span>@if ($record === null) · Registro ya no disponible @elseif (filled($record->name)) · {{ $record->name }}@endif</p>

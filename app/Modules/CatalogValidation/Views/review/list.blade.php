@@ -82,6 +82,8 @@
         <div @class(['contents [&>*]:w-full', 'md:[&>*]:w-52' => $isTeachers, 'md:[&>*]:w-40' => ! $isTeachers])>
             @if ($isTeachers)
                 <x-select wire:model.live="missing" aria-label="Falta" :options="$missingFilters" placeholder="Falta" data-testid="filter-missing" />
+                {{-- CV14: por omisión solo los activos; los inactivos se ven, no se validan. --}}
+                <x-select wire:model.live="status" aria-label="Estado" :options="$statusFilters" placeholder="Solo activos" data-testid="filter-status" />
             @endif
             @if ($isRooms)
                 <x-select wire:model.live="roomCampus" aria-label="Campus" :options="$roomFilters['campuses']" placeholder="Campus" data-testid="filter-campus" />
