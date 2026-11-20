@@ -24,22 +24,23 @@ use Illuminate\Support\Facades\Storage;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| Paso `materias` de imports:migrate-sii (D8, D15, D16, D18): las claves del SII se unen por la clave oficial del
-| TecNM, cada plan fundido tiene un solo lugar por materia, el nombre se normaliza, el tipo y el departamento se
-| derivan, y una materia sin semestre nunca recibe un semestre que no venga del SII: en una retícula viva va a «Por
-| validar» con el semestre sugerido de su misma carrera, y en una histórica queda como en el SII. Todo con datos sintéticos:
-| materias, retículas y claves inventadas, y los mapas de los pasos anteriores armados a mano.
+| Paso `materias` de imports:migrate-sii (D8, D15, D16, D18, R-V2-1): las claves del SII se unen por la clave oficial
+| del TecNM, cada retícula del SII es su propio plan con un lugar por materia, las variantes de un grupo (la clave
+| oficial que antes juntaba las retículas) siguen siendo una sola materia de Nexus, el nombre se normaliza, el tipo y el
+| departamento se derivan, y una materia sin semestre nunca recibe un semestre que no venga del SII: en una retícula
+| viva va a «Por validar» con el semestre sugerido de su misma carrera, y en una histórica queda como en el SII. Todo
+| con datos sintéticos: materias, retículas y claves inventadas, y los mapas de los pasos anteriores armados a mano.
 */
 
 const SUBJECTS_STEP_PLAN_FOR = [
-    'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial'],
-    'A2/2' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'distancia'],
-    'A/3' => ['plan' => 'AAA-2004-100', 'career' => 'AAA', 'modality' => 'presencial'],
-    'B/1' => ['plan' => 'BBB-2010-300', 'career' => 'BBB', 'modality' => 'presencial'],
-    'C/1' => ['plan' => 'CCC-2009-201', 'career' => 'CCC', 'modality' => 'presencial'],
+    'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial', 'group' => 'AAA-2010-224'],
+    'A2/2' => ['plan' => 'AAA-2010-224-A2', 'career' => 'AAA', 'modality' => 'distancia', 'group' => 'AAA-2010-224'],
+    'A/3' => ['plan' => 'AAA-2004-100', 'career' => 'AAA', 'modality' => 'presencial', 'group' => 'AAA-2004-100'],
+    'B/1' => ['plan' => 'BBB-2010-300', 'career' => 'BBB', 'modality' => 'presencial', 'group' => 'BBB-2010-300'],
+    'C/1' => ['plan' => 'CCC-2009-201', 'career' => 'CCC', 'modality' => 'presencial', 'group' => 'CCC-2009-201'],
 ];
 
-const SUBJECTS_STEP_VERSIONS = ['AAA-2010-224' => '2010', 'AAA-2004-100' => '2004', 'BBB-2010-300' => '2010', 'CCC-2009-201' => '2009'];
+const SUBJECTS_STEP_VERSIONS = ['AAA-2010-224' => '2010', 'AAA-2010-224-A2' => '2010', 'AAA-2004-100' => '2004', 'BBB-2010-300' => '2010', 'CCC-2009-201' => '2009'];
 
 const SUBJECTS_STEP_CAREERS = <<<'CSV'
 carrera,nombre,departamento,departamento_nombre,nota
@@ -151,7 +152,7 @@ function writeSiiSubjects(string $dir, array $catalog, array $placements, array 
  * Corre el paso con los mapas de los pasos anteriores armados a mano (`department_for_area` con llaves numéricas,
  * como lo deja el paso del organigrama).
  *
- * @param  array<string, array{plan: string, career: string, modality: string}>  $planFor
+ * @param  array<string, array{plan: string, career: string, modality: string, group: string}>  $planFor
  * @param  array<string, true>  $historical  los planes de Nexus que son retículas históricas
  * @return array{migration: SiiMigration, subjects: array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}, subject_aliases: array{rows: list<array<string, scalar|null>>, incidents: list<array{level: string, ref: string, message: string}>}}
  */
@@ -262,7 +263,7 @@ it('deja todas las claves del SII como alias', function () {
     $subjectFor = $run['migration']->remember('subject_for', fn () => throw new LogicException('debía estar armado'));
 
     expect($aliases['CD1']['subject'])->toBe('ACF-0901')
-        ->and($aliases['CD1D'])->toBe(['code' => 'CD1D', 'subject' => 'ACF-0901', 'plan' => 'AAA-2010-224'])
+        ->and($aliases['CD1D'])->toBe(['code' => 'CD1D', 'subject' => 'ACF-0901', 'plan' => 'AAA-2010-224-A2'])
         ->and($aliases->keys()->sort()->values()->all())->toBe(['CD1', 'CD1D', 'CD2', 'CD3', 'ESP', 'ESQ', 'ETB', 'ETC', 'ETI', 'NNN', 'OLD', 'OLDP', 'OPT', 'PRB1', 'PRB2', 'PRG', 'RES', 'SS', 'ZZZ'])
         ->and(collect($run['subjects']['rows'])->pluck('sii_code')->unique()->all())->toBe([''])
         ->and($subjectFor['CD1D'])->toBe('ACF-0901')
@@ -271,15 +272,25 @@ it('deja todas las claves del SII como alias', function () {
         ->and($subjectFor['NNN'])->toBe('NNN');
 });
 
-it('emite un solo lugar por plan aunque venga de dos variantes', function () {
-    $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
-    $placements = collect($subjects['rows'])->where('plan', 'AAA-2010-224')->where('code', 'ACF-0901');
-    $warning = collect($subjects['incidents'])->first(fn (array $i): bool => $i['ref'] === 'AAA-2010-224/ACF-0901');
+it('R-V2-1: dos retículas de un grupo dan dos lugares, cada uno con su semestre y renglón del SII, de la misma materia de Nexus', function () {
+    $placements = array_map(fn (array $p): array => match ($p[2]) {
+        'CD1' => [...$p, '3'],
+        'CD1D' => [...$p, '5'],
+        default => $p,
+    }, SUBJECTS_STEP_PLACEMENTS);
+    writeSiiSubjects($this->dir, SUBJECTS_STEP_CATALOG, $placements, SUBJECTS_STEP_TECNM, SUBJECTS_STEP_SPECIALTIES);
 
-    expect($placements)->toHaveCount(1)
-        ->and($placements->first()['semester'])->toBe('1')
-        ->and($warning)->not->toBeNull()
-        ->and($warning['message'])->toContain('presencial');
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $rows = collect($run['subjects']['rows'])->where('code', 'ACF-0901')->whereIn('plan', ['AAA-2010-224', 'AAA-2010-224-A2']);
+    $forPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
+
+    expect($rows->map(fn (array $row): string => "{$row['plan']}:{$row['semester']}:{$row['position']}")->sort()->values()->all())
+        ->toBe(['AAA-2010-224-A2:2:5', 'AAA-2010-224:1:3'])
+        ->and($rows->map(fn (array $row): string => "{$row['name']}|{$row['credits']}/{$row['theory_hours']}/{$row['practice_hours']}|{$row['department']}|{$row['kind']}")->unique()->values()->all())
+        ->toBe(['Cálculo Diferencial|5/3/2|110100|basica'])
+        ->and($forPlan['AAA-2010-224'])->toMatchArray(['CD1' => 'ACF-0901'])->not->toHaveKey('CD1D')
+        ->and($forPlan['AAA-2010-224-A2'])->toBe(['CD1D' => 'ACF-0901'])
+        ->and(subjectsStepMessages($run['subjects']))->not->toContain('semestres distintos');
 });
 
 it('normaliza el nombre de la materia', function () {
@@ -408,13 +419,13 @@ it('funde la misma materia de dos variantes sin clave TecNM', function () {
 
     expect($placements->pluck('code')->all())->toBe(['VZ'])
         ->and($placements->first()['semester'])->toBe('2')
-        ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['VA'])->toBe(['code' => 'VA', 'subject' => 'VZ', 'plan' => 'AAA-2010-224'])
-        ->and($subjectFor['VA'])->toBe('VZ')
-        ->and(subjectsStepMessages($run['subjects']))->toContain('AAA-2010-224/VZ');
+        ->and(subjectsStepRow($run['subjects'], 'AAA-2010-224-A2', 'VZ')['semester'])->toBe('3')
+        ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['VA'])->toBe(['code' => 'VA', 'subject' => 'VZ', 'plan' => 'AAA-2010-224-A2'])
+        ->and($subjectFor['VA'])->toBe('VZ');
 
-    $withoutPresencial = subjectsStepRun($this->dir, $this->curated, [...SUBJECTS_STEP_PLAN_FOR, 'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'mixta']]);
+    $withoutPresencial = subjectsStepRun($this->dir, $this->curated, [...SUBJECTS_STEP_PLAN_FOR, 'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'mixta', 'group' => 'AAA-2010-224']]);
 
-    expect(collect($withoutPresencial['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->all())->toBe(['VA']);
+    expect(collect($withoutPresencial['subjects']['rows'])->whereIn('plan', ['AAA-2010-224', 'AAA-2010-224-A2'])->pluck('code')->unique()->values()->all())->toBe(['VA']);
 });
 
 it('funde la variante sin clave TecNM en la materia con clave TecNM', function () {
@@ -427,6 +438,7 @@ it('funde la variante sin clave TecNM en la materia con clave TecNM', function (
     $aliases = collect($run['subject_aliases']['rows'])->keyBy('code');
 
     expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->all())->toBe(['DIB-0001'])
+        ->and(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224-A2')->pluck('code')->all())->toBe(['DIB-0001'])
         ->and($aliases['W1']['subject'])->toBe('DIB-0001')
         ->and($aliases['W2']['subject'])->toBe('DIB-0001');
 });
@@ -442,6 +454,7 @@ it('no funde materias con el mismo nombre dentro de una retícula y lo reporta',
     $warnings = collect($run['subjects']['incidents'])->filter(fn (array $i): bool => $i['ref'] === 'A/1');
 
     expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['D1', 'D2'])
+        ->and(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224-A2')->pluck('code')->all())->toBe(['D1'])
         ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['D3']['subject'])->toBe('D1')
         ->and($warnings)->toHaveCount(1)
         ->and($warnings->first()['message'])->toContain('«Dibujo» 2 veces')->toContain('A/1')->toContain('D1, D2')->toContain('revisar');
@@ -460,7 +473,8 @@ it('no funde variantes con créditos distintos', function () {
 
     $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
 
-    expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['X1', 'X2', 'Y1', 'Y2']);
+    expect(collect($subjects['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['X1', 'Y1'])
+        ->and(collect($subjects['rows'])->where('plan', 'AAA-2010-224-A2')->pluck('code')->sort()->values()->all())->toBe(['X2', 'Y2']);
 });
 
 it('funde variantes con horas distintas: queda la materia de la variante presencial con sus horas, y avisa', function () {
@@ -470,14 +484,40 @@ it('funde variantes con horas distintas: queda la materia de la variante presenc
     ], [['A2', '2', 'P2', 'AEC-1008']]);
 
     $run = subjectsStepRun($this->dir, $this->curated);
-    $placements = collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224');
+    $placements = collect($run['subjects']['rows'])->whereIn('plan', ['AAA-2010-224', 'AAA-2010-224-A2']);
     $warning = collect($run['subjects']['incidents'])->first(fn (array $i): bool => $i['ref'] === 'AAA-2010-224/P1' && str_contains($i['message'], 'horas distintas'));
 
-    expect($placements->pluck('code')->all())->toBe(['P1'])
-        ->and($placements->first())->toMatchArray(['theory_hours' => '4', 'practice_hours' => '0', 'credits' => '4'])
+    expect($placements->pluck('plan')->sort()->values()->all())->toBe(['AAA-2010-224', 'AAA-2010-224-A2'])
+        ->and($placements->pluck('code')->unique()->all())->toBe(['P1'])
+        ->and($placements->map(fn (array $row): string => "{$row['credits']}/{$row['theory_hours']}/{$row['practice_hours']}")->unique()->values()->all())->toBe(['4/4/0'])
         ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['P2']['subject'])->toBe('P1')
         ->and($warning)->not->toBeNull()
         ->and($warning['message'])->toContain('P1')->toContain('P2')->toContain('presencial')->toContain('supuesto por confirmar');
+});
+
+it('R-V2-1: la variante de distancia con otras horas se une a la materia presencial como antes (catálogo sin cambio)', function () {
+    writeSiiSubjects($this->dir, [['P1', '1', '110100', 'CONTABILIDAD FINANCIERA'], ['P2', '2', '110600', 'CONTABILIDAD FINANCIERA']], [
+        ['A', '1', 'P1', '4', '4', '0', '2', '', 'A', '4'],
+        ['A2', '2', 'P2', '4', '2', '2', '3', '', 'A', '1'],
+    ], [['A2', '2', 'P2', 'AEC-1008']]);
+
+    $run = subjectsStepRun($this->dir, $this->curated);
+    $forPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
+    $distance = subjectsStepRow($run['subjects'], 'AAA-2010-224-A2', 'P1');
+
+    expect(collect($run['subjects']['rows'])->pluck('code')->unique()->values()->all())->toBe(['P1'])
+        ->and($distance)->toMatchArray([
+            'name' => 'Contabilidad Financiera', 'credits' => '4', 'theory_hours' => '4', 'practice_hours' => '0',
+            'department' => '110100', 'kind' => 'basica', 'semester' => '3', 'position' => '1',
+        ])
+        ->and(subjectsStepRow($run['subjects'], 'AAA-2010-224', 'P1'))->toMatchArray(['credits' => '4', 'theory_hours' => '4', 'practice_hours' => '0', 'semester' => '2', 'position' => '4'])
+        ->and($forPlan)->toMatchArray(['AAA-2010-224' => ['P1' => 'P1'], 'AAA-2010-224-A2' => ['P2' => 'P1']])
+        ->and(collect($run['subject_aliases']['rows'])->keyBy('code')['P2'])->toBe(['code' => 'P2', 'subject' => 'P1', 'plan' => 'AAA-2010-224-A2'])
+        ->and(subjectsStepMessages($run['subjects']))
+        ->toContain('warning|AAA-2010-224/P1|')
+        ->toContain('La materia P1 junta claves del SII de departamentos distintos (110100, 110600): queda en 110100')
+        ->toContain('La materia P1 junta claves del SII de tipos distintos (basica, complementaria): queda basica')
+        ->not->toContain('trae créditos/teoría/práctica distintos según el plan');
 });
 
 it('una clave del SII con horas distintas en dos planes queda con las del plan más reciente en los dos, y avisa', function () {
@@ -540,13 +580,14 @@ it('recuerda por plan a qué materia de Nexus va cada clave del SII, aunque su a
     $byPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
     $subjectFor = $run['migration']->remember('subject_for', fn () => throw new LogicException('debía estar armado'));
 
-    expect($byPlan['AAA-2010-224'])->toBe(['P1' => 'P1', 'P2' => 'P1'])
+    expect($byPlan['AAA-2010-224'])->toBe(['P1' => 'P1'])
+        ->and($byPlan['AAA-2010-224-A2'])->toBe(['P2' => 'P1'])
         ->and($byPlan['BBB-2010-300'])->toBe(['P2' => 'AEC-1008'])
         ->and($subjectFor['P2'])->toBe('AEC-1008');
 });
 
 it('no depende del orden de los renglones del SII', function () {
-    $planFor = [...SUBJECTS_STEP_PLAN_FOR, 'A3/4' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'mixta']];
+    $planFor = [...SUBJECTS_STEP_PLAN_FOR, 'A3/4' => ['plan' => 'AAA-2010-224-A3', 'career' => 'AAA', 'modality' => 'mixta', 'group' => 'AAA-2010-224']];
     $catalog = [['Q1', '1', '110100', 'DIBUJO'], ['Q2', '1', '110100', 'DIBUJO']];
     $placements = [['A3', '4', 'Q2', '4', '2', '2', '3', '', 'A'], ['A2', '2', 'Q1', '4', '2', '2', '2', '', 'A']];
     $tecnm = [['A3', '4', 'Q2', 'QQQ-0001'], ['A2', '2', 'Q1', 'QQQ-0001']];
@@ -556,8 +597,8 @@ it('no depende del orden de los renglones del SII', function () {
     writeSiiSubjects($this->dir, array_reverse($catalog), array_reverse($placements), array_reverse($tecnm));
     $second = subjectsStepRun($this->dir, $this->curated, $planFor);
 
-    expect(subjectsStepRow($first['subjects'], 'AAA-2010-224', 'QQQ-0001')['semester'])->toBe('2')
-        ->and(subjectsStepMessages($first['subjects']))->toContain('A2/2')
+    expect(subjectsStepRow($first['subjects'], 'AAA-2010-224-A2', 'QQQ-0001')['semester'])->toBe('2')
+        ->and(subjectsStepRow($first['subjects'], 'AAA-2010-224-A3', 'QQQ-0001')['semester'])->toBe('3')
         ->and($second['subjects'])->toBe($first['subjects'])
         ->and($second['subject_aliases'])->toBe($first['subject_aliases']);
 });
@@ -653,7 +694,7 @@ it('D18: en una retícula viva, un lugar con estatus N sugiere su semestre del S
         ->toContain('con el 5 sugerido por la materia con el mismo nombre de la misma carrera en AAA-2010-224/AEB-1055');
 });
 
-it('un lugar con estatus N que es la variante de otro vigente se funde con él', function () {
+it('R-V2-1: un lugar con estatus N que es la variante de otro vigente es la misma materia de Nexus, y en su propio plan pasa a «Por validar»', function () {
     writeSiiSubjects($this->dir, [['LOG', '1', '110100', 'LOGISTICA'], ['LOGD', '1', '110100', 'LOGISTICA']], [
         ['A', '1', 'LOG', '4', '2', '2', '9', '', 'A'],
         ['A2', '2', 'LOGD', '4', '2', '2', '9', '', 'N'],
@@ -663,8 +704,9 @@ it('un lugar con estatus N que es la variante de otro vigente se funde con él',
     $forPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
 
     expect(subjectsStepRow($run['subjects'], 'AAA-2010-224', 'LOG'))->toMatchArray(['semester' => '9'])
-        ->and($run['pending_placements']['rows'])->toBe([])
-        ->and($forPlan['AAA-2010-224']['LOGD'])->toBe('LOG');
+        ->and(subjectsStepRow($run['subjects'], 'AAA-2010-224-A2', 'LOG'))->toBeNull()
+        ->and(collect($run['pending_placements']['rows'])->map(fn (array $row): string => "{$row['plan']}/{$row['code']}:{$row['suggested_semester']}:{$row['sii_grid']}")->all())->toBe(['AAA-2010-224-A2/LOG:9:A2/2'])
+        ->and($forPlan['AAA-2010-224-A2']['LOGD'])->toBe('LOG');
 });
 
 it('una retícula excluida no migra sus materias y avisa una sola vez', function () {
@@ -691,9 +733,9 @@ function subjectsStepEndToEnd(object $test, ?array $selection = null): void
     $organigrama = base_path('app/Modules/Imports/Sii/Curated/organigrama.csv');
     File::copy($organigrama, $test->curated.'/organigrama.csv');
     File::put($test->curated.'/planes.csv', implode("\n", [
-        'sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota',
-        'A,1,AAA-2010-224,AAA,presencial,si,0,', 'A2,2,AAA-2010-224,AAA,distancia,si,0,', 'A,3,AAA-2004-100,AAA,presencial,si,0,',
-        'B,1,BBB-2010-300,BBB,presencial,si,0,', 'C,1,CCC-2009-201,CCC,presencial,si,0,', 'X,9,XXX-2010-999,XXX,presencial,no,0,sin alumnos',
+        'sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota',
+        'A,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,', 'A2,2,AAA-2010-224-A2,AAA-2010-224,AAA,distancia,si,0,', 'A,3,AAA-2004-100,AAA-2004-100,AAA,presencial,si,0,',
+        'B,1,BBB-2010-300,BBB-2010-300,BBB,presencial,si,0,', 'C,1,CCC-2009-201,CCC-2009-201,CCC,presencial,si,0,', 'X,9,XXX-2010-999,XXX-2010-999,XXX,presencial,no,0,sin alumnos',
     ])."\n");
 
     $areas = array_column((new SiiMigration(SiiExport::open($test->dir), $test->curated))->curated('organigrama'), 'clave_sii');
@@ -740,6 +782,7 @@ it('migra las materias de punta a punta después del organigrama y las carreras'
         ->and($calculus->department->code)->toBe('110100')
         ->and($calculus->kind)->toBe(SubjectKind::Basica)
         ->and($semester('AAA-2010-224', 'ACF-0901'))->toBe(1)
+        ->and($semester('AAA-2010-224-A2', 'ACF-0901'))->toBe(2)
         ->and($semester('AAA-2004-100', 'OLD'))->toBeNull()
         ->and($semester('CCC-2009-201', 'CD3'))->toBe(1)
         ->and(Subject::query()->where('code', 'AEB-1055')->sole()->department->code)->toBe('110700')
@@ -789,7 +832,7 @@ it('D18: de punta a punta, un plan sin inscritos en el periodo actual queda como
         ->and(file_get_contents($this->dir.'/_incidencias.csv'))->toContain('Retícula histórica AAA-2004-100')->not->toContain('AAA-2004-100/OLD');
 });
 
-it('toma el orden en el semestre (D21) del renglón del SII, de la variante presencial al fundir; 0 queda vacío', function () {
+it('toma el orden en el semestre (D21) del renglón del SII de su propia retícula; 0 queda vacío', function () {
     $placements = array_map(fn (array $p): array => match ($p[2]) {
         'CD1' => [...$p, '3'],
         'CD1D' => [...$p, '5'],
@@ -802,8 +845,29 @@ it('toma el orden en el semestre (D21) del renglón del SII, de la variante pres
     $subjects = subjectsStepRun($this->dir, $this->curated)['subjects'];
 
     expect(subjectsStepRow($subjects, 'AAA-2010-224', 'ACF-0901')['position'])->toBe('3')
+        ->and(subjectsStepRow($subjects, 'AAA-2010-224-A2', 'ACF-0901')['position'])->toBe('5')
         ->and(subjectsStepRow($subjects, 'BBB-2010-300', 'ACF-0901')['position'])->toBe('7')
         ->and(subjectsStepRow($subjects, 'AAA-2010-224', 'ACA-0907')['position'])->toBe('');
+});
+
+it('D21: el orden de un semestre sigue el renglón del SII sin cajones repetidos', function () {
+    writeSiiSubjects($this->dir, [
+        ['M1', '1', '110100', 'MATEMATICAS'], ['M1D', '1', '110100', 'MATEMATICAS'], ['M2', '1', '110100', 'QUIMICA'],
+        ['M3', '1', '110100', 'DIBUJO'], ['M4', '1', '110100', 'FISICA'],
+    ], [
+        ['A', '1', 'M1', '4', '2', '2', '1', '', 'A', '1'],
+        ['A', '1', 'M2', '4', '2', '2', '1', '', 'A', '2'],
+        ['A', '1', 'M4', '4', '2', '2', '1', '', 'A', '3'],
+        ['A2', '2', 'M3', '4', '2', '2', '1', '', 'A', '1'],
+        ['A2', '2', 'M1D', '4', '2', '2', '1', '', 'A', '2'],
+    ]);
+
+    $rows = collect(subjectsStepRun($this->dir, $this->curated)['subjects']['rows']);
+    $order = fn (string $plan): array => $rows->where('plan', $plan)->sortBy('position')->map(fn (array $row): string => "{$row['semester']}.{$row['position']} {$row['code']}")->values()->all();
+
+    expect($order('AAA-2010-224'))->toBe(['1.1 M1', '1.2 M2', '1.3 M4'])
+        ->and($order('AAA-2010-224-A2'))->toBe(['1.1 M3', '1.2 M1'])
+        ->and($rows->groupBy(fn (array $row): string => "{$row['plan']}|{$row['semester']}|{$row['position']}")->filter(fn ($group): bool => $group->count() > 1)->keys()->all())->toBe([]);
 });
 
 it('dos materias distintas de una retícula con la misma clave TecNM no se juntan: la conserva la que se llama como esa clave en otras retículas, y avisa', function () {
@@ -821,8 +885,10 @@ it('dos materias distintas de una retícula con la misma clave TecNM no se junta
     $forPlan = $run['migration']->remember('subject_for_plan', fn () => throw new LogicException('debía estar armado'));
     $warning = collect($run['subjects']['incidents'])->first(fn (array $i): bool => $i['ref'] === 'A2/2');
 
-    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->sort()->values()->all())->toBe(['FI2', 'INC-1023'])
-        ->and($forPlan['AAA-2010-224'])->toMatchArray(['PF1' => 'INC-1023', 'PF2' => 'INC-1023', 'FI2' => 'FI2'])
+    expect(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224')->pluck('code')->all())->toBe(['INC-1023'])
+        ->and(collect($run['subjects']['rows'])->where('plan', 'AAA-2010-224-A2')->pluck('code')->sort()->values()->all())->toBe(['FI2', 'INC-1023'])
+        ->and($forPlan['AAA-2010-224'])->toBe(['PF1' => 'INC-1023'])
+        ->and($forPlan['AAA-2010-224-A2'])->toBe(['FI2' => 'FI2', 'PF2' => 'INC-1023'])
         ->and($warning['message'])->toContain('INC-1023')->toContain('FI2 (FISICA)')->toContain('la conserva PF2')->toContain('supuesto por confirmar');
 });
 

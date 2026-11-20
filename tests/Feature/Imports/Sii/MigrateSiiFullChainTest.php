@@ -41,7 +41,7 @@ beforeEach(function () {
 
     File::copy(base_path('app/Modules/Imports/Sii/Curated/organigrama.csv'), $this->curated.'/organigrama.csv');
     File::put($this->curated.'/carreras.csv', "carrera,nombre,departamento,departamento_nombre,nota\nAAA,Carrera Triple A,110700,Económico Administrativas,\n");
-    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\nA,3,AAA-2004-100,AAA,presencial,si,0,\n");
+    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,\nA,3,AAA-2004-100,AAA-2004-100,AAA,presencial,si,0,\n");
     File::put($this->curated.'/aulas.csv', "aula,incluir,campus,edificio,nombre,tipo,capacidad,departamento,sesiones_desde_20251,nota\nA1,si,C1,ED1,,aula,30,,5,\nA2,si,C2,ED2,Aula dos,aula,25,,3,\n");
 
     $areas = array_column((new SiiMigration(SiiExport::open($this->dir), $this->curated))->curated('organigrama'), 'clave_sii');

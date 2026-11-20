@@ -314,7 +314,7 @@ it('migra docentes e historial de punta a punta sin filas con error', function (
     File::makeDirectory($curated, 0775, true);
     File::copy(base_path('app/Modules/Imports/Sii/Curated/organigrama.csv'), $curated.'/organigrama.csv');
     File::put($curated.'/carreras.csv', "carrera,nombre,departamento,departamento_nombre,nota\nAAA,Carrera Triple A,110700,Económico Administrativas,\n");
-    File::put($curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\n");
+    File::put($curated.'/planes.csv', "sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,\n");
 
     $areas = array_column((new SiiMigration(SiiExport::open($this->dir), $curated))->curated('organigrama'), 'clave_sii');
     File::put($this->dir.'/organigrama.csv', "clave_area,descripcion_area,area_depende,nivel,tipo_area,p_sustantivos,pro_sus,p_sus,p_s\n"

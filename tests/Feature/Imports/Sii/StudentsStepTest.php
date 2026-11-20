@@ -27,10 +27,10 @@ use Tests\Unit\Imports\Sii\SiiFixtures;
 */
 
 const STUDENTS_CURATED_PLANS = <<<'CSV'
-sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota
-A,1,AAA-2010-224,AAA,presencial,si,0,
-A2,2,AAA-2010-224,AAA,distancia,si,0,
-X,9,XXX-2010-999,XXX,presencial,no,0,excluida
+sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota
+A,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,
+A2,2,AAA-2010-224-A2,AAA-2010-224,AAA,distancia,si,0,
+X,9,XXX-2010-999,XXX-2010-999,XXX,presencial,no,0,excluida
 CSV;
 
 const STUDENTS_CURATED_CAREERS = <<<'CSV'
@@ -61,8 +61,8 @@ function studentsStepRun(string $dir): array
 {
     $migration = new SiiMigration(SiiExport::open($dir), '/nonexistent');
     $migration->remember('plan_for', fn (): array => [
-        'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial'],
-        'A2/2' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'distancia'],
+        'A/1' => ['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial', 'group' => 'AAA-2010-224'],
+        'A2/2' => ['plan' => 'AAA-2010-224-A2', 'career' => 'AAA', 'modality' => 'distancia', 'group' => 'AAA-2010-224'],
     ]);
     $out = ['rows' => [], 'incidents' => []];
 
@@ -145,7 +145,7 @@ it('toma la modalidad de la variante del SII y mapea el campus', function () {
 
     expect($run['rows'])->toHaveCount(2)
         ->and($run['rows'][0])->toMatchArray(['career' => 'AAA', 'study_plan' => 'AAA-2010-224', 'modality' => 'presencial', 'campus' => 'C1'])
-        ->and($run['rows'][1])->toMatchArray(['modality' => 'distancia', 'campus' => 'C2'])
+        ->and($run['rows'][1])->toMatchArray(['study_plan' => 'AAA-2010-224-A2', 'modality' => 'distancia', 'campus' => 'C2'])
         ->and($run['incidents'])->toHaveCount(1)
         ->and($run['incidents'][0]['message'])->toContain('7');
 });
@@ -248,7 +248,8 @@ it('migra a los alumnos de punta a punta sin errores', function () {
         ->and(Student::query()->where('control_number', 'S1')->sole())->status->toBe(StudentStatus::Activo)->is_active->toBeTrue()
         ->and(Student::query()->where('control_number', 'S3')->sole())->is_active->toBeFalse()
         ->and(ImportBatch::query()->where('template', 'students')->sum('error_rows'))->toBe(0)
-        ->and(StudyPlan::query()->count())->toBe(1)
+        ->and(StudyPlan::query()->orderBy('code')->pluck('code')->all())->toBe(['AAA-2010-224', 'AAA-2010-224-A2'])
+        ->and($student->studyPlan->code)->toBe('AAA-2010-224-A2')
         ->and(Career::query()->count())->toBe(1);
 
     File::deleteDirectory($curated);
