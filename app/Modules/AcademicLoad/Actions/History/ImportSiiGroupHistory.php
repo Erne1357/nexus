@@ -70,100 +70,109 @@ final class ImportSiiGroupHistory
         $now = now();
 
         $report = ['sessions' => 0, 'ignored_sessions' => 0, 'terms' => $importable, 'ignored_terms' => $ignored, 'groups' => 0, 'per_term' => [], 'unknown_subjects' => [], 'cancelled' => 0, 'without_campus' => 0, 'without_career' => 0, 'invalid_capacity' => 0, 'dry_run' => $dryRun];
-        $rows = [];
-        $sessionRows = [];
-        $seen = [];
+        $process = function () use ($importable, $dryRun, $subjects, $tecnm, $modalities, $default, $careers, $plans, $roomCampus, $now, &$report): void {
+            foreach ($importable as $term) {
+                $rows = [];
+                $sessionRows = [];
+                $seen = [];
+                $aulas = $this->roomsByGroup($term);
+                $sessions = $this->sessionsByGroup($term, $report['ignored_sessions']);
+                $report['per_term'][$term] = 0;
 
-        foreach ($importable as $term) {
-            $aulas = $this->roomsByGroup($term);
-            $sessions = $this->sessionsByGroup($term, $report['ignored_sessions']);
-            $report['per_term'][$term] = 0;
+                foreach (DB::table('sii_archivo.grupos')->where('periodo', $term)->orderBy('_linea')->cursor() as $group) {
+                    if (trim((string) $group->estatus_grupo) !== '') {
+                        $report['cancelled']++;
 
-            foreach (DB::table('sii_archivo.grupos')->where('periodo', $term)->orderBy('_linea')->cursor() as $group) {
-                if (trim((string) $group->estatus_grupo) !== '') {
-                    $report['cancelled']++;
+                        continue;
+                    }
 
-                    continue;
+                    $code = trim((string) $group->materia);
+                    $subjectId = (isset($tecnm[$code]) ? ($subjects[$tecnm[$code]] ?? null) : null) ?? $subjects[$code] ?? null;
+
+                    if ($subjectId === null) {
+                        $report['unknown_subjects'][$code] = ($report['unknown_subjects'][$code] ?? 0) + 1;
+
+                        continue;
+                    }
+
+                    $plan = $plans[trim((string) $group->exclusivo_carrera).'/'.trim((string) $group->exclusivo_reticula)] ?? null;
+                    $campusId = $this->campusOf($aulas[$code."\0".trim((string) $group->grupo)] ?? [], $roomCampus);
+                    $careerId = $plan === null ? null : ($careers[$plan['career']] ?? null);
+                    $capacity = $this->integer($group->capacidad_grupo);
+
+                    $modalityId = $plan !== null && $plan['modality'] === 'distancia' ? ($modalities[self::DISTANCE_MODALITY] ?? $default) : $default;
+                    $key = implode("\0", [$term, $modalityId, $subjectId, $code, trim((string) $group->grupo)]);
+
+                    if (isset($seen[$key])) {
+                        continue;
+                    }
+
+                    $seen[$key] = true;
+                    $report['groups']++;
+                    $report['per_term'][$term]++;
+                    $report['without_campus'] += $campusId === null ? 1 : 0;
+                    $report['without_career'] += trim((string) $group->exclusivo_carrera) !== '' && $careerId === null ? 1 : 0;
+                    $report['invalid_capacity'] += $capacity === null ? 1 : 0;
+
+                    $groupId = (string) Str::uuid7();
+
+                    foreach ($sessions[$code."\0".trim((string) $group->grupo)] ?? [] as $session) {
+                        $report['sessions']++;
+                        $sessionRows[] = ['id' => (string) Str::uuid7(), 'historical_group_id' => $groupId, ...$session, 'created_at' => $now, 'updated_at' => $now];
+                    }
+
+                    $rows[] = [
+                        'id' => $groupId,
+                        'term_code' => $term,
+                        'modality_id' => $modalityId,
+                        'campus_id' => $campusId,
+                        'subject_id' => $subjectId,
+                        'group_code' => trim((string) $group->grupo),
+                        'sii_subject_code' => $code,
+                        'capacity' => $capacity ?? 0,
+                        'enrolled' => $this->integer($group->alumnos_inscritos),
+                        'career_id' => $careerId,
+                        'parallel_of' => ($parallel = trim(preg_replace('/\s+/', ' ', (string) $group->paralelo_de) ?? '')) === '' ? null : $parallel,
+                        'source' => HistoricalGroupSource::Sii->value,
+                        'load_snapshot_id' => null,
+                        'recorded_at' => $now,
+                        'created_at' => $now,
+                        'updated_at' => $now,
+                    ];
                 }
 
-                $code = trim((string) $group->materia);
-                $subjectId = (isset($tecnm[$code]) ? ($subjects[$tecnm[$code]] ?? null) : null) ?? $subjects[$code] ?? null;
+                if (! $dryRun) {
+                    DB::table('historical_groups')->where('source', HistoricalGroupSource::Sii->value)->where('term_code', $term)->delete();
 
-                if ($subjectId === null) {
-                    $report['unknown_subjects'][$code] = ($report['unknown_subjects'][$code] ?? 0) + 1;
+                    foreach (array_chunk($rows, self::CHUNK) as $chunk) {
+                        DB::table('historical_groups')->insertOrIgnore($chunk);
+                    }
 
-                    continue;
+                    foreach (array_chunk($sessionRows, self::CHUNK) as $chunk) {
+                        DB::table('historical_group_sessions')->insert($chunk);
+                    }
                 }
 
-                $plan = $plans[trim((string) $group->exclusivo_carrera).'/'.trim((string) $group->exclusivo_reticula)] ?? null;
-                $campusId = $this->campusOf($aulas[$code."\0".trim((string) $group->grupo)] ?? [], $roomCampus);
-                $careerId = $plan === null ? null : ($careers[$plan['career']] ?? null);
-                $capacity = $this->integer($group->capacidad_grupo);
-
-                $modalityId = $plan !== null && $plan['modality'] === 'distancia' ? ($modalities[self::DISTANCE_MODALITY] ?? $default) : $default;
-                $key = implode("\0", [$term, $modalityId, $subjectId, $code, trim((string) $group->grupo)]);
-
-                if (isset($seen[$key])) {
-                    continue;
-                }
-
-                $seen[$key] = true;
-                $report['groups']++;
-                $report['per_term'][$term]++;
-                $report['without_campus'] += $campusId === null ? 1 : 0;
-                $report['without_career'] += trim((string) $group->exclusivo_carrera) !== '' && $careerId === null ? 1 : 0;
-                $report['invalid_capacity'] += $capacity === null ? 1 : 0;
-
-                $groupId = (string) Str::uuid7();
-
-                foreach ($sessions[$code."\0".trim((string) $group->grupo)] ?? [] as $session) {
-                    $report['sessions']++;
-                    $sessionRows[] = ['id' => (string) Str::uuid7(), 'historical_group_id' => $groupId, ...$session, 'created_at' => $now, 'updated_at' => $now];
-                }
-
-                $rows[] = [
-                    'id' => $groupId,
-                    'term_code' => $term,
-                    'modality_id' => $modalityId,
-                    'campus_id' => $campusId,
-                    'subject_id' => $subjectId,
-                    'group_code' => trim((string) $group->grupo),
-                    'sii_subject_code' => $code,
-                    'capacity' => $capacity ?? 0,
-                    'enrolled' => $this->integer($group->alumnos_inscritos),
-                    'career_id' => $careerId,
-                    'parallel_of' => ($parallel = trim(preg_replace('/\s+/', ' ', (string) $group->paralelo_de) ?? '')) === '' ? null : $parallel,
-                    'source' => HistoricalGroupSource::Sii->value,
-                    'load_snapshot_id' => null,
-                    'recorded_at' => $now,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
+                unset($rows, $sessionRows, $seen, $aulas, $sessions);
             }
+        };
+
+        // Periodo por periodo dentro de una sola transacción: en memoria solo hay las filas de un periodo a la vez.
+        if ($dryRun) {
+            $process();
+        } else {
+            DB::transaction(function () use ($process, $importable, &$report): void {
+                $process();
+                arsort($report['unknown_subjects']);
+
+                activity()
+                    ->event('group_history_imported')
+                    ->withProperties(['terms' => count($importable), 'groups' => $report['groups'], 'unknown_subjects' => count($report['unknown_subjects']), 'cancelled' => $report['cancelled'], 'without_campus' => $report['without_campus'], 'sessions' => $report['sessions']])
+                    ->log("Importó el historial de grupos del SII: {$report['groups']} grupos de ".count($importable).' periodos');
+            });
         }
 
         arsort($report['unknown_subjects']);
-
-        if ($dryRun) {
-            return $report;
-        }
-
-        DB::transaction(function () use ($importable, $rows, $sessionRows, $report): void {
-            DB::table('historical_groups')->where('source', HistoricalGroupSource::Sii->value)->whereIn('term_code', $importable)->delete();
-
-            foreach (array_chunk($rows, self::CHUNK) as $chunk) {
-                DB::table('historical_groups')->insertOrIgnore($chunk);
-            }
-
-            foreach (array_chunk($sessionRows, self::CHUNK) as $chunk) {
-                DB::table('historical_group_sessions')->insert($chunk);
-            }
-
-            activity()
-                ->event('group_history_imported')
-                ->withProperties(['terms' => count($importable), 'groups' => $report['groups'], 'unknown_subjects' => count($report['unknown_subjects']), 'cancelled' => $report['cancelled'], 'without_campus' => $report['without_campus'], 'sessions' => $report['sessions']])
-                ->log("Importó el historial de grupos del SII: {$report['groups']} grupos de ".count($importable).' periodos');
-        });
 
         return $report;
     }

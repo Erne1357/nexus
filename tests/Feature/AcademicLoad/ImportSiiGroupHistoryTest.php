@@ -263,3 +263,25 @@ it('borra las sesiones junto con su grupo', function () {
 
     expect(DB::table('historical_group_sessions')->count())->toBe(0);
 });
+
+it('importa dos periodos en una corrida y reimportar solo uno no toca el otro', function () {
+    historicalGroupsSiiGroup('20261', 'HGMAT1', 'A');
+    historicalGroupsSiiGroup('20253', 'HGMAT1', 'A');
+    historicalGroupsSiiSession();
+    historicalGroupsSiiSession(['periodo' => '20253', 'dia_semana' => '4']);
+
+    $this->artisan('academic-load:import-sii-groups')->assertSuccessful();
+
+    expect(HistoricalGroup::query()->count())->toBe(2)
+        ->and(DB::table('historical_group_sessions')->count())->toBe(2);
+
+    $untouched = HistoricalGroup::query()->where('term_code', '20253')->value('id');
+    DB::table('sii_archivo.horarios')->where('periodo', '20261')->update(['dia_semana' => '5']);
+
+    $this->artisan('academic-load:import-sii-groups', ['--periodos' => '20261'])->assertSuccessful();
+
+    expect(HistoricalGroup::query()->count())->toBe(2)
+        ->and(HistoricalGroup::query()->where('term_code', '20253')->value('id'))->toBe($untouched)
+        ->and(DB::table('historical_group_sessions')->count())->toBe(2)
+        ->and(HistoricalGroup::query()->where('term_code', '20261')->sole()->sessions()->value('day'))->toBe(4);
+});
