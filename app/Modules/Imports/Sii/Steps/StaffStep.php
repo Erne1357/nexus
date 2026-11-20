@@ -12,6 +12,7 @@ use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\SiiStepOutOfOrder;
 use App\Modules\Imports\Sii\TeacherRoster;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 /**
  * La plantilla del SII con su tipo de personal (R-V2-3, confirmado el 19 de noviembre de 2026; que el tipo salga de
@@ -60,7 +61,7 @@ final class StaffStep implements SiiStep
 
         $sync = app(SyncStaffMember::class);
         $count = ['created' => 0, 'changed' => 0, 'unchanged' => 0];
-        $untyped = $nameless = 0;
+        $untyped = $nameless = $failed = 0;
 
         foreach ($rfcs as $rfc) {
             $d = $staff[$rfc] ?? null;
@@ -80,7 +81,13 @@ final class StaffStep implements SiiStep
             $outcome = $existing === null ? 'created' : ($type !== null && $existing->staff_type !== $type ? 'changed' : 'unchanged');
 
             if (! $migration->dryRun()) {
-                $sync->handle($rfc, $name, $this->email($d), $type);
+                try {
+                    $sync->handle($rfc, $name, $this->email($d), $type);
+                } catch (ValidationException) {
+                    $failed++;
+
+                    continue;
+                }
             }
 
             $count[$outcome]++;
@@ -94,11 +101,11 @@ final class StaffStep implements SiiStep
             $export->fileName(SiiFile::Docentes2),
             $people,
             $people - $nameless,
-            $untyped + $nameless,
+            $untyped + $nameless + $failed,
             0,
             $created,
             $changed,
-            $this->incidents($untyped, $nameless),
+            $this->incidents($untyped, $nameless, $failed),
             [($migration->dryRun() ? 'Crearía' : 'Creó')." {$created} usuario(s) sin acceso, ".($migration->dryRun() ? 'pondría' : 'puso')." el tipo de personal a {$changed} que ya existían y {$unchanged} ya estaban al día."],
         );
     }
@@ -148,7 +155,7 @@ final class StaffStep implements SiiStep
     /**
      * @return list<array{level: 'error'|'warning'|'info', ref: string, message: string}>
      */
-    private function incidents(int $untyped, int $nameless): array
+    private function incidents(int $untyped, int $nameless, int $failed): array
     {
         $out = [];
 
@@ -158,6 +165,10 @@ final class StaffStep implements SiiStep
 
         if ($nameless > 0) {
             $out[] = ['level' => 'warning', 'ref' => 'nombre', 'message' => "{$nameless} persona(s) sin usuario en Nexus y sin nombre en el SII: no se dan de alta."];
+        }
+
+        if ($failed > 0) {
+            $out[] = ['level' => 'warning', 'ref' => 'alta', 'message' => "{$failed} persona(s) no se pudieron poner al día porque otra sesión las creó o chocó con ellas al mismo tiempo: corre el paso otra vez."];
         }
 
         return $out;
