@@ -420,6 +420,7 @@ describe('abrir la validación (CV9)', function () {
     });
 
     it('el drawer lista cada catálogo, con los abiertos ya marcados, y abrir agrega su columna', function () {
+        schoolServicesHead();
         CatalogReview::query()->whereNotIn('catalog', [Catalog::Teachers->value])->delete();
 
         progressPage($this->admin)
@@ -495,6 +496,7 @@ describe('etiquetas y lista (1.21)', function () {
 
 describe('abrir la validación vuelve a pintar la página (1.21)', function () {
     it('después de abrir, la página se recarga a sí misma con el aviso', function () {
+        schoolServicesHead();
         CatalogReview::query()->whereNot('catalog', Catalog::Teachers->value)->delete();
 
         $page = progressPage($this->admin)->set('toOpen', [Catalog::Subjects->value])->call('openValidation');

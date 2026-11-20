@@ -63,7 +63,8 @@ enum CatalogValidationPermission: string implements Permission
      * AZ-02, AZ-S16: el avance, a lo académico (los departamentos académicos y la Subdirección Académica); las acciones
      * sobre una revisión, también a Servicios Escolares, que valida las materias, los planes y las carreras de todo el
      * Tec (CV15, confirmada el 20 de noviembre de 2026). A su jefe solo le alcanzan las revisiones de Servicios
-     * Escolares: las de docentes y salones se piden sobre cada departamento (CatalogReviewQuery::targetOf).
+     * Escolares: las de docentes y salones se piden sobre cada departamento, y en las de Servicios Escolares la unidad se
+     * compara exacta, no por una unidad que la contenga (CatalogReviewQuery::allowsOn).
      */
     public function appliesTo(): ?UnitApplicability
     {

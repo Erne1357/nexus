@@ -28,7 +28,6 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\CampusQuery;
-use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Actions\CreateRoom;
 use App\Modules\Facilities\Actions\UpdateRoom;
 use App\Modules\Facilities\Enums\RoomType;
@@ -138,7 +137,7 @@ class CatalogValidationDemoSeeder extends Seeder
         private readonly FlagRecord $flag,
         private readonly ResolveFlag $resolve,
         private readonly RemindPendingReviews $remind,
-        private readonly RecipientsQuery $recipients,
+        private readonly CatalogReviewQuery $reviews,
     ) {}
 
     /**
@@ -510,7 +509,7 @@ class CatalogValidationDemoSeeder extends Seeder
 
     private function findHead(CatalogReview $review): User
     {
-        return $this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($review->owner_id))[0]['user']
+        return $this->reviews->holdersOf($review->owner_id, CatalogValidationPermission::ReviewValidate)[0]['user']
             ?? User::query()->where('username', 'admin')->firstOrFail();
     }
 }

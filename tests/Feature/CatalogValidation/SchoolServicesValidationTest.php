@@ -22,8 +22,11 @@ use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\User;
@@ -122,13 +125,33 @@ describe('CV15: abrir', function () {
             ->and($contents->records(schoolServicesReview(Catalog::Careers)))->toHaveCount(1);
     });
 
-    it('CV15: sin jefe de Servicios Escolares, el drawer «Abrir validación» lo advierte en sus catálogos', function () {
+    it('CV15: sin jefe de Servicios Escolares no se abren materias, planes ni carreras; docentes y salones sí (supuesto por confirmar)', function () {
         vacate(Role::JefeDepartamento, schoolServicesUnit()->id);
 
         Livewire::actingAs($this->admin)->test('catalog-validation::pages.progress')
             ->call('startOpening')
-            ->assertSeeHtml('data-testid="school-services-without-head-subjects"')
-            ->assertSee('Servicios Escolares no tiene jefe vigente');
+            ->assertSeeHtml('data-testid="open-blocked-subjects"')
+            ->assertSee('Nombra al jefe de Servicios Escolares antes de abrir materias, planes y carreras')
+            ->assertDontSeeHtml('data-testid="open-blocked-teachers"')
+            ->set('toOpen', ['subjects'])
+            ->call('openValidation')
+            ->assertSet('showOpen', false);
+
+        expect(CatalogReview::count())->toBe(0)
+            ->and(schoolServicesOpen())->toBe(4)
+            ->and(CatalogReview::query()->whereNull('department_id')->exists())->toBeFalse();
+    });
+
+    it('HC-14: sin jefe de Servicios Escolares sus catálogos no se abren y no detienen la carga; abiertos antes, sí', function () {
+        vacate(Role::JefeDepartamento, schoolServicesUnit()->id);
+        schoolServicesOpen();
+
+        expect(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis))->toBe([Catalog::Teachers, Catalog::Rooms]);
+
+        CatalogReview::factory()->general(Catalog::Careers)->create(['term_id' => $this->term->id]);
+
+        expect(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::Careers])
+            ->and(app(ValidationProgressQuery::class)->board($this->term)['rows'][0]['remind_blocked_reason'])->toBe('No tiene jefe vigente.');
     });
 });
 
@@ -173,6 +196,54 @@ describe('CV15: quién ve y quién actúa', function () {
             ->and($context->allowsAny(CatalogValidationPermission::ProgressView))->toBeFalse()
             ->and($context->allowsAny(CatalogValidationPermission::ReviewOpen))->toBeFalse()
             ->and(CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewView, $this->sis->id))->toBeFalse();
+    });
+
+    it('CV-S1: la Subdirección Académica no valida ni corrige lo de Servicios Escolares aunque el panel le dé esos permisos (R-V2-5)', function () {
+        PermissionSet::factory()->withPermissions([CatalogValidationPermission::ReviewValidate, CatalogValidationPermission::ReviewCorrect])->assignedTo(Role::Subdireccion)->create();
+        app()->forgetScopedInstances();
+        $review = schoolServicesReview(Catalog::Subjects);
+
+        expect($this->subdireccion->can('validate', schoolServicesReview(Catalog::Teachers, $this->sis)))->toBeTrue()
+            ->and($this->subdireccion->can('validate', $review))->toBeFalse()
+            ->and($this->subdireccion->can('correct', $review))->toBeFalse()
+            ->and($this->subdireccion->can('view', $review))->toBeTrue()
+            ->and(collect(app(CatalogReviewQuery::class)->holdersOf(ReviewOwner::SCHOOL_SERVICES, CatalogValidationPermission::ReviewValidate))->pluck('user.id')->all())->toBe([$this->escolares->id]);
+    });
+
+    it('CV15: el jefe de una unidad que contiene a Servicios Escolares no la ve ni la valida, ni recibe sus avisos', function () {
+        $unit = OrgUnit::factory()->create(['code' => 'VINCULACION', 'name' => 'Departamento de Gestión Tecnológica y Vinculación', 'kind' => OrgUnitKind::Departamento, 'parent_id' => schoolServicesUnit()->parent_id]);
+        schoolServicesUnit()->update(['parent_id' => $unit->id]);
+        $boss = User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $unit->id])->create();
+        app()->forgetScopedInstances();
+        $review = schoolServicesReview(Catalog::Subjects);
+
+        foreach (['view', 'correct', 'validate', 'reopen', 'flag', 'resolveFlag', 'mark'] as $ability) {
+            expect($boss->can($ability, $review))->toBeFalse();
+        }
+
+        expect($this->escolares->can('validate', $review))->toBeTrue()
+            ->and(collect(app(CatalogReviewQuery::class)->holdersOf(ReviewOwner::SCHOOL_SERVICES, CatalogValidationPermission::ReviewValidate))->pluck('user.id')->all())->toBe([$this->escolares->id]);
+    });
+
+    it('CV15: el jefe de una unidad que no es académica ni Servicios Escolares no la ve ni la valida', function () {
+        $finance = OrgUnit::factory()->create(['code' => 'RECURSOS-FINANCIEROS', 'name' => 'Departamento de Recursos Financieros', 'kind' => OrgUnitKind::Departamento, 'parent_id' => schoolServicesUnit()->parent_id]);
+        $boss = User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $finance->id])->create();
+        $review = schoolServicesReview(Catalog::Subjects);
+
+        expect($boss->can('view', $review))->toBeFalse()
+            ->and($boss->can('validate', $review))->toBeFalse();
+        schoolServicesPage($boss, ['department' => ReviewOwner::SCHOOL_SERVICES])->assertForbidden();
+    });
+
+    it('AZ-03: un directivo de Planeación ve lo de Servicios Escolares pero no lo valida ni corrige, aunque el panel le diera esos permisos', function () {
+        $directivo = User::factory()->withRole(Role::Directivo, ['org_unit_id' => schoolServicesUnit()->parent_id])->create();
+        PermissionSet::factory()->withPermissions([CatalogValidationPermission::ReviewValidate, CatalogValidationPermission::ReviewCorrect])->assignedTo(Role::Directivo)->create();
+        app()->forgetScopedInstances();
+        $review = schoolServicesReview(Catalog::Subjects);
+
+        expect($directivo->can('view', $review))->toBeTrue()
+            ->and($directivo->can('validate', $review))->toBeFalse()
+            ->and($directivo->can('correct', $review))->toBeFalse();
     });
 
     it('CV15: el menú le muestra «Validar catálogos» al jefe de Servicios Escolares', function () {
@@ -328,6 +399,27 @@ describe('HC-14 con la revisión de Servicios Escolares', function () {
         expect($reviews->pendingOf($this->term, ReviewOwner::ofDepartment($this->sis)))->toBe([])
             ->and($reviews->pendingOf($this->term, ReviewOwner::ofDepartment($this->ele)))->toBe([Catalog::Teachers, Catalog::Rooms])
             ->and($reviews->pendingOf($this->term, ReviewOwner::schoolServices()))->toBe([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
+    });
+});
+
+describe('CV11: un aviso guardado en la cola antes de CV15', function () {
+    it('el que trae el departamento en lugar del dueño sale igual', function () {
+        $legacy = (new ReflectionClass(CatalogReviewsPending::class))->newInstanceWithoutConstructor();
+        $key = fn (string $property): string => "\0".CatalogReviewsPending::class."\0{$property}";
+
+        $legacy->__unserialize([
+            $key('term') => $this->term,
+            $key('department') => $this->sis,
+            $key('pending') => [Catalog::Teachers],
+            $key('deadline') => null,
+            $key('reminder') => false,
+            $key('progress') => [],
+        ]);
+
+        expect($legacy->message($this->jefe)->body)->toBe('Ene-Jun 2027 · Sistemas y Computación: docentes')
+            ->and($legacy->message($this->jefe)->parameters)->toBe(['department' => $this->sis->id])
+            ->and(unserialize(serialize(new CatalogReviewsPending($this->term, ReviewOwner::schoolServices(), [Catalog::Subjects])))->message($this->escolares)->body)
+            ->toBe('Ene-Jun 2027 · Servicios Escolares: materias');
     });
 });
 

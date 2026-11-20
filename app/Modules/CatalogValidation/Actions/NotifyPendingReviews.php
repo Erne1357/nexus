@@ -13,7 +13,6 @@ use App\Modules\CatalogValidation\Queries\ValidationWindowQuery;
 use App\Modules\Core\Actions\NotifyHolders;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\RecipientsQuery;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -34,7 +33,6 @@ final class NotifyPendingReviews
         private readonly CatalogReviewQuery $reviews,
         private readonly CatalogContentsQuery $contents,
         private readonly ValidationWindowQuery $window,
-        private readonly RecipientsQuery $recipients,
         private readonly NotifyHolders $notifyHolders,
     ) {}
 
@@ -68,7 +66,7 @@ final class NotifyPendingReviews
                 continue;
             }
 
-            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($owner->id));
+            $heads = $this->reviews->holdersOf($owner->id, CatalogValidationPermission::ReviewValidate);
             $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $owner, $pending, $deadline)));
         }
 
@@ -94,7 +92,7 @@ final class NotifyPendingReviews
                 continue;
             }
 
-            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($owner->id));
+            $heads = $this->reviews->holdersOf($owner->id, CatalogValidationPermission::ReviewValidate);
 
             if ($heads === []) {
                 continue;

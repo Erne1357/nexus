@@ -12,23 +12,33 @@ use Illuminate\Support\Facades\DB;
  * - `department_id` acepta nulo, y el CHECK `catalog_reviews_owner_check` exige que lo sea justo en esos tres
  *   catálogos. La unicidad de siempre (periodo, campus, departamento y catálogo, con los nulos como un valor más) deja
  *   una sola de Servicios Escolares por catálogo y periodo.
- * - Las que ya había, una por departamento, se funden por periodo y catálogo con el patrón de CV-S11 (supuesto por
- *   confirmar): gana el estado menos avanzado (pendiente, en revisión, validada; a igual estado, la de id menor), que
- *   conserva quién y cuándo la validó solo si queda validada; las observaciones y las marcas de las demás pasan a ella
- *   (una marca del mismo registro no se repite); su foto es la unión de las fotos; sus notas se juntan, una por
- *   renglón; las demás se borran (una revisión no es catálogo) y la bitácora de la que queda registra cada fundida
- *   (evento `merged`: id, departamento, estado, quién y cuándo la validó).
+ * - Las que ya había, una por departamento, se funden por periodo y catálogo con el patrón de CV-S11 (supuestos por
+ *   confirmar). Cuál estado queda depende del periodo:
+ *   - en un periodo que ya terminó, gana el más avanzado (validada, en revisión, pendiente), para que la primera
+ *     validación de Servicios Escolares cuente sus altas y bajas contra esa foto (CV3);
+ *   - en un periodo con alguna carga fuera de borrador, si en algún departamento estaba validada, queda validada, para
+ *     no volver a detener esas cargas (HC-14); si no, gana la menos avanzada;
+ *   - en los demás, gana la menos avanzada (pendiente, en revisión, validada), así que nada queda validado si no lo
+ *     estaba en todos los departamentos.
+ *   A igual estado, la de id menor. La que queda conserva quién y cuándo la validó solo si queda validada; las
+ *   observaciones y las marcas de las demás pasan a ella (una marca del mismo registro no se repite); su foto es la
+ *   unión de las fotos; sus notas se juntan, una por renglón; las demás se borran (una revisión no es catálogo) y la
+ *   bitácora de la que queda registra cada fundida (evento `merged`: id, departamento, estado, quién y cuándo la validó)
+ *   y la regla que decidió (`rule`: `ended`, `loads` o `least`).
+ * - Las observaciones que pasan conservan a quien las puso (`flagged_by`, el jefe académico): al resolverlas, su aviso
+ *   (CV10) ya no le llega, porque ya no observa esas revisiones (aceptado).
  *
  * mergeIntoSchoolServices() es idempotente: un periodo y catálogo con una sola revisión sin departamento no cambia.
- * down() no tiene reversa útil: regresa el `not null` solo si ninguna revisión quedó sin departamento, y si alguna
- * quedó, lanza una excepción, porque no hay de dónde sacar el departamento.
+ * down() no tiene reversa con datos: regresa el `not null` solo si ninguna revisión quedó sin departamento, y si alguna
+ * quedó, lanza una excepción, porque no hay de dónde sacar el departamento (aceptado: antes de migrar se respalda la
+ * base).
  */
 return new class extends Migration
 {
     /** Los catálogos que valida Servicios Escolares (Catalog::ownedBy(CatalogOwner::SchoolServices)). */
     private const array CATALOGS = ['subjects', 'study_plans', 'careers'];
 
-    /** El menos avanzado primero: gana la fusión. */
+    /** Qué tan avanzado está cada estado. */
     private const array RANK = ['pending' => 0, 'in_review' => 1, 'validated' => 2];
 
     public function up(): void
@@ -74,8 +84,14 @@ return new class extends Migration
             ->where('catalog', $catalog)
             ->where('term_id', $termId)
             ->orderBy('id')
-            ->get()
-            ->sortBy(fn (object $review): int => self::RANK[$review->status] ?? 3)
+            ->get();
+        $rule = $this->ruleFor($termId);
+        $anyValidated = $reviews->contains(fn (object $review): bool => $review->status === 'validated');
+        $reviews = $reviews
+            ->sortBy(fn (object $review): int => match (true) {
+                $rule === 'ended', $rule === 'loads' && $anyValidated => -(self::RANK[$review->status] ?? -1),
+                default => self::RANK[$review->status] ?? 3,
+            })
             ->values();
 
         $kept = $reviews->first();
@@ -122,9 +138,22 @@ return new class extends Migration
             activity()
                 ->performedOn(CatalogReview::query()->findOrFail($kept->id))
                 ->event('merged')
-                ->withProperties(['kept' => $describe($kept), 'absorbed' => $absorbed->map($describe)->all()])
+                ->withProperties(['kept' => $describe($kept), 'absorbed' => $absorbed->map($describe)->all(), 'rule' => $rule])
                 ->log('Fundió las revisiones de cada departamento en una de Servicios Escolares para todo el Tec (CV15)');
         }
+    }
+
+    /**
+     * Qué regla funde las revisiones del periodo: `ended` si ya terminó, `loads` si alguna de sus cargas salió de
+     * borrador, `least` si no.
+     */
+    private function ruleFor(string $termId): string
+    {
+        return match (true) {
+            DB::table('terms')->where('id', $termId)->whereDate('ends_on', '<', today()->toDateString())->exists() => 'ended',
+            DB::table('academic_loads')->where('term_id', $termId)->where('status', '!=', 'draft')->exists() => 'loads',
+            default => 'least',
+        };
     }
 
     /**

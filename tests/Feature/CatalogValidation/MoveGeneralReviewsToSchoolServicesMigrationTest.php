@@ -2,6 +2,8 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\AcademicLoad\Enums\LoadStatus;
+use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
@@ -17,8 +19,10 @@ use Spatie\Activitylog\Models\Activity;
 /*
 | CV15 (confirmada el 20 de noviembre de 2026): materias, planes y carreras los valida Servicios Escolares, una sola
 | revisión por catálogo y periodo para todo el Tec, sin departamento. La migración funde las que ya había, una por
-| departamento, con el patrón de CV-S11 (supuesto por confirmar): gana el estado menos avanzado, las observaciones y las
-| marcas pasan a la que queda, la foto es la unión, las demás se borran y la bitácora de la que queda dice qué se fundió.
+| departamento, con el patrón de CV-S11 (supuestos por confirmar): en un periodo terminado gana el estado más avanzado;
+| en uno con cargas fuera de borrador, validada si alguna lo estaba; en los demás, el menos avanzado. Las observaciones y
+| las marcas pasan a la que queda, la foto es la unión, las demás se borran y la bitácora de la que queda dice qué se
+| fundió.
 | Después la base exige que esas revisiones no tengan departamento y que las de docentes y salones sí. Se prueba sobre
 | la forma de antes: `down()`, filas con `DB::table()` y `up()`.
 */
@@ -27,7 +31,7 @@ beforeEach(function () {
     $this->migration = require base_path('app/Modules/CatalogValidation/Database/Migrations/2026_11_20_100001_move_general_catalog_reviews_to_school_services.php');
     $this->migration->down();
 
-    $this->term = Term::factory()->create();
+    $this->term = Term::factory()->create(['starts_on' => today()->subMonth()->toDateString(), 'ends_on' => today()->addMonths(4)->toDateString()]);
     $this->sc = Department::factory()->create(['code' => 'SC']);
     $this->ii = Department::factory()->create(['code' => 'II']);
     $this->jefe = User::factory()->create();
@@ -118,6 +122,54 @@ it('CV15: deja en la bitácora de la que queda cada revisión fundida con su dep
         ->and($entry->properties['absorbed'])->toHaveCount(1)
         ->and($entry->properties['absorbed'][0])->toMatchArray(['id' => $validated, 'department' => 'II', 'status' => 'validated', 'validated_by' => $this->jefe->id])
         ->and($entry->properties['absorbed'][0]['validated_at'])->not->toBeNull();
+});
+
+it('CV15: en un periodo terminado gana la más avanzada, para que cuente como la validación anterior (CV3)', function () {
+    $this->term->update(['starts_on' => today()->subMonths(6)->toDateString(), 'ends_on' => today()->subDay()->toDateString()]);
+    schoolServicesMergeReview($this->sc, Catalog::Subjects, ReviewStatus::Pending);
+    $validated = schoolServicesMergeReview($this->ii, Catalog::Subjects, ReviewStatus::Validated, ['snapshot' => json_encode([['id' => fakeKey(3), 'code' => 'AEF-1', 'name' => null]])]);
+    $inReview = schoolServicesMergeReview($this->sc, Catalog::Careers, ReviewStatus::InReview);
+    schoolServicesMergeReview($this->ii, Catalog::Careers, ReviewStatus::Pending);
+
+    $this->migration->up();
+
+    $subjects = CatalogReview::query()->where('catalog', Catalog::Subjects)->sole();
+    expect($subjects->id)->toBe($validated)
+        ->and($subjects->status)->toBe(ReviewStatus::Validated)
+        ->and($subjects->validated_by)->toBe($this->jefe->id)
+        ->and($subjects->snapshot)->toBe([['id' => fakeKey(3), 'code' => 'AEF-1', 'name' => null]])
+        ->and(CatalogReview::query()->where('catalog', Catalog::Careers)->sole()->id)->toBe($inReview)
+        ->and(Activity::query()->where('event', 'merged')->pluck('properties')->pluck('rule')->unique()->all())->toBe(['ended']);
+});
+
+it('CV15: en un periodo con una carga fuera de borrador, si algún departamento la validó, queda validada; si no, la menos avanzada', function () {
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Proposed]);
+    $validated = schoolServicesMergeReview($this->sc, Catalog::Subjects, ReviewStatus::Validated);
+    schoolServicesMergeReview($this->ii, Catalog::Subjects, ReviewStatus::Pending);
+    schoolServicesMergeReview($this->sc, Catalog::Careers, ReviewStatus::InReview);
+    $pending = schoolServicesMergeReview($this->ii, Catalog::Careers, ReviewStatus::Pending);
+
+    $this->migration->up();
+
+    expect(CatalogReview::query()->where('catalog', Catalog::Subjects)->sole())
+        ->id->toBe($validated)
+        ->status->toBe(ReviewStatus::Validated)
+        ->and(CatalogReview::query()->where('catalog', Catalog::Careers)->sole()->id)->toBe($pending)
+        ->and(Activity::query()->where('event', 'merged')->pluck('properties')->pluck('rule')->unique()->all())->toBe(['loads']);
+});
+
+it('CV15: en un periodo en curso sin cargas fuera de borrador gana la menos avanzada', function () {
+    AcademicLoad::factory()->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id, 'status' => LoadStatus::Draft]);
+    schoolServicesMergeReview($this->sc, Catalog::Subjects, ReviewStatus::Validated);
+    $pending = schoolServicesMergeReview($this->ii, Catalog::Subjects, ReviewStatus::Pending);
+
+    $this->migration->up();
+
+    expect(CatalogReview::query()->sole())
+        ->id->toBe($pending)
+        ->status->toBe(ReviewStatus::Pending)
+        ->validated_by->toBeNull()
+        ->and(Activity::query()->where('event', 'merged')->sole()->properties['rule'])->toBe('least');
 });
 
 it('CV15: una sola de un departamento solo pierde su departamento y no deja bitácora de fusión', function () {

@@ -19,7 +19,7 @@ use App\Modules\Core\Policies\Concerns\AuthorizesActor;
  *   TeacherPolicy::updateInstitutionalEmail (AC-06).
  * - Materias, planes y carreras: el jefe del Departamento de Servicios Escolares, una sola revisión para todo el Tec
  *   (CV15, confirmada el 20 de noviembre de 2026); el jefe de un departamento académico ya no las ve ni las corrige.
- *   CatalogReviewQuery::targetOf() dice sobre qué unidades se pregunta.
+ *   CatalogReviewQuery::allowsOn() dice sobre qué unidades se pregunta (la de Servicios Escolares, exacta).
  * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (CV-S1,
  *   supuesto por confirmar).
  * - Marcar y desmarcar registros como revisados (CV7): quien valida, con el mismo permiso, porque sin todos revisados

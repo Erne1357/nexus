@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Jobs\RemindPendingReviewsJob;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
-use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\CatalogValidation\Queries\ValidationWindowQuery;
 use App\Modules\Core\Authorization\Actor;
@@ -30,7 +29,8 @@ use Mary\Traits\Toast;
  * «matriz» (DESIGN.md): el avance global del periodo activo, la ventana de la etapa de validación de catálogos con su
  * fecha límite (la ventana general, CV11) y una fila por departamento activo con el estado de cada catálogo, de las
  * observaciones y de su carga, y otra de Servicios Escolares con las materias, los planes y las carreras de todo el Tec
- * (CV15); al abrir esos catálogos, el drawer advierte si Servicios Escolares no tiene jefe vigente. La validación es de cada departamento para todo el Tec: la pantalla no filtra por campus
+ * (CV15); sin jefe de Servicios Escolares vigente, el drawer «Abrir validación» no deja abrir esos catálogos y dice
+ * por qué. La validación es de cada departamento para todo el Tec: la pantalla no filtra por campus
  * (14 de noviembre de 2026). Lo ven y recuerdan Subdirección y el admin (CatalogReviewPolicy::viewProgress y remind,
  * supuesto por confirmar); cada método público vuelve a autorizar, porque la petición puede llegar con una pantalla
  * que abrió otra sesión. «Observaciones abiertas» junta las de todos los departamentos (CV10); resolver una, con la nota
@@ -79,7 +79,7 @@ new #[Title('Avance de validación')] class extends Component
         $canOpen = Gate::allows('open', CatalogReview::class);
 
         if ($term === null || $open->isEmpty()) {
-            return ['term' => $term, 'open' => $open, 'board' => null, 'window' => null, 'detail' => null, 'canOpen' => $canOpen, 'options' => [], 'allFlags' => null, 'roomsWithoutOwner' => 0, 'schoolServicesWithoutHead' => false];
+            return ['term' => $term, 'open' => $open, 'board' => null, 'window' => null, 'detail' => null, 'canOpen' => $canOpen, 'options' => [], 'allFlags' => null, 'roomsWithoutOwner' => 0];
         }
 
         $board = $progress->board($term, $this->search, $this->status);
@@ -94,7 +94,6 @@ new #[Title('Avance de validación')] class extends Component
             'options' => $reviews->openingOptions($term),
             'allFlags' => $this->showFlags ? $progress->allOpenFlags($term) : null,
             'roomsWithoutOwner' => $canOpen && $this->showOpen ? $rooms->withoutOwnerCount() : 0,
-            'schoolServicesWithoutHead' => $canOpen && $this->showOpen && ! $progress->hasHead(ReviewOwner::SCHOOL_SERVICES),
         ];
     }
 
@@ -139,7 +138,7 @@ new #[Title('Avance de validación')] class extends Component
         $chosen = collect($reviews->openingOptions($term))->filter(fn (array $option): bool => in_array($option['catalog'], $catalogs, true));
         $this->info('No se abrió nada', match (true) {
             $chosen->every(fn (array $option): bool => $option['open']) => 'Esos catálogos ya estaban abiertos.',
-            $chosen->contains(fn (array $option): bool => $option['blocked'] !== null) => 'Ninguna modalidad abierta en este periodo usa salones.',
+            $chosen->contains(fn (array $option): bool => $option['blocked'] !== null) => $chosen->first(fn (array $option): bool => $option['blocked'] !== null)['blocked'],
             default => 'No hay departamentos activos a los que abrirles la validación.',
         });
     }

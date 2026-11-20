@@ -58,6 +58,9 @@ function seedCatalogScenario(array $campuses = ['C1', 'C2'], bool $previous = tr
         }
     }
 
+    // Sin jefe de Servicios Escolares no se abren materias, planes ni carreras (CV15).
+    schoolServicesHead(['name' => 'Jefe SE']);
+
     $codes = $previous ? ['20263', '20271'] : ['20271'];
 
     foreach ($codes as $code) {
@@ -268,7 +271,7 @@ it('no desactiva a los jefes ni a los jefes de proyecto docente', function () {
     runCatalogDemoSeeder('massive');
 
     expect(Teacher::query()->whereIn('id', $kept)->where('is_active', true)->count())->toBe(count($kept))
-        ->and(RoleAssignment::query()->whereIn('role', Role::HEADSHIPS)->whereNull('valid_to')->count())->toBe(count($kept))
+        ->and(RoleAssignment::query()->whereIn('role', Role::HEADSHIPS)->whereNull('valid_to')->count())->toBe(count($kept) + 1)
         ->and(User::query()->whereIn('id', Teacher::query()->whereIn('id', $kept)->select('user_id'))->where('is_active', true)->count())->toBe(count($kept));
 });
 
@@ -303,7 +306,6 @@ it('en modo previous valida el periodo anterior y simula los cambios sin dar de 
 
 it('en modo validated empieza y valida cada revisión del periodo actual con el jefe de su departamento, sin observaciones (demo por puntos, punto 3)', function () {
     seedCatalogScenario(previous: false);
-    schoolServicesHead(['name' => 'Jefe SE']);
 
     runCatalogDemoSeeder('demo', 'validated');
 

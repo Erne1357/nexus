@@ -19,7 +19,6 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\CampusQuery;
 use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\ModalityQuery;
-use App\Modules\Core\Queries\RecipientsQuery;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
 use Carbon\CarbonImmutable;
@@ -43,7 +42,6 @@ use Spatie\Activitylog\Models\Activity;
 final class ValidationProgressQuery
 {
     public function __construct(
-        private readonly RecipientsQuery $recipients,
         private readonly CatalogContentsQuery $contents,
         private readonly CatalogReviewQuery $catalogReviews,
         private readonly CampusQuery $campuses,
@@ -139,7 +137,7 @@ final class ValidationProgressQuery
             ->keyBy('owner');
 
         $heads = $owners->mapWithKeys(fn (ReviewOwner $owner): array => [
-            $owner->id => collect($this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($owner->id)))->pluck('user'),
+            $owner->id => collect($this->catalogReviews->holdersOf($owner->id, CatalogValidationPermission::ReviewValidate))->pluck('user'),
         ]);
 
         $modalities = $this->openModalities($term);
@@ -218,16 +216,6 @@ final class ValidationProgressQuery
         }
 
         return ['columns' => $columns, 'rows' => $rows, 'totals' => $totals, 'global' => $global, 'flags' => $summary, 'remindable' => $remindableHeads];
-    }
-
-    /**
-     * Si alguien vigente valida las revisiones de `$ownerId` (un departamento o ReviewOwner::SCHOOL_SERVICES): el mismo
-     * jefe que recibe los avisos. Sin él, nadie valida lo de ese dueño (el drawer «Abrir validación» lo advierte para
-     * Servicios Escolares, CV15).
-     */
-    public function hasHead(string $ownerId): bool
-    {
-        return $this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($ownerId)) !== [];
     }
 
     /**

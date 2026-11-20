@@ -71,11 +71,11 @@ it('CV9: el admin ve que la validación no está abierta, abre dos catálogos en
         ->click('@open-validation-empty')
         ->assertSee('Los jefes de cada departamento revisan')
         ->check('input[value="teachers"]')
-        ->check('input[value="subjects"]')
+        ->check('input[value="rooms"]')
         ->click('@open-submit')
         ->waitForText('Validación abierta')
         ->assertPresent('@column-teachers')
-        ->assertPresent('@column-subjects')
+        ->assertPresent('@column-rooms')
         ->assertMissing('@column-careers')
         // La página se volvió a pintar: la franja de pantalla oculta ya no dice que no hay validación abierta.
         ->assertDontSee('No hay validación abierta')

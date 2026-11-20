@@ -216,12 +216,7 @@
                             @else
                                 <x-checkbox :label="$option['catalog']->label()" value="{{ $option['catalog']->value }}" wire:model="toOpen" :disabled="$option['blocked'] !== null" omit-error />
                                 @if ($option['blocked'])
-                                    <p class="ms-8 text-sm text-neutral">{{ $option['blocked'] }}</p>
-                                @elseif ($option['catalog']->owner() === \App\Modules\CatalogValidation\Enums\CatalogOwner::SchoolServices && $schoolServicesWithoutHead)
-                                    <p class="ms-8 flex items-start gap-1.5 text-sm" data-testid="school-services-without-head-{{ $option['catalog']->value }}">
-                                        <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 flex-none text-warning" aria-hidden="true" />
-                                        <span>Servicios Escolares no tiene jefe vigente: nadie lo validará. Nómbralo en <a href="{{ route('core.org-chart') }}" wire:navigate class="link underline-offset-4">Organigrama</a>.</span>
-                                    </p>
+                                    <p class="ms-8 text-sm text-neutral" data-testid="open-blocked-{{ $option['catalog']->value }}">{{ $option['blocked'] }}</p>
                                 @elseif ($option['catalog'] === \App\Modules\CatalogValidation\Enums\Catalog::Rooms && $roomsWithoutOwner > 0)
                                     <p class="ms-8 flex items-start gap-1.5 text-sm" data-testid="rooms-without-owner">
                                         <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 flex-none text-warning" aria-hidden="true" />

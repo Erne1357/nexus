@@ -21,9 +21,7 @@ use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
-use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
-use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -188,11 +186,7 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
                 ? $allIn('20263', ReviewStatus::Validated)
                 : true),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Toda revisión de Ene-Jun 2027 validada (HC-14)', fn (DemoContext $demo): true|string => $allIn($demo->termCode, ReviewStatus::Validated)),
-            // Las de Servicios Escolares (CV15) solo cuentan si tiene jefe: sin él, el seeder las valida con el admin.
-            new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)
-                ->where('validated_by', $demo->admin()->getKey())
-                ->when(! app(ValidationProgressQuery::class)->hasHead(ReviewOwner::SCHOOL_SERVICES), fn ($query) => $query->whereNotNull('department_id'))
-                ->count()) === 0
+            new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)->where('validated_by', $demo->admin()->getKey())->count()) === 0
                 ? true
                 : "{$byAdmin} revisiones las validó el admin: a su departamento le falta jefe."),
         ];

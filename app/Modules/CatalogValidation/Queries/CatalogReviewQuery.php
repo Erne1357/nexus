@@ -4,6 +4,7 @@ namespace App\Modules\CatalogValidation\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
@@ -11,9 +12,13 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\CampusQuery;
+use App\Modules\Core\Queries\RecipientsQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -23,9 +28,16 @@ use Illuminate\Support\Str;
  */
 final class CatalogReviewQuery
 {
+    /** Lo que la Subdirección Académica, el admin y quien lee en todo el Tec pueden en las de Servicios Escolares (CV-S1). */
+    private const array SCHOOL_SERVICES_OVERSIGHT = [CatalogValidationPermission::ReviewView, CatalogValidationPermission::ReviewResolveFlag];
+
+    /** Por qué no se abren materias, planes ni carreras sin jefe de Servicios Escolares (CV15, supuesto por confirmar). */
+    public const string SCHOOL_SERVICES_HEADLESS = 'Nombra al jefe de Servicios Escolares antes de abrir materias, planes y carreras: sin él nadie los valida y ninguna carga saldría de borrador.';
+
     public function __construct(
         private readonly CatalogContentsQuery $contents,
         private readonly CampusQuery $campuses,
+        private readonly RecipientsQuery $recipients,
     ) {}
 
     /**
@@ -125,7 +137,8 @@ final class CatalogReviewQuery
 
     /**
      * Los catálogos del periodo para el drawer «Abrir validación»: cada uno con si ya está abierto y, si no se puede
-     * abrir, el motivo (los salones sin un campus abierto que use salones).
+     * abrir, el motivo: los salones sin un campus abierto que use salones; materias, planes y carreras sin jefe de
+     * Servicios Escolares vigente (CV15, supuesto por confirmar).
      *
      * @return list<array{catalog: Catalog, open: bool, blocked: ?string}>
      */
@@ -133,13 +146,17 @@ final class CatalogReviewQuery
     {
         $opened = $this->openedCatalogs($term);
         $roomsApply = $this->roomsApply($term);
+        $headless = ! $this->hasSchoolServicesHead();
 
         return array_map(fn (Catalog $catalog): array => [
             'catalog' => $catalog,
             'open' => in_array($catalog, $opened, true),
-            'blocked' => $catalog === Catalog::Rooms && ! $roomsApply && ! in_array($catalog, $opened, true)
-                ? 'Ninguna modalidad abierta en este periodo usa salones.'
-                : null,
+            'blocked' => match (true) {
+                in_array($catalog, $opened, true) => null,
+                $catalog === Catalog::Rooms && ! $roomsApply => 'Ninguna modalidad abierta en este periodo usa salones.',
+                $catalog->owner() === CatalogOwner::SchoolServices && $headless => self::SCHOOL_SERVICES_HEADLESS,
+                default => null,
+            },
         ], Catalog::cases());
     }
 
@@ -205,30 +222,95 @@ final class CatalogReviewQuery
     }
 
     /**
-     * Sobre qué se pide un permiso de las revisiones de `$ownerId` (un id de departamento o ReviewOwner::SCHOOL_SERVICES).
-     * Las revisiones no son de un campus ni de una modalidad (AZ-S17), así que solo cuenta la unidad: la del departamento
-     * o, en las de Servicios Escolares (CV15), la unidad de Servicios Escolares y la Subdirección Académica, que las ve y
-     * resuelve sus observaciones como las de los departamentos (CV-S1) aunque Servicios Escolares no cuelgue de ella
-     * (R-V2-5). Sin esas unidades en el organigrama, solo las alcanza quien no se acota por unidad (el admin).
+     * Sobre qué se pide `$permission` en las revisiones de `$ownerId` (un id de departamento o
+     * ReviewOwner::SCHOOL_SERVICES). Las revisiones no son de un campus ni de una modalidad (AZ-S17), así que solo cuenta
+     * la unidad: la del departamento o, en las de Servicios Escolares (CV15), su unidad y, solo para ver y resolver
+     * observaciones, la Subdirección Académica (CV-S1), aunque Servicios Escolares no cuelgue de ella (R-V2-5). Un permiso
+     * que escribe nunca se pide sobre la Subdirección: aunque el panel (CF-01) se lo diera a uno de sus puestos, no alcanza
+     * lo de Servicios Escolares. Sin esas unidades en el organigrama, solo las alcanza quien no se acota por unidad (el
+     * admin).
      */
-    public static function targetOf(string $ownerId): Target
+    public static function targetOf(string $ownerId, CatalogValidationPermission $permission): Target
     {
         if ($ownerId !== ReviewOwner::SCHOOL_SERVICES) {
             return Target::of(unit: $ownerId);
         }
 
         $tree = app(OrgTree::class);
+        $units = [$tree->idOf(OrgTree::SCHOOL_SERVICES)];
 
-        return Target::of(unit: array_values(array_filter([$tree->idOf(OrgTree::SCHOOL_SERVICES), $tree->idOf(OrgTree::ACADEMIC)])));
+        if (in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)) {
+            $units[] = $tree->idOf(OrgTree::ACADEMIC);
+        }
+
+        return Target::of(unit: array_values(array_filter($units)));
     }
 
     /**
      * Si `$permission` vale sobre las revisiones de `$ownerId` (targetOf()). Es la regla única de CatalogReviewPolicy y
      * de las pantallas.
+     *
+     * En las de Servicios Escolares (CV15) la unidad se compara exacta: su jefe es quien tiene un nombramiento sobre la
+     * unidad de Servicios Escolares, no el de una unidad que la contenga si alguien la moviera en el Organigrama (AZ-S16
+     * deja que un nombramiento cubra a las descendientes de su unidad). Ver y resolver observaciones también lo pueden la
+     * Subdirección Académica, el admin y quien lee en todo el Tec (CV-S1, AZ-03).
      */
     public static function allowsOn(Actor $context, CatalogValidationPermission $permission, string $ownerId): bool
     {
-        return $context->allows($permission, self::targetOf($ownerId));
+        if ($ownerId !== ReviewOwner::SCHOOL_SERVICES) {
+            return $context->allows($permission, self::targetOf($ownerId, $permission));
+        }
+
+        $tree = app(OrgTree::class);
+        $schoolServices = $tree->idOf(OrgTree::SCHOOL_SERVICES);
+
+        if ($schoolServices !== null
+            && $context->allows($permission, Target::of(unit: $schoolServices))
+            && self::holdsSchoolServices($context, $schoolServices)) {
+            return true;
+        }
+
+        return in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)
+            && $context->allows($permission, Target::of(unit: $tree->idOf(OrgTree::ACADEMIC)));
+    }
+
+    /**
+     * Quienes tienen hoy `$permission` sobre las revisiones de `$ownerId`, como RecipientsQuery::holders: los jefes que
+     * reciben el aviso de apertura, el recordatorio (CV11) y el de una observación resuelta (CV10), y el jefe del
+     * tablero de avance. En las de Servicios Escolares, solo quien tiene un nombramiento exactamente sobre su unidad
+     * (allowsOn()).
+     *
+     * @return list<array{user: User, role: Role}>
+     */
+    public function holdersOf(string $ownerId, CatalogValidationPermission $permission): array
+    {
+        $holders = $this->recipients->holders($permission, self::targetOf($ownerId, $permission));
+
+        if ($ownerId !== ReviewOwner::SCHOOL_SERVICES) {
+            return $holders;
+        }
+
+        $schoolServices = app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES);
+
+        return array_values(array_filter($holders, fn (array $holder): bool => $schoolServices !== null
+            && self::holdsSchoolServices(app(Actor::class)->forUser($holder['user']), $schoolServices)));
+    }
+
+    /**
+     * Si Servicios Escolares tiene hoy un jefe que valida sus revisiones (CV15): sin él no se abren materias, planes ni
+     * carreras, y el tablero de avance lo dice.
+     */
+    public function hasSchoolServicesHead(): bool
+    {
+        return $this->holdersOf(ReviewOwner::SCHOOL_SERVICES, CatalogValidationPermission::ReviewValidate) !== [];
+    }
+
+    /**
+     * Si alguno de sus nombramientos es exactamente sobre la unidad de Servicios Escolares.
+     */
+    private static function holdsSchoolServices(Actor $context, string $schoolServices): bool
+    {
+        return $context->heldScopes()->contains(fn (RoleAssignment $scope): bool => $scope->org_unit_id === $schoolServices);
     }
 
     /**

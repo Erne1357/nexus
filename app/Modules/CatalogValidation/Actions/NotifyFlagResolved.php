@@ -7,7 +7,6 @@ use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewFlagResolvedNotice;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\Core\Actions\NotifyHolders;
-use App\Modules\Core\Queries\RecipientsQuery;
 
 /**
  * Avisa al jefe que puso una observación que ya se resolvió (CV10, confirmado el 14 de noviembre de 2026;
@@ -18,7 +17,7 @@ use App\Modules\Core\Queries\RecipientsQuery;
  */
 final class NotifyFlagResolved
 {
-    public function __construct(private readonly RecipientsQuery $recipients, private readonly NotifyHolders $notifyHolders) {}
+    public function __construct(private readonly CatalogReviewQuery $reviews, private readonly NotifyHolders $notifyHolders) {}
 
     public function handle(CatalogReviewFlag $flag): bool
     {
@@ -27,7 +26,7 @@ final class NotifyFlagResolved
         }
 
         $flagger = array_values(array_filter(
-            $this->recipients->holders(CatalogValidationPermission::ReviewFlag, CatalogReviewQuery::targetOf($flag->review->owner_id)),
+            $this->reviews->holdersOf($flag->review->owner_id, CatalogValidationPermission::ReviewFlag),
             fn (array $holder): bool => $holder['user']->getKey() === $flag->flagged_by,
         ));
 

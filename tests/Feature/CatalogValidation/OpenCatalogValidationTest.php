@@ -34,6 +34,8 @@ beforeEach(function () {
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
     $this->d1 = Department::factory()->create(['code' => 'D1']);
     Department::factory()->create(['code' => 'D2']);
+    // Sin jefe de Servicios Escolares no se abren materias, planes ni carreras (CV15).
+    $this->escolares = schoolServicesHead();
     $this->actingAs($this->admin);
     app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
 });
@@ -113,7 +115,7 @@ it('CV9: deja una entrada en la bitácora del periodo con los catálogos y quié
 it('CV9: avisa a los jefes solo de los catálogos que se abrieron; las carreras, al de Servicios Escolares (CV15)', function () {
     Notification::fake();
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->d1->id])->create();
-    $escolares = schoolServicesHead();
+    $escolares = $this->escolares;
 
     openValidation([Catalog::Careers]);
 

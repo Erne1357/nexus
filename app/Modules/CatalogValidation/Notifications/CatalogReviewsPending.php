@@ -70,6 +70,25 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
     }
 
     /**
+     * Un aviso que se guardó en la cola antes de CV15 trae `department` (un Department) en lugar de `owner`: se arma su
+     * dueño con él, para que el correo pendiente salga igual después de desplegar.
+     *
+     * @param  array<string, mixed>  $values
+     */
+    public function __unserialize(array $values): void
+    {
+        parent::__unserialize($values);
+
+        $legacy = "\0".self::class."\0department";
+
+        $department = ! isset($this->owner) && array_key_exists($legacy, $values) ? $this->getRestoredPropertyValue($values[$legacy]) : null;
+
+        if ($department instanceof Department) {
+            $this->owner = ReviewOwner::ofDepartment($department);
+        }
+    }
+
+    /**
      * @return list<string>
      */
     public function via(object $notifiable): array
