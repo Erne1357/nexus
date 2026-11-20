@@ -24,6 +24,9 @@ use Illuminate\Support\Str;
  */
 final class PeopleQuery
 {
+    /** El valor del filtro «Sin tipo» de personal. */
+    public const string NO_STAFF_TYPE = 'none';
+
     public function __construct(
         private readonly RoleAssignmentRules $rules,
         private readonly ScopeLabels $labels,

@@ -108,7 +108,7 @@ new #[Title('Personas y puestos')] class extends Component
             },
             access: UserAccess::tryFrom($this->access),
             staffType: StaffType::tryFrom($this->staffType),
-            withoutStaffType: $this->staffType === 'none',
+            withoutStaffType: $this->staffType === PeopleQuery::NO_STAFF_TYPE,
         );
         $described = $labels->describe($page->getCollection()->flatMap(fn (User $user) => $user->roleAssignments));
 
@@ -136,7 +136,7 @@ new #[Title('Personas y puestos')] class extends Component
             'roles' => array_map(fn (Role $role): array => ['id' => $role->value, 'name' => $role->listLabel()], Role::cases()),
             'statuses' => [['id' => 'active', 'name' => 'Activos'], ['id' => 'inactive', 'name' => 'Inactivos']],
             'accesses' => array_map(fn (UserAccess $access): array => ['id' => $access->value, 'name' => $access->label()], UserAccess::cases()),
-            'staffTypes' => [...array_map(fn (StaffType $type): array => ['id' => $type->value, 'name' => $type->label()], StaffType::cases()), ['id' => 'none', 'name' => 'Sin tipo']],
+            'staffTypes' => [...array_map(fn (StaffType $type): array => ['id' => $type->value, 'name' => $type->label()], StaffType::cases()), ['id' => PeopleQuery::NO_STAFF_TYPE, 'name' => 'Sin tipo']],
             'canCreate' => Gate::allows('create', User::class),
         ];
     }
