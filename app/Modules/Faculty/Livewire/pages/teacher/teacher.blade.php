@@ -383,13 +383,13 @@
                 </section>
             </div>
 
-            @if ($canAppoint)
+            @if ($canSeeHeadships)
                 <section class="overflow-hidden rounded-box border border-base-300 bg-base-100" aria-labelledby="h-jef" data-testid="headships">
                     <header class="flex flex-wrap items-center justify-between gap-2 border-b border-base-300 px-5 py-3">
                         <h2 id="h-jef" class="text-lg font-bold">Jefaturas <span class="font-mono text-neutral">{{ $headships->count() }}</span></h2>
-                        @if ($record->teacher->is_active)
+                        @if ($canAppoint && $record->teacher->is_active)
                             <x-button label="Nombrar jefatura" icon="o-plus" class="btn-outline btn-sm" wire:click="createHeadship" spinner="createHeadship" data-testid="add-headship" />
-                        @else
+                        @elseif ($canAppoint)
                             <span class="tooltip tooltip-left" data-tip="Un docente inactivo no se nombra: reactívalo primero.">
                                 <x-button label="Nombrar jefatura" icon="o-plus" class="btn-outline btn-sm" disabled data-testid="add-headship" aria-label="Nombrar jefatura: un docente inactivo no se nombra" />
                             </span>
@@ -413,9 +413,9 @@
                                 />
                             </span>
                             <span class="flex justify-end max-md:col-span-2 max-md:justify-start max-md:-ms-3">
-                                @unless ($ended)
+                                @if (! $ended && $canEndHeadships)
                                     <x-button label="Terminar" icon="o-stop-circle" class="btn-ghost btn-sm text-error" wire:click="confirmEndHeadship('{{ $head->id }}')" spinner="confirmEndHeadship('{{ $head->id }}')" :data-testid="'end-headship-'.$head->id" aria-label="Terminar la jefatura de {{ $head->orgUnit?->name }}" />
-                                @endunless
+                                @endif
                             </span>
                         </div>
                     @empty
@@ -453,7 +453,9 @@
                 </x-slot:actions>
             </x-form>
         </x-modal>
+    @endif
 
+    @if ($canEndHeadships)
         <x-modal wire:model="showEndHeadshipModal" title="Terminar jefatura" box-class="max-w-lg" separator>
             @if ($endingHeadship)
                 <p>¿Terminar la jefatura de <b>{{ $endingHeadship->role->label() }}</b> de <b>{{ $record->teacher->name }}</b>? Deja de ejercerse después del último día. Si empieza hoy o después y el último día es anterior a su inicio, se quita.</p>

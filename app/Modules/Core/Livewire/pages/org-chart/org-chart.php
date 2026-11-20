@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Queries\OrgChartQuery;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Session;
 use Livewire\Attributes\Title;
@@ -13,8 +14,8 @@ use Livewire\Component;
  * escrituras. Elegir una caja o buscar por nombre o clave lo hace Alpine sin ir al servidor; el diagrama solo se vuelve
  * a pintar al cambiar «Mostrar inactivas» o cuando el panel avisa que algo cambió (`org-chart-changed`).
  *
- * Solo la ve el admin con ese perfil activo (OrgUnitPolicy); el componente autoriza en mount(), en cada cambio y al
- * pintar.
+ * La ven el admin con ese perfil activo y, de solo lectura, el directivo (AZ-03; OrgUnitPolicy), que no ve «Nueva
+ * unidad» porque no tiene `create`. El componente autoriza en mount(), en cada cambio y al pintar.
  */
 new #[Title('Organigrama')] class extends Component
 {
@@ -34,7 +35,7 @@ new #[Title('Organigrama')] class extends Component
     {
         $this->authorize('viewAny', OrgUnit::class);
 
-        return ['chart' => $query->chart($this->showInactive)];
+        return ['chart' => $query->chart($this->showInactive), 'mayCreate' => Gate::allows('create', OrgUnit::class)];
     }
 
     public function updated(): void

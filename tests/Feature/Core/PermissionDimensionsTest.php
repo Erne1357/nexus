@@ -26,7 +26,7 @@ use Tests\Support\Authorization\CampusBoundWrites;
 | permiso sobre un recurso con `campus_id` que no declara `Dimension::Campus` se concedería "en todos los campus"
 | aunque el puesto sea de uno. Esta prueba lo impide (§14) y fija D4 a D6 del plan 3.P9 y la excepción RV (revisiones sin campus):
 | D4: `core.term.open` declaraba campus y desde M4 declara modalidad (`term_openings` ya no tiene campus); D5:
-| `core.assignment.*` e `imports.batch.*`, solo del admin; D6: `catalog_validation.progress.*`, solo de puestos de todo
+| `core.assignment.*` (salvo `core.assignment.view`, que también tiene el directivo, AZ-03: D6) e `imports.batch.*`, solo del admin; D6: `catalog_validation.progress.*`, solo de puestos de todo
 | el Tec; RV: `catalog_validation.review.*` sin campus ni modalidad (`core.term.manage_calendar` dejó de ser excepción: `term_stages` ya no tiene campus, M4).
 | AZ-S17 (MS6): solo los permisos de modalityLevelPermissions() se acotan por la modalidad en lugar del campus; uno nuevo
 | sobre algo con campus declara el campus. Las tablas con `modality_id` piden la dimensión modalidad, salvo D5 y D6
@@ -117,9 +117,10 @@ function dimensionExceptions(): array
     $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
     $noCampus = 'RV: las revisiones de catálogos son del departamento en todo el Tec, sin campus ni modalidad (AZ-S17, supuesto por confirmar); `catalog_reviews.campus_id` siempre es nulo (CHECK) y, si el permiso declarara el campus, un nombramiento con campus nunca cubriría una revisión sin campus.';
     $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección y el directivo, AZ-03); el panel o tablero abarca todos los campus.';
+    $people = 'D6: «Personas y puestos» es del admin y, de solo lectura, del directivo, que lee en todo el Tec (AZ-03): la lista abarca los nombramientos de todos los campus.';
 
     return [
-        'core.assignment.view' => $admin,
+        'core.assignment.view' => $people,
         'core.assignment.appoint' => $admin,
         'core.assignment.end' => $admin,
         'imports.batch.view' => $admin,
@@ -201,9 +202,10 @@ function modalityDimensionExceptions(): array
 {
     $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
     $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección y el directivo, AZ-03), que cubren todas las modalidades; `term_stages.modality_id` nulo es el calendario general del periodo, que no es de ninguna modalidad (M4).';
+    $people = 'D6: «Personas y puestos» es del admin y, de solo lectura, del directivo, que lee en todo el Tec (AZ-03): la lista abarca los nombramientos de todas las modalidades.';
 
     return [
-        'core.assignment.view' => $admin,
+        'core.assignment.view' => $people,
         'core.assignment.appoint' => $admin,
         'core.assignment.end' => $admin,
         'core.term.manage_calendar' => $tec,
