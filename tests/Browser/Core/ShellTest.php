@@ -118,11 +118,15 @@ it('con el menú abierto, ↓ y ↑ recorren las entradas que quedan y Enter en 
         ->click('@hare')
         ->assertScript('document.activeElement.id', 'nexus-menu-search')
         ->keys('#nexus-menu-search', 'ArrowDown')
+        ->assertScript('document.activeElement.dataset.label', 'Resumen')
+        ->keys('a[data-label="Resumen"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Validación de catálogos')
         ->keys('a[data-label="Validación de catálogos"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Avance de validación')
         ->keys('a[data-label="Avance de validación"]', 'ArrowUp')
         ->keys('a[data-label="Validación de catálogos"]', 'ArrowUp')
+        ->assertScript('document.activeElement.dataset.label', 'Resumen')
+        ->keys('a[data-label="Resumen"]', 'ArrowUp')
         ->assertScript('document.activeElement.dataset.label', 'Correos y colas');
 
     $page->click('#nexus-menu-search')

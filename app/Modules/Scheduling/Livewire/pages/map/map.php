@@ -12,6 +12,9 @@ use Livewire\Component;
  * 2026), dentro de la app con la banda y el menú (D5). El mapa (resources/js/ubicatec) maneja su propio DOM y Livewire no
  * lo vuelve a pintar; sus datos reales (CampusMapQuery: lugares, departamentos y las clases del periodo en curso) van
  * embebidos como JSON, sin API. `?lugar=b:<edificio>` abre un lugar al cargar.
+ *
+ * Bandera `config('nexus.campus_map_3d')` (env CAMPUS_MAP_3D, por omisión true): con false vive un marcador estático con el
+ * título y el periodo, sin assets de ubicatec ni visor (phpunit.xml la apaga para no pagar WebGL en las pruebas).
  */
 new #[Layout('layouts::app', ['fullBleed' => true])] #[Title('Inicio')] class extends Component
 {

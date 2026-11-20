@@ -107,6 +107,8 @@ it('CV10 y CV11: Subdirección recuerda a un jefe por correo y resuelve una obse
         ->fill('username', 'subdireccion')
         ->fill('password', 'password')
         ->press('Entrar')
+        ->assertPathIs('/')
+        ->navigate('/resumen')
         ->assertSee('0 de 2 departamentos validados')
         ->click('Ver avance')
         ->assertPathIs('/catalog-validation/progress')

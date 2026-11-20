@@ -18,6 +18,7 @@ it('sin sesión no se ve el mapa: manda al acceso', function () {
 });
 
 it('el Inicio es el mapa del campus para cada puesto, con sus datos embebidos', function (Role $role) {
+    config(['nexus.campus_map_3d' => true]);
     $user = User::factory()->withRole($role, match ($role) {
         Role::JefeDepartamento => ['campus_id' => $this->campus->id, 'department_id' => departmentKey(10)],
         default => ['campus_id' => $this->campus->id],
@@ -43,4 +44,17 @@ it('lo que era el Inicio queda como Resumen en Mi espacio', function () {
         ->get('/')
         ->assertSee(route('core.summary'), false)
         ->assertSee('Resumen');
+});
+
+it('con la bandera en false no carga el visor 3D y muestra el marcador estático', function () {
+    config(['nexus.campus_map_3d' => false]);
+    $user = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
+
+    actingAsRole($user, Role::Docente)
+        ->get('/')
+        ->assertOk()
+        ->assertDontSee('ubicatec/main.js', false)
+        ->assertDontSee('id="ubicatec-data"', false)
+        ->assertSee('data-testid="campus-map-static"', false)
+        ->assertSee('Mapa del campus');
 });

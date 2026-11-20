@@ -2,6 +2,7 @@
     El mapa del campus del Inicio (tarea 1.24.1). El visor 3D y su panel los arma resources/js/ubicatec con los datos de
     #ubicatec-data; wire:ignore evita que Livewire los vuelva a pintar. Estilos aislados bajo #ubicatec-root (ADR-0030).
 --}}
+@if (config('nexus.campus_map_3d'))
 <div id="ubicatec-root" wire:ignore data-base="{{ asset('ubicatec') }}/" data-initial="{{ $lugar }}" data-testid="campus-map" class="absolute inset-0">
     @assets
         @vite(['resources/css/ubicatec.css', 'resources/js/ubicatec/main.js'])
@@ -37,3 +38,11 @@
     <div id="pickhint">Toca el mapa para fijar tu punto de partida</div>
     <div id="compass"><div class="ut-nd"></div><span class="ut-nl">N</span></div>
 </div>
+@else
+<div data-testid="campus-map-static" class="absolute inset-0 flex items-center justify-center bg-base-200">
+    <div class="text-center">
+        <h1 class="text-2xl font-semibold">Mapa del campus</h1>
+        <p class="text-base-content/70">{{ collect([$map['campus'], $map['term']['name'] ?? null])->filter()->implode(' · ') }}</p>
+    </div>
+</div>
+@endif

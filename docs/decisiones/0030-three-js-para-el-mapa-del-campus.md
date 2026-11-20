@@ -14,6 +14,7 @@ El usuario entregó el 20 de noviembre de 2026 un mapa del Campus I (UbicaTec) p
 ## Consecuencias
 - El bundle del mapa pesa lo que three.js (~600 KB sin comprimir) y solo se baja en el Inicio.
 - Los estilos del mapa se aíslan bajo `#ubicatec-root` y sus clases llevan prefijo `ut-`, para no chocar con Tailwind ni con daisyUI.
+- La bandera `config('nexus.campus_map_3d')` (env `CAMPUS_MAP_3D`, por omisión `true`) apaga el visor: con `false` la página no carga los assets de ubicatec y muestra un marcador estático con el título y el periodo. `phpunit.xml` la pone en `false` para que las pruebas de navegador que aterrizan en `/` no paguen el WebGL por CPU de Chrome sin GPU; `CampusMapTest` (navegador) la enciende para probar el mapa real.
 - Actualizar three.js es un cambio de versión exacta con su propia revisión visual del mapa.
 
 ## Alternativas descartadas
