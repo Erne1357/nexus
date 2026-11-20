@@ -21,7 +21,7 @@ new #[Title('Ficha del alumno')] class extends Component
 
     /** 'reticula' o 'kardex'; va en la URL para volver a la misma pestaña, y otro valor muestra la retícula. */
     #[Url]
-    public string $tab = 'reticula';
+    public mixed $tab = 'reticula';
 
     public function mount(string $student, StudentQuery $students): void
     {
@@ -36,7 +36,7 @@ new #[Title('Ficha del alumno')] class extends Component
      */
     public function updatedTab(): void
     {
-        $this->tab = $this->tab === 'kardex' ? 'kardex' : 'reticula';
+        $this->tab = is_string($this->tab) && $this->tab === 'kardex' ? 'kardex' : 'reticula';
     }
 
     /**

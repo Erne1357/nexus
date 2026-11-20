@@ -150,3 +150,9 @@ it('AC-15: las iniciales de la credencial salen del nombre del alumno que se mue
         ->assertSee('María Zamora')
         ->assertSeeInOrder(['data-testid="credential-photo"', 'MZ']);
 });
+
+it('la ficha del personal con ?tab[]=x responde 200 y muestra la retícula', function () {
+    $coordinator = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => $this->career->id])->create();
+
+    $this->actingAs($coordinator)->get(route('students.show', $this->student).'?tab[]=x')->assertOk()->assertSee('ACF-0901');
+});
