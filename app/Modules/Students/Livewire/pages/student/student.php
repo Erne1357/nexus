@@ -1,8 +1,5 @@
 <?php
 
-use App\Modules\Core\Support\SemesterGrid;
-use App\Modules\Students\Enums\SubjectStanding;
-use App\Modules\Students\Queries\GridCell;
 use App\Modules\Students\Queries\StudentQuery;
 use App\Modules\Students\Queries\StudentRecordQuery;
 use Livewire\Attributes\Locked;
@@ -24,7 +21,7 @@ new #[Title('Ficha del alumno')] class extends Component
 
     /** 'reticula' o 'kardex'; va en la URL para volver a la misma pestaña, y otro valor muestra la retícula. */
     #[Url]
-    public string $tab = 'reticula';
+    public mixed $tab = 'reticula';
 
     public function mount(string $student, StudentQuery $students): void
     {
@@ -39,7 +36,7 @@ new #[Title('Ficha del alumno')] class extends Component
      */
     public function updatedTab(): void
     {
-        $this->tab = $this->tab === 'kardex' ? 'kardex' : 'reticula';
+        $this->tab = is_string($this->tab) && $this->tab === 'kardex' ? 'kardex' : 'reticula';
     }
 
     /**
@@ -50,16 +47,6 @@ new #[Title('Ficha del alumno')] class extends Component
         $student = $students->findOrFail($this->studentId);
         $this->authorize('view', $student);
 
-        $record = $records->forStudent($student);
-
-        return [
-            'record' => $record,
-            'layout' => SemesterGrid::place(
-                array_map(fn (array $cells): array => collect($cells)->mapWithKeys(fn (GridCell $cell): array => [$cell->code => $cell->specialtyId])->all(), $record->semesters),
-                array_column($record->specialties, 'id'),
-            ),
-            'specialtyNames' => array_column($record->specialties, 'name', 'id'),
-            'standings' => SubjectStanding::cases(),
-        ];
+        return ['record' => $records->forStudent($student)];
     }
 };

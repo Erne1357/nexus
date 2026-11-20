@@ -9,8 +9,6 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
-use App\Modules\CatalogValidation\Enums\Catalog;
-use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -272,9 +270,7 @@ it('al aceptar la parte con AcceptProposalReview nacen los grupos de su departam
     createGroupsItem($subject, 2);
     createGroupsItem(createGroupsSubject($this->sc), 1);
     AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $this->cb->id]);
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->cb->id]);
-    }
+    validateGeneralCatalogs($this->term->id, $this->cb->id);
 
     app(AcceptProposalReview::class)->handle($this->part, $this->user);
 

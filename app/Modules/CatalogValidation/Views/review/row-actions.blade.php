@@ -19,6 +19,10 @@
 @php($row = $teacherRows[$record->id] ?? null)
 @php($mark = $marks[$record->id] ?? null)
 @php($viewOnly = $current['viewOnly'])
+{{-- CV14: un docente inactivo no se valida: solo ficha, disponibilidad y ver. --}}
+@php($inactive = $teachers && ! $record->is_active)
+{{-- 1.24.3: las páginas a las que se sale de aquí ofrecen «Regresar» a este departamento y catálogo. --}}
+@php($back = \App\Modules\Core\Support\ValidationReturn::params($current['review']->owner_id, $current['review']->catalog->value))
 @php($departmentName = $current['review']->department?->name)
 <div @class(['flex items-center gap-1', 'justify-end whitespace-nowrap' => $inTable])>
     @unless ($teachers)
@@ -37,9 +41,11 @@
 
     <x-core::row-menu :name="$code" :compact="$inTable">
         @if ($teachers)
-            <x-core::row-menu-item label="Ficha" :href="route('faculty.teachers.show', $record->id)" :data-testid="$inTable ? 'record-'.$code : null" />
-            <x-core::row-menu-item label="Disponibilidad" :href="route('faculty.teachers.availability', $record->id)" />
-            @if ($row['emailReason'] === null)
+            <x-core::row-menu-item label="Ficha" :href="route('faculty.teachers.show', ['teacher' => $record->id, ...$back])" :data-testid="$inTable ? 'record-'.$code : null" />
+            <x-core::row-menu-item label="Disponibilidad" :href="route('faculty.teachers.availability', ['teacher' => $record->id, ...$back])" />
+            @if ($inactive)
+                {{-- CV14: sin correo, observaciones ni baja. --}}
+            @elseif ($row['emailReason'] === null)
                 <x-core::row-menu-item
                     :label="$record->institutional_email ? 'Cambiar correo institucional' : 'Agregar correo institucional'"
                     data-email-open="{{ $record->id }}"
@@ -51,14 +57,16 @@
                 <x-core::row-menu-item :label="$record->institutional_email ? 'Cambiar correo institucional' : 'Agregar correo institucional'" disabled :reason="$row['emailReason']" />
             @endif
             <x-core::row-menu-item
-                label="Observaciones"
+                label="{{ $inactive ? 'Ver observaciones' : 'Observaciones' }}"
                 wire:click="edit('{{ $record->id }}')"
                 :spinner="'edit(\''.$record->id.'\')'"
                 :data-testid="$inTable ? 'observations-'.$code : null"
             />
         @endif
 
-        @if ($current['canFlag'])
+        @if ($inactive)
+            {{-- CV14 --}}
+        @elseif ($current['canFlag'])
             <x-core::row-menu-item
                 label="Agregar observación"
                 wire:click="edit('{{ $record->id }}')"
@@ -69,7 +77,7 @@
             <x-core::row-menu-item label="Agregar observación" disabled :reason="$current['flagReason']" />
         @endif
 
-        @if ($mark !== null && $current['canMark'])
+        @if ($mark !== null && $current['canMark'] && ! $inactive)
             <x-core::row-menu-item
                 label="Quitar «Revisado»"
                 :reason="$mark['long']"
@@ -79,7 +87,7 @@
             />
         @endif
 
-        @if ($teachers && ! $viewOnly)
+        @if ($teachers && ! $viewOnly && ! $inactive)
             @if ($row['dischargeReason'] === null)
                 <x-core::row-menu-item
                     :label="'Quitar de '.$departmentName"

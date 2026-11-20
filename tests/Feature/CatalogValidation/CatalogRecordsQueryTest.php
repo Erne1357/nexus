@@ -1,9 +1,11 @@
 <?php
 
+use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
@@ -28,9 +30,14 @@ beforeEach(function () {
     $this->records = app(CatalogRecordsQuery::class);
 });
 
+/**
+ * La revisión del catálogo: la del departamento en docentes y salones, la de Servicios Escolares, sin departamento, en
+ * materias, planes y carreras (CV15).
+ */
 function recordsReview(Catalog $catalog, Department $department): CatalogReview
 {
-    return ($catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog))->create(['department_id' => $department->id]);
+    return ($catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog))
+        ->create($catalog->owner() === CatalogOwner::Department ? ['department_id' => $department->id] : []);
 }
 
 /**
@@ -54,13 +61,36 @@ it('CV7: «Por revisar» son los activos sin marca; las cifras del filtro segmen
     CatalogReviewFlag::factory()->on($flagged)->create(['review_id' => $review->id, 'flag' => ReviewFlag::MissingData]);
     CatalogReviewFlag::factory()->on($marked)->resolved()->create(['review_id' => $review->id]);
 
-    expect(pageCodes($review, 'pending'))->toBe(['B-2', 'C-3'])
+    expect(pageCodes($review, 'pending'))->toBe(['B-2', 'C-3', 'Z-9'])
         ->and(pageCodes($review, 'reviewed'))->toBe(['A-1', 'D-4'])
         ->and(pageCodes($review, flag: 'with'))->toBe(['B-2'])
-        ->and($this->records->segmentCounts($review))->toBe(['pending' => 2, 'reviewed' => 2, 'flagged' => 1, 'all' => 5])
-        ->and($this->records->pendingIds($review))->toBe([$flagged->id, Subject::where('code', 'C-3')->sole()->id])
+        ->and($this->records->segmentCounts($review))->toBe(['pending' => 3, 'reviewed' => 2, 'flagged' => 1, 'all' => 6])
+        ->and($this->records->pendingIds($review))->toBe([$flagged->id, Subject::where('code', 'C-3')->sole()->id, Subject::where('code', 'Z-9')->sole()->id])
         ->and($this->records->pendingIds($review, 'C-3'))->toBe([Subject::where('code', 'C-3')->sole()->id])
         ->and($this->records->pendingIds($review, onlyIds: [$flagged->id, $marked->id]))->toBe([$flagged->id]);
+});
+
+it('CV15: en una revisión de Servicios Escolares filtra por departamento y ofrece los departamentos de sus registros', function () {
+    $subjects = recordsReview(Catalog::Subjects, $this->department);
+    $own = Subject::factory()->create(['code' => 'A-1', 'department_id' => $this->department->id]);
+    $foreign = Subject::factory()->create(['code' => 'Z-9', 'department_id' => $this->other->id]);
+    $plans = recordsReview(Catalog::StudyPlans, $this->department);
+    StudyPlan::factory()->for(Career::factory()->create(['department_id' => $this->other->id]))->create(['code' => 'IELE-2010']);
+    StudyPlan::factory()->for(Career::factory()->create(['department_id' => $this->department->id]))->create(['code' => 'ISIC-2010']);
+    $codes = fn (CatalogReview $review, string $departmentId): array => $this->records->page($review, departmentId: $departmentId)->getCollection()->pluck('code')->all();
+
+    expect($codes($subjects, $this->department->id))->toBe(['A-1'])
+        ->and($codes($subjects, ''))->toBe(['A-1', 'Z-9'])
+        ->and($codes($subjects, 'no-es-uuid'))->toBe([])
+        ->and($codes($plans, $this->other->id))->toBe(['IELE-2010'])
+        ->and($this->records->pendingIds($subjects, departmentId: $this->other->id))->toBe([$foreign->id])
+        ->and($this->records->pendingIds($subjects, departmentId: $this->department->id))->toBe([$own->id])
+        ->and($this->records->departmentFilterOptions($subjects))->toBe([
+            ['id' => $this->other->id, 'name' => 'ELE · Eléctrica-Electrónica'],
+            ['id' => $this->department->id, 'name' => 'SIS · Sistemas y Computación'],
+        ])
+        ->and(array_column($this->records->departmentFilterOptions($plans), 'id'))->toBe([$this->other->id, $this->department->id])
+        ->and($this->records->departmentFilterOptions(recordsReview(Catalog::Teachers, $this->department)))->toBe([]);
 });
 
 it('CV7: dice quién marcó cada registro y cuándo', function () {

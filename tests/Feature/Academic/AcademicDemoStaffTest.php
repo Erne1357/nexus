@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Enums\Role;
@@ -32,7 +33,7 @@ use Tests\Support\Academic\DemoCatalog;
 | Este archivo: los usuarios de prueba con su rol y su alcance.
 */
 
-it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el Tec, jefes de proyecto docente y coordinadores en Presencial y por campus (AZ-S17)', function () {
+it('crea los usuarios de prueba con su alcance: Subdirección, jefe de Servicios Escolares (CV15) y jefes de todo el Tec, jefes de proyecto docente y coordinadores en Presencial y por campus (AZ-S17)', function () {
     $this->seed(DemoSeeder::class);
     modalityOf('EAD')->update(['is_active' => true]);
 
@@ -45,7 +46,7 @@ it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el
     $coordinator = User::query()->where('username', 'coord.isc.c2')->sole();
 
     expect(DemoCatalog::staff()->pluck('username')->all())->toEqualCanonicalizing([
-        'subdir',
+        'subdir', 'jefe.se',
         'jefe.cb', 'jefe.cea', 'jefe.ii', 'jefe.sc',
         'jpd.cb.c2', 'jpd.cea.c2', 'jpd.ii.c2', 'jpd.sc.c2',
         'coord.isc.c2', 'coord.ii.c2', 'coord.ige.c2', 'coord.il.c2', 'coord.la.c2', 'coord.cp.c2',
@@ -66,6 +67,7 @@ it('crea los usuarios de prueba con su alcance: Subdirección y jefes de todo el
         ->and(RoleAssignment::query()->current()->where(['org_unit_id' => $sc->id, 'campus_id' => $c2->id, 'role' => Role::JefeProyectoDocente])->whereHas('user', fn ($query) => $query->where('username', 'jpd.sc.c2'))->exists())->toBeTrue()
         ->and(RoleAssignment::query()->whereIn('role', [Role::Coordinador, Role::JefeProyectoDocente])->get())
         ->each(fn ($assignment) => $assignment->modality_id->toBe(modalityOf('PRES')->id)->campus_id->toBe($c2->id))
+        ->and(RoleAssignment::query()->current()->where(['org_unit_id' => app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES), 'role' => Role::JefeDepartamento])->sole()->user->username)->toBe('jefe.se')
         ->and(DB::table('department_heads')->count())->toBe(0)
         ->and(Hash::check('password', $coordinator->password))->toBeTrue()
         ->and($coordinator->must_change_password)->toBeFalse();

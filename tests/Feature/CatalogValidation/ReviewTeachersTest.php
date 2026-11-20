@@ -113,7 +113,7 @@ describe('correo institucional desde la fila (CV1, CV-S2, AC-06; D4 y D11)', fun
 
     it('rechaza a un docente que no es de la revisión, también validada, y fuera de la revisión de docentes', function () {
         $foreign = Teacher::factory()->adscribedTo($this->ii)->create(['institutional_email' => null]);
-        $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id]);
+        $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id]);
         $own = Teacher::factory()->adscribedTo($this->sc)->create(['institutional_email' => null]);
 
         expect(teachersErrors(fn () => app(SetReviewTeacherEmail::class)->handle($subjects, $own, 'ana@cdjuarez.tecnm.mx', $this->jefe)))->toBe(['record' => ['El registro no es de esta revisión.']]);
@@ -166,7 +166,7 @@ describe('dar de baja (CV8)', function () {
     });
 
     it('solo en la revisión de docentes', function () {
-        $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id]);
+        $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id]);
         $teacher = Teacher::factory()->adscribedTo($this->sc)->create();
 
         expect(teachersErrors(fn () => app(DischargeReviewTeacher::class)->handle($subjects, $teacher, $this->jefe)))->toBe(['record' => ['El registro no es de esta revisión.']]);

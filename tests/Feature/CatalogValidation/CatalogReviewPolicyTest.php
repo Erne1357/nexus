@@ -12,6 +12,8 @@ use App\Modules\Core\Models\User;
 | confirmar: ni el admin ni Subdirección); ven y resuelven observaciones ese jefe, el admin y Subdirección.
 | Los salones de su departamento los corrige en cualquier campus, en una sola revisión para todos los campus (CV2 y
 | decisión 6, confirmados el 12 de noviembre de 2026). Marcar un registro como revisado (CV7) es de quien valida.
+| Materias, planes y carreras son una revisión de Servicios Escolares para todo el Tec (CV15, confirmada el 20 de
+| noviembre de 2026): el jefe de un departamento académico no la ve; la ven y resuelven Subdirección y el admin.
 */
 
 const REVIEW_ABILITIES = ['view', 'correct', 'validate', 'reopen', 'flag', 'resolveFlag', 'mark'];
@@ -19,7 +21,8 @@ const REVIEW_ABILITIES = ['view', 'correct', 'validate', 'reopen', 'flag', 'reso
 beforeEach(function () {
     $this->c1 = Campus::factory()->create(['code' => 'C1']);
     $this->c2 = Campus::factory()->create(['code' => 'C2']);
-    $this->general = CatalogReview::factory()->general(Catalog::Subjects)->create(['department_id' => departmentKey(10)]);
+    $this->general = CatalogReview::factory()->general(Catalog::Teachers)->create(['department_id' => departmentKey(10)]);
+    $this->schoolServices = CatalogReview::factory()->general(Catalog::Subjects)->create();
     $this->rooms = CatalogReview::factory()->rooms()->create(['department_id' => departmentKey(10)]);
 });
 
@@ -48,6 +51,23 @@ it('permite según el rol y su alcance en la revisión general del departamento'
     'docente' => [Role::Docente, [], [false, false, false, false, false, false, false]],
     'jefe de otro departamento' => [Role::JefeDepartamento, fn () => ['department_id' => departmentKey(11)], [false, false, false, false, false, false, false]],
 ]);
+
+it('CV15: en la revisión de Servicios Escolares, su jefe lo hace todo; el jefe de un departamento, nada; Subdirección ve y resuelve', function (Closure $user, array $expected) {
+    expect(reviewAbilitiesOf($user(), $this->schoolServices))->toBe(reviewAbilities(...$expected));
+})->with([
+    'jefe de Servicios Escolares' => [fn () => schoolServicesHead(), [true, true, true, true, true, true, true]],
+    'jefe de un departamento académico' => [fn () => User::factory()->withRole(Role::JefeDepartamento, ['department_id' => departmentKey(10)])->create(), [false, false, false, false, false, false, false]],
+    'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), [true, false, false, false, false, true, false]],
+    'admin' => [fn () => User::factory()->admin()->create(), [true, false, false, false, false, true, false]],
+]);
+
+it('CV15: el jefe de Servicios Escolares no ve ni actúa en las revisiones de docentes y salones de un departamento', function () {
+    $head = schoolServicesHead();
+
+    expect(reviewAbilitiesOf($head, $this->general))->toBe(reviewAbilities(false, false, false, false, false, false, false))
+        ->and(reviewAbilitiesOf($head, $this->rooms))->toBe(reviewAbilities(false, false, false, false, false, false, false))
+        ->and($head->can('viewProgress', CatalogReview::class))->toBeFalse();
+});
 
 it('al admin le deja ver y resolver observaciones, pero no corregir, validar, reabrir ni observar', function () {
     $admin = User::factory()->admin()->create();

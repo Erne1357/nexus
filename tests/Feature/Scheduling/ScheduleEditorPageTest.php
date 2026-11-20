@@ -803,7 +803,7 @@ describe('contexto', function () {
             ->assertRedirect(route('scheduling.editor', ['modalidad' => 'PRES', 'campus' => $this->campus->code]));
     });
 
-    it('el menú lleva a «Horarios» en Académico a quien ve los horarios', function () {
+    it('el menú lleva a «Horarios» en Carga académica a quien ve los horarios', function () {
         $this->actingAs($this->coordinator)->get(route('scheduling.editor'))->assertOk()->assertSee('Horarios');
 
         expect(textOf(domOf($this->get('/'))->getElementById('nexus-menu')))->toContain('Horarios');

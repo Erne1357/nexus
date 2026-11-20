@@ -61,7 +61,8 @@ it('el camino del seeder masivo: el demo de Campus II y después los dos campus 
         ->and($named('/^jpd\.[a-z]+\.c2$/'))->toHaveCount(4)
         ->and($named('/^coord\.[a-z]+\.c1$/'))->toHaveCount(12)
         ->and($named('/^coord\.[a-z]+\.c2$/'))->toHaveCount(6)
-        ->and($named('/^jefe\.[a-z]+$/')->pluck('username')->map(fn (string $username): string => substr($username, 5))->sort()->values()->all())
+        // jefe.se es el de Servicios Escolares (CV15), que no tiene jefe de proyecto docente.
+        ->and($named('/^jefe\.[a-z]+$/')->pluck('username')->reject(fn (string $username): bool => $username === 'jefe.se')->map(fn (string $username): string => substr($username, 5))->sort()->values()->all())
         ->toBe($named('/^jpd\./')->pluck('username')->map(fn (string $username): string => explode('.', $username)[1])->unique()->sort()->values()->all())
         ->and($headed(Role::JefeDepartamento))->toEqualCanonicalizing($named('/^jefe\./')->pluck('username')->all())
         ->and($headed(Role::JefeProyectoDocente))->toEqualCanonicalizing($named('/^jpd\./')->pluck('username')->all());

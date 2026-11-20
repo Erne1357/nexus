@@ -2,6 +2,7 @@
 
 namespace App\Modules\Students\Queries;
 
+use App\Modules\Core\Support\SemesterGrid;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
 
@@ -40,4 +41,23 @@ final readonly class StudentRecord
         public array $kardex,
         public array $unplaced = [],
     ) {}
+
+    /**
+     * La retícula acomodada en la cuadrícula de Core: columnas por semestre, el tronco común arriba y una banda por especialidad.
+     */
+    public function gridLayout(): SemesterGrid
+    {
+        return SemesterGrid::place(
+            array_map(fn (array $cells): array => collect($cells)->mapWithKeys(fn (GridCell $cell): array => [$cell->code => $cell->specialtyId])->all(), $this->semesters),
+            array_column($this->specialties, 'id'),
+        );
+    }
+
+    /**
+     * @return array<string, string> id de especialidad → su nombre
+     */
+    public function specialtyNames(): array
+    {
+        return array_column($this->specialties, 'name', 'id');
+    }
 }

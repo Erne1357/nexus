@@ -57,3 +57,11 @@
 5. **Abierto,** las áreas se acomodan en una retícula (5 columnas, 3 en tableta) que calcula `MenuGrid` (Core): un área con encabezados ocupa las columnas que necesita sin partir un grupo, y las de una columna se apilan. El buscador esconde los grupos y las áreas sin coincidencias y vuelve a acomodar lo que queda con el mismo algoritmo en el navegador; las flechas recorren los resultados.
 
 **Consecuencias.** `NavigationArea` cambia sus casos y entra `NavigationGroup`; `NavigationItem` lleva `group` y `order`. El componente `core::components.navigation` y `nexusShell` se reescriben para la retícula, y `DESIGN.md` («Estructura», «Responsivo», «Navigation» y «El menú que se transforma») describe lo construido. La cascada del movimiento al abrir no pasa de 0.4 s: con un área larga, las últimas entradas esperaban más de 0.8 s.
+
+## Adenda (20 de noviembre de 2026): Carga académica (tarea 1.24.6, #719)
+
+**Contexto.** El usuario pidió reunir todo lo de la carga académica en un solo lugar del menú y poder ocultarlo desde el panel de configuración, para mostrar Nexus sin la carga mientras no está lista.
+
+**Decisión.** Entra el área **Carga académica** (`o-table-cells`), justo después de Académico. Se lleva los grupos Propuesta, Horarios, Asignación y Cierre y publicación, y «Mi carga» y «Oferta», que salen de Mi espacio; Académico se queda con Validación. El admin la oculta a los demás con un parámetro de Core (MN-05). Sigue siendo el mismo menú, así que no hace falta un ADR nuevo.
+
+**Consecuencias.** `NavigationArea` gana un caso y los grupos de la carga cambian de área. Ocultar no toca el registro inmutable del menú: lo decide cada petición (`AcademicLoadVisibility`, `scoped`) en `NavigationItem::isVisibleTo` y en el middleware que cierra sus rutas por una lista explícita.

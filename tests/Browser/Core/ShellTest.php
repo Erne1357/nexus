@@ -11,7 +11,8 @@ use App\Modules\Core\Models\User;
 | coincidencias y reacomoda lo que queda; ↓ y ↑ recorren las entradas y Enter abre la primera; Esc lo
 | cierra y regresa el foco a la liebre. La credencial se abre como tarjeta con el campus y el periodo.
 | En el celular, la liebre baja el menú como hoja, con Inicio en su primer renglón. En Inicio, la
-| columna cerrada muestra la primera área del admin (Académico); Administración se ve al abrir.
+| columna cerrada muestra la primera área del admin (Académico, la validación); Carga académica y Administración se ven
+| al abrir.
 */
 
 beforeEach(function () {
@@ -48,9 +49,10 @@ it('cada página llega con su propia sesión: lo que otra dejó pendiente no la 
 it('la liebre abre el menú con el cursor en el buscador; buscar filtra por grupos y Esc lo cierra', function () {
     $page = signInToShell()
         ->assertVisible('a[data-label="Validación de catálogos"]')
-        ->assertVisible('[data-menu-group="validacion"]')
+        ->assertMissing('[data-menu-group="propuesta"]')
         ->assertMissing('a[data-label="Importaciones"]')
         ->click('@hare')
+        ->assertVisible('[data-menu-group="propuesta"]')
         ->assertScript('document.body.dataset.menu', 'open')
         ->assertAttribute('@hare', 'aria-expanded', 'true')
         ->assertAttribute('@hare', 'aria-label', 'Cerrar el menú completo')
@@ -118,11 +120,15 @@ it('con el menú abierto, ↓ y ↑ recorren las entradas que quedan y Enter en 
         ->click('@hare')
         ->assertScript('document.activeElement.id', 'nexus-menu-search')
         ->keys('#nexus-menu-search', 'ArrowDown')
+        ->assertScript('document.activeElement.dataset.label', 'Resumen')
+        ->keys('a[data-label="Resumen"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Validación de catálogos')
         ->keys('a[data-label="Validación de catálogos"]', 'ArrowDown')
         ->assertScript('document.activeElement.dataset.label', 'Avance de validación')
         ->keys('a[data-label="Avance de validación"]', 'ArrowUp')
         ->keys('a[data-label="Validación de catálogos"]', 'ArrowUp')
+        ->assertScript('document.activeElement.dataset.label', 'Resumen')
+        ->keys('a[data-label="Resumen"]', 'ArrowUp')
         ->assertScript('document.activeElement.dataset.label', 'Correos y colas');
 
     $page->click('#nexus-menu-search')

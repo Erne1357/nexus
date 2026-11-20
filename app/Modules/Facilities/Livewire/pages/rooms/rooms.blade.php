@@ -10,6 +10,7 @@
     del edificio, que el formulario agrupa por campus.
 --}}
 <div>
+    <x-core::back-link :validation="$this->validationReturnUrl()" class="mb-4" />
     <x-header title="Salones" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             Los salones de tus campus con su tipo, capacidad y departamento dueño. Un salón no se borra: se desactiva. Sus bloqueos (mantenimiento, reservas) se administran desde «Acciones».

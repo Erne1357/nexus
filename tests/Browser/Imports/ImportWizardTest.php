@@ -107,7 +107,7 @@ it('un coordinador no ve la entrada Importaciones en el menú', function () {
     signInToImports('19110001')
         ->assertVisible('#nexus-menu [data-menu-home]')
         ->click('@hare')
-        ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"]')
+        ->assertVisible('[data-menu-area="carga_academica"] [data-menu-flip="name"]')
         ->assertDontSeeIn('[aria-label="Navegación principal"]', 'Importaciones')
         ->assertNotPresent('[data-menu-area="administracion"]')
         ->assertNoJavaScriptErrors();

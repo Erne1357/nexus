@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use App\Modules\Core\Livewire\Concerns\WithCampusFilter;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Queries\ModalityQuery;
@@ -43,7 +44,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Salones')] class extends Component
 {
-    use Toast, WithCampusFilter, WithPagination;
+    use ReturnsToValidation, Toast, WithCampusFilter, WithPagination;
 
     /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]

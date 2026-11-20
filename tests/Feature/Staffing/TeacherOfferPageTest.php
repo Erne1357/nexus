@@ -307,9 +307,9 @@ describe('alcance', function () {
         Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('No estás adscrito')->assertDontSee('1A');
     });
 
-    it('la ruta pide sesión y aparece en Mi espacio solo para el docente', function () {
+    it('la ruta pide sesión y aparece en Carga académica solo para el docente (MN-05)', function () {
         $this->get('/mi-espacio/oferta')->assertRedirect('/login');
-        $this->actingAs($this->user)->get('/mi-espacio/oferta')->assertOk()->assertSee('Mi espacio');
+        $this->actingAs($this->user)->get('/mi-espacio/oferta')->assertOk()->assertSee('Carga académica');
         $this->actingAs(User::factory()->create())->get('/mi-espacio/oferta')->assertForbidden();
     });
 });

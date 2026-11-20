@@ -200,7 +200,13 @@
             "academic_load.load.export_sii"
         ],
         "kinds=departamento_academico;codes=SERVICIOS-ESCOLARES,SUB-ACADEMICA": [
-            "academic_load.load.export"
+            "academic_load.load.export",
+            "catalog_validation.review.correct",
+            "catalog_validation.review.flag",
+            "catalog_validation.review.reopen",
+            "catalog_validation.review.resolve_flag",
+            "catalog_validation.review.validate",
+            "catalog_validation.review.view"
         ],
         "kinds=departamento_academico;codes=SUB-ACADEMICA": [
             "academic.career.create",
@@ -242,12 +248,6 @@
             "academic_load.proposal_review.view",
             "catalog_validation.progress.remind",
             "catalog_validation.progress.view",
-            "catalog_validation.review.correct",
-            "catalog_validation.review.flag",
-            "catalog_validation.review.reopen",
-            "catalog_validation.review.resolve_flag",
-            "catalog_validation.review.validate",
-            "catalog_validation.review.view",
             "faculty.teacher.adscribe",
             "faculty.teacher.create",
             "faculty.teacher.deactivate",

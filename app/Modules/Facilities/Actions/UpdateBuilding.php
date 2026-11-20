@@ -26,13 +26,13 @@ final class UpdateBuilding
     public function __construct(private readonly BuildingRules $rules) {}
 
     /**
-     * @param  array{code?: string, name?: string, is_active?: bool}  $data
+     * @param  array{code?: string, name?: string, map_key?: ?string, is_active?: bool}  $data
      *
      * @throws ValidationException
      */
     public function handle(Building $building, array $data): Building
     {
-        $data = Arr::only($data, ['code', 'name', 'is_active']);
+        $data = Arr::only($data, ['code', 'name', 'map_key', 'is_active']);
 
         if (array_key_exists('code', $data)) {
             $data['code'] = $this->rules->normalizeCode($data['code']);
@@ -44,7 +44,7 @@ final class UpdateBuilding
 
         return DB::transaction(function () use ($building, $data): Building {
             $building->setRawAttributes($building->newQuery()->lockForUpdate()->findOrFail($building->getKey())->getAttributes(), sync: true);
-            $old = $building->only(['code', 'name', 'is_active']);
+            $old = $building->only(['code', 'name', 'map_key', 'is_active']);
 
             if (array_key_exists('code', $data)) {
                 $this->rules->ensureCodeIsFree($building->campus_id, $data['code'], $building);

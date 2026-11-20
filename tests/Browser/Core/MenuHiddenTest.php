@@ -9,7 +9,8 @@ use App\Modules\Core\Models\User;
 | Lo oculto para los demás en el navegador (MN-02, opción B «Insignia "Oculta"»). El periodo activo no tiene
 | validación abierta ni carga en curso (MN-03 y MN-04): el admin ve esas pantallas con la insignia, el motivo
 | flotante al enfocarlas y, en la pantalla misma, el aviso; el coordinador no ve nada de la carga, solo Horarios
-| publicados.
+| publicados. Académico (la validación) es una lista plana oculta entera por un motivo, que lo dice junto a su nombre;
+| Carga académica lleva encabezados (MN-05).
 */
 
 beforeEach(function () {
@@ -39,9 +40,18 @@ const MENU_WHY_TIP = '(() => { const t = document.querySelector("[data-menu-why-
 it('el admin ve lo oculto con su insignia y su motivo, y el aviso en la pantalla', function () {
     $why = 'Oculta para los demás: No hay carga en curso en Ene-Jun 2027';
 
+    // En Inicio, la columna cerrada es Académico: oculta entera por un solo motivo, lo dice junto a su nombre.
     $page = signInToHiddenMenu('admin')
-        // Cerrado: el grupo entero lo dice en su encabezado; la entrada suelta, con la insignia solo con el icono.
-        ->assertSeeIn('[data-menu-group="validacion"] [data-menu-badge]', 'Oculto')
+        ->assertSeeIn('[data-menu-area="academico"] [data-menu-flip="name"] [data-menu-badge]', 'Oculta');
+
+    // En la pantalla oculta, el aviso arriba del contenido.
+    $page->click('@hare')
+        ->click('a[data-label="Avance del cierre"]')
+        ->assertPathIs('/staffing/closing-board')
+        ->assertSeeIn('#nexus-content [role="note"]', 'Oculta para los demás. No hay carga en curso en Ene-Jun 2027. Tú la ves porque administras Nexus; en el menú de los demás no aparece.');
+
+    // Cerrado, en Carga académica: el grupo entero lo dice en su encabezado; la entrada suelta, con la insignia solo con el icono.
+    $page->assertSeeIn('[data-menu-group="asignacion"] [data-menu-badge]', 'Oculto')
         ->assertVisible('a[data-label="Cierre de la carga"] [data-menu-badge]')
         ->assertScript('getComputedStyle(document.querySelector(\'a[data-label="Cierre de la carga"] [data-menu-badge] span\')).display', 'none')
         ->assertMissing('a[data-label="Horarios publicados"] [data-menu-badge]');
@@ -53,11 +63,6 @@ it('el admin ve lo oculto con su insignia y su motivo, y el aviso en la pantalla
         ->keys('a[data-label="Cierre de la carga"]', 'Escape')
         ->assertScript(MENU_WHY_TIP, null)
         ->assertScript('document.body.dataset.menu', 'closed');
-
-    // En la pantalla oculta, el aviso arriba del contenido.
-    $page->click('a[data-label="Avance del cierre"]')
-        ->assertPathIs('/staffing/closing-board')
-        ->assertSeeIn('#nexus-content [role="note"]', 'Oculta para los demás. No hay carga en curso en Ene-Jun 2027. Tú la ves porque administras Nexus; en el menú de los demás no aparece.');
 
     // Abierto, la insignia lleva su texto y el motivo sale debajo; el primer Esc lo esconde y el segundo cierra.
     $page->click('@hare')
@@ -81,31 +86,33 @@ it('el admin ve lo oculto con su insignia y su motivo, y el aviso en la pantalla
         ->assertSeeIn('[data-menu-group="horarios"] [data-menu-badge]', 'Oculto')
         ->assertVisible('a[data-label="Choques y avance"]')
         ->assertNotPresent('a[data-label="Choques y avance"] [data-menu-badge]')
-        ->assertMissing('[data-menu-group="validacion"]')
+        ->assertMissing('a[data-label="Validación de catálogos"]')
         ->assertNoJavaScriptErrors();
 });
 
-it('en la hoja del celular, el admin lee el motivo bajo el grupo y bajo la entrada; el buscador lo esconde con ellos', function () {
+it('en la hoja del celular, el admin lee el motivo bajo el área, el grupo y la entrada; el buscador lo esconde con ellos', function () {
     signInToHiddenMenu('admin', 390)
         ->click('@hare')
-        ->assertVisible('[data-menu-group="validacion"] + [data-menu-note]')
-        ->assertSeeIn('[data-menu-group="validacion"] + [data-menu-note]', 'No hay validación abierta en Ene-Jun 2027')
+        ->assertVisible('[data-menu-area="academico"] [data-menu-flip="name"] + [data-menu-note]')
+        ->assertSeeIn('[data-menu-area="academico"] [data-menu-flip="name"] + [data-menu-note]', 'No hay validación abierta en Ene-Jun 2027')
+        ->assertSeeIn('[data-menu-group="horarios"] + [data-menu-note]', 'No hay carga en curso en Ene-Jun 2027')
         ->assertSeeIn('a[data-label="Cierre de la carga"] + [data-menu-note]', 'No hay carga en curso en Ene-Jun 2027')
         ->assertSeeIn('a[data-label="Cierre de la carga"] [data-menu-badge]', 'Oculta')
         ->type('#nexus-menu-search', 'cierre de')
         ->assertVisible('a[data-label="Cierre de la carga"] + [data-menu-note]')
-        ->assertMissing('[data-menu-group="validacion"] + [data-menu-note]')
+        ->assertMissing('[data-menu-area="academico"] [data-menu-flip="name"] + [data-menu-note]')
+        ->assertMissing('[data-menu-group="horarios"] + [data-menu-note]')
         ->assertMissing('a[data-label="Avance del cierre"] + [data-menu-note]')
         ->assertScript('document.documentElement.scrollWidth <= document.documentElement.clientWidth')
         ->assertNoJavaScriptErrors();
 });
 
-it('el coordinador no ve nada de la carga ni ninguna marca: de Académico, solo Horarios publicados', function () {
+it('el coordinador no ve nada de la carga ni ninguna marca: de Carga académica, solo Horarios publicados', function () {
     signInToHiddenMenu('19110001')
         ->assertVisible('a[data-label="Horarios publicados"]')
         ->assertMissing('a[data-label="Propuesta de carrera"]')
         ->click('@hare')
-        ->assertScript('[...document.querySelectorAll(\'[data-menu-area="academico"] a[data-menu-entry]\')].map((a) => a.dataset.label).join()', 'Horarios publicados')
+        ->assertScript('[...document.querySelectorAll(\'[data-menu-area="carga_academica"] a[data-menu-entry]\')].map((a) => a.dataset.label).join()', 'Horarios publicados')
         ->assertNotPresent('[data-menu-badge]')
         ->assertNotPresent('[data-why]')
         ->assertNoJavaScriptErrors();

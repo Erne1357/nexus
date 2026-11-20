@@ -63,9 +63,7 @@ function overviewRow(Department $department, string $code, int $semester, int $g
  */
 function validateOverviewCatalogs(Department $department): void
 {
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => test()->proposal->term_id, 'department_id' => $department->id]);
-    }
+    validateGeneralCatalogs(test()->proposal->term_id, $department->id);
 }
 
 it('agrupa las filas por semestre, en orden, y por clave de materia, con su materia y departamento', function () {
@@ -168,14 +166,15 @@ it('avisa de los departamentos involucrados con catálogos sin validar, por clav
     $ii = Department::factory()->create(['code' => 'II']);
     overviewRow($ii, 'INC-1001', 3, 1);
     validateOverviewCatalogs($ii);
-    foreach ([Catalog::Teachers, Catalog::Subjects, Catalog::Careers] as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->sc->id]);
-    }
+    CatalogReview::factory()->general(Catalog::Teachers)->validated()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->sc->id]);
+    // La de planes es de Servicios Escolares: sin validar, detiene a todos los departamentos (CV15).
+    CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::StudyPlans)->update(['status' => 'pending']);
 
     $pending = proposalOverview()->pendingCatalogs;
 
     expect(array_map(fn (array $row): array => [$row['department']->code, $row['catalogs']], $pending))->toBe([
-        ['CB', [Catalog::Teachers, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]],
+        ['CB', [Catalog::Teachers, Catalog::StudyPlans]],
+        ['II', [Catalog::StudyPlans]],
         ['SC', [Catalog::StudyPlans]],
     ]);
 });

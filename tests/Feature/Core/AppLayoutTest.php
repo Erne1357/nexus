@@ -154,7 +154,7 @@ describe('tarjeta de la credencial', function () {
 
 it('pone el menú y el contenido de la página después de la banda', function () {
     $this->actingAs(User::factory()->admin()->create())
-        ->get('/')
+        ->get(route('core.summary'))
         ->assertSeeLivewire('core::components.band')
         ->assertSeeLivewire('core::components.navigation')
         ->assertSeeInOrder(['data-testid="hare"', 'id="nexus-menu"', '<main', 'Hola,'], false);

@@ -106,7 +106,7 @@ final class SolverServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
-            new NavigationItem('Corridas del motor', 'solver.runs', 'o-cpu-chip', NavigationArea::Academico, group: NavigationGroup::Horarios,
+            new NavigationItem('Corridas del motor', 'solver.runs', 'o-cpu-chip', NavigationArea::CargaAcademica, group: NavigationGroup::Horarios,
                 whyUnavailable: LoadProgressQuery::menuCondition(),
                 visible: static fn (Actor $context): bool => $context->allowsAny(SolverPermission::DepartmentRunView) || $context->allowsAny(SolverPermission::CareerRunView)),
         ];

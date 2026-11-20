@@ -68,6 +68,8 @@ function dimensionTables(): array
         'core.queue' => 'failed_jobs',
         // Ver en el menú lo no disponible depende del periodo activo (MN-02), no de un recurso con campus.
         'core.navigation' => 'terms',
+        // El interruptor de la carga académica (MN-05) es un parámetro global de toda la instalación: no lleva campus.
+        'core.academic_load' => 'settings',
         'academic.department' => 'departments',
         'academic.career' => 'careers',
         'academic.subject' => 'subjects',

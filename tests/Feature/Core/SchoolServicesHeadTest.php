@@ -29,9 +29,10 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | AZ-02 (D20, confirmado el 5 de noviembre de 2026) visto desde las pantallas: el jefe del Departamento de Servicios
-| Escolares solo tiene lo de Servicios Escolares (hoy, «Por validar» en los planes de estudio); su menú no muestra lo
-| académico, no entra a esas pantallas ni las usa aunque llame a mano, y su credencial nombra su unidad. Los demás
-| puestos ven el mismo menú que antes.
+| Escolares solo tiene lo de Servicios Escolares («Por validar» en los planes de estudio y, desde el 20 de noviembre de
+| 2026, la validación de materias, planes y carreras de todo el Tec, CV15); su menú no muestra lo demás de lo académico,
+| no entra a esas pantallas ni las usa aunque llame a mano, y su credencial nombra su unidad. Los demás puestos ven el
+| mismo menú que antes.
 */
 
 beforeEach(function () {
@@ -62,21 +63,21 @@ function menuOf(User $user): array
 }
 
 describe('AZ-02: menú', function () {
-    it('AZ-02: el jefe de Servicios Escolares no ve lo académico: solo Materias por colocar (MN-01) y Planes de estudio', function () {
-        expect(menuOf($this->servicesHead))->toBe(['Materias por colocar', 'Planes de estudio']);
+    it('AZ-02: el jefe de Servicios Escolares no ve lo académico: solo Validar catálogos (CV15), Materias por colocar (MN-01) y Planes de estudio', function () {
+        expect(menuOf($this->servicesHead))->toBe(['Resumen', 'Validar catálogos', 'Materias por colocar', 'Planes de estudio']);
     });
 
-    // Las listas van en el orden del menú (MN-01): Mi espacio, Académico por etapas, Servicios escolares,
+    // Las listas van en el orden del menú (MN-01): Mi espacio (con «Resumen» para todo el que tiene puesto, 1.24.1), Académico (la validación), Carga académica por etapas (MN-05), Servicios escolares,
     // Recursos humanos y Administración. Inicio no es una entrada: el menú lo pinta aparte.
     it('AZ-S16: cada puesto ve su menú, en el orden de MN-01', function (Closure $user, array $menu) {
         expect(menuOf($user($this)))->toBe($menu);
     })->with([
-        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Validar catálogos', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes']],
-        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Edificios', 'Salones', 'Parámetros']],
-        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados', 'Docentes']],
-        'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Horarios publicados', 'Alumnos']],
-        'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Mi carga', 'Oferta']],
-        'admin' => [fn () => User::factory()->admin()->create(), ['Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Materias por colocar', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas']],
+        'jefe de un departamento académico' => [fn ($test) => $test->academicHead, ['Resumen', 'Validar catálogos', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes']],
+        'subdirección' => [fn () => User::factory()->withRole(Role::Subdireccion)->create(), ['Resumen', 'Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Edificios', 'Salones', 'Parámetros']],
+        'jefe de proyecto docente' => [fn ($test) => User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $test->c2->id, 'department_id' => $test->systems->id])->create(), ['Resumen', 'Bandeja del departamento', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Acuerdos', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Versiones publicadas', 'Horarios publicados', 'Docentes']],
+        'coordinador' => [fn ($test) => User::factory()->withRole(Role::Coordinador, ['campus_id' => $test->c2->id, 'career_id' => $test->isc->id])->create(), ['Resumen', 'Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Horarios publicados', 'Alumnos']],
+        'docente' => [fn () => User::factory()->withRole(Role::Docente)->create(), ['Resumen', 'Mi carga', 'Oferta']],
+        'admin' => [fn () => User::factory()->admin()->create(), ['Resumen', 'Validación de catálogos', 'Avance de validación', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados', 'Alumnos', 'Materias por colocar', 'Docentes', 'Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas']],
     ]);
 });
 
@@ -84,9 +85,14 @@ describe('AZ-02: pantallas y acciones', function () {
     it('AZ-02: el jefe de Servicios Escolares no entra a ninguna pantalla académica', function (string $route) {
         $this->actingAs($this->servicesHead)->get(route($route))->assertForbidden();
     })->with([
-        'catalog-validation.review', 'catalog-validation.progress', 'academic-load.inbox', 'academic-load.proposal', 'staffing.assign', 'staffing.teacher-loads',
+        'catalog-validation.progress', 'academic-load.inbox', 'academic-load.proposal', 'staffing.assign', 'staffing.teacher-loads',
         'faculty.teachers', 'students.index', 'academic.departments', 'academic.careers', 'academic.subjects',
     ]);
+
+    it('CV15: sí entra a la validación de catálogos, la de Servicios Escolares, y no a la de un departamento', function () {
+        $this->actingAs($this->servicesHead)->get(route('catalog-validation.review'))->assertOk();
+        $this->actingAs($this->servicesHead)->get(route('catalog-validation.review', ['department' => $this->systems->id]))->assertForbidden();
+    });
 
     it('AZ-02: el jefe de Servicios Escolares no abre la ficha de un docente ni la de un alumno', function () {
         $teacher = Teacher::factory()->create();
@@ -151,7 +157,7 @@ describe('AZ-02: credencial', function () {
         $this->actingAs($this->servicesHead);
 
         Livewire::test('core::pages.home')
-            ->assertSeeInOrder(['Jefe del Departamento de Servicios Escolares', 'Asignas semestre a las materias de la migración del SII'])
+            ->assertSeeInOrder(['Jefe del Departamento de Servicios Escolares', 'Validas cada periodo las materias, los planes de estudio y las carreras de todo el Tec', 'asignas semestre a las materias de la migración del SII'])
             ->assertDontSee('Jefe de departamento académico')
             ->assertDontSee('Validas los catálogos');
     });

@@ -30,6 +30,7 @@ final readonly class SettingDefinition
      * @param  array<string, string>  $fields  campo => etiqueta, solo en las tablas
      * @param  string|null  $unit  «horas», «minutos», «semestres»…
      * @param  Permission|null  $permission  permiso del módulo que, además de `core.setting.update`, deja cambiar este parámetro (CF-S7); sin él solo lo cambia quien tiene `core.setting.update`
+     * @param  bool  $permissionOnly  solo `permission` deja cambiarlo: `core.setting.update` no basta (el interruptor de la carga académica, MN-05)
      * @param  string|null  $savedNotice  aviso que se suma al de «Parámetros guardados» cuando este parámetro cambia (por ejemplo, que se recalcula en segundo plano)
      * @param  array<string, string>  $options  opción => etiqueta, solo en las tablas de opciones
      */
@@ -48,6 +49,7 @@ final readonly class SettingDefinition
         public ?Permission $permission = null,
         public ?string $savedNotice = null,
         public array $options = [],
+        public bool $permissionOnly = false,
     ) {
         if (preg_match('/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/', $key) !== 1) {
             throw new InvalidArgumentException("La llave de parámetro «{$key}» no tiene la forma modulo.nombre.");
@@ -59,6 +61,10 @@ final readonly class SettingDefinition
 
         if (($type === SettingType::ChoiceTable) === ($options === [])) {
             throw new InvalidArgumentException("El parámetro «{$key}»: solo las tablas de opciones llevan opciones, y todas las necesitan.");
+        }
+
+        if ($permissionOnly && $permission === null) {
+            throw new InvalidArgumentException("El parámetro «{$key}» es solo de su permiso, pero no declara cuál.");
         }
 
         if ($default === null ? ! $nullable : false) {

@@ -15,6 +15,7 @@ use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Sii\SiiStep;
 use App\Modules\Imports\Sii\Steps\AppointmentsStep;
 use App\Modules\Imports\Sii\Steps\ArchiveStep;
+use App\Modules\Imports\Sii\Steps\CampusMapStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\KardexStep;
 use App\Modules\Imports\Sii\Steps\OrgChartStep;
@@ -91,6 +92,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         SubjectsStep::class,
         SeriationStep::class,
         RoomsStep::class,
+        CampusMapStep::class,
         TeachersStep::class,
         PositionsStep::class,
         StaffStep::class,

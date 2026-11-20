@@ -69,7 +69,12 @@ new class extends Component
         $routeItem = $this->route === null ? null : $navigation->forRoute($this->route, $context);
         $onHome = $this->route === 'home';
         $visibleAreas = array_column($menu, 'area');
-        $currentArea = in_array($routeItem?->area, $visibleAreas, true) ? $routeItem->area : ($visibleAreas[0] ?? null);
+        // Sin área propia (el Inicio, que es el mapa, o una pantalla fuera del menú), la columna abre la primera área que no
+        // sea Mi espacio: «Resumen» vive ahí para todos los que tienen puesto (tarea 1.24.1) y no debe ganarle a lo que el
+        // puesto hace (para un jefe, Académico). Si solo tiene Mi espacio, esa.
+        $currentArea = in_array($routeItem?->area, $visibleAreas, true)
+            ? $routeItem->area
+            : (array_values(array_filter($visibleAreas, fn (NavigationArea $area): bool => $area !== NavigationArea::MiEspacio))[0] ?? $visibleAreas[0] ?? null);
 
         $shape = array_map(fn (array $area): array => [
             'headings' => $area['headings'],

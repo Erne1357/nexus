@@ -34,9 +34,15 @@
 
             <livewire:core::components.navigation />
 
+            {{-- $fullBleed (la página lo pasa con #[Layout('layouts::app', ['fullBleed' => true])]): el contenido ocupa todo
+                 lo que dejan la banda y el menú, sin márgenes ni ancho máximo; lo usa el mapa del campus del Inicio. --}}
             <main
                 id="nexus-content"
-                class="ms-(--menu-w) min-h-[calc(100vh_-_var(--shell-top))] max-w-[calc(1680px_+_4rem)] border-s border-base-300 px-8 pt-6.5 pb-10 max-desktop:px-6 max-desktop:pt-6 max-md:border-s-0 max-md:px-4 max-md:pt-[18px] max-md:pb-8"
+                @class([
+                    'ms-(--menu-w) border-s border-base-300 max-md:border-s-0',
+                    'min-h-[calc(100vh_-_var(--shell-top))] max-w-[calc(1680px_+_4rem)] px-8 pt-6.5 pb-10 max-desktop:px-6 max-desktop:pt-6 max-md:px-4 max-md:pt-[18px] max-md:pb-8' => ! ($fullBleed ?? false),
+                    'relative h-[calc(100dvh_-_var(--shell-top))] overflow-hidden' => $fullBleed ?? false,
+                ])
             >
                 <livewire:core::components.hidden-notice />
                 {{ $slot }}

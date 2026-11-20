@@ -40,6 +40,7 @@ use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Actions\SyncScheduleConflicts;
+use App\Modules\Scheduling\Console\ImportLoadProjectionCommand;
 use App\Modules\Scheduling\Console\RecomputeConflicts;
 use App\Modules\Scheduling\Database\Seeders\CleanScheduleDemoSeeder;
 use App\Modules\Scheduling\Database\Seeders\ReanalysisChangesDemoSeeder;
@@ -149,7 +150,7 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         Event::listen(ParallelGroupsArranged::class, NotifyCareersOnParallelGroupsArranged::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([RecomputeConflicts::class]);
+            $this->commands([RecomputeConflicts::class, ImportLoadProjectionCommand::class]);
         }
     }
 
@@ -166,14 +167,14 @@ final class SchedulingServiceProvider extends ModuleServiceProvider
         $loadInProgress = LoadProgressQuery::menuCondition();
 
         return [
-            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
+            new NavigationItem('Horarios', 'scheduling.editor', 'o-calendar', NavigationArea::CargaAcademica, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
-            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
+            new NavigationItem('Choques y avance', 'scheduling.conflicts', 'o-exclamation-triangle', NavigationArea::CargaAcademica, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(SchedulingPermission::ScheduleView)),
-            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::Academico, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
+            new NavigationItem('Acuerdos', 'scheduling.agreements', 'o-arrows-right-left', NavigationArea::CargaAcademica, group: NavigationGroup::Horarios, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::AgreementView)),
             // Después de «Cierre de la carga» y «Avance del cierre» (Staffing, orden 0) y antes de «Horarios publicados» (orden 2).
-            new NavigationItem('Re-análisis de la carga', 'scheduling.reanalysis', 'o-arrow-path', NavigationArea::Academico, group: NavigationGroup::CierrePublicacion, order: 1,
+            new NavigationItem('Re-análisis de la carga', 'scheduling.reanalysis', 'o-arrow-path', NavigationArea::CargaAcademica, group: NavigationGroup::CierrePublicacion, order: 1,
                 whyUnavailable: ReanalysisLoadsQuery::menuCondition(),
                 visible: static fn (Actor $context): bool => $context->allowsAny(AcademicLoadPermission::LoadView) || $context->allowsAny(AcademicLoadPermission::ProposalView)),
         ];

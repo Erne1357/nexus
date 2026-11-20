@@ -24,7 +24,7 @@
         @else
             <span class="flex flex-wrap items-center gap-x-2">
                 <span class="inline-flex items-center gap-1 text-warning"><x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5" aria-hidden="true" />Sin correo institucional</span>
-                @if ($row['emailReason'] === null)
+                @if ($row['emailReason'] === null && $record->is_active) {{-- CV14: un inactivo no cambia de correo --}}
                     <button type="button" class="link font-medium text-base-content underline-offset-4" data-email-open="{{ $record->id }}" data-email-name="{{ $record->name }}" data-email-current="" aria-label="Agregar el correo institucional de {{ $record->name }}" @if ($inTable) data-testid="add-email-{{ $record->rfc }}" @endif>Agregar</button>
                 @endif
             </span>

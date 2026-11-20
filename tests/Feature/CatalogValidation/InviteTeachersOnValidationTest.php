@@ -100,7 +100,7 @@ it('AC-09: validar la revisión de docentes invita a los activos del departament
 
 it('AC-09: validar otro catálogo no invita a nadie', function () {
     teacherWithoutAccess($this->sc, 'AAAA800101AA1', 'ana@cdjuarez.tecnm.mx');
-    $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id]);
+    $subjects = CatalogReview::factory()->general(Catalog::Subjects)->create(['term_id' => $this->term->id]);
 
     validateAllReviewed($subjects, $this->jefe);
 
@@ -170,7 +170,7 @@ it('AC-09: TeacherInvitationReleaseQuery libera la invitación con la primera re
         ->and($releases->isReleased($teacher))->toBeFalse();
 
     CatalogReview::factory()->validated()->create(['term_id' => Term::factory()->create(['ends_on' => today()->subDay()->toDateString(), 'starts_on' => today()->subMonths(5)->toDateString()])->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Teachers]);
-    CatalogReview::factory()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Subjects]);
+    CatalogReview::factory()->validated()->create(['term_id' => $this->term->id, 'department_id' => $this->sc->id, 'catalog' => Catalog::Rooms]);
 
     expect($releases->isReleased($teacher))->toBeFalse();
 

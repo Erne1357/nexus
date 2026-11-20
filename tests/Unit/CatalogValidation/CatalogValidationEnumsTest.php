@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\DischargeReason;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
@@ -27,6 +28,21 @@ it('HC-14: un campus que usa salones exige los cinco; uno sin salones, los cuatr
 
     expect(Catalog::requiredFor(usesRooms: true))->toBe(Catalog::cases())
         ->and(Catalog::requiredFor(usesRooms: false))->toBe([Catalog::Teachers, Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
+});
+
+it('CV15: docentes y salones los valida cada departamento; materias, planes y carreras, Servicios Escolares para todo el Tec', function (Catalog $catalog, CatalogOwner $owner) {
+    expect($catalog->owner())->toBe($owner);
+})->with([
+    [Catalog::Teachers, CatalogOwner::Department],
+    [Catalog::Rooms, CatalogOwner::Department],
+    [Catalog::Subjects, CatalogOwner::SchoolServices],
+    [Catalog::StudyPlans, CatalogOwner::SchoolServices],
+    [Catalog::Careers, CatalogOwner::SchoolServices],
+]);
+
+it('CV15: los catálogos de cada dueño, en el orden del enum', function () {
+    expect(Catalog::ownedBy(CatalogOwner::Department))->toBe([Catalog::Teachers, Catalog::Rooms])
+        ->and(Catalog::ownedBy(CatalogOwner::SchoolServices))->toBe([Catalog::Subjects, Catalog::StudyPlans, Catalog::Careers]);
 });
 
 it('cada estado de revisión tiene su etiqueta y el tono de su insignia', function (ReviewStatus $status, string $label, StatusTone $tone) {

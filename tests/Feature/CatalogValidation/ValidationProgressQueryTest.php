@@ -6,11 +6,13 @@ use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -23,9 +25,10 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 
 /*
-| Tarea 2.5: lo que lee el tablero de avance de validación. El total sigue la regla de HC-14 (las cuatro que no son
-| salones y una de salones para todos los campus si alguno abierto usa salones; decisión 6, confirmada el 12 de
-| noviembre de 2026) y cuadra con CatalogReviewQuery::pendingFor.
+| Tarea 2.5: lo que lee el tablero de avance de validación. Cada departamento tiene su renglón con sus docentes y una de
+| salones para todos los campus si alguno abierto usa salones (decisión 6, confirmada el 12 de noviembre de 2026), y
+| Servicios Escolares el suyo, primero, con materias, planes y carreras de todo el Tec (CV15). El total de cada renglón
+| cuadra con CatalogReviewQuery::pendingOf.
 */
 
 beforeEach(function () {
@@ -44,11 +47,15 @@ beforeEach(function () {
     $this->progress = fn (string $search = '', string $status = '') => app(ValidationProgressQuery::class)->board($this->term, $search, $status);
 });
 
+/**
+ * Pone en `$status` la revisión del catálogo: la del departamento en docentes y salones, la de Servicios Escolares en
+ * materias, planes y carreras (CV15).
+ */
 function progressValidate(Department $department, Catalog $catalog, ReviewStatus $status = ReviewStatus::Validated): void
 {
     CatalogReview::query()
         ->where('term_id', test()->term->id)
-        ->where('department_id', $department->id)
+        ->tap(fn ($query) => CatalogReviewQuery::ownedBy($query, $catalog->owner() === CatalogOwner::Department ? $department->id : null))
         ->where('catalog', $catalog)
         ->update(['status' => $status, 'validated_at' => $status === ReviewStatus::Validated ? now() : null]);
 }
@@ -67,39 +74,41 @@ it('MS4: un periodo abierto solo en modalidades sin salones no tiene campus abie
     expect(app(ValidationProgressQuery::class)->openCampuses($term))->toBeEmpty();
 });
 
-it('cuenta el total con HC-14: las cuatro que no son salones más una de salones para todos los campus', function () {
+it('CV15: cada departamento cuenta sus docentes y salones, y Servicios Escolares, primero, sus tres catálogos', function () {
     $board = ($this->progress)();
 
-    expect($board['global']['total'])->toBe(2 * 5)
-        ->and($board['rows'])->toHaveCount(2)
-        ->and($board['rows'][0]['total'])->toBe(5)
-        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans', 'careers', 'rooms']);
+    expect($board['global']['total'])->toBe(3 + 2 * 2)
+        ->and($board['rows'])->toHaveCount(3)
+        ->and($board['rows'][0]['department']->id)->toBe(ReviewOwner::SCHOOL_SERVICES)
+        ->and($board['rows'][0]['total'])->toBe(3)
+        ->and($board['rows'][1]['total'])->toBe(2)
+        ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'rooms', 'subjects', 'study_plans', 'careers'])
+        ->and(array_column($board['rows'][1]['columns'], 'key'))->toBe(['teachers', 'rooms']);
 });
 
-it('una revisión que falta cuenta como pendiente y cuadra con pendingFor', function () {
-    CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Careers)->delete();
+it('una revisión que falta cuenta como pendiente y cuadra con pendingOf', function () {
+    CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->delete();
+    progressValidate($this->sis, Catalog::Teachers);
+
+    $board = ($this->progress)();
+    $row = collect($board['rows'])->firstWhere('department.code', 'SIS');
+
+    expect($row['cells']['rooms'])->toBeNull()
+        ->and($row['validated'])->toBe(1)
+        ->and($row['pending'])->toBe(1)
+        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingOf($this->term, ReviewOwner::ofDepartment($this->sis))));
+});
+
+it('cuenta la de salones, una para todo el Tec, y cuadra con pendingOf', function () {
     progressValidate($this->sis, Catalog::Teachers);
     progressValidate($this->sis, Catalog::Rooms);
 
     $board = ($this->progress)();
     $row = collect($board['rows'])->firstWhere('department.code', 'SIS');
 
-    expect($row['cells']['careers'])->toBeNull()
-        ->and($row['validated'])->toBe(2)
-        ->and($row['pending'])->toBe(3)
-        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis)));
-});
-
-it('cuenta la de salones, una para todo el Tec, y cuadra con pendingFor', function () {
-    progressValidate($this->sis, Catalog::Teachers);
-    progressValidate($this->sis, Catalog::Rooms);
-
-    $board = ($this->progress)();
-    $row = collect($board['rows'])->firstWhere('department.code', 'SIS');
-
-    expect($board['global']['total'])->toBe(10)
-        ->and($row['total'])->toBe(5)
-        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingFor($this->term, modalityOf('PRES'), $this->sis)));
+    expect($board['global']['total'])->toBe(7)
+        ->and($row['total'])->toBe(2)
+        ->and($row['total'] - $row['validated'])->toBe(count(app(CatalogReviewQuery::class)->pendingOf($this->term, ReviewOwner::ofDepartment($this->sis))));
 });
 
 it('CV9: las columnas y el total son los catálogos abiertos en el periodo', function () {
@@ -107,7 +116,7 @@ it('CV9: las columnas y el total son los catálogos abiertos en el periodo', fun
 
     $board = ($this->progress)();
 
-    expect($board['global']['total'])->toBe(6)
+    expect($board['global']['total'])->toBe(4)
         ->and(array_column($board['columns'], 'key'))->toBe(['teachers', 'subjects', 'study_plans']);
 
     CatalogReview::query()->delete();
@@ -122,9 +131,9 @@ it('suma validadas, en revisión y pendientes por fila, por columna y en lo glob
 
     $board = ($this->progress)();
 
-    expect($board['global'])->toMatchArray(['validated' => 2, 'in_review' => 1, 'pending' => 7, 'total' => 10, 'percent' => 20])
+    expect($board['global'])->toMatchArray(['validated' => 2, 'in_review' => 1, 'pending' => 4, 'total' => 7, 'percent' => 29])
         ->and($board['totals']['teachers'])->toMatchArray(['validated' => 2, 'total' => 2])
-        ->and($board['totals']['subjects'])->toMatchArray(['validated' => 0, 'in_review' => 1, 'total' => 2]);
+        ->and($board['totals']['subjects'])->toMatchArray(['validated' => 0, 'in_review' => 1, 'total' => 1]);
 });
 
 it('cuenta las observaciones abiertas y en cuántos departamentos, y las resueltas', function () {
@@ -161,7 +170,7 @@ it('«Recordar» queda bloqueado si no falta nada, y la insignia cuenta jefes di
 
     expect(($this->progress)()['remindable'])->toBe(['departments' => 2, 'heads' => 1]);
 
-    foreach (Catalog::cases() as $catalog) {
+    foreach (Catalog::ownedBy(CatalogOwner::Department) as $catalog) {
         progressValidate($this->sis, $catalog);
     }
 
@@ -175,7 +184,8 @@ it('con un departamento dado arma solo su fila', function () {
     $board = app(ValidationProgressQuery::class)->board($this->term, '', 'validated', $this->ele->id);
 
     expect($board['rows'])->toBe([])
-        ->and(app(ValidationProgressQuery::class)->board($this->term, departmentId: $this->ele->id)['rows'])->toHaveCount(1);
+        ->and(app(ValidationProgressQuery::class)->board($this->term, ownerId: $this->ele->id)['rows'])->toHaveCount(1)
+        ->and(app(ValidationProgressQuery::class)->board($this->term, ownerId: ReviewOwner::SCHOOL_SERVICES)['rows'][0]['department']->name)->toBe('Servicios Escolares');
 });
 
 it('el último recordatorio cuenta los de cualquier campus: la validación es de todo el Tec', function () {
@@ -187,7 +197,7 @@ it('el último recordatorio cuenta los de cualquier campus: la validación es de
 
 it('filtra por departamento o jefe y por estado', function () {
     User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
-    foreach (Catalog::cases() as $catalog) {
+    foreach (Catalog::ownedBy(CatalogOwner::Department) as $catalog) {
         progressValidate($this->sis, $catalog);
     }
 
@@ -195,11 +205,11 @@ it('filtra por departamento o jefe y por estado', function () {
 
     expect($codes('sist'))->toBe(['SIS'])
         ->and($codes('raul'))->toBe(['ELE'])
-        ->and($codes('', 'pending'))->toBe(['ELE'])
+        ->and($codes('', 'pending'))->toBe(['SE', 'ELE'])
         ->and($codes('', 'validated'))->toBe(['SIS'])
         ->and($codes('nadie'))->toBe([])
         // El global no cambia con los filtros de la tabla.
-        ->and(($this->progress)('nadie')['global']['total'])->toBe(10);
+        ->and(($this->progress)('nadie')['global']['total'])->toBe(7);
 });
 
 it('reporta el estado de la carga de cada departamento en la modalidad de los campus mediante el evento con reporte (M1)', function () {
@@ -218,13 +228,13 @@ it('entrega por renglón las columnas que aún no están validadas, para el celu
     progressValidate($this->sis, Catalog::Teachers);
 
     $board = ($this->progress)();
-    $sis = collect($board['rows'])->first(fn (array $row) => $row['department']->is($this->sis));
+    $sis = collect($board['rows'])->first(fn (array $row) => $row['department']->id === $this->sis->id);
 
-    expect(array_column($sis['pending_columns'], 'key'))->toBe(['subjects', 'study_plans', 'careers', 'rooms']);
+    expect(array_column($sis['pending_columns'], 'key'))->toBe(['rooms']);
 });
 
 it('CV7: dice por celda cuántos registros van revisados de cuántos, y nulo si falta la revisión', function () {
-    CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Careers)->delete();
+    CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Rooms)->delete();
     $review = CatalogReview::query()->where('department_id', $this->sis->id)->where('catalog', Catalog::Teachers)->sole();
     $teacher = Teacher::factory()->adscribedTo($this->sis)->create();
     Teacher::factory()->adscribedTo($this->sis)->create();
@@ -233,6 +243,6 @@ it('CV7: dice por celda cuántos registros van revisados de cuántos, y nulo si 
     $sis = collect(($this->progress)()['rows'])->firstWhere('department.code', 'SIS');
 
     expect($sis['reviewed']['teachers'])->toBe(['reviewed' => 1, 'total' => 2])
-        ->and($sis['reviewed']['subjects'])->toBe(['reviewed' => 0, 'total' => 0])
-        ->and($sis['reviewed']['careers'])->toBeNull();
+        ->and($sis['reviewed']['rooms'])->toBeNull()
+        ->and($sis['reviewed'])->not->toHaveKey('subjects');
 });
