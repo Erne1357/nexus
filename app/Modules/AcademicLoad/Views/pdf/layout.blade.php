@@ -37,7 +37,7 @@
 <body>
     <header>
         <table><tr>
-            <td style="border: 0; padding: 0 6px 2px 0; width: 32px; vertical-align: bottom;"><img src="{{ \App\Modules\AcademicLoad\Exports\PublishedPdf::crest() }}" alt="Escudo del ITCJ" style="height: 34px; width: auto;"></td>
+            <td style="border: 0; padding: 0 6px 2px 0; width: 32px; vertical-align: bottom;"><img src="{{ $crest ?? \App\Modules\AcademicLoad\Exports\PublishedPdf::crest() }}" alt="Escudo del ITCJ" style="height: 34px; width: auto;"></td>
             <td style="border: 0; padding: 0 0 2px;"><span class="brand">Nexus · Horarios · Carga académica</span><br><span class="org">Instituto Tecnológico de Ciudad Juárez</span></td>
             <td style="border: 0; padding: 0 0 2px; text-align: right; vertical-align: bottom;" class="org">{{ $campus?->name ?? $modality->name }} · {{ $term->name }}@if ($updated)<br>Actualizado el {{ $updated }}@endif</td>
         </tr></table>

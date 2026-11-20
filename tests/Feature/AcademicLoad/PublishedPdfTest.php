@@ -291,6 +291,15 @@ it('1.24.5: el encabezado de los PDF lleva el escudo del ITCJ y «Nexus · Horar
             ->toContain('Nexus · Horarios · Carga académica')
             ->toContain('Instituto Tecnológico de Ciudad Juárez')
             ->not->toContain('src="http');
+        preg_match('#<img src="data:image/jpeg;base64,([^"]+)"#', $html, $found);
+        expect(base64_decode($found[1] ?? '', true))->not->toBeEmpty()->toStartWith("\xFF\xD8\xFF");
         expect($document->build())->toStartWith('%PDF');
     }
+});
+
+it('1.24.5: la llave del PDF lleva el formato 3, así que un PDF en caché armado con el formato 2 no se sirve', function () {
+    $document = new SemesterPdf($this->term->id, modalityOf('PRES')->id, '20271', 'PRES', LoadSnapshot::query()->pluck('id')->all(), $this->career['id'], 'ISC', $this->plan['id'], 'ISIC-2010-224', 3, 'C2');
+    $old = 'semestre-'.hash('xxh128', implode('|', [2, $document->termId, $document->modalityId, 'C2', $this->career['id'], $this->plan['id'], 3, ...$document->snapshotIds]));
+
+    expect(PublishedPdf::FORMAT)->toBe(3)->and($document->key())->not->toBe($old);
 });

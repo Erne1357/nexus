@@ -16,6 +16,7 @@ use App\Modules\Core\Support\WeekTime;
 use Carbon\CarbonImmutable;
 use Dompdf\Dompdf;
 use Dompdf\Options;
+use RuntimeException;
 
 /**
  * Lo común de los PDF públicos de lo publicado (tarea 4.5; ADR-0021): uno por carrera y semestre, docente o salón,
@@ -118,13 +119,20 @@ abstract class PublishedPdf implements PublishedExport
         $schedule = app(PublishedScheduleQuery::class)->scheduleOf($term, $modality, $this->snapshotIds)->onlyCampus($this->campusCode);
         [$view, $data, $orientation] = $this->document($schedule, $term, $modality);
 
-        return [view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus])->render(), $orientation];
+        return [view($view, [...$data, 'term' => $term, 'modality' => $modality, 'campus' => $campus, 'crest' => self::crest()])->render(), $orientation];
     }
 
     /** El escudo del ITCJ (`resources/images/pdf/escudo-itcj.jpg`, JPEG sobre blanco: DomPDF sin la extensión GD solo lee JPEG) en base64. */
     public static function crest(): string
     {
-        return 'data:image/jpeg;base64,'.base64_encode((string) file_get_contents(resource_path('images/pdf/escudo-itcj.jpg')));
+        $path = resource_path('images/pdf/escudo-itcj.jpg');
+        $bytes = is_file($path) ? file_get_contents($path) : false;
+
+        if ($bytes === false || $bytes === '') {
+            throw new RuntimeException("Falta el escudo del ITCJ para el encabezado de los PDF: {$path}");
+        }
+
+        return 'data:image/jpeg;base64,'.base64_encode($bytes);
     }
 
     /**
