@@ -13,6 +13,7 @@ use App\Modules\AcademicLoad\Models\ProposalReview;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalAnomalies;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
@@ -58,6 +59,23 @@ final readonly class DepartmentInbox
     public function canAccept(): bool
     {
         return $this->load !== null && $this->pendingCatalogs === [];
+    }
+
+    /**
+     * Si entre los catálogos sin validar hay alguno del departamento (docentes o salones): solo entonces le sirve ir a
+     * validar. Materias, planes y carreras los valida Servicios Escolares (CV15).
+     */
+    public function pendingOwnCatalogs(): bool
+    {
+        return array_any($this->pendingCatalogs, fn (Catalog $catalog): bool => $catalog->owner() === CatalogOwner::Department);
+    }
+
+    /**
+     * Si entre los catálogos sin validar hay alguno de Servicios Escolares (materias, planes o carreras; CV15).
+     */
+    public function pendingSchoolServicesCatalogs(): bool
+    {
+        return array_any($this->pendingCatalogs, fn (Catalog $catalog): bool => $catalog->owner() === CatalogOwner::SchoolServices);
     }
 
     /**

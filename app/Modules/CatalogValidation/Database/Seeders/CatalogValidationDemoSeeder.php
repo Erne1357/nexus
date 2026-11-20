@@ -378,7 +378,8 @@ class CatalogValidationDemoSeeder extends Seeder
                 continue;
             }
 
-            $code = ReviewOwner::of($group->first())->code;
+            $owner = ReviewOwner::of($group->first());
+            $code = $owner->isSchoolServices() ? ReviewOwner::SCHOOL_SERVICES : $owner->code;
             $flags = [];
 
             foreach ($group->sort(fn (CatalogReview $a, CatalogReview $b): int => [$order[$a->catalog->value], $a->campus?->code] <=> [$order[$b->catalog->value], $b->campus?->code]) as $review) {
@@ -407,13 +408,13 @@ class CatalogValidationDemoSeeder extends Seeder
 
     /**
      * El estado final de una revisión: `validated`, `reopened` (validada y reabierta), `review` (en revisión) o
-     * `pending`. Fijo por departamento (o Servicios Escolares, `SE`, CV15) y perfil: AcademicLoad depende de él, y las
+     * `pending`. Fijo por departamento (o Servicios Escolares, ReviewOwner::SCHOOL_SERVICES, CV15) y perfil: AcademicLoad depende de él, y las
      * cargas de todos los departamentos necesitan validados los catálogos de Servicios Escolares (HC-14).
      */
     private function target(string $department, Catalog $catalog, string $profile): string
     {
         return match ($department) {
-            'SE', 'CB', 'SC', 'II', 'EE' => 'validated',
+            ReviewOwner::SCHOOL_SERVICES, 'CB', 'SC', 'II', 'EE' => 'validated',
             'CEA' => match (true) {
                 $profile === 'demo' => 'validated',
                 $catalog === Catalog::Teachers => 'validated',

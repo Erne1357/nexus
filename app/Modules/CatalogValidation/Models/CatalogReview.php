@@ -6,7 +6,6 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Database\Factories\CatalogReviewFactory;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
-use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -32,6 +31,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[UseFactory(CatalogReviewFactory::class)]
 class CatalogReview extends Model
 {
+    /** De quién es una revisión sin departamento: Servicios Escolares (CV15; owner_id, `?department=` de la pantalla). */
+    public const string SCHOOL_SERVICES = 'servicios-escolares';
+
     /** @use HasFactory<CatalogReviewFactory> */
     use HasFactory, HasUuids;
 
@@ -107,14 +109,14 @@ class CatalogReview extends Model
     }
 
     /**
-     * De quién es (CV15): el id de su departamento o, en las de Servicios Escolares, ReviewOwner::SCHOOL_SERVICES. Es lo
+     * De quién es (CV15): el id de su departamento o, en las de Servicios Escolares, SCHOOL_SERVICES. Es lo
      * que lleva `?department=` en la pantalla de la revisión.
      *
      * @return Attribute<string, never>
      */
     protected function ownerId(): Attribute
     {
-        return Attribute::get(fn (): string => $this->department_id ?? ReviewOwner::SCHOOL_SERVICES);
+        return Attribute::get(fn (): string => $this->department_id ?? self::SCHOOL_SERVICES);
     }
 
     /**

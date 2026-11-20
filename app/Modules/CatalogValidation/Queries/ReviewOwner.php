@@ -19,7 +19,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 final readonly class ReviewOwner
 {
     /** El `?department=` de las revisiones de Servicios Escolares, que no tienen departamento. */
-    public const string SCHOOL_SERVICES = 'servicios-escolares';
+    public const string SCHOOL_SERVICES = CatalogReview::SCHOOL_SERVICES;
 
     private function __construct(
         public string $id,
