@@ -98,6 +98,18 @@
             @endif
         </div>
 
+        @if ($isRooms && $current['canClaim'] && ! $current['viewOnly'])
+            {{-- CV16: reclamar salones sin dueño; con la revisión validada, deshabilitado y con su motivo. --}}
+            <div class="w-full md:ms-auto md:w-auto">
+                @if ($current['claimReason'] === null)
+                    <x-button :label="'Reclamar salones sin dueño ('.$unownedCount.')'" icon="o-hand-raised" class="btn-outline w-full md:w-auto" wire:click="openClaim" spinner="openClaim" data-testid="claim-rooms" />
+                @else
+                    <button type="button" class="btn btn-outline w-full md:w-auto" aria-disabled="true" disabled aria-describedby="claim-why" data-testid="claim-rooms"><x-icon name="o-hand-raised" class="h-4 w-4" aria-hidden="true" />Reclamar salones sin dueño ({{ $unownedCount }})</button>
+                    <p id="claim-why" class="mt-1 text-xs text-neutral md:max-w-56" data-testid="claim-why">{{ $current['claimReason'] }}</p>
+                @endif
+            </div>
+        @endif
+
         @if ($isTeachers && ! $current['viewOnly'])
             <div class="w-full md:ms-auto md:w-auto">
                 @if ($current['canEdit'])
@@ -354,6 +366,32 @@
             @include('catalog-validation::review.removed', ['review' => $review, 'removed' => $removed])
         @endif
     </x-drawer>
+
+    @if ($isRooms)
+        {{-- CV16: «Reclamar salones sin dueño» y «Soltar» (con su confirmación, ADR-0023). --}}
+        <x-drawer wire:model.live="showClaim" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="claim-rooms-title" data-testid="claim-drawer">
+            @if ($claimable !== null)
+                @include('catalog-validation::review.claim-rooms', ['review' => $review, 'claimable' => $claimable, 'claimFilters' => $claimFilters])
+            @endif
+        </x-drawer>
+
+        <x-modal wire:model="showRelease" title="Soltar el salón" box-class="max-w-lg" separator data-testid="release-modal">
+            <div class="space-y-3 text-sm">
+                @error('claim')
+                    <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm" :title="$message" data-testid="release-error" />
+                @enderror
+                <p>Vas a soltar el salón <strong class="font-mono">{{ $releasing }}</strong>: regresa a «sin dueño», sale de la revisión de {{ $review->department?->name }} y pierde su marca de revisado.</p>
+                <p class="text-neutral">Otro departamento podrá reclamarlo. Solo se sueltan los que reclamaste aquí y mientras la revisión no esté validada.</p>
+            </div>
+
+            <x-slot:actions>
+                <div class="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+                    <x-button label="Cancelar" class="max-sm:h-11" wire:click="cancelRelease" />
+                    <x-button label="Soltar" icon="o-arrow-uturn-left" class="btn-error max-sm:h-11" wire:click="releaseRoom" spinner="releaseRoom" data-testid="confirm-release" />
+                </div>
+            </x-slot:actions>
+        </x-modal>
+    @endif
 
     @if ($isTeachers)
         <x-modal wire:model="showDischarge" :title="$discharging['title'] ?? 'Quitar del departamento'" box-class="max-w-lg" separator data-testid="discharge-modal">

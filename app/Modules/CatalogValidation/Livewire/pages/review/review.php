@@ -2,10 +2,12 @@
 
 use App\Modules\Academic\Enums\SubjectKind;
 use App\Modules\CatalogValidation\Actions\AddReviewTeacher;
+use App\Modules\CatalogValidation\Actions\ClaimRooms;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Actions\DischargeReviewTeacher;
 use App\Modules\CatalogValidation\Actions\FlagRecord;
 use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
+use App\Modules\CatalogValidation\Actions\ReleaseRoomClaim;
 use App\Modules\CatalogValidation\Actions\ReopenReview;
 use App\Modules\CatalogValidation\Actions\ResolveFlag;
 use App\Modules\CatalogValidation\Actions\SetReviewTeacherEmail;
@@ -22,6 +24,7 @@ use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\ReviewOwner;
+use App\Modules\CatalogValidation\Queries\RoomClaimQuery;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
@@ -29,6 +32,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Queries\BuildingQuery;
+use App\Modules\Facilities\Queries\RoomQuery;
 use App\Modules\Facilities\Rules\RoomRules;
 use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Models\Teacher;
@@ -94,6 +98,11 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /** Cuántos registros trae cada página de la lista. */
     private const int PER_PAGE = 50;
+
+    /** CV16: con la revisión validada no se reclama ni se suelta; hay que reabrirla. */
+    private const string CLAIM_VALIDATED = 'La revisión de Salones ya está validada: reábrela para reclamar salones.';
+
+    private const string RELEASE_VALIDATED = 'La revisión de Salones ya está validada: reábrela para soltar un salón.';
 
     /** El departamento abierto; vacío es el primero que cubre el jefe. Se valida en cada petición. */
     #[Url]
@@ -201,6 +210,23 @@ new #[Title('Validación de catálogos')] class extends Component
     public string $dischargeText = '';
 
     /** La confirmación de «Validarlos», los catálogos sin registros activos (CV7, D5). */
+    /** «Reclamar salones sin dueño» (CV16): el drawer, su búsqueda, sus filtros y cuántos salones muestra. */
+    public bool $showClaim = false;
+
+    public string $claimSearch = '';
+
+    public string $claimCampus = '';
+
+    public string $claimBuilding = '';
+
+    public int $claimLimit = 40;
+
+    /** «Soltar» un salón reclamado (CV16): su modal y el salón. */
+    public bool $showRelease = false;
+
+    #[Locked]
+    public ?string $releaseId = null;
+
     public bool $showEmpty = false;
 
     /**
@@ -320,8 +346,16 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->roomBuilding = '';
         }
 
+        if (in_array($property, ['claimSearch', 'claimCampus', 'claimBuilding'], true)) {
+            $this->claimLimit = 40;
+        }
+
+        if ($property === 'claimCampus') {
+            $this->claimBuilding = '';
+        }
+
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'segment', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'recordDepartment', 'showDrawer', 'showRemoved', 'showAddTeacher', 'teacherSearch', 'editingId', 'showDischarge', 'dischargeId', 'dischargeKind', 'dischargeText', 'showEmpty', 'emptyIds');
+            $this->reset('search', 'segment', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'recordDepartment', 'showDrawer', 'showRemoved', 'showAddTeacher', 'teacherSearch', 'editingId', 'showDischarge', 'dischargeId', 'dischargeKind', 'dischargeText', 'showEmpty', 'emptyIds', 'showClaim', 'claimSearch', 'claimCampus', 'claimBuilding', 'claimLimit', 'showRelease', 'releaseId');
             $this->segment = $this->segmentOrDefault('');
         }
     }
@@ -549,6 +583,111 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
+     * «Reclamar salones sin dueño» (CV16): abre el drawer. Con la revisión validada se rechaza (hay que reabrirla), y a
+     * quien no corrige la revisión, también.
+     */
+    public function openClaim(): void
+    {
+        $review = $this->roomsReview();
+        $this->authorize('claimRooms', $review);
+
+        if ($review->status === ReviewStatus::Validated) {
+            throw ValidationException::withMessages(['status' => self::CLAIM_VALIDATED]);
+        }
+
+        $this->reset('claimSearch', 'claimCampus', 'claimBuilding');
+        $this->claimLimit = 40;
+        $this->showClaim = true;
+    }
+
+    /**
+     * «Mostrar más» del drawer de «Reclamar salones sin dueño».
+     */
+    public function moreClaims(): void
+    {
+        $this->authorize('claimRooms', $this->roomsReview());
+        $this->claimLimit += 40;
+    }
+
+    /**
+     * «Reclamar N seleccionados» (CV16): los salones sin dueño que el jefe eligió pasan a su departamento y entran a la
+     * revisión por revisar. El primero que reclama se lo queda: los que otro jefe se llevó mientras tanto se omiten y se
+     * le avisa. La selección vive en el navegador y llega aquí.
+     *
+     * @param  list<string>  $ids
+     */
+    public function claimRooms(array $ids, ClaimRooms $claimRooms): void
+    {
+        $review = $this->roomsReview();
+        $this->authorize('claimRooms', $review);
+
+        try {
+            $result = $claimRooms->handle($review, array_values(array_filter($ids, is_string(...))), $this->user());
+        } catch (ValidationException $exception) {
+            throw ValidationException::withMessages(['claim' => Arr::flatten($exception->errors())]);
+        }
+
+        $this->resolved = null;
+        $claimed = count($result['claimed']);
+        $skipped = count($result['skipped']);
+
+        if ($claimed > 0) {
+            $this->success($claimed === 1 ? 'Reclamaste 1 salón' : "Reclamaste {$claimed} salones", e(($claimed === 1 ? 'Entró' : 'Entraron')." a {$review->department?->name} por revisar."));
+        }
+
+        if ($skipped > 0) {
+            $this->warning($skipped === 1 ? 'Se omitió 1 salón' : "Se omitieron {$skipped} salones", e('Ya no estaban disponibles (otro jefe los reclamó o cambiaron): '.implode(', ', $result['skipped']).'.'));
+        }
+    }
+
+    /**
+     * Pide confirmar «Soltar» un salón que esta revisión reclamó (CV16).
+     */
+    public function askRelease(string $id): void
+    {
+        $review = $this->roomsReview();
+        $this->authorize('releaseRoomClaim', $review);
+        abort_unless(isset(app(RoomClaimQuery::class)->activeOf($review, [$id])[$id]), 404);
+
+        if ($review->status === ReviewStatus::Validated) {
+            throw ValidationException::withMessages(['status' => self::RELEASE_VALIDATED]);
+        }
+
+        $this->resetValidation();
+        $this->releaseId = $id;
+        $this->showRelease = true;
+    }
+
+    public function cancelRelease(): void
+    {
+        $this->showRelease = false;
+        $this->releaseId = null;
+        $this->resetValidation();
+    }
+
+    /**
+     * «Soltar» (CV16): el salón que esta revisión reclamó regresa a sin dueño.
+     */
+    public function releaseRoom(ReleaseRoomClaim $releaseClaim): void
+    {
+        $review = $this->roomsReview();
+        $this->authorize('releaseRoomClaim', $review);
+        abort_if($this->releaseId === null, 404);
+
+        try {
+            $releaseClaim->handle($review, $this->releaseId, $this->user());
+        } catch (ValidationException $exception) {
+            $this->cancelRelease();
+
+            throw $exception;
+        }
+
+        $this->cancelRelease();
+        $this->resolved = null;
+        $this->success('Soltaste el salón', 'Quedó sin dueño: otro departamento puede reclamarlo.');
+    }
+
+    /**
      * «Agregar docente» (CV-S9): uno que ya existe, activo o dado de baja (se reactiva), que el jefe encontró en el
      * drawer por su RFC o su nombre, al departamento; queda revisado (CV7). A uno dado de baja que ocupa un puesto solo lo
      * reactivan el admin o la Subdirección: el drawer lo muestra deshabilitado con su motivo y aquí se rechaza.
@@ -767,6 +906,13 @@ new #[Title('Validación de catálogos')] class extends Component
         return $this->state()['reviews']->first(fn (CatalogReview $review): bool => $review->catalog->value === $catalog) ?? abort(404);
     }
 
+    private function roomsReview(): CatalogReview
+    {
+        abort_unless($this->openCatalog() === Catalog::Rooms, 404);
+
+        return $this->currentReview();
+    }
+
     private function currentReview(): CatalogReview
     {
         return $this->reviewOf($this->openCatalog()?->value ?? '');
@@ -943,6 +1089,8 @@ new #[Title('Validación de catálogos')] class extends Component
             'canEdit' => ! $validated && $canCorrect,
             'canEmail' => $canCorrect,
             'canFlag' => ! $validated && $isHead,
+            'canClaim' => $review->catalog === Catalog::Rooms && $review->department_id !== null && $canCorrect,
+            'claimReason' => $validated ? self::CLAIM_VALIDATED : null,
             'canToggle' => ! $validated && in_array($review->catalog, [Catalog::Subjects, Catalog::Rooms], true) && $canCorrect,
             'toggleReason' => match ($review->catalog) {
                 Catalog::Careers, Catalog::StudyPlans => 'Carreras y planes no se activan ni se desactivan aquí: pon la observación «Debe desactivarse».',
@@ -1090,6 +1238,11 @@ new #[Title('Validación de catálogos')] class extends Component
                 ['id' => 'con-observacion', 'label' => 'Con observación', 'count' => $segmentCounts['flagged']],
                 ['id' => 'todos', 'label' => 'Todos', 'count' => $segmentCounts['all']],
             ],
+            'claims' => $isRooms ? app(RoomClaimQuery::class)->activeOf($review, $ids) : [],
+            'releasing' => $this->releaseId === null ? null : $contents->query($review)->whereKey($this->releaseId)->first(['rooms.id', 'rooms.code'])?->code,
+            'claimable' => $isRooms && $this->showClaim && $current['canClaim'] ? app(RoomQuery::class)->unowned($this->claimSearch, $this->claimCampus, $this->claimBuilding, $this->claimLimit) : null,
+            'unownedCount' => $isRooms && $current['canClaim'] && ! $current['viewOnly'] ? app(RoomQuery::class)->withoutOwnerCount() : 0,
+            'claimFilters' => $isRooms && $this->showClaim ? app(RoomQuery::class)->unownedFilterOptions() : ['campuses' => [], 'buildings' => []],
             'roomFilters' => $isRooms ? $records->roomFilterOptions($review) : ['campuses' => [], 'buildings' => []],
             'departmentFilters' => $records->departmentFilterOptions($review),
             'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil'], ['id' => 'correo', 'name' => 'Sin correo institucional']],

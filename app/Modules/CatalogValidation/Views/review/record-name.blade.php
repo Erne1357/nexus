@@ -16,6 +16,10 @@
     @if (! $record->is_active)
         <x-core::status-badge tone="neutral" label="Inactivo" />
     @endif
+    @if (isset($claims[$record->id]))
+        {{-- CV16: lo reclamó esta revisión (quién y cuándo, en el título). --}}
+        <span title="Lo reclamó {{ $claims[$record->id]['by'] ?? 'un usuario ya dado de baja' }} el {{ $claims[$record->id]['at'] }}"><x-core::status-badge tone="info" icon="o-hand-raised" label="Reclamado" /></span>
+    @endif
 </div>
 @if ($row !== null)
     <div class="mt-0.5 flex flex-col text-[12.5px] leading-snug text-neutral">
