@@ -39,6 +39,13 @@
         @endif
     </div>
 
+    @if ($requestsHidden)
+        <p class="flex items-start gap-2 text-sm text-neutral" data-testid="requests-unavailable">
+            <x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            Las solicitudes de cambio no están disponibles por ahora.
+        </p>
+    @endif
+
     @if ($canRequest)
         @foreach ($blocked as $label)
             <p class="flex items-start gap-2 text-sm text-neutral" data-testid="requests-closed">

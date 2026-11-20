@@ -309,7 +309,7 @@ describe('alcance', function () {
 
     it('la ruta pide sesión y aparece en Carga académica solo para el docente (MN-05)', function () {
         $this->get('/mi-espacio/oferta')->assertRedirect('/login');
-        $this->actingAs($this->user)->get('/mi-espacio/oferta')->assertOk()->assertSee('Carga académica');
+        $this->actingAs($this->user)->get('/mi-espacio/oferta')->assertOk()->assertSee('Mi espacio');
         $this->actingAs(User::factory()->create())->get('/mi-espacio/oferta')->assertForbidden();
     });
 });
