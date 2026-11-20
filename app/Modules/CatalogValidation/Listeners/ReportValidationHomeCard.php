@@ -2,10 +2,10 @@
 
 namespace App\Modules\CatalogValidation\Listeners;
 
-use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\CatalogValidation\Queries\ValidationWindowQuery;
 use App\Modules\Core\Events\HomeCardsRequested;
@@ -15,9 +15,10 @@ use App\Modules\Core\Support\StageTimeline;
 /**
  * La tarjeta de Inicio de la validación de catálogos (CV-S13, supuesto por confirmar), solo mientras la validación del
  * periodo activo está abierta (OpenValidationQuery, MN-03). A quien ve el avance (Subdirección y el admin): «X de Y
- * departamentos validados» con «Ver avance». Al jefe que valida: cuántos catálogos le faltan en sus departamentos
- * activos, con la fecha límite si la etapa tiene ventana (CV11) y «Ir a validar»; si ya no le falta ninguno, no hay
- * tarjeta. Contesta HomeCardsRequested de Core sin escribir nada.
+ * departamentos validados», contando a Servicios Escolares (CV15), con «Ver avance». Al jefe que valida: cuántos de sus
+ * catálogos le faltan en sus departamentos activos o, al de Servicios Escolares, de las materias, los planes y las
+ * carreras (CV15), con la fecha límite si la etapa tiene ventana (CV11) y «Ir a validar»; si ya no le falta ninguno, no
+ * hay tarjeta. Contesta HomeCardsRequested de Core sin escribir nada.
  */
 final class ReportValidationHomeCard
 {
@@ -52,10 +53,11 @@ final class ReportValidationHomeCard
             return;
         }
 
-        $pending = $this->reviews->departmentsFor($context)
-            ->filter(fn (Department $department): bool => $department->is_active
-                && CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewValidate, $department->getKey()))
-            ->sum(fn (Department $department): int => count($this->reviews->pendingFor($term, null, $department)));
+        $active = $this->reviews->activeOwners()->pluck('id')->all();
+        $pending = $this->reviews->ownersFor($context)
+            ->filter(fn (ReviewOwner $owner): bool => in_array($owner->id, $active, true)
+                && CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewValidate, $owner->id))
+            ->sum(fn (ReviewOwner $owner): int => count($this->reviews->pendingOf($term, $owner)));
 
         if ($pending === 0) {
             return;

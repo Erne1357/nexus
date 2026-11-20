@@ -3,16 +3,19 @@
 namespace App\Modules\CatalogValidation\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
+use App\Modules\Core\Enums\OrgUnitKind;
 
 /**
- * Permisos del módulo CatalogValidation: el avance de validación y la revisión de catálogos de un departamento. La
- * clave es `catalog_validation.<recurso>.<accion>`. Las acciones sobre una revisión declaran solo la unidad (el departamento): los
- * catálogos son de la institución, sin campus ni modalidad (AZ-S17, supuesto por confirmar); el avance no declara dimensiones. Corregir, validar, reabrir y
- * observar solo son del jefe del departamento: el admin no los tiene (CV-S1, ver el provider). Abrir la validación del
- * periodo (CV9) es solo del admin: no se concede a ningún puesto y no declara dimensiones.
+ * Permisos del módulo CatalogValidation: el avance de validación y la revisión de catálogos de un departamento o de
+ * Servicios Escolares (CV15). La clave es `catalog_validation.<recurso>.<accion>`. Las acciones sobre una revisión
+ * declaran solo la unidad (el departamento, o Servicios Escolares en materias, planes y carreras): los catálogos son de
+ * la institución, sin campus ni modalidad (AZ-S17, supuesto por confirmar); el avance no declara dimensiones. Corregir,
+ * validar, reabrir y observar solo son del jefe que valida: el admin no los tiene (CV-S1, ver el provider). Abrir la
+ * validación del periodo (CV9) es solo del admin: no se concede a ningún puesto y no declara dimensiones.
  */
 enum CatalogValidationPermission: string implements Permission
 {
@@ -33,7 +36,7 @@ enum CatalogValidationPermission: string implements Permission
         return match ($this) {
             self::ProgressView => 'Ver el avance de validación de catálogos',
             self::ProgressRemind => 'Recordar a los jefes sus catálogos pendientes',
-            self::ReviewView => 'Ver la revisión de catálogos de un departamento',
+            self::ReviewView => 'Ver la revisión de catálogos de un departamento o de Servicios Escolares',
             self::ReviewResolveFlag => 'Marcar como resuelta una observación',
             self::ReviewCorrect => 'Corregir los registros de una revisión',
             self::ReviewValidate => 'Validar una revisión',
@@ -57,10 +60,17 @@ enum CatalogValidationPermission: string implements Permission
     }
 
     /**
-     * Lo académico (AZ-02, AZ-S16): a los departamentos académicos y a la Subdirección Académica.
+     * AZ-02, AZ-S16: el avance, a lo académico (los departamentos académicos y la Subdirección Académica); las acciones
+     * sobre una revisión, también a Servicios Escolares, que valida las materias, los planes y las carreras de todo el
+     * Tec (CV15, confirmada el 20 de noviembre de 2026). A su jefe solo le alcanzan las revisiones de Servicios
+     * Escolares: las de docentes y salones se piden sobre cada departamento (CatalogReviewQuery::targetOf).
      */
     public function appliesTo(): ?UnitApplicability
     {
-        return $this === self::ReviewOpen ? null : UnitApplicability::academic();
+        return match ($this) {
+            self::ReviewOpen => null,
+            self::ProgressView, self::ProgressRemind => UnitApplicability::academic(),
+            default => UnitApplicability::of([OrgUnitKind::DepartamentoAcademico], [OrgTree::ACADEMIC, OrgTree::SCHOOL_SERVICES]),
+        };
     }
 }

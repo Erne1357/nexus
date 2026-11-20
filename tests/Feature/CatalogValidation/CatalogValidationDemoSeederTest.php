@@ -5,11 +5,13 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Database\Seeders\CatalogValidationDemoSeeder;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Actions\OpenTerm;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -75,11 +77,15 @@ function runCatalogDemoSeeder(string $profile = 'demo', string $mode = 'mixed'):
     (new DatabaseSeeder)->setContainer(app())->callWith(CatalogValidationDemoSeeder::class, ['profile' => $profile, 'mode' => $mode]);
 }
 
+/**
+ * La revisión del periodo: la del departamento en docentes y salones, la de Servicios Escolares (sin departamento) en
+ * materias, planes y carreras (CV15).
+ */
 function cvReview(string $term, string $department, Catalog $catalog): CatalogReview
 {
     return CatalogReview::query()
         ->whereRelation('term', 'code', $term)
-        ->whereRelation('department', 'code', $department)
+        ->when($catalog->owner() === CatalogOwner::Department, fn ($query) => $query->whereRelation('department', 'code', $department), fn ($query) => $query->whereNull('department_id'))
         ->where('catalog', $catalog)
         ->sole();
 }
@@ -114,15 +120,15 @@ it('deja el periodo actual con los estados fijos por departamento (HC-14)', func
         expect($pending($code, 'C2'))->toBe([])->and($pending($code, 'C1'))->toBe([]);
     }
 
-    expect($pending('CEA', 'C2'))->toBe(['rooms', 'study_plans', 'careers'])
+    expect($pending('CEA', 'C2'))->toBe(['rooms'])
         ->and(cvReview('20271', 'CEA', Catalog::Rooms)->status)->toBe(ReviewStatus::InReview)
+        ->and(cvReview('20271', 'CEA', Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
         ->and(cvReview('20271', 'EE', Catalog::Rooms)->status)->toBe(ReviewStatus::Validated)
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::InReview)
-        ->and(cvReview('20271', 'CEA', Catalog::Careers)->validated_by)->toBeNull()
-        ->and(cvReview('20271', 'CEA', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'CEA', Catalog::StudyPlans)->status)->toBe(ReviewStatus::Pending)
-        ->and(Activity::query()->where('event', 'reopened')->count())->toBe(1);
+        ->and(cvReview('20271', 'SE', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'SE', Catalog::StudyPlans)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'SE', Catalog::Careers)->status)->toBe(ReviewStatus::Validated)
+        ->and(Activity::query()->where('event', 'reopened')->count())->toBe(0);
 });
 
 it('con el perfil demo deja CEA y EE validados y MM reabierto con salones en revisión (HC-14)', function () {
@@ -138,12 +144,12 @@ it('con el perfil demo deja CEA y EE validados y MM reabierto con salones en rev
         ->and(cvReview('20271', 'CEA', Catalog::Rooms)->status)->toBe(ReviewStatus::Validated)
         ->and(cvReview('20271', 'MM', Catalog::Rooms)->status)->toBe(ReviewStatus::InReview)
         ->and(CatalogReviewFlag::query()->whereRelation('review', 'catalog', Catalog::Rooms)->whereRelation('review.department', 'code', 'MM')->exists())->toBeTrue()
-        ->and($pending('MM'))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
+        ->and($pending('MM'))->toBe([Catalog::Teachers, Catalog::Rooms])
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->status)->toBe(ReviewStatus::InReview)
         ->and(cvReview('20271', 'MM', Catalog::Teachers)->validated_by)->toBeNull()
-        ->and(cvReview('20271', 'MM', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
-        ->and(cvReview('20271', 'CEA', Catalog::Careers)->status)->toBe(ReviewStatus::Validated)
-        ->and(Activity::query()->where('event', 'reopened')->count())->toBe(2);
+        ->and(cvReview('20271', 'SE', Catalog::Subjects)->status)->toBe(ReviewStatus::Validated)
+        ->and(cvReview('20271', 'SE', Catalog::Careers)->status)->toBe(ReviewStatus::Validated)
+        ->and(Activity::query()->where('event', 'reopened')->count())->toBe(1);
 });
 
 it('con el perfil demo en un solo campus deja los mismos estados en C2', function () {
@@ -157,7 +163,7 @@ it('con el perfil demo en un solo campus deja los mismos estados en C2', functio
 
     expect($query->pendingFor($term, $presencial, Department::query()->where('code', 'CB')->firstOrFail()))->toBe([])
         ->and($query->pendingFor($term, $presencial, Department::query()->where('code', 'EE')->firstOrFail()))->toBe([])
-        ->and($query->pendingFor($term, $presencial, Department::query()->where('code', 'MM')->firstOrFail()))->toBe([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers])
+        ->and($query->pendingFor($term, $presencial, Department::query()->where('code', 'MM')->firstOrFail()))->toBe([Catalog::Teachers, Catalog::Rooms])
         ->and(CatalogReview::query()->whereNotNull('snapshot')->count())->toBe(CatalogReview::query()->where('status', ReviewStatus::Validated)->count() + Activity::query()->where('event', 'reopened')->count());
 });
 
@@ -198,7 +204,7 @@ it('pone observaciones de todos los tipos que admite cada catálogo, algunas res
         ->and($others->count())->toBe(count(ReviewFlag::cases()) - 1)
         ->and(CatalogReviewFlag::whereNotNull('resolved_at')->count())->toBeGreaterThan(0)
         ->and(CatalogReviewFlag::whereNull('resolved_at')->count())->toBeGreaterThan(20)
-        ->and(CatalogReviewFlag::query()->whereRelation('review.department', 'code', 'CB')->whereNotNull('resolved_at')->exists())->toBeTrue()
+        ->and(CatalogReviewFlag::query()->whereHas('review', fn ($query) => $query->whereNull('department_id'))->whereNotNull('resolved_at')->exists())->toBeTrue()
         ->and($reminded)->toBe(['CEA']);
 });
 
@@ -297,13 +303,14 @@ it('en modo previous valida el periodo anterior y simula los cambios sin dar de 
 
 it('en modo validated empieza y valida cada revisión del periodo actual con el jefe de su departamento, sin observaciones (demo por puntos, punto 3)', function () {
     seedCatalogScenario(previous: false);
+    schoolServicesHead(['name' => 'Jefe SE']);
 
     runCatalogDemoSeeder('demo', 'validated');
 
     $reviews = CatalogReview::query()->whereRelation('term', 'code', '20271')->with(['department', 'validator'])->get();
 
     expect($reviews)->not->toBeEmpty()
-        ->and($reviews->every(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated && $review->validator->name === "Jefe {$review->department->code}"))->toBeTrue()
+        ->and($reviews->every(fn (CatalogReview $review): bool => $review->status === ReviewStatus::Validated && $review->validator->name === 'Jefe '.ReviewOwner::of($review)->code))->toBeTrue()
         ->and(Activity::query()->where('description', 'like', 'Empezó la revisión de %')->count())->toBe($reviews->count())
         ->and(CatalogReviewFlag::count())->toBe(0);
 });

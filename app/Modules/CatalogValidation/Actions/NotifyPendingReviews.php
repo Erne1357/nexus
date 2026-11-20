@@ -2,30 +2,30 @@
 
 namespace App\Modules\CatalogValidation\Actions;
 
-use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Notifications\CatalogReviewsPending;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\ValidationWindowQuery;
 use App\Modules\Core\Actions\NotifyHolders;
-use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
-use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Queries\RecipientsQuery;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
  * Avisa a los jefes que tienen catálogos por validar (tarea 2.9; reglas-de-negocio.md, «Periodo y
- * calendario»): a cada jefe de departamento vigente, el único que valida, de cada departamento activo con
- * revisiones pendientes del periodo, contadas igual que HC-14 (CatalogReviewQuery::pendingFor, sin modalidad: todo lo
- * que el admin abrió en el periodo, CV9). El aviso no lleva campus: la validación es de todo el Tec (decisión 6). Lleva
- * la fecha límite, el fin de la ventana general de la etapa (ValidationWindowQuery, CV11).
- * Con `$departmentId`, solo a los de ese departamento: el recordatorio del tablero de avance (tarea 2.5); un id
- * que no es de un departamento activo no avisa a nadie.
+ * calendario»): a cada jefe vigente que valida, el único que valida, de cada departamento activo y de Servicios
+ * Escolares (CV15, confirmada el 20 de noviembre de 2026), con lo que le falta de sus propios catálogos en el periodo
+ * (CatalogReviewQuery::pendingOf: todo lo que el admin abrió, CV9): al jefe de un departamento, sus docentes y salones;
+ * al de Servicios Escolares, las materias, los planes y las carreras de todo el Tec. El aviso no lleva campus: la
+ * validación es de todo el Tec (decisión 6). Lleva la fecha límite, el fin de la ventana general de la etapa
+ * (ValidationWindowQuery, CV11).
+ * Con `$ownerId`, solo a los de ese departamento o de Servicios Escolares (ReviewOwner::SCHOOL_SERVICES): el
+ * recordatorio del tablero de avance (tarea 2.5); un id que no es de un departamento activo no avisa a nadie.
  * Lo llama NotifyPendingReviewsJob al abrir la validación (OpenCatalogValidation). `handle()` da a cuántos usuarios avisó y `notify()`, cuáles.
  */
 final class NotifyPendingReviews
@@ -41,15 +41,14 @@ final class NotifyPendingReviews
     /**
      * A cuántos usuarios avisó; un jefe de varios departamentos cuenta una vez por departamento.
      */
-    public function handle(Term $term, ?string $departmentId = null): int
+    public function handle(Term $term, ?string $ownerId = null): int
     {
-        return $this->notify($term, $departmentId)->count();
+        return $this->notify($term, $ownerId)->count();
     }
 
     /**
-     * El aviso de que el admin abrió la validación (CV9): un aviso por jefe y departamento, con solo los catálogos recién
-     * abiertos que le faltan en ese departamento. Lo pendiente y los jefes se leen una vez por departamento. Da los
-     * usuarios avisados.
+     * El aviso de que el admin abrió la validación (CV9): un aviso por jefe y dueño, con solo los catálogos recién
+     * abiertos que le faltan. Lo pendiente y los jefes se leen una vez por dueño. Da los usuarios avisados.
      *
      * @param  list<Catalog>  $catalogs
      * @return Collection<int, User>
@@ -59,9 +58,9 @@ final class NotifyPendingReviews
         $notified = new Collection;
         $deadline = $this->window->deadline($term);
 
-        foreach (Department::query()->where('is_active', true)->orderBy('code')->get() as $department) {
+        foreach ($this->reviews->activeOwners() as $owner) {
             $pending = array_values(array_filter(
-                $this->reviews->pendingFor($term, null, $department),
+                $this->reviews->pendingOf($term, $owner),
                 fn (Catalog $catalog): bool => in_array($catalog, $catalogs, true),
             ));
 
@@ -69,8 +68,8 @@ final class NotifyPendingReviews
                 continue;
             }
 
-            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()));
-            $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $department, $pending, $deadline)));
+            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($owner->id));
+            $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $owner, $pending, $deadline)));
         }
 
         return $notified;
@@ -83,54 +82,43 @@ final class NotifyPendingReviews
      *
      * @return Collection<int, User>
      */
-    public function notify(Term $term, ?string $departmentId = null, bool $reminder = false): Collection
+    public function notify(Term $term, ?string $ownerId = null, bool $reminder = false): Collection
     {
-        $query = Department::query()->where('is_active', true)->orderBy('code');
-
-        if ($departmentId !== null) {
-            $department = KeyLookup::find($query, $departmentId);
-            $departments = $department === null ? collect() : collect([$department]);
-        } else {
-            $departments = $query->get();
-        }
-
         $notified = new Collection;
         $deadline = $this->window->deadline($term);
 
-        foreach ($departments as $department) {
-            $pending = $this->reviews->pendingFor($term, null, $department);
+        foreach ($this->reviews->activeOwners($ownerId === null ? null : [$ownerId]) as $owner) {
+            $pending = $this->reviews->pendingOf($term, $owner);
 
             if ($pending === []) {
                 continue;
             }
 
-            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()));
+            $heads = $this->recipients->holders(CatalogValidationPermission::ReviewValidate, CatalogReviewQuery::targetOf($owner->id));
 
             if ($heads === []) {
                 continue;
             }
 
-            $progress = $reminder ? $this->progressOf($term, $department, $pending) : [];
+            $progress = $reminder ? $this->progressOf($term, $owner, $pending) : [];
 
-            $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $department, $pending, $deadline, $reminder, $progress)));
+            $notified = $notified->concat($this->notifyHolders->handle($heads, new CatalogReviewsPending($term, $owner, $pending, $deadline, $reminder, $progress)));
         }
 
         return $notified;
     }
 
     /**
-     * «N de M revisados» de cada catálogo pendiente del departamento, por catálogo (CV7).
+     * «N de M revisados» de cada catálogo pendiente del dueño, por catálogo (CV7).
      *
      * @param  list<Catalog>  $pending
      * @return array<string, array{reviewed: int, total: int}>
      */
-    private function progressOf(Term $term, Department $department, array $pending): array
+    private function progressOf(Term $term, ReviewOwner $owner, array $pending): array
     {
-        $reviews = CatalogReview::query()
-            ->where('term_id', $term->getKey())
-            ->where('department_id', $department->getKey())
-            ->whereIn('catalog', $pending)
-            ->get();
+        $reviews = $this->reviews->forOwner($term, $owner)
+            ->filter(fn (CatalogReview $review): bool => in_array($review->catalog, $pending, true))
+            ->values();
         $progress = $this->contents->progressOf($reviews);
 
         return $reviews->mapWithKeys(fn (CatalogReview $review): array => [$review->catalog->value => $progress[$review->getKey()]])->all();

@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Database\Factories\CatalogReviewFactory;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -19,9 +20,11 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
- * Revisión de un catálogo de un departamento en un periodo, una vez por periodo para todo el Tec y sin campus, también
- * los salones de todos los campus (decisión 6, confirmada el 12 de noviembre de 2026; antes, D2, los salones eran por
- * campus). `campus_id` queda en la tabla, siempre nulo (CHECK `catalog_reviews_campus_check`).
+ * Revisión de un catálogo en un periodo, una vez por periodo para todo el Tec y sin campus, también los salones de todos
+ * los campus (decisión 6, confirmada el 12 de noviembre de 2026; antes, D2, los salones eran por campus). `campus_id`
+ * queda en la tabla, siempre nulo (CHECK `catalog_reviews_campus_check`). Docentes y salones son de un departamento;
+ * materias, planes y carreras, de Servicios Escolares, una sola del Tec sin departamento (CV15, confirmada el 20 de
+ * noviembre de 2026; CHECK `catalog_reviews_owner_check`).
  * `snapshot` es la foto de los registros activos al validarla: `list<array{id: string, code: string, name: ?string}>`,
  * nula hasta la primera validación.
  */
@@ -64,6 +67,8 @@ class CatalogReview extends Model
     }
 
     /**
+     * Nulo en las de Servicios Escolares (CV15).
+     *
      * @return BelongsTo<Department, $this>
      */
     public function department(): BelongsTo
@@ -102,23 +107,38 @@ class CatalogReview extends Model
     }
 
     /**
-     * «Materias de SIS», para la bitácora.
+     * De quién es (CV15): el id de su departamento o, en las de Servicios Escolares, ReviewOwner::SCHOOL_SERVICES. Es lo
+     * que lleva `?department=` en la pantalla de la revisión.
+     *
+     * @return Attribute<string, never>
+     */
+    protected function ownerId(): Attribute
+    {
+        return Attribute::get(fn (): string => $this->department_id ?? ReviewOwner::SCHOOL_SERVICES);
+    }
+
+    /**
+     * «Docentes de SIS» o, en las de Servicios Escolares, «Materias de todo el Tec» (CV15), para la bitácora.
      *
      * @return Attribute<string, never>
      */
     protected function title(): Attribute
     {
-        return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->code}");
+        return Attribute::get(fn (): string => $this->department_id === null
+            ? "{$this->catalog->label()} de todo el Tec"
+            : "{$this->catalog->label()} de {$this->department?->code}");
     }
 
     /**
-     * «Materias de Sistemas y Computación»: lo que dicen la pantalla, sus modales y sus avisos, con el nombre del
-     * departamento y no su clave (tarea 1.21).
+     * «Docentes de Sistemas y Computación»: lo que dicen la pantalla, sus modales y sus avisos, con el nombre del
+     * departamento y no su clave (tarea 1.21); en las de Servicios Escolares, «Materias de todo el Tec» (CV15).
      *
      * @return Attribute<string, never>
      */
     protected function heading(): Attribute
     {
-        return Attribute::get(fn (): string => "{$this->catalog->label()} de {$this->department?->name}");
+        return Attribute::get(fn (): string => $this->department_id === null
+            ? "{$this->catalog->label()} de todo el Tec"
+            : "{$this->catalog->label()} de {$this->department?->name}");
     }
 }

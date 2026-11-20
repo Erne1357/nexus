@@ -21,7 +21,9 @@ use App\Modules\CatalogValidation\Listeners\StartTeachersReviewOnFacultyCapture;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Queries\OpenValidationQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Queries\TeacherInvitationReleaseQuery;
+use App\Modules\CatalogValidation\Queries\ValidationProgressQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Demo\DemoCheck;
 use App\Modules\Core\Demo\DemoContext;
@@ -86,8 +88,8 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
     /**
      * La pantalla de la revisión, en Académico, con dos nombres según quien la abre (tarea 1.21): «Validar catálogos»
-     * para quien valida (el jefe de departamento) y «Validación de catálogos» para quien solo la ve (Subdirección y el
-     * admin, en lectura, CV-S1). Que el departamento sea el suyo lo decide la pantalla.
+     * para quien valida (el jefe de departamento y el de Servicios Escolares, CV15) y «Validación de catálogos» para
+     * quien solo la ve (Subdirección y el admin, en lectura, CV-S1). Que el departamento sea el suyo lo decide la pantalla.
      * «Avance de validación», para Subdirección y el admin (tarea 2.5; `has()` incluye al admin).
      */
     public function navigation(): array
@@ -112,8 +114,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
     /**
      * Subdirección: el avance, recordar, y ver y resolver observaciones en todo; el jefe de departamento, ver, resolver
-     * y, de su departamento, corregir, validar, reabrir y observar. La condición del campus para corregir salones
-     * (CV2) la pone la Policy. El directivo ve el avance y las revisiones (AZ-03).
+     * y, de su departamento, corregir, validar, reabrir y observar; el jefe de Servicios Escolares, lo mismo sobre las
+     * materias, los planes y las carreras de todo el Tec (CV15: el permiso aplica también a su unidad,
+     * CatalogValidationPermission::appliesTo). El directivo ve el avance y las revisiones (AZ-03).
      */
     public function grants(): array
     {
@@ -185,7 +188,11 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
                 ? $allIn('20263', ReviewStatus::Validated)
                 : true),
             new DemoCheck(DemoCheckpoint::since(DemoCheckpoint::Proposal), 'Toda revisión de Ene-Jun 2027 validada (HC-14)', fn (DemoContext $demo): true|string => $allIn($demo->termCode, ReviewStatus::Validated)),
-            new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)->where('validated_by', $demo->admin()->getKey())->count()) === 0
+            // Las de Servicios Escolares (CV15) solo cuentan si tiene jefe: sin él, el seeder las valida con el admin.
+            new DemoCheck([DemoCheckpoint::Proposal], 'Cada catálogo lo validó un jefe, no el admin (CV-S1)', fn (DemoContext $demo): true|string => ($byAdmin = $reviews($demo->termCode)
+                ->where('validated_by', $demo->admin()->getKey())
+                ->when(! app(ValidationProgressQuery::class)->hasHead(ReviewOwner::SCHOOL_SERVICES), fn ($query) => $query->whereNotNull('department_id'))
+                ->count()) === 0
                 ? true
                 : "{$byAdmin} revisiones las validó el admin: a su departamento le falta jefe."),
         ];

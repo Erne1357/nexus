@@ -3,7 +3,9 @@
     decidida por el usuario el 2 de noviembre de 2026). Encabezado, su barra de herramientas (búsqueda, estado y
     «Recordar a todos los pendientes»; sin campus: la validación es de todo el Tec), tres indicadores (avance global,
     ventana de la etapa con su fecha límite y observaciones abiertas, que abre la lista de todas) y la matriz: una tabla
-    desde 1024 px y, debajo, renglones apilados con las mismas celdas. Tocar un departamento abre su drawer.
+    desde 1024 px y, debajo, renglones apilados con las mismas celdas. Tocar un departamento abre su drawer. Servicios
+    Escolares es un renglón más, con sus materias, planes y carreras (CV15); en las columnas que no le tocan a un renglón
+    va una raya.
 --}}
 <div>
     <x-header title="Avance de validación" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-4!" use-h1 separator progress-indicator>
@@ -120,7 +122,11 @@
                                         @include('catalog-validation::progress.who', ['row' => $row])
                                     </td>
                                     @foreach ($columns as $column)
-                                        <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']]])</td>
+                                        @if (array_key_exists($column['key'], $row['cells']))
+                                            <td class="px-2 py-2.5" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}">@include('catalog-validation::progress.cell', ['review' => $row['cells'][$column['key']], 'reviewed' => $row['reviewed'][$column['key']]])</td>
+                                        @else
+                                            <td class="px-2 py-2.5 text-neutral" data-testid="cell-{{ $department->code }}-{{ $column['key'] }}"><span aria-hidden="true">—</span><span class="sr-only">{{ $department->isSchoolServices() ? 'Lo valida cada departamento' : 'Lo valida Servicios Escolares' }}</span></td>
+                                        @endif
                                     @endforeach
                                     <td class="px-2 py-2.5 whitespace-nowrap"><span class="font-semibold tabular-nums">{{ $row['validated'] }} de {{ $row['total'] }}</span></td>
                                     <td class="px-2 py-2.5">@include('catalog-validation::progress.flags', ['row' => $row])</td>
@@ -201,7 +207,7 @@
                     <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />
                 </header>
                 <fieldset class="flex-1 space-y-1 px-5 pt-4 pb-8">
-                    <legend class="mb-2 text-sm text-neutral">Los jefes de cada departamento revisan y validan los catálogos que abras. Un catálogo abierto no se quita del periodo.</legend>
+                    <legend class="mb-2 text-sm text-neutral">Los jefes de cada departamento revisan y validan sus docentes y salones; Servicios Escolares, las materias, los planes y las carreras de todo el Tec. Un catálogo abierto no se quita del periodo.</legend>
                     @foreach ($options as $option)
                         <div class="rounded-box border border-base-300 px-3 py-2.5" data-testid="open-option-{{ $option['catalog']->value }}">
                             @if ($option['open'])
@@ -211,6 +217,11 @@
                                 <x-checkbox :label="$option['catalog']->label()" value="{{ $option['catalog']->value }}" wire:model="toOpen" :disabled="$option['blocked'] !== null" omit-error />
                                 @if ($option['blocked'])
                                     <p class="ms-8 text-sm text-neutral">{{ $option['blocked'] }}</p>
+                                @elseif ($option['catalog']->owner() === \App\Modules\CatalogValidation\Enums\CatalogOwner::SchoolServices && $schoolServicesWithoutHead)
+                                    <p class="ms-8 flex items-start gap-1.5 text-sm" data-testid="school-services-without-head-{{ $option['catalog']->value }}">
+                                        <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 flex-none text-warning" aria-hidden="true" />
+                                        <span>Servicios Escolares no tiene jefe vigente: nadie lo validará. Nómbralo en <a href="{{ route('core.org-chart') }}" wire:navigate class="link underline-offset-4">Organigrama</a>.</span>
+                                    </p>
                                 @elseif ($option['catalog'] === \App\Modules\CatalogValidation\Enums\Catalog::Rooms && $roomsWithoutOwner > 0)
                                     <p class="ms-8 flex items-start gap-1.5 text-sm" data-testid="rooms-without-owner">
                                         <x-icon name="o-exclamation-triangle" class="mt-0.5 h-4 w-4 flex-none text-warning" aria-hidden="true" />
@@ -236,13 +247,13 @@
                 <header class="flex items-start gap-3 border-b border-base-300 py-4 ps-5 pe-3">
                     <div class="min-w-0 flex-1">
                         <h2 id="flags-drawer-title" class="text-xl font-bold leading-tight">Observaciones abiertas ({{ $allFlags->count() }})</h2>
-                        <p class="mt-1 text-sm text-neutral">{{ $term?->name }} · de todos los departamentos</p>
+                        <p class="mt-1 text-sm text-neutral">{{ $term?->name }} · de Servicios Escolares y todos los departamentos</p>
                     </div>
                     <x-button icon="o-x-mark" class="btn-ghost btn-sm btn-circle" @click="close()" aria-label="Cerrar el panel" />
                 </header>
                 <div class="flex-1 space-y-6 px-5 pt-4 pb-8">
-                    @forelse ($allFlags->groupBy(fn ($flag) => $flag->review->department_id) as $departmentFlags)
-                        @php($flagged = $departmentFlags->first()->review->department)
+                    @forelse ($allFlags->groupBy(fn ($flag) => $flag->review->owner_id) as $departmentFlags)
+                        @php($flagged = \App\Modules\CatalogValidation\Queries\ReviewOwner::of($departmentFlags->first()->review))
                         <section class="space-y-3" wire:key="flags-department-{{ $flagged->id }}" aria-labelledby="flags-department-{{ $flagged->id }}" data-testid="flags-department-{{ $flagged->code }}">
                             <h3 id="flags-department-{{ $flagged->id }}" class="font-semibold"><span class="font-mono text-neutral">{{ $flagged->code }}</span> {{ $flagged->name }} <span class="font-mono font-normal text-neutral tabular-nums">{{ $departmentFlags->count() }}</span></h3>
                             @include('catalog-validation::progress.flag-groups', ['flags' => $departmentFlags])
@@ -257,7 +268,7 @@
 
     <x-drawer wire:model.live="showDrawer" right close-on-escape class="w-full max-w-md p-0!" role="dialog" aria-modal="true" aria-labelledby="progress-drawer-title" data-testid="progress-drawer">
         @if ($detail !== null)
-            @include('catalog-validation::progress.drawer', ['row' => $detail['row'], 'flags' => $detail['flags'], 'columns' => $board['columns'] ?? [], 'term' => $term])
+            @include('catalog-validation::progress.drawer', ['row' => $detail['row'], 'flags' => $detail['flags'], 'columns' => $detail['row']['columns'], 'term' => $term])
         @endif
     </x-drawer>
 </div>

@@ -5,10 +5,13 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewFlag;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\NavigationArea;
 use App\Modules\Core\Enums\Role;
@@ -45,14 +48,19 @@ beforeEach(function () {
     app(CreateTermReviews::class)->handle($this->term, Catalog::cases());
 
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
+    $this->escolares = schoolServicesHead(['name' => 'Sara Escolar']);
     $this->subject = Subject::factory()->create(['code' => 'SCD-1027', 'name' => 'Química', 'department_id' => $this->sis->id]);
 });
 
+/**
+ * La revisión del periodo: la del departamento (SIS, si no se dice) en docentes y salones, la de Servicios Escolares en
+ * materias, planes y carreras (CV15).
+ */
 function headReview(Catalog $catalog, ?Department $department = null): CatalogReview
 {
     return CatalogReview::query()
         ->where('term_id', test()->term->id)
-        ->where('department_id', ($department ?? test()->sis)->id)
+        ->tap(fn ($query) => CatalogReviewQuery::ownedBy($query, $catalog->owner() === CatalogOwner::SchoolServices ? null : ($department ?? test()->sis)->id))
         ->where('catalog', $catalog)
         ->sole();
 }
@@ -78,31 +86,31 @@ function headValidate(Catalog $catalog, ?User $by = null): CatalogReview
 
 describe('quién validó', function () {
     it('justo después de Validar dice quién validó, sin recargar', function (array $query) {
-        markAllReviewed(headReview(Catalog::Subjects), $this->jefe);
+        markAllReviewed(headReview(Catalog::Subjects), $this->escolares);
 
-        headPage($this->jefe, $query)
+        headPage($this->escolares, $query)
             ->call('confirm', 'validate', 'subjects')
             ->call('confirmed')
             ->assertHasNoErrors()
-            ->assertSee('Validó '.$this->jefe->name)
+            ->assertSee('Validó '.$this->escolares->name)
             ->assertDontSee('un usuario ya dado de baja');
     })->with(['tablero' => [[]], 'lista' => [['catalogo' => 'subjects']]]);
 
     it('después de reabrir y volver a validar dice quién validó la última vez', function () {
         headValidate(Catalog::Subjects, User::factory()->create(['name' => 'Otra Persona']));
 
-        headPage($this->jefe, ['catalogo' => 'subjects'])
+        headPage($this->escolares, ['catalogo' => 'subjects'])
             ->call('confirm', 'reopen', 'subjects')->call('confirmed')
             ->assertDontSee('Validó Otra Persona')
             ->call('confirm', 'validate', 'subjects')->call('confirmed')
-            ->assertSee('Validó '.$this->jefe->name)
+            ->assertSee('Validó '.$this->escolares->name)
             ->assertDontSee('un usuario ya dado de baja');
     });
 });
 
 describe('guardar sin cambios (CV-S7, D9)', function () {
     it('CV-S7: «Guardar» sin cambios marca el registro como revisado, y el pie y el aviso lo dicen', function () {
-        $component = headPage($this->jefe, ['catalogo' => 'subjects'])
+        $component = headPage($this->escolares, ['catalogo' => 'subjects'])
             ->call('edit', $this->subject->id)
             ->assertSee('Al guardar, queda revisado.')
             ->call('save')
@@ -113,7 +121,7 @@ describe('guardar sin cambios (CV-S7, D9)', function () {
     });
 
     it('CV-S7: con un cambio, el aviso dice que se actualizó', function () {
-        $component = headPage($this->jefe, ['catalogo' => 'subjects'])->call('edit', $this->subject->id)->set('name', 'Química general')->call('save');
+        $component = headPage($this->escolares, ['catalogo' => 'subjects'])->call('edit', $this->subject->id)->set('name', 'Química general')->call('save');
 
         expect(lastToastOf($component)['title'])->toBe('Materia actualizada');
     });
@@ -223,24 +231,37 @@ describe('quitar de <departamento> (CV8, D8, D10)', function () {
 
 describe('el departamento por su nombre y el plural', function () {
     it('el modal de Validar y su aviso nombran el departamento, no su clave', function () {
-        markAllReviewed(headReview(Catalog::Subjects), $this->jefe);
+        markAllReviewed(headReview(Catalog::Teachers), $this->jefe);
 
         $component = headPage()
-            ->call('confirm', 'validate', 'subjects')
-            ->assertSeeHtml('Vas a validar <strong>Materias de Sistemas y Computación</strong>')
-            ->assertDontSee('Materias de 110100')
+            ->call('confirm', 'validate', 'teachers')
+            ->assertSeeHtml('Vas a validar <strong>Docentes de Sistemas y Computación</strong>')
+            ->assertDontSee('Docentes de 110100')
             ->call('confirmed');
 
-        expect(lastToastOf($component)['description'])->toBe('Materias de Sistemas y Computación');
+        expect(lastToastOf($component)['description'])->toBe('Docentes de Sistemas y Computación');
+    });
+
+    it('CV15: en Servicios Escolares el modal y el aviso dicen «de todo el Tec»', function () {
+        markAllReviewed(headReview(Catalog::Subjects), $this->escolares);
+
+        $component = headPage($this->escolares)
+            ->call('confirm', 'validate', 'subjects')
+            ->assertSeeHtml('Vas a validar <strong>Materias de todo el Tec</strong>')
+            ->assertSee('la carga académica de ningún departamento')
+            ->call('confirmed');
+
+        expect(lastToastOf($component)['description'])->toBe('Materias de todo el Tec');
     });
 
     it('con una observación abierta y un registro dice «Queda 1 observación abierta» y «1 registro activo»', function () {
-        $review = headReview(Catalog::Subjects);
+        $review = headReview(Catalog::Rooms);
+        $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
         markAllReviewed($review, $this->jefe);
-        CatalogReviewFlag::factory()->on($this->subject)->create(['review_id' => $review->id]);
+        CatalogReviewFlag::factory()->on($room)->create(['review_id' => $review->id]);
 
         headPage()
-            ->call('confirm', 'validate', 'subjects')
+            ->call('confirm', 'validate', 'rooms')
             ->assertSeeHtml('<span class="font-mono">1</span> registro activo y <span class="font-mono">0</span> inactivos')
             ->assertSeeHtml('Queda <span class="font-mono">1</span> observación abierta; no impide validar.')
             ->assertDontSee('observaciones abiertas; no impiden');
@@ -251,7 +272,7 @@ describe('cada «Tipo» con su nombre', function () {
     it('el drawer de una materia dice «Tipo de materia» y «Tipo de observación»; el de un salón, «Tipo de salón»', function () {
         $room = Room::factory()->for(Building::factory()->create(['campus_id' => $this->campus->id]))->create(['department_id' => $this->sis->id]);
 
-        headPage($this->jefe, ['catalogo' => 'subjects'])->call('edit', $this->subject->id)->assertSee('Tipo de materia')->assertSee('Tipo de observación');
+        headPage($this->escolares, ['catalogo' => 'subjects'])->call('edit', $this->subject->id)->assertSee('Tipo de materia')->assertSee('Tipo de observación');
         headPage($this->jefe, ['catalogo' => 'rooms'])->call('edit', $room->id)->assertSee('Tipo de salón')->assertSee('Tipo de observación');
     });
 });
@@ -264,7 +285,7 @@ describe('materias con su plan', function () {
         placeInPlan(StudyPlan::factory()->create(['code' => 'IELC-2010-211']), $other);
         placeInPlan(StudyPlan::factory()->create(['code' => 'IELE-2010-209']), $other);
 
-        $html = headPage($this->jefe, ['catalogo' => 'subjects'])->html();
+        $html = headPage($this->escolares, ['catalogo' => 'subjects'])->html();
         $row = fn (string $code): string => textOf(domOf($html)->querySelector('[data-testid="subject-plans-'.$code.'"]'));
 
         expect($row('SCD-1027'))->toBe('IMCT-2005-284')
@@ -276,32 +297,30 @@ describe('materias con su plan', function () {
 describe('catálogos sin registros (CV7, D5)', function () {
     it('CV7: el tablero ofrece validar juntos los catálogos abiertos sin registros activos y la confirmación los nombra', function () {
         Subject::factory()->inactive()->create(['department_id' => $this->sis->id]);
-        markAllReviewed(headReview(Catalog::Subjects), $this->jefe);
+        markAllReviewed(headReview(Catalog::Subjects), $this->escolares);
 
-        $component = headPage()
-            ->assertSee('4 catálogos sin registros')
+        $component = headPage($this->escolares)
+            ->assertSee('2 catálogos sin registros')
             ->assertSeeHtml('data-testid="validate-empty"')
             ->call('confirmEmpty')
             ->assertSet('showEmpty', true)
-            ->assertSee('Docentes, Salones, Planes de estudio y Carreras')
+            ->assertSee('Planes de estudio y Carreras')
             ->call('validateEmpty')
             ->assertHasNoErrors()
             ->assertSet('showEmpty', false)
             ->assertDontSeeHtml('data-testid="validate-empty"');
 
-        foreach ([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
+        foreach ([Catalog::StudyPlans, Catalog::Careers] as $catalog) {
             expect(headReview($catalog)->status)->toBe(ReviewStatus::Validated)
                 ->and(Activity::query()->where('event', 'validated')->where('subject_id', headReview($catalog)->id)->exists())->toBeTrue();
         }
 
         expect(headReview(Catalog::Subjects)->status)->toBe(ReviewStatus::Pending)
-            ->and(lastToastOf($component)['title'])->toBe('4 catálogos validados');
+            ->and(lastToastOf($component)['title'])->toBe('2 catálogos validados');
     });
 
     it('CV7: valida solo los que nombró la confirmación, y si uno recibió un registro activo mientras tanto no valida ninguno y lo dice', function () {
-        markAllReviewed(headReview(Catalog::Subjects), $this->jefe);
-
-        $page = headPage()->call('confirmEmpty')->assertSee('Docentes, Salones, Planes de estudio y Carreras');
+        $page = headPage()->call('confirmEmpty')->assertSee('Docentes y Salones');
         Teacher::factory()->adscribedTo($this->sis)->create();
 
         $page->call('validateEmpty')->assertHasErrors('status')->assertSee('La revisión de Docentes de Sistemas y Computación ya tiene registros activos');
@@ -310,9 +329,7 @@ describe('catálogos sin registros (CV7, D5)', function () {
     });
 
     it('con uno solo dice «1 catálogo sin registros» y «Validarlo»; los ya validados no cuentan', function () {
-        foreach ([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans] as $catalog) {
-            headValidate($catalog);
-        }
+        headValidate(Catalog::Teachers);
 
         $html = headPage()->assertSee('1 catálogo sin registros')->html();
 
@@ -320,7 +337,7 @@ describe('catálogos sin registros (CV7, D5)', function () {
     });
 
     it('sin catálogos vacíos no lo ofrece', function () {
-        foreach ([Catalog::Teachers, Catalog::Rooms, Catalog::StudyPlans, Catalog::Careers] as $catalog) {
+        foreach ([Catalog::Teachers, Catalog::Rooms] as $catalog) {
             headValidate($catalog);
         }
 
@@ -408,7 +425,8 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
     it('no ven Validar, Reabrir, «Sin registros» ni sus motivos deshabilitados en el tablero', function (string $who) {
         headValidate(Catalog::Careers);
 
-        headPage(headViewer($who), ['department' => $this->sis->id])
+        headPage(headViewer($who), ['department' => ReviewOwner::SCHOOL_SERVICES])
+            ->assertSeeHtml('data-testid="card-careers"')
             ->assertDontSeeHtml('data-testid="validate-subjects"')
             ->assertDontSeeHtml('data-testid="reopen-careers"')
             ->assertDontSee('Solo el jefe del departamento valida.')
@@ -416,7 +434,7 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
     })->with(['admin', 'subdirección']);
 
     it('en la lista no ven Validar, Marcar, Desactivar ni Agregar observación deshabilitados', function (string $who) {
-        headPage(headViewer($who), ['department' => $this->sis->id, 'catalogo' => 'subjects'])
+        headPage(headViewer($who), ['department' => ReviewOwner::SCHOOL_SERVICES, 'catalogo' => 'subjects'])
             ->assertDontSeeHtml('data-testid="validate-subjects"')
             ->assertDontSee('Solo el jefe del departamento')
             ->assertDontSee('Agregar observación')

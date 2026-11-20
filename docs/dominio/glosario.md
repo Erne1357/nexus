@@ -53,7 +53,7 @@ Términos del proceso académico del ITCJ tal como los usa Nexus. Cuando el cód
 | **Cita de inscripción** | `EnrollmentAppointment` (R3) | Ventana de fecha y hora en la que el alumno puede entrar a inscribirse. |
 | **Catálogo** | — | Datos maestros: campus, departamentos, carreras, planes, materias, docentes, salones, alumnos. Se cargan por importación y los jefes los validan cada periodo. |
 | **Importación / lote** | `ImportBatch` | Archivo exportado del SII (Excel/CSV) cargado a Nexus, validado fila por fila y aplicado a un catálogo. |
-| **Validación de catálogos** | `CatalogReview` | Paso del flujo en el que cada jefe revisa, corrige y marca como validados los catálogos de su departamento antes de que inicie la carga. |
+| **Validación de catálogos** | `CatalogReview` | Paso del flujo en el que cada jefe revisa, corrige y marca como validados los catálogos de su departamento (docentes y salones) antes de que inicie la carga; las materias, los planes y las carreras de todo el Tec los valida Servicios Escolares (CV15). |
 | **Bitácora** | `activity_log` | Registro inmutable de quién cambió qué y cuándo. Nunca se borra. |
 | **Aviso** | `LoginNotice` (`login_notices`) | Una entrada del carrusel de la pantalla de acceso (LG-01): título, foto y enlace opcionales, con orden y vigencia. Se maneja en «Avisos y atajos» (CF-S6). |
 | **Atajo** | `LoginShortcut` (`login_shortcuts`) | Un enlace o la descarga de un pdf que sale en el botón de atajos de la pantalla de acceso, sin iniciar sesión (LG-02). Se maneja en «Avisos y atajos» (CF-S6). |

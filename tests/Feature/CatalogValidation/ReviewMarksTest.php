@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Actions\MarkRecordsReviewed;
@@ -33,10 +34,12 @@ use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     $this->actor = User::factory()->create();
+    // La de materias es de Servicios Escolares, con todas las del Tec (CV15): lo ajeno es una materia borrada.
     $this->review = CatalogReview::factory()->general(Catalog::Subjects)->create();
-    $this->first = Subject::factory()->create(['code' => 'A-1', 'department_id' => $this->review->department_id]);
-    $this->second = Subject::factory()->inactive()->create(['code' => 'B-2', 'department_id' => $this->review->department_id]);
-    $this->foreign = Subject::factory()->create(['code' => 'Z-9']);
+    $this->department = Department::factory()->create();
+    $this->first = Subject::factory()->create(['code' => 'A-1', 'department_id' => $this->department->id]);
+    $this->second = Subject::factory()->inactive()->create(['code' => 'B-2', 'department_id' => $this->department->id]);
+    $this->foreign = tap(Subject::factory()->create(['code' => 'Z-9']))->delete();
 });
 
 function markErrors(Closure $action): array
@@ -210,7 +213,7 @@ describe('validar con todo revisado', function () {
 
     it('CV7: una revisión sin registros activos se valida', function () {
         $empty = CatalogReview::factory()->general(Catalog::Careers)->create();
-        Career::factory()->inactive()->create(['department_id' => $empty->department_id]);
+        Career::factory()->inactive()->create(['department_id' => $this->department->id]);
 
         app(ValidateReview::class)->handle($empty, $this->actor);
 
@@ -219,14 +222,14 @@ describe('validar con todo revisado', function () {
 
     it('CV-S7: un registro que entra a la revisión después nace sin revisar', function () {
         app(MarkRecordsReviewed::class)->handle($this->review, [$this->first->id, $this->second->id], $this->actor);
-        Subject::factory()->create(['department_id' => $this->review->department_id]);
+        Subject::factory()->create(['department_id' => $this->department->id]);
 
         expect(markErrors(fn () => app(ValidateReview::class)->handle($this->review, $this->actor)))
             ->toBe(['status' => ['Falta 1 registro por revisar.']]);
     });
 
     it('CV-S7: la marca de un registro que salió de la revisión no cuenta', function () {
-        $gone = Subject::factory()->create(['department_id' => $this->review->department_id]);
+        $gone = Subject::factory()->create(['department_id' => $this->department->id]);
         app(MarkRecordsReviewed::class)->handle($this->review, [$gone->id], $this->actor);
         $gone->delete();
 

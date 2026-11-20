@@ -9,14 +9,17 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
- * Quién revisa los catálogos de un departamento, según docs/dominio/reglas-de-negocio.md, "Validación de
- * catálogos" y "Aprobaciones y permisos" (fila «Validar catálogos del departamento»).
+ * Quién revisa los catálogos, según docs/dominio/reglas-de-negocio.md, "Validación de catálogos" y "Aprobaciones y
+ * permisos" (fila «Validar catálogos del departamento»).
  *
- * - El jefe de departamento, que es de todo el Tec, si cubre el departamento. Las revisiones no son de un campus,
- *   también la de salones (decisión 6, confirmada el 12 de noviembre de 2026).
- * - Corrige materias, carreras y planes (CV1) y los salones de su departamento en cualquier campus (CV2, confirmado
- *   el 12 de noviembre de 2026; ya no depende de `heads_edit_rooms`). Los docentes, en su correo institucional
- *   (CV1); quién cambia ese correo lo decide además TeacherPolicy::updateInstitutionalEmail (AC-06).
+ * - Docentes y salones: el jefe de departamento, que es de todo el Tec, si cubre el departamento. Las revisiones no
+ *   son de un campus, también la de salones (decisión 6, confirmada el 12 de noviembre de 2026). Corrige los salones de
+ *   su departamento en cualquier campus (CV2, confirmado el 12 de noviembre de 2026; ya no depende de
+ *   `heads_edit_rooms`) y de los docentes su correo institucional (CV1); quién cambia ese correo lo decide además
+ *   TeacherPolicy::updateInstitutionalEmail (AC-06).
+ * - Materias, planes y carreras: el jefe del Departamento de Servicios Escolares, una sola revisión para todo el Tec
+ *   (CV15, confirmada el 20 de noviembre de 2026); el jefe de un departamento académico ya no las ve ni las corrige.
+ *   CatalogReviewQuery::targetOf() dice sobre qué unidades se pregunta.
  * - Corregir, validar, reabrir y poner observaciones: solo ese jefe; ni el admin ni Subdirección (CV-S1,
  *   supuesto por confirmar).
  * - Marcar y desmarcar registros como revisados (CV7): quien valida, con el mismo permiso, porque sin todos revisados
@@ -113,6 +116,6 @@ final class CatalogReviewPolicy
 
     private function can(User $user, CatalogValidationPermission $permission, CatalogReview $review): bool
     {
-        return CatalogReviewQuery::allowsOnDepartment($this->actor($user), $permission, $review->department_id);
+        return CatalogReviewQuery::allowsOn($this->actor($user), $permission, $review->owner_id);
     }
 }

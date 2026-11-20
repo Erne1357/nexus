@@ -5,6 +5,7 @@ use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
@@ -18,8 +19,9 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 /*
 | CatalogContentsQuery: los registros que revisa el jefe en cada catálogo de su departamento (docs/dominio/
 | modelo-de-datos.md, "CatalogValidation"), sin los borrados: docentes con una adscripción sin borrar al
-| departamento, materias y carreras del departamento, planes de sus carreras y salones del departamento en todos los
-| campus (decisión 6, confirmada el 12 de noviembre de 2026). La foto de una validación son los activos.
+| departamento y salones del departamento en todos los campus (decisión 6, confirmada el 12 de noviembre de 2026); en
+| las de Servicios Escolares, todas las materias, carreras y planes (de carreras sin borrar) del Tec (CV15). La foto de
+| una validación son los activos.
 */
 
 beforeEach(function () {
@@ -27,11 +29,15 @@ beforeEach(function () {
     $this->other = Department::factory()->create();
 });
 
+/**
+ * La revisión del catálogo: la del departamento en docentes y salones, la de Servicios Escolares, sin departamento, en
+ * materias, planes y carreras (CV15).
+ */
 function contentsReview(Catalog $catalog, Department $department): CatalogReview
 {
     $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog);
 
-    return $factory->create(['department_id' => $department->id]);
+    return $factory->create($catalog->owner() === CatalogOwner::Department ? ['department_id' => $department->id] : []);
 }
 
 function contentsCodes(CatalogReview $review): array
@@ -44,34 +50,36 @@ function roomIn(Campus $campus, array $attributes = []): Room
     return Room::factory()->for(Building::factory()->create(['campus_id' => $campus->id]))->create($attributes);
 }
 
-it('lista las materias del departamento por clave, con su estado, sin las borradas ni las de otro departamento', function () {
+it('CV15: lista las materias de todo el Tec por clave, con su estado, sin las borradas', function () {
     Subject::factory()->create(['code' => 'B-2', 'name' => 'Química', 'department_id' => $this->department->id]);
     $inactive = Subject::factory()->inactive()->create(['code' => 'A-1', 'name' => 'Cálculo', 'department_id' => $this->department->id]);
     Subject::factory()->create(['department_id' => $this->department->id])->delete();
-    Subject::factory()->create(['department_id' => $this->other->id]);
+    $foreign = Subject::factory()->create(['code' => 'C-3', 'name' => 'Circuitos', 'department_id' => $this->other->id]);
 
     expect(app(CatalogContentsQuery::class)->records(contentsReview(Catalog::Subjects, $this->department)))->toBe([
         ['id' => $inactive->id, 'code' => 'A-1', 'name' => 'Cálculo', 'is_active' => false],
         ['id' => Subject::where('code', 'B-2')->sole()->id, 'code' => 'B-2', 'name' => 'Química', 'is_active' => true],
+        ['id' => $foreign->id, 'code' => 'C-3', 'name' => 'Circuitos', 'is_active' => true],
     ]);
 });
 
-it('lista las carreras del departamento', function () {
+it('CV15: lista las carreras de todo el Tec', function () {
     Career::factory()->create(['code' => 'ISC', 'department_id' => $this->department->id]);
     Career::factory()->inactive()->create(['code' => 'IIA', 'department_id' => $this->department->id]);
     Career::factory()->create(['code' => 'IND', 'department_id' => $this->other->id]);
 
-    expect(contentsCodes(contentsReview(Catalog::Careers, $this->department)))->toBe(['IIA', 'ISC']);
+    expect(contentsCodes(contentsReview(Catalog::Careers, $this->department)))->toBe(['IIA', 'IND', 'ISC']);
 });
 
-it('lista los planes de las carreras del departamento', function () {
+it('CV15: lista los planes de las carreras sin borrar de todo el Tec', function () {
     $career = Career::factory()->create(['department_id' => $this->department->id]);
     StudyPlan::factory()->for($career)->create(['code' => 'ISIC-2010']);
     StudyPlan::factory()->for($career)->inactive()->create(['code' => 'ISIC-2004']);
     StudyPlan::factory()->for($career)->create()->delete();
     StudyPlan::factory()->for(Career::factory()->create(['department_id' => $this->other->id]))->create(['code' => 'INDU-2010']);
+    StudyPlan::factory()->for(tap(Career::factory()->create())->delete())->create(['code' => 'OLD-2000']);
 
-    expect(contentsCodes(contentsReview(Catalog::StudyPlans, $this->department)))->toBe(['ISIC-2004', 'ISIC-2010']);
+    expect(contentsCodes(contentsReview(Catalog::StudyPlans, $this->department)))->toBe(['INDU-2010', 'ISIC-2004', 'ISIC-2010']);
 });
 
 it('lista los docentes con una adscripción sin borrar al departamento, aunque no sea la principal, por RFC', function () {
@@ -117,14 +125,15 @@ it('dice si un registro es de la revisión', function () {
 
     expect($query->contains($review, $own))->toBeTrue()
         ->and($query->contains($review, $deleted))->toBeFalse()
-        ->and($query->contains($review, $foreign))->toBeFalse()
+        ->and($query->contains($review, $foreign))->toBeTrue()
         ->and($query->contains($review, $career))->toBeFalse();
 });
 
 it('busca un registro de la revisión por su id; uno ajeno o que no es uuid no existe', function () {
-    $review = contentsReview(Catalog::Careers, $this->department);
-    $own = Career::factory()->create(['department_id' => $this->department->id]);
-    $foreign = Career::factory()->create(['department_id' => $this->other->id]);
+    $review = contentsReview(Catalog::Rooms, $this->department);
+    $campus = Campus::factory()->create();
+    $own = roomIn($campus, ['department_id' => $this->department->id]);
+    $foreign = roomIn($campus, ['department_id' => $this->other->id]);
     $query = app(CatalogContentsQuery::class);
 
     expect($query->findOrFail($review, $own->id)->is($own))->toBeTrue()
@@ -174,9 +183,9 @@ describe('cuántos van revisados (CV7)', function () {
     });
 
     it('dice si todos los ids son de la revisión', function () {
-        $review = contentsReview(Catalog::Careers, $this->department);
-        $own = Career::factory()->create(['department_id' => $this->department->id]);
-        $foreign = Career::factory()->create(['department_id' => $this->other->id]);
+        $review = contentsReview(Catalog::Teachers, $this->department);
+        $own = Teacher::factory()->adscribedTo($this->department)->create();
+        $foreign = Teacher::factory()->adscribedTo($this->other)->create();
         $query = app(CatalogContentsQuery::class);
 
         expect($query->containsAll($review, [$own->id]))->toBeTrue()

@@ -88,9 +88,11 @@
         @include('academic-load::inbox.tabs', ['active' => 'inbox'])
 
         @if ($inbox->pendingCatalogs !== [])
+            {{-- CV15: materias, planes y carreras las valida Servicios Escolares; el enlace solo sirve si falta algo del departamento. --}}
+            @php($ownPending = collect($inbox->pendingCatalogs)->filter(fn ($catalog) => $catalog->owner() === \App\Modules\CatalogValidation\Enums\CatalogOwner::Department))
             <x-alert icon="o-exclamation-triangle" class="alert-warning alert-soft text-sm" data-testid="pending-catalogs"
-                :title="'Faltan por validar '.collect($inbox->pendingCatalogs)->map(fn ($catalog) => mb_strtolower($catalog->label()))->join(', ', ' y ').'. No se puede aceptar hasta validarlos; regresar sí.'">
-                @if ($catalogsUrl !== null)
+                :title="'Faltan por validar '.collect($inbox->pendingCatalogs)->map(fn ($catalog) => mb_strtolower($catalog->label()))->join(', ', ' y ').'. No se puede aceptar hasta validarlos; regresar sí.'.($ownPending->count() < count($inbox->pendingCatalogs) ? ' Materias, planes y carreras los valida Servicios Escolares.' : '')">
+                @if ($catalogsUrl !== null && $ownPending->isNotEmpty())
                     <x-slot:actions>
                         <x-button label="Validar catálogos" icon="o-check-badge" class="btn-sm btn-ghost" link="{{ $catalogsUrl }}" data-testid="validate-catalogs" />
                     </x-slot:actions>

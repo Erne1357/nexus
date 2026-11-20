@@ -68,9 +68,10 @@ beforeEach(function () {
     app(OpenTerm::class)->handle($this->term, modalityOf('PRES'));
     app(OpenCatalogValidation::class)->handle($this->term, Catalog::cases(), User::query()->where('username', 'admin')->firstOrFail());
 
+    // Las de materias, planes y carreras son de Servicios Escolares, sin departamento, y sirven a todos (CV15).
     CatalogReview::query()
         ->where('term_id', $this->term->id)
-        ->whereIn('department_id', Department::query()->whereIn('code', ['CB', 'SC'])->select('id'))
+        ->where(fn ($query) => $query->whereIn('department_id', Department::query()->whereIn('code', ['CB', 'SC'])->select('id'))->orWhereNull('department_id'))
         ->update(['status' => ReviewStatus::Validated]);
 });
 

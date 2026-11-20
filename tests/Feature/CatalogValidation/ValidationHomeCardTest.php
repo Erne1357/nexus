@@ -29,7 +29,7 @@ beforeEach(function () {
     Department::factory()->inactive()->create(['code' => 'OLD']);
     $this->jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sis->id])->create();
 
-    app(CreateTermReviews::class)->handle($this->term, [Catalog::Teachers, Catalog::Subjects, Catalog::Careers]);
+    app(CreateTermReviews::class)->handle($this->term, [Catalog::Teachers, Catalog::Rooms, Catalog::Subjects, Catalog::Careers]);
 });
 
 function homeAs(User $user, Role $role)
@@ -46,17 +46,17 @@ it('CV-S13: al jefe le dice cuántos catálogos le faltan, la fecha límite y lo
 
     homeAs($this->jefe, Role::JefeDepartamento)
         ->assertSeeHtml('data-testid="home-card-catalog-validation"')
-        ->assertSee('Tienes 2 catálogos por validar · fecha límite 27 nov')
+        ->assertSee('Tienes 1 catálogo por validar · fecha límite 27 nov')
         ->assertSee('Ir a validar')
         ->assertSeeHtml('href="'.route('catalog-validation.review').'"');
 });
 
-it('CV-S13: a Subdirección y al admin, cuántos departamentos activos validaron todo', function (string $who) {
+it('CV-S13: a Subdirección y al admin, cuántos departamentos activos validaron todo, Servicios Escolares incluido (CV15)', function (string $who) {
     CatalogReview::query()->where('department_id', $this->ele->id)->update(['status' => ReviewStatus::Validated, 'validated_at' => now()]);
     [$user, $role] = $who === 'admin' ? [User::factory()->admin()->create(), Role::Admin] : [User::factory()->withRole(Role::Subdireccion, [])->create(), Role::Subdireccion];
 
     homeAs($user, $role)
-        ->assertSee('1 de 2 departamentos validados')
+        ->assertSee('1 de 3 departamentos validados')
         ->assertSee('Ver avance')
         ->assertSeeHtml('href="'.route('catalog-validation.progress').'"');
 })->with(['admin', 'subdirección']);

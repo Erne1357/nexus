@@ -1,5 +1,6 @@
 {{--
-    El tablero (variante C, con la revisión por registro de la opción A): la tarjeta de avance (HC-14) y una tarjeta por
+    El tablero (variante C, con la revisión por registro de la opción A): la tarjeta de avance (HC-14; a un departamento
+    con lo suyo validado le dice si Servicios Escolares todavía detiene su carga, CV15) y una tarjeta por
     revisión del periodo, las que tienen trabajo primero (review.php). La de avance dice, por catálogo exigido, cuántos
     van revisados, «Listo para validar» o «Validado». Cada tarjeta lleva «N de M revisados» en grande con su barra y lo
     que queda (CV7), las cifras, los avisos de docentes (readiness) y «Validar catálogo» a todo el ancho: deshabilitado
@@ -59,6 +60,10 @@
 
         @if ($progress['left'] > 0)
             <p class="flex items-center gap-2 text-sm font-medium text-warning" data-testid="review-lock"><x-icon name="o-lock-closed" class="h-4 w-4" aria-hidden="true" />{{ trans_choice('{1} Falta 1 para sacar la carga de borrador|[2,*] Faltan :count para sacar la carga de borrador', $progress['left']) }}</p>
+        @elseif ($progress['schoolServices'])
+            <p class="flex items-center gap-2 text-sm font-medium text-success" data-testid="review-lock"><x-icon name="o-lock-open" class="h-4 w-4" aria-hidden="true" />Todo validado: ya no detiene la carga de ningún departamento</p>
+        @elseif ($progress['waiting'] > 0)
+            <p class="flex items-start gap-2 text-sm font-medium text-neutral" data-testid="review-lock"><x-icon name="o-lock-closed" class="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />Todo lo tuyo está validado. La carga sale de borrador cuando Servicios Escolares valide materias, planes y carreras.</p>
         @else
             <p class="flex items-center gap-2 text-sm font-medium text-success" data-testid="review-lock"><x-icon name="o-lock-open" class="h-4 w-4" aria-hidden="true" />Todo validado: la carga puede salir de borrador</p>
         @endif

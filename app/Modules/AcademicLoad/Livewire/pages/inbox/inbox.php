@@ -13,6 +13,8 @@ use App\Modules\AcademicLoad\Queries\DepartmentInbox;
 use App\Modules\AcademicLoad\Queries\DepartmentInboxQuery;
 use App\Modules\AcademicLoad\Rules\ParallelGroups;
 use App\Modules\AcademicLoad\Rules\ProposalReviewRules;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Livewire\Concerns\WithModalityCampusFilter;
 use App\Modules\Core\Models\Campus;
@@ -493,7 +495,10 @@ new #[Title('Bandeja del departamento')] class extends Component
     private function acceptBlock(DepartmentInbox $inbox): string
     {
         if ($inbox->pendingCatalogs !== []) {
-            return 'Valida los catálogos del departamento para poder aceptar.';
+            // CV15: si solo falta lo de Servicios Escolares, el jefe no tiene nada que validar.
+            return array_any($inbox->pendingCatalogs, fn (Catalog $catalog): bool => $catalog->owner() === CatalogOwner::Department)
+                ? 'Valida los catálogos del departamento para poder aceptar.'
+                : 'Falta que Servicios Escolares valide materias, planes y carreras para poder aceptar.';
         }
 
         return "{$inbox->department->code} no tiene carga en ".($inbox->modality?->name ?? 'esta modalidad').' para este periodo.';

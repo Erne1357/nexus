@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Models\Department;
-use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CreateTermReviews;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
@@ -14,6 +13,7 @@ use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\TermOpening;
 use App\Modules\Core\Models\TermStage;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\Teacher;
 use Illuminate\Notifications\DatabaseNotification;
 
 /*
@@ -91,11 +91,11 @@ it('CV10 y CV11: Subdirección recuerda a un jefe por correo y resuelve una obse
     TermStage::factory()->create(['term_id' => $term->id, 'stage' => Stage::CatalogValidation, 'starts_on' => '2026-11-16', 'ends_on' => '2026-11-27']);
     $sis = Department::factory()->create(['code' => 'SIS', 'name' => 'Sistemas y Computación']);
     $ele = Department::factory()->create(['code' => 'ELE', 'name' => 'Eléctrica y Electrónica']);
-    app(CreateTermReviews::class)->handle($term, [Catalog::Subjects]);
+    app(CreateTermReviews::class)->handle($term, [Catalog::Teachers]);
     $jefeSis = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $sis->id])->create(['name' => 'Dra. Ana Soto', 'email' => 'ana.soto@cdjuarez.tecnm.mx']);
     $jefeEle = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $ele->id])->create(['name' => 'Ing. Raúl Terrazas']);
-    $subject = Subject::factory()->create(['code' => 'ELC-1001', 'name' => 'Circuitos eléctricos', 'department_id' => $ele->id]);
-    $flag = CatalogReviewFlag::factory()->on($subject)->create([
+    $teacher = Teacher::factory()->adscribedTo($ele)->create(['rfc' => 'ELCA800101AA1', 'name' => 'Elsa Carrillo']);
+    $flag = CatalogReviewFlag::factory()->on($teacher)->create([
         'review_id' => CatalogReview::query()->where('department_id', $ele->id)->sole()->id,
         'flag' => ReviewFlag::Duplicate,
         'flagged_by' => $jefeEle->id,
@@ -118,7 +118,7 @@ it('CV10 y CV11: Subdirección recuerda a un jefe por correo y resuelve una obse
     $page->click('@open-all-flags')
         ->waitForText('Observaciones abiertas (1)')
         ->assertSee('Eléctrica y Electrónica')
-        ->assertSee('ELC-1001')
+        ->assertSee('ELCA800101AA1')
         ->click('@resolve-flag-'.$flag->id)
         ->fill('@resolve-note-'.$flag->id, 'Se dio de baja la repetida.')
         ->click('@resolve-submit-'.$flag->id)

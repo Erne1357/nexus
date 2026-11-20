@@ -5,14 +5,16 @@ namespace App\Modules\CatalogValidation\Notifications;
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
+use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
 use App\Modules\CatalogValidation\Queries\HeadMailAddressQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\Core\Authorization\Actor;
-use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Notifications\RoutesMailAddress;
+use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Core\Support\StageTimeline;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
@@ -20,10 +22,11 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 
 /**
- * «Tienes catálogos por validar» (tarea 2.9) y su recordatorio (tarea 2.5): al jefe de un departamento, con los catálogos
- * que le faltan del periodo. Lleva a la validación de catálogos de ese departamento (tarea 2.4), con la credencial en el
- * periodo del aviso; no lleva campus, porque la validación es de todo el Tec (decisión 6). Deja de poder abrirse si el
- * departamento se borró o el usuario ya no es su jefe.
+ * «Tienes catálogos por validar» (tarea 2.9) y su recordatorio (tarea 2.5): al jefe de un departamento o de Servicios
+ * Escolares (CV15), con los catálogos que le faltan del periodo. Lleva a la validación de catálogos de ese departamento
+ * o de Servicios Escolares (tarea 2.4; `?department=` es ReviewOwner::id), con la credencial en el periodo del aviso; no
+ * lleva campus, porque la validación es de todo el Tec (decisión 6). Deja de poder abrirse si el departamento se borró
+ * o el usuario ya no es su jefe.
  *
  * CV11 (D3 y D6, confirmados el 14 de noviembre de 2026): los dos dicen la fecha límite, si la etapa tiene ventana
  * (ValidationWindowQuery), y llegan también al correo del jefe. El recordatorio tiene su propio título y dice cuánto
@@ -47,18 +50,22 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
         return 'Catálogos por validar';
     }
 
+    /** De quién son los catálogos: un departamento o Servicios Escolares (CV15). */
+    private readonly ReviewOwner $owner;
+
     /**
      * @param  list<Catalog>  $pending
      * @param  array<string, array{reviewed: int, total: int}>  $progress  por catálogo (`Catalog->value`), solo en el recordatorio
      */
     public function __construct(
         private readonly Term $term,
-        private readonly Department $department,
+        Department|ReviewOwner $owner,
         private readonly array $pending,
         private readonly ?CarbonImmutable $deadline = null,
         private readonly bool $reminder = false,
         private readonly array $progress = [],
     ) {
+        $this->owner = $owner instanceof Department ? ReviewOwner::ofDepartment($owner) : $owner;
         $this->afterCommit();
     }
 
@@ -92,10 +99,10 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
     {
         return new NotificationMessage(
             title: $this->title(),
-            body: "{$this->term->name} · {$this->department->name}: {$this->catalogList()}".($this->deadline === null ? '' : ' · fecha límite '.StageTimeline::dateLabel($this->deadline)),
+            body: "{$this->term->name} · {$this->owner->name}: {$this->catalogList()}".($this->deadline === null ? '' : ' · fecha límite '.StageTimeline::dateLabel($this->deadline)),
             icon: 'o-clipboard-document-check',
             route: 'catalog-validation.review',
-            parameters: ['department' => $this->department->getKey()],
+            parameters: ['department' => $this->owner->id],
             termId: $this->term->getKey(),
             tone: 'warning',
         );
@@ -107,8 +114,8 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
             ->subject($this->title())
             ->greeting("Hola, {$notifiable->name}")
             ->line($this->reminder
-                ? "En {$this->department->name} te falta validar en {$this->term->name}:"
-                : "Se abrió la validación de catálogos de {$this->term->name}. En {$this->department->name} te falta validar:");
+                ? "En {$this->owner->name} te falta validar en {$this->term->name}:"
+                : "Se abrió la validación de catálogos de {$this->term->name}. En {$this->owner->name} te falta validar:");
 
         foreach ($this->ordered() as $catalog) {
             $mail->line($catalog->label().($this->reminder ? ': '.$this->progressLabel($catalog) : ''));
@@ -119,19 +126,27 @@ final class CatalogReviewsPending extends NexusNotification implements RoutesMai
         }
 
         return $mail
-            ->action('Ir a validar', route('catalog-validation.review', ['department' => $this->department->getKey()]))
+            ->action('Ir a validar', route('catalog-validation.review', ['department' => $this->owner->id]))
             ->line('Revisa cada registro y valida el catálogo cuando esté completo.');
     }
 
     public static function unavailableReason(Actor $context, NotificationMessage $message): ?string
     {
-        $department = Department::query()->find($message->parameters['department'] ?? null);
+        $owner = $message->parameters['department'] ?? null;
+
+        if ($owner === ReviewOwner::SCHOOL_SERVICES) {
+            return CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewValidate, $owner)
+                ? parent::unavailableReason($context, $message)
+                : 'Ya no eres jefe de Servicios Escolares.';
+        }
+
+        $department = KeyLookup::find(Department::query(), $owner);
 
         if ($department === null) {
             return 'Ese departamento ya no existe.';
         }
 
-        if (! $context->allows(CatalogValidationPermission::ReviewValidate, Target::of(unit: $department->getKey()))) {
+        if (! CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewValidate, $department->getKey())) {
             return "Ya no eres jefe de {$department->name}.";
         }
 

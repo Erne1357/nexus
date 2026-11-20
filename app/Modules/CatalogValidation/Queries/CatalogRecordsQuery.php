@@ -2,6 +2,8 @@
 
 namespace App\Modules\CatalogValidation\Queries;
 
+use App\Modules\Academic\Models\Career;
+use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\CatalogValidation\Enums\Catalog;
 use App\Modules\CatalogValidation\Enums\ReviewFlag;
@@ -43,14 +45,14 @@ final class CatalogRecordsQuery
      * `$onlyIds`, si no es null, deja solo esos registros (el filtro «Falta» de docentes); `$reviewed` es `reviewed`
      * (marcados como revisados), `unreviewed` (sin marca), `pending` (activos sin marca: los que faltan por revisar, CV7)
      * o vacío. En salones, `$campusId` y `$buildingId` dejan los de ese campus o edificio (un id que no es uuid no deja
-     * ninguno).
+     * ninguno). En las de Servicios Escolares, `$departmentId` deja los de ese departamento (CV15).
      *
      * @param  ?list<string>  $onlyIds
      * @return LengthAwarePaginator<int, Model>
      */
-    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null, string $reviewed = '', string $campusId = '', string $buildingId = ''): LengthAwarePaginator
+    public function page(CatalogReview $review, string $search = '', ?bool $active = null, string $flag = '', int $perPage = 15, ?array $onlyIds = null, string $reviewed = '', string $campusId = '', string $buildingId = '', string $departmentId = ''): LengthAwarePaginator
     {
-        $query = $this->filtered($review, $search, $onlyIds, $campusId, $buildingId);
+        $query = $this->filtered($review, $search, $onlyIds, $campusId, $buildingId, $departmentId);
         $model = $query->getModel();
 
         match ($review->catalog) {
@@ -82,13 +84,14 @@ final class CatalogRecordsQuery
 
     /**
      * Los registros de la revisión con los filtros de la barra que no son de revisión: la búsqueda, `$onlyIds` («Falta»
-     * y «Cambio») y, en salones, el campus y el edificio (un id que no es uuid no deja ninguno). La base de page() y de
-     * pendingIds(), para que «Elegir los N por revisar» elija lo mismo que se ve.
+     * y «Cambio»), en salones el campus y el edificio y, en las de Servicios Escolares, el departamento (un id que no es
+     * uuid no deja ninguno). La base de page() y de pendingIds(), para que «Elegir los N por revisar» elija lo mismo que
+     * se ve.
      *
      * @param  ?list<string>  $onlyIds
      * @return Builder<Model>
      */
-    private function filtered(CatalogReview $review, string $search, ?array $onlyIds, string $campusId, string $buildingId): Builder
+    private function filtered(CatalogReview $review, string $search, ?array $onlyIds, string $campusId, string $buildingId, string $departmentId = ''): Builder
     {
         $query = $this->contents->query($review);
         $model = $query->getModel();
@@ -107,7 +110,41 @@ final class CatalogRecordsQuery
             }
         }
 
+        if ($departmentId !== '' && $review->department_id === null) {
+            match (true) {
+                ! Str::isUuid($departmentId) => $query->whereRaw('false'),
+                $review->catalog === Catalog::StudyPlans => $query->whereIn($model->qualifyColumn('career_id'), Career::query()->where('department_id', $departmentId)->select('id')),
+                default => $query->where($model->qualifyColumn('department_id'), $departmentId),
+            };
+        }
+
         return $query;
+    }
+
+    /**
+     * Las opciones del filtro «Departamento» de una revisión de Servicios Escolares (CV15): los departamentos de sus
+     * registros (de la carrera, en los planes), por clave, como opciones de x-select («SIS · Sistemas y Computación»).
+     * Vacío en las de un departamento.
+     *
+     * @return list<array{id: string, name: string}>
+     */
+    public function departmentFilterOptions(CatalogReview $review): array
+    {
+        if ($review->department_id !== null) {
+            return [];
+        }
+
+        $owners = match ($review->catalog) {
+            Catalog::StudyPlans => Career::query()->whereIn('id', $this->contents->query($review)->reorder()->select('study_plans.career_id'))->select('department_id'),
+            default => $this->contents->query($review)->reorder()->select($this->contents->query($review)->getModel()->qualifyColumn('department_id')),
+        };
+
+        return Department::query()
+            ->whereIn('id', $owners)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name'])
+            ->map(fn (Department $department): array => ['id' => $department->id, 'name' => "{$department->code} · {$department->name}"])
+            ->all();
     }
 
     /**
@@ -136,9 +173,9 @@ final class CatalogRecordsQuery
      * @param  ?list<string>  $onlyIds
      * @return list<string>
      */
-    public function pendingIds(CatalogReview $review, string $search = '', ?array $onlyIds = null, string $campusId = '', string $buildingId = '', int $limit = 500): array
+    public function pendingIds(CatalogReview $review, string $search = '', ?array $onlyIds = null, string $campusId = '', string $buildingId = '', int $limit = 500, string $departmentId = ''): array
     {
-        $query = $this->filtered($review, $search, $onlyIds, $campusId, $buildingId);
+        $query = $this->filtered($review, $search, $onlyIds, $campusId, $buildingId, $departmentId);
         $model = $query->getModel();
 
         return $query

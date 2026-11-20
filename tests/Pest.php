@@ -9,16 +9,21 @@ use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
 use App\Modules\CatalogValidation\Actions\ValidateReview;
+use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
+use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
+use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Navigation\Navigation;
@@ -401,4 +406,63 @@ function catalogToolbarInOneRowScript(): string
 function activitySince(): Builder
 {
     return Activity::query()->where('id', '>', test()->activityBase);
+}
+
+/**
+ * La unidad del Departamento de Servicios Escolares (OrgTree::SCHOOL_SERVICES), colgada de la Subdirección de Planeación
+ * y Vinculación como en el organigrama oficial (R-V2-5): la crea la primera vez. Sus revisiones de catálogo son las de
+ * materias, planes y carreras de todo el Tec (CV15).
+ */
+function schoolServicesUnit(): OrgUnit
+{
+    $tree = app(OrgTree::class);
+
+    if (($id = $tree->idOf(OrgTree::SCHOOL_SERVICES)) !== null) {
+        return OrgUnit::query()->findOrFail($id);
+    }
+
+    $planning = OrgUnit::query()->where('code', 'SUB-PLANEACION')->first()
+        ?? OrgUnit::factory()->create(['code' => 'SUB-PLANEACION', 'name' => 'Subdirección de Planeación y Vinculación', 'kind' => OrgUnitKind::Subdireccion, 'parent_id' => $tree->idOf(OrgTree::ROOT)]);
+    $unit = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'parent_id' => $planning->id]);
+
+    app()->forgetScopedInstances();
+
+    return $unit;
+}
+
+/**
+ * Un jefe del Departamento de Servicios Escolares (AZ-S15), que valida las materias, los planes y las carreras de todo el
+ * Tec (CV15). Crea la unidad si falta.
+ *
+ * @param  array<string, mixed>  $attributes
+ */
+function schoolServicesHead(array $attributes = []): User
+{
+    return User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => schoolServicesUnit()->id])->create($attributes);
+}
+
+/**
+ * Deja validadas en el periodo las revisiones generales (sin salones) que exige HC-14 a la carga de `$departmentId`: su
+ * revisión de docentes y las de Servicios Escolares (materias, planes y carreras, una sola del Tec; CV15). Las crea si
+ * faltan y, si ya existían, las valida; las de Servicios Escolares sirven a todos los departamentos. `$except` deja fuera
+ * esos catálogos.
+ *
+ * @param  list<Catalog>  $except
+ */
+function validateGeneralCatalogs(string $termId, string $departmentId, array $except = []): void
+{
+    foreach (Catalog::general() as $catalog) {
+        if (in_array($catalog, $except, true)) {
+            continue;
+        }
+
+        $department = $catalog->owner() === CatalogOwner::Department ? $departmentId : null;
+        $review = CatalogReview::query()->where('term_id', $termId)->where('catalog', $catalog)->where('department_id', $department)->first();
+
+        if ($review === null) {
+            CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $termId, 'department_id' => $department]);
+        } elseif ($review->status !== ReviewStatus::Validated) {
+            $review->update(['status' => ReviewStatus::Validated, 'validated_by' => User::factory()->create()->id, 'validated_at' => now()]);
+        }
+    }
 }
