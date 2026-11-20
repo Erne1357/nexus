@@ -35,6 +35,7 @@ use App\Modules\Core\Events\HomeCardsRequested;
 use App\Modules\Core\Events\ModalityUpdated;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Events\AdscriptionChanged;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
@@ -190,6 +191,17 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
                 ? true
                 : "{$byAdmin} revisiones las validó el admin: a su departamento le falta jefe."),
         ];
+    }
+
+    /**
+     * D8 (confirmado el 14 de noviembre de 2026; en la bitácora, el 20 de noviembre de 2026): el motivo con que un jefe
+     * quitó a un docente al validar (`discharged`, `reason`) solo lo ven quienes dan de baja docentes, el admin y la
+     * Subdirección (`faculty.teacher.deactivate`), como en «Salidas de departamento» de la ficha del docente. Quien ve la
+     * bitácora sin ese permiso (el directivo, AZ-03) ve la entrada sin el motivo.
+     */
+    public function activityProtectedProperties(): array
+    {
+        return ['discharged' => ['reason' => FacultyPermission::TeacherDeactivate]];
     }
 
     public function activityAttributes(): array

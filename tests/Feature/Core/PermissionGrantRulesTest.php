@@ -30,9 +30,16 @@ it('CF-03: los candados son usuarios, roles y permisos, nombramientos, organigra
         ->and($registry->isAdminOnly(CorePermission::ModalityUpdateProfile))->toBeFalse()
         ->and($registry->grants(Role::Subdireccion, CorePermission::ModalityUpdateProfile))->toBeTrue();
 
+    // La única excepción de fábrica (AZ-03, confirmado el 20 de noviembre de 2026): el directivo ve Personas y puestos,
+    // el Organigrama y la Bitácora.
+    $exceptions = ['core.activity.view', 'core.assignment.view', 'core.org_unit.view'];
+
     foreach ($registry->permissions() as $permission) {
         if ($registry->isAdminOnly($permission)) {
-            expect($registry->rolesGranting($permission))->toBe([], "{$permission->value} es candado y se concede de fábrica");
+            expect($registry->rolesGranting($permission))->toBe(
+                in_array($permission->value, $exceptions, true) ? [Role::Directivo] : [],
+                "{$permission->value} es candado y se concede de fábrica",
+            );
         }
     }
 });

@@ -46,7 +46,7 @@
                     <div class="flex flex-wrap items-center gap-2">
                         <h2 id="who-title" class="font-bold">{{ $selected['label'] }}</h2>
                         @if ($selected['admin_only'])
-                            <x-core::status-badge tone="neutral" icon="o-lock-closed" label="Solo del admin" />
+                            <x-core::status-badge tone="neutral" icon="o-lock-closed" :label="$selected['lock_label']" data-testid="lock-badge" />
                         @endif
                         @if ($selected['admin_denied'])
                             <x-core::status-badge tone="neutral" icon="o-minus-circle" label="Excepción del admin" />

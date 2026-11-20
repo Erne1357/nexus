@@ -11,8 +11,9 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Le da a un puesto un permiso suelto (CF-01). El admin no se edita (CF-S1), y el permiso no puede ser candado (CF-03)
- * ni ampliar el alcance del puesto (CF-04); lo de fábrica del puesto siempre vale. Si ya lo tiene suelto, no escribe
+ * Le da a un puesto un permiso suelto (CF-01). El admin no se edita (CF-S1), y el permiso no puede ser candado (CF-03,
+ * salvo la excepción de fábrica de ese puesto) ni ampliar el alcance del puesto (CF-04); lo de fábrica del puesto
+ * siempre vale. Si ya lo tiene suelto, no escribe
  * ni registra. Deja en la bitácora los permisos sueltos y los roles del puesto antes y después.
  */
 final class GrantPositionPermission
@@ -28,7 +29,7 @@ final class GrantPositionPermission
     public function handle(Role $role, Permission $permission): void
     {
         $this->rules->ensureEditable($role);
-        [$key] = $this->rules->permissionKeys([(string) $permission->value], 'permission');
+        [$key] = $this->rules->permissionKeys([(string) $permission->value], 'permission', $role);
         $this->rules->ensureGrantable([$role], [$key], 'permission');
 
         DB::transaction(function () use ($role, $key, $permission): void {
