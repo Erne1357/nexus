@@ -189,6 +189,16 @@ describe('ReleaseRoomClaim', function () {
             ->and($own->fresh()->department_id)->toBe($this->sis->id);
     });
 
+    it('CV16: si el admin ya cambió el dueño después del reclamo, soltar se rechaza y no cierra el reclamo ni deja bitácora', function () {
+        app(ClaimRooms::class)->handle(claimReview(), [$this->a->id], $this->jefe);
+        $this->a->update(['department_id' => $this->ele->id]);
+
+        expect(claimErrors(fn () => app(ReleaseRoomClaim::class)->handle(claimReview(), $this->a->id, $this->jefe)))->toHaveKey('claim')
+            ->and($this->a->fresh()->department_id)->toBe($this->ele->id)
+            ->and(CatalogReviewRoomClaim::query()->active()->count())->toBe(1)
+            ->and(Activity::query()->where('event', 'released')->count())->toBe(0);
+    });
+
     it('CV16: solo mientras la revisión no esté validada', function () {
         app(ClaimRooms::class)->handle(claimReview(), [$this->a->id], $this->jefe);
         $review = claimReview();

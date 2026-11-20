@@ -51,7 +51,11 @@ final class ReleaseRoomClaim
                 throw ValidationException::withMessages(['claim' => 'El salón no lo reclamó esta revisión.']);
             }
 
-            $this->releaseRoom->handle($roomId, $review->department_id);
+            // Si el admin ya cambió el dueño después del reclamo, el salón ya no es del departamento: no se suelta nada,
+            // el reclamo queda como estaba y no se escribe bitácora.
+            if (! $this->releaseRoom->handle($roomId, $review->department_id)) {
+                throw ValidationException::withMessages(['claim' => 'El salón ya no es de tu departamento: no hay nada que soltar.']);
+            }
             $claim->update(['released_at' => now()]);
             $review->marks()->where('record_id', $roomId)->delete();
 
