@@ -12,8 +12,9 @@ use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
  * Le da a un puesto varios permisos sueltos a la vez («Agregar permisos sueltos», CF-01), todos o ninguno, en una sola
- * transacción. Las reglas de GrantPositionPermission: el admin no se edita (CF-S1), y ninguno puede ser candado (CF-03)
- * ni ampliar el alcance del puesto (CF-04); lo de fábrica del puesto siempre vale. Si alguno no se puede, no da ninguno
+ * transacción. Las reglas de GrantPositionPermission: el admin no se edita (CF-S1), y ninguno puede ser candado (CF-03,
+ * salvo la excepción de fábrica de ese puesto) ni ampliar el alcance del puesto (CF-04); lo de fábrica del puesto
+ * siempre vale. Si alguno no se puede, no da ninguno
  * y los motivos salen juntos sobre `permissions`. Lo que ya tenía suelto no se escribe ni se registra; cada permiso que
  * da deja su entrada en la bitácora, con los permisos sueltos y los roles del puesto antes y después.
  */
@@ -47,7 +48,7 @@ final class GrantPositionPermissions
         }
 
         $this->rules->ensureGrantable([$role], $keys, 'permissions');
-        $keys = $this->rules->permissionKeys($keys);
+        $keys = $this->rules->permissionKeys($keys, position: $role);
 
         DB::transaction(function () use ($role, $keys, $labels): void {
             foreach ($keys as $key) {

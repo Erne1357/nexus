@@ -28,6 +28,18 @@ function writeSiiHistory(string $dir, array $rows): void
 }
 
 /**
+ * @param  array<string, string>  $statuses  estatus del alumno (`estatus_alumno`) por número de control
+ */
+function writeSiiStudentStatuses(string $dir, array $statuses): void
+{
+    SiiFixtures::write($dir.'/alumnos_todos.csv', SiiFile::Alumnos, array_map(
+        fn (string $control, string $status): string => SiiFixtures::line(SiiFile::Alumnos, ['no_de_control' => "'{$control}'", 'estatus_alumno' => "'{$status}'"]),
+        array_keys($statuses),
+        $statuses,
+    ));
+}
+
+/**
  * @param  list<array{0: string, 1: string, 2: string, 3: string, 4: string}>  $rows  periodo, número de control, materia, repetición y status
  */
 function writeSiiSelection(string $dir, array $rows): void
@@ -119,7 +131,65 @@ it('K4: la reprobada vieja entra como reprobada y la aprobada posterior de la mi
         kardexStepRow('S1', 'AEF-1001', '20001', '', 'reprobada', 1),
         kardexStepRow('S1', 'ACF-0901', '20011', '', 'aprobada', 1),
     ])
-        ->and(kardexMessages($run['incidents']))->toContain('kardex K4: 2 línea(s) con estatus A y calificación 0 o vacía de examen pasaron a reprobadas (1990s: 1, 2000s: 1).');
+        ->and(kardexMessages($run['incidents']))->toContain('kardex K4: 2 línea(s) con estatus A y calificación 0 o vacía de examen: 1 reprobadas porque la materia se volvió a cursar, 1 reprobadas sin reintento (alumnos que no son egresados ni titulados), 0 aprobadas sin calificación (egresados y titulados que nunca la volvieron a cursar). Reprobadas por década: 1990s: 1, 2000s: 1.');
+});
+
+it('K4 mixta: la A con 0 de examen de un egresado o titulado que nunca volvió a cursar la materia queda aprobada sin calificación', function () {
+    writeSiiStudentStatuses($this->dir, ['S1' => 'EGR', 'S2' => 'TIT']);
+    writeSiiHistory($this->dir, [
+        ['19951', 'S1', 'CD1', '0', 'O1', 'A'],
+        ['20001', 'S2', 'QU1', '', 'E1', 'A'],
+    ]);
+
+    $run = kardexStepRun($this->dir);
+
+    expect($run['rows'])->toBe([
+        kardexStepRow('S1', 'ACF-0901', '19951', '', 'aprobada', 1),
+        kardexStepRow('S2', 'AEF-1001', '20001', '', 'aprobada', 1),
+    ])
+        ->and(kardexMessages($run['incidents']))->toContain('kardex K4: 2 línea(s) con estatus A y calificación 0 o vacía de examen: 0 reprobadas porque la materia se volvió a cursar, 0 reprobadas sin reintento (alumnos que no son egresados ni titulados), 2 aprobadas sin calificación (egresados y titulados que nunca la volvieron a cursar).');
+});
+
+it('K4 mixta: el mismo renglón de un alumno que no es egresado queda reprobado', function () {
+    writeSiiStudentStatuses($this->dir, ['S1' => 'ACT', 'S2' => 'BD']);
+    writeSiiHistory($this->dir, [
+        ['19951', 'S1', 'CD1', '0', 'O1', 'A'],
+        ['20001', 'S2', 'QU1', '0', 'O1', 'A'],
+    ]);
+
+    expect(kardexStepRun($this->dir)['rows'])->toBe([
+        kardexStepRow('S1', 'ACF-0901', '19951', 0, 'reprobada', 1),
+        kardexStepRow('S2', 'AEF-1001', '20001', 0, 'reprobada', 1),
+    ]);
+});
+
+it('K4 mixta: si se volvió a cursar, después o en el mismo periodo, la línea vieja es reprobada aunque el alumno sea egresado', function () {
+    writeSiiStudentStatuses($this->dir, ['S1' => 'EGR']);
+    writeSiiHistory($this->dir, [
+        ['19951', 'S1', 'CD1', '0', 'O1', 'A'],
+        ['19953', 'S1', 'CD1', '85', 'O1', 'A'],
+        ['19961', 'S1', 'QU1', '0', 'O1', 'A'],
+        ['19961', 'S1', 'QU1', '0', 'O2', 'A'],
+    ]);
+
+    $run = kardexStepRun($this->dir);
+
+    expect($run['rows'])->toBe([
+        kardexStepRow('S1', 'ACF-0901', '19951', 0, 'reprobada', 1),
+        kardexStepRow('S1', 'ACF-0901', '19953', 85, 'aprobada', 1),
+        kardexStepRow('S1', 'AEF-1001', '19961', 0, 'reprobada', 2),
+    ])
+        ->and(kardexMessages($run['incidents']))->toContain('kardex K4: 3 línea(s) con estatus A y calificación 0 o vacía de examen: 3 reprobadas porque la materia se volvió a cursar, 0 reprobadas sin reintento (alumnos que no son egresados ni titulados), 0 aprobadas sin calificación (egresados y titulados que nunca la volvieron a cursar). Reprobadas por década: 1990s: 3.');
+});
+
+it('K4 mixta: una A con 0 de convalidación de un egresado sigue aprobada y no cuenta en el aviso', function () {
+    writeSiiStudentStatuses($this->dir, ['S1' => 'EGR']);
+    writeSiiHistory($this->dir, [['20011', 'S1', 'CD2', '0', 'RC', 'A']]);
+
+    $run = kardexStepRun($this->dir);
+
+    expect($run['rows'])->toBe([kardexStepRow('S1', 'ACF-0901', '20011', '', 'aprobada', 1)])
+        ->and(implode("\n", kardexMessages($run['incidents'])))->not->toContain('K4');
 });
 
 it('no migra la materia sin equivalente en Nexus y avisa por clave del SII', function () {

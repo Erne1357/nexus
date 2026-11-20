@@ -32,8 +32,10 @@ use Illuminate\Support\Facades\DB;
  *   KardexSubjects). Los renglones de un alumno que caen en la misma fila del kárdex (alumno, materia de Nexus y periodo)
  *   se ordenan como en KardexStep (la aprobada, la de mayor calificación y la última línea): los que pierden «se quedan
  *   uno». Un estatus distinto de A, R y P no pasa al kárdex y es «sin explicar» antes que cualquier otro diagnóstico.
- * - Una línea es aprobada con la regla K4: `estatus_materia` A, salvo la de calificación 0 o vacía y tipo de evaluación de
- *   examen (KardexCodes::EXAM_TYPES), que el kárdex guarda como reprobada. `materias.aprobada_k4` lo dice.
+ * - Una línea es aprobada con la regla K4 mixta (la misma de KardexStep): `estatus_materia` A, salvo la de calificación 0
+ *   o vacía y tipo de evaluación de examen (KardexCodes::EXAM_TYPES), que el kárdex guarda como reprobada, a menos que el
+ *   alumno sea EGR o TIT (su primer renglón de `alumnos_todos`) y no tenga otra línea de esa materia del SII en la
+ *   historia: entonces es aprobada. `materias.aprobada_k4` lo dice.
  * - `alumnos`: un renglón por alumno de `alumnos_todos`. Según el SII (regla confirmada), está completo cuando los
  *   créditos de sus materias aprobadas (K4; `estatus_materia` A que no es una reprobada vieja) que están en su propia retícula llegan a los créditos
  *   totales de esa retícula (GridTotalCredits, la regla del paso `carreras`: solo un entero mayor que cero; sin él no
@@ -255,14 +257,45 @@ final class VerifySiiMigration
     }
 
     /**
-     * La condición SQL de una línea aprobada con K4: A, salvo calificación 0 o vacía con tipo de evaluación de examen.
+     * La condición SQL de una línea aprobada con K4 mixta: A, salvo calificación 0 o vacía con tipo de evaluación de
+     * examen, que es aprobada solo si `$graduateNeverRetaken` (egresado o titulado que nunca volvió a cursar la materia).
      */
-    private function approvedSql(string $alias): string
+    private function approvedSql(string $alias, string $graduateNeverRetaken): string
     {
         $types = implode(', ', array_map(fn (string $type): string => "'{$type}'", KardexCodes::EXAM_TYPES));
 
-        return "(upper({$alias}.estatus_materia) = 'A' and not ({$alias}.calificacion ~ '^[[:space:]]*0*[[:space:]]*$' and upper(trim({$alias}.tipo_evaluacion)) in ({$types})))";
+        return "(upper({$alias}.estatus_materia) = 'A' and (not ({$alias}.calificacion ~ '^[[:space:]]*0*[[:space:]]*$' and upper(trim({$alias}.tipo_evaluacion)) in ({$types})) or {$graduateNeverRetaken}))";
     }
+
+    /**
+     * Los CTE de K4 mixta, igual que KardexStep: `sola` (alumno y materia del SII con una única línea en la historia) y
+     * `egresado` (alumnos cuyo primer renglón de `alumnos_todos` es EGR o TIT).
+     */
+    private function mixedCtesSql(): string
+    {
+        $statuses = implode(', ', array_map(fn (string $status): string => "'{$status}'", KardexCodes::GRADUATE_STATUSES));
+
+        return <<<SQL
+            sola as (
+                select no_de_control, materia from sii_archivo.historia_alumno group by no_de_control, materia having count(*) = 1
+            ), egresado as (
+                select no_de_control
+                from (
+                    select distinct on (no_de_control) no_de_control, upper(trim(estatus_alumno)) as estatus
+                    from sii_archivo.alumnos_todos
+                    order by no_de_control, _linea
+                ) primero
+                where estatus in ({$statuses})
+            )
+            SQL;
+    }
+
+    /**
+     * El unir y la condición de «egresado que nunca volvió a cursar la materia» para la tabla `historia_alumno` con alias h.
+     */
+    private const string MIXED_JOINS = 'left join sola so on so.no_de_control = h.no_de_control and so.materia = h.materia left join egresado eg on eg.no_de_control = h.no_de_control';
+
+    private const string MIXED_EXEMPT = '(so.no_de_control is not null and eg.no_de_control is not null)';
 
     private function subjectsSql(): string
     {
@@ -271,20 +304,23 @@ final class VerifySiiMigration
         $credits = $this->numeric('creditos_materia');
         $first = KardexCodes::FIRST_YEAR;
         $last = (int) date('Y') + 1;
-        $approved = $this->approvedSql('h');
+        $approved = $this->approvedSql('h', self::MIXED_EXEMPT);
+        $mixed = $this->mixedCtesSql();
+        $mixedJoins = self::MIXED_JOINS;
         $diagnosis = fn (VerificationDiagnosis $case): string => "'".str_replace("'", "''", $case->value)."'";
 
         return <<<SQL
             insert into {$schema}.materias (_linea, no_de_control, periodo, periodo_nexus, clave_sii, estatus_sii, calificacion_sii,
                 reticula_sii, en_reticula_sii, creditos_sii, plan_nexus, clave_nexus, creditos_nexus, resultado_nexus, clave_nexus_esperada,
                 diagnostico, aprobada_k4)
-            with historia as (
+            with {$mixed}, historia as (
                 select h._linea, h.no_de_control, h.periodo, h.materia, h.estatus_materia, h.calificacion,
                     case when h.periodo ~ '^[0-9]{4}[123]$' then case when left(h.periodo, 4)::int between {$first} and {$last} then h.periodo end end as periodo_nexus,
                     upper(h.estatus_materia) in ('A', 'R', 'P') as estatus_valido,
                     {$approved} as aprobada,
                     case when h.calificacion ~ '^[0-9]{1,3}$' then case when h.calificacion::int <= 100 then h.calificacion::int else 0 end else 0 end as calificacion_valida
                 from sii_archivo.historia_alumno h
+                {$mixedJoins}
             ), alumno as (
                 select distinct on (no_de_control) no_de_control, carrera, reticula
                 from sii_archivo.alumnos_todos
@@ -363,13 +399,15 @@ final class VerifySiiMigration
         $grids = self::GRIDS;
         $credits = $this->numeric('creditos_materia');
         $field = $this->numeric('a.creditos_aprobados');
-        $approved = $this->approvedSql('h');
+        $approved = $this->approvedSql('h', self::MIXED_EXEMPT);
+        $mixed = $this->mixedCtesSql();
+        $mixedJoins = self::MIXED_JOINS;
 
         return <<<SQL
             insert into {$schema}.alumnos (_linea, no_de_control, reticula_sii, estatus_sii, creditos_requeridos_sii, creditos_campo_sii,
                 creditos_sii, materias_sii, completo_sii, reticula_migrada, en_nexus, plan_nexus, estatus_nexus, creditos_requeridos_nexus,
                 creditos_nexus, materias_nexus, completo_nexus, creditos_perdidos, completo_sii_exportado)
-            with alumno as (
+            with {$mixed}, alumno as (
                 select distinct on (no_de_control) _linea, no_de_control, carrera, reticula, estatus_alumno, creditos_aprobados
                 from sii_archivo.alumnos_todos
                 order by no_de_control, _linea
@@ -383,6 +421,7 @@ final class VerifySiiMigration
                 from sii_archivo.historia_alumno h
                 join alumno a on a.no_de_control = h.no_de_control
                 left join lugar l on l.carrera = a.carrera and l.reticula = a.reticula and l.materia = h.materia
+                {$mixedJoins}
                 where h.estatus_materia in ('A', 'a')
                 group by h.no_de_control, h.materia
             ), sii as (

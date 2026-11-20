@@ -15,7 +15,8 @@ use Illuminate\Validation\ValidationException;
  *
  * - `name`: recortado, no vacío, máx. 80 y único sin importar mayúsculas entre los roles no borrados (CF-S2).
  * - `description`: opcional, recortada, máx. 240; vacía es nula.
- * - `permissions`: al menos una clave, todas declaradas por algún módulo y ninguna candado (CF-03).
+ * - `permissions`: al menos una clave, todas declaradas por algún módulo y ninguna candado (CF-03), salvo en el rol de
+ *   fábrica de un puesto los candados que el código le concede (la excepción de fábrica de CF-03, AZ-03).
  * - Dar un permiso a un puesto, suelto o dentro de un rol: PermissionGrantRules (CF-S1, CF-03, CF-04).
  */
 final class PermissionSetRules
@@ -87,14 +88,16 @@ final class PermissionSetRules
     }
 
     /**
-     * CF-S2 y CF-03: las claves de un rol, sin repetir y ordenadas.
+     * CF-S2 y CF-03: las claves de un rol o de permisos sueltos, sin repetir y ordenadas. `$position` es el puesto que las
+     * recibe (el de un rol de fábrica que se edita, o el que recibe permisos sueltos): sus excepciones de candado (las que
+     * el código le concede de fábrica) pasan; para un rol propio, ningún candado.
      *
      * @param  list<string>  $keys
      * @return list<string>
      *
      * @throws ValidationException
      */
-    public function permissionKeys(array $keys, string $field = 'permissions'): array
+    public function permissionKeys(array $keys, string $field = 'permissions', ?Role $position = null): array
     {
         $keys = array_values(array_unique(array_map('strval', $keys)));
         sort($keys);
@@ -109,7 +112,7 @@ final class PermissionSetRules
             $permission = $this->registry->forKey($key);
             $problems[] = $permission === null
                 ? "El permiso «{$key}» no existe."
-                : $this->grantRules->lockProblem($permission);
+                : $this->grantRules->lockProblem($permission, $position);
         }
 
         $problems = array_values(array_filter($problems));

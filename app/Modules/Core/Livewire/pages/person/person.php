@@ -37,8 +37,10 @@ use Mary\Traits\Toast;
  * Aquí se nombran y terminan todos los puestos salvo el de docente (AZ-S11), que se ve de solo lectura con el aviso de
  * dónde se maneja, aunque la llamada llegue forzada desde el navegador. El admin sí puede terminar su propio puesto de
  * Administración si otro cubre los días que siguen; si no, queda deshabilitado con su motivo (AZ-S12), y quien pierde
- * así su puesto vuelve a Inicio. Solo la ve el admin con ese perfil activo (RoleAssignmentPolicy); el componente
- * autoriza en mount(), al renderizar y en cada método público.
+ * así su puesto vuelve a Inicio. La ven el admin con ese perfil activo y, de solo lectura, el directivo (AZ-03;
+ * RoleAssignmentPolicy): «Nombrar», «Terminar…», el menú «Acciones» y sus cajones salen solo a quien tiene su ability
+ * (`create` y `end` de RoleAssignmentPolicy, UserPolicy). El componente autoriza en mount(), al renderizar y en cada
+ * método público.
  *
  * El encabezado muestra el estado del acceso de la persona (AC-04). El bloque «Cuenta» (UserAccountQuery) muestra
  * usuario, correo, estado, acceso y último acceso, y el menú «Acciones» del encabezado lleva Editar datos, Enviar o
@@ -97,16 +99,19 @@ new #[Title('Ficha de la persona')] class extends Component
         $person = $people->findOrFail($this->personId);
         $role = Role::tryFrom($this->role);
         $whoRole = Role::tryFrom($this->whoRole);
+        $abilities = $this->accountAbilities($person);
 
         return [
             'record' => $records->for($person),
             'access' => UserAccess::of($person),
             'account' => $accounts->for($person, auth()->user()),
-            'abilities' => $this->accountAbilities($person),
-            'preview' => $this->showDeactivate ? $previews->for($person, auth()->user()) : null,
+            'abilities' => $abilities,
+            'preview' => $this->showDeactivate && $abilities['deactivate'] ? $previews->for($person, auth()->user()) : null,
             'resetMinutes' => $tokens->minutes(),
             'inviteDays' => AccessInvitationLink::DAYS,
             'reasons' => array_map(fn (DeactivationReason $reason): array => ['id' => $reason->value, 'name' => $reason->label()], DeactivationReason::cases()),
+            'mayAppoint' => Gate::allows('create', RoleAssignment::class),
+            'mayEnd' => Gate::allows('end', RoleAssignment::class),
             'canAppoint' => $person->is_active,
             'offered' => $this->offeredOptions($rules),
             'roleCase' => $role,
@@ -211,6 +216,7 @@ new #[Title('Ficha de la persona')] class extends Component
     public function end(EndRoleAssignment $endRoleAssignment, PeopleQuery $people, PersonRecordQuery $records): void
     {
         $this->authorize('viewAny', RoleAssignment::class);
+        $this->authorize('end', RoleAssignment::class);
 
         if ($this->endingId === null) {
             return;

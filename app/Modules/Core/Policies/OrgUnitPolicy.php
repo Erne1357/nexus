@@ -8,8 +8,9 @@ use App\Modules\Core\Models\User;
 use App\Modules\Core\Policies\Concerns\AuthorizesActor;
 
 /**
- * Quién ve y corrige el organigrama: solo el admin (spec §6.1). Cada ability se resuelve con un permiso
- * `core.org_unit.*` (CorePermission) que ningún puesto concede. Qué unidades admiten cada operación (AZ-S13: los
+ * Quién ve y corrige el organigrama: solo el admin lo corrige (spec §6.1); el directivo también lo ve, de solo lectura
+ * (AZ-03, confirmado el 20 de noviembre de 2026). Cada ability se resuelve con un permiso `core.org_unit.*`
+ * (CorePermission), candados de CF-03: el admin los tiene todos y el directivo, de fábrica, solo `core.org_unit.view`. Qué unidades admiten cada operación (AZ-S13: los
  * departamentos académicos se manejan en Administración › Departamentos) lo deciden OrgUnitRules y las Actions.
  */
 final class OrgUnitPolicy

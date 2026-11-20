@@ -96,7 +96,7 @@ Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por con
    - `ModuleServiceProvider::adminOnly()` declara los permisos que solo tiene el admin y que no se dan a otro puesto, ni sueltos ni dentro de un rol.
    - Core declara `core.user.*`, `core.authz.*`, `core.assignment.*`, `core.activity.*`, `core.mail.*`, `core.queue.*` y `core.org_unit.*`. El organigrama es un supuesto por confirmar, porque decide el alcance de todos.
    - Desde el 15 de noviembre de 2026 (confirmado) también son candados `core.campus.update` y `core.modality.update` (Core) y `academic.career.delete` y `academic.department.delete` (Academic): desactivar un campus o una modalidad les quita el alcance a todos, y borrar una carrera o un departamento termina nombramientos de otros. `core.modality.update_profile` no lo es, porque la Subdirección lo tiene de fábrica.
-   - El registro falla al arrancar si un candado se concede en `grants()` o es también excepción del admin.
+   - El registro falla al arrancar si un candado se concede en `grants()` o es también excepción del admin. La única salida es la excepción de fábrica, explícita, de un candado de lectura para un puesto que lee en todo el Tec (adenda del 20 de noviembre de 2026).
 6. **Alcance (CF-04, «departamento o carrera», confirmado el 14 de noviembre de 2026).**
    - `Role::boundedDimensions()` dice qué dimensiones acota cada puesto:
      - las que lleva en su nombramiento, también el campus opcional del coordinador y del jefe de proyecto docente (supuesto por confirmar);
@@ -130,3 +130,22 @@ Las reglas son AZ-02 (D20, confirmada) y AZ-S16 (el mecanismo, supuestos por con
 - **Subir `users.authz_version` de todos los usuarios:** tocaría miles de filas por cada cambio y mezclaría los nombramientos con las concesiones.
 - **Materializar lo de fábrica como filas:** cada cambio de `grants()` necesitaría una migración de datos para llegar a los puestos.
 - **Hacer editables los puestos:** su alcance vive en los CHECK y las exclusiones de la base (C1).
+
+## Adenda (20 de noviembre de 2026): la excepción de fábrica de un candado (AZ-03, #738)
+
+**Contexto.** El usuario confirmó que el directivo, que lee en todo el Tec (AZ-03), consulte también «Personas y puestos», el Organigrama y la Bitácora, de solo lectura. Sus permisos (`core.assignment.view`, `core.org_unit.view`, `core.activity.view`) son candados (CF-03): el registro no dejaba concederlos en `grants()` y las reglas los descartaban para cualquier puesto.
+
+**Decisión.**
+1. **Una lista explícita.** `ModuleServiceProvider::factoryLockExceptions()` declara, por puesto, los candados que el código sí le concede de fábrica. Core declara solo la del directivo, con esas tres lecturas, y `grants()` del directivo las toma de ahí.
+2. **El registro la valida al arrancar.** Cada excepción tiene que estar en `grants()` de ese puesto, ser candado, ser de lectura (`isReadOnly()`) y ser de un puesto que lee en todo el Tec (`readsWholeTec()`). Y todo candado que aparezca en `grants()` tiene que ser excepción de ese mismo puesto. Si algo no cumple, `PermissionRegistry` lanza `LogicException`. Nuevos: `isFactoryLockException(Role, Permission)` y `factoryLockHolders(Permission)`.
+3. **La excepción vale solo para su puesto.** `PermissionGrantRules::lockProblem(Permission, ?Role)` no bloquea al puesto exceptuado: su rol de fábrica la conserva al editarlo y el panel se la puede devolver suelta. Para cualquier otro puesto, y dentro de un rol propio, sigue siendo candado, también en `GrantTable`. El motivo y la insignia lo dicen: «… es solo del admin y, de fábrica, de Directivo: no se da a otro puesto.» y «Solo del admin y Directivo». `PermissionGrantRules::VERSION` sube a 4.
+4. **Lo que muestra de cada pantalla.** Cada botón que escribe sale solo con su ability («Dar de alta», «Nombrar», «Terminar…», «Acciones» de la cuenta y de la unidad, «Nueva unidad», y «Nombrar jefatura» y «Terminar» en la ficha del docente), y cada método vuelve a autorizar. En la Bitácora, las propiedades reservadas que declara cada módulo en `activityProtectedProperties()` (`evento => [propiedad => permiso]`; Core las junta en `ActivityProtectedProperties`) no salen en el detalle a quien no tiene su permiso. Hoy son dos: el motivo D8 de la salida de un docente (`discharged.reason`, `faculty.teacher.deactivate`: admin y Subdirección) y la nota libre de la baja de una cuenta (`deactivated.note`, `core.user.deactivate`: solo el admin). Se quitan al leer; lo guardado no cambia (HC-18).
+
+**Consecuencias.**
+- Conceder de fábrica otro candado a un puesto es un PR que toca dos listas y `matrix.json`. El registro no arranca si falta una.
+- `tests/Arch/AuthorizationTest.php` permite `Role::` también dentro de `factoryLockExceptions()` de los providers.
+- Una propiedad nueva de la bitácora con datos reservados se declara en el provider del módulo dueño del evento.
+
+**Alternativas descartadas.**
+- **Quitar esos tres de los candados:** el panel podría dárselos a cualquier puesto, y el usuario solo decidió el directivo.
+- **Deducir la excepción de una regla** («todo candado de lectura para quien lee en todo el Tec»): se colaría cualquier lectura de candado nueva sin decisión del usuario.

@@ -6,7 +6,8 @@
     1200 px hacia abajo), «Cuenta», «¿Quién ocupa un puesto?» y la bitácora de sus puestos. «Nombrar» abre un cajón que
     pide solo el alcance que el puesto necesita. Junto a «Nombrar», el menú «Acciones» de la cuenta (1.22-C1 y C2):
     «Editar datos» en un modal, «Enviar invitación» o «Restablecer contraseña» según su acceso, y «Dar de baja» en un
-    cajón con su vista previa.
+    cajón con su vista previa. Quien solo consulta (el directivo, AZ-03) no ve «Nombrar», «Terminar…», el menú ni los
+    cajones: cada uno sale solo con su ability.
 --}}
 @php
     $person = $record->person;
@@ -46,22 +47,26 @@
             </div>
         </div>
 
-        <div class="flex flex-col items-end gap-1 max-md:w-full max-md:items-stretch">
-            <div class="flex items-center gap-2 max-md:w-full max-md:[&>*:last-child]:flex-1">
-                @if (in_array(true, $abilities, true))
-                    @include('core::people.account-menu')
-                @endif
+        @if ($mayAppoint || in_array(true, $abilities, true))
+            <div class="flex flex-col items-end gap-1 max-md:w-full max-md:items-stretch">
+                <div class="flex items-center gap-2 max-md:w-full max-md:[&>*:last-child]:flex-1">
+                    @if (in_array(true, $abilities, true))
+                        @include('core::people.account-menu')
+                    @endif
 
-                @if ($canAppoint)
-                    <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" wire:click="openAppoint" spinner="openAppoint" data-testid="appoint" />
-                @else
-                    <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" disabled data-testid="appoint" />
+                    @if ($mayAppoint)
+                        @if ($canAppoint)
+                            <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" wire:click="openAppoint" spinner="openAppoint" data-testid="appoint" />
+                        @else
+                            <x-button label="Nombrar" icon="o-plus" class="btn-primary max-md:h-11" disabled data-testid="appoint" />
+                        @endif
+                    @endif
+                </div>
+                @if ($mayAppoint && ! $canAppoint)
+                    <p class="text-sm text-neutral" data-testid="appoint-blocker">El usuario está inactivo.</p>
                 @endif
             </div>
-            @unless ($canAppoint)
-                <p class="text-sm text-neutral" data-testid="appoint-blocker">El usuario está inactivo.</p>
-            @endunless
-        </div>
+        @endif
     </div>
 
     <div class="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-base-300 pt-4">
@@ -130,7 +135,7 @@
                 <div class="space-y-3" data-testid="assignments">
                     @forelse ($record->assignments as $row)
                         <div wire:key="assignment-{{ $row['assignment']->id }}">
-                            @include('core::people.assignment', ['row' => $row])
+                            @include('core::people.assignment', ['row' => $row, 'mayEnd' => $mayEnd])
                         </div>
                     @empty
                         <p class="text-neutral" data-testid="assignments-empty">Todavía no tiene nombramientos.</p>
@@ -212,13 +217,19 @@
         </div>
     </div>
 
-    <x-drawer wire:model.live="showModal" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="appoint-title" data-testid="appoint-drawer">
-        @include('core::people.appoint-drawer', ['person' => $person, 'isCoordinator' => $isCoordinator])
-    </x-drawer>
+    @if ($mayAppoint)
+        <x-drawer wire:model.live="showModal" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="appoint-title" data-testid="appoint-drawer">
+            @include('core::people.appoint-drawer', ['person' => $person, 'isCoordinator' => $isCoordinator])
+        </x-drawer>
+    @endif
 
-    <x-drawer wire:model.live="showDeactivate" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="deactivate-title" data-testid="deactivate-drawer">
-        @include('core::people.deactivate-drawer', ['person' => $person])
-    </x-drawer>
+    @if ($abilities['deactivate'])
+        <x-drawer wire:model.live="showDeactivate" right close-on-escape class="w-full max-w-xl p-0!" role="dialog" aria-modal="true" aria-labelledby="deactivate-title" data-testid="deactivate-drawer">
+            @include('core::people.deactivate-drawer', ['person' => $person])
+        </x-drawer>
+    @endif
 
-    @include('core::people.profile-modal', ['person' => $person])
+    @if ($abilities['update'])
+        @include('core::people.profile-modal', ['person' => $person])
+    @endif
 </div>

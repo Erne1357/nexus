@@ -11,8 +11,9 @@ use App\Modules\Core\Authorization\UnitApplicability;
  * Permisos del módulo Core: campus, modalidades, periodos, nombramientos, organigrama, usuarios y su acceso, y el panel de
  * configuración (1.22: roles y permisos, bitácora, avisos y atajos del login, parámetros, correos y colas). La clave es
  * `core.<recurso>.<accion>`. Los de usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas, y los
- * del interruptor de la carga académica (MN-05), son candados (CF-03): solo los tiene el admin y no se dan a otro puesto.
- * Los de avisos, atajos y parámetros sí se pueden dar.
+ * del interruptor de la carga académica (MN-05), son candados (CF-03): solo los tiene el admin y no se dan a otro puesto,
+ * salvo ver personas y puestos, el organigrama y la bitácora, que el directivo tiene de fábrica (AZ-03). Los de avisos,
+ * atajos y parámetros sí se pueden dar.
  */
 enum CorePermission: string implements Permission
 {

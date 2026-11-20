@@ -43,9 +43,9 @@ it('RecipientsQuery no conserva for()', function () {
 });
 
 /*
-| ADR-0018 (3.P9): quien decide es el motor (`Actor::allows()`), no el puesto. `Role::` solo se nombra en `grants()` de
-| los providers y en las piezas que nombran puestos por oficio (nombrar, listar, sembrar, mostrar). Cada archivo de la
-| lista debe seguir necesitando su entrada.
+| ADR-0018 (3.P9): quien decide es el motor (`Actor::allows()`), no el puesto. `Role::` solo se nombra en `grants()` y
+| `factoryLockExceptions()` (CF-03, AZ-03) de los providers y en las piezas que nombran puestos por oficio (nombrar,
+| listar, sembrar, mostrar). Cada archivo de la lista debe seguir necesitando su entrada.
 */
 const ROLE_NAMING_EXCEPTIONS = [
     'app/Modules/Academic/Database/Seeders/DemoStaffSeeder.php',
@@ -82,7 +82,7 @@ const ROLE_NAMING_EXCEPTIONS = [
 
 /**
  * Los aciertos de `Role::` (distinto de `Role::class`) fuera de Core/Authorization, como `ruta => [líneas]`. Los de un
- * `*ServiceProvider` que caen dentro de `grants()` no cuentan.
+ * `*ServiceProvider` que caen dentro de `grants()` o de `factoryLockExceptions()` no cuentan.
  *
  * @return array<string, list<int>>
  */
@@ -132,13 +132,15 @@ function roleReferences(): array
                 ? $ns[1].'\\'.$name[1]
                 : null;
 
-            $method = $class !== null && method_exists($class, 'grants') ? new ReflectionMethod($class, 'grants') : null;
+            foreach (['grants', 'factoryLockExceptions'] as $declaration) {
+                $method = $class !== null && method_exists($class, $declaration) ? new ReflectionMethod($class, $declaration) : null;
 
-            if ($method !== null && realpath($method->getFileName()) === $file->getRealPath()) {
-                $lines = array_values(array_filter(
-                    $lines,
-                    fn (int $line): bool => $line < $method->getStartLine() || $line > $method->getEndLine(),
-                ));
+                if ($method !== null && realpath($method->getFileName()) === $file->getRealPath()) {
+                    $lines = array_values(array_filter(
+                        $lines,
+                        fn (int $line): bool => $line < $method->getStartLine() || $line > $method->getEndLine(),
+                    ));
+                }
             }
         }
 

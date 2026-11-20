@@ -66,6 +66,7 @@ use App\Modules\Core\Queries\NoUnitAdscriptions;
 use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
+use App\Modules\Core\Support\ActivityProtectedProperties;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
@@ -143,6 +144,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // Singleton porque es inmutable: las etiquetas de columnas y enums que declaran los módulos para la bitácora.
         $this->app->singleton(ActivityAttributes::class, fn (Application $app): ActivityAttributes => ActivityAttributes::fromModules(
+            $app->getProviders(ModuleServiceProvider::class),
+        ));
+
+        // Singleton porque es inmutable: las propiedades reservadas de la bitácora que declaran los módulos, sin nada de
+        // quien mira (lo dice el Actor de cada llamada).
+        $this->app->singleton(ActivityProtectedProperties::class, fn (Application $app): ActivityProtectedProperties => ActivityProtectedProperties::fromModules(
             $app->getProviders(ModuleServiceProvider::class),
         ));
 
@@ -225,6 +232,15 @@ final class CoreServiceProvider extends ModuleServiceProvider
         ];
     }
 
+    /**
+     * CF-05 (confirmado el 20 de noviembre de 2026): la nota libre de la baja de una cuenta solo la ve quien da de baja
+     * cuentas, el admin (`core.user.deactivate`, candado); su motivo sale a quien ve la bitácora.
+     */
+    public function activityProtectedProperties(): array
+    {
+        return ['deactivated' => ['note' => CorePermission::UserDeactivate]];
+    }
+
     public function navigation(): array
     {
         return [
@@ -280,6 +296,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
                 CorePermission::CampusView,
                 CorePermission::ModalityView,
                 CorePermission::TermView,
+                ...$this->factoryLockExceptions()[Role::Directivo->value],
             ],
             Role::Subdireccion->value => [
                 CorePermission::CampusView,
@@ -303,7 +320,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
      * todos (confirmado). El perfil de flujo de una modalidad no es candado: la Subdirección lo tiene de fábrica. Los
      * avisos y atajos del login y los parámetros sí se pueden dar. Desde la tarea 1.24.6, también el interruptor de la carga
      * académica y verla oculta (`core.academic_load.*`, MN-05): la oculta a todos menos al admin (supuesto por confirmar
-     * que no se puedan dar).
+     * que no se puedan dar). Siguen siendo candados aunque el directivo tenga de fábrica tres lecturas
+     * (factoryLockExceptions()).
      */
     public function adminOnly(): array
     {
@@ -316,6 +334,23 @@ final class CoreServiceProvider extends ModuleServiceProvider
             )),
             CorePermission::CampusUpdate,
             CorePermission::ModalityUpdate,
+        ];
+    }
+
+    /**
+     * AZ-03 (confirmado el 20 de noviembre de 2026): el directivo consulta, de fábrica y de solo lectura, «Personas y
+     * puestos» (la lista y la ficha), el Organigrama y la Bitácora, de todo el Tec. Siguen siendo candados (CF-03): el
+     * panel no los da a otro puesto. Lo demás del admin (roles y permisos, usuarios, correos y colas, nombrar, terminar,
+     * editar el organigrama, la carga oculta) no lo tiene (supuesto por confirmar).
+     */
+    public function factoryLockExceptions(): array
+    {
+        return [
+            Role::Directivo->value => [
+                CorePermission::AssignmentView,
+                CorePermission::OrgUnitView,
+                CorePermission::ActivityView,
+            ],
         ];
     }
 
