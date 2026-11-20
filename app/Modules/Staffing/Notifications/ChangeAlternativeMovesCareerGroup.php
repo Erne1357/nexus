@@ -3,6 +3,7 @@
 namespace App\Modules\Staffing\Notifications;
 
 use App\Modules\Core\Models\User;
+use App\Modules\Core\Notifications\AcademicLoadNotice;
 use App\Modules\Core\Notifications\NotificationMessage;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Str;
@@ -11,9 +12,10 @@ use Illuminate\Support\Str;
  * Llega a la coordinación de una carrera cuando el jefe aprueba una solicitud de cambio con una alternativa del motor
  * cuya cadena mueve un grupo de esa carrera (decidido por el usuario el 18 de noviembre de 2026: el jefe decide sin su
  * visto bueno y se le avisa al elegir). Dice qué grupo se mueve, de dónde a dónde y por qué solicitud; lleva al editor
- * de horarios con el grupo, porque la solicitud es de otra carrera y su pantalla no la muestra.
+ * de horarios con el grupo, porque la solicitud es de otra carrera y su pantalla no la muestra. Es un aviso de la carga (AcademicLoadNotice, MN-05): mientras
+ * está oculta, el correo no sale.
  */
-final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice
+final class ChangeAlternativeMovesCareerGroup extends ChangeAlternativeNotice implements AcademicLoadNotice
 {
     /**
      * @param  array{group_id: string, label: string, subject: ?string, career: ?string, campus: ?string, from: string, to: string}  $group  el grupo que se mueve

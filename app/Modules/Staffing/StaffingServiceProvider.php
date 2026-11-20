@@ -152,9 +152,9 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::RankingView)),
             new NavigationItem('Carga por docente', 'staffing.teacher-loads', 'o-user-group', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::TeacherLoadView)),
-            new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::CargaAcademica,
+            new NavigationItem('Mi carga', 'staffing.my-load', 'o-calendar-days', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
-            new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::CargaAcademica,
+            new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
             new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)

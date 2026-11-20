@@ -24,6 +24,9 @@ use App\Modules\Core\Notifications\NotificationMessage;
 use App\Modules\Core\Queries\PageTrailQuery;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Settings\SettingType;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Staffing\Notifications\ChangeAlternativeMovesCareerGroup;
+use App\Modules\Staffing\Notifications\ChangeRequestMovedTeacherGroups;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -59,12 +62,31 @@ final class HiddenLoadMailNotice extends NexusNotification implements AcademicLo
 
     public function message(object $notifiable): NotificationMessage
     {
-        return new NotificationMessage(title: 'Cambió tu carga', body: 'Detalle', icon: 'o-bell', route: 'staffing.my-load');
+        return new NotificationMessage(title: 'Cambió tu carga', body: 'Detalle', icon: 'o-bell', route: 'scheduling.editor');
     }
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)->subject('Cambió tu carga')->action('Ver mi carga', route('staffing.my-load'));
+        return (new MailMessage)->subject('Cambió tu carga')->action('Ver el horario', route('scheduling.editor'));
+    }
+}
+
+/** Un aviso al docente que lleva a «Mi carga» (siempre visible): sale por la campana y por correo aunque la carga esté oculta. */
+final class HiddenMyLoadMailNotice extends NexusNotification
+{
+    public function via(object $notifiable): array
+    {
+        return ['database', 'mail'];
+    }
+
+    public function message(object $notifiable): NotificationMessage
+    {
+        return new NotificationMessage(title: 'Cambió el horario de tus grupos', body: 'Detalle', icon: 'o-bell', route: 'staffing.my-load');
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        return (new MailMessage)->subject('Cambió el horario de tus grupos')->action('Ver mi carga', route('staffing.my-load'));
     }
 }
 
@@ -329,15 +351,18 @@ describe('MN-05: las rutas', function () {
     it('la lista nombra rutas que existen y cubre las del área Carga académica y todas las de sus módulos; ninguna otra área lleva a ellas', function () {
         $items = collect(app(Navigation::class)->items());
         $routesOf = fn (NavigationItem $item): array => [$item->route, ...$item->childRoutes];
+        $alwaysVisible = ['staffing.my-load', 'staffing.offer'];
         $inArea = $items->filter(fn (NavigationItem $item): bool => $item->area === NavigationArea::CargaAcademica)->flatMap($routesOf)->unique();
         $elsewhere = $items->reject(fn (NavigationItem $item): bool => $item->area === NavigationArea::CargaAcademica)->flatMap($routesOf)->unique();
         $ofLoadModules = collect(array_keys(Route::getRoutes()->getRoutesByName()))
-            ->filter(fn (string $name): bool => Str::startsWith($name, ['academic-load.', 'published.', 'scheduling.', 'staffing.', 'solver.']));
+            ->filter(fn (string $name): bool => Str::startsWith($name, ['academic-load.', 'published.', 'scheduling.', 'staffing.', 'solver.']))
+            ->diff($alwaysVisible);
 
         expect(array_values(array_filter(AcademicLoadVisibility::ROUTES, fn (string $name): bool => ! Route::has($name))))->toBe([])
             ->and($inArea->diff(AcademicLoadVisibility::ROUTES)->values()->all())->toBe([])
             ->and($ofLoadModules->diff(AcademicLoadVisibility::ROUTES)->values()->all())->toBe([])
-            ->and($elsewhere->intersect(AcademicLoadVisibility::ROUTES)->values()->all())->toBe([]);
+            ->and($elsewhere->diff($alwaysVisible)->intersect(AcademicLoadVisibility::ROUTES)->values()->all())->toBe([])
+            ->and(array_intersect($alwaysVisible, AcademicLoadVisibility::ROUTES))->toBe([]);
     });
 
     it('Inicio y el mapa nunca se bloquean, aunque alguien los ponga en la lista', function () {
@@ -364,13 +389,44 @@ describe('MN-05: las rutas', function () {
         setAcademicLoadVisible(false);
         $protected = array_values(array_filter(AcademicLoadVisibility::ROUTES, loadVisibilityNeedsLogin(...)));
 
-        expect($protected)->toContain('academic-load.proposal', 'scheduling.editor', 'staffing.my-load', 'solver.runs', 'published.export');
+        expect($protected)->toContain('academic-load.proposal', 'scheduling.editor', 'solver.runs', 'published.export');
 
         foreach ([$this->coordinador, $this->jefe, $this->docente, $this->subdireccion] as $user) {
             foreach ($protected as $name) {
                 expect($this->actingAs($user)->get(loadVisibilityUrlOf($name))->status())->toBe(403, "{$name} para {$user->username}");
             }
         }
+    });
+
+    it('oculta, «Mi carga» y «Oferta» siguen abriendo (200) para el docente, y sus acciones de Livewire funcionan (MN-05, desde el 20 de noviembre de 2026)', function () {
+        $teacher = Teacher::factory()->create(['user_id' => $this->docente->id]);
+        setAcademicLoadVisible(false);
+
+        foreach (['staffing.my-load' => 'staffing::pages.my-load', 'staffing.offer' => 'staffing::pages.offer'] as $name => $component) {
+            $page = $this->actingAs($this->docente)->get(route($name))->assertOk();
+
+            loadVisibilityRefresh(loadVisibilitySnapshotIn($page, $component))->assertOk();
+        }
+
+        expect($teacher)->not->toBeNull();
+    });
+
+    it('oculta, un aviso de Mi carga se ve en la campana y sale por correo, y los de la carga siguen retenidos', function () {
+        $this->docente->forceFill(['email' => 'docente@itcj.edu.mx'])->save();
+        setAcademicLoadVisible(false);
+        $this->docente->notify(new HiddenLoadNotice('Mira la oferta', 'staffing.offer'));
+        $this->docente->notify(new HiddenLoadNotice('Tu horario publicado', 'published.index'));
+        $this->docente->notify(new HiddenMyLoadMailNotice);
+        $this->docente->notify(new HiddenLoadMailNotice);
+
+        Livewire::actingAs($this->docente)->test('core::components.bell')
+            ->assertSee('Mira la oferta')
+            ->assertSee('Cambió el horario de tus grupos')
+            ->assertDontSee('Tu horario publicado');
+
+        expect(MailLog::query()->pluck('subject')->all())->toBe(['Cambió el horario de tus grupos'])
+            ->and(is_subclass_of(ChangeRequestMovedTeacherGroups::class, AcademicLoadNotice::class))->toBeFalse()
+            ->and(is_subclass_of(ChangeAlternativeMovesCareerGroup::class, AcademicLoadNotice::class))->toBeTrue();
     });
 
     it('oculta, las públicas responden 404 al invitado y a quien tiene sesión', function () {
@@ -509,7 +565,8 @@ describe('MN-05: la campana', function () {
             foreach (glob(app_path("Modules/{$module}/Notifications/*.php")) as $file) {
                 $class = "App\\Modules\\{$module}\\Notifications\\".basename($file, '.php');
 
-                if (method_exists($class, 'toMail') && ! is_subclass_of($class, AcademicLoadNotice::class)) {
+                // El aviso al docente lleva a «Mi carga», que siempre se ve: no es de la carga que se oculta.
+                if (method_exists($class, 'toMail') && ! is_subclass_of($class, AcademicLoadNotice::class) && $class !== ChangeRequestMovedTeacherGroups::class) {
                     $unmarked[] = $class;
                 }
             }
