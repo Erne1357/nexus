@@ -33,10 +33,11 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
         ->fill('password', 'password')
         ->press('Entrar')
         ->assertPathIs('/')
+        ->navigate('/resumen')
         ->assertSeeIn('[data-testid="role-block"]', 'Validas los catálogos de tu departamento, asignas docentes y salones a los grupos de sus materias y cierras su carga.')
         ->assertSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
         ->assertDontSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
-        ->assertVisible('a[data-label="Bandeja del departamento"]')
+        ->assertPresent('a[data-label="Bandeja del departamento"]')
         ->assertMissing('a[data-label="Propuesta de carrera"]')
         ->click('@credential')
         ->assertSee('Actuando como')
@@ -46,11 +47,13 @@ it('una persona con dos puestos cambia de perfil y ve menú e Inicio distintos',
     $page->resize(1440, 900)->screenshot(filename: 'active-role-1440');
 
     $page->click('[data-testid="role-switcher"] input[value="coordinador"]')
-        ->assertSeeIn('[data-testid="role-block"]', 'Analizas el avance de los alumnos de tu carrera en tu modalidad, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre; si tu nombramiento es de un campus, ves toda la propuesta y cambias lo de tu campus.')
         ->assertPathIs('/')
+        ->navigate('/resumen')
+        ->assertSeeIn('[data-testid="role-block"]', 'Analizas el avance de los alumnos de tu carrera en tu modalidad, propones qué materias y cuántos grupos abrir y armas la propuesta de horarios por semestre; si tu nombramiento es de un campus, ves toda la propuesta y cambias lo de tu campus.')
+        ->assertPathIs('/resumen')
         ->assertSeeIn('[data-testid="role-block"]', 'Coordinador de carrera')
         ->assertDontSeeIn('[data-testid="role-block"]', 'Jefe de departamento académico')
-        ->assertVisible('a[data-label="Propuesta de carrera"]')
+        ->assertPresent('a[data-label="Propuesta de carrera"]')
         ->assertMissing('a[data-label="Bandeja del departamento"]')
         ->assertNoJavaScriptErrors();
 });

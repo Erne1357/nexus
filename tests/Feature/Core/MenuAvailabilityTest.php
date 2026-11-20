@@ -73,7 +73,7 @@ it('MN-04: con una carga sin publicar en el periodo, se ven', function () {
 it('MN-04: Mi carga y Oferta se ven siempre', function () {
     $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
 
-    expect(menuLabelsOf($docente))->toBe(['Mi carga', 'Oferta']);
+    expect(menuLabelsOf($docente))->toBe(['Resumen', 'Mi carga', 'Oferta']);
 });
 
 it('MN-02: decide el periodo de la credencial, no solo el actual', function () {

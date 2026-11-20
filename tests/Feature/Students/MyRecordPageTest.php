@@ -55,7 +55,7 @@ it('AC-15: al cambiar su NIP la portada ya no dice que entra con él', function 
 it('AC-15: «Mis datos» aparece en el menú del alumno, que no ve el calendario del periodo en Inicio', function () {
     Term::factory()->current()->create();
 
-    $this->actingAs($this->user)->get('/')
+    $this->actingAs($this->user)->get(route('core.summary'))
         ->assertOk()
         ->assertSee('Mis datos')
         ->assertSee(route('students.my-record'))

@@ -47,6 +47,11 @@ it('AC-07, AC-08 e IN-01: el docente activa su acceso con su propia contraseña 
         ->fill('password_confirmation', 'Propia-clave-2027')
         ->press('Activar mi acceso')
         ->assertPathIs('/')
+        ->assertSee('Mapa del campus')
+        ->assertNoJavaScriptErrors();
+
+    // Lo que era el Inicio (saludo y su acceso) está en Mi espacio › Resumen (tarea 1.24.1).
+    $page->navigate(route('core.summary', absolute: false))
         ->assertSee('Hola, Ana Pérez')
         ->assertSee('Tu acceso')
         ->assertSee('ana.perez@cdjuarez.tecnm.mx')
@@ -66,6 +71,6 @@ it('AC-07, AC-08 e IN-01: el docente activa su acceso con su propia contraseña 
         ->fill('password', 'Propia-clave-2027')
         ->press('Entrar')
         ->assertPathIs('/')
-        ->assertSee('Hola, Ana Pérez')
+        ->assertSee('Mapa del campus')
         ->assertNoJavaScriptErrors();
 });
