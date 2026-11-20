@@ -71,7 +71,7 @@ final class FacultyServiceProvider extends ModuleServiceProvider
      * La Subdirección, a todos los docentes (`faculty.teacher.view_all`), además de la baja y adscribir a uno que ya
      * existe; ella y los jefes de departamento y de proyecto docente, a los de los departamentos que cubren. El jefe de
      * departamento, además, reenvía la invitación de acceso de sus docentes (AC-07). Nombrar jefes, dar de alta
-     * usuarios y restablecer contraseñas no se concede: es solo del admin.
+     * usuarios y restablecer contraseñas no se concede: es solo del admin. El directivo solo ve a todos (AZ-03).
      */
     public function grants(): array
     {
@@ -88,6 +88,7 @@ final class FacultyServiceProvider extends ModuleServiceProvider
         ];
 
         return [
+            Role::Directivo->value => [FacultyPermission::TeacherViewAll, FacultyPermission::TeacherView],
             Role::Subdireccion->value => [
                 FacultyPermission::TeacherViewAll,
                 ...$byDepartment,

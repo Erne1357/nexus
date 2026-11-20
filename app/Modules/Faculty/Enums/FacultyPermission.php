@@ -4,6 +4,7 @@ namespace App\Modules\Faculty\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -14,6 +15,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum FacultyPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case TeacherViewAll = 'faculty.teacher.view_all';
     case TeacherView = 'faculty.teacher.view';
     case TeacherCreate = 'faculty.teacher.create';

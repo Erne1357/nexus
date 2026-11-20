@@ -4,6 +4,7 @@ namespace App\Modules\Solver\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -14,6 +15,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum SolverPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case DepartmentRunView = 'solver.department_run.view';
     case DepartmentRunLaunch = 'solver.department_run.launch';
     case DepartmentRunApply = 'solver.department_run.apply';

@@ -49,6 +49,7 @@ final class FacilitiesServiceProvider extends ModuleServiceProvider
     public function grants(): array
     {
         return [
+            Role::Directivo->value => [FacilitiesPermission::BuildingView, FacilitiesPermission::RoomView],
             Role::Subdireccion->value => FacilitiesPermission::cases(),
         ];
     }

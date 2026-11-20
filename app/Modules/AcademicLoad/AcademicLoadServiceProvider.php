@@ -184,10 +184,21 @@ final class AcademicLoadServiceProvider extends ModuleServiceProvider
      * coordinador arma, corrige, envía y ve la propuesta de su carrera. «Demanda por materia» (tarea 5.7, confirmado el 16
      * de noviembre de 2026) la ven el jefe y el jefe de proyecto docente de las materias que imparte su departamento,
      * Subdirección de cualquier departamento, y el coordinador de las materias de su carrera, en todos los departamentos.
+     * El directivo ve todo eso y exporta lo publicado en todo el Tec, sin los archivos para el SII (AZ-03).
      */
     public function grants(): array
     {
         return [
+            Role::Directivo->value => [
+                AcademicLoadPermission::LoadView,
+                AcademicLoadPermission::LoadExport,
+                AcademicLoadPermission::ProposalView,
+                AcademicLoadPermission::ProposalReviewView,
+                AcademicLoadPermission::AgreementView,
+                AcademicLoadPermission::DemandViewDepartment,
+                AcademicLoadPermission::DemandViewCareer,
+                AcademicLoadPermission::ForecastEvaluationView,
+            ],
             Role::Subdireccion->value => [
                 AcademicLoadPermission::LoadView,
                 AcademicLoadPermission::LoadExport,

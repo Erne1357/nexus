@@ -4,6 +4,7 @@ namespace App\Modules\CatalogValidation\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -15,6 +16,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum CatalogValidationPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case ProgressView = 'catalog_validation.progress.view';
     case ProgressRemind = 'catalog_validation.progress.remind';
     case ReviewView = 'catalog_validation.review.view';

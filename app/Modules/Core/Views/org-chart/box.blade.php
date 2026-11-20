@@ -1,7 +1,7 @@
 {{--
     Una caja del Organigrama (core::pages.org-chart), de un OrgChartNode: el tipo en versalitas (con candado si es un
     departamento académico, que se edita en Administración › Departamentos), el nombre, el titular o lo que falta («Sin jefe vigente»,
-    «Sin titular vigente»; la raíz, «Sin titular en Nexus»), la clave en Mono con las personas de la unidad y sus hijas
+    «Sin titular vigente»; desde AZ-03 la Dirección también tiene titular, el directivo), la clave en Mono con las personas de la unidad y sus hijas
     y «Inactiva» si aplica. La raíz lleva filete superior `primary`, el primer nivel uno más delgado y la académica
     borde punteado sobre `base-200`. Es un botón: elegirla, atenuarla al buscar y el marco de elegida los hace el
     Alpine de la página.
@@ -39,8 +39,6 @@
         <span class="flex items-center gap-1 text-[13px] leading-snug font-medium text-warning">
             <x-icon name="o-exclamation-triangle" class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />{{ $node->locked ? 'Sin jefe vigente' : 'Sin titular vigente' }}
         </span>
-    @elseif ($level === 0)
-        <span class="text-[13px] leading-snug text-neutral">Sin titular en Nexus</span>
     @endif
 
     <span class="mt-0.5 flex flex-wrap items-center justify-between gap-x-2 text-[12.5px] text-neutral">

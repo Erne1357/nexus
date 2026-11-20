@@ -46,11 +46,17 @@ final class AcademicServiceProvider extends ModuleServiceProvider
     /**
      * El jefe de departamento valida las materias por validar de la migración del SII (D19); el permiso aplica solo a
      * Servicios Escolares (AZ-02, AcademicPermission::appliesTo()), así que solo lo ejerce el jefe de esa unidad, y
-     * StudyPlanPolicy además lo pregunta sobre ella.
+     * StudyPlanPolicy además lo pregunta sobre ella. El directivo consulta los cuatro catálogos en todo el Tec (AZ-03).
      */
     public function grants(): array
     {
         return [
+            Role::Directivo->value => [
+                AcademicPermission::DepartmentView,
+                AcademicPermission::CareerView,
+                AcademicPermission::SubjectView,
+                AcademicPermission::StudyPlanView,
+            ],
             Role::JefeDepartamento->value => [AcademicPermission::PlacementValidate],
         ];
     }

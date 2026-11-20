@@ -94,7 +94,7 @@ it('arma el árbol con las hijas por orden y nombre, sin borradas, y sin inactiv
         ->and(chartNode($all, 'SC')->search())->toBe('sc sistemas y computacion');
 });
 
-it('da el titular de cada departamento académico y de Subdirección Académica, y cuenta los departamentos sin jefe', function () {
+it('da el titular de cada departamento académico, de Subdirección Académica y, desde AZ-03, de la Dirección y las demás subdirecciones, y cuenta los departamentos sin jefe', function () {
     $c2 = Campus::factory()->create(['code' => 'C2']);
     $basics = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $electric = Department::factory()->create(['code' => 'EE', 'name' => 'Eléctrica y Electrónica']);
@@ -102,6 +102,7 @@ it('da el titular de cada departamento académico y de Subdirección Académica,
     Department::factory()->inactive()->create(['code' => 'II', 'name' => 'Ingeniería Industrial']);
 
     User::factory()->withRole(Role::Subdireccion)->create(['name' => 'Alejandro Rentería Cota']);
+    User::factory()->withRole(Role::Directivo, ['org_unit_id' => $this->planning->id])->create(['name' => 'Diana Directiva']);
     User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $basics->id])->create(['name' => 'Elena Gutiérrez Parra']);
     User::factory()->withRole(Role::JefeProyectoDocente, ['org_unit_id' => $electric->id, 'campus_id' => $c2->id])->create(['name' => 'Jefa de proyecto']);
     User::factory()->withRole(Role::JefeDepartamento, ['org_unit_id' => $metal->id, 'valid_from' => '2025-01-01', 'valid_to' => '2026-11-02'])->create(['name' => 'Jefe anterior']);
@@ -113,8 +114,9 @@ it('da el titular de cada departamento académico y de Subdirección Académica,
         ->and(chartNode($chart, 'EE'))->titular->toBeNull()->missingTitular->toBeTrue()
         ->and(chartNode($chart, 'MM'))->titular->toBeNull()->missingTitular->toBeTrue()
         ->and(chartNode($chart, 'II'))->titular->toBeNull()->missingTitular->toBeFalse()
-        ->and(chartNode($chart, 'SUB-PLANEACION'))->titular->toBeNull()->missingTitular->toBeFalse()
-        ->and(chartNode($chart, 'DIRECCION'))->titular->toBeNull()->missingTitular->toBeFalse()
+        ->and(chartNode($chart, 'SUB-PLANEACION'))->titular->toBe('Diana Directiva')->missingTitular->toBeFalse()
+        ->and(chartNode($chart, 'DIRECCION'))->titular->toBeNull()->missingTitular->toBeTrue()
+        ->and(chartNode($chart, 'SERVICIOS-ESCOLARES'))->titular->toBeNull()->missingTitular->toBeTrue()
         ->and($chart->headless)->toBe(2);
 
     vacate(Role::Subdireccion);
@@ -228,7 +230,7 @@ it('detail trae la ruta, los puestos de la unidad, sus hijas y los motivos de bl
 
     expect($root->path)->toBe([])
         ->and($root->titular)->toBeNull()
-        ->and($root->titularNote)->toBe('La Dirección no tiene un puesto en Nexus.')
+        ->and($root->titularNote)->toBe('Sin titular vigente.')
         ->and($root->moveBlocker)->toBe('La Dirección es la raíz: no se mueve.')
         ->and($root->deactivationBlockers[0])->toBe('La Dirección es la raíz: no se desactiva.');
 
@@ -317,12 +319,18 @@ it('detail dice por qué no se nombra sobre la unidad: sin puesto que la admita,
     $inactive = OrgUnit::factory()->inactive()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id, 'name' => 'Departamento Dormido']);
     $active = OrgUnit::factory()->create(['kind' => OrgUnitKind::DepartamentoAcademico, 'parent_id' => $this->academic->id]);
 
+    $office = OrgUnit::factory()->create(['kind' => OrgUnitKind::Oficina, 'parent_id' => $this->planning->id]);
+
     $root = $this->query->detail($this->root->id);
+    $none = $this->query->detail($office->id);
     $dormant = $this->query->detail($inactive->id);
     $open = $this->query->detail($active->id);
 
-    expect($root->appointRoles)->toBe([])
-        ->and($root->appointBlocker)->toBe('Ningún puesto se nombra sobre esta unidad.')
+    expect($root->appointRoles)->toBe([Role::Directivo])
+        ->and($root->appointBlocker)->toBeNull()
+        ->and($none->appointRoles)->toBe([])
+        ->and($none->appointBlocker)->toBe('Ningún puesto se nombra sobre esta unidad.')
+        ->and($none->titularNote)->toBe('Esta unidad todavía no tiene un puesto de titular en Nexus.')
         ->and($dormant->appointBlocker)->toBe('Departamento Dormido está inactiva.')
         ->and($open->appointRoles)->toBe([Role::JefeDepartamento, Role::JefeProyectoDocente])
         ->and($open->appointBlocker)->toBeNull();

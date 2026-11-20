@@ -59,12 +59,14 @@ final class StudentsServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * Consultan alumnos la Subdirección, los jefes y los coordinadores; el alumno, solo sus datos (AC-15).
+     * Consultan alumnos la Subdirección, el directivo (AZ-03), los jefes y los coordinadores; el alumno, solo sus datos
+     * (AC-15).
      */
     public function grants(): array
     {
         return [
             Role::Alumno->value => [StudentsPermission::MyRecordView],
+            Role::Directivo->value => [StudentsPermission::StudentView],
             Role::Subdireccion->value => [StudentsPermission::StudentView],
             Role::JefeDepartamento->value => [StudentsPermission::StudentView],
             Role::Coordinador->value => [StudentsPermission::StudentView],

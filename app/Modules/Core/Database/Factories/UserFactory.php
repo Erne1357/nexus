@@ -57,10 +57,10 @@ class UserFactory extends Factory
      * Con un nombramiento vigente con las columnas de `$scope` (`campus_id`, `org_unit_id`,
      * `career_id`, `modality_id`, `valid_from`, `valid_to`); el de admin, sin alcance. `department_id` es otro nombre de
      * `org_unit_id`: el id de un departamento es el de su unidad. Sin `org_unit_id`, la Subdirección va sobre la unidad
-     * Subdirección Académica (AZ-S3). Sin `campus_id`, el nombramiento es de todo el Tec (en el coordinador y el jefe
-     * de proyecto docente, de todos los campus de su modalidad). Sin `modality_id`, el coordinador y el jefe de proyecto
-     * docente van en Presencial (RoleAssignmentFactory). Se encadena para dar varios puestos o varios nombramientos del
-     * mismo puesto.
+     * Subdirección Académica (AZ-S3) y el directivo sobre la Dirección (AZ-03). Sin `campus_id`, el nombramiento es de
+     * todo el Tec (en el coordinador y el jefe de proyecto docente, de todos los campus de su modalidad). Sin
+     * `modality_id`, el coordinador y el jefe de proyecto docente van en Presencial (RoleAssignmentFactory). Se encadena
+     * para dar varios puestos o varios nombramientos del mismo puesto.
      *
      * @param  array<string, mixed>  $scope
      *
@@ -73,22 +73,26 @@ class UserFactory extends Factory
             unset($scope['department_id']);
         }
 
-        $academicDefault = $role === Role::Subdireccion && ($scope['org_unit_id'] ?? null) === null;
+        $defaultUnit = ($scope['org_unit_id'] ?? null) !== null ? null : match ($role) {
+            Role::Subdireccion => OrgTree::ACADEMIC,
+            Role::Directivo => OrgTree::ROOT,
+            default => null,
+        };
 
         foreach ($role->scopeColumns() as $column) {
             if ($column === 'modality_id') {
                 continue;
             }
 
-            if (($scope[$column] ?? null) === null && ! ($academicDefault && $column === 'org_unit_id')) {
+            if (($scope[$column] ?? null) === null && ! ($defaultUnit !== null && $column === 'org_unit_id')) {
                 throw new InvalidArgumentException("El alcance de {$role->value} necesita {$column}.");
             }
         }
 
-        return $this->afterCreating(function (User $user) use ($role, $scope, $academicDefault): void {
-            if ($academicDefault) {
-                $scope['org_unit_id'] = app(OrgTree::class)->idOf(OrgTree::ACADEMIC)
-                    ?? throw new RuntimeException('Falta la unidad '.OrgTree::ACADEMIC.' para el nombramiento de Subdirección.');
+        return $this->afterCreating(function (User $user) use ($role, $scope, $defaultUnit): void {
+            if ($defaultUnit !== null) {
+                $scope['org_unit_id'] = app(OrgTree::class)->idOf($defaultUnit)
+                    ?? throw new RuntimeException("Falta la unidad {$defaultUnit} para el nombramiento de {$role->label()}.");
             }
 
             RoleAssignment::factory()->for($user)->create(['role' => $role, ...$scope]);

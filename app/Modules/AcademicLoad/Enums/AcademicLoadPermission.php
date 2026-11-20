@@ -5,6 +5,7 @@ namespace App\Modules\AcademicLoad\Enums;
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 use App\Modules\Core\Enums\OrgUnitKind;
 
@@ -18,6 +19,8 @@ use App\Modules\Core\Enums\OrgUnitKind;
  */
 enum AcademicLoadPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case AgreementView = 'academic_load.agreement.view';
     case AgreementRequest = 'academic_load.agreement.request';
     case AgreementDecide = 'academic_load.agreement.decide';

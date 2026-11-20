@@ -3,6 +3,7 @@
 namespace App\Modules\Imports\Enums;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -10,6 +11,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum ImportsPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case BatchView = 'imports.batch.view';
     case BatchCreate = 'imports.batch.create';
     case BatchApply = 'imports.batch.apply';

@@ -53,6 +53,7 @@ it('dice a quién cubre cada puesto', function () {
     expect(array_column(app(PositionsQuery::class)->all(), 'scope'))->toBe([
         'Sin alcance: vale en todo Nexus',
         'Su unidad; todo el Tec en campus y modalidad',
+        'Su unidad, solo para su credencial; lee en todo el Tec',
         'Su departamento; todo el Tec en campus y modalidad',
         'Su departamento y su modalidad; el campus, si lo lleva',
         'Su carrera y su modalidad; el campus, si lo lleva',
@@ -121,9 +122,9 @@ it('CF-S2: la tabla de roles busca por nombre sin acentos y filtra por tipo', fu
 
     expect(array_column($sets->forTable('CATALOGOS', ''), 'name'))->toBe(['Consulta de catálogos'])
         ->and(array_column($sets->forTable('', 'own'), 'name'))->toBe(['Consulta de catálogos', 'Parámetros'])
-        ->and(count($sets->forTable('', 'factory')))->toBe(6)
-        ->and(count($sets->forTable('', '')))->toBe(8)
-        ->and(count($sets->forTable('', 'otro')))->toBe(8);
+        ->and(count($sets->forTable('', 'factory')))->toBe(7)
+        ->and(count($sets->forTable('', '')))->toBe(9)
+        ->and(count($sets->forTable('', 'otro')))->toBe(9);
 });
 
 it('CF-03 y CF-04: dice por qué un rol no se le da a un puesto, con todos los motivos', function () {

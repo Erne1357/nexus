@@ -4,6 +4,7 @@ namespace App\Modules\Staffing\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -14,6 +15,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum StaffingPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case RankingView = 'staffing.ranking.view';
     case TeacherAssign = 'staffing.teacher.assign';
     case OfferView = 'staffing.offer.view';

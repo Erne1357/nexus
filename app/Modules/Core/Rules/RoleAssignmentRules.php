@@ -31,6 +31,8 @@ use Illuminate\Validation\ValidationException;
  *
  * - AZ-S10 (confirmado el 3 de noviembre de 2026): el puesto Subdirección Académica solo va sobre la unidad
  *   Subdirección Académica.
+ * - AZ-03 (R-V2-4, confirmado el 19 de noviembre de 2026): el directivo va sobre la Dirección o una subdirección que no
+ *   sea la Académica, que ya tiene su puesto; uno por unidad (AZ-S7).
  * - D19 (confirmado el 5 de noviembre de 2026): el jefe de departamento va sobre un departamento académico o sobre el
  *   Departamento de Servicios Escolares (OrgTree::SCHOOL_SERVICES), que valida las materias de la migración del SII;
  *   los demás departamentos que no son académicos no tienen jefe en Nexus (supuesto por confirmar).
@@ -93,18 +95,22 @@ final class RoleAssignmentRules
         if (in_array('org_unit_id', $columns, true)) {
             if ($unit === null) {
                 $errors['unit'] = match ($role) {
+                    Role::Directivo => 'Elige la Dirección o la subdirección.',
                     Role::Subdireccion => 'Elige la subdirección.',
                     Role::JefeDepartamento => 'Elige el departamento.',
                     default => 'Elige el departamento académico.',
                 };
-            } elseif ($unit->kind !== $role->unitKind() && ! $this->isSchoolServicesHead($role, $unit)) {
+            } elseif (! in_array($unit->kind, $role->unitKinds(), true) && ! $this->isSchoolServicesHead($role, $unit)) {
                 $errors['unit'] = match ($role) {
+                    Role::Directivo => "{$unit->name} no es la Dirección ni una subdirección.",
                     Role::Subdireccion => "{$unit->name} no es una subdirección.",
                     Role::JefeDepartamento => "{$unit->name} no es un departamento académico ni Servicios Escolares.",
                     default => "{$unit->name} no es un departamento académico.",
                 };
             } elseif (! $this->allowsUnit($role, $unit)) {
-                $errors['unit'] = 'El puesto de Subdirección Académica va sobre la unidad Subdirección Académica.';
+                $errors['unit'] = $role === Role::Directivo
+                    ? 'La Subdirección Académica tiene su propio puesto: el directivo va sobre la Dirección o una subdirección no académica.'
+                    : 'El puesto de Subdirección Académica va sobre la unidad Subdirección Académica.';
             } elseif ($unit->trashed() || ! $unit->is_active) {
                 $errors['unit'] = "{$unit->name} está inactiva.";
             }
@@ -130,11 +136,11 @@ final class RoleAssignmentRules
     }
 
     /**
-     * Si el puesto se nombra sobre esa unidad: el tipo es `Role::unitKind()` y, para la Subdirección, además es
-     * Subdirección Académica (AZ-S10), sin borrar; el jefe de departamento también va sobre Servicios Escolares (D19).
-     * Se decide con la unidad, sin consultar la base: la clave de una unidad estructural es única aun entre las
-     * borradas y la de Subdirección Académica no cambia (AZ-S13), así que es la misma que daría
-     * `OrgTree::idOf(OrgTree::ACADEMIC)`, y el Organigrama la pregunta por cada caja.
+     * Si el puesto se nombra sobre esa unidad: el tipo es uno de `Role::unitKinds()`; para la Subdirección, además es
+     * Subdirección Académica (AZ-S10), sin borrar, y para el directivo, una subdirección que no lo es (AZ-03); el jefe de
+     * departamento también va sobre Servicios Escolares (D19). Se decide con la unidad, sin consultar la base: la clave
+     * de una unidad estructural es única aun entre las borradas y la de Subdirección Académica no cambia (AZ-S13), así
+     * que es la misma que daría `OrgTree::idOf(OrgTree::ACADEMIC)`, y el Organigrama la pregunta por cada caja.
      */
     public function allowsUnit(Role $role, OrgUnit $unit): bool
     {
@@ -142,21 +148,32 @@ final class RoleAssignmentRules
             return true;
         }
 
-        if ($role->unitKind() === null || $unit->kind !== $role->unitKind()) {
+        if (! in_array($unit->kind, $role->unitKinds(), true)) {
             return false;
         }
 
-        return $role !== Role::Subdireccion || ($unit->code === OrgTree::ACADEMIC && ! $unit->trashed());
+        return match ($role) {
+            Role::Subdireccion => $unit->code === OrgTree::ACADEMIC && ! $unit->trashed(),
+            Role::Directivo => $unit->kind === OrgUnitKind::Direccion || $unit->code !== OrgTree::ACADEMIC,
+            default => true,
+        };
     }
 
     /**
-     * El tipo de unidad que el puesto pide sobre `$unit`: el de Role::unitKind(), salvo el jefe del Departamento de
-     * Servicios Escolares, que pide un departamento (D19). Nulo si el puesto no lleva unidad. Lo usa OrgUnitRules para
-     * que un cambio de tipo no deje sin lugar a los nombramientos de la unidad.
+     * El tipo de unidad que el puesto pide sobre `$unit`: el de la unidad si es uno de Role::unitKinds() (el directivo
+     * admite dos) y si no, el primero; el jefe del Departamento de Servicios Escolares pide un departamento (D19). Nulo
+     * si el puesto no lleva unidad. Lo usa OrgUnitRules para que un cambio de tipo no deje sin lugar a los nombramientos
+     * de la unidad.
      */
     public function kindNeeded(Role $role, OrgUnit $unit): ?OrgUnitKind
     {
-        return $this->isSchoolServicesHead($role, $unit) ? OrgUnitKind::Departamento : $role->unitKind();
+        if ($this->isSchoolServicesHead($role, $unit)) {
+            return OrgUnitKind::Departamento;
+        }
+
+        $kinds = $role->unitKinds();
+
+        return in_array($unit->kind, $kinds, true) ? $unit->kind : ($kinds[0] ?? null);
     }
 
     /**
@@ -169,7 +186,8 @@ final class RoleAssignmentRules
 
     /**
      * El puesto exclusivo cuyo titular es el de la unidad (AZ-S7): el jefe de un departamento académico, la
-     * Subdirección de Subdirección Académica; nulo si la unidad no tiene.
+     * Subdirección de Subdirección Académica, el directivo de la Dirección y de las demás subdirecciones (AZ-03); nulo si
+     * la unidad no tiene.
      */
     public function titularRoleOf(OrgUnit $unit): ?Role
     {
@@ -553,7 +571,7 @@ final class RoleAssignmentRules
      */
     public function seatTaken(Role $role, OrgUnit $unit, ?RoleAssignment $occupant = null): ValidationException
     {
-        $holder = $role === Role::Subdireccion ? 'titular' : 'jefe';
+        $holder = in_array($role, [Role::Subdireccion, Role::Directivo], true) ? 'titular' : 'jefe';
         $who = $occupant === null ? '' : ": {$occupant->user->name} (desde {$occupant->valid_from->format('d/m/Y')})";
 
         return ValidationException::withMessages([
