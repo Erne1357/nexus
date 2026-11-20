@@ -30,8 +30,9 @@ beforeEach(function () {
 
 /**
  * Un registro hecho a mano con motivos fijos:
- * - Académico lleva encabezados (cuatro grupos, nueve entradas). Validación está oculta entera por un motivo (A);
- *   Propuesta, entera por dos (B y C); Horarios está disponible, y en Asignación solo A1 está oculta (B).
+ * - Carga académica lleva encabezados (cuatro grupos, nueve entradas). Propuesta (V1, V2) está oculta entera por un motivo
+ *   (A); Horarios (P1, P2), entera por dos (B y C); Asignación (H1 a H3) está disponible, y en Cierre y publicación solo
+ *   A1 está oculta (B).
  * - Servicios escolares, sin encabezados, oculta entera por dos motivos (S1 por A y S2 por B).
  * - Recursos humanos, sin encabezados, oculta entera por un solo motivo (A).
  * - Administración, disponible.
@@ -44,15 +45,15 @@ function markedNavigation(): Navigation
     );
 
     return new Navigation([
-        $entry('V1', NavigationArea::Academico, NavigationGroup::Validacion, 'Motivo A'),
-        $entry('V2', NavigationArea::Academico, NavigationGroup::Validacion, 'Motivo A'),
-        $entry('P1', NavigationArea::Academico, NavigationGroup::Propuesta, 'Motivo B'),
-        $entry('P2', NavigationArea::Academico, NavigationGroup::Propuesta, 'Motivo C'),
-        $entry('H1', NavigationArea::Academico, NavigationGroup::Horarios),
-        $entry('H2', NavigationArea::Academico, NavigationGroup::Horarios),
-        $entry('H3', NavigationArea::Academico, NavigationGroup::Horarios),
-        $entry('A1', NavigationArea::Academico, NavigationGroup::Asignacion, 'Motivo B'),
-        $entry('A2', NavigationArea::Academico, NavigationGroup::Asignacion),
+        $entry('V1', NavigationArea::CargaAcademica, NavigationGroup::Propuesta, 'Motivo A'),
+        $entry('V2', NavigationArea::CargaAcademica, NavigationGroup::Propuesta, 'Motivo A'),
+        $entry('P1', NavigationArea::CargaAcademica, NavigationGroup::Horarios, 'Motivo B'),
+        $entry('P2', NavigationArea::CargaAcademica, NavigationGroup::Horarios, 'Motivo C'),
+        $entry('H1', NavigationArea::CargaAcademica, NavigationGroup::Asignacion),
+        $entry('H2', NavigationArea::CargaAcademica, NavigationGroup::Asignacion),
+        $entry('H3', NavigationArea::CargaAcademica, NavigationGroup::Asignacion),
+        $entry('A1', NavigationArea::CargaAcademica, NavigationGroup::CierrePublicacion, 'Motivo B'),
+        $entry('A2', NavigationArea::CargaAcademica, NavigationGroup::CierrePublicacion),
         $entry('S1', NavigationArea::ServiciosEscolares, reason: 'Motivo A'),
         $entry('S2', NavigationArea::ServiciosEscolares, reason: 'Motivo B'),
         $entry('R1', NavigationArea::RecursosHumanos, reason: 'Motivo A'),
@@ -110,11 +111,11 @@ describe('MN-02: la marca del admin', function () {
         expect($entry->querySelector('[data-menu-badge]'))->toBeNull()
             ->and($entry->hasAttribute('aria-describedby'))->toBeFalse()
             ->and($entry->hasAttribute('data-why'))->toBeFalse()
-            ->and($this->page->querySelector('[data-menu-group="horarios"] [data-menu-badge]'))->toBeNull();
+            ->and($this->page->querySelector('[data-menu-group="asignacion"] [data-menu-badge]'))->toBeNull();
     });
 
     it('un grupo entero oculto por un solo motivo lo dice una vez en su encabezado; sus entradas, sin insignia, conservan la descripción', function () {
-        $heading = $this->page->querySelector('[data-menu-group="validacion"]');
+        $heading = $this->page->querySelector('[data-menu-group="propuesta"]');
         $badge = $heading->querySelector('[data-menu-badge]');
 
         expect(textOf($badge))->toBe('Oculto')
@@ -131,13 +132,13 @@ describe('MN-02: la marca del admin', function () {
     });
 
     it('un grupo entero oculto por varios motivos lleva la insignia en el encabezado y cada entrada la suya', function () {
-        expect($this->page->querySelector('[data-menu-group="propuesta"] [data-menu-badge]')->getAttribute('data-why'))->toBe('Oculto para los demás: Motivo B. Motivo C')
+        expect($this->page->querySelector('[data-menu-group="horarios"] [data-menu-badge]')->getAttribute('data-why'))->toBe('Oculto para los demás: Motivo B. Motivo C')
             ->and(textOf(menuEntryIn($this->page, 'P1')->querySelector('[data-menu-badge]')))->toBe('Oculta')
             ->and(menuDescriptionOf($this->page, menuEntryIn($this->page, 'P2')))->toBe('Oculta para los demás: Motivo C');
     });
 
     it('un grupo con algo disponible no se marca en su encabezado', function () {
-        expect($this->page->querySelector('[data-menu-group="asignacion"] [data-menu-badge]'))->toBeNull()
+        expect($this->page->querySelector('[data-menu-group="cierre_publicacion"] [data-menu-badge]'))->toBeNull()
             ->and(menuEntryIn($this->page, 'A2')->querySelector('[data-menu-badge]'))->toBeNull();
     });
 
@@ -156,14 +157,14 @@ describe('MN-02: la marca del admin', function () {
     });
 
     it('un área con algo disponible no se marca', function () {
-        expect($this->page->querySelector('[data-menu-area="academico"] [data-menu-flip="name"] [data-menu-badge]'))->toBeNull()
-            ->and($this->page->querySelector('[data-menu-area="academico"] [data-menu-hidden-mark]'))->toBeNull()
-            ->and($this->page->querySelector('[data-menu-area="academico"] [data-menu-flip="icon"]')->getAttribute('aria-label'))->toBe('Académico');
+        expect($this->page->querySelector('[data-menu-area="carga_academica"] [data-menu-flip="name"] [data-menu-badge]'))->toBeNull()
+            ->and($this->page->querySelector('[data-menu-area="carga_academica"] [data-menu-hidden-mark]'))->toBeNull()
+            ->and($this->page->querySelector('[data-menu-area="carga_academica"] [data-menu-flip="icon"]')->getAttribute('aria-label'))->toBe('Carga académica');
     });
 
     it('en la hoja del celular, el motivo va escrito bajo el encabezado del grupo cubierto y bajo la entrada suelta', function () {
         $notes = array_map(fn (Element $note): string => textOf($note), iterator_to_array($this->page->querySelectorAll('#nexus-menu [data-menu-note]')));
-        $validation = $this->page->querySelector('[data-menu-group="validacion"]');
+        $validation = $this->page->querySelector('[data-menu-group="propuesta"]');
 
         expect($notes)->toBe(['Motivo A', 'Motivo B', 'Motivo C', 'Motivo B', 'Motivo A', 'Motivo B', 'Motivo A'])
             ->and($validation->nextElementSibling->hasAttribute('data-menu-note'))->toBeTrue()
@@ -240,7 +241,7 @@ it('MN-02: el icono de un área no lleva a una página que el menú ya le escond
 
     $load->update(['status' => LoadStatus::Published]);
     $icon = domOf(Livewire::test('core::components.navigation', ['route' => 'students.index']))
-        ->querySelector('#nexus-menu [data-menu-area="academico"] [data-menu-flip="icon"]');
+        ->querySelector('#nexus-menu [data-menu-area="carga_academica"] [data-menu-flip="icon"]');
 
     expect($icon->getAttribute('href'))->toBe(route('published.index'));
 });

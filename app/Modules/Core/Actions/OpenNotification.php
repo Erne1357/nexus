@@ -2,6 +2,7 @@
 
 namespace App\Modules\Core\Actions;
 
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
@@ -32,6 +33,9 @@ use Illuminate\Routing\Exceptions\UrlGenerationException;
  * (SwitchRole) antes de mover el periodo, para que el destino se vea con su alcance; si no se puede, la sesión
  * se queda como estaba. Si ya no tiene el puesto, se decide con ese puesto igual (AZ-S8): sin roles, el aviso
  * no está disponible, aunque el perfil activo sea otro (el de Administración cubre todo).
+ *
+ * Un aviso que lleva a una pantalla de la carga académica no está disponible mientras el admin la tiene oculta para el
+ * usuario (MN-05): la campana lo dice en lugar de llevarlo a un 403.
  */
 final class OpenNotification
 {
@@ -39,6 +43,7 @@ final class OpenNotification
         private readonly Actor $context,
         private readonly SetActiveContext $setActiveContext,
         private readonly SwitchRole $switchRole,
+        private readonly AcademicLoadVisibility $visibility,
     ) {}
 
     /**
@@ -63,6 +68,10 @@ final class OpenNotification
         $addressed = $message->role;
         $role = $this->roleToSwitchTo($addressed);
         $context = $addressed === null ? $this->context : $this->context->asRole($addressed);
+
+        if (AcademicLoadVisibility::isLoadRoute($message->route) && $this->visibility->hiddenFrom($context)) {
+            return NotificationTarget::unavailable('La carga académica no está disponible por ahora.');
+        }
 
         $problem = $type::unavailableReason($context, $message);
 

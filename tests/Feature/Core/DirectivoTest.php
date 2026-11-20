@@ -247,7 +247,7 @@ describe('R-V2-4: nada que escriba', function () {
         sort($reads);
 
         // Lo que se lee: lo de la sección 4 del spec, más los archivos para el SII, lo que es candado del admin (Bitácora,
-        // nombramientos, organigrama, roles, correos y colas), lo que no es académico (campus y modalidades inactivos,
+        // nombramientos, organigrama, roles, correos y colas, ver la carga académica oculta), lo que no es académico (campus y modalidades inactivos,
         // avisos y atajos del login, parámetros, lo no disponible del menú, importaciones) y lo personal.
         expect($reads)->toBe([
             'academic.career.view',
@@ -265,6 +265,7 @@ describe('R-V2-4: nada que escriba', function () {
             'academic_load.proposal_review.view',
             'catalog_validation.progress.view',
             'catalog_validation.review.view',
+            'core.academic_load.view_hidden',
             'core.activity.view',
             'core.assignment.view',
             'core.authz.view',

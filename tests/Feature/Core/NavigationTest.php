@@ -121,11 +121,12 @@ function navigationLabelsFor(?User $user): array
 }
 
 /**
- * Una entrada de prueba: va a Inicio para no depender de rutas de módulos.
+ * Una entrada de prueba: va a Inicio para no depender de rutas de módulos. Sin área, la de su grupo o, sin grupo, Carga
+ * académica, el área con más grupos (tarea 1.24.6).
  */
-function testEntry(string $label, NavigationArea $area = NavigationArea::Academico, ?NavigationGroup $group = null, int $order = 0, ?Closure $whyUnavailable = null): NavigationItem
+function testEntry(string $label, ?NavigationArea $area = null, ?NavigationGroup $group = null, int $order = 0, ?Closure $whyUnavailable = null): NavigationItem
 {
-    return new NavigationItem($label, 'home', 'o-home', $area, group: $group, order: $order, whyUnavailable: $whyUnavailable);
+    return new NavigationItem($label, 'home', 'o-home', $area ?? $group?->area() ?? NavigationArea::CargaAcademica, group: $group, order: $order, whyUnavailable: $whyUnavailable);
 }
 
 it('Inicio no es una entrada del registro: el menú lo pinta aparte', function () {
@@ -184,12 +185,13 @@ describe('agrupado por área', function () {
 
         // Presencia y ausencia, no listas exactas, como arriba.
         expect(navigationAreasFor($admin))
-            ->academico->toContain('Propuesta de carrera', 'Horarios')
+            ->academico->toContain('Validación de catálogos')
+            ->carga_academica->toContain('Propuesta de carrera', 'Horarios')
             ->servicios_escolares->toContain('Saludo')
             ->recursos_humanos->toContain('Elementos')
             ->administracion->toContain('Campus', 'Periodos', 'Importaciones')
             ->and(navigationAreasFor($coordinador))
-            ->academico->toContain('Horarios publicados')
+            ->carga_academica->toContain('Horarios publicados')
             ->servicios_escolares->toContain('Saludo')
             ->not->toHaveKey('administracion');
     });
@@ -200,14 +202,14 @@ describe('MN-01: grupos dentro de un área', function () {
         $navigation = new Navigation([
             testEntry('Cierre', group: NavigationGroup::CierrePublicacion),
             testEntry('Suelta'),
+            testEntry('Horarios', group: NavigationGroup::Horarios),
             testEntry('Propuesta', group: NavigationGroup::Propuesta),
-            testEntry('Validar', group: NavigationGroup::Validacion),
         ]);
 
-        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::Academico, $navigation))->toBe([
+        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::CargaAcademica, $navigation))->toBe([
             '—' => ['Suelta'],
-            'validacion' => ['Validar'],
             'propuesta' => ['Propuesta'],
+            'horarios' => ['Horarios'],
             'cierre_publicacion' => ['Cierre'],
         ]);
     });
@@ -219,24 +221,24 @@ describe('MN-01: grupos dentro de un área', function () {
             testEntry('Avance', group: NavigationGroup::CierrePublicacion),
         ]);
 
-        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::Academico, $navigation))
+        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::CargaAcademica, $navigation))
             ->toBe(['cierre_publicacion' => ['Cierre', 'Avance', 'Publicados']]);
     });
 
     it('no muestra un grupo sin entradas visibles para el rol', function () {
         $navigation = new Navigation([
-            testEntry('Validar', group: NavigationGroup::Validacion),
-            new NavigationItem('Propuestas', 'home', 'o-home', NavigationArea::Academico, group: NavigationGroup::Propuesta,
+            testEntry('Horarios', group: NavigationGroup::Horarios),
+            new NavigationItem('Propuestas', 'home', 'o-home', NavigationArea::CargaAcademica, group: NavigationGroup::Propuesta,
                 visible: static fn (): bool => false),
         ]);
 
-        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::Academico, $navigation))
-            ->toBe(['validacion' => ['Validar']]);
+        expect(navigationGroupsFor(User::factory()->admin()->create(), NavigationArea::CargaAcademica, $navigation))
+            ->toBe(['horarios' => ['Horarios']]);
     });
 
     it('lleva encabezados solo si el área muestra dos grupos o más y ocho entradas o más', function (array $sizes, bool $headings) {
         $items = [];
-        $groups = [NavigationGroup::Validacion, NavigationGroup::Propuesta, NavigationGroup::Horarios];
+        $groups = [NavigationGroup::Propuesta, NavigationGroup::Horarios, NavigationGroup::Asignacion];
 
         foreach ($sizes as $index => $size) {
             foreach (range(1, $size) as $number) {
@@ -256,7 +258,7 @@ describe('MN-01: grupos dentro de un área', function () {
     ]);
 
     it('las entradas sin grupo no cuentan como grupo para los encabezados', function () {
-        $items = [testEntry('Suelta'), ...array_map(fn (int $number): NavigationItem => testEntry("V{$number}", group: NavigationGroup::Validacion), range(1, 8))];
+        $items = [testEntry('Suelta'), ...array_map(fn (int $number): NavigationItem => testEntry("P{$number}", group: NavigationGroup::Propuesta), range(1, 8))];
 
         $this->actingAs(User::factory()->admin()->create());
 
@@ -268,7 +270,7 @@ describe('MN-02: disponibilidad en el periodo activo', function () {
     beforeEach(function () {
         $this->navigation = new Navigation([
             testEntry('Siempre'),
-            testEntry('Sin validación', group: NavigationGroup::Validacion, whyUnavailable: static fn (): string => 'No hay validación abierta'),
+            testEntry('Sin validación', group: NavigationGroup::Horarios, whyUnavailable: static fn (): string => 'No hay validación abierta'),
             testEntry('Disponible', group: NavigationGroup::Propuesta, whyUnavailable: static fn (): ?string => null),
         ]);
     });
@@ -276,7 +278,7 @@ describe('MN-02: disponibilidad en el periodo activo', function () {
     it('quien no es admin no ve lo que no está disponible en el periodo', function () {
         $coordinador = User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create();
 
-        expect(navigationAreasFor($coordinador, $this->navigation))->toBe(['academico' => ['Siempre', 'Disponible']]);
+        expect(navigationAreasFor($coordinador, $this->navigation))->toBe(['carga_academica' => ['Siempre', 'Disponible']]);
     });
 
     it('el admin lo ve, marcado con su motivo; lo disponible va sin motivo', function () {
@@ -286,7 +288,7 @@ describe('MN-02: disponibilidad en el periodo activo', function () {
             ->flatMap(fn (array $group): array => $group['entries'])
             ->mapWithKeys(fn (MenuEntry $entry): array => [$entry->item->label => $entry->hiddenReason]);
 
-        expect($entries->all())->toBe(['Siempre' => null, 'Sin validación' => 'No hay validación abierta', 'Disponible' => null]);
+        expect($entries->all())->toBe(['Siempre' => null, 'Disponible' => null, 'Sin validación' => 'No hay validación abierta']);
     });
 
     it('visibleTo da lo mismo que el menú, aplanado y en su orden', function () {
@@ -380,11 +382,12 @@ describe('entrada de una ruta', function () {
     });
 });
 
-it('MN-01: el admin ve Académico por etapas y Administración por propósito', function () {
+it('MN-01: el admin ve Académico con la validación, Carga académica por etapas y Administración por propósito', function () {
     $admin = User::factory()->admin()->create();
 
     expect(navigationGroupsFor($admin, NavigationArea::Academico))->toBe([
         'validacion' => ['Validación de catálogos', 'Avance de validación'],
+    ])->and(navigationGroupsFor($admin, NavigationArea::CargaAcademica))->toBe([
         'propuesta' => ['Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección'],
         'horarios' => ['Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor'],
         'asignacion' => ['Asignación docente', 'Carga por docente', 'Solicitudes de cambio'],
@@ -501,7 +504,7 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuAreasIn($page))->toBe(['Académico' => ['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
+        expect(menuAreasIn($page))->toBe(['Carga académica' => ['Propuesta de carrera', 'Demanda por materia', 'Horarios', 'Choques y avance', 'Corridas del motor', 'Solicitudes de cambio', 'Re-análisis de la carga', 'Horarios publicados'], 'Servicios escolares' => ['Alumnos', 'Saludo']])
             ->and($page->querySelector('a[data-menu-entry][href="'.route('demo-catalog.greeting').'"]')?->hasAttribute('wire:navigate'))->toBeTrue()
             ->and($page->querySelector('a[href="'.route('demo-catalog.ping').'"]'))->toBeNull();
     });
@@ -511,19 +514,20 @@ describe('menú', function () {
         $this->actingAs(User::factory()->admin()->create());
 
         expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))
-            ->{'Académico'}->toContain('Validación de catálogos', 'Horarios publicados')->not->toContain('Campus', 'Materias')
+            ->{'Académico'}->toBe(['Validación de catálogos', 'Avance de validación'])
+            ->{'Carga académica'}->toContain('Propuesta de carrera', 'Horarios publicados')->not->toContain('Campus', 'Materias', 'Validación de catálogos')
             ->{'Servicios escolares'}->toContain('Alumnos', 'Saludo')
             ->{'Recursos humanos'}->toContain('Docentes', 'Elementos')
             ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas']);
     });
 
-    it('muestra al docente su «Mi espacio»', function () {
+    it('muestra al docente «Mi carga» y «Oferta» en Carga académica', function () {
         withDemoCatalogNavigation();
         $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
         Teacher::factory()->create(['user_id' => $docente->id]);
         $this->actingAs($docente);
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Mi carga', 'Oferta']]);
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Carga académica' => ['Mi carga', 'Oferta']]);
     });
 
     it('Inicio va aparte, primero en la franja y fuera de las áreas, para cualquier usuario activo', function () {
@@ -614,13 +618,14 @@ describe('menú', function () {
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuRowsIn($page, 'academico'))->toBe([
-            'Validación', 'Validación de catálogos', 'Avance de validación',
-            'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección',
-            'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor',
-            'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
-            'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados',
-        ])
+        // Académico, con un solo grupo, es una lista plana; Carga académica lleva sus encabezados.
+        expect(menuRowsIn($page, 'academico'))->toBe(['Validación de catálogos', 'Avance de validación'])
+            ->and(menuRowsIn($page, 'carga_academica'))->toBe([
+                'Propuesta', 'Propuesta de carrera', 'Bandeja del departamento', 'Demanda por materia', 'Precisión de la proyección',
+                'Horarios', 'Horarios', 'Choques y avance', 'Acuerdos', 'Corridas del motor',
+                'Asignación', 'Asignación docente', 'Carga por docente', 'Solicitudes de cambio',
+                'Cierre y publicación', 'Cierre de la carga', 'Avance del cierre', 'Re-análisis de la carga', 'Versiones publicadas', 'Horarios publicados',
+            ])
             ->and(array_map(fn (Element $heading): string => $heading->getAttribute('data-menu-group'), iterator_to_array($page->querySelectorAll('[data-menu-area="administracion"] [data-menu-group]'))))
             ->toBe(['institucion', 'catalogos', 'datos', 'configuracion'])
             ->and($page->querySelector('[data-menu-group="datos"]')->getAttribute('data-menu-flip'))->toBe('heading');
@@ -636,12 +641,12 @@ describe('menú', function () {
         expect($page->querySelector('#nexus-menu [data-menu-group]'))->toBeNull();
     });
 
-    it('MN-01: el coordinador, con ocho entradas en Académico, ya ve los encabezados de sus grupos', function () {
+    it('MN-01: el coordinador, con ocho entradas en Carga académica, ya ve los encabezados de sus grupos', function () {
         $this->actingAs(User::factory()->withRole(Role::Coordinador, ['campus_id' => $this->campus->id, 'career_id' => careerKey(20)])->create());
 
         $page = domOf(Livewire::test('core::components.navigation'));
 
-        expect(menuRowsIn($page, 'academico'))->toBe([
+        expect(menuRowsIn($page, 'carga_academica'))->toBe([
             'Propuesta', 'Propuesta de carrera', 'Demanda por materia',
             'Horarios', 'Horarios', 'Choques y avance', 'Corridas del motor',
             'Asignación', 'Solicitudes de cambio',
@@ -691,7 +696,7 @@ describe('menú', function () {
         'Campus' => ['core.campuses', 'Administración'],
         'Materias' => ['academic.subjects', 'Administración'],
         'Importaciones' => ['imports.wizard', 'Administración'],
-        'Horarios' => ['scheduling.editor', 'Académico'],
+        'Horarios' => ['scheduling.editor', 'Carga académica'],
         'Alumnos' => ['students.index', 'Servicios escolares'],
         'la ficha de un alumno, hija de Alumnos' => ['students.show', 'Servicios escolares'],
         'fuera del menú' => ['user-password.edit', 'Académico'],
@@ -704,7 +709,7 @@ describe('menú', function () {
         $current = $page->querySelectorAll('#nexus-menu [role="group"][data-menu-area][data-current]');
 
         expect($current)->toHaveCount(1)
-            ->and($current->item(0)->getAttribute('aria-label'))->toBe('Académico')
+            ->and($current->item(0)->getAttribute('aria-label'))->toBe('Carga académica')
             ->and($page->querySelector('[aria-current="page"]'))->toBeNull();
     });
 
@@ -738,10 +743,10 @@ describe('menú', function () {
         );
 
         app()->instance(Navigation::class, new Navigation([
-            ...$group('V', NavigationGroup::Validacion, 2),
             ...$group('P', NavigationGroup::Propuesta, 2),
             ...$group('H', NavigationGroup::Horarios, 2),
             ...$group('A', NavigationGroup::Asignacion, 2),
+            ...$group('X', NavigationGroup::CierrePublicacion, 2),
             testEntry('S1', NavigationArea::ServiciosEscolares),
             testEntry('R1', NavigationArea::RecursosHumanos),
             ...$group('I', NavigationGroup::Institucion, 4),
@@ -752,11 +757,11 @@ describe('menú', function () {
         $page = domOf(Livewire::test('core::components.navigation', ['route' => 'login']));
         $styleOf = fn (string $selector): string => $page->querySelector("#nexus-menu {$selector}")->getAttribute('style');
 
-        // Académico abarca dos columnas; Servicios escolares y Recursos humanos se apilan en la tercera.
+        // Carga académica abarca dos columnas; Servicios escolares y Recursos humanos se apilan en la tercera.
         // Administración va en la cuarta con cinco columnas y, con tres, baja a la primera, en el renglón 14.
-        expect($styleOf('[data-menu-area="academico"] [data-menu-flip="name"]'))->toBe('--oc: 1; --or: 3; --os: 2; --oc3: 1; --or3: 3; --os3: 2')
-            ->and($styleOf('[data-menu-area="academico"] [data-menu-flip="icon"]'))->toBe('--oc: 1; --or: 3; --os: 1; --oc3: 1; --or3: 3; --os3: 1')
-            ->and($styleOf('[data-menu-group="asignacion"]'))->toBe('--oc: 2; --or: 4; --os: 1; --oc3: 2; --or3: 4; --os3: 1')
+        expect($styleOf('[data-menu-area="carga_academica"] [data-menu-flip="name"]'))->toBe('--oc: 1; --or: 3; --os: 2; --oc3: 1; --or3: 3; --os3: 2')
+            ->and($styleOf('[data-menu-area="carga_academica"] [data-menu-flip="icon"]'))->toBe('--oc: 1; --or: 3; --os: 1; --oc3: 1; --or3: 3; --os3: 1')
+            ->and($styleOf('[data-menu-group="cierre_publicacion"]'))->toBe('--oc: 2; --or: 4; --os: 1; --oc3: 2; --or3: 4; --os3: 1')
             ->and($styleOf('a[data-label="R1"]'))->toBe('--oc: 3; --or: 7; --os: 1; --oc3: 3; --or3: 7; --os3: 1')
             ->and($styleOf('[data-menu-area="administracion"] [data-menu-flip="icon"]'))->toBe('--oc: 4; --or: 3; --os: 1; --oc3: 1; --or3: 14; --os3: 1')
             ->and($styleOf('[data-menu-group="catalogos"]'))->toBe('--oc: 4; --or: 9; --os: 1; --oc3: 1; --or3: 20; --os3: 1')
