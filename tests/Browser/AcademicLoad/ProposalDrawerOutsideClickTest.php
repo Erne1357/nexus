@@ -44,8 +44,11 @@ it('un clic fuera del drawer de una materia lo cierra y no abre el de paquetes q
 
     $page->assertScript($openDrawers, 1);
 
-    // Un punto a la izquierda del panel, sobre el velo del drawer abierto.
-    $page->script('document.elementFromPoint(20, 300).click()');
+    // Clic en el velo del drawer abierto (su `<label for>`): con ids repetidos encendía la casilla del primer drawer de la
+    // página. Un punto fijo de la pantalla no sirve: a la izquierda queda la barra del menú, encima del velo.
+    $page->script(<<<'JS'
+        document.querySelector(`label.drawer-overlay[for="${[...document.querySelectorAll('.drawer-toggle')].find((c) => c.checked).id}"]`).click()
+        JS);
     $page->wait(1);
 
     $page->assertScript($openDrawers, 0)
