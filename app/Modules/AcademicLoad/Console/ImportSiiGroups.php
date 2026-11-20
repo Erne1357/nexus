@@ -32,6 +32,8 @@ final class ImportSiiGroups extends Command
         $this->info(($report['dry_run'] ? 'Simulacro, no se escribió nada. ' : '')."Grupos: {$report['groups']} en ".count($report['terms']).' periodos.');
         $this->line("Sin campus: {$report['without_campus']}. Con carrera exclusiva que Nexus no tiene: {$report['without_career']}. Cancelados (estatus): {$report['cancelled']}. Cupo ilegible (queda en 0): {$report['invalid_capacity']}.");
 
+        $this->line("Sesiones de clase: {$report['sessions']}. Ignoradas (día fuera de lunes a sábado u hora ilegible): {$report['ignored_sessions']}.");
+
         if ($report['ignored_terms'] !== []) {
             $this->warn('Periodos ignorados (verano o que no están en el archivo): '.implode(', ', $report['ignored_terms']).'.');
         }

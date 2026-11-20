@@ -38,7 +38,7 @@ final class CredentialQuery
      * Las iniciales del avatar: las de las dos primeras palabras con mayúscula del nombre («María de
      * la Luz» da ML) o, si no hay, las de las dos primeras palabras.
      */
-    private function initials(string $name): string
+    public function initials(string $name): string
     {
         $words = preg_split('/\s+/u', trim($name), flags: PREG_SPLIT_NO_EMPTY) ?: [];
         $capitalized = array_values(array_filter($words, fn (string $word): bool => preg_match('/^\p{Lu}/u', $word) === 1));
