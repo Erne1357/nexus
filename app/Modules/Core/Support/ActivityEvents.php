@@ -39,6 +39,8 @@ final class ActivityEvents
         'transitioned' => 'Cambio de estado',
         'validated' => 'Validado',
         'validation_opened' => 'Validación abierta',
+        'claimed' => 'Salones reclamados',
+        'released' => 'Salón soltado',
         'discharged' => 'Salida del departamento',
         'provisioned' => 'Usuario de docente',
         'deactivated' => 'Baja de la cuenta',

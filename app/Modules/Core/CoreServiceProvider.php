@@ -67,12 +67,15 @@ use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityProtectedProperties;
+use App\Modules\Core\View\Components\Drawer;
+use App\Modules\Core\View\DrawerIds;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationSending;
 use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Livewire\ComponentHookRegistry;
@@ -114,6 +117,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped` por lo mismo: guarda en la instancia la huella y el mapa de la petición en curso.
         $this->app->scoped(OrgTree::class, fn (Application $app): OrgTree => new OrgTree($app['cache.store']));
+        $this->app->scoped(DrawerIds::class);
 
         // `scoped` por lo mismo: memoriza los snapshots de nombramientos de la petición en curso.
         $this->app->scoped(AuthorizationSnapshots::class, fn (Application $app): AuthorizationSnapshots => new AuthorizationSnapshots($app['cache.store']));
@@ -163,6 +167,10 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        // El x-drawer de MaryUI con id de casilla único en la página y estable entre renders (issue #754); registrado después del paquete, gana el alias.
+        Blade::component('mary-drawer', Drawer::class);
+        Blade::component(config('mary.prefix').'drawer', Drawer::class);
 
         if ($this->app->runningInConsole()) {
             $this->commands([SeedDemo::class]);

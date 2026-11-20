@@ -3,6 +3,7 @@
 namespace App\Modules\Core\Models;
 
 use App\Modules\Core\Database\Factories\TermFactory;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Attributes\UseFactory;
@@ -68,6 +69,18 @@ class Term extends Model
             ->sort()
             ->values()
             ->all());
+    }
+
+    /**
+     * Los periodos cuyas fechas (`starts_on` a `ends_on`) contienen el día: el periodo en curso, sin importar cuál es el
+     * activo para capturar carga (P9). Si dos lo contienen, quien llama toma el de código mayor; ninguno entre semestres.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function containing(Builder $query, CarbonInterface $day): void
+    {
+        $query->whereDate('starts_on', '<=', $day)->whereDate('ends_on', '>=', $day);
     }
 
     /**

@@ -107,6 +107,54 @@ final class RoomQuery
     }
 
     /**
+     * Los salones activos, sin borrar, de cualquier campus, que no tienen departamento dueño, por campus y clave, con su
+     * campus y edificio: la lista de «Reclamar salones sin dueño» (CV16, confirmado el 20 de noviembre de 2026). Busca
+     * `$search` en la clave o el nombre; `$campusId` y `$buildingId` dejan los de ese campus o edificio (uno que no es
+     * uuid no deja ninguno). Devuelve a lo más `$limit` y cuántos hay en total. No lleva alcance de campus: la reclama
+     * el jefe, que es de todo el Tec.
+     *
+     * @return array{rooms: EloquentCollection<int, Room>, total: int}
+     */
+    public function unowned(string $search = '', string $campusId = '', string $buildingId = '', int $limit = 40): array
+    {
+        $query = Room::query()
+            ->where('rooms.is_active', true)->whereNull('rooms.department_id')
+            ->tap(fn (Builder $query) => TextSearch::apply($query, ['code', 'name'], $search));
+
+        foreach (['campus_id' => $campusId, 'building_id' => $buildingId] as $column => $id) {
+            if ($id !== '') {
+                Str::isUuid($id) ? $query->where("rooms.{$column}", $id) : $query->whereRaw('false');
+            }
+        }
+
+        return [
+            'total' => (clone $query)->count(),
+            'rooms' => $query->with(['campus:id,code,name', 'building:id,code,name'])
+                ->orderBy(Campus::query()->select('code')->whereColumn('campuses.id', 'rooms.campus_id'))->orderBy('rooms.code')
+                ->limit($limit)->get(),
+        ];
+    }
+
+    /**
+     * Los campus y edificios que tienen salones activos sin dueño, como opciones de x-select, para los filtros de
+     * `unowned()`: sin los borrados, por clave; el edificio con su campus.
+     *
+     * @return array{campuses: list<array{id: string, name: string}>, buildings: list<array{id: string, name: string, campus_id: string}>}
+     */
+    public function unownedFilterOptions(): array
+    {
+        $rooms = Room::query()->where('is_active', true)->whereNull('department_id')
+            ->with(['campus:id,code,name', 'building:id,code,name'])->get(['id', 'campus_id', 'building_id']);
+
+        return [
+            'campuses' => $rooms->pluck('campus')->filter()->unique('id')->sortBy('code')
+                ->map(fn ($campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])->values()->all(),
+            'buildings' => $rooms->filter(fn (Room $room): bool => $room->building !== null)->unique('building_id')->sortBy(fn (Room $room): string => ($room->campus?->code ?? '').' '.$room->building->code)
+                ->map(fn (Room $room): array => ['id' => $room->building->id, 'name' => trim(($room->campus?->code ?? '').' · '.$room->building->code.' · '.$room->building->name, ' ·'), 'campus_id' => $room->campus_id])->values()->all(),
+        ];
+    }
+
+    /**
      * El salón que se va a editar, sin los borrados.
      *
      * @throws ModelNotFoundException<Room>
