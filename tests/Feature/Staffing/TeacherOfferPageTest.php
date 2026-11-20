@@ -103,7 +103,7 @@ it('HC-17: no muestra la oferta mientras la carga está en borrador o propuesta,
     }
 });
 
-it('no muestra grupos cancelados ni de otros periodos ni de departamentos donde no está adscrito', function () {
+it('no muestra grupos cancelados ni de otros periodos ni de departamentos donde no está asignado', function () {
     offerGroup($this->sc, $this->c2, ['code' => 'CAN1', 'status' => 'cancelled']);
     offerGroup($this->other, $this->c2, ['code' => 'OTR1']);
     $later = Term::factory()->create(['code' => '20272']);
@@ -300,16 +300,16 @@ describe('alcance', function () {
         Livewire::actingAs($user)->test('staffing::pages.offer')->assertDontSee('SCG1')->assertSee('INDG1');
     });
 
-    it('un docente sin adscripciones vigentes ve un aviso', function () {
+    it('un docente sin asignaciones vigentes ve un aviso', function () {
         $this->me->adscriptions()->delete();
         offerGroup($this->sc, $this->c2, ['code' => '1A']);
 
-        Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('No estás adscrito')->assertDontSee('1A');
+        Livewire::actingAs($this->user)->test('staffing::pages.offer')->assertSee('No estás asignado')->assertDontSee('1A');
     });
 
     it('la ruta pide sesión y aparece en Carga académica solo para el docente (MN-05)', function () {
         $this->get('/mi-espacio/oferta')->assertRedirect('/login');
-        $this->actingAs($this->user)->get('/mi-espacio/oferta')->assertOk()->assertSee('Carga académica');
+        $this->actingAs($this->user)->get('/mi-espacio/oferta')->assertOk()->assertSee('Mi espacio');
         $this->actingAs(User::factory()->create())->get('/mi-espacio/oferta')->assertForbidden();
     });
 });

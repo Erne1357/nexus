@@ -1,6 +1,6 @@
 {{--
     «Agregar docente» (CV-S9; opción A): busca por nombre o RFC entre todos los docentes, también los dados de baja y los
-    de otros departamentos, y dice qué pasa con cada uno antes de agregarlo: se agrega como adscripción adicional, queda
+    de otros departamentos, y dice qué pasa con cada uno antes de agregarlo: se agrega como asignación adicional, queda
     como principal, se reactiva, ya está, o no se puede (dado de baja y con un puesto: su motivo escrito, CV-S9). Al
     agregarlo queda revisado (CV7). `$candidates` es de review.php; `close()` es del x-drawer.
 --}}

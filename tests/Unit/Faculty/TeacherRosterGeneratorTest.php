@@ -6,7 +6,7 @@ use Random\Randomizer;
 
 /*
 | Generador de plantillas de docentes de los seeders demo y masivo (tarea 7b). Clase pura, sin base: con una
-| semilla fija da los mismos docentes, con las plazas, adscripciones, disponibilidad e historial de los casos
+| semilla fija da los mismos docentes, con las plazas, asignaciones, disponibilidad e historial de los casos
 | que pide docs/arquitectura/testing.md ("Datos de prueba").
 */
 
@@ -55,7 +55,7 @@ it('respeta las horas de cada tipo de plaza', function () {
     }
 });
 
-it('cada docente tiene una sola adscripción principal, sin campus ni departamentos repetidos; algunos tienen dos o tres', function () {
+it('cada docente tiene una sola asignación principal, sin campus ni departamentos repetidos; algunos tienen dos o tres', function () {
     $teachers = roster(60);
 
     foreach ($teachers as $teacher) {
@@ -154,7 +154,7 @@ it('las plazas de un docente no repiten tipo y «desde», que es la clave de la 
     }
 });
 
-it('con pesos por departamento, la adscripción principal sigue los pesos y aun así hay un docente de cada departamento', function () {
+it('con pesos por departamento, la asignación principal sigue los pesos y aun así hay un docente de cada departamento', function () {
     $teachers = (new TeacherRosterGenerator(new Randomizer(new Mt19937(2027))))->generate('C2', 300, [8, 5, 0, 12], [1, 1, 1, 97]);
     $primaries = array_count_values(array_map(fn (array $teacher): int => $teacher['adscriptions'][0]['dept'], $teachers));
 

@@ -37,14 +37,14 @@ use Mary\Traits\Toast;
  * del acceso de cada uno (AC-04); alta y edición en un
  * modal, y al editar, el correo institucional con las reglas de la ficha (AC-06, EditsInstitutionalEmail); en
  * «Acciones», «Quitar de <Departamento>» con su consecuencia (D10) y «Desactivar/Activar». Un docente no se borra: se
- * da de baja, y su usuario con él. Los docentes son de todo el Tec: la adscripción es solo de un departamento.
+ * da de baja, y su usuario con él. Los docentes son de todo el Tec: la asignación es solo de un departamento.
  *
  * Lo ven el admin y la Subdirección, a todos, y los jefes de departamento y de proyecto docente, a los de su
  * departamento (TeacherPolicy; TeacherQuery lista con la misma regla). El alta lleva el departamento de quien da de
  * alta: el jefe, el suyo, sin elegirlo; el admin y la Subdirección lo eligen. Si el número ya existe, no se da de
- * alta otra vez: al admin y a la Subdirección se les ofrece adscribirlo a ese departamento sin cambiar sus datos; a
+ * alta otra vez: al admin y a la Subdirección se les ofrece asignarlo a ese departamento sin cambiar sus datos; a
  * un jefe solo se le dice que ya está registrado (S9, supuesto por confirmar). La baja es solo del admin y la
- * Subdirección; los jefes quitan al docente de su departamento y, con la última adscripción, queda dado de baja
+ * Subdirección; los jefes quitan al docente de su departamento y, con la última asignación, queda dado de baja
  * (DischargeTeacherFromDepartment, CV8). El admin además encola «Dar de
  * alta usuarios» (ProvisionTeacherUsersJob) desde «Más acciones».
  *
@@ -60,7 +60,7 @@ new #[Title('Docentes')] class extends Component
     private const string DELETED_RFC = 'Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.';
 
     /** El número es de un docente dado de baja: primero se reactiva. */
-    private const string INACTIVE_RFC = 'Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.';
+    private const string INACTIVE_RFC = 'Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de asignarlo.';
 
     /** A un jefe no se le dice de quién es un número que ya existe (S9, supuesto por confirmar). */
     private const string TAKEN_RFC = 'Ese RFC ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.';
@@ -69,7 +69,7 @@ new #[Title('Docentes')] class extends Component
     #[Session]
     public string $search = '';
 
-    /** Id del departamento de una adscripción; '' son todos. */
+    /** Id del departamento de una asignación; '' son todos. */
     #[Session]
     public string $departmentFilter = '';
 
@@ -170,11 +170,11 @@ new #[Title('Docentes')] class extends Component
             'institutionalDomain' => config('nexus.institutional_email_domain'),
             'institutionalEmailReason' => $editing === null ? null : $this->institutionalEmailReason($editing),
             'canProvision' => Gate::allows('provisionUsers', Teacher::class),
-            // La adscripción y el acceso son las columnas descriptivas: se ocultan debajo de 1024 y de 1200 px.
+            // La asignación y el acceso son las columnas descriptivas: se ocultan debajo de 1024 y de 1200 px.
             'headers' => [
                 ['key' => 'rfc', 'label' => 'RFC'],
                 ['key' => 'name', 'label' => 'Nombre', 'class' => 'min-w-36 min-[1200px]:min-w-52'],
-                ['key' => 'adscriptions', 'label' => 'Adscripción', 'class' => 'max-[1023px]:hidden'],
+                ['key' => 'adscriptions', 'label' => 'Asignación', 'class' => 'max-[1023px]:hidden'],
                 ['key' => 'base_hours', 'label' => 'Horas base', 'class' => 'text-right'],
                 ['key' => 'access', 'label' => 'Acceso', 'class' => 'max-[1200px]:hidden'],
                 ['key' => 'is_active', 'label' => 'Estado'],
@@ -204,7 +204,7 @@ new #[Title('Docentes')] class extends Component
     }
 
     /**
-     * Al capturar el número en un alta, si ya hay un docente con él, ofrece adscribirlo (S9).
+     * Al capturar el número en un alta, si ya hay un docente con él, ofrece asignarlo (S9).
      */
     public function updatedRfc(): void
     {
@@ -268,7 +268,7 @@ new #[Title('Docentes')] class extends Component
 
         $this->authorize('create', Teacher::class);
 
-        // Un número que ya existe no se da de alta otra vez: el modal cambia a «Adscribir» (S9).
+        // Un número que ya existe no se da de alta otra vez: el modal cambia a «Asignar» (S9).
         if ($this->lookUpExisting() !== null) {
             return;
         }
@@ -315,12 +315,12 @@ new #[Title('Docentes')] class extends Component
 
         $addAdscription->handle($teacher, $department);
 
-        $this->success(e("Docente adscrito a {$department->code}"), $this->describe($teacher));
+        $this->success(e("Docente asignado a {$department->code}"), $this->describe($teacher));
         $this->showModal = false;
     }
 
     /**
-     * «Quitar de <Departamento>» (D10): quita una adscripción del docente; si era la principal, la principal pasa a la más
+     * «Quitar de <Departamento>» (D10): quita una asignación del docente; si era la principal, la principal pasa a la más
      * antigua que le quede, y sin ninguna el docente queda dado de baja y su cuenta se inhabilita
      * (DischargeTeacherFromDepartment, CV8, confirmado el 12 de noviembre de 2026).
      */
@@ -425,9 +425,9 @@ new #[Title('Docentes')] class extends Component
 
     /**
      * Las acciones de cada fila del menú «Acciones», ya decididas con TeacherPolicy: «Quitar de <Departamento>» por cada
-     * adscripción a un departamento que cubre (las de otros departamentos no se muestran), con su consecuencia (D10:
+     * asignación a un departamento que cubre (las de otros departamentos no se muestran), con su consecuencia (D10:
      * solo sale de ahí y qué principal queda, o queda dado de baja, CV8), deshabilitado con su motivo si es él mismo o si ocupa un puesto
-     * (CV-S8); y «Desactivar/Activar», deshabilitado con su motivo si no le toca. Las adscripciones ya vienen con la
+     * (CV-S8); y «Desactivar/Activar», deshabilitado con su motivo si no le toca. Las asignaciones ya vienen con la
      * página; los puestos salen de una sola consulta.
      *
      * @param  LengthAwarePaginator<int, Teacher>  $teachers

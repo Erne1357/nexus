@@ -77,8 +77,8 @@ it('la Subdirección escribe el número de un docente que ya existe y lo adscrib
         ->fill('rfc', 'PRUE000002AB1')
         ->keys('input[name="rfc"]', 'Tab')
         ->waitForText('Ya existe el docente PRUE000002AB1 · Beto Ruiz')
-        ->press('Adscribir a SC')
-        ->waitForText('Docente adscrito a SC')
+        ->press('Asignar a SC')
+        ->waitForText('Docente asignado a SC')
         ->assertNoJavaScriptErrors();
 
     expect($existing->adscriptions()->pluck('department_id')->all())->toContain($this->sc->id);

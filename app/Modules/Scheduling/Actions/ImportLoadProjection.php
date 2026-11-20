@@ -131,6 +131,10 @@ final class ImportLoadProjection
                 $report['warnings'][] = "Fila {$row['row']}: {$credits} créditos usan la regla de días que es supuesto por confirmar (R-PRY-1).";
             }
 
+            if ($credits !== null && CreditDays::unplacedHours($credits) > 0) {
+                $report['warnings'][] = "Fila {$row['row']}: {$credits} créditos: se acomodan de lunes a viernes a la hora del archivo y falta acomodar a mano ".CreditDays::unplacedHours($credits).' hora (sin ella, el sábado o una segunda el viernes, según la materia; R-PRY-1).';
+            }
+
             $report['resolved_via'][$subject['via']] = ($report['resolved_via'][$subject['via']] ?? 0) + 1;
             $days = $credits === null ? null : CreditDays::for($credits);
 

@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 
 /*
-| Plantilla `teachers` (tarea 10): los docentes del SII con su adscripción. Un renglón por docente,
+| Plantilla `teachers` (tarea 10): los docentes del SII con su asignación. Un renglón por docente,
 | departamento (S5); el que el SII no marca activo nace inactivo y uno activo no se desactiva (S4);
 | un grado desconocido queda vacío con advertencia (S6). No ofrece «desactivar faltantes».
 */
@@ -69,7 +69,7 @@ it('rechaza un correo, una fecha o un activo que no se entienden', function (arr
     'sin nombre' => [['name' => null], 'name'],
 ]);
 
-it('da de alta al docente con sus datos y su adscripción principal', function () {
+it('da de alta al docente con sus datos y su asignación principal', function () {
     $teacher = $this->template->apply(teacherRow(), $this->context)->fresh();
 
     expect($teacher)->rfc->toBe('PRUE001001AB1')->name->toBe('Ana López')->email->toBe('ana@example.test')
@@ -131,7 +131,7 @@ it('un docente inactivo se actualiza y sigue inactivo, con advertencia; uno borr
         ->and($this->template->validate(teacherRow(['rfc' => 'PRUE001002AB1']), $this->context)->errors)->toHaveKey('rfc');
 });
 
-it('S5: dos renglones del mismo docente con otro departamento son adscripciones, no repetidos; la primera es la principal', function () {
+it('S5: dos renglones del mismo docente con otro departamento son asignaciones, no repetidos; la primera es la principal', function () {
     $first = teacherRow();
     $second = teacherRow(['department' => 'II']);
 
@@ -161,7 +161,7 @@ it('S5: si el docente ya tiene otra principal, la conserva y avisa', function ()
         ->and($primary->department_id)->toBe($this->industrial->id);
 });
 
-it('una adscripción borrada a mano es error: importar no la restaura', function () {
+it('una asignación borrada a mano es error: importar no la restaura', function () {
     $teacher = Teacher::factory()->create(['rfc' => 'PRUE001001AB1']);
     TeacherDepartment::factory()->for($teacher)->for($this->sistemas)->create()->delete();
 
@@ -179,7 +179,7 @@ it('aplicar dos veces la misma fila no cambia nada', function () {
         ->and(TeacherDepartment::count())->toBe(1);
 });
 
-it('un renglón que solo agrega una adscripción cuenta como cambio del docente; repetirlo, no', function () {
+it('un renglón que solo agrega una asignación cuenta como cambio del docente; repetirlo, no', function () {
     $this->template->apply(teacherRow(), $this->context);
 
     $teacher = $this->template->apply(teacherRow(['department' => 'II']), $this->context);

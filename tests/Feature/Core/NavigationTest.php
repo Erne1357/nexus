@@ -521,13 +521,13 @@ describe('menú', function () {
             ->{'Administración'}->toBe(['Campus', 'Modalidades', 'Periodos', 'Organigrama', 'Personas y puestos', 'Departamentos', 'Carreras', 'Materias', 'Planes de estudio', 'Edificios', 'Salones', 'Importaciones', 'Puestos y permisos', 'Bitácora', 'Avisos y atajos', 'Parámetros', 'Correos y colas']);
     });
 
-    it('muestra al docente «Mi carga» y «Oferta» en Carga académica', function () {
+    it('muestra al docente «Mi carga» y «Oferta» en Mi espacio, sin grupo (MN-05, desde el 20 de noviembre de 2026)', function () {
         withDemoCatalogNavigation();
         $docente = User::factory()->withRole(Role::Docente, ['campus_id' => $this->campus->id])->create();
         Teacher::factory()->create(['user_id' => $docente->id]);
         $this->actingAs($docente);
 
-        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Resumen'], 'Carga académica' => ['Mi carga', 'Oferta']]);
+        expect(menuAreasIn(domOf(Livewire::test('core::components.navigation'))))->toBe(['Mi espacio' => ['Resumen', 'Mi carga', 'Oferta']]);
     });
 
     it('Inicio va aparte, primero en la franja y fuera de las áreas, para cualquier usuario activo', function () {

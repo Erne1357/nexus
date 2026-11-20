@@ -20,9 +20,9 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Actions de Docentes (spec 4.2 y 4.3). El RFC va sin espacios y es único también contra los
-| borrados; dar de alta deja la adscripción principal (solo departamento: el docente no es de un campus), el usuario
+| borrados; dar de alta deja la asignación principal (solo departamento: el docente no es de un campus), el usuario
 | (SyncTeacherAccess) y la bitácora; editar sin cambios no escribe; la baja desactiva su usuario y reactivarlo lo
-| devuelve; adscribir a un docente que ya existe (S9, supuesto por confirmar) agrega la adscripción sin tocar sus
+| devuelve; asignar a un docente que ya existe (S9, supuesto por confirmar) agrega la asignación sin tocar sus
 | datos y restaura una que se había quitado; si no tiene principal viva, esa queda como principal.
 */
 
@@ -63,7 +63,7 @@ function teacherErrorsOf(Closure $action): array
 }
 
 describe('alta', function () {
-    it('da de alta un docente activo con el número sin espacios, su adscripción principal y su usuario', function () {
+    it('da de alta un docente activo con el número sin espacios, su asignación principal y su usuario', function () {
         $teacher = newTeacher(['rfc' => " 123\u{00A0}4567 "]);
         $teacher = $teacher->fresh(['adscriptions', 'user']);
 
@@ -89,7 +89,7 @@ describe('alta', function () {
         expect($teacher)->email->toBeNull()->degree->toBeNull()->hired_on->toBeNull();
     });
 
-    it('deja en la bitácora el alta del docente, de su adscripción y de su usuario, y avisa con TeacherCreated', function () {
+    it('deja en la bitácora el alta del docente, de su asignación y de su usuario, y avisa con TeacherCreated', function () {
         Event::fake([TeacherCreated::class, AdscriptionChanged::class]);
         $this->actingAs($admin = User::factory()->admin()->create());
 
@@ -107,7 +107,7 @@ describe('alta', function () {
                 'is_active' => true,
             ]])
             ->and(Activity::query()->where('subject_type', (new TeacherDepartment)->getMorphClass())->sole()->description)
-            ->toBe('Adscribió al docente 1234567 a SC (principal)')
+            ->toBe('Asignó al docente 1234567 a SC (principal)')
             ->and(Activity::query()->where('description', 'Dio de alta al usuario 1234567, sin acceso')->exists())->toBeTrue();
         Event::assertDispatched(TeacherCreated::class, fn (TeacherCreated $event): bool => $event->teacher->is($teacher));
         Event::assertDispatched(AdscriptionChanged::class);
@@ -273,7 +273,7 @@ describe('baja y reactivación', function () {
     });
 });
 
-describe('adscripción de un docente que ya existe (S9)', function () {
+describe('asignación de un docente que ya existe (S9)', function () {
     beforeEach(function () {
         $this->teacher = Teacher::factory()->adscribedTo($this->ii)->create([
             'rfc' => '5555555',
@@ -282,7 +282,7 @@ describe('adscripción de un docente que ya existe (S9)', function () {
         ]);
     });
 
-    it('agrega la adscripción, que no es la principal, sin tocar sus datos ni su acceso', function () {
+    it('agrega la asignación, que no es la principal, sin tocar sus datos ni su acceso', function () {
         Event::fake([AdscriptionChanged::class]);
         $before = $this->teacher->fresh()->only(['rfc', 'user_id', 'name', 'email', 'degree', 'is_active']);
 
@@ -297,11 +297,11 @@ describe('adscripción de un docente que ya existe (S9)', function () {
             // Su usuario y su alcance de `docente` no dependen de sus departamentos (G3).
             ->and(User::count())->toBe(0)
             ->and(Activity::query()->where('subject_type', $adscription->getMorphClass())->sole()->description)
-            ->toBe('Adscribió al docente 5555555 a SC');
+            ->toBe('Asignó al docente 5555555 a SC');
         Event::assertDispatched(AdscriptionChanged::class, fn (AdscriptionChanged $event): bool => $event->adscription->is($adscription));
     });
 
-    it('restaura una adscripción que se había quitado', function () {
+    it('restaura una asignación que se había quitado', function () {
         $removed = TeacherDepartment::factory()->for($this->teacher)->for($this->sc)->create(['is_primary' => false]);
         $removed->delete();
 
@@ -312,10 +312,10 @@ describe('adscripción de un docente que ya existe (S9)', function () {
             ->and(TeacherDepartment::withTrashed()->where('teacher_id', $this->teacher->id)->count())->toBe(2)
             ->and(Activity::query()->where('subject_type', $adscription->getMorphClass())->sole())
             ->event->toBe('restored')
-            ->description->toBe('Volvió a adscribir al docente 5555555 a SC');
+            ->description->toBe('Volvió a asignar al docente 5555555 a SC');
     });
 
-    it('si el docente se quedó sin principal viva, la adscripción restaurada queda como principal', function () {
+    it('si el docente se quedó sin principal viva, la asignación restaurada queda como principal', function () {
         $alone = Teacher::factory()->create(['rfc' => '6666666']);
         $removed = TeacherDepartment::factory()->for($alone)->for($this->sc)->create(['is_primary' => false]);
         $removed->delete();
@@ -325,21 +325,21 @@ describe('adscripción de un docente que ya existe (S9)', function () {
         expect($adscription->id)->toBe($removed->id)
             ->and($adscription->fresh()->is_primary)->toBeTrue()
             ->and(Activity::query()->where('subject_type', $adscription->getMorphClass())->sole()->description)
-            ->toBe('Volvió a adscribir al docente 6666666 a SC (principal)');
+            ->toBe('Volvió a asignar al docente 6666666 a SC (principal)');
     });
 
-    it('rechaza una adscripción que ya tiene', function () {
+    it('rechaza una asignación que ya tiene', function () {
         expect(teacherErrorsOf(fn () => app(AddAdscription::class)->handle($this->teacher, $this->ii)))
-            ->toBe(['adscription' => ['Rosa Díaz ya está adscrito a II.']])
+            ->toBe(['adscription' => ['Rosa Díaz ya está asignado a II.']])
             ->and(TeacherDepartment::withTrashed()->count())->toBe(1);
     });
 
     it('rechaza una segunda principal: cambiarla es a mano', function () {
         expect(teacherErrorsOf(fn () => app(AddAdscription::class)->handle($this->teacher, $this->sc, primary: true)))
-            ->toBe(['adscription' => ['Rosa Díaz ya tiene una adscripción principal.']]);
+            ->toBe(['adscription' => ['Rosa Díaz ya tiene una asignación principal.']]);
     });
 
-    it('la primera adscripción de un docente sin principal es la principal', function () {
+    it('la primera asignación de un docente sin principal es la principal', function () {
         $loose = Teacher::factory()->create();
 
         expect(app(AddAdscription::class)->handle($loose, $this->sc)->is_primary)->toBeTrue();

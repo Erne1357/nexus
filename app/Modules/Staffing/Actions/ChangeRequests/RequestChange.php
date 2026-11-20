@@ -4,6 +4,8 @@ namespace App\Modules\Staffing\Actions\ChangeRequests;
 
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\ModalityProfile;
 use App\Modules\Core\Models\User;
@@ -28,6 +30,9 @@ use Illuminate\Validation\ValidationException;
  * cancelado; si pide el docente del grupo, que no tenga ya una solicitud abierta en él (confirmado el 7 de noviembre
  * de 2026; la base lo garantiza con un índice único parcial). Guarda la solicitud pendiente con una foto de las
  * sesiones (`current`), deja bitácora y, después del commit, avisa a los jefes del departamento.
+ *
+ * MN-05 (confirmado el 20 de noviembre de 2026): con la carga académica oculta, «Mi carga» queda en solo lectura y la
+ * solicitud se rechaza con 403, también si se llama a mano; quien tiene `core.academic_load.view_hidden` no se afecta.
  */
 final class RequestChange
 {
@@ -44,6 +49,8 @@ final class RequestChange
      */
     public function handle(Group $group, User $actor, ChangeRequestKind $kind, string $description, string $reason, array $structured = []): ChangeRequest
     {
+        abort_if(app(AcademicLoadVisibility::class)->hiddenFrom(app(Actor::class)), 403, 'Las solicitudes de cambio no están disponibles por ahora.');
+
         $description = trim($description);
         $reason = trim($reason);
 

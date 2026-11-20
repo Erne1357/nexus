@@ -166,7 +166,7 @@ it('Ranking docente: un cambio de Faculty encola los alcances del docente en los
 })->with([
     'plaza' => [PositionChanged::class, fn () => [TeacherPosition::factory()->for($this->teacher)->create()]],
     'perfil' => [QualificationChanged::class, fn () => [TeacherSubjectQualification::factory()->for($this->teacher)->apto()->create()]],
-    'adscripción' => [AdscriptionChanged::class, fn () => [TeacherDepartment::factory()->create(['teacher_id' => $this->teacher->id, 'is_primary' => false])]],
+    'asignación' => [AdscriptionChanged::class, fn () => [TeacherDepartment::factory()->create(['teacher_id' => $this->teacher->id, 'is_primary' => false])]],
     'datos del docente' => [TeacherUpdated::class, fn () => [$this->teacher, ['name']]],
     'acceso' => [TeacherAccessChanged::class, fn () => [$this->teacher, AccessSync::Updated]],
 ]);
@@ -178,7 +178,7 @@ it('Ranking docente: horas externas y disponibilidad encolan solo el periodo del
     expect(queuedRankingScopes())->toBe([[$this->closedTerm->id, $this->modalityId, $this->department->id]]);
 });
 
-it('Ranking docente: quien perdió la adscripción se recalcula donde todavía tiene ranking', function () {
+it('Ranking docente: quien perdió la asignación se recalcula donde todavía tiene ranking', function () {
     $former = Teacher::factory()->create();
     $adscription = TeacherDepartment::factory()->create(['teacher_id' => $former->id, 'department_id' => $this->department->id]);
     StaffingRanking::factory()->create(['group_id' => $this->ownGroup->id, 'teacher_id' => $former->id]);

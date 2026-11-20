@@ -138,7 +138,7 @@ final class TeacherRoster
             $department = $this->department($d, $d2, $cells, $materiaArea, $departmentForArea);
             if ($department === null) {
                 $noDepartment++;
-                $this->incidents[] = $this->warning($lineOf[$rfc], 'El docente de esta línea no tiene departamento académico (ni por su adscripción ni por sus grupos recientes): no se migra.');
+                $this->incidents[] = $this->warning($lineOf[$rfc], 'El docente de esta línea no tiene departamento académico (ni por su asignación ni por sus grupos recientes): no se migra.');
 
                 continue;
             }

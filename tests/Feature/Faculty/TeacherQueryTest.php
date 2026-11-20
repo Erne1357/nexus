@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Gate;
 /*
 | TeacherQuery: la tabla de Docentes deja ver lo mismo que TeacherPolicy (`view`), filtrado en SQL con los
 | departamentos de los alcances de Actor, sin campus (el docente no es de un campus), y sin preguntarle a la
-| policy fila por fila. Busca por número o nombre; filtra por departamento de una adscripción, por tipo de plaza
+| policy fila por fila. Busca por número o nombre; filtra por departamento de una asignación, por tipo de plaza
 | vigente y por estado; trae las horas base del periodo activo de toda la página en una consulta.
 */
 
@@ -35,7 +35,7 @@ beforeEach(function () {
     $this->carla = Teacher::factory()->adscribedTo($this->ii)->inactive()->create(['rfc' => 'PRUE000003AB1', 'name' => 'Carla 50%_Díaz']);
     $this->borrado = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => 'PRUE000005AB1']);
     $this->borrado->delete();
-    // Su adscripción a SC se quitó; queda II.
+    // Su asignación a SC se quitó; queda II.
     $this->ex = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => 'PRUE000006AB1', 'name' => 'Elena Vega']);
     TeacherDepartment::factory()->for($this->ex)->for($this->sc)->create(['is_primary' => false])->delete();
     // Sin departamento.
@@ -62,13 +62,13 @@ it('al admin y a la Subdirección les trae a todos los docentes sin borrar, tamb
         ->and(teacherNumbersFor(User::factory()->withRole(Role::Subdireccion)->create()))->toBe($all);
 });
 
-it('el jefe de SC, de todo el Tec, solo ve a los adscritos a SC, aunque su principal sea otra', function () {
+it('el jefe de SC, de todo el Tec, solo ve a los asignados a SC, aunque su principal sea otra', function () {
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->sc->id])->create();
 
     expect(teacherNumbersFor($jefe))->toBe(['PRUE000001AB1', 'PRUE000002AB1']);
 });
 
-it('el jefe de proyecto docente de SC en un campus ve a todos los adscritos a SC: el docente no es de un campus', function () {
+it('el jefe de proyecto docente de SC en un campus ve a todos los asignados a SC: el docente no es de un campus', function () {
     $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => $this->c2->id, 'department_id' => $this->sc->id])->create();
 
     expect(teacherNumbersFor($jpd))->toBe(['PRUE000001AB1', 'PRUE000002AB1']);
@@ -99,7 +99,7 @@ it('con varios puestos ve solo lo del perfil activo', function () {
     actingAsRole($both, Role::JefeProyectoDocente);
     $asJefeProyecto = app(TeacherQuery::class)->forTable(app(Actor::class))->pluck('rfc')->all();
 
-    // Ana está adscrita a SC y a II: sale con los dos perfiles. Beto solo es de SC; Carla y Elena, solo de II.
+    // Ana está asignada a SC y a II: sale con los dos perfiles. Beto solo es de SC; Carla y Elena, solo de II.
     expect($asJefe)->toBe(['PRUE000001AB1', 'PRUE000002AB1'])
         ->and($asJefeProyecto)->toBe(['PRUE000001AB1', 'PRUE000003AB1', 'PRUE000006AB1']);
 });
@@ -131,7 +131,7 @@ it('busca por número o por nombre, con %, _ y \\ literales', function (string $
     'comodín que no está' => ['%', ['PRUE000003AB1']],
 ]);
 
-it('filtra por el departamento de una adscripción sin borrar', function () {
+it('filtra por el departamento de una asignación sin borrar', function () {
     $admin = User::factory()->admin()->create();
 
     expect(teacherNumbersFor($admin, ['departmentId' => $this->sc->id]))->toBe(['PRUE000001AB1', 'PRUE000002AB1'])
@@ -154,7 +154,7 @@ it('filtra por estado', function () {
         ->and(teacherNumbersFor($admin, ['active' => true]))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000006AB1', 'PRUE000007AB1']);
 });
 
-it('trae las adscripciones sin borrar de cada docente con su departamento, la principal primero', function () {
+it('trae las asignaciones sin borrar de cada docente con su departamento, la principal primero', function () {
     $this->actingAs(User::factory()->admin()->create());
 
     $page = app(TeacherQuery::class)->forTable(app(Actor::class));
@@ -214,7 +214,7 @@ it('da las horas base del periodo activo de toda la página en una sola consulta
         ->and(app(TeacherQuery::class)->baseHoursFor(null, $page))->toBe([]);
 });
 
-it('carga 40 docentes con 3 adscripciones cada uno y sus horas base sin N+1', function () {
+it('carga 40 docentes con 3 asignaciones cada uno y sus horas base sin N+1', function () {
     $departments = [$this->sc, $this->ii, Department::factory()->create()];
 
     Teacher::factory()->count(40)->create()->each(function (Teacher $teacher) use ($departments): void {
@@ -236,7 +236,7 @@ it('carga 40 docentes con 3 adscripciones cada uno y sus horas base sin N+1', fu
 
     expect($page)->toHaveCount(45)
         ->and(count($hours))->toBe(45)
-        // La página, su cuenta, las adscripciones, sus departamentos y las horas base.
+        // La página, su cuenta, las asignaciones, sus departamentos y las horas base.
         ->and(count(DB::getQueryLog()))->toBeLessThanOrEqual(5);
 });
 

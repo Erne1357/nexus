@@ -52,7 +52,7 @@ describe('«Quitar de <Departamento>» (D10)', function () {
             ->assertSee('Quitar de Sistemas y Computación')->assertSee('Quitar de Ingeniería Industrial')
             ->assertDontSee('Quitar de SC')
             ->call('confirmRemoveAdscription', $ii->id)
-            ->assertSee('¿Quitar al docente PRUE000001AB1 de Ingeniería Industrial? Solo sale de Ingeniería Industrial: sigue activo y su adscripción principal pasa a Sistemas y Computación. Queda en la bitácora.')
+            ->assertSee('¿Quitar al docente PRUE000001AB1 de Ingeniería Industrial? Solo sale de Ingeniería Industrial: sigue activo y su asignación principal pasa a Sistemas y Computación. Queda en la bitácora.')
             ->call('removeAdscription');
 
         expect(lastToastOf($page))->title->toBe('Quitado de Ingeniería Industrial');

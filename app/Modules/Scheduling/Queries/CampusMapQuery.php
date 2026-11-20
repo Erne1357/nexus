@@ -39,7 +39,7 @@ final class CampusMapQuery
      *     departments: list<array{id: string, name: string, b: ?string, room: ?string, location: ?string, phone: ?string, email: ?string, web: ?string}>,
      *     subjects: list<array{id: string, name: string, area: ?string, cred: ?int}>,
      *     groups: list<array{id: string, subject: string, code: string, area: ?string, career: ?string, turno: string}>,
-     *     profs: list<array{id: string, name: string, title: ?string, area: ?string, email: null}>,
+     *     profs: list<array{id: string, name: string, title: ?string, area: ?string, email: ?string}>,
      *     classes: list<array{subject: string, group: string, prof: ?string, room: ?string, roomLabel: ?string, days: list<int>, hour: int, end: int}>
      * }
      */
@@ -276,14 +276,14 @@ final class CampusMapQuery
         return DB::table('teachers')
             ->whereIn('id', $ids)
             ->orderBy('name')
-            ->get(['id', 'name', 'degree'])
+            ->get(['id', 'name', 'degree', 'institutional_email'])
             ->map(fn (object $teacher): array => [
                 'id' => $teacher->id,
                 'name' => $teacher->name,
                 'title' => $teacher->degree,
                 'area' => $primary[$teacher->id] ?? null,
-                // El mapa lo ve todo el que tiene sesión, alumnos incluidos (D6): el correo del docente no va (supuesto por confirmar).
-                'email' => null,
+                // El correo institucional va para todo el que tiene sesión, alumnos incluidos (confirmado por el usuario el 20 de noviembre de 2026).
+                'email' => $teacher->institutional_email,
             ])->values()->all();
     }
 

@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| La migración que quita el campus de las adscripciones: la adscripción es solo a un departamento (confirmado el 30
+| La migración que quita el campus de las asignaciones: la asignación es solo a un departamento (confirmado el 30
 | de octubre de 2026). Antes de quitar `campus_id` junta las de un docente en el mismo departamento y distinto campus:
 | se queda una fila (la sin borrar, luego la principal, luego la más antigua) y las demás se eliminan con su entrada
 | en la bitácora, porque la clave nueva, docente y departamento, cuenta también las borradas. La que se queda toma la
@@ -33,7 +33,7 @@ beforeEach(function () {
 });
 
 /**
- * Inserta una adscripción con la forma vieja (con campus) y devuelve su id.
+ * Inserta una asignación con la forma vieja (con campus) y devuelve su id.
  */
 function oldAdscription(Teacher $teacher, Department $department, Campus $campus, bool $primary, string $createdAt, ?string $deletedAt = null): string
 {
@@ -54,7 +54,7 @@ function oldAdscription(Teacher $teacher, Department $department, Campus $campus
 }
 
 /**
- * Los ids de las adscripciones que quedan, borradas o no.
+ * Los ids de las asignaciones que quedan, borradas o no.
  *
  * @return list<string>
  */

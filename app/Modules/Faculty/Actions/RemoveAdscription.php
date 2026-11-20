@@ -11,23 +11,23 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * «Quitar de <Departamento>»: quita, con borrado lógico, una adscripción de un docente (reglas-de-negocio.md,
- * "Adscripciones"). Si era la principal, la principal pasa a la adscripción más antigua que le quede (confirmado el
+ * «Quitar de <Departamento>»: quita, con borrado lógico, una asignación de un docente (reglas-de-negocio.md,
+ * "Asignaciones"). Si era la principal, la principal pasa a la asignación más antigua que le quede (confirmado el
  * 30 de octubre de 2026). La más antigua es la de `created_at` menor y, a igual fecha, la de id menor. Cuando exista
  * la carga de la fase 3, pasará a la del departamento donde tenga más horas asignadas (confirmado el 30 de octubre
  * de 2026). Si no le queda ninguna, el docente sigue activo y sin departamento (confirmado el 30 de octubre de 2026);
- * su usuario, su rol y su alcance de `docente` no dependen de sus adscripciones, así que no se tocan. Quitar una que
+ * su usuario, su rol y su alcance de `docente` no dependen de sus asignaciones, así que no se tocan. Quitar una que
  * no es la principal no cambia la principal. La quitada deja de ser principal, así que restaurarla no choca con la
  * nueva. Quién puede lo decide la policy de docentes antes de llamarla.
  *
- * En una transacción bloquea al docente (dos cambios a sus adscripciones no se pisan la principal) y sus
- * adscripciones, borra, pasa la principal si hace falta y deja bitácora sobre la quitada (con la principal que le
- * queda al docente) y sobre la principal nueva. Después del commit avisa con AdscriptionChanged. Una adscripción ya
+ * En una transacción bloquea al docente (dos cambios a sus asignaciones no se pisan la principal) y sus
+ * asignaciones, borra, pasa la principal si hace falta y deja bitácora sobre la quitada (con la principal que le
+ * queda al docente) y sobre la principal nueva. Después del commit avisa con AdscriptionChanged. Una asignación ya
  * quitada es un error en `adscription`.
  *
- * Devuelve lo que quien la llama necesita para avisar, con el mismo texto que la bitácora: la adscripción que pasó a
+ * Devuelve lo que quien la llama necesita para avisar, con el mismo texto que la bitácora: la asignación que pasó a
  * ser la principal (`promoted`; null si la principal no cambió de lugar), cuántas le quedan (`remaining`) y el
- * resultado en palabras (`outcome`: «queda sin departamento», «su adscripción principal pasa a IND» o null).
+ * resultado en palabras (`outcome`: «queda sin departamento», «su asignación principal pasa a IND» o null).
  */
 final class RemoveAdscription
 {
@@ -47,7 +47,7 @@ final class RemoveAdscription
                 ->lockForUpdate()
                 ->get();
             $removed = $adscriptions->firstWhere('id', $adscription->getKey())
-                ?? throw ValidationException::withMessages(['adscription' => 'Esa adscripción ya se quitó.']);
+                ?? throw ValidationException::withMessages(['adscription' => 'Esa asignación ya se quitó.']);
             $remaining = $adscriptions->reject(fn (TeacherDepartment $other): bool => $other->is($removed))->values();
             $wasPrimary = $removed->is_primary;
             $promoted = $wasPrimary ? $remaining->first() : null;
@@ -64,7 +64,7 @@ final class RemoveAdscription
 
             $outcome = match (true) {
                 $remaining->isEmpty() => 'queda sin departamento',
-                $promoted !== null => "su adscripción principal pasa a {$codes[$promoted->department_id]}",
+                $promoted !== null => "su asignación principal pasa a {$codes[$promoted->department_id]}",
                 default => null,
             };
 
@@ -81,7 +81,7 @@ final class RemoveAdscription
                     ->event(ActivityEvent::Updated)
                     ->withChanges(['attributes' => ['is_primary' => true], 'old' => ['is_primary' => false]])
                     ->withProperties(['teacher_id' => $teacher->getKey()])
-                    ->log("Hizo principal la adscripción del docente {$teacher->rfc} a {$codes[$promoted->department_id]} al quitarlo de {$from}");
+                    ->log("Hizo principal la asignación del docente {$teacher->rfc} a {$codes[$promoted->department_id]} al quitarlo de {$from}");
             }
 
             AdscriptionChanged::dispatch($removed, auth()->user());

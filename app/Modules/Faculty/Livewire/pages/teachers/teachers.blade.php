@@ -7,7 +7,7 @@
     superficie blanca con filete: el número en Mono, el departamento principal y debajo los otros, las horas base del
     periodo activo en Mono, el estado de su acceso (AC-04) y el estado con su insignia; «Editar» visible y lo demás en
     «Acciones». Al editar, el correo institucional va con el parcial de la ficha (AC-06). Entre 768 y 1199 px se ocultan el acceso y,
-    debajo de 1024, la adscripción; debajo de 768 px la tabla cede su lugar a renglones apilados (número, nombre y
+    debajo de 1024, la asignación; debajo de 768 px la tabla cede su lugar a renglones apilados (número, nombre y
     estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
 --}}
 <div>
@@ -15,9 +15,9 @@
     <x-header title="Docentes" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             @if ($term === null)
-                Los docentes de tu alcance con sus adscripciones y su acceso; sin periodo activo no hay horas base. Un docente no se borra: se da de baja, y su usuario con él.
+                Los docentes de tu alcance con sus asignaciones y su acceso; sin periodo activo no hay horas base. Un docente no se borra: se da de baja, y su usuario con él.
             @else
-                Los docentes de tu alcance con sus adscripciones, sus horas base de {{ $term->name }} y su acceso. Un docente no se borra: se da de baja, y su usuario con él.
+                Los docentes de tu alcance con sus asignaciones, sus horas base de {{ $term->name }} y su acceso. Un docente no se borra: se da de baja, y su usuario con él.
             @endif
         </x-slot:subtitle>
     </x-header>
@@ -171,7 +171,7 @@
             @if ($existingId !== null)
                 <x-alert
                     :title="'Ya existe el docente '.$existingLabel"
-                    description="No se da de alta otra vez: puedes adscribirlo a este departamento sin cambiar sus datos."
+                    description="No se da de alta otra vez: puedes asignarlo a este departamento sin cambiar sus datos."
                     icon="o-information-circle"
                     class="alert-info alert-soft"
                     data-testid="existing-teacher"
@@ -233,10 +233,10 @@
                 @if ($existingId === null)
                     <x-button label="Guardar" type="submit" icon="o-check" class="btn-primary" spinner="save" />
                 @elseif ($targetCode !== null)
-                    <x-button :label="'Adscribir a '.$targetCode" icon="o-link" class="btn-primary" wire:click="adscribeExisting" spinner="adscribeExisting" />
+                    <x-button :label="'Asignar a '.$targetCode" icon="o-link" class="btn-primary" wire:click="adscribeExisting" spinner="adscribeExisting" />
                 @else
                     <span class="tooltip tooltip-left" data-tip="Elige el departamento.">
-                        <x-button label="Adscribir" icon="o-link" class="btn-primary" disabled />
+                        <x-button label="Asignar" icon="o-link" class="btn-primary" disabled />
                     </span>
                 @endif
             </x-slot:actions>

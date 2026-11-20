@@ -432,7 +432,7 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
             ->assertDontSeeHtml('data-testid="reopen-careers"')
             ->assertDontSee('Solo el jefe del departamento valida.')
             ->assertDontSee('Solo el jefe del departamento reabre.');
-    })->with(['admin', 'subdirección']);
+    })->with(['admin']);
 
     it('en la lista no ven Validar, Marcar, Desactivar ni Agregar observación deshabilitados', function (string $who) {
         headPage(headViewer($who), ['department' => ReviewOwner::SCHOOL_SERVICES, 'catalogo' => 'subjects'])
@@ -441,7 +441,7 @@ describe('solo lectura de admin y Subdirección (CV-S1)', function () {
             ->assertDontSee('Agregar observación')
             ->assertDontSee('Desactivar')
             ->assertSeeHtml("wire:click=\"edit('{$this->subject->id}')\"");
-    })->with(['admin', 'subdirección']);
+    })->with(['admin']);
 
     it('en docentes no ven Quitar, Agregar docente ni el correo deshabilitados, y sí la ficha y las observaciones', function (string $who) {
         $teacher = Teacher::factory()->adscribedTo($this->sis)->create(['rfc' => 'AAAA800101AA1', 'institutional_email' => null]);

@@ -62,6 +62,6 @@
 
 **Contexto.** El usuario pidió reunir todo lo de la carga académica en un solo lugar del menú y poder ocultarlo desde el panel de configuración, para mostrar Nexus sin la carga mientras no está lista.
 
-**Decisión.** Entra el área **Carga académica** (`o-table-cells`), justo después de Académico. Se lleva los grupos Propuesta, Horarios, Asignación y Cierre y publicación, y «Mi carga» y «Oferta», que salen de Mi espacio; Académico se queda con Validación. El admin la oculta a los demás con un parámetro de Core (MN-05). Sigue siendo el mismo menú, así que no hace falta un ADR nuevo.
+**Decisión.** Entra el área **Carga académica** (`o-table-cells`), justo después de Académico. Se lleva los grupos Propuesta, Horarios, Asignación y Cierre y publicación; Académico se queda con Validación. «Mi carga» y «Oferta» salieron de Mi espacio en esa tarea, pero el usuario decidió el 20 de noviembre de 2026 (tarea 1.25) que vuelven a Mi espacio y quedan siempre visibles: el interruptor no las oculta. El admin la oculta a los demás con un parámetro de Core (MN-05). Sigue siendo el mismo menú, así que no hace falta un ADR nuevo.
 
 **Consecuencias.** `NavigationArea` gana un caso y los grupos de la carga cambian de área. Ocultar no toca el registro inmutable del menú: lo decide cada petición (`AcademicLoadVisibility`, `scoped`) en `NavigationItem::isVisibleTo` y en el middleware que cierra sus rutas por una lista explícita.

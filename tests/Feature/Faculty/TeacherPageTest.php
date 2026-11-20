@@ -29,7 +29,7 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Ficha del docente (`/faculty/teachers/{teacher}`, faculty::pages.teacher; spec 4.3 y S8). Cinco pestañas: Datos
-| (datos, adscripciones: quitar y hacer principal), Plazas (agregar, editar y quitar), Disponibilidad (de solo
+| (datos, asignaciones: quitar y hacer principal), Plazas (agregar, editar y quitar), Disponibilidad (de solo
 | lectura, con el enlace al editor), Perfil e Historial. Cada quien ve y cambia a los docentes de su alcance
 | (TeacherPolicy); cada método vuelve a autorizar. «Restablecer contraseña» (por enlace) y la invitación del admin son
 | solo del administrador (UserPolicy).
@@ -67,7 +67,7 @@ describe('ficha', function () {
             ->assertSeeInOrder(['Ana Pérez', '1000001', 'Horas base', 'Ene-Jun 2027', '40', 'Datos', 'Plazas', 'Disponibilidad', 'Perfil', 'Historial']);
     });
 
-    it('en Datos muestra sus datos y sus adscripciones con la principal primero', function () {
+    it('en Datos muestra sus datos y sus asignaciones con la principal primero', function () {
         teacherRecord($this->admin, $this->ana)
             ->assertSeeInOrder(['RFC', '1000001', 'Correo institucional', 'Correo personal', 'ana@example.test', 'Usuario'])
             ->assertSeeInOrder(['Asignaciones', 'Ingeniería Industrial', 'Principal', 'Sistemas y Computación', 'Hacer principal']);
@@ -150,8 +150,8 @@ describe('baja', function () {
     })->with(['admin', 'subdireccion']);
 });
 
-describe('adscripciones', function () {
-    it('quita una adscripción después de confirmar y avisa', function () {
+describe('asignaciones', function () {
+    it('quita una asignación después de confirmar y avisa', function () {
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
         $page = teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $sc->id);
         $page->assertSet('removingAdscriptionId', $sc->id)->assertSee('¿Quitar al docente');
@@ -174,7 +174,7 @@ describe('adscripciones', function () {
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
 
         $page = teacherRecord($this->admin, $this->ana)->call('confirmRemoveAdscription', $primary->id)
-            ->assertSee('su adscripción principal pasa a Sistemas y Computación')
+            ->assertSee('su asignación principal pasa a Sistemas y Computación')
             ->call('removeAdscription');
 
         expect($primary->fresh()->trashed())->toBeTrue()
@@ -182,7 +182,7 @@ describe('adscripciones', function () {
             ->and(lastToastOf($page))->type->toBe('success')->description->toContain('principal pasa a SC');
     });
 
-    it('CV8: quitar la única adscripción da de baja al docente, y el aviso lo dice', function () {
+    it('CV8: quitar la única asignación da de baja al docente, y el aviso lo dice', function () {
         $page = teacherRecord($this->admin, $this->beto)->call('confirmRemoveAdscription', $this->beto->adscriptions()->sole()->id)
             ->assertSee('Es su último departamento: queda dado de baja y su cuenta se inhabilita.')
             ->call('removeAdscription');
@@ -192,7 +192,7 @@ describe('adscripciones', function () {
             ->and(lastToastOf($page))->description->toContain('queda dado de baja y su cuenta se inhabilita');
     });
 
-    it('al jefe de proyecto docente la última adscripción se le ve deshabilitada con su motivo, y llamarla es 403 (confirmado)', function () {
+    it('al jefe de proyecto docente la última asignación se le ve deshabilitada con su motivo, y llamarla es 403 (confirmado)', function () {
         $beto = Teacher::factory()->adscribedTo($this->sc)->create(['rfc' => '1000009', 'name' => 'Beto Solo']);
         $jpd = User::factory()->withRole(Role::JefeProyectoDocente, ['campus_id' => Campus::factory()->create()->id, 'department_id' => $this->sc->id])->create();
         $adscription = $beto->adscriptions()->sole();
@@ -228,7 +228,7 @@ describe('adscripciones', function () {
         expect($sc->fresh()->trashed())->toBeFalse();
     });
 
-    it('lista las adscripciones sin campus, con «Quitar de <Departamento>» por renglón', function () {
+    it('lista las asignaciones sin campus, con «Quitar de <Departamento>» por renglón', function () {
         $page = teacherRecord($this->admin, $this->ana);
 
         $page->assertSee('Quitar de Ingeniería Industrial')->assertSee('Quitar de Sistemas y Computación')->assertDontSee(' en C2');
@@ -243,7 +243,7 @@ describe('adscripciones', function () {
             ->and(lastToastOf($page))->title->toBe('Asignación principal cambiada');
     });
 
-    it('el jefe ve la adscripción de otro departamento con «Quitar» deshabilitado y su motivo', function () {
+    it('el jefe ve la asignación de otro departamento con «Quitar» deshabilitado y su motivo', function () {
         $dom = domOf($this->actingAs($this->jefe)->get(route('faculty.teachers.show', $this->ana->id))->assertOk());
         $buttons = collect($dom->querySelectorAll('[data-testid^="remove-adscription-"]'));
 
@@ -477,7 +477,7 @@ describe('alcance', function () {
         $this->get(route('faculty.teachers.show', $this->ana->id))->assertRedirect(route('login'));
     });
 
-    it('el jefe de SC recibe 403 al quitar la adscripción de II, aunque la llame directo', function () {
+    it('el jefe de SC recibe 403 al quitar la asignación de II, aunque la llame directo', function () {
         $ii = $this->ana->adscriptions()->where('department_id', $this->ii->id)->sole();
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
         $this->ana->adscriptions()->where('department_id', $this->ii->id)->update(['is_primary' => false]);
@@ -511,7 +511,7 @@ describe('alcance', function () {
         'guardar datos' => ['saveData', []],
         'desactivar' => ['toggleActive', []],
         'restablecer contraseña' => ['resetPassword', []],
-        'confirmar quitar adscripción' => ['confirmRemoveAdscription', [':adscription']],
+        'confirmar quitar asignación' => ['confirmRemoveAdscription', [':adscription']],
         'hacer principal' => ['setPrimary', [':adscription']],
         'agregar plaza' => ['createPosition', []],
         'guardar plaza' => ['savePosition', []],
@@ -519,7 +519,7 @@ describe('alcance', function () {
         'confirmar quitar plaza' => ['confirmRemovePosition', [':position']],
     ]);
 
-    it('quitar una adscripción o una plaza confirmada recibe 403 si cambió quien la pide', function () {
+    it('quitar una asignación o una plaza confirmada recibe 403 si cambió quien la pide', function () {
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
         $page = Livewire::actingAs($this->admin)->test('faculty::pages.teacher', ['teacher' => $this->ana->id])
             ->call('confirmRemoveAdscription', $sc->id)->call('confirmRemovePosition', $this->plaza->id);
@@ -536,7 +536,7 @@ describe('alcance', function () {
 });
 
 describe('revisión de la ficha', function () {
-    it('«Hacer principal» es de quien cubre el departamento de esa adscripción (supuesto por confirmar)', function () {
+    it('«Hacer principal» es de quien cubre el departamento de esa asignación (supuesto por confirmar)', function () {
         $ii = $this->ana->adscriptions()->where('department_id', $this->ii->id)->sole();
         $sc = $this->ana->adscriptions()->where('department_id', $this->sc->id)->sole();
         $ii->update(['is_primary' => false]);
@@ -563,7 +563,7 @@ describe('revisión de la ficha', function () {
             ->and($button->parentElement->getAttribute('data-tip'))->toContain('Solo quien administra');
     });
 
-    it('la ficha no consulta por adscripción: las consultas no crecen con tres o más', function () {
+    it('la ficha no consulta por asignación: las consultas no crecen con tres o más', function () {
         $count = function (): int {
             DB::flushQueryLog();
             DB::enableQueryLog();
