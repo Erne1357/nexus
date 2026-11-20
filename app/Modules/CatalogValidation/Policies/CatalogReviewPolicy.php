@@ -94,6 +94,22 @@ final class CatalogReviewPolicy
         return $this->can($user, CatalogValidationPermission::ReviewValidate, $review);
     }
 
+    /**
+     * Reclamar salones sin dueño para el departamento (ClaimRooms, CV16): corregir la revisión, solo su jefe.
+     */
+    public function claimRooms(User $user, CatalogReview $review): bool
+    {
+        return $this->can($user, CatalogValidationPermission::ReviewCorrect, $review);
+    }
+
+    /**
+     * Soltar un salón reclamado (ReleaseRoomClaim, CV16).
+     */
+    public function releaseRoomClaim(User $user, CatalogReview $review): bool
+    {
+        return $this->can($user, CatalogValidationPermission::ReviewCorrect, $review);
+    }
+
     public function reopen(User $user, CatalogReview $review): bool
     {
         return $this->can($user, CatalogValidationPermission::ReviewReopen, $review);

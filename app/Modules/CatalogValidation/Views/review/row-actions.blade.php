@@ -101,6 +101,21 @@
             @endif
         @endif
 
+        @if (isset($claims[$record->id]) && ! $viewOnly)
+            {{-- CV16: solo los que reclamó esta revisión, y mientras no esté validada. --}}
+            @if ($current['claimReason'] === null)
+                <x-core::row-menu-item
+                    label="Soltar"
+                    danger
+                    wire:click="askRelease('{{ $record->id }}')"
+                    :spinner="'askRelease(\''.$record->id.'\')'"
+                    :data-testid="$inTable ? 'release-'.$code : null"
+                />
+            @else
+                <x-core::row-menu-item label="Soltar" disabled reason="La revisión ya está validada: reábrela para soltar un salón." />
+            @endif
+        @endif
+
         @if (! $teachers && ! $viewOnly)
             @if ($current['canToggle'])
                 <x-core::row-menu-item
