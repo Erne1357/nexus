@@ -229,6 +229,8 @@ De abajo hacia arriba. Cada capa gana a las de abajo sin importar cuánto se des
 
 Un contenido nuevo que se quede fijo usa `z-10` (`z-20` si debe pasar sobre otro fijo); nunca sube de 20. `row-menu` sale a la capa superior del navegador con `popover` y no entra en esta tabla.
 
+**Velo de un drawer.** El velo es un `<label for="id">` de la casilla del drawer, así que el `id` de cada `x-drawer` debe ser único en la página. MaryUI lo derivaba de `md5(serialize($this))` y dos drawers con los mismos atributos compartían id: un clic fuera del drawer abierto encendía la casilla del primero de la página y abría otro debajo (propuesta de la carga: una materia abierta y un clic fuera abría «Nuevo paquete»; issue #754, 20 de noviembre de 2026). `x-drawer` es ahora [`Core\View\Components\Drawer`](app/Modules/Core/View/Components/Drawer.php), que da un id único por instancia; no pongas `id` fijo repetido ni vuelvas a registrar el de MaryUI. Prueba: `tests/Browser/AcademicLoad/ProposalDrawerOutsideClickTest.php`.
+
 ### Anatomía de una pantalla de catálogo
 La forma de [Campus](app/Modules/Core/Livewire/pages/campuses/campuses.blade.php), que copian todos los catálogos:
 1. **Encabezado** (`x-header`): el título y una línea que explica la pantalla. Nada más: la barra de herramientas no va en su slot `actions`, porque según el ancho subiría junto al título o caería debajo.
