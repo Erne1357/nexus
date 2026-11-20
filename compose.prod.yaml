@@ -70,6 +70,8 @@ services:
       RUN_MIGRATIONS: "true"
     volumes:
       - app-storage:/app/storage/app
+      # Fotos de los alumnos para la credencial (AC-20): <AAAA>/<número de control>.jpg, solo lectura.
+      - ${NEXUS_STUDENT_PHOTOS_DIR:-/srv/nexus/fotos}:/app/storage/app/private/fotos:ro
     # Las migraciones corren en el entrypoint antes de servir: start_period amplio.
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]

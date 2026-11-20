@@ -30,6 +30,12 @@ export default defineConfig({
                     preload: false,
                     optimizedFallbacks: false,
                 }),
+                // Solo la credencial del alumno (tarea 1.27): la tipografía de la plantilla del TecNM.
+                bunny('Montserrat', {
+                    weights: [500, 600],
+                    preload: false,
+                    optimizedFallbacks: false,
+                }),
             ],
         }),
         tailwindcss(),

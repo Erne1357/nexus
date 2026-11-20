@@ -23,7 +23,10 @@ use App\Modules\Students\Listeners\BlockSubjectDeactivationWhileNeeded;
 use App\Modules\Students\Listeners\RecomputeProgressOnCurriculumChange;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Módulo Students: alumnos, su kardex y su avance reticular (docs/dominio/modelo-de-datos.md, "Students").
@@ -41,6 +44,9 @@ final class StudentsServiceProvider extends ModuleServiceProvider
         Event::listen(SubjectDeactivating::class, BlockSubjectDeactivationWhileNeeded::class);
         Event::listen(PlanCareerChanging::class, BlockPlanCareerChangeWithStudents::class);
         Event::listen(CurriculumChanged::class, RecomputeProgressOnCurriculumChange::class);
+
+        // AC-20: la verificación pública del QR de la credencial, 30 por minuto por dirección.
+        RateLimiter::for('credential-verify', fn (Request $request): Limit => Limit::perMinute(30)->by((string) $request->ip()));
     }
 
     public function navigation(): array
