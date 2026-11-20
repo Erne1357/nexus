@@ -11,6 +11,7 @@ use App\Modules\Faculty\Models\TeacherExternalLoad;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Queries\ScheduleStateQuery;
+use App\Modules\Scheduling\Queries\SiiTeacherScheduleQuery;
 use App\Modules\Scheduling\Rules\Constraints\CampusTravel;
 use App\Modules\Scheduling\Rules\TeacherHourLimit;
 use App\Modules\Scheduling\Validation\Minutes;
@@ -42,6 +43,7 @@ final class MyLoadQuery
         private readonly ScheduleValidator $validator,
         private readonly ScheduleStateQuery $states,
         private readonly PublishedLoadsQuery $published,
+        private readonly SiiTeacherScheduleQuery $sii,
     ) {}
 
     /**
@@ -51,12 +53,20 @@ final class MyLoadQuery
      *     travel_minutes: int,
      *     days: array<int, array{name: string, short: string, hours: int, blocks: list<array<string, mixed>>}>,
      *     hours: array{base: int, limit: int, tolerance: int, external: int, assigned: int, remaining: int, sources: list<array{source: string, hours: int}>},
-     *     published: list<array{scope: ?string, version: int, published_at: CarbonImmutable}>
+     *     published: list<array{scope: ?string, version: int, published_at: CarbonImmutable}>,
+     *     source: 'nexus'|'sii'
      * }
      */
     public function forTeacher(Teacher $teacher, Term $term): array
     {
         $groups = $this->groups($teacher, $term);
+        $source = 'nexus';
+
+        // Sin grupos en Nexus (ni publicados ni vivos), el periodo en curso sale del horario del SII por RFC (#755).
+        if ($groups === []) {
+            $groups = $this->siiGroups($teacher, $term);
+            $source = $groups === [] ? 'nexus' : 'sii';
+        }
 
         // El validador es scoped y guarda la foto que ya leyó en la petición: se olvida para leer la de ahora.
         $this->validator->forget();
@@ -129,7 +139,16 @@ final class MyLoadQuery
                 'campus' => $group['campus_code'],
                 'published' => $group['published'],
             ], $groups)),
+            'source' => $source,
         ];
+    }
+
+    /**
+     * Si el docente tiene grupos de Nexus (publicados o vivos) en el periodo; no mira el SII.
+     */
+    public function hasNexusGroups(Teacher $teacher, Term $term): bool
+    {
+        return $this->groups($teacher, $term) !== [];
     }
 
     /**
@@ -167,6 +186,28 @@ final class MyLoadQuery
         usort($groups, fn (array $a, array $b): int => strnatcmp($a['code'], $b['code']) ?: strcmp($a['subject_code'], $b['subject_code']));
 
         return $groups;
+    }
+
+    /**
+     * Los grupos del horario del SII del periodo, con la misma forma que los de Nexus y sin carga publicada.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function siiGroups(Teacher $teacher, Term $term): array
+    {
+        return array_map(fn (array $group): array => [
+            'id' => $group['id'],
+            'code' => $group['code'],
+            'subject_code' => $group['subject_code'],
+            'subject_name' => $group['subject_name'],
+            'campus_code' => $group['campus_code'],
+            'campus_name' => $group['campus_name'],
+            'department' => $group['department'],
+            'hours' => $group['hours'],
+            'schedule' => SessionLabels::lines(array_map(fn (array $s): array => [$s['day'], $s['starts_at'], $s['ends_at']], $group['sessions'])),
+            'sessions' => array_map(fn (array $s): array => self::session($s['day'], $s['starts_at'], $s['ends_at'], $s['room'], 'class'), $group['sessions']),
+            'published' => null,
+        ], $this->sii->forTeacher($teacher->rfc, $term->code));
     }
 
     /**

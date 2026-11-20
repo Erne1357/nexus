@@ -691,6 +691,19 @@ Supuestos por confirmar:
 - En la oferta, las fichas de una carga publicada son sus grupos de esa versión, con el docente, la carrera dueña, el semestre, el horario y los salones que se congelaron. El ranking sigue vivo («tu lugar», «tu mejor lugar» y el desglose) y se une por el id del grupo; si el grupo publicado ya no tiene ranking, no hay lugar. «Choca con tu horario» del panel explica la marca del ranking, así que sigue calculándose con los grupos vivos.
 - Las dos pantallas dicen «Publicado el 8 dic. 2026 · v2» en una línea discreta, una por carga publicada de las que se ven. Si se ven varias cargas, cada línea dice de cuál: el departamento si se ven varios y el campus si se ven varios («C2: publicado el …»).
 
+## Mi carga: periodo en curso y periodo en planeación (P9)
+
+«Mi carga» muestra el semestre en curso, el periodo cuyas fechas (`starts_on` a `ends_on`) contienen hoy en `America/Ciudad_Juarez`, y no el periodo activo que se planea (confirmado el 20 de noviembre de 2026: «mi carga sí debería ser del semestre actual», porque la carga del siguiente semestre se arma antes de que termine el actual). Lo resuelve `Term::containing()`, que también usa el mapa del campus. Si ningún periodo contiene hoy (entre semestres), se ve el activo (supuesto por confirmar).
+
+- De dónde salen los grupos del periodo en curso (confirmado el 20 de noviembre de 2026): de lo que Nexus tiene del docente en ese periodo, publicado o vivo (P8), si tiene grupos; si no, de las sesiones históricas del SII por su RFC (`historical_group_sessions.teacher_rfc` con `historical_groups`: materia, grupo, horario y salón del campus del grupo, resuelto como en el mapa), vía `SiiTeacherScheduleQuery` de Scheduling.
+- Lo que sale del SII es solo lectura (confirmado el 20 de noviembre de 2026): sin «Solicitar cambio», con la línea «Horario del SII del periodo Ago-Dic 2026. Solo lectura.», y la página rechaza con 403 pedir un cambio sobre un grupo del SII o sobre uno de Nexus de un periodo que no es el periodo en planeación (`openRequest` y `sendRequest`); `RequestChange` no cambia.
+
+Supuestos por confirmar:
+
+- El periodo en planeación (el activo, p. ej. 20271): si el docente ya tiene grupos de Nexus en él, asignados o publicados, «Mi carga» ofrece el selector «Periodo» con el periodo en curso (por omisión) y el periodo en planeación (`?periodo=`); si no tiene ninguno, solo muestra el periodo en curso.
+- Condición acordada con la coordinación (20 de noviembre de 2026): si la carga académica está oculta para quien mira (`AcademicLoadVisibility::hiddenFrom`; el admin que ve lo oculto se rige por lo mismo), el periodo en planeación no se ofrece: Mi carga muestra solo el periodo en curso, y pedirlo por URL o por una acción de Livewire cae al periodo en curso. Con la carga oculta todo sigue en solo lectura (MN-05).
+- Solo se piden cambios en el periodo en planeación: en el periodo en curso, venga de Nexus o del SII, Mi carga es de solo lectura.
+
 ## Menú
 
 Tarea 1.20 (#417): el menú por áreas y etapas, la opción B que eligió el usuario entre las maquetas el 12 de noviembre de 2026 (DESIGN.md, "Navigation"; `Core\Navigation\Navigation`).
