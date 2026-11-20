@@ -408,7 +408,7 @@ final class SubjectPlacements
 
         usort($tied, fn (string $a, string $b): int => $this->newest($combinations[$b]) <=> $this->newest($combinations[$a]) ?: strcmp($a, $b));
         [$version, $group] = $this->newest($combinations[$tied[0]]);
-        $this->warn($tecnm, "Clave TecNM {$tecnm}: empate de créditos/teoría/práctica entre ".implode(', ', $tied)."; gana {$tied[0]}, la del plan más reciente {$group} ({$version}) (supuesto por confirmar).");
+        $this->warn($tecnm, "Clave TecNM {$tecnm}: empate de créditos/teoría/práctica entre ".implode(', ', $tied)."; gana {$tied[0]}, la del grupo de planes más reciente {$group} ({$version}) (supuesto por confirmar).");
 
         return $tied[0];
     }
@@ -714,7 +714,7 @@ final class SubjectPlacements
 
             sort($changed, SORT_STRING);
             $count = count($combinations[$winner]);
-            $this->warn((string) $code, "La materia {$code} trae créditos/teoría/práctica distintos según el plan: {$winner} en {$count} ".($count === 1 ? 'plan' : 'planes').' y otros en '.implode(', ', $changed).". En Nexus una materia tiene unas solas horas: queda {$winner} en todos sus planes; revisar (supuesto por confirmar).");
+            $this->warn((string) $code, "La materia {$code} trae créditos/teoría/práctica distintos según el grupo de planes: {$winner} en {$count} ".($count === 1 ? 'grupo' : 'grupos').' y otros en '.implode(', ', $changed).". En Nexus una materia tiene unas solas horas: queda {$winner} en todos sus planes; revisar (supuesto por confirmar).");
         }
 
         return $subjects;

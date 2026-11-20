@@ -129,12 +129,15 @@ it('R-V2-1: cada retícula del SII es su propio plan y recuerda su grupo', funct
         ->and(array_map($grid, array_values(array_filter($planes, fn (array $r): bool => $r['grupo'] === 'ISIC-2010-224'))))->toEqualCanonicalizing(['IS2/26', 'ISC/44', 'SCN/11'])
         ->and(array_count_values(array_column(array_filter($planes, fn (array $r): bool => $r['incluir'] === 'si'), 'plan')))->each->toBe(1);
 
-    foreach (array_unique(array_column($planes, 'grupo')) as $group) {
-        $official = array_values(array_filter($planes, fn (array $r): bool => $r['plan'] === $group));
+    foreach (array_count_values(array_column($planes, 'grupo')) as $group => $rows) {
+        $official = array_values(array_filter($planes, fn (array $r): bool => $r['plan'] === (string) $group));
 
         expect($official)->toHaveCount(1, "el grupo {$group} no tiene la fila que conserva la clave oficial")
-            ->and($official[0]['grupo'])->toBe($group)
-            ->and($official[0]['modalidad'])->toBe('presencial', "el grupo {$group} conserva la clave oficial en una retícula que no es presencial");
+            ->and($official[0]['grupo'])->toBe((string) $group);
+
+        if ($rows > 1) {
+            expect($official[0]['modalidad'])->toBe('presencial', "el grupo {$group} conserva la clave oficial en una retícula que no es presencial");
+        }
     }
 });
 
@@ -149,6 +152,22 @@ it('R-V2-6: el plan de nuevo ingreso de la carrera es el que más nuevo ingreso 
 
     expect($plans['AAA-2010-224'])->toMatchArray(['career' => 'AAA', 'current' => 'Sí', 'intake' => 'Sí', 'historical' => 'No'])
         ->and($plans['AAA-2010-224-A2'])->toMatchArray(['career' => 'AAA', 'version' => '2010', 'current' => 'Sí', 'intake' => 'No', 'historical' => 'No']);
+});
+
+it('R-V2-6: avisa cuando el plan con más nuevo ingreso de una carrera no es el presencial', function () {
+    $warnings = fn (): array => collect(careersStepBatches($this->dir, $this->curated)['study_plans']['incidents'])
+        ->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'R-V2-6'))->values()->all();
+
+    expect($warnings())->toBe([]);
+
+    // S0 entró a la presencial A/1; S1 y S2, a la de distancia A2/2.
+    writeSiiCareers($this->dir, [
+        ['A', '1', '15/08/2010'], ['A2', '2', '15/08/2010'], ['A', '3', '15/08/2004'], ['B', '1', '15/08/2010'],
+        ['C', '1', '15/08/2005'], ['D', '1', '15/08/2010'], ['D', '2', '15/08/1980'], ['X', '9', '15/08/2010'],
+    ], [['A', '1', 'ACT', '20253', '1'], ['A2', '2', 'ACT', '20253', '1'], ['A2', '2', 'ACT', '20253', '1']]);
+
+    expect(collect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->firstWhere('code', 'AAA-2010-224-A2')['intake'])->toBe('Sí')
+        ->and($warnings())->toBe(['Carrera AAA: el plan con más nuevo ingreso en el periodo 20253 es AAA-2010-224-A2, de modalidad distancia, y queda como el de nuevo ingreso; R-V2-6 pide que el actual sea el presencial: revisar el curado o el nuevo ingreso.']);
 });
 
 it('deriva la oferta por campus de los alumnos', function () {
@@ -234,11 +253,40 @@ it('una fila curada sin grupo detiene la migración antes de escribir', function
     File::put($this->curated.'/planes.csv', str_replace('X,9,XXX-2010-999,XXX-2010-999,', 'X,9,XXX-2010-999,,', str_replace('A2,2,AAA-2010-224-A2,AAA-2010-224,', 'A2,2,AAA-2010-224-A2, ,', SII_CURATED_PLANS)));
 
     expect(fn () => careersStepBatches($this->dir, $this->curated))
-        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes (filas sin grupo: pon la clave oficial del plan que agrupa sus materias) no coincide con la exportación del SII: sin fila curada [A2/2, X/9]');
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: filas sin grupo (pon la clave oficial del plan que agrupa sus materias) [A2/2, X/9].');
 
     File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\nA2,2,AAA-2010-224-A2,AAA,distancia,si,0,\nA,3,AAA-2004-100,AAA,presencial,si,0,\nB,1,BBB-2010-300,BBB,presencial,si,0,\nC,1,CCC-2005-200,CCC,presencial,si,0,\nD,1,DDD-2010-1,DDD,presencial,si,0,\nD,2,DDD-IS-80-160,DDD,presencial,si,0,\nX,9,XXX-2010-999,XXX,presencial,no,0,\n");
 
     expect(fn () => careersStepBatches($this->dir, $this->curated))->toThrow(SiiCuratedMismatch::class, 'filas sin grupo');
+});
+
+it('R-V2-1: dos retículas incluidas con el mismo plan detienen la migración antes de escribir', function () {
+    File::put($this->curated.'/planes.csv', str_replace('A2,2,AAA-2010-224-A2,AAA-2010-224,', 'A2,2,AAA-2010-224,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: planes de más de una retícula incluida (una retícula del SII es un plan de Nexus, R-V2-1) [AAA-2010-224 (A/1, A2/2)].');
+
+    File::put($this->curated.'/planes.csv', str_replace('X,9,XXX-2010-999,XXX-2010-999,', 'X,9,AAA-2010-224,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->toHaveCount(7);
+});
+
+it('R-V2-1: un plan con dos grupos distintos detiene la migración antes de escribir', function () {
+    File::put($this->curated.'/planes.csv', str_replace('X,9,XXX-2010-999,XXX-2010-999,', 'X,9,AAA-2004-100,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: planes con más de un grupo [AAA-2004-100 (AAA-2004-100, AAA-2010-224)].');
+});
+
+it('R-V2-1: un grupo sin la fila que conserva su clave como plan detiene la migración antes de escribir; esa fila puede no ser presencial', function () {
+    File::put($this->curated.'/planes.csv', str_replace('A,1,AAA-2010-224,AAA-2010-224,', 'A,1,AAA-2010-224-A1,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: grupos sin la fila que conserva su clave como plan [AAA-2010-224 (A/1, A2/2)].');
+
+    File::put($this->curated.'/planes.csv', str_replace('B,1,BBB-2010-300,BBB-2010-300,BBB,presencial,', 'B,1,BBB-2010-300,BBB-2010-300,BBB,distancia,', SII_CURATED_PLANS));
+
+    expect(collect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->pluck('code'))->toContain('BBB-2010-300');
 });
 
 it('una carrera incluida sin renglón en carreras.csv detiene la migración', function () {

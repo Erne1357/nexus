@@ -19,8 +19,9 @@ use App\Modules\Imports\Sii\SiiStep;
  * `Curated/carreras.csv` da el nombre y el departamento de cada carrera.
  *
  * Contrato: cada (carrera, retícula) del SII tiene exactamente una fila curada y cada fila curada existe en el SII;
- * cada fila curada trae su grupo y cada carrera incluida tiene fila en `carreras.csv`. Si no, el paso se detiene antes
- * de escribir (SiiCuratedMismatch).
+ * cada fila curada trae su grupo; dos retículas incluidas no comparten plan; un plan tiene un solo grupo; cada grupo
+ * tiene la fila que conserva su clave como plan (la oficial, que puede no ser presencial), y cada carrera incluida
+ * tiene fila en `carreras.csv`. Si no, el paso se detiene antes de escribir (SiiCuratedMismatch).
  *
  * Todo lo derivado sale de los alumnos, solo agregado (conteos por carrera, retícula, campus y periodo; nunca
  * valores personales): la oferta por campus, el plan vigente y el plan de nuevo ingreso (el que más nuevo
@@ -41,7 +42,8 @@ use App\Modules\Imports\Sii\SiiStep;
  * alumno está inscrito si tiene un renglón de la selección en ese periodo; su retícula es la de `alumnos_todos`, y un
  * plan con varias retículas del SII (el curado ya no junta, pero lo admite) es vivo si cualquiera tiene un inscrito.
  * Con un plan por retícula, el de distancia o mixta de una carrera queda vivo si tiene inscritos, y no es el de nuevo
- * ingreso mientras la presencial reciba más (R-V2-6, confirmado el 19 de noviembre de 2026). La selección se lee una sola vez y
+ * ingreso mientras la presencial reciba más (R-V2-6, confirmado el 19 de noviembre de 2026; si un plan sin retícula
+ * presencial resulta el de nuevo ingreso, queda así y se avisa por carrera). La selección se lee una sola vez y
  * solo guarda los números de control de los dos periodos regulares más recientes vistos hasta ahí. Sin
  * `seleccion_materias` (es opcional) o sin un periodo regular válido, ningún plan es histórico y se avisa una vez; si
  * no, un aviso dice qué periodo o periodos tomó y con cuántos alumnos.
@@ -156,11 +158,7 @@ final class CareersStep implements SiiStep
             throw new SiiCuratedMismatch('planes', $this->capped($missing), $this->capped($extra));
         }
 
-        $withoutGroup = array_values(array_filter($planKeys, fn (string $key): bool => trim($plans[$key]['grupo'] ?? '') === ''));
-
-        if ($withoutGroup !== []) {
-            throw new SiiCuratedMismatch('planes (filas sin grupo: pon la clave oficial del plan que agrupa sus materias)', $this->capped($withoutGroup), []);
-        }
+        $this->checkGroups($plans);
 
         $included = [];
         foreach ($plans as $row) {
@@ -174,6 +172,69 @@ final class CareersStep implements SiiStep
         if ($withoutCareer !== []) {
             throw new SiiCuratedMismatch('carreras', $this->capped($withoutCareer), []);
         }
+    }
+
+    /**
+     * R-V2-1: cada fila trae su grupo, una retícula incluida no comparte su plan con otra, un plan tiene un solo grupo
+     * y cada grupo tiene la fila que conserva su clave como plan (la oficial; puede no ser presencial).
+     *
+     * @param  array<string, array<string, string>>  $plans
+     *
+     * @throws SiiCuratedMismatch
+     */
+    private function checkGroups(array $plans): void
+    {
+        $withoutGroup = array_map('strval', array_keys(array_filter($plans, fn (array $row): bool => trim($row['grupo'] ?? '') === '')));
+
+        if ($withoutGroup !== []) {
+            throw SiiCuratedMismatch::invalid('planes', 'filas sin grupo (pon la clave oficial del plan que agrupa sus materias)', $this->capped($withoutGroup));
+        }
+
+        $included = [];
+        $groupsByPlan = [];
+        $grids = [];
+        foreach ($plans as $key => $row) {
+            $plan = trim($row['plan']);
+            $group = trim($row['grupo']);
+            $groupsByPlan[$plan][$group] = true;
+            $grids[$group][(string) $key] = true;
+
+            if ($this->included($row)) {
+                $included[$plan][(string) $key] = true;
+            }
+        }
+
+        $shared = array_filter($included, fn (array $keys): bool => count($keys) > 1);
+
+        if ($shared !== []) {
+            throw SiiCuratedMismatch::invalid('planes', 'planes de más de una retícula incluida (una retícula del SII es un plan de Nexus, R-V2-1)', $this->listed($shared));
+        }
+
+        $mixed = array_filter($groupsByPlan, fn (array $groups): bool => count($groups) > 1);
+
+        if ($mixed !== []) {
+            throw SiiCuratedMismatch::invalid('planes', 'planes con más de un grupo', $this->listed($mixed));
+        }
+
+        $orphans = array_filter($grids, fn (array $keys, string|int $group): bool => ! isset($groupsByPlan[$group][$group]), ARRAY_FILTER_USE_BOTH);
+
+        if ($orphans !== []) {
+            throw SiiCuratedMismatch::invalid('planes', 'grupos sin la fila que conserva su clave como plan', $this->listed($orphans));
+        }
+    }
+
+    /**
+     * Cada clave con lo que trae entre paréntesis, como «ISIC-2010-224 (IS2/26, ISC/44)», en orden y con tope.
+     *
+     * @param  array<string, array<string, true>>  $byCode
+     * @return list<string>
+     */
+    private function listed(array $byCode): array
+    {
+        return $this->capped(array_map(
+            fn (string|int $code): string => "{$code} (".implode(', ', $this->capped(array_map('strval', array_keys($byCode[$code])))).')',
+            array_keys($byCode),
+        ));
     }
 
     /**
@@ -405,6 +466,7 @@ final class CareersStep implements SiiStep
         foreach ($planFor as $key => $info) {
             $plans[$info['plan']]['career'] = $info['career'];
             $plans[$info['plan']]['keys'][] = (string) $key;
+            $plans[$info['plan']]['modalities'][$info['modality']] = true;
         }
         ksort($plans);
 
@@ -428,6 +490,11 @@ final class CareersStep implements SiiStep
                 $incidents[] = ['level' => 'warning', 'ref' => (string) $career, 'message' => "Carrera {$career}: empate de nuevo ingreso en el periodo {$period} entre ".implode(', ', $winners).'; no hay plan de nuevo ingreso.'];
             } else {
                 $intake[$winners[0]] = true;
+                $modalities = array_map('strval', array_keys($plans[$winners[0]]['modalities']));
+
+                if (! in_array('presencial', $modalities, true)) {
+                    $incidents[] = ['level' => 'warning', 'ref' => (string) $career, 'message' => "Carrera {$career}: el plan con más nuevo ingreso en el periodo {$period} es {$winners[0]}, de modalidad ".implode(', ', $modalities).', y queda como el de nuevo ingreso; R-V2-6 pide que el actual sea el presencial: revisar el curado o el nuevo ingreso.'];
+                }
             }
         }
 
