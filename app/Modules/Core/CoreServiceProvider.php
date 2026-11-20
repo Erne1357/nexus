@@ -211,6 +211,8 @@ final class CoreServiceProvider extends ModuleServiceProvider
     public function navigation(): array
     {
         return [
+            // El Inicio de antes (tarea 1.24.1): para todos, primero en Mi espacio.
+            new NavigationItem('Resumen', 'core.summary', 'o-home', NavigationArea::MiEspacio),
             new NavigationItem('Campus', 'core.campuses', 'o-building-office-2', NavigationArea::Administracion, group: NavigationGroup::Institucion,
                 ability: 'viewAny', arguments: [Campus::class]),
             new NavigationItem('Modalidades', 'core.modalities', 'o-squares-2x2', NavigationArea::Administracion, group: NavigationGroup::Institucion,
