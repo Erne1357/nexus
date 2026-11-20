@@ -63,6 +63,14 @@ final class KardexStep implements SiiStep
     private const int APPROVED_RANK = 128;
 
     /**
+     * K4 mixta, de la corrida en curso: el estatus de los egresados y titulados (por número de control) y las líneas A con 0 de examen
+     * cuya materia del SII el alumno nunca volvió a cursar («control|materia»).
+     *
+     * @var array{graduates: array<string, string>, single: array<string, true>}
+     */
+    private array $mixed = ['graduates' => [], 'single' => []];
+
+    /**
      * @param  (Closure(string): int)|null  $hash  la llave de 64 bits de un renglón; solo las pruebas la cambian
      */
     public function __construct(private readonly ?Closure $hash = null) {}
@@ -88,7 +96,8 @@ final class KardexStep implements SiiStep
         }
 
         $students = $this->students();
-        $tally = ['lines' => [], 'students' => 0, 'subjects' => [], 'types' => [], 'repeated' => 0, 'failed' => []];
+        $this->mixed = $this->mixedContext($export);
+        $tally = ['lines' => [], 'students' => 0, 'subjects' => [], 'types' => [], 'repeated' => 0, 'failed' => [], 'retried' => 0, 'abandoned' => 0, 'exempt' => 0];
         $best = $this->rank($export, $subjects, $students, $tally);
         [$current, $selectionIncidents] = $this->current($export, $subjects, $students, $best);
 
@@ -107,7 +116,7 @@ final class KardexStep implements SiiStep
      * Primera pasada por la historia: por llave, el valor de la línea que gana.
      *
      * @param  array<string|int, string>  $students  plan de Nexus por número de control
-     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>}  $tally
+     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>, retried: int, abandoned: int, exempt: int}  $tally
      * @return array<int, int>
      */
     private function rank(SiiExport $export, KardexSubjects $subjects, array $students, array &$tally): array
@@ -138,7 +147,7 @@ final class KardexStep implements SiiStep
      * lo que no pasa o no se entiende (solo en la primera pasada).
      *
      * @param  array<string|int, string>  $students  plan de Nexus por número de control
-     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>}|null  $tally
+     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>, retried: int, abandoned: int, exempt: int}|null  $tally
      * @return Generator<int, array{key: int, fingerprint: int, rank: int, row: array<string, string|int>}>
      */
     private function history(SiiExport $export, KardexSubjects $subjects, array $students, ?array &$tally = null): Generator
@@ -146,7 +155,9 @@ final class KardexStep implements SiiStep
         $file = $export->fileName(SiiFile::HistoriaAlumno);
 
         foreach ($export->reader(SiiFile::HistoriaAlumno)->rows(self::HISTORY_COLUMNS) as $line => $row) {
-            $result = KardexCodes::result($row['estatus_materia'], $row['calificacion'], $row['tipo_evaluacion']);
+            $neverRetaken = isset($this->mixed['single']["{$row['no_de_control']}|{$row['materia']}"]);
+            $graduate = KardexCodes::graduateNeverRetaken($this->mixed['graduates'][$row['no_de_control']] ?? '', $neverRetaken);
+            $result = KardexCodes::result($row['estatus_materia'], $row['calificacion'], $row['tipo_evaluacion'], $graduate);
             $unreadable = match (true) {
                 $row['no_de_control'] === '' => 'Esta línea no trae número de control: no pasa al kárdex.',
                 $result === null => 'El estatus de la materia de esta línea no es A, R ni P: no pasa al kárdex.',
@@ -177,7 +188,10 @@ final class KardexStep implements SiiStep
             $attempt = KardexCodes::attempt($row['tipo_evaluacion']);
 
             if ($tally !== null) {
-                if ($result === KardexResult::Reprobada && strtoupper(trim($row['estatus_materia'])) === 'A') {
+                if ($graduate && KardexCodes::failedExam($row['calificacion'], $row['tipo_evaluacion'])) {
+                    $tally['exempt']++;
+                } elseif ($result === KardexResult::Reprobada && strtoupper(trim($row['estatus_materia'])) === 'A') {
+                    $tally[$neverRetaken ? 'abandoned' : 'retried']++;
                     $decade = $term === '' ? 'sin periodo' : substr($term, 0, 3).'0s';
                     $tally['failed'][$decade] = ($tally['failed'][$decade] ?? 0) + 1;
                 }
@@ -383,7 +397,7 @@ final class KardexStep implements SiiStep
     }
 
     /**
-     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>}  $tally
+     * @param  array{lines: list<array{level: 'warning', ref: string, message: string}>, students: int, subjects: array<string|int, int>, types: array<string, int>, repeated: int, failed: array<string, int>, retried: int, abandoned: int, exempt: int}  $tally
      * @return list<array{level: 'warning', ref: string, message: string}>
      */
     private function historyIncidents(array $tally): array
@@ -410,11 +424,12 @@ final class KardexStep implements SiiStep
                 : "{$count} renglones de la historia traen el tipo de evaluación «{$type}», que no se conoce: cuentan como oportunidad 1.");
         }
 
-        if ($tally['failed'] !== []) {
+        if ($tally['failed'] !== [] || $tally['exempt'] > 0) {
             ksort($tally['failed'], SORT_STRING);
-            $total = array_sum($tally['failed']);
+            $total = $tally['retried'] + $tally['abandoned'] + $tally['exempt'];
             $decades = implode(', ', array_map(fn (string $decade, int $count): string => "{$decade}: {$count}", array_keys($tally['failed']), $tally['failed']));
-            $incidents[] = $this->warning('kardex', "K4: {$total} línea(s) con estatus A y calificación 0 o vacía de examen pasaron a reprobadas ({$decades}).");
+            $incidents[] = $this->warning('kardex', "K4: {$total} línea(s) con estatus A y calificación 0 o vacía de examen: {$tally['retried']} reprobadas porque la materia se volvió a cursar, {$tally['abandoned']} reprobadas sin reintento (alumnos que no son egresados ni titulados), {$tally['exempt']} aprobadas sin calificación (egresados y titulados que nunca la volvieron a cursar)."
+                .($decades === '' ? '' : " Reprobadas por década: {$decades}."));
         }
 
         if ($tally['repeated'] > 0) {
@@ -422,6 +437,48 @@ final class KardexStep implements SiiStep
         }
 
         return $incidents;
+    }
+
+    /**
+     * El contexto de K4 mixta, de los archivos de la exportación (no del archivo `sii_archivo`, para que sirva también
+     * en un ensayo): el estatus de los egresados y titulados (la primera línea de cada alumno en `alumnos_todos`, como
+     * la verificación) y, de las líneas A con 0 de examen, cuáles son la única línea de su alumno y materia del SII en
+     * toda la historia. Son dos pasadas por la historia que solo guardan las llaves de esas líneas, no los dos millones.
+     *
+     * @return array{graduates: array<string, string>, single: array<string, true>}
+     */
+    private function mixedContext(SiiExport $export): array
+    {
+        $statuses = [];
+
+        if ($export->has(SiiFile::Alumnos)) {
+            foreach ($export->reader(SiiFile::Alumnos)->rows(['no_de_control', 'estatus_alumno']) as $row) {
+                $statuses[$row['no_de_control']] ??= strtoupper(trim($row['estatus_alumno']));
+            }
+        }
+
+        $graduates = array_filter($statuses, fn (string $status): bool => in_array($status, KardexCodes::GRADUATE_STATUSES, true));
+        $lines = [];
+
+        foreach ($export->reader(SiiFile::HistoriaAlumno)->rows(['no_de_control', 'materia', 'calificacion', 'tipo_evaluacion', 'estatus_materia']) as $row) {
+            if (strtoupper(trim($row['estatus_materia'])) === 'A' && KardexCodes::failedExam($row['calificacion'], $row['tipo_evaluacion'])) {
+                $lines["{$row['no_de_control']}|{$row['materia']}"] = 0;
+            }
+        }
+
+        if ($lines !== []) {
+            foreach ($export->reader(SiiFile::HistoriaAlumno)->rows(['no_de_control', 'materia']) as $row) {
+                $key = "{$row['no_de_control']}|{$row['materia']}";
+
+                if (isset($lines[$key])) {
+                    $lines[$key]++;
+                } elseif (array_key_exists($key, $lines)) {
+                    $lines[$key] = 1;
+                }
+            }
+        }
+
+        return ['graduates' => $graduates, 'single' => array_map(fn (): bool => true, array_filter($lines, fn (int $count): bool => $count === 1))];
     }
 
     /**
