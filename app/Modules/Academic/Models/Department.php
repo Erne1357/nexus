@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Departamento académico, global a la institución. `code` es la clave natural.
  */
-#[Fillable(['code', 'name', 'is_active'])]
+#[Fillable(['code', 'name', 'is_active', 'location', 'phone', 'email', 'website', 'map_key'])]
 #[UseFactory(DepartmentFactory::class)]
 class Department extends Model
 {

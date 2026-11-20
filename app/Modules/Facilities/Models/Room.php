@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * clave natural dentro del campus; `department_id` es el departamento dueño, si lo hay; `features` es
  * una lista de características.
  */
-#[Fillable(['campus_id', 'building_id', 'code', 'name', 'type', 'capacity', 'department_id', 'features', 'is_active'])]
+#[Fillable(['campus_id', 'building_id', 'code', 'name', 'map_key', 'type', 'capacity', 'department_id', 'features', 'is_active'])]
 #[UseFactory(RoomFactory::class)]
 class Room extends Model
 {

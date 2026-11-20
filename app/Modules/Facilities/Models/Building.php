@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 /**
  * Edificio de un campus. `code` es la clave natural dentro del campus.
  */
-#[Fillable(['campus_id', 'code', 'name', 'is_active'])]
+#[Fillable(['campus_id', 'code', 'name', 'map_key', 'is_active'])]
 #[UseFactory(BuildingFactory::class)]
 class Building extends Model
 {
