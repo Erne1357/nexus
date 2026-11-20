@@ -111,6 +111,10 @@ beforeEach(function () {
         SiiFixtures::line(SiiFile::SeleccionMaterias, ['periodo' => "'20263'", 'no_de_control' => "'S1'", 'materia' => "'CD1'", 'repeticion' => "'S'", 'status_seleccion' => "'I'", 'calificacion' => '']),
     ]);
 
+    SiiFixtures::write($this->dir.'/titulares.csv', SiiFile::Titulares, [
+        SiiFixtures::line(SiiFile::Titulares, ['unidad' => "'NO-EXISTE'", 'nombre' => "'Nadie'", 'desde' => "'2026-03-04'"]),
+    ]);
+
     app()->when(RunSiiMigration::class)->needs('$curatedDir')->give($this->curated);
 });
 
@@ -119,9 +123,9 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('corre los catorce pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
+it('corre los quince pasos de producción sin errores ni diferencias y repetirla no da altas ni cambios', function () {
     expect(app()->bound('sii.steps'))->toBeFalse()
-        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(14);
+        ->and(ImportsServiceProvider::SII_STEPS)->toHaveCount(15);
 
     $this->artisan('imports:migrate-sii', ['dir' => $this->dir, '--user' => 'migrador'])->assertSuccessful()
         ->doesntExpectOutputToContain('con diferencias');
@@ -131,7 +135,7 @@ it('corre los catorce pasos de producción sin errores ni diferencias y repetirl
     expect(DB::table('sii_verificacion.materias')->orderBy('_linea')->pluck('diagnostico')->all())->toBe(['igual', 'pendiente del plan: cuenta'])
         ->and(DB::table('sii_verificacion.alumnos')->count())->toBe(2);
 
-    expect(DB::table('sii_archivo._cargas')->pluck('archivo')->sort()->values()->all())->toBe(collect(SiiFile::cases())->map->value->sort()->values()->all());
+    expect(DB::table('sii_archivo._cargas')->pluck('archivo')->sort()->values()->all())->toBe(collect(SiiFile::cases())->reject(fn (SiiFile $file): bool => $file === SiiFile::Titulares)->map->value->sort()->values()->all());
 
     expect($first->pluck('template')->unique()->sort()->values()->all())->toBe([
         'careers', 'departments', 'kardex', 'org_units', 'pending_placements', 'pending_prerequisites', 'positions', 'prerequisites', 'rooms', 'students', 'study_plans', 'subject_aliases', 'subjects', 'teacher_history', 'teachers',

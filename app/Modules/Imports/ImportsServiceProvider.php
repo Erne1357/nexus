@@ -13,6 +13,7 @@ use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Sii\SiiStep;
+use App\Modules\Imports\Sii\Steps\AppointmentsStep;
 use App\Modules\Imports\Sii\Steps\ArchiveStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\KardexStep;
@@ -97,6 +98,7 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         StudentsStep::class,
         KardexStep::class,
         StudentAccountsStep::class,
+        AppointmentsStep::class,
         VerificationStep::class,
     ];
 
