@@ -37,7 +37,7 @@
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="offer-empty">No hay un periodo activo.</div>
     @elseif ($departments === [])
         <div class="rounded-box border border-base-300 bg-base-100 px-5 py-8 text-center text-neutral" data-testid="offer-empty">
-            No estás adscrito a ningún departamento. Cuando te adscriban a uno, aquí verás su oferta.
+            No estás asignado a ningún departamento. Cuando te asignen a uno, aquí verás su oferta.
         </div>
     @else
         @if (count($departments) > 1)

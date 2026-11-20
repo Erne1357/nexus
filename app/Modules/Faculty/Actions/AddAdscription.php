@@ -18,14 +18,14 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  * que ya existe en el departamento de quien lo da de alta (S9, supuesto por confirmar), sin tocar sus datos. Quién
  * puede lo decide TeacherPolicy (`create` con el departamento) antes de llamarla.
  *
- * Una adscripción por docente y departamento, también contra una quitada: si se había quitado, la restaura
- * (modelo-de-datos.md, Faculty). Ya adscrito ahí es un error en `adscription`. Hay a lo más una principal sin
+ * Una asignación por docente y departamento, también contra una quitada: si se había quitado, la restaura
+ * (modelo-de-datos.md, Faculty). Ya asignado ahí es un error en `adscription`. Hay a lo más una principal sin
  * borrar: pedir una segunda es un error (cambiarla es a mano), y si el docente no tiene una principal viva, la nueva
  * o la restaurada lo es aunque no se pida (S9, supuesto por confirmar).
  *
- * No toca el acceso del docente: su usuario, su rol y su alcance de `docente` no dependen de sus adscripciones (los
- * sincroniza SyncTeacherAccess). En una transacción bloquea al docente (dos cambios a sus adscripciones no se pisan
- * la principal), lee el departamento para compartir, escribe y deja bitácora sobre la adscripción (alta o
+ * No toca el acceso del docente: su usuario, su rol y su alcance de `docente` no dependen de sus asignaciones (los
+ * sincroniza SyncTeacherAccess). En una transacción bloquea al docente (dos cambios a sus asignaciones no se pisan
+ * la principal), lee el departamento para compartir, escribe y deja bitácora sobre la asignación (alta o
  * restauración). Después del commit avisa con AdscriptionChanged.
  */
 final class AddAdscription
@@ -34,7 +34,7 @@ final class AddAdscription
 
     /**
      * @param  bool  $primary  pedirla como principal (el alta de CreateTeacher); con una principal viva es un error.
-     *                         Si el docente no tiene principal viva, la adscripción nueva o restaurada queda como
+     *                         Si el docente no tiene principal viva, la asignación nueva o restaurada queda como
      *                         principal aunque `$primary` sea false.
      *
      * @throws ValidationException
@@ -44,7 +44,7 @@ final class AddAdscription
         return DB::transaction(function () use ($teacher, $department, $primary): TeacherDepartment {
             $locked = Teacher::query()->lockForUpdate()->findOrFail($teacher->getKey());
             $department = $this->rules->lockDepartment($department);
-            $alreadyThere = ValidationException::withMessages(['adscription' => "{$locked->name} ya está adscrito a {$department->code}."]);
+            $alreadyThere = ValidationException::withMessages(['adscription' => "{$locked->name} ya está asignado a {$department->code}."]);
 
             $adscription = TeacherDepartment::withTrashed()
                 ->where('teacher_id', $locked->getKey())
@@ -58,7 +58,7 @@ final class AddAdscription
             $hasPrimary = TeacherDepartment::query()->where('teacher_id', $locked->getKey())->where('is_primary', true)->exists();
 
             if ($primary && $hasPrimary) {
-                throw ValidationException::withMessages(['adscription' => "{$locked->name} ya tiene una adscripción principal."]);
+                throw ValidationException::withMessages(['adscription' => "{$locked->name} ya tiene una asignación principal."]);
             }
 
             $becomesPrimary = ! $hasPrimary;
@@ -75,7 +75,7 @@ final class AddAdscription
                     throw $alreadyThere;
                 }
 
-                $this->record($adscription, ActivityEvent::Created, "Adscribió al docente {$locked->rfc} a {$department->code}{$mark}", [
+                $this->record($adscription, ActivityEvent::Created, "Asignó al docente {$locked->rfc} a {$department->code}{$mark}", [
                     'attributes' => $adscription->only(['department_id', 'is_primary']),
                 ]);
             } else {
@@ -83,7 +83,7 @@ final class AddAdscription
                 $adscription->is_primary = $becomesPrimary;
                 $adscription->restore();
 
-                $this->record($adscription, ActivityEvent::Restored, "Volvió a adscribir al docente {$locked->rfc} a {$department->code}{$mark}", [
+                $this->record($adscription, ActivityEvent::Restored, "Volvió a asignar al docente {$locked->rfc} a {$department->code}{$mark}", [
                     'attributes' => $adscription->only(['department_id', 'is_primary']),
                     'old' => $old,
                 ]);

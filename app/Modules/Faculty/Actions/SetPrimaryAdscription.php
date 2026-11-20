@@ -10,12 +10,12 @@ use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Enums\ActivityEvent;
 
 /**
- * Hace principal a una adscripción de un docente: la anterior deja de serlo, así queda una sola (índice único
+ * Hace principal a una asignación de un docente: la anterior deja de serlo, así queda una sola (índice único
  * parcial). Quién puede lo decide TeacherPolicy (`update` sobre el docente) antes de llamarla.
  *
- * En una transacción bloquea al docente y sus adscripciones; si ya es la principal no escribe, no registra ni avisa.
- * Deja bitácora de las dos adscripciones con el valor anterior, llama a SyncTeacherAccess (idempotente: el
- * acceso no depende de las adscripciones) y, después del commit, avisa con AdscriptionChanged. Una adscripción ya quitada es un error en
+ * En una transacción bloquea al docente y sus asignaciones; si ya es la principal no escribe, no registra ni avisa.
+ * Deja bitácora de las dos asignaciones con el valor anterior, llama a SyncTeacherAccess (idempotente: el
+ * acceso no depende de las asignaciones) y, después del commit, avisa con AdscriptionChanged. Una asignación ya quitada es un error en
  * `adscription`.
  */
 final class SetPrimaryAdscription
@@ -31,7 +31,7 @@ final class SetPrimaryAdscription
             $teacher = Teacher::query()->lockForUpdate()->findOrFail($adscription->teacher_id);
             $adscriptions = TeacherDepartment::query()->lockForUpdate()->where('teacher_id', $teacher->getKey())->get();
             $new = $adscriptions->firstWhere('id', $adscription->getKey())
-                ?? throw ValidationException::withMessages(['adscription' => 'Esa adscripción ya se quitó.']);
+                ?? throw ValidationException::withMessages(['adscription' => 'Esa asignación ya se quitó.']);
 
             if ($new->is_primary) {
                 return;
@@ -60,6 +60,6 @@ final class SetPrimaryAdscription
             ->event(ActivityEvent::Updated)
             ->withChanges(['attributes' => ['is_primary' => $primary], 'old' => ['is_primary' => ! $primary]])
             ->withProperties(['teacher_id' => $teacher->getKey()])
-            ->log(($primary ? 'Hizo principal' : 'Dejó de ser principal')." una adscripción del docente {$teacher->rfc}");
+            ->log(($primary ? 'Hizo principal' : 'Dejó de ser principal')." una asignación del docente {$teacher->rfc}");
     }
 }

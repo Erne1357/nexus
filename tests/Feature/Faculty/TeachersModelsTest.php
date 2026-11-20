@@ -9,7 +9,7 @@ use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Models\TeacherPosition;
 use Illuminate\Support\Carbon;
 
-it('un docente tiene usuario opcional, adscripciones y plazas', function () {
+it('un docente tiene usuario opcional, asignaciones y plazas', function () {
     $user = User::factory()->create();
     $teacher = Teacher::factory()->create(['user_id' => $user->id, 'degree' => TeacherDegree::Maestria]);
     TeacherPosition::factory()->for($teacher)->medioTiempo()->create();
@@ -20,7 +20,7 @@ it('un docente tiene usuario opcional, adscripciones y plazas', function () {
         ->and(Teacher::factory()->create()->user)->toBeNull();
 });
 
-it('adscribedTo crea la adscripción y primaryAdscription devuelve la principal', function () {
+it('adscribedTo crea la asignación y primaryAdscription devuelve la principal', function () {
     $department = Department::factory()->create();
     $teacher = Teacher::factory()->adscribedTo($department)->create();
     TeacherDepartment::factory()->for($teacher)->create(['is_primary' => false]);

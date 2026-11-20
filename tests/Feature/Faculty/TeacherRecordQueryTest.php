@@ -17,7 +17,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
 /*
-| La ficha de un docente (TeacherRecordQuery): adscripciones con la principal primero, plazas con su estado, las
+| La ficha de un docente (TeacherRecordQuery): asignaciones con la principal primero, plazas con su estado, las
 | horas base del periodo activo (S1 y S2, supuestos por confirmar: plazas vigentes el primer día, sin tope en la
 | suma) y su usuario. Solo lectura.
 */
@@ -31,7 +31,7 @@ beforeEach(function () {
     TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false]);
 });
 
-it('trae las adscripciones, sin campus, con la principal primero y su departamento', function () {
+it('trae las asignaciones, sin campus, con la principal primero y su departamento', function () {
     $record = app(TeacherRecordQuery::class)->for($this->ana, $this->term);
 
     expect($record->adscriptions->pluck('is_primary')->all())->toBe([true, false])
@@ -69,7 +69,7 @@ it('marca cada plaza como vigente, por empezar o vencida, y si cuenta en el peri
         ->and($record->positions->pluck('id')->all())->toBe([$current->id, $future->id, $expired->id]);
 });
 
-it('deja fuera las plazas y adscripciones quitadas', function () {
+it('deja fuera las plazas y asignaciones quitadas', function () {
     TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create()->delete();
     $this->ana->adscriptions()->where('is_primary', false)->sole()->delete();
 
@@ -87,7 +87,7 @@ it('trae su usuario, o null si no tiene', function () {
         ->and(app(TeacherRecordQuery::class)->for($without, $this->term)->user)->toBeNull();
 });
 
-it('busca una adscripción o una plaza del docente por el id del navegador y no una de otro', function () {
+it('busca una asignación o una plaza del docente por el id del navegador y no una de otro', function () {
     $query = app(TeacherRecordQuery::class);
     $position = TeacherPosition::factory()->for($this->ana)->create();
     $other = Teacher::factory()->adscribedTo($this->sc)->create();

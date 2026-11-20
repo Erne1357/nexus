@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| La migración que quita el campus de las adscripciones: la adscripción es solo a un departamento (confirmado el 30
+| La migración que quita el campus de las asignaciones: la asignación es solo a un departamento (confirmado el 30
 | de octubre de 2026). Antes de quitar `campus_id` junta las de un docente en el mismo departamento y distinto campus:
 | se queda una fila (la sin borrar, luego la principal, luego la más antigua) y las demás se eliminan con su entrada
 | en la bitácora, porque la clave nueva, docente y departamento, cuenta también las borradas. La que se queda toma la
@@ -33,7 +33,7 @@ beforeEach(function () {
 });
 
 /**
- * Inserta una adscripción con la forma vieja (con campus) y devuelve su id.
+ * Inserta una asignación con la forma vieja (con campus) y devuelve su id.
  */
 function oldAdscription(Teacher $teacher, Department $department, Campus $campus, bool $primary, string $createdAt, ?string $deletedAt = null): string
 {
@@ -54,7 +54,7 @@ function oldAdscription(Teacher $teacher, Department $department, Campus $campus
 }
 
 /**
- * Los ids de las adscripciones que quedan, borradas o no.
+ * Los ids de las asignaciones que quedan, borradas o no.
  *
  * @return list<string>
  */
@@ -151,7 +151,7 @@ it('deja en la bitácora cada fila que elimina, con lo que tenía y la que se qu
         ->and($entry->subject_id)->toBe($gone)
         ->and($entry->causer_id)->toBeNull()
         ->and($entry->event)->toBe('deleted')
-        ->and($entry->description)->toBe('Juntó la adscripción del docente 1234567 a SIS en C1 con la que se queda, porque la adscripción ya no lleva campus')
+        ->and($entry->description)->toBe('Juntó la asignación del docente 1234567 a SIS en C1 con la que se queda, porque la asignación ya no lleva campus')
         ->and($entry->attribute_changes->all())->toBe(['old' => [
             'department_id' => $this->sis->id,
             'campus_id' => $this->c1->id,

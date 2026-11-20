@@ -109,7 +109,7 @@
                 <h3 id="unit-people-title" class="{{ $label }} mb-1">Personas</h3>
                 <p data-testid="unit-people">
                     <span class="font-mono text-xl font-semibold tabular-nums">{{ $detail->people }}</span>
-                    <span class="text-neutral">con adscripción o puesto vigente en la unidad y en las que cuelgan de ella</span>
+                    <span class="text-neutral">con asignación o puesto vigente en la unidad y en las que cuelgan de ella</span>
                 </p>
             </section>
 

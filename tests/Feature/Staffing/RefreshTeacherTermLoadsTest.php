@@ -128,7 +128,7 @@ describe('RefreshTeacherTermLoads', function () {
         expect(loadOf($teacher, $this->term))->assigned_hours->toBe(0);
     });
 
-    it('solo calcula a los docentes activos con una adscripción', function () {
+    it('solo calcula a los docentes activos con una asignación', function () {
         $active = loadTeacher($this->department);
         $inactive = Teacher::factory()->inactive()->adscribedTo($this->department)->create();
         $orphan = Teacher::factory()->create();
@@ -207,7 +207,7 @@ describe('disparadores', function () {
         Queue::assertNotPushed(RefreshTeacherLoads::class);
     });
 
-    it('un cambio de plaza, datos o adscripción encola cada periodo con carga en curso', function () {
+    it('un cambio de plaza, datos o asignación encola cada periodo con carga en curso', function () {
         $closed = AcademicLoad::factory()->inStatus(LoadStatus::Closed)->create(['department_id' => $this->department->id]);
         $position = TeacherPosition::factory()->for($this->teacher)->create();
 

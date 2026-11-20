@@ -76,17 +76,17 @@ it('la disponibilidad y las horas fuera del ITCJ del jefe también la inician', 
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
 });
 
-it('los cambios de ficha, adscripción y plaza del jefe la inician', function (string $change) {
+it('los cambios de ficha, asignación y plaza del jefe la inician', function (string $change) {
     $this->actingAs($this->jefe);
 
     match ($change) {
         'ficha' => TeacherUpdated::dispatch($this->teacher, ['name'], $this->jefe),
-        'adscripción' => AdscriptionChanged::dispatch($this->teacher->adscriptions()->first(), $this->jefe),
+        'asignación' => AdscriptionChanged::dispatch($this->teacher->adscriptions()->first(), $this->jefe),
         'plaza' => PositionChanged::dispatch(TeacherPosition::factory()->for($this->teacher)->tiempoCompleto()->create(), $this->jefe),
     };
 
     expect(teachersReviewStatus($this->sis))->toBe(ReviewStatus::InReview);
-})->with(['ficha', 'adscripción', 'plaza']);
+})->with(['ficha', 'asignación', 'plaza']);
 
 it('el admin, Subdirección y el jefe de proyecto docente no la mueven', function (string $role) {
     captureQualification(match ($role) {

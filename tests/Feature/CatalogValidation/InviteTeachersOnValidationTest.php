@@ -26,7 +26,7 @@ use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
 
 /*
-| AC-09: cuando el jefe valida la revisión de docentes de su departamento, cada docente activo adscrito a él que no
+| AC-09: cuando el jefe valida la revisión de docentes de su departamento, cada docente activo asignado a él que no
 | tiene acceso ni una invitación vigente recibe la suya en su correo institucional (decisión 3, confirmada el 11 de
 | noviembre de 2026). Supuestos por confirmar: validar no se bloquea por los que no tienen correo institucional (el
 | aviso dice cuántos); un docente en dos departamentos se invita con la primera validación; y si el jefe captura el
@@ -193,7 +193,7 @@ it('AC-09: el docente que queda en condiciones después de validar se invita a n
     expect(invitedEmails())->toBe(['ana@cdjuarez.tecnm.mx'])
         ->and($log->causer_id)->toBe($admin->id);
 })->with([
-    'adscrito al departamento' => [fn (Teacher $teacher, $test) => app(AddAdscription::class)->handle($teacher, $test->sc)],
+    'asignado al departamento' => [fn (Teacher $teacher, $test) => app(AddAdscription::class)->handle($teacher, $test->sc)],
     'reactivado' => [function (Teacher $teacher) {
         app(SetTeacherActive::class)->handle($teacher, false);
         TeacherDepartment::factory()->for($teacher)->for(test()->sc)->create(['is_primary' => false]);

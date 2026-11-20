@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /*
-| Integridad de docentes, adscripciones y plazas (docs/dominio/modelo-de-datos.md, "Faculty"). Las claves
-| naturales cuentan también los borrados; la adscripción es solo a un departamento, sin campus (confirmado el 30 de
-| octubre de 2026); una sola adscripción principal sin borrar por docente; cada tipo de plaza acepta solo sus horas
+| Integridad de docentes, asignaciones y plazas (docs/dominio/modelo-de-datos.md, "Faculty"). Las claves
+| naturales cuentan también los borrados; la asignación es solo a un departamento, sin campus (confirmado el 30 de
+| octubre de 2026); una sola asignación principal sin borrar por docente; cada tipo de plaza acepta solo sus horas
 | base (S3, supuesto por confirmar).
 */
 
@@ -43,7 +43,7 @@ describe('docentes', function () {
     });
 });
 
-describe('adscripciones', function () {
+describe('asignaciones', function () {
     it('no tiene campus: el docente no es de un campus', function () {
         expect(Schema::hasColumn('teacher_departments', 'campus_id'))->toBeFalse();
     });

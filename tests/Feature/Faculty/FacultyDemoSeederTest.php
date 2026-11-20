@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 
 /*
-| Docentes demo y masivos (tarea 7b): se siembran sobre el catálogo demo con sus adscripciones, plazas,
+| Docentes demo y masivos (tarea 7b): se siembran sobre el catálogo demo con sus asignaciones, plazas,
 | disponibilidad, horas fuera del ITCJ, historial, perfil, evaluaciones y usuarios. Los casos están en
 | docs/arquitectura/testing.md ("Datos de prueba").
 */
@@ -34,7 +34,7 @@ function seedDemoTeachers(array $perCampus = ['C2' => 40], int $seed = 2027): vo
     $seeder->callWith(FacultyDemoSeeder::class, ['teachersPerCampus' => $perCampus, 'seed' => $seed]);
 }
 
-it('siembra los docentes pedidos de cada campus, cada uno con su adscripción principal', function () {
+it('siembra los docentes pedidos de cada campus, cada uno con su asignación principal', function () {
     seedDemoTeachers(['C1' => 22, 'C2' => 25]);
 
     $perCampus = DB::table('teachers')->selectRaw('substr(rfc, 1, 1) as prefix, count(*) as total')->groupBy('prefix')->pluck('total', 'prefix')->all();
@@ -57,7 +57,7 @@ it('hay docentes de los cinco tipos de plaza, con varias plazas, vencidas, futur
         ->and(DB::table('teachers')->whereNotIn('id', DB::table('teacher_positions')->select('teacher_id'))->exists())->toBeTrue();
 });
 
-it('cada docente tiene una sola adscripción principal; hay con dos o tres departamentos, sin repetir ninguno', function () {
+it('cada docente tiene una sola asignación principal; hay con dos o tres departamentos, sin repetir ninguno', function () {
     seedDemoTeachers();
 
     $primaries = DB::table('teacher_departments')->whereNull('deleted_at')->where('is_primary', true)->selectRaw('teacher_id, count(*) as total')->groupBy('teacher_id')->pluck('total');
@@ -263,7 +263,7 @@ it('ningún docente tiene bloques de disponibilidad traslapados en un día', fun
     expect($overlaps)->toBe(0);
 });
 
-it('en modo proceso siembra 40 % más docentes y reparte la adscripción principal por las horas de cada departamento en los planes', function () {
+it('en modo proceso siembra 40 % más docentes y reparte la asignación principal por las horas de cada departamento en los planes', function () {
     $seeder = (new DatabaseSeeder)->setContainer(app());
     $seeder->call([CampusSeeder::class, AdminUserSeeder::class, DemoTermSeeder::class]);
     $seeder->callWith(AcademicDemoSeeder::class, ['campuses' => ['C2']]);

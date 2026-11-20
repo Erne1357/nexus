@@ -21,11 +21,11 @@ use Spatie\Activitylog\Models\Activity;
 
 /*
 | Docentes (`/faculty/teachers`, faculty::pages.teachers; spec 4.3 con la adenda del 30 de octubre de 2026). Los
-| docentes son de todo el Tec: la adscripción es solo de un departamento. Lo ven el admin y la Subdirección (a
+| docentes son de todo el Tec: la asignación es solo de un departamento. Lo ven el admin y la Subdirección (a
 | todos) y los jefes de departamento y de proyecto docente (a los de su departamento). Tabla con número, nombre,
-| adscripción principal y otras, horas base del periodo activo, acceso y estado; filtros de departamento, tipo de
+| asignación principal y otras, horas base del periodo activo, acceso y estado; filtros de departamento, tipo de
 | plaza y estado (por omisión, los activos), y los que no tienen correo institucional. Alta en un modal con el departamento de quien da de alta (el jefe, el suyo; el admin y la
-| Subdirección lo eligen); con un número que ya existe, el admin y la Subdirección pueden adscribirlo y a los jefes
+| Subdirección lo eligen); con un número que ya existe, el admin y la Subdirección pueden asignarlo y a los jefes
 | solo se les dice que está registrado (S9). En «Acciones»: «Quitar de <Departamento>»
 | por cada departamento que cubre (RemoveAdscription) y «Desactivar/Activar» (solo admin y Subdirección); nadie se
 | quita ni se da de baja a sí mismo. «Dar de alta usuarios» va en «Más acciones», es del admin y encola
@@ -39,7 +39,7 @@ beforeEach(function () {
     $this->cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $this->term = Term::factory()->current()->create(['name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-06-11']);
 
-    // Principal en II y otra adscripción a SC; dos plazas vigentes.
+    // Principal en II y otra asignación a SC; dos plazas vigentes.
     $this->ana = Teacher::factory()->adscribedTo($this->ii)->create(['rfc' => 'PRUE000001AB1', 'name' => 'Ana Pérez']);
     TeacherDepartment::factory()->for($this->ana)->for($this->sc)->create(['is_primary' => false, 'created_at' => now()->addSecond()]);
     TeacherPosition::factory()->for($this->ana)->tiempoCompleto()->create();
@@ -108,12 +108,12 @@ function teacherRowMenu(User $user, string $number, bool $inactiveToo = false): 
 }
 
 describe('admin', function () {
-    it('ve la tabla con número en Mono, nombre, adscripción principal y otras, horas base del periodo activo, acceso y estado', function () {
+    it('ve la tabla con número en Mono, nombre, asignación principal y otras, horas base del periodo activo, acceso y estado', function () {
         $response = $this->actingAs($this->admin)
             ->get(route('faculty.teachers'))
             ->assertOk()
             ->assertSee('Ene-Jun 2027')
-            ->assertSeeInOrder(['Número', 'Nombre', 'Adscripción', 'Horas base', 'Acceso', 'Estado']);
+            ->assertSeeInOrder(['Número', 'Nombre', 'Asignación', 'Horas base', 'Acceso', 'Estado']);
         $rows = teacherRowsFor($this->admin, inactiveToo: true);
 
         expect(array_map('strval', array_keys($rows)))->toBe(['PRUE000001AB1', 'PRUE000002AB1', 'PRUE000003AB1', 'PRUE000004AB1', 'PRUE000005AB1'])
@@ -198,14 +198,14 @@ describe('admin', function () {
             ->assertSee('II · Ingeniería Industrial (inactivo)');
     });
 
-    it('un número que ya existe ofrece «Adscribir a <depto>» y adscribe sin cambiar sus datos (S9)', function () {
+    it('un número que ya existe ofrece «Asignar a <depto>» y adscribe sin cambiar sus datos (S9)', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
             ->set('rfc', 'prue 000002 ab1')
             ->assertSee('Ya existe el docente')
-            ->assertSee('Adscribir a SC')
+            ->assertSee('Asignar a SC')
             ->call('adscribeExisting')
             ->assertHasNoErrors()
             ->assertSet('showModal', false);
@@ -213,10 +213,10 @@ describe('admin', function () {
         expect($this->beto->fresh()->name)->toBe('Beto Ruiz')
             ->and($this->beto->adscriptions()->pluck('department_id')->sort()->values()->all())->toBe(collect([$this->cb->id, $this->sc->id])->sort()->values()->all())
             ->and($this->beto->adscriptions()->where('department_id', $this->sc->id)->sole()->is_primary)->toBeFalse()
-            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente adscrito a SC')->description->toBe('PRUE000002AB1 · Beto Ruiz');
+            ->and(lastToastOf($page))->type->toBe('success')->title->toBe('Docente asignado a SC')->description->toBe('PRUE000002AB1 · Beto Ruiz');
     });
 
-    it('guardar con un número que ya existe no da de alta otro: ofrece adscribirlo', function () {
+    it('guardar con un número que ya existe no da de alta otro: ofrece asignarlo', function () {
         Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
@@ -225,13 +225,13 @@ describe('admin', function () {
             ->set('rfc', 'PRUE000002AB1')
             ->call('save')
             ->assertSet('showModal', true)
-            ->assertSee('Adscribir a SC');
+            ->assertSee('Asignar a SC');
 
         expect(Teacher::count())->toBe(5)
             ->and($this->beto->fresh()->name)->toBe('Beto Ruiz');
     });
 
-    it('si ya está adscrito ahí, lo dice y no escribe', function () {
+    it('si ya está asignado ahí, lo dice y no escribe', function () {
         Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
@@ -239,29 +239,29 @@ describe('admin', function () {
             ->set('rfc', 'PRUE000002AB1')
             ->call('adscribeExisting')
             ->assertHasErrors('adscription')
-            ->assertSee('Beto Ruiz ya está adscrito a CB.');
+            ->assertSee('Beto Ruiz ya está asignado a CB.');
 
         expect(TeacherDepartment::where('teacher_id', $this->beto->id)->count())->toBe(1);
     });
 
-    it('al número de un docente dado de baja no le ofrece adscribirlo: pide reactivarlo primero', function () {
+    it('al número de un docente dado de baja no le ofrece asignarlo: pide reactivarlo primero', function () {
         Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
             ->set('rfc', 'PRUE000003AB1')
             ->assertHasErrors('rfc')
-            ->assertSee('Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.')
-            ->assertDontSee('Adscribir a SC');
+            ->assertSee('Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de asignarlo.')
+            ->assertDontSee('Asignar a SC');
     });
 
-    it('si el docente se dio de baja o se borró mientras tanto, «Adscribir» lo dice en el número y no escribe', function (string $change) {
+    it('si el docente se dio de baja o se borró mientras tanto, «Asignar» lo dice en el número y no escribe', function (string $change) {
         $page = Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
             ->set('rfc', 'PRUE000002AB1')
-            ->assertSee('Adscribir a SC');
+            ->assertSee('Asignar a SC');
 
         $change === 'baja' ? $this->beto->update(['is_active' => false]) : $this->beto->delete();
 
@@ -269,7 +269,7 @@ describe('admin', function () {
             ->assertOk()
             ->assertHasErrors('rfc')
             ->assertSee($change === 'baja'
-                ? 'Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de adscribirlo.'
+                ? 'Ese RFC es de un docente dado de baja: reactívalo desde la lista antes de asignarlo.'
                 : 'Ese RFC pertenece a un docente borrado; pide a Subdirección que lo revise.');
 
         expect(TeacherDepartment::withTrashed()->where('teacher_id', $this->beto->id)->count())->toBe(1);
@@ -352,14 +352,14 @@ describe('admin', function () {
 
         expect($this->ana->adscriptions()->sole())->department_id->toBe($this->sc->id)->is_primary->toBeTrue()
             ->and($this->ana->fresh()->is_active)->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente quitado de Ingeniería Industrial')->description->toBe('PRUE000001AB1 · Ana Pérez; su adscripción principal pasa a SC');
+            ->and(lastToastOf($page))->title->toBe('Docente quitado de Ingeniería Industrial')->description->toBe('PRUE000001AB1 · Ana Pérez; su asignación principal pasa a SC');
     });
 
     it('el aviso de quitar la principal dice qué principal queda', function () {
         $menu = teacherRowMenu($this->admin, 'PRUE000001AB1');
         $item = collect($menu->querySelectorAll('[role="menuitem"]'))->first(fn ($item): bool => str_starts_with(textOf($item), 'Quitar de Ingeniería Industrial'));
 
-        expect($item->getAttribute('x-confirm'))->toContain('su adscripción principal pasa a Sistemas y Computación');
+        expect($item->getAttribute('x-confirm'))->toContain('su asignación principal pasa a Sistemas y Computación');
     });
 
     it('«Más acciones» junto a «Nuevo docente» lleva «Dar de alta usuarios»', function () {
@@ -412,7 +412,7 @@ describe('admin', function () {
         Livewire::actingAs($this->admin)->test('faculty::pages.teachers')->call('edit', 'no-es-uuid')->assertNotFound();
     });
 
-    it('carga 40 docentes con 3 adscripciones cada uno en pocas consultas', function () {
+    it('carga 40 docentes con 3 asignaciones cada uno en pocas consultas', function () {
         $departments = [$this->sc, $this->ii, $this->cb];
 
         Teacher::factory()->count(40)->create()->each(function (Teacher $teacher) use ($departments): void {
@@ -461,7 +461,7 @@ describe('Subdirección, una para todo el Tec', function () {
             ->assertHasNoErrors();
 
         expect($this->beto->adscriptions()->where('department_id', $this->sc->id)->exists())->toBeTrue()
-            ->and(lastToastOf($page))->title->toBe('Docente adscrito a SC');
+            ->and(lastToastOf($page))->title->toBe('Docente asignado a SC');
     });
 
     it('da de baja y ve «Dar de alta usuarios» deshabilitado con su motivo', function () {
@@ -477,7 +477,7 @@ describe('Subdirección, una para todo el Tec', function () {
 });
 
 describe('jefe de departamento de SC, de todo el Tec', function () {
-    it('solo ve a los docentes adscritos a SC, aunque su principal sea otra', function () {
+    it('solo ve a los docentes asignados a SC, aunque su principal sea otra', function () {
         expect(teacherNumbersOnPage($this->jefe))->toBe(['PRUE000001AB1', 'PRUE000004AB1']);
     });
 
@@ -518,7 +518,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->assertHasErrors('rfc')
             ->assertSee('Ese RFC ya está registrado. Pide a Subdirección que lo adscriba a tu departamento.')
             ->assertDontSee('Beto Ruiz')
-            ->assertDontSee('Adscribir a')
+            ->assertDontSee('Asignar a')
             ->call('save')
             ->assertHasErrors('rfc')
             ->assertDontSee('Beto Ruiz');
@@ -527,13 +527,13 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->and($this->beto->adscriptions()->count())->toBe(1);
     });
 
-    it('recibe 403 al adscribir a un docente que ya existe, aunque lo llame directo sobre una página que abrió el admin', function () {
+    it('recibe 403 al asignar a un docente que ya existe, aunque lo llame directo sobre una página que abrió el admin', function () {
         $page = Livewire::actingAs($this->admin)
             ->test('faculty::pages.teachers')
             ->call('create')
             ->set('department_id', $this->sc->id)
             ->set('rfc', 'PRUE000002AB1')
-            ->assertSee('Adscribir a SC');
+            ->assertSee('Asignar a SC');
 
         $this->actingAs($this->jefe);
         $page->call('adscribeExisting')->assertForbidden();
@@ -551,7 +551,7 @@ describe('jefe de departamento de SC, de todo el Tec', function () {
             ->and($deactivate->hasAttribute('wire:click'))->toBeFalse();
     });
 
-    it('CV8: quitar a un docente de su última adscripción lo da de baja con su cuenta, y sale de la lista', function () {
+    it('CV8: quitar a un docente de su última asignación lo da de baja con su cuenta, y sale de la lista', function () {
         $page = Livewire::actingAs($this->jefe)
             ->test('faculty::pages.teachers')
             ->call('removeAdscription', $this->dario->adscriptions()->sole()->id)
@@ -699,7 +699,7 @@ describe('otros roles e invitados', function () {
         'editar' => ['edit', false],
         'guardar un alta' => ['save', false],
         'guardar una edición' => ['save', true],
-        'adscribir uno que ya existe' => ['adscribeExisting', false],
+        'asignar uno que ya existe' => ['adscribeExisting', false],
         'activar o desactivar' => ['toggleActive', false],
         'quitar de un departamento' => ['removeAdscription', false],
         'dar de alta usuarios' => ['provisionUsers', false],
