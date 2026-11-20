@@ -8,6 +8,7 @@ use App\Modules\Imports\Sii\SiiMigration;
 use App\Modules\Imports\Sii\SiiStepOutOfOrder;
 use App\Modules\Imports\Sii\Steps\StaffStep;
 use Illuminate\Support\Facades\File;
+use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
@@ -129,3 +130,20 @@ it('se detiene si no corrió docentes antes', function () {
 
     iterator_to_array((new StaffStep)->batches($migration));
 })->throws(SiiStepOutOfOrder::class);
+
+it('una persona cuya alta falla no aborta el paso: cuenta como aviso sin RFC ni nombre y las demás siguen', function () {
+    SiiFixtures::writeStaff($this->dir, [($this->staffRow)('FALL800101AA1'), ($this->staffRow)('SIGU800101AA1')], [($this->staff2Row)('FALL800101AA1'), ($this->staff2Row)('SIGU800101AA1')]);
+    User::creating(function (User $user): void {
+        if ($user->username === 'FALL800101AA1') {
+            throw ValidationException::withMessages(['username' => 'falla']);
+        }
+    });
+
+    $reports = ($this->run)();
+
+    $messages = collect($reports[0]->incidents)->pluck('message')->implode(' ');
+    expect(User::where('username', 'SIGU800101AA1')->exists())->toBeTrue()
+        ->and(User::where('username', 'FALL800101AA1')->exists())->toBeFalse()
+        ->and($messages)->toContain('1 persona(s) no se pudieron poner al día')
+        ->and($messages)->not->toContain('FALL800101AA1');
+});

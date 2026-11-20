@@ -6,6 +6,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\SyncTeacherAccess;
 use App\Modules\Faculty\Enums\AccessSync;
 use App\Modules\Faculty\Models\Teacher;
+use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Activity;
 
 /*
@@ -78,4 +79,66 @@ it('el usuario creado para un RFC se liga después al docente con ese RFC, sin c
 
     expect(app(SyncTeacherAccess::class)->handle($teacher))->toBe(AccessSync::Linked)
         ->and($teacher->fresh()->user->username)->toBe('DOCE800101AA1');
+});
+
+/**
+ * Simula a otra sesión (la cola de Faculty) que da de alta al usuario justo antes del insert de CreateStaffUser.
+ */
+function otraSesionCreaAlUsuario(string $username, ?string $email = null): void
+{
+    $done = false;
+
+    DB::listen(function ($query) use (&$done, $username, $email): void {
+        if ($done || ! str_contains($query->sql, 'for update') || ! str_contains($query->sql, 'from "users"') || ! str_contains($query->sql, '"username" =')) {
+            return;
+        }
+
+        $done = true;
+        DB::table('users')->insert([
+            'username' => $username, 'name' => 'Creado por la cola', 'email' => $email,
+            'is_active' => true, 'must_change_password' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    });
+}
+
+it('si otra sesión crea al usuario entre la revisión y el alta, lo lee y le pone el tipo (carrera con la cola)', function () {
+    otraSesionCreaAlUsuario('CARR800101AA1');
+
+    $user = app(SyncStaffMember::class)->handle('CARR800101AA1', 'Ana Ruiz', null, StaffType::Docente);
+
+    expect(User::where('username', 'CARR800101AA1')->count())->toBe(1)
+        ->and($user->name)->toBe('Creado por la cola')
+        ->and($user->fresh()->staff_type)->toBe(StaffType::Docente);
+});
+
+it('si el alta choca por el correo, crea al usuario sin correo en vez de abortar', function () {
+    // El correo se libera para la revisión previa (freeEmail) y lo toma otra sesión después.
+    $email = 'choque@cdjuarez.tecnm.mx';
+    $other = null;
+    User::creating(function (User $user) use ($email, &$other): void {
+        if ($other === null && $user->username === 'CORR800101AA1') {
+            $other = true;
+            DB::table('users')->insert([
+                'username' => 'AJENO800101AA1', 'name' => 'Ajeno', 'email' => $email,
+                'is_active' => true, 'must_change_password' => true, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+    });
+
+    $user = app(SyncStaffMember::class)->handle('CORR800101AA1', 'Ana Ruiz', $email, StaffType::Administrativo);
+
+    expect($user->username)->toBe('CORR800101AA1')
+        ->and($user->email)->toBeNull()
+        ->and($user->fresh()->staff_type)->toBe(StaffType::Administrativo);
+});
+
+it('si otra sesión crea al usuario justo antes del alta, SyncTeacherAccess lo liga (carrera con la importación)', function () {
+    $teacher = Teacher::factory()->create(['rfc' => 'LIGA800101AA1', 'is_active' => true, 'user_id' => null]);
+    otraSesionCreaAlUsuario('LIGA800101AA1');
+
+    $result = app(SyncTeacherAccess::class)->handle($teacher);
+
+    expect($result)->toBe(AccessSync::Linked)
+        ->and($teacher->fresh()->user->username)->toBe('LIGA800101AA1')
+        ->and(User::where('username', 'LIGA800101AA1')->count())->toBe(1);
 });
