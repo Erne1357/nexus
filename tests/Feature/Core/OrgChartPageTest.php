@@ -391,18 +391,17 @@ it('sin persona elegida pide elegirla', function () {
         ->and(RoleAssignment::query()->where('role', Role::JefeDepartamento)->count())->toBe(0);
 });
 
-it('«Nombrar» queda deshabilitado con su motivo en una unidad sin puestos y en una inactiva', function () {
+it('R-V2-4: «Nombrar» queda habilitado en una oficina, que ya admite jefe con su título, y se deshabilita con su motivo en una inactiva', function () {
     $office = OrgUnit::factory()->create(['parent_id' => $this->planning->id, 'code' => 'BECAS', 'name' => 'Oficina de Becas', 'kind' => OrgUnitKind::Oficina]);
     $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $office->id);
     $dom = domOf($panel);
 
-    expect($dom->querySelector('[data-testid="unit-appoint"]')->hasAttribute('disabled'))->toBeTrue()
-        ->and(textOf($dom->querySelector('[data-testid="unit-appoint-blocker"]')))->toBe('Ningún puesto se nombra sobre esta unidad.')
-        ->and(textOf($dom->querySelector('[data-testid="unit-assignments-empty"]')))->toBe('Nadie tiene un puesto vigente aquí.');
+    // Ya no queda un tipo de unidad sin puesto (los tipos cubren Dirección, subdirecciones, divisiones, departamentos y
+    // oficinas), así que «Ningún puesto se nombra sobre esta unidad.» solo se alcanza por consulta directa.
+    expect($dom->querySelector('[data-testid="unit-appoint"]')->hasAttribute('disabled'))->toBeFalse()
+        ->and($dom->querySelector('[data-testid="unit-appoint-blocker"]'))->toBeNull();
 
-    $panel->call('openAppoint')->assertSet('showAppoint', false)->assertHasErrors(['unit' => 'Ningún puesto se nombra sobre esta unidad.']);
-
-    expect(domOf($panel)->querySelector('[data-testid="unit-error"]'))->not->toBeNull();
+    $panel->call('openAppoint')->assertSet('showAppoint', true)->assertViewHas('offered', [['id' => Role::JefeDepartamento->value, 'name' => 'Titular de la Oficina de Becas']]);
 
     $this->systems->update(['is_active' => false]);
     $panel->dispatch('org-unit-picked', id: $this->systems->id);

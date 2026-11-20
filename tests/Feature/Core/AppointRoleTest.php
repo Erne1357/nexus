@@ -139,8 +139,8 @@ it('valida las columnas que pide cada puesto', function (Role $role, array $scop
     'coordinador con unidad' => [Role::Coordinador, ['c2', 'systems', 'isc', 'pres'], 'unit', 'Este puesto no lleva unidad.'],
     'jefe con campus' => [Role::JefeDepartamento, ['c2', 'systems', null, null], 'campus', 'Este puesto no lleva campus.'],
     'jefe con modalidad' => [Role::JefeDepartamento, [null, 'systems', null, 'pres'], 'modality', 'Este puesto no lleva modalidad.'],
-    'jefe sin unidad' => [Role::JefeDepartamento, [null, null, null, null], 'unit', 'Elige el departamento.'],
-    'jefe sobre una subdirección' => [Role::JefeDepartamento, [null, 'planning', null, null], 'unit', 'Subdirección de Planeación no es un departamento académico ni Servicios Escolares.'],
+    'jefe sin unidad' => [Role::JefeDepartamento, [null, null, null, null], 'unit', 'Elige la unidad.'],
+    'jefe sobre una subdirección' => [Role::JefeDepartamento, [null, 'planning', null, null], 'unit', 'Subdirección de Planeación no es un departamento, una división ni una oficina.'],
     'jefe de proyecto docente sin unidad' => [Role::JefeProyectoDocente, ['c2', null, null, 'pres'], 'unit', 'Elige el departamento académico.'],
     'AZ-S17: jefe de proyecto docente sin modalidad' => [Role::JefeProyectoDocente, ['c2', 'systems', null, null], 'modality', 'Elige la modalidad.'],
     'subdirección sin unidad' => [Role::Subdireccion, [null, null, null, null], 'unit', 'Elige la subdirección.'],
@@ -195,13 +195,34 @@ it('D19: nombra jefe del Departamento de Servicios Escolares, que no es un depar
         ->and(app(RoleAssignmentRules::class)->titularRoleOf($services))->toBe(Role::JefeDepartamento);
 });
 
-it('D19: los demás departamentos que no son académicos siguen sin jefe en Nexus', function () {
-    $linkage = OrgUnit::factory()->create(['code' => 'VINCULACION', 'name' => 'Departamento de Gestión Tecnológica y Vinculación', 'kind' => OrgUnitKind::Departamento]);
-    $inactiveServices = OrgUnit::factory()->create(['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'is_active' => false]);
+it('R-V2-4: se nombra jefe de Recursos Humanos, de la División de Estudios Profesionales y de la Coordinación General Campus II', function () {
+    $hr = OrgUnit::factory()->create(['code' => 'RECURSOS-HUMANOS', 'name' => 'Departamento de Recursos Humanos', 'kind' => OrgUnitKind::Departamento]);
+    $division = OrgUnit::factory()->create(['code' => 'DIV-PROFESIONAL', 'name' => 'División de Estudios Profesionales', 'kind' => OrgUnitKind::Division]);
+    $office = OrgUnit::factory()->create(['code' => 'COORDINACION-CAMPUS-II', 'name' => 'Coordinación General Campus II', 'kind' => OrgUnitKind::Oficina]);
 
-    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $linkage), 'unit', 'Departamento de Gestión Tecnológica y Vinculación no es un departamento académico ni Servicios Escolares.');
-    expectInvalid(fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $inactiveServices), 'unit', 'Departamento de Servicios Escolares no es un departamento académico.');
-    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $inactiveServices), 'unit', 'Departamento de Servicios Escolares está inactiva.');
+    foreach ([$hr, $division, $office] as $unit) {
+        $assignment = appoint($this->rosa, Role::JefeDepartamento, null, $unit);
+
+        expect($assignment->fresh())->role->toBe(Role::JefeDepartamento)->org_unit_id->toBe($unit->id)
+            ->and(app(RoleAssignmentRules::class)->titularRoleOf($unit))->toBe(Role::JefeDepartamento);
+    }
+
+    expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->count())->toBe(3);
+});
+
+it('R-V2-4: una unidad no académica tiene un solo jefe vigente (AZ-S7)', function () {
+    $hr = OrgUnit::factory()->create(['code' => 'RECURSOS-HUMANOS', 'name' => 'Departamento de Recursos Humanos', 'kind' => OrgUnitKind::Departamento]);
+    appoint($this->rosa, Role::JefeDepartamento, null, $hr);
+
+    expectInvalid(fn () => appoint(User::factory()->create(), Role::JefeDepartamento, null, $hr), 'unit', 'Departamento de Recursos Humanos ya tiene jefe en esas fechas: Rosa Ruiz (desde 03/11/2026). Termina ese nombramiento antes de nombrar a otra persona.');
+});
+
+it('R-V2-4: el jefe de proyecto docente sigue solo en departamentos académicos y la unidad inactiva se rechaza', function () {
+    $hr = OrgUnit::factory()->create(['code' => 'RECURSOS-HUMANOS', 'name' => 'Departamento de Recursos Humanos', 'kind' => OrgUnitKind::Departamento]);
+    $inactive = OrgUnit::factory()->create(['code' => 'DIV-X', 'name' => 'División X', 'kind' => OrgUnitKind::Division, 'is_active' => false]);
+
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeProyectoDocente, $this->c2, $hr), 'unit', 'Departamento de Recursos Humanos no es un departamento académico.');
+    expectInvalid(fn () => appoint($this->rosa, Role::JefeDepartamento, null, $inactive), 'unit', 'División X está inactiva.');
 
     expect(RoleAssignment::query()->where('user_id', $this->rosa->id)->exists())->toBeFalse();
 });
