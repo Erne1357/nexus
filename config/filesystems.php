@@ -47,6 +47,20 @@ return [
             'report' => false,
         ],
 
+        // Fotos de los alumnos para la credencial (Students, tarea 1.27, AC-20): una carpeta por año de ingreso,
+        // `<AAAA>/<número de control>.jpg` (p. ej. `2021/21111182.jpg`). Datos personales: fuera de git
+        // (storage/app/.gitignore), fuera de public/ y fuera de la raíz del disco `local` (que sirve archivos);
+        // se sirven solo por rutas que autorizan. En el servidor,
+        // STUDENT_PHOTOS_PATH apunta al directorio montado (compose.prod.yaml).
+        'student_photos' => [
+            'driver' => 'local',
+            'root' => env('STUDENT_PHOTOS_PATH', storage_path('app/fotos')),
+            // Nexus solo lee (en el servidor es un montaje de solo lectura): no crea la carpeta; si no existe, no hay fotos.
+            'lazy_root_creation' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
         // Exportes de lo publicado (AcademicLoad, tareas 4.5 y 4.6): PDF, Excel y archivos para el SII que arma la
         // cola. Fuera de git y sin URL pública: se descargan por una ruta que revisa el permiso de cada exporte.
         'exports' => [

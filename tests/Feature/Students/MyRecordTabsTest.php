@@ -6,12 +6,10 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
-use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Students\Actions\SyncStudentAccounts;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
-use App\Modules\Students\Queries\StudentCredentialQuery;
 use Livewire\Livewire;
 
 /*
@@ -63,38 +61,16 @@ it('AC-15: «Perfil» muestra su retícula y su kárdex, solo lectura y sin lo d
         ->assertDontSeeHtml('aria-pressed');
 });
 
-it('AC-15: «Credencial» muestra nombre, número de control, carrera, campus, periodo activo e iniciales', function () {
-    Term::factory()->current()->create(['name' => 'Ene-Jun 2027']);
-
+it('AC-15: «Credencial» muestra la plantilla del ITCJ con nombre / número de control, carrera / estatus y la institución', function () {
     Livewire::actingAs($this->user)->withQueryParams(['tab' => 'credencial'])->test('students::pages.my-record')
         ->assertSeeHtml('data-testid="my-credential"')
-        ->assertSee('Ana López')
-        ->assertSee('21110001')
-        ->assertSee('Ingeniería en Sistemas Computacionales')
-        ->assertSee('Campus II')
-        ->assertSee('Ene-Jun 2027')
+        ->assertSeeHtml('data-testid="credential-front"')
+        ->assertSeeHtml('data-testid="credential-back"')
+        ->assertSee('Ana López / 21110001')
+        ->assertSee('Ing. Sistemas Computacionales / Estudiante')
+        ->assertSee('Instituto Tecnológico de Ciudad Juárez')
         ->assertSeeInOrder(['data-testid="credential-photo"', 'AL'])
         ->assertDontSee('21110002');
-});
-
-it('AC-15: la credencial trae el QR en SVG en línea con solo el número de control y un texto accesible', function () {
-    $expected = app(StudentCredentialQuery::class)->qr('21110001');
-
-    expect($expected)->toStartWith('<svg')->not->toContain('<?xml');
-
-    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'credencial'])->test('students::pages.my-record')
-        ->assertSeeHtml('data-testid="credential-qr"')
-        ->assertSeeHtml('aria-label="Código QR con tu número de control"')
-        ->assertSeeHtml($expected)
-        ->assertDontSeeHtml(app(StudentCredentialQuery::class)->qr('21110002'))
-        ->assertDontSeeHtml('data:image')
-        ->assertDontSeeHtml('credential-photo-img');
-});
-
-it('AC-15: la foto sustituye a las iniciales solo si hay fuente; hoy no la hay', function () {
-    Livewire::actingAs($this->user)->withQueryParams(['tab' => 'credencial'])->test('students::pages.my-record')
-        ->assertDontSeeHtml('credential-photo-img')
-        ->assertSeeInOrder(['data-testid="credential-photo"', 'AL']);
 });
 
 it('AC-15: la ruta con ?tab=credencial abre la credencial y una pestaña inventada muestra «Mis datos»', function () {
