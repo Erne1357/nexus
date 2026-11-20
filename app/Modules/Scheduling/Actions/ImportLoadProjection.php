@@ -35,8 +35,9 @@ use RuntimeException;
  *   (B = 8:00 …, la misma de GroupCode). `#N/A`, sin grupo o sin alumnos: la fila se omite y se reporta.
  * - **Días:** CreditDays (créditos). Créditos sin regla: fila reportada.
  * - **Clave:** AssignGroupCode; si no coincide con la letra del archivo, se avisa.
- * - **Idempotente:** mismo periodo, modalidad, materia, carrera dueña, semestre y hora de inicio = mismo grupo (no cancelado):
- *   se omite con aviso.
+ * - **Idempotente:** mismo periodo, modalidad, campus, materia, carrera dueña, plan, semestre y hora de inicio = mismo grupo (no cancelado).
+ *   Dos grupos en paralelo a la misma hora comparten llave: los que ya existen cubren las primeras filas y solo se crean las
+ *   que sobran (las demás se omiten con aviso).
  *
  * Una sola transacción, bitácora con el resumen y, al final, el recálculo de choques. Con `$dryRun` calcula el mismo
  * reporte sin escribir nada.
@@ -63,7 +64,8 @@ final class ImportLoadProjection
         $plans = StudyPlan::query()->get(['id', 'code', 'career_id'])->keyBy(fn (StudyPlan $plan): string => mb_strtoupper($plan->code));
         $resolver = new SubjectResolver;
         $departments = DB::table('departments')->pluck('code', 'id')->all();
-        $existing = $this->existingGroups($term, $modality);
+        $existing = $this->existingGroups($term, $modality, $campus);
+        $seen = [];
         $codes = [];
         $loadOk = [];
         $plan = [];
@@ -73,8 +75,15 @@ final class ImportLoadProjection
             $students = $this->integer($row['students']);
             $credits = $this->integer($row['credits']);
 
-            if ($row['code'] === '' || $row['group'] === '' || $students === null || $students < 1 || $semester === null || $semester < 1) {
-                $this->skip($report, $row['row'], 'omitted', 'Sin clave de materia, grupo, alumnos o semestre.');
+            $missing = array_keys(array_filter([
+                'clave de materia' => $row['code'] === '',
+                'grupo' => $row['group'] === '',
+                'alumnos' => $students === null || $students < 1,
+                'semestre' => $semester === null || $semester < 1,
+            ]));
+
+            if ($missing !== []) {
+                $this->skip($report, $row['row'], 'omitted', 'Fila sin '.implode(', ', $missing).'.');
 
                 continue;
             }
@@ -118,8 +127,16 @@ final class ImportLoadProjection
                 continue;
             }
 
+            if ($credits !== null && CreditDays::for($credits) !== null && CreditDays::isAssumed($credits)) {
+                $report['warnings'][] = "Fila {$row['row']}: {$credits} créditos usan la regla de días que es supuesto por confirmar (R-PRY-1).";
+            }
+
             $report['resolved_via'][$subject['via']] = ($report['resolved_via'][$subject['via']] ?? 0) + 1;
             $days = $credits === null ? null : CreditDays::for($credits);
+
+            if ($days !== null && $startMinutes + ($endMinutes - $startMinutes) * max($days) > 24 * 60) {
+                $days = null;
+            }
 
             if ($days === null) {
                 $this->skip($report, $row['row'], 'bad_credits', "La materia {$row['code']} trae créditos sin regla de días ({$row['credits']}).");
@@ -136,15 +153,17 @@ final class ImportLoadProjection
                 continue;
             }
 
-            $key = $subject['id'].'|'.$studyPlan->career_id.'|'.$semester.'|'.$startMinutes;
+            $key = implode('|', [$subject['id'], $studyPlan->career_id, $studyPlan->id, $campus->id, $semester, $startMinutes]);
+            $seen[$key] = ($seen[$key] ?? 0) + 1;
 
-            if (isset($existing[$key])) {
+            // Dos grupos de la misma materia a la misma hora (A y B en paralelo) son dos filas con la misma llave: los que ya
+            // existen cubren las primeras filas y solo las que sobran se crean.
+            if ($seen[$key] <= ($existing[$key] ?? 0)) {
                 $this->skip($report, $row['row'], 'duplicate', "El grupo {$row['group']} de {$row['code']} (semestre {$semester}, ".Minutes::format($startMinutes).') ya existe.');
 
                 continue;
             }
 
-            $existing[$key] = true;
             $plan[] = compact('row', 'subject', 'studyPlan', 'semester', 'students', 'days', 'startMinutes', 'endMinutes', 'departmentId');
         }
 
@@ -245,27 +264,28 @@ final class ImportLoadProjection
     }
 
     /**
-     * Los grupos no cancelados que ya hay, por materia, carrera dueña, semestre y hora de inicio.
+     * Los grupos no cancelados que ya hay, por materia, carrera dueña, plan, campus, semestre y hora de inicio.
      *
-     * @return array<string, true>
+     * @return array<string, int> cuántos grupos hay por llave
      */
-    private function existingGroups(Term $term, Modality $modality): array
+    private function existingGroups(Term $term, Modality $modality, Campus $campus): array
     {
-        $keys = [];
+        $counts = [];
 
         $rows = DB::table('groups')
             ->join('group_sessions', 'group_sessions.group_id', '=', 'groups.id')
-            ->where('groups.term_id', $term->id)->where('groups.modality_id', $modality->id)
+            ->where('groups.term_id', $term->id)->where('groups.modality_id', $modality->id)->where('groups.campus_id', $campus->id)
             ->where('groups.status', '<>', GroupStatus::Cancelled->value)
-            ->groupBy('groups.id', 'groups.subject_id', 'groups.owner_career_id', 'groups.semester')
-            ->selectRaw('groups.subject_id, groups.owner_career_id, groups.semester, min(group_sessions.starts_at) as start')
+            ->groupBy('groups.id', 'groups.subject_id', 'groups.owner_career_id', 'groups.study_plan_id', 'groups.semester')
+            ->selectRaw('groups.subject_id, groups.owner_career_id, groups.study_plan_id, groups.semester, min(group_sessions.starts_at) as start')
             ->get();
 
         foreach ($rows as $row) {
-            $keys[$row->subject_id.'|'.$row->owner_career_id.'|'.$row->semester.'|'.Minutes::of((string) $row->start)] = true;
+            $key = implode('|', [$row->subject_id, $row->owner_career_id, $row->study_plan_id, $campus->id, $row->semester, Minutes::of((string) $row->start)]);
+            $counts[$key] = ($counts[$key] ?? 0) + 1;
         }
 
-        return $keys;
+        return $counts;
     }
 
     /**

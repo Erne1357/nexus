@@ -191,3 +191,43 @@ it('deja el resumen en la bitácora y el comando imprime el reporte', function (
 
     $this->artisan('academic-load:import-projection', ['file' => $path, '--campus' => 'XX'])->assertFailed();
 });
+
+it('crea los dos grupos en paralelo de la misma materia a la misma hora, y una segunda corrida no los duplica', function () {
+    $rows = [
+        [$this->block, 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 30, '9 - 10'],
+        ['', 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 28, '9 - 10'],
+    ];
+
+    $first = ($this->import)($rows);
+    $second = ($this->import)($rows);
+    $third = ($this->import)([...$rows, ['', 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 20, '9 - 10']]);
+
+    expect($first['created'])->toBe(2)
+        ->and(Group::query()->orderBy('code')->pluck('code')->all())->toBe(['C', 'C2', 'C3'])
+        ->and($second['created'])->toBe(0)->and($second['skipped_by_kind'])->toBe(['duplicate' => 2])
+        ->and($third['created'])->toBe(1);
+});
+
+it('un grupo igual en otro campus o en otro plan de la misma carrera no es duplicado', function () {
+    $rows = [[$this->block, 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 30, '9 - 10']];
+    ($this->import)($rows);
+
+    $otherCampus = Campus::factory()->create(['code' => 'C2']);
+    $inOtherCampus = app(ImportLoadProjection::class)->handle(projectionFile($rows), $this->term, $otherCampus, $this->pres);
+
+    StudyPlan::factory()->create(['career_id' => $this->career->id, 'code' => 'ISIC-2020-300']);
+    $inOtherPlan = ($this->import)([['ISIC-2020-300. OTRA RETÍCULA', 1, 'PROGRAMACIÓN', 'AID-2501', 5, 'C', 30, '9 - 10']]);
+
+    expect($inOtherCampus['created'])->toBe(1)->and($inOtherPlan['created'])->toBe(1)->and(Group::query()->count())->toBe(3);
+});
+
+it('avisa de los créditos con regla supuesta y rechaza una sesión que pasaría de medianoche', function () {
+    $report = ($this->import)([
+        [$this->block, 1, 'DOS', 'AID-2501', 2, 'O', 30, '21 - 22'],
+        ['', 2, 'SEIS', 'CBD-2415', 6, 'O', 30, '23 - 24'],
+    ]);
+
+    expect($report['created'])->toBe(1)
+        ->and($report['skipped_by_kind'])->toBe(['bad_credits' => 1])
+        ->and(collect($report['warnings'])->contains(fn (string $w): bool => str_contains($w, '2 créditos')))->toBeTrue();
+});
