@@ -5,7 +5,9 @@ use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\OrgUnit;
+use App\Modules\Core\Models\PermissionSet;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Enums\FacultyPermission;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherDepartment;
 use App\Modules\Faculty\Policies\TeacherPolicy;
@@ -106,6 +108,16 @@ it('Subdirección conserva al docente pero no los departamentos fuera de su sub�
         ->and($subdireccion->can('setPrimaryAdscription', [Teacher::class, $inCb->adscriptions()->sole()]))->toBeFalse()
         ->and($subdireccion->can('manageQualification', [$inCb, $subject]))->toBeFalse()
         ->and($subdireccion->can('create', [Teacher::class, $this->sc]))->toBeTrue();
+});
+
+it('ver a todos (`view_all`) solo amplía las acciones que el puesto tiene: sin `teacher.update` en sus roles, la Subdirección los ve pero no edita a nadie (AZ-03)', function () {
+    PermissionSet::query()->where('factory_role', Role::Subdireccion->value)->update(['is_active' => false]);
+    PermissionSet::factory()->withPermissions([FacultyPermission::TeacherViewAll, FacultyPermission::TeacherView])->assignedTo(Role::Subdireccion)->create(['name' => 'Solo consulta de docentes']);
+    $subdireccion = User::factory()->withRole(Role::Subdireccion)->create();
+
+    foreach ([$this->inSc, $this->loose] as $teacher) {
+        expect(teacherAbilitiesOf($subdireccion, $teacher))->toBe([...allTeacherAbilities(false), 'view' => true]);
+    }
 });
 
 it('el jefe de SC, de todo el Tec, cubre a un adscrito a SC aunque su principal sea otra, pero no lo da de baja', function () {

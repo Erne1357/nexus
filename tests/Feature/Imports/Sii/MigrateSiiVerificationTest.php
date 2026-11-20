@@ -46,7 +46,7 @@ beforeEach(function () {
 
     File::copy(base_path('app/Modules/Imports/Sii/Curated/organigrama.csv'), $this->curated.'/organigrama.csv');
     File::put($this->curated.'/carreras.csv', "carrera,nombre,departamento,departamento_nombre,nota\nAAA,Carrera Triple A,110700,Económico Administrativas,\n");
-    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\nA,3,AAA-2004-100,AAA,presencial,si,0,\n");
+    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,\nA,3,AAA-2004-100,AAA-2004-100,AAA,presencial,si,0,\n");
 
     $areas = array_column((new SiiMigration(SiiExport::open($this->dir), $this->curated))->curated('organigrama'), 'clave_sii');
     File::put($this->dir.'/organigrama.csv', "clave_area,descripcion_area,area_depende,nivel,tipo_area,p_sustantivos,pro_sus,p_sus,p_s\n"
@@ -131,6 +131,29 @@ it('compara la corrida con Nexus, avisa de lo que no cuadra y marca la corrida �
 
     expect((int) $count[1])->toBe(count(array_filter($allRows, fn (array $row): bool => $row[4] !== 'info')))
         ->and(count(array_filter($allRows, fn (array $row): bool => $row[4] === 'info')))->toBeGreaterThan(0);
+});
+
+it('K4: la verificación compara con la regla K4 y reporta aparte los egresados que dejan de estar completos', function () {
+    $line = fn (string $term, string $control, string $materia, string $grade): string => SiiFixtures::line(SiiFile::HistoriaAlumno, [
+        'periodo' => "'{$term}'", 'no_de_control' => "'{$control}'", 'materia' => "'{$materia}'", 'calificacion' => $grade, 'tipo_evaluacion' => "'O1'", 'estatus_materia' => "'A'",
+    ]);
+    SiiFixtures::write($this->dir.'/historia_alumno.csv', SiiFile::HistoriaAlumno, [$line('19951', 'S1', 'CD1', '0'), $line('19953', 'S1', 'QU1', '90')]);
+    SiiFixtures::write($this->dir.'/alumnos_todos.csv', SiiFile::Alumnos, [SiiFixtures::line(SiiFile::Alumnos, [
+        'no_de_control' => "'S1'", 'carrera' => "'A'", 'reticula' => "'1'", 'estatus_alumno' => "'EGR'", 'campus' => "'1'", 'semestre' => '9',
+    ])]);
+
+    expect(($this->migrate)())->toBe(0);
+
+    $incidents = verificationIncidentRows($this->dir);
+    $k4 = array_values(array_filter($incidents, fn (array $row): bool => $row[2] === 'K4'));
+
+    expect(DB::table('sii_verificacion.alumnos')->first(['completo_sii', 'completo_sii_exportado', 'creditos_sii', 'completo_nexus']))
+        ->completo_sii->toBeFalse()->completo_sii_exportado->toBeTrue()->completo_nexus->toBeFalse()
+        ->and(DB::table('sii_verificacion.materias')->orderBy('_linea')->value('aprobada_k4'))->toBeFalse()
+        ->and(array_filter($incidents, fn (array $row): bool => $row[4] === 'error'))->toBe([])
+        ->and($k4)->toHaveCount(1)
+        ->and($k4[0][4])->toBe('warning')
+        ->and($k4[0][5])->toContain('1 con el SII tal cual y 0 con K4');
 });
 
 it('sin diferencias termina como siempre', function () {

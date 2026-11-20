@@ -67,7 +67,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
         ->assertOk()
         ->assertSee('<title>Organigrama · Nexus</title>', false)
         ->assertSee('La estructura del Instituto de un vistazo. Toca una unidad para ver su titular, sus puestos y sus acciones. Los departamentos académicos (con candado) se editan en Administración › Departamentos.')
-        ->assertSee('Mostrar inactivas (1)')
+        ->assertSee('Mostrar inactivas (2)')
         ->assertSee('1 departamento académico sin jefe')
         ->assertSee('Nueva unidad');
 
@@ -79,7 +79,7 @@ it('pinta el diagrama con la Dirección arriba y una caja por unidad', function 
     expect($boxes[0])->toBe('DIRECCION')
         ->and($boxes)->toEqualCanonicalizing(OrgUnit::query()->where('is_active', true)->pluck('code')->all())
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-SC"]')))->toContain('Departamento académico')->toContain('Sistemas y Computación')->toContain('Sin jefe vigente')
-        ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular en Nexus')
+        ->and(textOf(domOf($response)->querySelector('[data-testid="org-unit-DIRECCION"]')))->toContain('Sin titular vigente')
         ->and(textOf(domOf($response)->querySelector('[data-testid="org-legend"]')))->toBe('Se edita en Administración › Departamentos · n personas en la unidad y en las que cuelgan de ella');
 });
 
@@ -88,7 +88,7 @@ it('el panel muestra la unidad elegida', function () {
 
     $panel = orgUnitPanel($this->admin)
         ->assertSet('unitId', $this->root->id)
-        ->assertSee('La Dirección no tiene un puesto en Nexus.')
+        ->assertSee('Sin titular vigente.')
         ->assertDontSeeHtml('data-testid="unit-path"');
 
     $panel->dispatch('org-unit-picked', id: $this->planning->id)
@@ -96,7 +96,7 @@ it('el panel muestra la unidad elegida', function () {
         ->assertSee('Subdirección de Planeación y Vinculación')
         ->assertSee('SUB-PLANEACION')
         ->assertSee('Dirección › Subdirección de Planeación y Vinculación')
-        ->assertSee('Esta unidad todavía no tiene un puesto de titular en Nexus.')
+        ->assertSee('Sin titular vigente.')
         ->assertSee('con adscripción o puesto vigente en la unidad y en las que cuelgan de ella')
         ->assertSee('Departamento de Gestión Tecnológica y Vinculación');
 
@@ -175,12 +175,12 @@ it('da de alta, renombra, mueve, desactiva y activa desde el panel, y avisa al d
 it('mover a la misma madre o guardar sin cambios no avisa al diagrama', function () {
     $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $this->services->id);
 
-    $panel->call('openMove')->assertSet('parent', $this->academic->id)->call('move')
+    $panel->call('openMove')->assertSet('parent', $this->planning->id)->call('move')
         ->assertHasNoErrors()
         ->assertNotDispatched('org-chart-changed')
         ->assertSet('showForm', false);
 
-    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección Académica');
+    expect(lastToastOf($panel))->title->toBe('Sin cambios')->description->toBe('Departamento de Servicios Escolares ya depende de Subdirección de Planeación y Vinculación');
 
     $panel->call('openEdit')->call('save')
         ->assertHasNoErrors()
@@ -206,7 +206,7 @@ it('lo bloqueado se queda deshabilitado con su motivo escrito', function () {
 
     expect($dom->querySelector('[data-testid="unit-deactivate"]')->hasAttribute('disabled'))->toBeTrue()
         ->and($dom->querySelector('[data-testid="unit-move"]')->hasAttribute('disabled'))->toBeTrue()
-        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 6 unidades hijas activas; muévelas o desactívalas primero.')
+        ->and(textOf($dom->querySelector('[data-testid="unit-blockers"]')))->toContain('Tiene 5 unidades hijas activas; muévelas o desactívalas primero.')
         ->toContain('Mover: Nexus usa la Subdirección Académica: no se mueve.');
 
     $panel->dispatch('org-unit-picked', id: $this->systems->id);
@@ -391,17 +391,17 @@ it('sin persona elegida pide elegirla', function () {
         ->and(RoleAssignment::query()->where('role', Role::JefeDepartamento)->count())->toBe(0);
 });
 
-it('«Nombrar» queda deshabilitado con su motivo en una unidad sin puestos y en una inactiva', function () {
-    $panel = orgUnitPanel($this->admin);
+it('R-V2-4: «Nombrar» queda habilitado en una oficina, que ya admite jefe con su título, y se deshabilita con su motivo en una inactiva', function () {
+    $office = OrgUnit::factory()->create(['parent_id' => $this->planning->id, 'code' => 'BECAS', 'name' => 'Oficina de Becas', 'kind' => OrgUnitKind::Oficina]);
+    $panel = orgUnitPanel($this->admin)->dispatch('org-unit-picked', id: $office->id);
     $dom = domOf($panel);
 
-    expect($dom->querySelector('[data-testid="unit-appoint"]')->hasAttribute('disabled'))->toBeTrue()
-        ->and(textOf($dom->querySelector('[data-testid="unit-appoint-blocker"]')))->toBe('Ningún puesto se nombra sobre esta unidad.')
-        ->and(textOf($dom->querySelector('[data-testid="unit-assignments-empty"]')))->toBe('Nadie tiene un puesto vigente aquí.');
+    // Ya no queda un tipo de unidad sin puesto (los tipos cubren Dirección, subdirecciones, divisiones, departamentos y
+    // oficinas), así que «Ningún puesto se nombra sobre esta unidad.» solo se alcanza por consulta directa.
+    expect($dom->querySelector('[data-testid="unit-appoint"]')->hasAttribute('disabled'))->toBeFalse()
+        ->and($dom->querySelector('[data-testid="unit-appoint-blocker"]'))->toBeNull();
 
-    $panel->call('openAppoint')->assertSet('showAppoint', false)->assertHasErrors(['unit' => 'Ningún puesto se nombra sobre esta unidad.']);
-
-    expect(domOf($panel)->querySelector('[data-testid="unit-error"]'))->not->toBeNull();
+    $panel->call('openAppoint')->assertSet('showAppoint', true)->assertViewHas('offered', [['id' => Role::JefeDepartamento->value, 'name' => 'Titular de la Oficina de Becas']]);
 
     $this->systems->update(['is_active' => false]);
     $panel->dispatch('org-unit-picked', id: $this->systems->id);
@@ -554,7 +554,7 @@ describe('otros perfiles', function () {
         expect(OrgUnit::where('code', 'BECAS')->exists())->toBeFalse()
             ->and($this->head->roleAssignments()->sole()->valid_to)->toBeNull()
             ->and($this->coordinator->roleAssignments()->count())->toBe(1)
-            ->and($this->services->fresh())->parent_id->toBe($this->academic->id)->is_active->toBeTrue()
+            ->and($this->services->fresh())->parent_id->toBe($this->planning->id)->is_active->toBeTrue()
             ->and(activitySince()->count())->toBe(0);
     })->with(['pick', 'openCreate', 'openEdit', 'openMove', 'save', 'move', 'setActive', 'openAppoint', 'choosePerson', 'appoint', 'confirmEnd', 'cancelEnd', 'end']);
 });

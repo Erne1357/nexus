@@ -113,11 +113,15 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
     /**
      * Subdirección: el avance, recordar, y ver y resolver observaciones en todo; el jefe de departamento, ver, resolver
      * y, de su departamento, corregir, validar, reabrir y observar. La condición del campus para corregir salones
-     * (CV2) la pone la Policy.
+     * (CV2) la pone la Policy. El directivo ve el avance y las revisiones (AZ-03).
      */
     public function grants(): array
     {
         return [
+            Role::Directivo->value => [
+                CatalogValidationPermission::ProgressView,
+                CatalogValidationPermission::ReviewView,
+            ],
             Role::Subdireccion->value => [
                 CatalogValidationPermission::ProgressView,
                 CatalogValidationPermission::ProgressRemind,

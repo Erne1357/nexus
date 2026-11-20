@@ -13,6 +13,7 @@ use App\Modules\Imports\Enums\ImportsPermission;
 use App\Modules\Imports\Models\ImportBatch;
 use App\Modules\Imports\Models\ImportMapping;
 use App\Modules\Imports\Sii\SiiStep;
+use App\Modules\Imports\Sii\Steps\AppointmentsStep;
 use App\Modules\Imports\Sii\Steps\ArchiveStep;
 use App\Modules\Imports\Sii\Steps\CareersStep;
 use App\Modules\Imports\Sii\Steps\KardexStep;
@@ -20,6 +21,7 @@ use App\Modules\Imports\Sii\Steps\OrgChartStep;
 use App\Modules\Imports\Sii\Steps\PositionsStep;
 use App\Modules\Imports\Sii\Steps\RoomsStep;
 use App\Modules\Imports\Sii\Steps\SeriationStep;
+use App\Modules\Imports\Sii\Steps\StaffStep;
 use App\Modules\Imports\Sii\Steps\StudentAccountsStep;
 use App\Modules\Imports\Sii\Steps\StudentsStep;
 use App\Modules\Imports\Sii\Steps\SubjectsStep;
@@ -91,10 +93,12 @@ final class ImportsServiceProvider extends ModuleServiceProvider
         RoomsStep::class,
         TeachersStep::class,
         PositionsStep::class,
+        StaffStep::class,
         TeacherHistoryStep::class,
         StudentsStep::class,
         KardexStep::class,
         StudentAccountsStep::class,
+        AppointmentsStep::class,
         VerificationStep::class,
     ];
 

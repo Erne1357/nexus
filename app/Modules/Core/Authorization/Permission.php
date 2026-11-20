@@ -32,4 +32,11 @@ interface Permission extends \BackedEnum
      * que lo tiene concedido. Un nombramiento sin unidad (admin, coordinador, docente) lo aporta siempre.
      */
     public function appliesTo(): ?UnitApplicability;
+
+    /**
+     * Si el permiso solo lee (consultar, exportar) y no escribe nada (AZ-03). Lo que lee en todo el Tec un puesto con
+     * Role::readsWholeTec() (el directivo) es solo esto: el panel no le da otra cosa (PermissionGrantRules) y Actor no
+     * acota por unidad ni por carrera sus permisos de lectura. Por omisión lo da ReadsByAction, por la acción de la clave.
+     */
+    public function isReadOnly(): bool;
 }

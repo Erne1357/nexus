@@ -153,7 +153,7 @@ final class AppointRole
         $message = $exception->getMessage();
 
         return match (true) {
-            str_contains($message, 'role_assignments_one_jefe'), str_contains($message, 'role_assignments_one_subdireccion') => $this->rules->seatTaken($role, $unit),
+            str_contains($message, 'role_assignments_one_jefe'), str_contains($message, 'role_assignments_one_subdireccion'), str_contains($message, 'role_assignments_one_directivo') => $this->rules->seatTaken($role, $unit),
             str_contains($message, 'role_assignments_jpd_no_duplicate') => $this->rules->duplicated($user, $role, $campus, $unit, $careerId, $modality),
             default => null,
         };

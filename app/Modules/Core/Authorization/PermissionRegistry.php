@@ -13,8 +13,9 @@ use LogicException;
  *
  * El admin tiene implícitamente todo lo declarado menos adminDenies. Lo que un puesto tiene hoy lo decide GrantTable
  * (CF-01, roles editables): sus roles de fábrica siguen lo que aquí se concede mientras nadie los edite (CF-02). Los
- * candados (adminOnly, CF-03) no se conceden a ningún puesto. Core lo arma una vez y lo comparte entre peticiones
- * (Octane): es inmutable, no guarda nada del usuario ni de la petición.
+ * candados (adminOnly, CF-03) no se conceden a ningún puesto, y a un puesto que lee en todo el Tec (el directivo, AZ-03)
+ * solo se le conceden permisos de lectura. Core lo arma una vez y lo comparte entre peticiones (Octane): es inmutable,
+ * no guarda nada del usuario ni de la petición.
  */
 final class PermissionRegistry
 {
@@ -57,12 +58,17 @@ final class PermissionRegistry
         }
 
         foreach ($grants as $role => $permissions) {
-            if (Role::tryFrom((string) $role) === null) {
-                throw new LogicException("Se conceden permisos a un puesto que no existe: «{$role}».");
-            }
+            $position = Role::tryFrom((string) $role)
+                ?? throw new LogicException("Se conceden permisos a un puesto que no existe: «{$role}».");
 
             foreach ($permissions as $permission) {
-                $this->granted[$role][$this->declared($permission)->value] = true;
+                $declared = $this->declared($permission);
+
+                if ($position->readsWholeTec() && ! $declared->isReadOnly()) {
+                    throw new LogicException("El permiso «{$declared->value}» no es de lectura: no se concede a «{$role}», que lee en todo el Tec (AZ-03).");
+                }
+
+                $this->granted[$role][$declared->value] = true;
             }
         }
 
@@ -91,6 +97,7 @@ final class PermissionRegistry
             'permissions' => array_map(fn (Permission $permission): array => [
                 array_map(fn (Dimension $dimension): string => $dimension->value, $permission->dimensions()),
                 $permission->isPersonal(),
+                $permission->isReadOnly(),
             ], $this->byKey),
             'admin_only' => $this->adminOnly(),
         ]));
@@ -269,9 +276,9 @@ final class PermissionRegistry
     }
 
     /**
-     * Huella de lo que el código decide sobre las concesiones: lo de fábrica por puesto, las dimensiones y si es
-     * personal cada permiso declarado, y los candados. GrantTable la pone en su llave de caché: un despliegue que
-     * cambie algo de eso no lee el mapa que armó el código anterior.
+     * Huella de lo que el código decide sobre las concesiones: lo de fábrica por puesto, las dimensiones, si es
+     * personal y si es de lectura (AZ-03) cada permiso declarado, y los candados. GrantTable la pone en su llave de
+     * caché: un despliegue que cambie algo de eso no lee el mapa que armó el código anterior.
      */
     public function fingerprint(): string
     {

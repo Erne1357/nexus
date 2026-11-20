@@ -30,6 +30,7 @@ it('CF-04: cada puesto acota las dimensiones de su nombramiento y las de su regl
     expect($bounded)->toBe([
         'admin' => ['campus', 'unit', 'career', 'modality'],
         'subdireccion' => ['campus', 'unit', 'modality'],
+        'directivo' => ['campus', 'unit', 'career', 'modality'],
         'jefe_departamento' => ['campus', 'unit', 'modality'],
         'jefe_proyecto_docente' => ['campus', 'unit', 'modality'],
         'coordinador' => ['campus', 'career', 'modality'],
@@ -95,6 +96,9 @@ it('marca lo que valdría en todo el Tec: de gestión, sin unidad ni carrera, y 
     'campus, no para el jefe de proyecto docente (lo admite)' => [Role::JefeProyectoDocente, FakePermission::ViewCampus, false],
     'con unidad, no' => [Role::JefeDepartamento, FakePermission::ViewModalityUnit, false],
     'personal, no' => [Role::Docente, FakePermission::ViewOwn, false],
+    'AZ-03: lo que lee el directivo vale en todo el Tec, aunque declare unidad' => [Role::Directivo, FakePermission::ViewCampusUnit, true],
+    'AZ-03: lo que lee el directivo vale en todo el Tec, aunque declare carrera' => [Role::Directivo, FakePermission::ViewCareer, true],
+    'AZ-03: lo personal del directivo no' => [Role::Directivo, FakePermission::ViewOwn, false],
 ]);
 
 it('CF-03: el registro rechaza conceder un candado de fábrica o hacerlo excepción del admin', function () {

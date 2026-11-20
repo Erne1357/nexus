@@ -4,6 +4,7 @@ namespace Tests\Fixtures\Modules\DemoCatalog\Enums;
 
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -11,6 +12,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum DemoCatalogPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case ItemList = 'demo_catalog.item.list';
     case ItemView = 'demo_catalog.item.view';
     case ItemUpdate = 'demo_catalog.item.update';

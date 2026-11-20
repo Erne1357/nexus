@@ -114,7 +114,7 @@ function dimensionExceptions(): array
 {
     $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
     $noCampus = 'RV: las revisiones de catálogos son del departamento en todo el Tec, sin campus ni modalidad (AZ-S17, supuesto por confirmar); `catalog_reviews.campus_id` siempre es nulo (CHECK) y, si el permiso declarara el campus, un nombramiento con campus nunca cubriría una revisión sin campus.';
-    $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección); el panel o tablero abarca todos los campus.';
+    $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección y el directivo, AZ-03); el panel o tablero abarca todos los campus.';
 
     return [
         'core.assignment.view' => $admin,
@@ -138,14 +138,15 @@ function dimensionExceptions(): array
 }
 
 /**
- * Los puestos que no se acotan por campus ni por dimensión en los permisos de gestión: el admin cubre todo y la
- * Subdirección es de todo el Tec. Se escribe a mano: derivarla de "no tiene campus_id" exentaría al jefe y al docente.
+ * Los puestos que no se acotan por campus ni por dimensión en los permisos de gestión: el admin cubre todo, la
+ * Subdirección es de todo el Tec y el directivo lee en todo el Tec (AZ-03, solo permisos de lectura). Se escribe a mano:
+ * derivarla de "no tiene campus_id" exentaría al jefe y al docente.
  *
  * @return list<Role>
  */
 function dimensionWholeTecRoles(): array
 {
-    return [Role::Subdireccion];
+    return [Role::Directivo, Role::Subdireccion];
 }
 
 function dimensionTableFor(Permission $permission): ?string
@@ -197,7 +198,7 @@ function dimensionBoundsByModality(Permission $permission, string $table): bool
 function modalityDimensionExceptions(): array
 {
     $admin = 'D5: solo del admin, que cubre todo; si se concede a otro puesto hay que decidir sus dimensiones en ese PR.';
-    $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección), que cubren todas las modalidades; `term_stages.modality_id` nulo es el calendario general del periodo, que no es de ninguna modalidad (M4).';
+    $tec = 'D6: solo de puestos de todo el Tec (hoy la Subdirección y el directivo, AZ-03), que cubren todas las modalidades; `term_stages.modality_id` nulo es el calendario general del periodo, que no es de ninguna modalidad (M4).';
 
     return [
         'core.assignment.view' => $admin,

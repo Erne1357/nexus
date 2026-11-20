@@ -81,7 +81,7 @@ it('el admin nombra a un jefe de departamento sin registro de docente y lo termi
         ->click('@appoint')
         ->assertSee('Nombrar a Rosa Ruiz Almanza')
         ->select('role', 'jefe_departamento')
-        ->assertSee('Este puesto pide el departamento académico o Servicios Escolares. Tiene un solo jefe vigente.')
+        ->assertSee('Este puesto pide un departamento (académico o no), una división o una oficina. Tiene un solo jefe vigente; si la unidad no es académica, solo lleva su título.')
         ->select('unit', $this->systems->id)
         ->fill('from', today()->subDays(10)->toDateString())
         ->click('@appoint-submit')

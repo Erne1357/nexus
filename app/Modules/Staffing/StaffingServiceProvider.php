@@ -225,6 +225,11 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::MyLoadView,
                 StaffingPermission::ChangeRequestRequestOwn,
             ],
+            Role::Directivo->value => [
+                StaffingPermission::RankingView,
+                StaffingPermission::TeacherLoadView,
+                StaffingPermission::ChangeRequestView,
+            ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,

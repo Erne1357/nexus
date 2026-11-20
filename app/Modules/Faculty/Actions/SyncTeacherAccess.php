@@ -5,6 +5,7 @@ namespace App\Modules\Faculty\Actions;
 use App\Modules\Core\Actions\CreateStaffUser;
 use App\Modules\Core\Actions\EndRoleAssignment;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\RoleAssignment;
@@ -38,11 +39,14 @@ use Spatie\Activitylog\Enums\ActivityEvent;
  *   sin departamento conserva usuario y nombramiento. Uno sin campus que todavía no empieza cuenta como el suyo y no
  *   se abre otro (supuesto por confirmar). Cierra los alcances de `docente` con campus que quedaron de antes, con la
  *   regla de CloseRoleScopes: ayer si empezó antes de hoy; si no, se borra.
- * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026):
- *   desactiva su usuario (y, si no tiene contraseña, deja sin efecto su invitación: `access_invited_at` y
+ * - Docente inactivo, o borrado (supuesto por confirmar), es la baja (confirmado el 30 de octubre de 2026). Solo quita lo
+ *   docente (AZ-S19, confirmado el 20 de noviembre de 2026): termina las jefaturas de departamento académico y de proyecto
+ *   docente, y no toca las de otra unidad, la Subdirección, el Directivo ni el coordinador. Si al usuario le queda otro
+ *   puesto que no sea `docente` (vigente; el coordinador cuenta, supuesto por confirmar), su cuenta sigue
+ *   activa y su invitación no se toca. Si no, desactiva su usuario (y, si no tiene contraseña, deja sin efecto su invitación: `access_invited_at` y
  *   `access_invited_by` nulos), salvo que sea admin vigente o que su Administración programada haga falta para que ningún
  *   día se quede sin admin (AZ-S12 y P3, confirmado el 3 de noviembre de 2026: el docente queda de baja y el usuario
- *   sigue activo; toma ADMIN_SEATS_LOCK antes del candado del usuario), y termina con fecha de ayer cada jefatura suya vigente o por
+ *   sigue activo; toma ADMIN_SEATS_LOCK antes del candado del usuario), y termina con fecha de ayer cada jefatura académica suya vigente o por
  *   empezar (supuesto por confirmar; EndRoleAssignment quita las que empiezan hoy o después). Sin usuario no hace
  *   nada: un docente inactivo no recibe usuario. Sus alcances de `docente` se quedan, para cuando se reactive.
  *
@@ -95,7 +99,21 @@ final class SyncTeacherAccess
             }
 
             $result = $user === null ? AccessSync::Created : AccessSync::Linked;
-            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, email: $this->freeEmail($teacher->email));
+
+            if ($user === null) {
+                try {
+                    $user = $this->createStaffUser->handle($teacher->rfc, $teacher->name, email: $this->freeEmail($teacher->email));
+                } catch (ValidationException $exception) {
+                    // Otra sesión (la importación del personal) creó al usuario entre la revisión y el alta.
+                    $user = User::query()->where('username', $teacher->rfc)->lockForUpdate()->first() ?? throw $exception;
+
+                    if (! $this->linkable($user)) {
+                        return AccessSync::Conflict;
+                    }
+
+                    $result = AccessSync::Linked;
+                }
+            }
 
             $this->link($teacher, $user);
         }
@@ -116,7 +134,21 @@ final class SyncTeacherAccess
         $user = User::query()->lockForUpdate()->findOrFail($teacher->user_id);
         $changed = false;
 
+        $heads = $user->roleAssignments()
+            ->whereIn('role', Role::HEADSHIPS)
+            ->notEnded()
+            ->with('orgUnit')
+            ->get()
+            ->filter(fn (RoleAssignment $head): bool => $head->role === Role::JefeProyectoDocente
+                || $head->orgUnit?->kind === OrgUnitKind::DepartamentoAcademico);
+        $keepsOtherPost = $user->roleAssignments()
+            ->current()
+            ->where('role', '<>', Role::Docente)
+            ->whereNotIn('id', $heads->modelKeys())
+            ->exists();
+
         if ($user->is_active
+            && ! $keepsOtherPost
             && ! $user->roleAssignments()->current()->where('role', Role::Admin)->exists()
             && $this->rules->deactivationGap($user) === null) {
             $old = ['is_active' => true];
@@ -136,10 +168,6 @@ final class SyncTeacherAccess
             $changed = true;
         }
 
-        $heads = $user->roleAssignments()
-            ->whereIn('role', Role::HEADSHIPS)
-            ->notEnded()
-            ->get();
         $yesterday = today()->subDay()->toImmutable();
 
         foreach ($heads as $head) {

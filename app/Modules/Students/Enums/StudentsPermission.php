@@ -5,6 +5,7 @@ namespace App\Modules\Students\Enums;
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\Permission;
 use App\Modules\Core\Authorization\ReachesInactiveModalities;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -13,6 +14,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum StudentsPermission: string implements Permission, ReachesInactiveModalities
 {
+    use ReadsByAction;
+
     case StudentView = 'students.student.view';
     case MyRecordView = 'students.my_record.view';
 

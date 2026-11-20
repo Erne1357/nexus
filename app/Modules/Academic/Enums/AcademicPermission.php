@@ -5,6 +5,7 @@ namespace App\Modules\Academic\Enums;
 use App\Modules\Core\Authorization\Dimension;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -16,6 +17,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum AcademicPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case DepartmentView = 'academic.department.view';
     case DepartmentCreate = 'academic.department.create';
     case DepartmentUpdate = 'academic.department.update';

@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\ProvisionTeacherUsers;
@@ -156,4 +157,21 @@ it('el job es único: espera una sola provisión en la cola', function () {
     ProvisionTeacherUsersJob::dispatch();
 
     Queue::assertPushed(ProvisionTeacherUsersJob::class, 1);
+});
+
+it('AZ-S19: la provisión que da de baja a un docente directivo no le desactiva la cuenta ni le termina el puesto', function () {
+    $user = User::factory()->create(['username' => '4444444']);
+    $teacher = Teacher::factory()->adscribedTo($this->department)->create(['rfc' => '4444444', 'user_id' => $user->id]);
+    $directivo = RoleAssignment::factory()->for($user)->create([
+        'role' => Role::Directivo,
+        'org_unit_id' => OrgUnit::where('code', 'DIRECCION')->value('id'),
+        'valid_from' => today()->subMonth()->toDateString(),
+        'valid_to' => null,
+    ]);
+    $teacher->delete();
+
+    app(ProvisionTeacherUsers::class)->handle();
+
+    expect($user->fresh()->is_active)->toBeTrue()
+        ->and($directivo->fresh()->valid_to)->toBeNull();
 });

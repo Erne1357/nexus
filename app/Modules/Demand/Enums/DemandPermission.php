@@ -3,6 +3,7 @@
 namespace App\Modules\Demand\Enums;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 /**
@@ -11,6 +12,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
  */
 enum DemandPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case SettingUpdate = 'demand.setting.update';
 
     public function label(): string

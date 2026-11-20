@@ -17,6 +17,10 @@ use App\Modules\Core\Enums\Role;
  *   sin límite. El docente y el alumno no acotan ninguna dimensión: solo reciben permisos personales. Las concesiones
  *   de fábrica del puesto (grants()) siempre valen, porque se revisaron por PR; scopeProblem() responde sin esa
  *   excepción.
+ * - AZ-03 (R-V2-4, confirmado el 19 de noviembre de 2026): a un puesto que lee en todo el Tec (Role::readsWholeTec(),
+ *   el directivo) solo se le dan permisos de lectura (Permission::isReadOnly()), sin excepción de fábrica: lo que lee
+ *   no lo acota su unidad, así que escribir valdría en todo el Tec. PermissionRegistry tampoco deja concedérselo en
+ *   grants().
  *
  * Sin estado: solo lee el registro, que es inmutable. GrantTable la usa también al armar su mapa, así que nada de lo
  * que bloquea vale aunque llegue a la base por otro camino.
@@ -27,7 +31,7 @@ final class PermissionGrantRules
      * Versión de estas reglas en la huella de GrantTable. Súbela cada vez que cambie lo que bloquean, para que un
      * despliegue que solo cambie las reglas no lea el mapa que armaron las anteriores.
      */
-    public const int VERSION = 2;
+    public const int VERSION = 3;
 
     public function __construct(private readonly PermissionRegistry $registry) {}
 
@@ -52,14 +56,27 @@ final class PermissionGrantRules
     }
 
     /**
-     * CF-S1, CF-03 y CF-04: el motivo por el que `$permission` no se le puede dar a `$role`, o null si se puede. Lo que
-     * el código le concede de fábrica al puesto siempre se puede.
+     * CF-S1, CF-03, AZ-03 y CF-04: el motivo por el que `$permission` no se le puede dar a `$role`, o null si se puede.
+     * Lo que el código le concede de fábrica al puesto se puede salvo un candado o, a quien lee en todo el Tec, algo que
+     * no es de lectura.
      */
     public function grantProblem(Role $role, Permission $permission): ?string
     {
         return $this->positionProblem($role)
             ?? $this->lockProblem($permission)
+            ?? $this->readOnlyProblem($role, $permission)
             ?? ($this->registry->grants($role, $permission) ? null : $this->scopeProblem($role, $permission));
+    }
+
+    /**
+     * AZ-03: el motivo por el que `$permission` no se le da a un puesto que lee en todo el Tec (el directivo): no es de
+     * lectura; o null.
+     */
+    public function readOnlyProblem(Role $role, Permission $permission): ?string
+    {
+        return $role->readsWholeTec() && ! $permission->isReadOnly()
+            ? "«{$permission->label()}» no se da a {$role->listLabel()}: el puesto solo consulta, en todo el Tec, y el permiso no es de lectura."
+            : null;
     }
 
     /**
@@ -67,10 +84,15 @@ final class PermissionGrantRules
      * declara ni unidad ni carrera, y el puesto no fija en su nombramiento ninguna de las dimensiones que declara (el
      * campus o la modalidad; el jefe y la Subdirección son generales en ellas). Se puede dar, pero el panel lo avisa
      * («Valdrá en todo el Tec»). Crear periodos, abrir la validación o importar lo son para cualquier puesto; abrir el
-     * periodo en una modalidad, para el jefe y la Subdirección, no para el coordinador, que lleva modalidad.
+     * periodo en una modalidad, para el jefe y la Subdirección, no para el coordinador, que lleva modalidad. Un puesto que
+     * lee en todo el Tec (el directivo, AZ-03) solo recibe permisos de lectura, y cada uno vale en todo el Tec.
      */
     public function isInstitutionWide(Role $role, Permission $permission): bool
     {
+        if ($role->readsWholeTec() && $permission->isReadOnly() && ! $permission->isPersonal()) {
+            return true;
+        }
+
         if ($permission->isPersonal() || ! self::declaresNoUnitNorCareer($permission)) {
             return false;
         }

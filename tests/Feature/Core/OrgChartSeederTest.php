@@ -5,7 +5,7 @@ use App\Modules\Core\Database\Seeders\OrgChartSeeder;
 use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Models\OrgUnit;
 
-it('siembra el organigrama tipo bajo la Dirección (AZ-S1), con Servicios Escolares en la Subdirección Académica (AZ-02)', function () {
+it('R-V2-5: siembra el organigrama oficial: Servicios Escolares bajo Planeación y Vinculación, Educación a Distancia inactiva, Campus II bajo la Académica', function () {
     $this->seed(OrgChartSeeder::class);
 
     $expected = [
@@ -15,9 +15,18 @@ it('siembra el organigrama tipo bajo la Dirección (AZ-S1), con Servicios Escola
         'DIV-POSGRADO' => [OrgUnitKind::Division, 'SUB-ACADEMICA'],
         'DESARROLLO-ACADEMICO' => [OrgUnitKind::Departamento, 'SUB-ACADEMICA'],
         'EDUCACION-DISTANCIA' => [OrgUnitKind::Departamento, 'SUB-ACADEMICA'],
-        'SERVICIOS-ESCOLARES' => [OrgUnitKind::Departamento, 'SUB-ACADEMICA'],
         'VINCULACION' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
         'EXTRAESCOLARES' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
+        'PLANEACION' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
+        'COMUNICACION' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
+        'SERVICIOS-ESCOLARES' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
+        'CENTRO-INFORMACION' => [OrgUnitKind::Departamento, 'SUB-PLANEACION'],
+        'COORDINACION-CAMPUS-II' => [OrgUnitKind::Oficina, 'SUB-ACADEMICA'],
+        'RECURSOS-HUMANOS' => [OrgUnitKind::Departamento, 'SUB-ADMINISTRATIVA'],
+        'RECURSOS-FINANCIEROS' => [OrgUnitKind::Departamento, 'SUB-ADMINISTRATIVA'],
+        'RECURSOS-MATERIALES' => [OrgUnitKind::Departamento, 'SUB-ADMINISTRATIVA'],
+        'MANTENIMIENTO' => [OrgUnitKind::Departamento, 'SUB-ADMINISTRATIVA'],
+        'CENTRO-COMPUTO' => [OrgUnitKind::Departamento, 'SUB-ADMINISTRATIVA'],
     ];
 
     foreach ($expected as $code => [$kind, $parentCode]) {
@@ -25,7 +34,7 @@ it('siembra el organigrama tipo bajo la Dirección (AZ-S1), con Servicios Escola
 
         expect($unit->kind)->toBe($kind)
             ->and($unit->parent->code)->toBe($parentCode)
-            ->and($unit->is_active)->toBeTrue();
+            ->and($unit->is_active)->toBe($code !== 'EDUCACION-DISTANCIA');
     }
 });
 

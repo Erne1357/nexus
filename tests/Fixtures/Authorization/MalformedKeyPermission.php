@@ -3,10 +3,13 @@
 namespace Tests\Fixtures\Authorization;
 
 use App\Modules\Core\Authorization\Permission;
+use App\Modules\Core\Authorization\ReadsByAction;
 use App\Modules\Core\Authorization\UnitApplicability;
 
 enum MalformedKeyPermission: string implements Permission
 {
+    use ReadsByAction;
+
     case Bad = 'viewthing';
 
     public function label(): string

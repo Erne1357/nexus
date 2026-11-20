@@ -10,21 +10,22 @@ use Illuminate\Support\Facades\File;
 use Tests\Unit\Imports\Sii\SiiFixtures;
 
 /*
-| Paso `carreras` de imports:migrate-sii (D15): las variantes por modalidad se funden en el plan oficial, la
-| oferta por campus sale de los alumnos, el plan actual es el que recibió nuevo ingreso en el último periodo
-| regular. Todo con datos sintéticos: carreras y alumnos inventados, y un curado propio en una carpeta temporal.
+| Paso `carreras` de imports:migrate-sii (D15, R-V2-1): cada retícula del SII es su propio plan y recuerda su grupo
+| (la clave oficial que antes juntaba las variantes por modalidad), la oferta por campus sale de los alumnos, el plan
+| actual es el que recibió más nuevo ingreso en el último periodo regular. Todo con datos sintéticos: carreras y
+| alumnos inventados, y un curado propio en una carpeta temporal.
 */
 
 const SII_CURATED_PLANS = <<<'CSV'
-sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota
-A,1,AAA-2010-224,AAA,presencial,si,0,
-A2,2,AAA-2010-224,AAA,distancia,si,0,
-A,3,AAA-2004-100,AAA,presencial,si,0,
-B,1,BBB-2010-300,BBB,presencial,si,0,
-C,1,CCC-2005-200,CCC,presencial,si,0,
-D,1,DDD-2010-1,DDD,presencial,si,0,
-D,2,DDD-IS-80-160,DDD,presencial,si,0,
-X,9,XXX-2010-999,XXX,presencial,no,0,retícula sin alumnos
+sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota
+A,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,
+A2,2,AAA-2010-224-A2,AAA-2010-224,AAA,distancia,si,0,
+A,3,AAA-2004-100,AAA-2004-100,AAA,presencial,si,0,
+B,1,BBB-2010-300,BBB-2010-300,BBB,presencial,si,0,
+C,1,CCC-2005-200,CCC-2005-200,CCC,presencial,si,0,
+D,1,DDD-2010-1,DDD-2010-1,DDD,presencial,si,0,
+D,2,DDD-IS-80-160,DDD-IS-80-160,DDD,presencial,si,0,
+X,9,XXX-2010-999,XXX-2010-999,XXX,presencial,no,0,retícula sin alumnos
 CSV;
 
 const SII_CURATED_CAREERS = <<<'CSV'
@@ -98,6 +99,7 @@ beforeEach(function () {
         ['C', '1', 'EGR', '20231', '1'],
         ['D', '1', 'ACT', '20253', '1'],
         ['D', '2', 'ACT', '20253', '1'],
+        ['A', '1', 'ACT', '20253', '1'],
     ]);
 });
 
@@ -106,23 +108,66 @@ afterEach(function () {
     File::deleteDirectory($this->curated);
 });
 
-it('funde IS2/26 e ISC/44 en ISIC-2010-224', function () {
+it('R-V2-1: cada retícula del SII es su propio plan y recuerda su grupo', function () {
     $curated = base_path('app/Modules/Imports/Sii/Curated');
     $migration = new SiiMigration(SiiExport::open($this->dir), $this->curated);
     iterator_to_array((new CareersStep)->batches($migration));
     $map = $migration->remember('plan_for', fn () => throw new LogicException('debía estar armado'));
 
-    expect($map['A/1'])->toBe(['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial'])
-        ->and($map['A2/2'])->toBe(['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'distancia'])
+    expect($map['A/1'])->toBe(['plan' => 'AAA-2010-224', 'career' => 'AAA', 'modality' => 'presencial', 'group' => 'AAA-2010-224'])
+        ->and($map['A2/2'])->toBe(['plan' => 'AAA-2010-224-A2', 'career' => 'AAA', 'modality' => 'distancia', 'group' => 'AAA-2010-224'])
+        ->and($map['A/3'])->toBe(['plan' => 'AAA-2004-100', 'career' => 'AAA', 'modality' => 'presencial', 'group' => 'AAA-2004-100'])
         ->and(array_key_exists('X/9', $map))->toBeFalse();
 
-    $merged = array_filter((new SiiMigration(SiiExport::open($this->dir), $curated))->curated('planes'), fn (array $r): bool => $r['plan'] === 'ISIC-2010-224');
+    $plans = array_column(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'], 'code');
+    expect(array_count_values($plans))->toMatchArray(['AAA-2010-224' => 1, 'AAA-2010-224-A2' => 1]);
 
-    expect(array_map(fn (array $r): string => $r['sii_carrera'].'/'.$r['sii_reticula'], array_values($merged)))
-        ->toEqualCanonicalizing(['IS2/26', 'ISC/44', 'SCN/11']);
+    $planes = (new SiiMigration(SiiExport::open($this->dir), $curated))->curated('planes');
+    $grid = fn (array $r): string => $r['sii_carrera'].'/'.$r['sii_reticula'];
 
-    $plans = careersStepBatches($this->dir, $this->curated)['study_plans']['rows'];
-    expect(array_count_values(array_column($plans, 'code'))['AAA-2010-224'])->toBe(1);
+    expect(array_map($grid, array_values(array_filter($planes, fn (array $r): bool => $r['plan'] === 'ISIC-2010-224'))))->toBe(['IS2/26'])
+        ->and(array_map($grid, array_values(array_filter($planes, fn (array $r): bool => $r['grupo'] === 'ISIC-2010-224'))))->toEqualCanonicalizing(['IS2/26', 'ISC/44', 'SCN/11'])
+        ->and(array_count_values(array_column(array_filter($planes, fn (array $r): bool => $r['incluir'] === 'si'), 'plan')))->each->toBe(1);
+
+    foreach (array_count_values(array_column($planes, 'grupo')) as $group => $rows) {
+        $official = array_values(array_filter($planes, fn (array $r): bool => $r['plan'] === (string) $group));
+
+        expect($official)->toHaveCount(1, "el grupo {$group} no tiene la fila que conserva la clave oficial")
+            ->and($official[0]['grupo'])->toBe((string) $group);
+
+        if ($rows > 1) {
+            expect($official[0]['modalidad'])->toBe('presencial', "el grupo {$group} conserva la clave oficial en una retícula que no es presencial");
+        }
+    }
+});
+
+it('R-V2-6: el plan de nuevo ingreso de la carrera es el que más nuevo ingreso recibió; el de distancia queda vivo y no actual', function () {
+    // S0 y S2 entraron en 20253 a la presencial A/1; S1, a la de distancia A2/2, y está inscrito en el periodo actual.
+    writeSiiCareers($this->dir, [
+        ['A', '1', '15/08/2010'], ['A2', '2', '15/08/2010'], ['A', '3', '15/08/2004'], ['B', '1', '15/08/2010'],
+        ['C', '1', '15/08/2005'], ['D', '1', '15/08/2010'], ['D', '2', '15/08/1980'], ['X', '9', '15/08/2010'],
+    ], [['A', '1', 'ACT', '20253', '1'], ['A2', '2', 'ACT', '20253', '1'], ['A', '1', 'ACT', '20253', '2']]);
+    writeSiiCareersSelection($this->dir, [['20261', 'S1']]);
+    $plans = collect([...careersStepRun($this->dir, $this->curated)['batches']['study_plans']->rows])->keyBy('code');
+
+    expect($plans['AAA-2010-224'])->toMatchArray(['career' => 'AAA', 'current' => 'Sí', 'intake' => 'Sí', 'historical' => 'No'])
+        ->and($plans['AAA-2010-224-A2'])->toMatchArray(['career' => 'AAA', 'version' => '2010', 'current' => 'Sí', 'intake' => 'No', 'historical' => 'No']);
+});
+
+it('R-V2-6: avisa cuando el plan con más nuevo ingreso de una carrera no es el presencial', function () {
+    $warnings = fn (): array => collect(careersStepBatches($this->dir, $this->curated)['study_plans']['incidents'])
+        ->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'R-V2-6'))->values()->all();
+
+    expect($warnings())->toBe([]);
+
+    // S0 entró a la presencial A/1; S1 y S2, a la de distancia A2/2.
+    writeSiiCareers($this->dir, [
+        ['A', '1', '15/08/2010'], ['A2', '2', '15/08/2010'], ['A', '3', '15/08/2004'], ['B', '1', '15/08/2010'],
+        ['C', '1', '15/08/2005'], ['D', '1', '15/08/2010'], ['D', '2', '15/08/1980'], ['X', '9', '15/08/2010'],
+    ], [['A', '1', 'ACT', '20253', '1'], ['A2', '2', 'ACT', '20253', '1'], ['A2', '2', 'ACT', '20253', '1']]);
+
+    expect(collect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->firstWhere('code', 'AAA-2010-224-A2')['intake'])->toBe('Sí')
+        ->and($warnings())->toBe(['Carrera AAA: el plan con más nuevo ingreso en el periodo 20253 es AAA-2010-224-A2, de modalidad distancia, y queda como el de nuevo ingreso; R-V2-6 pide que el actual sea el presencial: revisar el curado o el nuevo ingreso.']);
 });
 
 it('deriva la oferta por campus de los alumnos', function () {
@@ -145,8 +190,9 @@ it('marca como actual el plan con nuevo ingreso', function () {
     $plans = collect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->keyBy('code');
 
     expect($plans['AAA-2010-224'])->toMatchArray(['career' => 'AAA', 'name' => '', 'version' => '2010', 'current' => 'Sí', 'intake' => 'Sí'])
+        ->and($plans['AAA-2010-224-A2'])->toMatchArray(['career' => 'AAA', 'version' => '2010', 'current' => 'Sí', 'intake' => 'No'])
         ->and($plans['AAA-2004-100'])->toMatchArray(['version' => '2004', 'intake' => 'No'])
-        ->and($plans->count())->toBe(6);
+        ->and($plans->count())->toBe(7);
 });
 
 it('recuerda la versión de cada plan para los pasos siguientes', function () {
@@ -154,7 +200,7 @@ it('recuerda la versión de cada plan para los pasos siguientes', function () {
     iterator_to_array((new CareersStep)->batches($migration));
 
     expect($migration->remember('plan_version', fn () => throw new LogicException('debía estar armado')))
-        ->toMatchArray(['AAA-2010-224' => '2010', 'AAA-2004-100' => '2004', 'DDD-IS-80-160' => '1980'])
+        ->toMatchArray(['AAA-2010-224' => '2010', 'AAA-2010-224-A2' => '2010', 'AAA-2004-100' => '2004', 'DDD-IS-80-160' => '1980'])
         ->not->toHaveKey('XXX-2010-999');
 });
 
@@ -195,12 +241,52 @@ it('excluye las retículas marcadas y lo reporta', function () {
 
 it('una carrera+retícula del SII sin renglón curado detiene la migración', function () {
     writeSiiCareers($this->dir, [['A', '1', '15/08/2010'], ['Q', '7', '15/08/2010']], []);
-    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\nZ,5,ZZZ-2010-1,ZZZ,presencial,si,0,\n");
+    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,grupo,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA-2010-224,AAA,presencial,si,0,\nZ,5,ZZZ-2010-1,ZZZ-2010-1,ZZZ,presencial,si,0,\n");
 
     expect(fn () => careersStepBatches($this->dir, $this->curated))
         ->toThrow(SiiCuratedMismatch::class, 'Q/7');
     expect(fn () => careersStepBatches($this->dir, $this->curated))
         ->toThrow(SiiCuratedMismatch::class, 'Z/5');
+});
+
+it('una fila curada sin grupo detiene la migración antes de escribir', function () {
+    File::put($this->curated.'/planes.csv', str_replace('X,9,XXX-2010-999,XXX-2010-999,', 'X,9,XXX-2010-999,,', str_replace('A2,2,AAA-2010-224-A2,AAA-2010-224,', 'A2,2,AAA-2010-224-A2, ,', SII_CURATED_PLANS)));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: filas sin grupo (pon la clave oficial del plan que agrupa sus materias) [A2/2, X/9].');
+
+    File::put($this->curated.'/planes.csv', "sii_carrera,sii_reticula,plan,carrera,modalidad,incluir,alumnos_vigentes,nota\nA,1,AAA-2010-224,AAA,presencial,si,0,\nA2,2,AAA-2010-224-A2,AAA,distancia,si,0,\nA,3,AAA-2004-100,AAA,presencial,si,0,\nB,1,BBB-2010-300,BBB,presencial,si,0,\nC,1,CCC-2005-200,CCC,presencial,si,0,\nD,1,DDD-2010-1,DDD,presencial,si,0,\nD,2,DDD-IS-80-160,DDD,presencial,si,0,\nX,9,XXX-2010-999,XXX,presencial,no,0,\n");
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))->toThrow(SiiCuratedMismatch::class, 'filas sin grupo');
+});
+
+it('R-V2-1: dos retículas incluidas con el mismo plan detienen la migración antes de escribir', function () {
+    File::put($this->curated.'/planes.csv', str_replace('A2,2,AAA-2010-224-A2,AAA-2010-224,', 'A2,2,AAA-2010-224,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: planes de más de una retícula incluida (una retícula del SII es un plan de Nexus, R-V2-1) [AAA-2010-224 (A/1, A2/2)].');
+
+    File::put($this->curated.'/planes.csv', str_replace('X,9,XXX-2010-999,XXX-2010-999,', 'X,9,AAA-2010-224,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->toHaveCount(7);
+});
+
+it('R-V2-1: un plan con dos grupos distintos detiene la migración antes de escribir', function () {
+    File::put($this->curated.'/planes.csv', str_replace('X,9,XXX-2010-999,XXX-2010-999,', 'X,9,AAA-2004-100,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: planes con más de un grupo [AAA-2004-100 (AAA-2004-100, AAA-2010-224)].');
+});
+
+it('R-V2-1: un grupo sin la fila que conserva su clave como plan detiene la migración antes de escribir; esa fila puede no ser presencial', function () {
+    File::put($this->curated.'/planes.csv', str_replace('A,1,AAA-2010-224,AAA-2010-224,', 'A,1,AAA-2010-224-A1,AAA-2010-224,', SII_CURATED_PLANS));
+
+    expect(fn () => careersStepBatches($this->dir, $this->curated))
+        ->toThrow(SiiCuratedMismatch::class, 'El catálogo curado planes no es válido: grupos sin la fila que conserva su clave como plan [AAA-2010-224 (A/1, A2/2)].');
+
+    File::put($this->curated.'/planes.csv', str_replace('B,1,BBB-2010-300,BBB-2010-300,BBB,presencial,', 'B,1,BBB-2010-300,BBB-2010-300,BBB,distancia,', SII_CURATED_PLANS));
+
+    expect(collect(careersStepBatches($this->dir, $this->curated)['study_plans']['rows'])->pluck('code'))->toContain('BBB-2010-300');
 });
 
 it('una carrera incluida sin renglón en carreras.csv detiene la migración', function () {
@@ -236,7 +322,7 @@ it('el curado real cubre cada carrera incluida', function () {
     expect(array_diff($included, $careers))->toBe([]);
 });
 
-it('lleva al plan los créditos totales de su retícula del SII; si sus retículas difieren, quedan los de la presencial, con aviso', function () {
+it('R-V2-1: lleva a cada plan los créditos totales de su propia retícula del SII, aunque otra retícula de su grupo pida otros', function () {
     writeSiiCareers($this->dir, [
         ['A2', '2', '15/08/2010', '250'], ['A', '1', '15/08/2010', '260'], ['A', '3', '15/08/2004', '440.00'],
         ['B', '1', '15/08/2010', ''], ['C', '1', '15/08/2005', '0'], ['D', '1', '15/08/2010', '260'], ['D', '1', '15/08/2010', '250'],
@@ -247,6 +333,7 @@ it('lleva al plan los créditos totales de su retícula del SII; si sus retícul
     $plans = array_column($batch['rows'], null, 'code');
 
     expect($plans['AAA-2010-224']['credits'])->toBe('260')
+        ->and($plans['AAA-2010-224-A2']['credits'])->toBe('250')
         ->and($plans['AAA-2004-100']['credits'])->toBe('440')
         ->and($plans['BBB-2010-300']['credits'])->toBeNull()
         ->and($plans['CCC-2005-200']['credits'])->toBeNull()
@@ -254,7 +341,6 @@ it('lleva al plan los créditos totales de su retícula del SII; si sus retícul
         ->and($plans['DDD-2010-1']['credits'])->toBe('260')
         ->and(collect($batch['incidents'])->pluck('message')->filter(fn (string $m): bool => str_contains($m, 'créditos'))->values()->all())
         ->toBe([
-            'El plan AAA-2010-224 junta retículas del SII con créditos totales distintos (A/1 260, A2/2 250): quedan 260, de la presencial (supuesto por confirmar).',
             'La retícula D/1 del SII viene varias veces en carreras con créditos totales distintos (250, 260): quedan 260, los mayores (supuesto por confirmar).',
         ]);
 });
@@ -284,19 +370,19 @@ function careersStepPeriodWarnings(array $run): array
     return collect($run['batches']['study_plans']->incidents)->where('ref', 'seleccion_materias')->pluck('message')->values()->all();
 }
 
-it('D18: un plan sin alumnos inscritos en el periodo regular más reciente y que no es de nuevo ingreso es una retícula histórica; el verano no cuenta, y un plan con dos retículas del SII es vivo si una tiene inscritos', function () {
+it('D18: un plan sin alumnos inscritos en el periodo regular más reciente y que no es de nuevo ingreso es una retícula histórica; el verano no cuenta', function () {
     // 20253: S0 (A/1), S2 (A/3) y S4 (C/1); 20261: S1 (A2/2) y S5 (D/1); S2 también en el verano 20262; S6 (D/2) con un periodo que no es del SII.
     writeSiiCareersSelection($this->dir, [['20253', 'S0'], ['20253', 'S2'], ['20261', 'S1'], ['20253', 'S4'], ['20261', 'S5'], ['20264', 'S6'], ['20261', 'S1'], ['20262', 'S2']]);
     $run = careersStepRun($this->dir, $this->curated);
     $plans = array_column([...$run['batches']['study_plans']->rows], 'historical', 'code');
 
     expect($plans)->toBe([
-        'AAA-2004-100' => 'Sí', 'AAA-2010-224' => 'No', 'BBB-2010-300' => 'Sí', 'CCC-2005-200' => 'Sí', 'DDD-2010-1' => 'No', 'DDD-IS-80-160' => 'Sí',
+        'AAA-2004-100' => 'Sí', 'AAA-2010-224' => 'No', 'AAA-2010-224-A2' => 'No', 'BBB-2010-300' => 'Sí', 'CCC-2005-200' => 'Sí', 'DDD-2010-1' => 'No', 'DDD-IS-80-160' => 'Sí',
     ])
         ->and($run['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
         ->toBe(['AAA-2004-100' => true, 'BBB-2010-300' => true, 'CCC-2005-200' => true, 'DDD-IS-80-160' => true])
         ->and(careersStepPeriodWarnings($run))
-        ->toBe(['El periodo actual es el 20261 (2 alumnos inscritos en seleccion_materias): 4 de 6 planes no tienen alumnos inscritos en él ni son de nuevo ingreso, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
+        ->toBe(['El periodo actual es el 20261 (2 alumnos inscritos en seleccion_materias): 4 de 7 planes no tienen alumnos inscritos en él ni son de nuevo ingreso, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
 });
 
 it('D18: un periodo regular con menos de la mitad de alumnos que el anterior todavía se está abriendo: cuentan los inscritos en los dos', function () {
@@ -305,7 +391,7 @@ it('D18: un periodo regular con menos de la mitad de alumnos que el anterior tod
 
     expect($run['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))->toBe(['BBB-2010-300' => true, 'DDD-2010-1' => true, 'DDD-IS-80-160' => true])
         ->and(careersStepPeriodWarnings($run))
-        ->toBe(['El periodo 20271 (1 alumno inscrito en seleccion_materias) todavía se está abriendo, con menos de la mitad que el 20253 (3 alumnos): cuentan los inscritos en los dos (umbral de la mitad, supuesto por confirmar). 3 de 6 planes no tienen alumnos inscritos ni son de nuevo ingreso, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
+        ->toBe(['El periodo 20271 (1 alumno inscrito en seleccion_materias) todavía se está abriendo, con menos de la mitad que el 20253 (3 alumnos): cuentan los inscritos en los dos (umbral de la mitad, supuesto por confirmar). 3 de 7 planes no tienen alumnos inscritos ni son de nuevo ingreso, y quedan como retículas históricas (confirmado, 10 de noviembre de 2026).']);
 
     writeSiiCareersSelection($this->dir, [['20253', 'S2'], ['20253', 'S4'], ['20253', 'S0'], ['20271', 'S1'], ['20271', 'S5']]);
 
@@ -326,22 +412,25 @@ it('D18: el plan de nuevo ingreso nunca es una retícula histórica aunque nadie
     expect($plans['BBB-2010-300'])->toMatchArray(['current' => 'Sí', 'intake' => 'Sí', 'historical' => 'No'])
         ->and($plans['DDD-IS-80-160'])->toMatchArray(['current' => 'Sí', 'intake' => 'No', 'historical' => 'Sí'])
         ->and($run['migration']->remember('historical_plans', fn () => throw new LogicException('debía estar armado')))
-        ->toBe(['AAA-2004-100' => true, 'AAA-2010-224' => true, 'CCC-2005-200' => true, 'DDD-2010-1' => true, 'DDD-IS-80-160' => true]);
+        ->toBe(['AAA-2004-100' => true, 'AAA-2010-224' => true, 'AAA-2010-224-A2' => true, 'CCC-2005-200' => true, 'DDD-2010-1' => true, 'DDD-IS-80-160' => true]);
 });
 
-it('D18: un plan que junta dos retículas del SII es vivo si una de ellas tiene un inscrito, aunque no sea de nuevo ingreso', function () {
-    // S0 (A/1) y S1 (A2/2), los dos de AAA-2010-224, egresados y sin periodo de ingreso: el plan no es vigente ni de nuevo ingreso.
+it('D18 y R-V2-1: cada retícula de un grupo es viva o histórica por sus propios inscritos', function () {
+    // S0 (A/1) y S1 (A2/2), del mismo grupo AAA-2010-224, egresados y sin periodo de ingreso: ningún plan es vigente ni de nuevo ingreso.
     writeSiiCareers($this->dir, [
         ['A', '1', '15/08/2010'], ['A2', '2', '15/08/2010'], ['A', '3', '15/08/2004'], ['B', '1', '15/08/2010'],
         ['C', '1', '15/08/2005'], ['D', '1', '15/08/2010'], ['D', '2', '15/08/1980'], ['X', '9', '15/08/2010'],
     ], [['A', '1', 'EGR', '', '1'], ['A2', '2', 'EGR', '', '1']]);
-    $plan = fn (): array => collect([...careersStepRun($this->dir, $this->curated)['batches']['study_plans']->rows])->firstWhere('code', 'AAA-2010-224');
+    $plans = fn (): array => collect([...careersStepRun($this->dir, $this->curated)['batches']['study_plans']->rows])->whereIn('code', ['AAA-2010-224', 'AAA-2010-224-A2'])->pluck('historical', 'code')->all();
 
     writeSiiCareersSelection($this->dir, [['20261', 'S1']]);
-    expect($plan())->toMatchArray(['current' => 'No', 'intake' => 'No', 'historical' => 'No']);
+    expect($plans())->toBe(['AAA-2010-224' => 'Sí', 'AAA-2010-224-A2' => 'No']);
+
+    writeSiiCareersSelection($this->dir, [['20261', 'S0']]);
+    expect($plans())->toBe(['AAA-2010-224' => 'No', 'AAA-2010-224-A2' => 'Sí']);
 
     writeSiiCareersSelection($this->dir, [['20261', 'S9']]);
-    expect($plan())->toMatchArray(['current' => 'No', 'intake' => 'No', 'historical' => 'Sí']);
+    expect($plans())->toBe(['AAA-2010-224' => 'Sí', 'AAA-2010-224-A2' => 'Sí']);
 });
 
 it('solo lee de la selección el periodo y el número de control', function () {

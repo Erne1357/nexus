@@ -4,6 +4,7 @@ namespace App\Modules\Core\Queries;
 
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\StaffType;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Modality;
@@ -23,6 +24,9 @@ use Illuminate\Support\Str;
  */
 final class PeopleQuery
 {
+    /** El valor del filtro «Sin tipo» de personal. */
+    public const string NO_STAFF_TYPE = 'none';
+
     public function __construct(
         private readonly RoleAssignmentRules $rules,
         private readonly ScopeLabels $labels,
@@ -34,16 +38,19 @@ final class PeopleQuery
      * tienen otro puesto vigente (AC-15, supuesto por confirmar): son decenas de miles y la lista es del personal; salen
      * al buscarlos o con el puesto «Alumno». `$active` deja solo las cuentas activas (true) o las dadas de baja (false), y
      * `$access`, las de ese estado del acceso (AC-04, con la misma regla que UserAccess::resolve()); los dos son filtros de
-     * 1.22-C1 y no cambian lo de los alumnos.
+     * 1.22-C1 y no cambian lo de los alumnos. `$staffType` deja a quienes tienen ese tipo de personal (R-V2-3) y
+     * `$withoutStaffType`, a quienes no tienen ninguno.
      *
      * @return LengthAwarePaginator<int, User>
      */
-    public function forTable(string $search = '', ?Role $role = null, int $perPage = 15, ?bool $active = null, ?UserAccess $access = null): LengthAwarePaginator
+    public function forTable(string $search = '', ?Role $role = null, int $perPage = 15, ?bool $active = null, ?UserAccess $access = null, ?StaffType $staffType = null, bool $withoutStaffType = false): LengthAwarePaginator
     {
         return User::query()
             ->tap(fn (Builder $query) => TextSearch::apply($query, ['name', 'username'], $search))
             ->when($active !== null, fn (Builder $query) => $query->where('is_active', $active))
             ->when($access !== null, fn (Builder $query) => $this->withAccess($query, $access))
+            ->when($staffType !== null, fn (Builder $query) => $query->where('staff_type', $staffType))
+            ->when($withoutStaffType && $staffType === null, fn (Builder $query) => $query->whereNull('staff_type'))
             ->when($role !== null, fn (Builder $query) => $query->whereHas(
                 'roleAssignments',
                 fn (Builder $assignments) => $assignments->current()->where('role', $role),
@@ -144,7 +151,7 @@ final class PeopleQuery
             ->map(fn (Campus $campus): array => ['id' => $campus->id, 'name' => "{$campus->code} · {$campus->name}"])
             ->all() : [];
 
-        $units = $role->unitKind() === null ? [] : OrgUnit::query()
+        $units = $role->unitKinds() === [] ? [] : OrgUnit::query()
             ->where('is_active', true)
             ->orderBy('name')
             ->get()

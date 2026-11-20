@@ -41,8 +41,9 @@ use Illuminate\Support\Collection;
  *
  * Se resuelve con los permisos de FacultyPermission, que el provider concede por puesto:
  * - Sobre un docente (`view`, `update`, `managePositions`, `manageAvailability`, `manageExternalLoads` y la parte del
- *   docente de `manageQualification`): `faculty.teacher.view_all`, que cubre a todos, también sin adscripción (la
- *   Subdirección), o el permiso por unidad de la acción (`faculty.teacher.view`, `update`, `manage_positions`,
+ *   docente de `manageQualification`): `faculty.teacher.view_all` junto con el permiso de la acción, que cubre a todos,
+ *   también sin adscripción (la Subdirección; el directivo, que solo tiene `view`, solo los ve, AZ-03), o el permiso por
+ *   unidad de la acción (`faculty.teacher.view`, `update`, `manage_positions`,
  *   `manage_availability`, `manage_external_loads`, `faculty.teacher_qualification.manage`) sobre los departamentos
  *   de sus adscripciones sin borrar.
  * - Sobre un departamento (`create` con destino, `removeAdscription`, `setPrimaryAdscription` y la materia de
@@ -230,12 +231,14 @@ final class TeacherPolicy
     }
 
     /**
-     * Si cubre al docente para `$permission`: con `faculty.teacher.view_all`, a todos, también a los que no tienen
-     * departamento; si no, con `$permission` sobre los departamentos de sus adscripciones sin borrar.
+     * Si cubre al docente para `$permission`: con `faculty.teacher.view_all` y `$permission` en algún lado, a todos,
+     * también a los que no tienen departamento; si no, con `$permission` sobre los departamentos de sus adscripciones sin
+     * borrar. `view_all` solo amplía a quién alcanza una acción que el puesto ya tiene: el directivo (AZ-03), que lo
+     * tiene para leer, no edita a nadie.
      */
     private function coversTeacher(Actor $scope, Teacher $teacher, FacultyPermission $permission): bool
     {
-        return $scope->allows(FacultyPermission::TeacherViewAll)
+        return ($scope->allows(FacultyPermission::TeacherViewAll) && $scope->allowsAny($permission))
             || $scope->allows($permission, Target::of(unit: $this->adscriptionsOf($teacher)->pluck('department_id')->unique()->values()->all()));
     }
 

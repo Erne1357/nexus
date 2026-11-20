@@ -4,9 +4,11 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Core\Actions\AppointRole;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\OrgUnitKind;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Enums\UserAccess;
 use App\Modules\Core\Models\Campus;
+use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\OrgUnit;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\User;
@@ -574,4 +576,93 @@ it('avisa con TeacherAccessChanged después del commit solo cuando cambia algo',
 
     Event::assertDispatchedTimes(TeacherAccessChanged::class, 1);
     Event::assertDispatched(TeacherAccessChanged::class, fn (TeacherAccessChanged $event): bool => $event->teacher->is($teacher) && $event->result === AccessSync::Created);
+});
+
+/**
+ * Un docente activo con usuario, que luego se da de baja en el catálogo (la baja la aplica la prueba).
+ *
+ * @return array{0: Teacher, 1: User}
+ */
+function teacherWithAccount(Department $department): array
+{
+    $teacher = Teacher::factory()->adscribedTo($department)->create();
+    syncAccess($teacher);
+
+    return [$teacher, $teacher->fresh()->user];
+}
+
+it('AZ-S19: la baja de un docente directivo deja su cuenta activa y su puesto, y no toca el de docente', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    [$teacher, $user] = teacherWithAccount($this->sis);
+    $directivo = RoleAssignment::factory()->for($user)->create(['role' => Role::Directivo, 'org_unit_id' => OrgUnit::where('code', 'DIRECCION')->value('id'), 'valid_from' => '2026-01-01', 'valid_to' => null]);
+
+    $teacher->update(['is_active' => false]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Unchanged)
+        ->and($user->fresh()->is_active)->toBeTrue()
+        ->and($directivo->fresh()->valid_to)->toBeNull()
+        ->and(teachingScopes($user))->toBe(['todo el Tec']);
+});
+
+it('AZ-S19: la baja conserva la cuenta y el puesto de quien es jefe de una unidad que no es departamento académico', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    [$teacher, $user] = teacherWithAccount($this->sis);
+    $hr = OrgUnit::factory()->create(['code' => 'RH', 'name' => 'Recursos Humanos', 'kind' => OrgUnitKind::Departamento]);
+    $head = RoleAssignment::factory()->for($user)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => $hr->id, 'valid_from' => '2026-01-01', 'valid_to' => null]);
+
+    $teacher->update(['is_active' => false]);
+    syncAccess($teacher);
+
+    expect($user->fresh()->is_active)->toBeTrue()
+        ->and($head->fresh()->valid_to)->toBeNull();
+});
+
+it('AZ-S19: con jefatura académica y otra de una unidad que no lo es, termina la académica y la cuenta sigue activa', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    [$teacher, $user] = teacherWithAccount($this->sis);
+    $hr = OrgUnit::factory()->create(['code' => 'RH', 'name' => 'Recursos Humanos', 'kind' => OrgUnitKind::Departamento]);
+    $academic = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-10-03');
+    $other = RoleAssignment::factory()->for($user)->create(['role' => Role::JefeDepartamento, 'org_unit_id' => $hr->id, 'valid_from' => '2026-01-01', 'valid_to' => null]);
+
+    $teacher->update(['is_active' => false]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated)
+        ->and($academic->fresh()->valid_to->toDateString())->toBe('2026-11-02')
+        ->and($other->fresh()->valid_to)->toBeNull()
+        ->and($user->fresh()->is_active)->toBeTrue();
+});
+
+it('AZ-S19: la baja termina la jefatura de un departamento académico y de proyecto docente, y desactiva si no queda otro puesto', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    [$teacher, $user] = teacherWithAccount($this->sis);
+    $head = appointHeadship($user, $this->sis, Role::JefeDepartamento, '2026-10-03');
+    $project = RoleAssignment::factory()->for($user)->create(['role' => Role::JefeProyectoDocente, 'org_unit_id' => $this->ind->id, 'modality_id' => Modality::factory()->create()->id, 'valid_from' => '2026-10-03', 'valid_to' => null]);
+
+    $teacher->update(['is_active' => false]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated)
+        ->and($head->fresh()->valid_to->toDateString())->toBe('2026-11-02')
+        ->and($project->fresh()->valid_to->toDateString())->toBe('2026-11-02')
+        ->and($user->fresh()->is_active)->toBeFalse();
+});
+
+it('AZ-S19: un coordinador cuenta como otro puesto vigente y la cuenta sigue activa (supuesto por confirmar)', function () {
+    $this->travelTo('2026-11-03 10:00:00');
+    [$teacher, $user] = teacherWithAccount($this->sis);
+    RoleAssignment::factory()->for($user)->create(['role' => Role::Coordinador, 'campus_id' => $this->c2->id, 'career_id' => Career::factory()->create()->id, 'valid_from' => '2026-09-01', 'valid_to' => null]);
+
+    $teacher->update(['is_active' => false]);
+    syncAccess($teacher);
+
+    expect($user->fresh()->is_active)->toBeTrue();
+});
+
+it('AZ-S19: la baja de un docente que solo es docente desactiva su cuenta y deja su bitácora como siempre', function () {
+    [$teacher, $user] = teacherWithAccount($this->sis);
+
+    $teacher->update(['is_active' => false]);
+
+    expect(syncAccess($teacher))->toBe(AccessSync::Updated)
+        ->and($user->fresh()->is_active)->toBeFalse()
+        ->and(Activity::where('subject_id', $user->id)->where('description', 'like', '%desactivó%')->count())->toBe(1);
 });
