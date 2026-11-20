@@ -45,7 +45,7 @@ final class AcademicLoadVisibility
      * Las rutas de la carga académica que se bloquean mientras está oculta, por nombre: las de la propuesta, la bandeja (con
      * Paralelos), la demanda y la precisión de la proyección, las versiones publicadas, los horarios y los choques, los acuerdos
      * (préstamos de salón y grupos compartidos), el re-análisis, la asignación docente, la carga por docente, las solicitudes
-     * de cambio, el cierre y su avance, las corridas del motor, «Mi carga», «Oferta», y la consulta publicada con sus PDF y
+     * de cambio, el cierre y su avance, las corridas del motor, y la consulta publicada con sus PDF y
      * exportes. Las que piden sesión responden 403; las públicas, 404.
      *
      * @var list<string>
@@ -74,8 +74,6 @@ final class AcademicLoadVisibility
         'staffing.change-requests',
         'staffing.closing',
         'staffing.closing-board',
-        'staffing.offer',
-        'staffing.my-load',
         'solver.runs',
     ];
 
@@ -162,7 +160,7 @@ final class AcademicLoadVisibility
             'core',
             'Módulos',
             label: 'Mostrar la carga académica',
-            help: 'Apagado, la carga académica (propuesta, demanda, horarios y choques, acuerdos, asignación docente, carga por docente, solicitudes de cambio, corridas del motor, cierre, publicación, «Mi carga» y «Oferta») sale del menú y sus pantallas no abren, ni la consulta pública de horarios, para nadie más que el admin. No se borra ni se detiene nada.',
+            help: 'Apagado, la carga académica (propuesta, demanda, horarios y choques, acuerdos, asignación docente, carga por docente, solicitudes de cambio, corridas del motor, cierre, publicación, sin «Mi carga» ni «Oferta», que siempre se ven) sale del menú y sus pantallas no abren, ni la consulta pública de horarios, para nadie más que el admin. No se borra ni se detiene nada.',
             type: SettingType::Boolean,
             default: self::DEFAULT_VISIBLE,
             permission: CorePermission::AcademicLoadToggle,
