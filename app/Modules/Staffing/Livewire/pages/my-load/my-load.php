@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
 use App\Modules\Faculty\Models\Teacher;
@@ -31,7 +32,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * solicitud abierta (una por docente y grupo, confirmado el 7 de noviembre de 2026); los demás quedan en el select
  * deshabilitados con su motivo, y si ninguno se puede, el botón queda deshabilitado con el suyo. La solicitud es sobre
  * el grupo vivo: un grupo publicado que después se reasignó o se canceló sale deshabilitado. Debajo, la lista de
- * sus solicitudes del periodo con el comentario del jefe. Lo que lee sale de MyLoadQuery y MyChangeRequestsQuery.
+ * sus solicitudes del periodo con el comentario del jefe. Con la carga académica oculta (MN-05, confirmado el 20 de
+ * noviembre de 2026) Mi carga es de solo lectura: no hay botón ni modal, una línea lo explica y el servidor rechaza pedir (403). Lo que lee sale de MyLoadQuery y MyChangeRequestsQuery.
  */
 new #[Title('Mi carga')] class extends Component
 {
@@ -165,6 +167,7 @@ new #[Title('Mi carga')] class extends Component
             'load' => $load,
             'mine' => $mine,
             'canRequest' => $this->canRequest($context),
+            'requestsHidden' => app(AcademicLoadVisibility::class)->hiddenFrom($context),
             'requestOptions' => $options,
             'requestBlocked' => self::blockedReason($options, $mine['groups'] ?? []),
             'maxText' => ChangeRequestRules::MAX_TEXT_LENGTH,
@@ -187,7 +190,8 @@ new #[Title('Mi carga')] class extends Component
     {
         $user = $context->user();
 
-        return $user !== null && $context->allows(StaffingPermission::ChangeRequestRequestOwn, Target::ownedBy((string) $user->getKey()));
+        return ! app(AcademicLoadVisibility::class)->hiddenFrom($context)
+            && $user !== null && $context->allows(StaffingPermission::ChangeRequestRequestOwn, Target::ownedBy((string) $user->getKey()));
     }
 
     /**
@@ -279,6 +283,8 @@ new #[Title('Mi carga')] class extends Component
      */
     private function requestable(string $groupId, Actor $context, MyChangeRequestsQuery $requests): array
     {
+        abort_if(app(AcademicLoadVisibility::class)->hiddenFrom($context), 403);
+
         $user = $context->user();
         $term = $context->activeTerm();
         $teacher = $user === null ? null : Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
