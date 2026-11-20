@@ -13,7 +13,7 @@
     <div id="tip"></div>
     <aside id="panel">
       <div class="ut-ph">
-        <div class="ut-grab" id="grab"></div><div class="ut-brand"><img class="ut-mk" src="{{ asset('ubicatec/img/logo_itcj.webp') }}" alt="ITCJ"><div><h1>Mapa del campus</h1><p>{{ collect([$map['campus'], $map['term']['name'] ?? null])->filter()->implode(' · ') }}</p></div></div>
+        <div class="ut-grab" id="grab"></div><div class="ut-brand"><img class="ut-mk" src="{{ asset('ubicatec/img/logo_itcj.webp') }}" alt="ITCJ"><div><h1>Mapa del campus</h1><p>{{ collect([$map['campus'], isset($map['term']['name']) ? 'clases de '.$map['term']['name'] : null])->filter()->implode(' · ') }}</p></div></div>
         <div class="ut-search" id="sbox">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
           <input id="q" placeholder="Salón, materia, grupo, docente, oficina…" autocomplete="off" aria-label="Buscar en el mapa">
@@ -42,7 +42,7 @@
 <div data-testid="campus-map-static" class="absolute inset-0 flex items-center justify-center bg-base-200">
     <div class="text-center">
         <h1 class="text-2xl font-semibold">Mapa del campus</h1>
-        <p class="text-base-content/70">{{ collect([$map['campus'], $map['term']['name'] ?? null])->filter()->implode(' · ') }}</p>
+        <p class="text-base-content/70">{{ collect([$map['campus'], isset($map['term']['name']) ? 'clases de '.$map['term']['name'] : null])->filter()->implode(' · ') }}</p>
     </div>
 </div>
 @endif
