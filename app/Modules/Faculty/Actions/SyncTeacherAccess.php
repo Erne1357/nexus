@@ -95,7 +95,21 @@ final class SyncTeacherAccess
             }
 
             $result = $user === null ? AccessSync::Created : AccessSync::Linked;
-            $user ??= $this->createStaffUser->handle($teacher->rfc, $teacher->name, email: $this->freeEmail($teacher->email));
+
+            if ($user === null) {
+                try {
+                    $user = $this->createStaffUser->handle($teacher->rfc, $teacher->name, email: $this->freeEmail($teacher->email));
+                } catch (ValidationException $exception) {
+                    // Otra sesión (la importación del personal) creó al usuario entre la revisión y el alta.
+                    $user = User::query()->where('username', $teacher->rfc)->lockForUpdate()->first() ?? throw $exception;
+
+                    if (! $this->linkable($user)) {
+                        return AccessSync::Conflict;
+                    }
+
+                    $result = AccessSync::Linked;
+                }
+            }
 
             $this->link($teacher, $user);
         }
