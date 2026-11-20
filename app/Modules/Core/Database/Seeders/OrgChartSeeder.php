@@ -8,10 +8,10 @@ use App\Modules\Core\Models\OrgUnit;
 use Illuminate\Database\Seeder;
 
 /**
- * Organigrama tipo del ITCJ bajo la Dirección y la Subdirección Académica que crea la migración.
- * Es el supuesto AZ-S1 (por confirmar), tomado del directorio de cdjuarez.tecnm.mx/nosotros consultado
- * el 2 de noviembre de 2026. Servicios Escolares pertenece a la Subdirección Académica (AZ-02, confirmado el 5 de
- * noviembre de 2026); una instalación que ya la tiene en otra subdirección la mueve el admin en el Organigrama.
+ * Organigrama oficial del ITCJ (marzo de 2026) bajo la Dirección y la Subdirección Académica que crea la migración
+ * (AZ-S1, R-V2-5, confirmado el 19 de noviembre de 2026). Servicios Escolares cuelga de la Subdirección de Planeación
+ * y Vinculación, Educación a Distancia se siembra inactiva y la Coordinación General Campus II cuelga de la
+ * Académica; una instalación que ya tiene una unidad en otro lugar la mueve el admin en el Organigrama.
  *
  * Solo crea las claves que faltan (también entre las borradas: una unidad que el admin quitó no se
  * resucita) y nunca actualiza una existente, así que volver a sembrar no mueve lo que el admin
@@ -24,7 +24,7 @@ class OrgChartSeeder extends Seeder
     /**
      * Ordenado de modo que cada padre aparece antes que sus hijos.
      *
-     * @var list<array{code: string, name: string, kind: OrgUnitKind, parent: string}>
+     * @var list<array{code: string, name: string, kind: OrgUnitKind, parent: string, active?: bool}>
      */
     private const array UNITS = [
         ['code' => 'SUB-PLANEACION', 'name' => 'Subdirección de Planeación y Vinculación', 'kind' => OrgUnitKind::Subdireccion, 'parent' => OrgTree::ROOT],
@@ -32,10 +32,19 @@ class OrgChartSeeder extends Seeder
         ['code' => 'DIV-PROFESIONAL', 'name' => 'División de Estudios Profesionales', 'kind' => OrgUnitKind::Division, 'parent' => OrgTree::ACADEMIC],
         ['code' => 'DIV-POSGRADO', 'name' => 'División de Estudios de Posgrado e Investigación', 'kind' => OrgUnitKind::Division, 'parent' => OrgTree::ACADEMIC],
         ['code' => 'DESARROLLO-ACADEMICO', 'name' => 'Departamento de Desarrollo Académico', 'kind' => OrgUnitKind::Departamento, 'parent' => OrgTree::ACADEMIC],
-        ['code' => 'EDUCACION-DISTANCIA', 'name' => 'Departamento de Educación a Distancia', 'kind' => OrgUnitKind::Departamento, 'parent' => OrgTree::ACADEMIC],
-        ['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'parent' => OrgTree::ACADEMIC],
+        ['code' => 'EDUCACION-DISTANCIA', 'name' => 'Departamento de Educación a Distancia', 'kind' => OrgUnitKind::Departamento, 'parent' => OrgTree::ACADEMIC, 'active' => false],
+        ['code' => 'COORDINACION-CAMPUS-II', 'name' => 'Coordinación General Campus II', 'kind' => OrgUnitKind::Oficina, 'parent' => OrgTree::ACADEMIC],
         ['code' => 'VINCULACION', 'name' => 'Departamento de Gestión Tecnológica y Vinculación', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-PLANEACION'],
         ['code' => 'EXTRAESCOLARES', 'name' => 'Departamento de Actividades Extraescolares', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-PLANEACION'],
+        ['code' => 'PLANEACION', 'name' => 'Departamento de Planeación, Programación y Presupuestación', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-PLANEACION'],
+        ['code' => 'COMUNICACION', 'name' => 'Departamento de Comunicación y Difusión', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-PLANEACION'],
+        ['code' => OrgTree::SCHOOL_SERVICES, 'name' => 'Departamento de Servicios Escolares', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-PLANEACION'],
+        ['code' => 'CENTRO-INFORMACION', 'name' => 'Departamento de Centro de Información', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-PLANEACION'],
+        ['code' => 'RECURSOS-HUMANOS', 'name' => 'Departamento de Recursos Humanos', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-ADMINISTRATIVA'],
+        ['code' => 'RECURSOS-FINANCIEROS', 'name' => 'Departamento de Recursos Financieros', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-ADMINISTRATIVA'],
+        ['code' => 'RECURSOS-MATERIALES', 'name' => 'Departamento de Recursos Materiales y Servicios', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-ADMINISTRATIVA'],
+        ['code' => 'MANTENIMIENTO', 'name' => 'Departamento de Mantenimiento de Equipo', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-ADMINISTRATIVA'],
+        ['code' => 'CENTRO-COMPUTO', 'name' => 'Departamento de Centro de Cómputo', 'kind' => OrgUnitKind::Departamento, 'parent' => 'SUB-ADMINISTRATIVA'],
     ];
 
     public function run(): void
@@ -56,7 +65,7 @@ class OrgChartSeeder extends Seeder
                 'code' => $unit['code'],
                 'name' => $unit['name'],
                 'kind' => $unit['kind'],
-                'is_active' => true,
+                'is_active' => $unit['active'] ?? true,
             ]);
         }
     }
