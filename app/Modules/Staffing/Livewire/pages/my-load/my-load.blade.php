@@ -1,5 +1,5 @@
 {{--
-    Mi carga (tarea 3.10), maqueta C «Columnas por día»: la ecuación de horas (base − externas − asignadas = restantes),
+    Mi carga (tarea 3.10), maqueta C «Columnas por día»: la ecuación de horas (base − otra modalidad − asignadas = restantes),
     los días de lunes a viernes (el sábado solo con sesiones) con un bloque por sesión (materia, grupo, salón, campus y,
     si el grupo tiene una solicitud abierta, su estado), el hueco entre dos sesiones y el traslado cuando el campus
     cambia, con sus minutos libres (SC-09: con menos del mínimo, en aviso). Los días van en columnas cuando su caja mide
@@ -48,13 +48,13 @@
             </div>
             <div class="hidden items-center px-0.5 font-mono text-2xl text-neutral md:flex" aria-hidden="true">−</div>
             <div class="min-w-0 px-4 py-3 md:flex-1">
-                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Externas</span>
+                <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Otra modalidad</span>
                 <b class="block font-mono text-3xl leading-tight" data-testid="hours-external">{{ $h['external'] }}<small class="text-sm font-normal text-neutral"> h</small></b>
                 <span class="flex flex-wrap gap-x-3 text-sm text-neutral">
                     @forelse ($h['sources'] as $source)
                         <span>{{ $source['source'] }} <span class="font-mono">{{ $source['hours'] }} h</span></span>
                     @empty
-                        <span>Sin horas fuera del ITCJ</span>
+                        <span>Sin carga académica en otra modalidad</span>
                     @endforelse
                 </span>
             </div>

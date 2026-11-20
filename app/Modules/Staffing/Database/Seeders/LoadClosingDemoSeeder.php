@@ -115,7 +115,7 @@ final class LoadClosingDemoSeeder extends Seeder
         'El docente renunció a sus horas de asignatura.',
     ];
 
-    private const string OVER_LIMIT_REASON = 'Con sus horas fuera del ITCJ se pasa de su tope; el grupo espera a otro docente.';
+    private const string OVER_LIMIT_REASON = 'Con su carga académica en otra modalidad se pasa de su tope; el grupo espera a otro docente.';
 
     private const array TEACHER_JUSTIFICATIONS = [
         'Docente de nuevo ingreso, contratación en trámite.',

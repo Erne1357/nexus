@@ -34,7 +34,7 @@ final class RemoveExternalLoad
                 ->event(ActivityEvent::Deleted)
                 ->withChanges(['old' => $this->rules->logged($locked)])
                 ->withProperties(['teacher_id' => $locked->teacher_id, 'term_id' => $locked->term_id])
-                ->log('Quitó unas horas fuera del ITCJ del docente');
+                ->log('Quitó carga académica en otra modalidad del docente');
 
             ExternalLoadChanged::dispatch($locked, auth()->user());
         });
