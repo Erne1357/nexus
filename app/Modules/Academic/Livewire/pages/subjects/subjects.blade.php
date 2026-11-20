@@ -7,6 +7,7 @@
     estado; luego el detalle; luego las acciones), que no repiten los data-testid de la tabla.
 --}}
 <div>
+    <x-core::back-link :validation="$this->validationReturnUrl()" class="mb-4" />
     <x-header title="Materias" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
             El catálogo de materias con sus horas y créditos; su lugar en cada plan está en la retícula. Una materia no se borra: se desactiva, y solo si ningún alumno la necesita todavía.

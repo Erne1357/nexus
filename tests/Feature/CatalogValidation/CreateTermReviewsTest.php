@@ -9,7 +9,8 @@ use App\Modules\Core\Models\Term;
 
 /*
 | CreateTermReviews (CV9): la pieza de escritura de OpenCatalogValidation. Crea, por cada departamento activo, una revisión
-| de cada catálogo dado en el periodo, sin campus (la de salones es una para todos, decisión 6); idempotente.
+| de docentes y de salones en el periodo, sin campus (la de salones es una para todos, decisión 6), y de materias, planes
+| y carreras una sola de Servicios Escolares, sin departamento (CV15); idempotente.
 */
 
 function createTermReviews(Term $term, array $catalogs = []): int
@@ -25,7 +26,7 @@ function createTermReviews(Term $term, array $catalogs = []): int
 function reviewKeysOf(Term $term): array
 {
     return CatalogReview::query()->where('term_id', $term->id)->with('department')->get()
-        ->map(fn (CatalogReview $review): string => "{$review->department->code} {$review->catalog->value}")
+        ->map(fn (CatalogReview $review): string => ($review->department?->code ?? 'SE')." {$review->catalog->value}")
         ->sort()->values()->all();
 }
 
@@ -47,7 +48,7 @@ it('no crea revisiones de departamentos inactivos ni borrados', function () {
     Department::factory()->create()->delete();
 
     expect(createTermReviews($term))->toBe(5)
-        ->and(reviewKeysOf($term))->each->toStartWith('D1 ');
+        ->and(reviewKeysOf($term))->toBe(['D1 rooms', 'D1 teachers', 'SE careers', 'SE study_plans', 'SE subjects']);
 });
 
 it('es idempotente: la segunda vez no crea nada; un catálogo nuevo o un departamento nuevo reciben solo lo suyo', function () {
@@ -60,8 +61,16 @@ it('es idempotente: la segunda vez no crea nada; un catálogo nuevo o un departa
 
     Department::factory()->create(['code' => 'D2']);
 
-    expect(createTermReviews($term, [Catalog::Teachers, Catalog::Careers]))->toBe(2)
-        ->and(CatalogReview::count())->toBe(4);
+    expect(createTermReviews($term, [Catalog::Teachers, Catalog::Careers]))->toBe(1)
+        ->and(CatalogReview::count())->toBe(3);
+});
+
+it('CV15: las de Servicios Escolares se crean una vez aunque no haya departamentos activos', function () {
+    $term = Term::factory()->create();
+
+    expect(createTermReviews($term))->toBe(3)
+        ->and(reviewKeysOf($term))->toBe(['SE careers', 'SE study_plans', 'SE subjects'])
+        ->and(createTermReviews($term))->toBe(0);
 });
 
 it('no toca las revisiones de otro periodo', function () {

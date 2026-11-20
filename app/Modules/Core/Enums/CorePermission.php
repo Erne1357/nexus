@@ -10,8 +10,8 @@ use App\Modules\Core\Authorization\UnitApplicability;
 /**
  * Permisos del módulo Core: campus, modalidades, periodos, nombramientos, organigrama, usuarios y su acceso, y el panel de
  * configuración (1.22: roles y permisos, bitácora, avisos y atajos del login, parámetros, correos y colas). La clave es
- * `core.<recurso>.<accion>`. Los de usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas son
- * candados (CF-03): solo los tiene el admin y no se dan a otro puesto.
+ * `core.<recurso>.<accion>`. Los de usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas, y los
+ * del interruptor de la carga académica (MN-05), son candados (CF-03): solo los tiene el admin y no se dan a otro puesto.
  * Los de avisos, atajos y parámetros sí se pueden dar.
  */
 enum CorePermission: string implements Permission
@@ -60,6 +60,8 @@ enum CorePermission: string implements Permission
     case QueueView = 'core.queue.view';
     case QueueManage = 'core.queue.manage';
     case NavigationViewUnavailable = 'core.navigation.view_unavailable';
+    case AcademicLoadToggle = 'core.academic_load.toggle';
+    case AcademicLoadViewHidden = 'core.academic_load.view_hidden';
 
     public function label(): string
     {
@@ -106,6 +108,8 @@ enum CorePermission: string implements Permission
             self::QueueView => 'Ver las colas y los trabajos fallidos',
             self::QueueManage => 'Reintentar y descartar trabajos fallidos',
             self::NavigationViewUnavailable => 'Ver en el menú las pantallas no disponibles en el periodo (MN-02)',
+            self::AcademicLoadToggle => 'Mostrar u ocultar la carga académica a los demás (MN-05)',
+            self::AcademicLoadViewHidden => 'Ver la carga académica cuando está oculta (MN-05)',
         };
     }
 

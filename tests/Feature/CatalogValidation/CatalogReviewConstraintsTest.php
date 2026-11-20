@@ -2,6 +2,7 @@
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
@@ -51,6 +52,14 @@ it('no repite una revisión del mismo periodo, departamento y catálogo, aunque 
         ->and(fn () => CatalogReview::factory()->create($review->only(['term_id', 'department_id', 'catalog'])))
         ->toThrow(UniqueConstraintViolationException::class);
 })->with([Catalog::Careers, Catalog::Rooms]);
+
+it('CV15: materias, planes y carreras son de Servicios Escolares, sin departamento; docentes y salones, de uno', function (Catalog $catalog) {
+    $schoolServices = $catalog->owner() === CatalogOwner::SchoolServices;
+
+    expect(CatalogReview::factory()->general($catalog)->create()->department_id === null)->toBe($schoolServices)
+        ->and(fn () => CatalogReview::factory()->general($catalog)->create(['department_id' => $schoolServices ? Department::factory()->create()->id : null]))
+        ->toThrow(QueryException::class, 'catalog_reviews_owner_check');
+})->with(Catalog::cases());
 
 it('rechaza un estado o un catálogo que no existen', function (string $column, string $value, string $constraint) {
     $review = CatalogReview::factory()->create();

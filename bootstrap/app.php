@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Http\Middleware\EnsurePasswordIsChanged;
 use App\Modules\Core\Http\Middleware\EnsureUserIsActive;
 use App\Modules\Core\Http\Middleware\NormalizeSidebarState;
@@ -24,13 +25,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(SetSecurityHeaders::class);
 
         // Para toda ruta web (Core): cierra las demás sesiones cuando cambia la contraseña, la de
-        // un usuario desactivado, obliga a cambiar la contraseña en el primer acceso y deja el
-        // estado de la barra lateral de MaryUI en 'true' o 'false'.
+        // un usuario desactivado, obliga a cambiar la contraseña en el primer acceso, deja el
+        // estado de la barra lateral de MaryUI en 'true' o 'false' y cierra las rutas de la carga
+        // académica mientras el admin la tiene oculta (MN-05).
         $middleware->web(append: [
             AuthenticateSession::class,
             EnsureUserIsActive::class,
             EnsurePasswordIsChanged::class,
             NormalizeSidebarState::class,
+            EnsureAcademicLoadIsVisible::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

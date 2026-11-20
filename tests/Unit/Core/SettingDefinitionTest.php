@@ -133,8 +133,9 @@ it('CF-S7: el catálogo real de los módulos se arma y cada valor por omisión e
         ->and(ProposalAnomalies::fromValue($registry->get(ProposalAnomalies::SETTING)->default))->toEqual(new ProposalAnomalies);
 });
 
-it('CF-S7: Asignación docente, Horarios, Proyección de demanda y Motor de horarios declaran sus parámetros', function () {
+it('CF-S7: Core (el interruptor de la carga, MN-05), Asignación docente, Horarios, Proyección de demanda y Motor de horarios declaran sus parámetros', function () {
     expect(array_map(fn (SettingDefinition $d): string => $d->key, app(SettingRegistry::class)->all()))->toEqualCanonicalizing([
+        'core.academic_load_visible',
         'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
         'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits', 'solver.soft_weights',
@@ -146,6 +147,14 @@ it('CF-S7: un parámetro puede declarar el permiso de su módulo y un aviso al g
     $plain = demoIntSetting();
     $owned = new SettingDefinition('demo.owned', 'demo', 'Demo', 'Tamaño', 'Ayuda', SettingType::Integer, 5, ['min:1'], permission: FakePermission::ViewAny, savedNotice: 'Se recalcula.');
 
-    expect($plain->permission)->toBeNull()->and($plain->savedNotice)->toBeNull()
-        ->and($owned->permission)->toBe(FakePermission::ViewAny)->and($owned->savedNotice)->toBe('Se recalcula.');
+    expect($plain->permission)->toBeNull()->and($plain->savedNotice)->toBeNull()->and($plain->permissionOnly)->toBeFalse()
+        ->and($owned->permission)->toBe(FakePermission::ViewAny)->and($owned->savedNotice)->toBe('Se recalcula.')->and($owned->permissionOnly)->toBeFalse();
+});
+
+it('MN-05: un parámetro puede ser solo de su permiso, y entonces debe declarar cuál', function () {
+    $only = new SettingDefinition('demo.only', 'demo', 'Demo', 'Interruptor', 'Ayuda', SettingType::Boolean, true, permission: FakePermission::ViewAny, permissionOnly: true);
+
+    expect($only->permissionOnly)->toBeTrue()
+        ->and(fn () => new SettingDefinition('demo.bare', 'demo', 'Demo', 'Interruptor', 'Ayuda', SettingType::Boolean, true, permissionOnly: true))
+        ->toThrow(InvalidArgumentException::class, 'es solo de su permiso');
 });

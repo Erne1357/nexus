@@ -57,9 +57,7 @@ beforeEach(function () {
  */
 function validateAcceptCatalogs(Department $department): void
 {
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => test()->term->id, 'department_id' => $department->id]);
-    }
+    validateGeneralCatalogs(test()->term->id, $department->id);
 }
 
 function acceptPart(?ProposalReview $part = null): ProposalReview
@@ -131,7 +129,7 @@ it('con la primera parte aceptada la carga del departamento pasa de borrador a p
 });
 
 it('HC-14: aceptar queda bloqueado sin los catálogos del departamento validados y no cambia nada', function () {
-    CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::StudyPlans)->update(['status' => 'pending']);
+    CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::StudyPlans)->update(['status' => 'pending']);
 
     expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Planes de estudio.']])
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending)
@@ -143,7 +141,7 @@ it('HC-14: aceptar queda bloqueado sin los catálogos del departamento validados
 
 it('HC-14: también bloquea con la carga ya en propuesta', function () {
     $this->load->update(['status' => LoadStatus::Proposed]);
-    CatalogReview::query()->where('department_id', $this->cb->id)->update(['status' => 'pending']);
+    CatalogReview::query()->where(fn ($query) => $query->where('department_id', $this->cb->id)->orWhereNull('department_id'))->update(['status' => 'pending']);
 
     expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Docentes, Materias, Planes de estudio y Carreras.']])
         ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending);
@@ -233,7 +231,7 @@ describe('con la propuesta regresada por otro departamento', function () {
     });
 
     it('HC-14: también exige los catálogos del departamento validados', function () {
-        CatalogReview::query()->where('department_id', $this->cb->id)->where('catalog', Catalog::Subjects)->update(['status' => 'pending']);
+        CatalogReview::query()->whereNull('department_id')->where('catalog', Catalog::Subjects)->update(['status' => 'pending']);
 
         expect(acceptErrors())->toBe(['catalogs' => ['HC-14: faltan por validar los catálogos de Materias.']])
             ->and($this->part->fresh()->status)->toBe(ProposalReviewStatus::Pending)

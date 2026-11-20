@@ -86,8 +86,8 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
     /**
      * La pantalla de la revisión, en Académico, con dos nombres según quien la abre (tarea 1.21): «Validar catálogos»
-     * para quien valida (el jefe de departamento) y «Validación de catálogos» para quien solo la ve (Subdirección y el
-     * admin, en lectura, CV-S1). Que el departamento sea el suyo lo decide la pantalla.
+     * para quien valida (el jefe de departamento y el de Servicios Escolares, CV15) y «Validación de catálogos» para
+     * quien solo la ve (Subdirección y el admin, en lectura, CV-S1). Que el departamento sea el suyo lo decide la pantalla.
      * «Avance de validación», para Subdirección y el admin (tarea 2.5; `has()` incluye al admin).
      */
     public function navigation(): array
@@ -112,8 +112,9 @@ final class CatalogValidationServiceProvider extends ModuleServiceProvider
 
     /**
      * Subdirección: el avance, recordar, y ver y resolver observaciones en todo; el jefe de departamento, ver, resolver
-     * y, de su departamento, corregir, validar, reabrir y observar. La condición del campus para corregir salones
-     * (CV2) la pone la Policy. El directivo ve el avance y las revisiones (AZ-03).
+     * y, de su departamento, corregir, validar, reabrir y observar; el jefe de Servicios Escolares, lo mismo sobre las
+     * materias, los planes y las carreras de todo el Tec (CV15: el permiso aplica también a su unidad,
+     * CatalogValidationPermission::appliesTo). El directivo ve el avance y las revisiones (AZ-03).
      */
     public function grants(): array
     {

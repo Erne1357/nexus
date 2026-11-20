@@ -13,8 +13,6 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
-use App\Modules\CatalogValidation\Enums\Catalog;
-use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -162,9 +160,7 @@ it('con la propuesta regresada, la parte que un departamento acepta mientras tan
     $cbPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $this->department->id]);
     $scPart = ProposalReview::factory()->create(['career_proposal_id' => $this->proposal->id, 'department_id' => $sc->id]);
     AcademicLoad::factory()->create(['term_id' => $this->proposal->term_id, 'modality_id' => $this->proposal->modality_id, 'department_id' => $this->department->id]);
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $this->proposal->term_id, 'department_id' => $this->department->id]);
-    }
+    validateGeneralCatalogs($this->proposal->term_id, $this->department->id);
 
     app(ReturnProposalReview::class)->handle($scPart, 'Pide dos grupos de Redes.', $this->actor);
     updateProposalItem(40, 3);

@@ -531,13 +531,13 @@ describe('alcance', function () {
 });
 
 describe('menú', function () {
-    it('la entrada «Solicitudes de cambio» va en Académico para quien ve, decide o aplica', function (string $who, bool $sees) {
+    it('la entrada «Solicitudes de cambio» va en Carga académica para quien ve, decide o aplica', function (string $who, bool $sees) {
         $items = collect(app(Navigation::class)->visibleTo(app(Actor::class)->forUser($this->w->{$who})))->keyBy('label');
 
         expect($items->has('Solicitudes de cambio'))->toBe($sees);
 
         if ($sees) {
-            expect($items['Solicitudes de cambio']->area)->toBe(NavigationArea::Academico)
+            expect($items['Solicitudes de cambio']->area)->toBe(NavigationArea::CargaAcademica)
                 ->and($items['Solicitudes de cambio']->route)->toBe('staffing.change-requests');
         }
     })->with([

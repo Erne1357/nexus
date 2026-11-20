@@ -8,6 +8,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Queries\CareerQuery;
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Livewire\Concerns\ReturnsToValidation;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Session;
@@ -30,7 +31,7 @@ use Mary\Traits\Toast;
  */
 new #[Title('Carreras')] class extends Component
 {
-    use Toast, WithPagination;
+    use ReturnsToValidation, Toast, WithPagination;
 
     /** Búsqueda por clave o nombre; se recuerda en la sesión del usuario (DESIGN.md). */
     #[Session]

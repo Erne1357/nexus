@@ -1,7 +1,6 @@
 <?php
 
 use App\Modules\Academic\Enums\SubjectKind;
-use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Actions\AddReviewTeacher;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Actions\DischargeReviewTeacher;
@@ -22,6 +21,7 @@ use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Queries\CatalogContentsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogRecordsQuery;
 use App\Modules\CatalogValidation\Queries\CatalogReviewQuery;
+use App\Modules\CatalogValidation\Queries\ReviewOwner;
 use App\Modules\CatalogValidation\Rules\CatalogReviewRules;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Authorization\Target;
@@ -56,7 +56,8 @@ use Mary\Traits\Toast;
 /**
  * Validación de catálogos del departamento (docs/dominio/reglas-de-negocio.md, "Validación de catálogos"),
  * variante C «tablero de tarjetas» (DESIGN.md). Toma el periodo activo de la credencial y, de la URL,
- * el departamento (`?department=`) y el catálogo abierto (`?catalogo=`).
+ * el departamento (`?department=`, o `servicios-escolares` para las materias, los planes y las carreras de todo el Tec,
+ * que valida Servicios Escolares; CV15) y el catálogo abierto (`?catalogo=`).
  *
  * Tablero: el avance (HC-14) y una tarjeta por revisión del periodo, con «N de M revisados», su barra y Validar o
  * Reabrir. Lista de un catálogo (opción A «Tabla con columna Revisión», elegida por el usuario el 12 de noviembre de
@@ -71,7 +72,8 @@ use Mary\Traits\Toast;
  * markSelected()), y Validar solo se activa con todos revisados (CV7); la tarjeta, la pestaña y el renglón de la lista
  * dicen cuántos van.
  *
- * El jefe cubre su departamento; Subdirección y el admin abren cualquiera en lectura, y solo resuelven
+ * El jefe cubre su departamento (docentes y salones) y el de Servicios Escolares, las materias, los planes y las carreras
+ * (CV15); Subdirección y el admin abren cualquiera en lectura, y solo resuelven
  * observaciones (CV-S1): no ven los controles que no pueden usar (marcar, validar, reabrir, quitar, observar) y la
  * cabecera les habla a ellos (tarea 1.21). Toda escritura pasa por su Action, después de autorizar con
  * CatalogReviewPolicy en cada método público, porque la petición puede llegar con una pantalla que abrió otra sesión.
@@ -83,6 +85,9 @@ new #[Title('Validación de catálogos')] class extends Component
 
     /** Por qué un docente dado de baja que ocupa un puesto no se agrega desde aquí (CV-S9). */
     private const string STAFF_REACTIVATION = 'Está dado de baja y ocupa un puesto: lo reactivan el administrador o la Subdirección.';
+
+    /** Por qué un docente inactivo solo se ve (CV14). */
+    private const string INACTIVE_TEACHER = 'Un docente inactivo no se valida: solo se puede ver.';
 
     /** Por qué el correo institucional de quien ocupa otro puesto no se cambia desde aquí (AC-06). */
     private const string STAFF_EMAIL = 'El correo institucional de un docente que ocupa otro puesto solo lo cambia el administrador.';
@@ -104,6 +109,10 @@ new #[Title('Validación de catálogos')] class extends Component
 
     public string $search = '';
 
+    /** Solo docentes (CV14): '' (solo los activos, por omisión), 'inactivos' o 'todos'. Los inactivos no se validan, solo se ven. */
+    #[Url(as: 'estado')]
+    public string $status = '';
+
     /** Solo con foto anterior: '' (todos) o 'added' (las altas); 'removed' no se queda, abre el drawer de bajas. */
     public string $change = '';
 
@@ -121,6 +130,9 @@ new #[Title('Validación de catálogos')] class extends Component
     public string $roomCampus = '';
 
     public string $roomBuilding = '';
+
+    /** Solo en las de Servicios Escolares (CV15): el departamento que deja la lista (id; vacío, todos). */
+    public string $recordDepartment = '';
 
     public bool $showConfirm = false;
 
@@ -212,10 +224,16 @@ new #[Title('Validación de catálogos')] class extends Component
         $state = $this->state();
 
         if ($this->department === '' && $state['department'] !== null) {
-            $this->department = $state['department']->getKey();
+            $this->department = $state['department']->id;
         }
 
+        $this->status = in_array($this->status, ['inactivos', 'todos'], true) ? $this->status : '';
         $this->segment = $this->segmentOrDefault($this->segment);
+
+        // CV14: los inactivos no entran en «Por revisar» (CV7); con ellos a la vista, la entrada es «Todos».
+        if ($this->status !== '' && $this->segment === 'por-revisar') {
+            $this->segment = 'todos';
+        }
     }
 
     /**
@@ -224,7 +242,7 @@ new #[Title('Validación de catálogos')] class extends Component
     public function with(CatalogReviewQuery $reviews, CatalogRecordsQuery $records, CatalogContentsQuery $contents, TeacherAccessQuery $access): array
     {
         $state = $this->state();
-        $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'viewOnly' => $this->viewOnlyOn($state['department']?->getKey())];
+        $data = ['departments' => $state['departments'], 'department' => $state['department'], 'term' => $state['term'], 'viewOnly' => $this->viewOnlyOn($state['department']?->id)];
 
         $empty = match (true) {
             $state['department'] === null => 'department',
@@ -266,7 +284,7 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->resolved = null;
         }
 
-        if (in_array($property, ['search', 'segment', 'missing', 'change', 'roomCampus', 'roomBuilding', 'department', 'catalog'], true)) {
+        if (in_array($property, ['search', 'segment', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'recordDepartment', 'department', 'catalog'], true)) {
             $this->resetPage();
         }
 
@@ -285,6 +303,15 @@ new #[Title('Validación de catálogos')] class extends Component
             $this->segment = 'todos';
         }
 
+        /*
+        | CV14: «Estado» solo tiene dos valores además de los activos; los inactivos no entran en «Por revisar» (CV7), así
+        | que al verlos el filtro segmentado pasa a «Todos».
+        */
+        if ($property === 'status') {
+            $this->status = in_array($this->status, ['inactivos', 'todos'], true) ? $this->status : '';
+            $this->segment = $this->status === '' ? $this->segmentOrDefault('') : 'todos';
+        }
+
         if ($property === 'segment') {
             $this->segment = $this->segmentOrDefault($this->segment);
         }
@@ -294,7 +321,7 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         if (in_array($property, ['department', 'catalog'], true)) {
-            $this->reset('search', 'segment', 'missing', 'change', 'roomCampus', 'roomBuilding', 'showDrawer', 'showRemoved', 'showAddTeacher', 'teacherSearch', 'editingId', 'showDischarge', 'dischargeId', 'dischargeKind', 'dischargeText', 'showEmpty', 'emptyIds');
+            $this->reset('search', 'segment', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'recordDepartment', 'showDrawer', 'showRemoved', 'showAddTeacher', 'teacherSearch', 'editingId', 'showDischarge', 'dischargeId', 'dischargeKind', 'dischargeText', 'showEmpty', 'emptyIds');
             $this->segment = $this->segmentOrDefault('');
         }
     }
@@ -304,7 +331,7 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     public function clearFilters(): void
     {
-        $this->reset('search', 'missing', 'change', 'roomCampus', 'roomBuilding');
+        $this->reset('search', 'status', 'missing', 'change', 'roomCampus', 'roomBuilding', 'recordDepartment');
         $this->segment = 'todos';
         $this->resetPage();
     }
@@ -688,10 +715,11 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * Lo resuelto de la petición, memorizado: los departamentos que el usuario abre, el seleccionado (403 si
-     * `?department=` no es de los suyos o no hay ninguno), el periodo y el campus activos y las revisiones.
+     * Lo resuelto de la petición, memorizado: de quién son las revisiones que el usuario abre (sus departamentos y, si la
+     * ve, Servicios Escolares, CV15; ReviewOwner en `departments`), el seleccionado (403 si `?department=` no es de los
+     * suyos o no hay ninguno), el periodo activo y las revisiones.
      *
-     * @return array{departments: Collection<int, Department>, department: ?Department, term: ?Term, reviews: Collection<int, CatalogReview>}
+     * @return array{departments: Collection<int, ReviewOwner>, department: ?ReviewOwner, term: ?Term, reviews: Collection<int, CatalogReview>}
      */
     private function state(): array
     {
@@ -700,20 +728,20 @@ new #[Title('Validación de catálogos')] class extends Component
         }
 
         $context = app(Actor::class);
-        $departments = app(CatalogReviewQuery::class)->departmentsFor($context);
+        $departments = app(CatalogReviewQuery::class)->ownersFor($context);
         abort_if($departments->isEmpty(), 403);
 
         if ($this->department !== '') {
-            $department = $departments->first(fn (Department $candidate): bool => $candidate->getKey() === $this->department);
+            $department = $departments->first(fn (ReviewOwner $candidate): bool => $candidate->id === $this->department);
             abort_if($department === null, 403);
         } else {
-            $department = $departments->first(fn (Department $candidate): bool => CatalogReviewQuery::allowsOnDepartment($context, CatalogValidationPermission::ReviewFlag, $candidate->getKey()));
+            $department = $departments->first(fn (ReviewOwner $candidate): bool => CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewFlag, $candidate->id));
         }
 
         $term = $context->activeTerm();
         $reviews = $department === null || $term === null
             ? new Collection
-            : app(CatalogReviewQuery::class)->forDepartment($term, $department)->load(['department', 'validator'])
+            : app(CatalogReviewQuery::class)->forOwner($term, $department)->load(['department', 'validator'])
                 ->filter(fn (CatalogReview $review): bool => Gate::allows('view', $review))
                 ->values()
                 ->each(fn (CatalogReview $review) => $review->setRelation('term', $term));
@@ -745,17 +773,17 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * Si quien mira solo ve las revisiones del departamento (Subdirección, el admin; CV-S1): no valida, corrige, observa
-     * ni reabre en él (sin departamento, en ninguno). Entonces la pantalla no le muestra los controles que no puede
-     * usar y la cabecera le habla a él. La misma regla para la página y para cada tarjeta.
+     * Si quien mira solo ve las revisiones del departamento o de Servicios Escolares (Subdirección, el admin; CV-S1): no
+     * valida, corrige, observa ni reabre en él (sin dueño, en ninguno). Entonces la pantalla no le muestra los controles
+     * que no puede usar y la cabecera le habla a él. La misma regla para la página y para cada tarjeta.
      */
-    private function viewOnlyOn(?string $departmentId): bool
+    private function viewOnlyOn(?string $ownerId): bool
     {
         $context = app(Actor::class);
         $permissions = [CatalogValidationPermission::ReviewValidate, CatalogValidationPermission::ReviewCorrect, CatalogValidationPermission::ReviewFlag, CatalogValidationPermission::ReviewReopen];
 
         foreach ($permissions as $permission) {
-            if ($departmentId === null ? $context->allowsAny($permission) : CatalogReviewQuery::allowsOnDepartment($context, $permission, $departmentId)) {
+            if ($ownerId === null ? $context->allowsAny($permission) : CatalogReviewQuery::allowsOn($context, $permission, $ownerId)) {
                 return false;
             }
         }
@@ -894,7 +922,7 @@ new #[Title('Validación de catálogos')] class extends Component
 
         return [
             'review' => $review,
-            'viewOnly' => $this->viewOnlyOn($review->department_id),
+            'viewOnly' => $this->viewOnlyOn($review->owner_id),
             'summary' => $reviews->summary($review),
             'reviewed' => $reviewed,
             'canMark' => ! $validated && $canMark,
@@ -931,21 +959,25 @@ new #[Title('Validación de catálogos')] class extends Component
     }
 
     /**
-     * «N de M validados» (HC-14, CV9): los catálogos que el admin abrió en el periodo (los que tienen revisiones en él) y
-     * que se exigen al departamento (los salones, si alguna modalidad donde el periodo está abierto usa salones; una revisión
+     * «N de M validados» (HC-14, CV9): de los catálogos del dueño (docentes y salones de un departamento; materias, planes
+     * y carreras de Servicios Escolares, CV15), los que el admin abrió en el periodo (los que tienen revisiones en él) y
+     * que se exigen (los salones, si alguna modalidad donde el periodo está abierto usa salones; una revisión
      * de salones para todos los campus, decisión 6), y los que todavía bloquean la salida de borrador de sus cargas. Uno
      * que no se abrió no cuenta ni se menciona; uno abierto cuya revisión le falta al departamento cuenta como pendiente.
-     * `items` trae cada catálogo contado con su revisión, si existe y el usuario la ve.
+     * `items` trae cada catálogo contado con su revisión, si existe y el usuario la ve. A un departamento, `waiting` le dice
+     * cuántos catálogos de Servicios Escolares abiertos siguen sin validar, que también detienen su carga (HC-14, CV15);
+     * `schoolServices` dice si es el tablero de Servicios Escolares, cuya validación no es de una carga sino de todas.
      *
-     * @param  array{term: ?Term, department: ?Department, reviews: Collection<int, CatalogReview>}  $state
+     * @param  array{term: ?Term, department: ?ReviewOwner, reviews: Collection<int, CatalogReview>}  $state
      * @param  array<string, array{reviewed: int, total: int}>  $reviewed  cuántos registros van revisados en cada revisión (CV7)
-     * @return array{validated: int, total: int, left: int, items: list<array{catalog: Catalog, review: ?CatalogReview, reviewed: ?array{reviewed: int, total: int}}>}
+     * @return array{validated: int, total: int, left: int, waiting: int, schoolServices: bool, items: list<array{catalog: Catalog, review: ?CatalogReview, reviewed: ?array{reviewed: int, total: int}}>}
      */
     private function progress(array $state, array $reviewed): array
     {
         $catalogReviews = app(CatalogReviewQuery::class);
         $opened = $catalogReviews->openedCatalogs($state['term']);
-        $required = array_values(array_filter(Catalog::requiredFor($catalogReviews->roomsApply($state['term'])), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)));
+        $owned = $state['department']?->catalogs() ?? [];
+        $required = array_values(array_filter(Catalog::requiredFor($catalogReviews->roomsApply($state['term'])), fn (Catalog $catalog): bool => in_array($catalog, $opened, true) && in_array($catalog, $owned, true)));
         $existing = $state['reviews']->keyBy(fn (CatalogReview $review): string => $review->catalog->value);
         $pending = array_filter($required, fn (Catalog $catalog): bool => $existing->get($catalog->value)?->status !== ReviewStatus::Validated);
 
@@ -953,6 +985,10 @@ new #[Title('Validación de catálogos')] class extends Component
             'validated' => count($required) - count($pending),
             'total' => count($required),
             'left' => count($pending),
+            'waiting' => $state['department'] !== null && ! $state['department']->isSchoolServices()
+                ? count($catalogReviews->pendingOf($state['term'], ReviewOwner::schoolServices()))
+                : 0,
+            'schoolServices' => $state['department']?->isSchoolServices() ?? false,
             'items' => array_map(function (Catalog $catalog) use ($existing, $reviewed): array {
                 $review = $existing->get($catalog->value);
 
@@ -993,11 +1029,15 @@ new #[Title('Validación de catálogos')] class extends Component
         $isRooms = $review->catalog === Catalog::Rooms;
         $onlyIds = $this->onlyIds($review, $current['summary']);
         [$campusId, $buildingId] = $isRooms ? [$this->roomCampus, $this->roomBuilding] : ['', ''];
-        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, null, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
+        $departmentId = $review->department_id === null ? $this->recordDepartment : '';
+        $active = $review->catalog === Catalog::Teachers ? $this->activeFilter() : null;
+        // CV14 (supuesto): «Con observación» muestra siempre los registros con observación abierta, sin importar «Estado».
+        $pageActive = $this->segment === 'con-observacion' ? null : $active;
+        $query = fn (): LengthAwarePaginator => $records->page($review, $this->search, $pageActive, $this->segment === 'con-observacion' ? 'with' : '', self::PER_PAGE, $onlyIds, match ($this->segment) {
             'por-revisar' => 'pending',
             'revisados' => 'reviewed',
             default => '',
-        }, $campusId, $buildingId);
+        }, $campusId, $buildingId, $departmentId);
         $page = $query();
 
         /*
@@ -1025,10 +1065,10 @@ new #[Title('Validación de catálogos')] class extends Component
             }
         }
 
-        $segmentCounts = $records->segmentCounts($review);
+        $segmentCounts = $records->segmentCounts($review, $active);
         $buildingGroups = $isRooms && ($editing['canEdit'] ?? false) ? app(BuildingQuery::class)->groupedByActiveCampus() : [];
         $marks = $this->describeMarks($records->marksOf($review, $ids));
-        $onlySegment = $this->search === '' && $this->missing === '' && $this->change === '' && $this->roomCampus === '' && $this->roomBuilding === '';
+        $onlySegment = $this->search === '' && $this->status === '' && $this->missing === '' && $this->change === '' && $this->roomCampus === '' && $this->roomBuilding === '' && $this->recordDepartment === '';
 
         return [
             'page' => $page,
@@ -1043,7 +1083,7 @@ new #[Title('Validación de catálogos')] class extends Component
             'pagePending' => $page->getCollection()->filter(fn (Model $record): bool => $record->is_active && ! isset($marks[$record->getKey()]))->count(),
             'allReviewed' => $this->segment === 'por-revisar' && $segmentCounts['pending'] === 0 && $onlySegment,
             'doneMessage' => $this->doneMessage($review->catalog, $current['reviewed']['total']),
-            'pendingIds' => $current['canMark'] ? $records->pendingIds($review, $this->search, $onlyIds, $campusId, $buildingId) : [],
+            'pendingIds' => $current['canMark'] ? $records->pendingIds($review, $this->search, $onlyIds, $campusId, $buildingId, departmentId: $departmentId) : [],
             'segments' => [
                 ['id' => 'por-revisar', 'label' => 'Por revisar', 'count' => $segmentCounts['pending']],
                 ['id' => 'revisados', 'label' => 'Revisados', 'count' => $segmentCounts['reviewed']],
@@ -1051,6 +1091,7 @@ new #[Title('Validación de catálogos')] class extends Component
                 ['id' => 'todos', 'label' => 'Todos', 'count' => $segmentCounts['all']],
             ],
             'roomFilters' => $isRooms ? $records->roomFilterOptions($review) : ['campuses' => [], 'buildings' => []],
+            'departmentFilters' => $records->departmentFilterOptions($review),
             'missingFilters' => [['id' => 'disponibilidad', 'name' => 'Sin disponibilidad'], ['id' => 'perfil', 'name' => 'Sin perfil'], ['id' => 'correo', 'name' => 'Sin correo institucional']],
             'flagMap' => $records->openFlags($review, $ids),
             'editing' => $editing,
@@ -1058,11 +1099,25 @@ new #[Title('Validación de catálogos')] class extends Component
             'emailDomain' => (string) config('nexus.institutional_email_domain'),
             'removed' => $current['summary']['removed'] ?? [],
             'changeFilters' => [['id' => 'added', 'name' => 'Altas'], ['id' => 'removed', 'name' => 'Bajas']],
-            'hasFilters' => $this->search !== '' || ! in_array($this->segment, ['', 'todos'], true) || $this->missing !== '' || $this->change !== '' || $this->roomCampus !== '' || $this->roomBuilding !== '',
+            'statusFilters' => [['id' => 'inactivos', 'name' => 'Solo inactivos'], ['id' => 'todos', 'name' => 'Activos e inactivos']],
+            'hasFilters' => $this->search !== '' || $this->status !== '' || ! in_array($this->segment, ['', 'todos'], true) || $this->missing !== '' || $this->change !== '' || $this->roomCampus !== '' || $this->roomBuilding !== '' || $this->recordDepartment !== '',
             'flagOptions' => collect(ReviewFlag::cases())->filter(fn (ReviewFlag $flag): bool => $flag->appliesTo($review->catalog))->map(fn (ReviewFlag $flag): array => ['id' => $flag->value, 'name' => $flag->label()])->values()->all(),
             'kinds' => array_map(fn (SubjectKind $kind): array => ['id' => $kind->value, 'name' => $kind->label()], SubjectKind::cases()),
             'roomTypes' => array_map(fn (RoomType $type): array => ['id' => $type->value, 'name' => $type->label()], RoomType::cases()),
         ];
+    }
+
+    /**
+     * El filtro «Estado» de docentes como lo pide CatalogRecordsQuery::page(): solo activos por omisión, solo inactivos
+     * o ambos (null). CV14.
+     */
+    private function activeFilter(): ?bool
+    {
+        return match ($this->status) {
+            'inactivos' => false,
+            'todos' => null,
+            default => true,
+        };
     }
 
     /**
@@ -1220,6 +1275,10 @@ new #[Title('Validación de catálogos')] class extends Component
      */
     private function editableOf(array $current, Model $record): array
     {
+        if ($record instanceof Teacher && ! $record->is_active) {
+            return ['canEdit' => false, 'editReason' => self::INACTIVE_TEACHER]; // CV14
+        }
+
         if ($current['canEdit'] && $record instanceof Teacher && ! Gate::allows('updateInstitutionalEmail', $record)) {
             return ['canEdit' => false, 'editReason' => self::STAFF_EMAIL];
         }
@@ -1349,7 +1408,7 @@ new #[Title('Validación de catálogos')] class extends Component
         return match ($review->catalog) {
             Catalog::Subjects, Catalog::Careers => [
                 ['label' => 'Clave', 'value' => $record->code, 'mono' => true],
-                ['label' => 'Departamento', 'value' => $review->department?->name],
+                ['label' => 'Departamento', 'value' => $record->department?->name],
             ],
             Catalog::StudyPlans => [
                 ['label' => 'Clave', 'value' => $record->code, 'mono' => true],

@@ -23,9 +23,9 @@ use Illuminate\Support\Str;
  * "CatalogValidation"), sin los borrados, activos o no:
  *
  * - Docentes: los que tienen una adscripción sin borrar al departamento, sea o no la principal.
- * - Materias y carreras: las del departamento.
- * - Planes: los de las carreras sin borrar del departamento.
  * - Salones: los del departamento en todos los campus (decisión 6, confirmada el 12 de noviembre de 2026).
+ * - Materias, carreras y planes (los de las carreras sin borrar): todos los del Tec, de cualquier departamento o sin
+ *   ninguno, porque los valida Servicios Escolares en una sola revisión (CV15, confirmada el 20 de noviembre de 2026).
  *
  * La clave es el RFC en los docentes y `code` en lo demás. Cuántos de los activos ya marcó el jefe como revisados (CV7:
  * solo los activos hay que revisarlos) lo dicen progress() y progressOf(); las marcas de registros que ya no están en la
@@ -93,7 +93,8 @@ final class CatalogContentsQuery
     }
 
     /**
-     * Si el registro es del catálogo y del departamento de la revisión y no está borrado.
+     * Si el registro es del catálogo y del departamento de la revisión (de todo el Tec en las de Servicios Escolares,
+     * CV15) y no está borrado.
      */
     public function contains(CatalogReview $review, Model $record): bool
     {
@@ -143,7 +144,7 @@ final class CatalogContentsQuery
 
     /**
      * «N de M revisados» de varias revisiones, por id de revisión, con una consulta por catálogo y no una por revisión:
-     * cuenta los registros activos de cada una con una subconsulta ligada a su departamento.
+     * cuenta los registros activos de cada una con una subconsulta ligada a su departamento (o a todo el Tec, CV15).
      *
      * @param  Collection<int, CatalogReview>  $reviews
      * @return array<string, array{reviewed: int, total: int}>
@@ -208,19 +209,19 @@ final class CatalogContentsQuery
     }
 
     /**
-     * Los registros de un catálogo de un departamento, sin orden. `$department` es un id o la columna de la revisión de
-     * una consulta exterior (progressOf).
+     * Los registros de un catálogo de la revisión, sin orden. `$department` es un id o la columna de la revisión de una
+     * consulta exterior (progressOf); los catálogos de Servicios Escolares no lo usan: son de todo el Tec (CV15).
      *
      * @return Builder<Model>
      */
-    private function scoped(Catalog $catalog, string|Expression $department): Builder
+    private function scoped(Catalog $catalog, string|Expression|null $department): Builder
     {
         return match ($catalog) {
             Catalog::Teachers => Teacher::query()->whereHas('adscriptions', fn (Builder $adscription) => $adscription->where('department_id', $department)),
-            Catalog::Subjects => Subject::query()->where('department_id', $department),
-            Catalog::Careers => Career::query()->where('department_id', $department),
-            Catalog::StudyPlans => StudyPlan::query()->whereIn('career_id', Career::query()->where('department_id', $department)->select('id')),
             Catalog::Rooms => Room::query()->where('department_id', $department),
+            Catalog::Subjects => Subject::query(),
+            Catalog::Careers => Career::query(),
+            Catalog::StudyPlans => StudyPlan::query()->whereIn('career_id', Career::query()->select('id')),
         };
     }
 

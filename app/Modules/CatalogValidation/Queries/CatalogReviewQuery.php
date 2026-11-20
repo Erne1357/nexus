@@ -4,32 +4,49 @@ namespace App\Modules\CatalogValidation\Queries;
 
 use App\Modules\Academic\Models\Department;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\CatalogValidationPermission;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Events\CatalogReviewReopening;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\Target;
+use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Modality;
+use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\CampusQuery;
+use App\Modules\Core\Queries\RecipientsQuery;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Lecturas de las revisiones de catálogo.
  */
 final class CatalogReviewQuery
 {
+    /** Lo que la Subdirección Académica, el admin y quien lee en todo el Tec pueden en las de Servicios Escolares (CV-S1). */
+    private const array SCHOOL_SERVICES_OVERSIGHT = [CatalogValidationPermission::ReviewView, CatalogValidationPermission::ReviewResolveFlag];
+
+    /** Por qué no se abren materias, planes ni carreras sin jefe de Servicios Escolares (CV15, supuesto por confirmar). */
+    public const string SCHOOL_SERVICES_HEADLESS = 'Nombra al jefe de Servicios Escolares antes de abrir materias, planes y carreras: sin él nadie los valida y ninguna carga saldría de borrador.';
+
     public function __construct(
         private readonly CatalogContentsQuery $contents,
         private readonly CampusQuery $campuses,
+        private readonly RecipientsQuery $recipients,
     ) {}
 
     /**
      * Los catálogos que todavía bloquean la salida de borrador de la carga de un departamento en una modalidad (HC-14,
      * M1): cada catálogo que exige la modalidad (todos, y los salones solo si su perfil usa salones) cuya revisión del
-     * periodo y el departamento falta o no está validada. Todas las revisiones son del departamento para todo el Tec,
-     * también la de salones (decisión 6, confirmada el 12 de noviembre de 2026). En el orden del enum Catalog.
+     * periodo falta o no está validada. Docentes y salones son revisiones del departamento para todo el Tec (la de
+     * salones cubre todos los campus, decisión 6, confirmada el 12 de noviembre de 2026); materias, planes y carreras,
+     * la revisión de Servicios Escolares del Tec, que cuenta para todos los departamentos (CV15, confirmada el 20 de
+     * noviembre de 2026). En el orden del enum Catalog.
      *
      * Con `$lock` las revisiones que lee quedan con bloqueo compartido (FOR SHARE) hasta el fin de la
      * transacción: quien valida HC-14 dentro de una transacción (CatalogsValidated, desde TransitionLoad)
@@ -40,9 +57,8 @@ final class CatalogReviewQuery
      * confirmado el 12 de noviembre de 2026): uno que no se abrió no se exige, y sin ninguno abierto no falta nada.
      *
      * `$modality` es la modalidad de la carga: sin salones (o con perfil guardado inválido, Modality::valid_profile), no
-     * exige la revisión de salones. El aviso a los jefes
-     * (NotifyPendingReviews), que no es de una carga, no da modalidad y cuenta todo lo abierto: la revisión es del
-     * departamento en todo el Tec y la de salones solo se abre si alguna modalidad abierta usa salones (roomsApply()).
+     * exige la revisión de salones. Sin modalidad cuenta todo lo abierto. Lo que le toca validar a cada quien (el aviso a
+     * los jefes, Inicio) es pendingOf().
      *
      * @return list<Catalog>
      */
@@ -55,7 +71,7 @@ final class CatalogReviewQuery
 
         $validated = CatalogReview::query()
             ->where('term_id', $termId)
-            ->where('department_id', $departmentId)
+            ->where(fn ($query) => $query->where('department_id', $departmentId)->orWhereNull('department_id'))
             ->where('status', ReviewStatus::Validated)
             ->whereIn('catalog', $required)
             ->when($lock, fn ($query) => $query->sharedLock())
@@ -66,6 +82,31 @@ final class CatalogReviewQuery
 
         return array_values(array_filter($required, fn (Catalog $catalog): bool => ! in_array($catalog, $validated, true)
             && in_array($catalog->value, $opened, true)));
+    }
+
+    /**
+     * Lo que le falta validar a `$owner` en el periodo (CV15): de sus catálogos (ReviewOwner::catalogs), los abiertos
+     * (CV9) cuya revisión falta o no está validada, en el orden del enum. Lo que dicen el aviso de apertura, el
+     * recordatorio (CV11) y la tarjeta de Inicio (CV-S13): al jefe de un departamento, sus docentes y salones; al de
+     * Servicios Escolares, las materias, los planes y las carreras.
+     *
+     * @return list<Catalog>
+     */
+    public function pendingOf(Term|string $term, ReviewOwner $owner): array
+    {
+        $termId = $term instanceof Term ? $term->getKey() : $term;
+
+        $validated = CatalogReview::query()
+            ->where('term_id', $termId)
+            ->tap(fn ($query) => self::ownedBy($query, $owner->departmentId))
+            ->where('status', ReviewStatus::Validated)
+            ->pluck('catalog')
+            ->all();
+
+        $opened = $this->openedCatalogs($termId);
+
+        return array_values(array_filter($owner->catalogs(), fn (Catalog $catalog): bool => in_array($catalog, $opened, true)
+            && ! in_array($catalog, $validated, true)));
     }
 
     /**
@@ -96,7 +137,8 @@ final class CatalogReviewQuery
 
     /**
      * Los catálogos del periodo para el drawer «Abrir validación»: cada uno con si ya está abierto y, si no se puede
-     * abrir, el motivo (los salones sin un campus abierto que use salones).
+     * abrir, el motivo: los salones sin un campus abierto que use salones; materias, planes y carreras sin jefe de
+     * Servicios Escolares vigente (CV15, supuesto por confirmar).
      *
      * @return list<array{catalog: Catalog, open: bool, blocked: ?string}>
      */
@@ -104,13 +146,17 @@ final class CatalogReviewQuery
     {
         $opened = $this->openedCatalogs($term);
         $roomsApply = $this->roomsApply($term);
+        $headless = ! $this->hasSchoolServicesHead();
 
         return array_map(fn (Catalog $catalog): array => [
             'catalog' => $catalog,
             'open' => in_array($catalog, $opened, true),
-            'blocked' => $catalog === Catalog::Rooms && ! $roomsApply && ! in_array($catalog, $opened, true)
-                ? 'Ninguna modalidad abierta en este periodo usa salones.'
-                : null,
+            'blocked' => match (true) {
+                in_array($catalog, $opened, true) => null,
+                $catalog === Catalog::Rooms && ! $roomsApply => 'Ninguna modalidad abierta en este periodo usa salones.',
+                $catalog->owner() === CatalogOwner::SchoolServices && $headless => self::SCHOOL_SERVICES_HEADLESS,
+                default => null,
+            },
         ], Catalog::cases());
     }
 
@@ -129,43 +175,180 @@ final class CatalogReviewQuery
         return Department::query()
             ->where(fn ($query) => $query
                 ->where('is_active', true)
-                ->when($termId !== null, fn ($query) => $query->orWhereIn('id', CatalogReview::query()->where('term_id', $termId)->select('department_id'))))
+                ->when($termId !== null, fn ($query) => $query->orWhereIn('id', CatalogReview::query()->where('term_id', $termId)->whereNotNull('department_id')->select('department_id'))))
             ->orderBy('code')
             ->get()
-            ->filter(fn (Department $department): bool => self::allowsOnDepartment($context, CatalogValidationPermission::ReviewView, $department->getKey()))
+            ->filter(fn (Department $department): bool => self::allowsOn($context, CatalogValidationPermission::ReviewView, $department->getKey()))
             ->values();
     }
 
     /**
-     * Si `$permission` vale sobre el departamento. Las revisiones no son de un campus ni de una modalidad (AZ-S17), por
-     * eso solo se decide por el departamento. Es la regla única de CatalogReviewPolicy y de las pantallas.
+     * De quién son las revisiones que puede abrir el usuario (CV15): Servicios Escolares primero, si la ve (su jefe, y
+     * en lectura Subdirección y el admin, CV-S1), y después sus departamentos (departmentsFor()).
+     *
+     * @return Collection<int, ReviewOwner>
      */
-    public static function allowsOnDepartment(Actor $context, CatalogValidationPermission $permission, string $department): bool
+    public function ownersFor(Actor $context): Collection
     {
-        return $context->allows($permission, Target::of(unit: $department));
+        $owners = $this->departmentsFor($context)->map(fn (Department $department): ReviewOwner => ReviewOwner::ofDepartment($department));
+
+        return self::allowsOn($context, CatalogValidationPermission::ReviewView, ReviewOwner::SCHOOL_SERVICES)
+            ? $owners->prepend(ReviewOwner::schoolServices())->values()
+            : $owners->values();
     }
 
     /**
-     * Las revisiones de un departamento en un periodo, para todo el Tec (la de salones, si existe, cubre todos los
-     * campus; decisión 6), en el orden del enum Catalog.
+     * Quienes validan en el periodo (CV15): Servicios Escolares y después los departamentos activos, por clave. Con
+     * `$ownerIds`, solo esos (un id que no es de Servicios Escolares ni de un departamento activo no cuenta). A quién
+     * avisan la apertura y el recordatorio (CV11).
+     *
+     * @param  list<string>|null  $ownerIds
+     * @return Collection<int, ReviewOwner>
+     */
+    public function activeOwners(?array $ownerIds = null): Collection
+    {
+        $departmentIds = $ownerIds === null ? null : array_values(array_filter($ownerIds, fn (string $id): bool => Str::isUuid($id)));
+
+        $owners = Department::query()
+            ->where('is_active', true)
+            ->when($departmentIds !== null, fn ($query) => $query->whereIn('id', $departmentIds))
+            ->orderBy('code')
+            ->get()
+            ->map(fn (Department $department): ReviewOwner => ReviewOwner::ofDepartment($department));
+
+        return $ownerIds === null || in_array(ReviewOwner::SCHOOL_SERVICES, $ownerIds, true)
+            ? $owners->prepend(ReviewOwner::schoolServices())->values()
+            : $owners->values();
+    }
+
+    /**
+     * Sobre qué se pide `$permission` en las revisiones de `$ownerId` (un id de departamento o
+     * ReviewOwner::SCHOOL_SERVICES). Las revisiones no son de un campus ni de una modalidad (AZ-S17), así que solo cuenta
+     * la unidad: la del departamento o, en las de Servicios Escolares (CV15), su unidad y, solo para ver y resolver
+     * observaciones, la Subdirección Académica (CV-S1), aunque Servicios Escolares no cuelgue de ella (R-V2-5). Un permiso
+     * que escribe nunca se pide sobre la Subdirección: aunque el panel (CF-01) se lo diera a uno de sus puestos, no alcanza
+     * lo de Servicios Escolares. Sin esas unidades en el organigrama, solo las alcanza quien no se acota por unidad (el
+     * admin).
+     */
+    public static function targetOf(string $ownerId, CatalogValidationPermission $permission): Target
+    {
+        if ($ownerId !== ReviewOwner::SCHOOL_SERVICES) {
+            return Target::of(unit: $ownerId);
+        }
+
+        $tree = app(OrgTree::class);
+        $units = [$tree->idOf(OrgTree::SCHOOL_SERVICES)];
+
+        if (in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)) {
+            $units[] = $tree->idOf(OrgTree::ACADEMIC);
+        }
+
+        return Target::of(unit: array_values(array_filter($units)));
+    }
+
+    /**
+     * Si `$permission` vale sobre las revisiones de `$ownerId` (targetOf()). Es la regla única de CatalogReviewPolicy y
+     * de las pantallas.
+     *
+     * En las de Servicios Escolares (CV15) la unidad se compara exacta: su jefe es quien tiene un nombramiento sobre la
+     * unidad de Servicios Escolares, no el de una unidad que la contenga si alguien la moviera en el Organigrama (AZ-S16
+     * deja que un nombramiento cubra a las descendientes de su unidad). Ver y resolver observaciones también lo pueden la
+     * Subdirección Académica, el admin y quien lee en todo el Tec (CV-S1, AZ-03).
+     */
+    public static function allowsOn(Actor $context, CatalogValidationPermission $permission, string $ownerId): bool
+    {
+        if ($ownerId !== ReviewOwner::SCHOOL_SERVICES) {
+            return $context->allows($permission, self::targetOf($ownerId, $permission));
+        }
+
+        $tree = app(OrgTree::class);
+        $schoolServices = $tree->idOf(OrgTree::SCHOOL_SERVICES);
+
+        if ($schoolServices !== null
+            && $context->allows($permission, Target::of(unit: $schoolServices))
+            && self::holdsSchoolServices($context, $schoolServices)) {
+            return true;
+        }
+
+        return in_array($permission, self::SCHOOL_SERVICES_OVERSIGHT, true)
+            && $context->allows($permission, Target::of(unit: $tree->idOf(OrgTree::ACADEMIC)));
+    }
+
+    /**
+     * Quienes tienen hoy `$permission` sobre las revisiones de `$ownerId`, como RecipientsQuery::holders: los jefes que
+     * reciben el aviso de apertura, el recordatorio (CV11) y el de una observación resuelta (CV10), y el jefe del
+     * tablero de avance. En las de Servicios Escolares, solo quien tiene un nombramiento exactamente sobre su unidad
+     * (allowsOn()).
+     *
+     * @return list<array{user: User, role: Role}>
+     */
+    public function holdersOf(string $ownerId, CatalogValidationPermission $permission): array
+    {
+        $holders = $this->recipients->holders($permission, self::targetOf($ownerId, $permission));
+
+        if ($ownerId !== ReviewOwner::SCHOOL_SERVICES) {
+            return $holders;
+        }
+
+        $schoolServices = app(OrgTree::class)->idOf(OrgTree::SCHOOL_SERVICES);
+
+        return array_values(array_filter($holders, fn (array $holder): bool => $schoolServices !== null
+            && self::holdsSchoolServices(app(Actor::class)->forUser($holder['user']), $schoolServices)));
+    }
+
+    /**
+     * Si Servicios Escolares tiene hoy un jefe que valida sus revisiones (CV15): sin él no se abren materias, planes ni
+     * carreras, y el tablero de avance lo dice.
+     */
+    public function hasSchoolServicesHead(): bool
+    {
+        return $this->holdersOf(ReviewOwner::SCHOOL_SERVICES, CatalogValidationPermission::ReviewValidate) !== [];
+    }
+
+    /**
+     * Si alguno de sus nombramientos es exactamente sobre la unidad de Servicios Escolares.
+     */
+    private static function holdsSchoolServices(Actor $context, string $schoolServices): bool
+    {
+        return $context->heldScopes()->contains(fn (RoleAssignment $scope): bool => $scope->org_unit_id === $schoolServices);
+    }
+
+    /**
+     * Las revisiones de un dueño en un periodo, para todo el Tec (la de salones, si existe, cubre todos los campus;
+     * decisión 6), en el orden del enum Catalog: las de un departamento, sus docentes y salones; las de Servicios
+     * Escolares, sus materias, planes y carreras (CV15).
      *
      * @return Collection<int, CatalogReview>
      */
-    public function forDepartment(Term|string $term, Department|string $department): Collection
+    public function forOwner(Term|string $term, ReviewOwner $owner): Collection
     {
         $order = array_flip(array_map(fn (Catalog $catalog): string => $catalog->value, Catalog::cases()));
 
         return CatalogReview::query()
             ->where('term_id', $term instanceof Term ? $term->getKey() : $term)
-            ->where('department_id', $department instanceof Department ? $department->getKey() : $department)
+            ->tap(fn ($query) => self::ownedBy($query, $owner->departmentId))
             ->get()
             ->sortBy(fn (CatalogReview $review): int => $order[$review->catalog->value])
             ->values();
     }
 
     /**
+     * Las revisiones del departamento dado o, con null, las de Servicios Escolares, que no tienen departamento (CV15).
+     *
+     * @template TQuery of Builder
+     *
+     * @param  TQuery  $query
+     * @return TQuery
+     */
+    public static function ownedBy(Builder $query, ?string $departmentId, string $column = 'department_id'): Builder
+    {
+        return $departmentId === null ? $query->whereNull($column) : $query->where($column, $departmentId);
+    }
+
+    /**
      * La última revisión validada, con foto, del mismo departamento y catálogo en un periodo que empieza antes que el
-     * de `$review` (CV3, confirmado el 2 de noviembre de 2026): contra su foto se cuentan las altas y las bajas. Una reabierta no cuenta aunque conserve su foto (CV-S6, supuesto por confirmar). Nula en el primer periodo.
+     * de `$review` (CV3, confirmado el 2 de noviembre de 2026): contra su foto se cuentan las altas y las bajas. En las de
+     * Servicios Escolares, la última de Servicios Escolares del mismo catálogo en el Tec (CV15). Una reabierta no cuenta aunque conserve su foto (CV-S6, supuesto por confirmar). Nula en el primer periodo.
      */
     public function previousValidation(CatalogReview $review): ?CatalogReview
     {
@@ -174,7 +357,7 @@ final class CatalogReviewQuery
         return CatalogReview::query()
             ->select('catalog_reviews.*')
             ->join('terms', 'terms.id', '=', 'catalog_reviews.term_id')
-            ->where('catalog_reviews.department_id', $review->department_id)
+            ->tap(fn ($query) => self::ownedBy($query, $review->department_id, 'catalog_reviews.department_id'))
             ->where('catalog_reviews.catalog', $review->catalog)
             ->where('catalog_reviews.status', ReviewStatus::Validated)
             ->whereNotNull('catalog_reviews.snapshot')

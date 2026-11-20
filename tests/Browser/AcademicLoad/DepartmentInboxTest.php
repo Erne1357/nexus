@@ -10,8 +10,6 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\AcademicLoad\Models\ProposalReview;
-use App\Modules\CatalogValidation\Enums\Catalog;
-use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\Term;
@@ -29,9 +27,7 @@ beforeEach(function () {
     TermOpening::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id]);
     $department = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);
     $this->load = AcademicLoad::factory()->create(['term_id' => $term->id, 'modality_id' => modalityOf('PRES')->id, 'department_id' => $department->id]);
-    foreach (Catalog::general() as $catalog) {
-        CatalogReview::factory()->general($catalog)->validated()->create(['term_id' => $term->id, 'department_id' => $department->id]);
-    }
+    validateGeneralCatalogs($term->id, $department->id);
 
     $career = Career::factory()->create(['code' => 'ISC', 'name' => 'Sistemas Computacionales']);
     CareerCampus::factory()->create(['career_id' => $career->id, 'campus_id' => $campus->id]);

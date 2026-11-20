@@ -53,6 +53,7 @@ final class SetReviewTeacherEmail
             }
 
             $this->rules->ensureContains($review, $teacher);
+            $this->rules->ensureNoInactiveTeachers($review, [$teacher->getKey()]); // CV14
 
             return $this->updateTeacher->handle($teacher, ['institutional_email' => $email]);
         });

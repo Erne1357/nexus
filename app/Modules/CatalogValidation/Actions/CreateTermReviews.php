@@ -4,13 +4,16 @@ namespace App\Modules\CatalogValidation\Actions;
 
 use App\Modules\Academic\Queries\DepartmentQuery;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\Core\Models\Term;
 
 /**
- * Crea las revisiones de los catálogos dados que falten en un periodo: por cada departamento activo y sin borrar, una
- * por catálogo, todas sin campus (la de salones es una para todos los campus, decisión 6, confirmada el 12 de
- * noviembre de 2026). Nacen pendientes. Devuelve cuántas creó: 0 si no faltaba ninguna.
+ * Crea las revisiones de los catálogos dados que falten en un periodo, todas sin campus (la de salones es una para todos
+ * los campus, decisión 6, confirmada el 12 de noviembre de 2026), según quién valida cada catálogo (CV15, confirmada el
+ * 20 de noviembre de 2026; Catalog::owner()): de docentes y salones, una por cada departamento activo y sin borrar; de
+ * materias, planes y carreras, una sola de Servicios Escolares para todo el Tec, sin departamento, aunque no haya
+ * departamentos activos. Nacen pendientes. Devuelve cuántas creó: 0 si no faltaba ninguna.
  *
  * Es la pieza de escritura de OpenCatalogValidation (CV9), que decide qué catálogos y deja la bitácora, y de
  * CreateRoomsReviewsOnModalityUpdated. No autoriza ni avisa. Un solo insert que ignora las que ya existen (la unicidad,
@@ -27,17 +30,25 @@ final class CreateTermReviews
     {
         $now = now();
         $rows = [];
+        $departmentIds = null;
+        $row = fn (Catalog $catalog, ?string $departmentId): array => [
+            'term_id' => $term->getKey(),
+            'campus_id' => null,
+            'department_id' => $departmentId,
+            'catalog' => $catalog->value,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ];
 
-        foreach ($this->departments->activeIds() as $departmentId) {
-            foreach ($catalogs as $catalog) {
-                $rows[] = [
-                    'term_id' => $term->getKey(),
-                    'campus_id' => null,
-                    'department_id' => $departmentId,
-                    'catalog' => $catalog->value,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
+        foreach ($catalogs as $catalog) {
+            if ($catalog->owner() === CatalogOwner::SchoolServices) {
+                $rows[] = $row($catalog, null);
+
+                continue;
+            }
+
+            foreach ($departmentIds ??= $this->departments->activeIds() as $departmentId) {
+                $rows[] = $row($catalog, $departmentId);
             }
         }
 

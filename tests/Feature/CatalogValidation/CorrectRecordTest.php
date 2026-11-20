@@ -6,6 +6,7 @@ use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\CatalogValidation\Actions\CorrectRecord;
 use App\Modules\CatalogValidation\Enums\Catalog;
+use App\Modules\CatalogValidation\Enums\CatalogOwner;
 use App\Modules\CatalogValidation\Enums\ReviewStatus;
 use App\Modules\CatalogValidation\Models\CatalogReview;
 use App\Modules\CatalogValidation\Models\CatalogReviewMark;
@@ -31,11 +32,15 @@ beforeEach(function () {
     $this->elsewhere = Department::factory()->create();
 });
 
+/**
+ * La revisión del catálogo: la del departamento en docentes y salones, la de Servicios Escolares, sin departamento, en
+ * materias, planes y carreras (CV15).
+ */
 function cvReviewOf(Catalog $catalog, array $attributes = []): CatalogReview
 {
     $factory = $catalog === Catalog::Rooms ? CatalogReview::factory()->rooms() : CatalogReview::factory()->general($catalog);
 
-    return $factory->create(['department_id' => test()->department->id, ...$attributes]);
+    return $factory->create([...($catalog->owner() === CatalogOwner::Department ? ['department_id' => test()->department->id] : []), ...$attributes]);
 }
 
 function cvCorrect(CatalogReview $review, mixed $record, array $data): mixed
@@ -159,7 +164,6 @@ it('rechaza un registro que no es de la revisión', function (Closure $record) {
         ->toBe(['record' => ['El registro no es de esta revisión.']])
         ->and(Activity::count())->toBe(0);
 })->with([
-    'materia de otro departamento' => fn () => Subject::factory()->create(['department_id' => test()->elsewhere->id]),
     'materia borrada' => fn () => tap(Subject::factory()->create(['department_id' => test()->department->id]))->delete(),
 ]);
 
