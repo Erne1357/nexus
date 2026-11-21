@@ -10,7 +10,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Las fotos de los alumnos para la credencial (AC-20, tarea 1.27): el disco `student_photos` (fuera de la raíz del disco
  * `local` y de `public/`) guarda una carpeta por año de ingreso y un archivo por número de control,
  * `<AAAA>/<número de control>.<ext>` (p. ej. `2021/21111182.jpg`). El año sale de los dos primeros dígitos del número de
- * control (21 → 2021), después de las letras de un prefijo de posgrado («C», «M», «D»…). Se aceptan jpg, jpeg, png y webp
+ * control (21 → 2021; 94 → 1994), después de las letras de un prefijo de posgrado («C», «M», «D»…). Se aceptan jpg, jpeg, png y webp
  * de hasta MAX_BYTES; una más pesada cuenta como sin foto (supuesto por confirmar). Nexus solo las lee: se colocan a mano.
  */
 final class StudentPhotos
@@ -25,11 +25,16 @@ final class StudentPhotos
     private const array MIME = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp'];
 
     /**
-     * La carpeta del año de un número de control (`2021`), o null si no empieza con dos dígitos tras su prefijo.
+     * La carpeta del año de un número de control (`2021`), o null si no empieza con dos dígitos tras su prefijo. Los dos
+     * dígitos son del siglo XXI hasta el año siguiente al actual; los mayores, del XX (`94110667` → `1994`).
      */
     public static function yearFolder(string $controlNumber): ?string
     {
-        return preg_match('/^[A-Za-z]*(\d{2})\d/', trim($controlNumber), $match) === 1 ? '20'.$match[1] : null;
+        if (preg_match('/^[A-Za-z]*(\d{2})\d/', trim($controlNumber), $match) !== 1) {
+            return null;
+        }
+
+        return ((int) $match[1] <= (int) now()->format('y') + 1 ? '20' : '19').$match[1];
     }
 
     /**

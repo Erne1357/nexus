@@ -50,6 +50,9 @@ it('AC-20: la carpeta de la foto es el año de los dos primeros dígitos del nú
     expect(StudentPhotos::yearFolder($control))->toBe($folder);
 })->with([
     ['21111182', '2021'],
+    ['26110001', '2026'],
+    ['94110667', '1994'],
+    ['D97540247', '1997'],
     ['C19110045', '2019'],
     ['M2511', '2025'],
     ['ABC', null],
