@@ -12,6 +12,7 @@ use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\SeedDemo;
+use App\Modules\Core\Console\SyncTermsFromData;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
@@ -173,7 +174,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Blade::component(config('mary.prefix').'drawer', Drawer::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SeedDemo::class]);
+            $this->commands([SeedDemo::class, SyncTermsFromData::class]);
         }
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
