@@ -10,6 +10,7 @@ use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlanSubject;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Academic\Models\SubjectPrerequisite;
+use App\Modules\Academic\Queries\SubjectAliasQuery;
 use App\Modules\AcademicLoad\Enums\AcademicLoadPermission;
 use App\Modules\AcademicLoad\Models\CareerProposal;
 use App\Modules\AcademicLoad\Models\ProposalIntake;
@@ -40,6 +41,7 @@ final class CareerProposalQuery
         private readonly CatalogReviewQuery $catalogReviews,
         private readonly RecipientsQuery $recipients,
         private readonly DemandForecastsQuery $forecasts,
+        private readonly SubjectAliasQuery $aliases,
     ) {}
 
     /**
@@ -171,7 +173,9 @@ final class CareerProposalQuery
             ->values()
             ->all();
 
-        $subjects = $items->groupBy('subject_id')->map(function (Collection $rows) use ($columns): ProposalSubject {
+        $siiCodes = $this->aliases->forPlans($items->pluck('study_plan_id')->unique()->values()->all());
+
+        $subjects = $items->groupBy('subject_id')->map(function (Collection $rows) use ($columns, $siiCodes): ProposalSubject {
             $first = $rows->first();
             $byColumn = $rows->keyBy(fn (ProposalItem $item): string => ProposalOverview::columnKey($item->campus));
             $cells = [];
@@ -182,7 +186,7 @@ final class CareerProposalQuery
                 }
             }
 
-            return new ProposalSubject($first->subject, $first->semester, $first->study_plan_id, $cells);
+            return new ProposalSubject($first->subject, $first->semester, $first->study_plan_id, $cells, $siiCodes[$first->study_plan_id][$first->subject_id] ?? null);
         });
 
         $reviews = ProposalReview::query()

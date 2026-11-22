@@ -3,6 +3,7 @@
 namespace App\Modules\AcademicLoad\Queries;
 
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Queries\SubjectAliasQuery;
 use App\Modules\AcademicLoad\Models\ProposalItem;
 use App\Modules\Core\Models\Campus;
 
@@ -21,7 +22,18 @@ final readonly class ProposalSubject
         public int $semester,
         public string $studyPlanId,
         public array $cells,
+        public ?string $siiCode = null,
     ) {}
+
+    /**
+     * La clave principal y la secundaria con que se pinta en la retícula (D8-bis): la del SII del plan y la del TecNM.
+     *
+     * @return array{0: string, 1: ?string}
+     */
+    public function codes(): array
+    {
+        return SubjectAliasQuery::display($this->subject->code, $this->siiCode);
+    }
 
     public function id(): string
     {

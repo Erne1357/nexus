@@ -9,7 +9,8 @@
             </div>
             @foreach ($term['records'] as $row)
                 <div class="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-base-300 px-5 py-2.5 md:grid-cols-[6.5rem_minmax(0,1fr)_4rem_9rem_9rem]">
-                    <span class="font-mono font-semibold">{{ $row->subject->code }}</span>
+                    @php([$primary, $secondary] = $record->codesFor($row->subject_id, $row->subject->code))
+                    <span class="font-mono font-semibold">{{ $primary }}@if ($secondary !== null)<span class="block text-xs font-normal text-neutral" title="Clave del TecNM" data-secondary-code>{{ $secondary }}</span>@endif</span>
                     <span>{{ $row->subject->name }}</span>
                     <span class="text-right font-mono tabular-nums max-md:hidden">{{ $row->grade_label }}</span>
                     <x-core::status-badge :tone="$row->result->tone()" :label="$row->result->label()" />

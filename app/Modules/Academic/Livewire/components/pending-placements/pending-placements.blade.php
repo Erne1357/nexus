@@ -108,7 +108,8 @@
                                 <x-core::semester-grid.tile
                                     :interactive="false"
                                     :row="$layout->rows[$row['placement_id']]"
-                                    :code="$row['code']"
+                                    :code="$row['sii_code'] ?? $row['code']"
+                                    :secondary-code="isset($row['sii_code']) ? $row['code'] : null"
                                     :name="$row['name']"
                                     :muted="! $row['is_active']"
                                     wire:key="pending-tile-{{ $row['placement_id'] }}"

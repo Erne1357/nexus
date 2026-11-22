@@ -12,10 +12,12 @@
     El relleno, el borde y el color de su estado llegan en `class`. `$chain` es su cadena de seriación: la franja a
     la izquierda (una sombra interior con el token chain-N, que no toca el borde). Con algo resaltado (`data-focus`
     en el marco), lo que no está en la cadena (`data-on-chain`) se atenúa, y el elegido (`data-me`) lleva anillo.
+    `$secondaryCode` es la clave del TecNM cuando `$code` es la del SII de la retícula (regla D8-bis): va junto a la clave,
+    en Mono chico y tono neutro, en el mismo renglón para no quitarle alto al nombre ni al pie.
     `$muted` deja el nombre en el color del mosaico en lugar de `text-base-content`. Con `:interactive="false"` es solo
     lectura: un `div` sin cursor de mano (la retícula de «Por validar», donde se coloca desde la bandeja).
 --}}
-@props(['row', 'code', 'name', 'chain' => null, 'muted' => false, 'interactive' => true])
+@props(['row', 'code', 'name', 'secondaryCode' => null, 'chain' => null, 'muted' => false, 'interactive' => true])
 
 @php
     // Un color por cadena, en clases completas: Tailwind solo publica los tokens chain-N que encuentra escritos.
@@ -36,7 +38,12 @@
     $chain === null ? '' : $chainColors[$chain % 12].' shadow-[inset_5px_0_0_var(--chain)] pl-3',
 ]) }} style="--row: {{ $row }}">
     <span class="-mr-0.5 flex h-4 shrink-0 items-center justify-between">
-        <span class="truncate font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]">{{ $code }}</span>
+        <span class="flex min-w-0 items-baseline gap-1.5">
+            <span class="truncate font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]">{{ $code }}</span>
+            @if ($secondaryCode !== null)
+                <span class="min-w-0 truncate font-mono text-[10px] leading-4 text-neutral" title="Clave del TecNM" data-secondary-code>{{ $secondaryCode }}</span>
+            @endif
+        </span>
         {{ $icon ?? '' }}
     </span>
     <span @class([
