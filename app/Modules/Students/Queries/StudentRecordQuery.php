@@ -4,6 +4,7 @@ namespace App\Modules\Students\Queries;
 
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Queries\SubjectAliasQuery;
 use App\Modules\Core\Support\SeriationChains;
 use App\Modules\Students\Enums\KardexResult;
 use App\Modules\Students\Enums\SubjectStanding;
@@ -25,6 +26,7 @@ final class StudentRecordQuery
     public function __construct(
         private readonly PlanGridQuery $grids,
         private readonly TermInProgressQuery $terms,
+        private readonly SubjectAliasQuery $aliases,
     ) {}
 
     public function forStudent(Student $student): StudentRecord
@@ -35,6 +37,7 @@ final class StudentRecordQuery
             'campus' => fn (BelongsTo $campus) => $campus->withTrashed(),
         ]);
         $grid = $this->grids->forPlan($student->study_plan_id);
+        $siiCodes = $this->aliases->forPlan($student->study_plan_id);
         $records = $student->kardexRecords()->with(['subject' => fn (BelongsTo $subject) => $subject->withTrashed()])->get();
         $approved = $records->where('result', KardexResult::Aprobada)->pluck('subject_id')->unique()->values()->all();
         $taking = $records->where('result', KardexResult::Cursando)->pluck('subject_id')->unique()->values()->all();
@@ -80,6 +83,7 @@ final class StudentRecordQuery
                 creditShare: $grid->creditShareOf($subjectId),
                 beyondReach: $reach !== null && $semester > $reach,
                 chain: $chainOf[$subjectId] ?? null,
+                siiCode: $siiCodes[$subjectId] ?? null,
             );
         }
 
@@ -113,7 +117,9 @@ final class StudentRecordQuery
                 ->all(),
             chains: $chains,
             kardex: $this->kardex($records),
+            siiCodes: $siiCodes,
             unplaced: array_map(fn (string $subjectId): array => [
+                'id' => $subjectId,
                 'code' => $subjects[$subjectId]->code,
                 'name' => $subjects[$subjectId]->name,
                 'credits' => $grid->unplaced[$subjectId],

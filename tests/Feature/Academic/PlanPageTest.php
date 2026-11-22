@@ -314,7 +314,7 @@ describe('admin', function () {
         // permisos y alcances, la retícula (3: materias, seriación y especialidades), cuántas materias esperan
         // semestre («Por validar»), la credencial (su periodo; ya no consulta campus, #415) y el menú, si la carga
         // académica está oculta (MN-05).
-        expect($queries)->toBe(11);
+        expect($queries)->toBe(12);
     });
 });
 
@@ -831,7 +831,7 @@ describe('agregar materia', function () {
         // 8 medidas, constantes con el número de materias: el plan con su carrera (2), la retícula (3), cuántas
         // esperan semestre (1) y el catálogo (2: cuántas tiene y las que coinciden, con su cuenta en la misma consulta).
         expect(domOf($component)->querySelectorAll('[data-testid="catalog"] button'))->toHaveCount(8)
-            ->and($queries)->toBe(8);
+            ->and($queries)->toBe(9);
     });
 });
 
@@ -1159,7 +1159,7 @@ describe('seriación', function () {
         // 6 medidas, constantes con el número de materias: el plan con su carrera (2), la retícula (3) y cuántas
         // esperan semestre (1).
         expect(domOf($component)->querySelectorAll('[data-testid="requisite-options"] button'))->toHaveCount(8)
-            ->and($queries)->toBe(6);
+            ->and($queries)->toBe(7);
     });
 });
 

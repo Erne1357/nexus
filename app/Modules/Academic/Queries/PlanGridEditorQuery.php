@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\DB;
  * `is_active` en false, porque sigue en la retícula hasta que alguien la quite.
  *
  * @phpstan-type Requisite array{prerequisite_id: string, subject_id: string, code: string, name: string, semester: int, kind: string}
- * @phpstan-type Row array{placement_id: string, subject_id: string, code: string, name: string, credits: int, theory_hours: int, practice_hours: int, department: ?string, semester: int, specialty_id: ?string, is_required: bool, is_active: bool, chain: ?int, requires: list<Requisite>, required_by: list<Requisite>}
+ * @phpstan-type Row array{placement_id: string, subject_id: string, code: string, sii_code: ?string, name: string, credits: int, theory_hours: int, practice_hours: int, department: ?string, semester: int, specialty_id: ?string, is_required: bool, is_active: bool, chain: ?int, requires: list<Requisite>, required_by: list<Requisite>}
  * @phpstan-type CatalogSubject array{id: string, code: string, name: string, theory_hours: int, practice_hours: int, credits: int, department: ?string, is_active: bool, deleted: bool, semester: ?int, placeable: bool}
  */
 final class PlanGridEditorQuery
@@ -70,6 +70,8 @@ final class PlanGridEditorQuery
                 'study_plan_subjects.semester', 'study_plan_subjects.specialty_id', 'study_plan_subjects.is_required', 'subjects.is_active',
             ]);
 
+        $siiCodes = (new SubjectAliasQuery)->forPlan($plan->getKey());
+
         /** @var array<string, Row> $grid */
         $grid = [];
 
@@ -78,6 +80,7 @@ final class PlanGridEditorQuery
                 'placement_id' => $row->placement_id,
                 'subject_id' => $row->subject_id,
                 'code' => $row->code,
+                'sii_code' => $siiCodes[$row->subject_id] ?? null,
                 'name' => $row->name,
                 'credits' => (int) $row->credits,
                 'theory_hours' => (int) $row->theory_hours,

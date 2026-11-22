@@ -54,6 +54,7 @@ it('agrupa por semestre e incluye los semestres vacíos hasta los del plan', fun
             'placement_id' => $calculus->id,
             'subject_id' => $calculus->subject_id,
             'code' => 'ACF-0901',
+            'sii_code' => null,
             'name' => 'Materia ACF-0901',
             'credits' => 5,
             'theory_hours' => 3,
@@ -222,7 +223,7 @@ it('lee una retícula de 60 materias con su seriación y especialidades en 3 con
     $grid = editorGrid($plan);
     $queries = count(DB::getQueryLog());
 
-    expect($queries)->toBe(3)
+    expect($queries)->toBe(4)
         ->and(collect($grid['semesters'])->flatten(1))->toHaveCount(60)
         ->and($grid['semesters_count'])->toBe(9);
 });

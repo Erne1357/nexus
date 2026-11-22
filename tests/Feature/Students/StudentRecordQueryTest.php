@@ -13,6 +13,7 @@ use App\Modules\Students\Models\Student;
 use App\Modules\Students\Queries\GridCell;
 use App\Modules\Students\Queries\StudentRecord;
 use App\Modules\Students\Queries\StudentRecordQuery;
+use Illuminate\Support\Arr;
 
 /*
 | StudentRecordQuery arma la ficha del alumno (tarea 1.6): su retícula por semestre con el estado de cada materia
@@ -237,7 +238,7 @@ it('D18: lista aparte, por renglón y luego por clave, las materias de su plan q
     StudyPlanSubjectPending::factory()->for($this->plan)->for($last)->create();
     recordKardex($this->student, $second, 'aprobada', '20253', grade: 90);
 
-    expect(recordOf($this->student)->unplaced)->toBe([
+    expect(array_map(fn (array $row): array => Arr::except($row, 'id'), recordOf($this->student)->unplaced))->toBe([
         ['code' => 'P-9', 'name' => 'Pendiente nueve', 'credits' => 6, 'accredited' => false],
         ['code' => 'P-2', 'name' => 'Pendiente dos', 'credits' => 4, 'accredited' => true],
         ['code' => 'P-1', 'name' => 'Pendiente uno', 'credits' => 5, 'accredited' => false],

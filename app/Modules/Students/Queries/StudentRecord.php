@@ -2,6 +2,7 @@
 
 namespace App\Modules\Students\Queries;
 
+use App\Modules\Academic\Queries\SubjectAliasQuery;
 use App\Modules\Core\Support\SemesterGrid;
 use App\Modules\Students\Models\KardexRecord;
 use App\Modules\Students\Models\Student;
@@ -23,7 +24,8 @@ final readonly class StudentRecord
      * @param  list<array{id: string, name: string, subjects: int}>  $specialties  las especialidades con materias en la retícula, por su clave, y cuántas tiene cada una
      * @param  list<array{index: int, name: string, size: int}>  $chains  cadenas de seriación, por su primera materia
      * @param  list<array{term: string|null, label: string, records: list<KardexRecord>}>  $kardex  primero lo que no tiene periodo y luego del periodo más antiguo al más reciente
-     * @param  list<array{code: string, name: string, credits: int, accredited: bool}>  $unplaced  las materias de su plan que esperan semestre en «Por validar» (D18), por su renglón del SII y luego por clave, y si las acreditó
+     * @param  list<array{id: string, code: string, name: string, credits: int, accredited: bool}>  $unplaced  las materias de su plan que esperan semestre en «Por validar» (D18), por su renglón del SII y luego por clave, y si las acreditó
+     * @param  array<string, string>  $siiCodes  materia → su clave del SII en el plan del alumno, solo si difiere de la de Nexus (D8-bis)
      */
     public function __construct(
         public Student $student,
@@ -40,6 +42,7 @@ final readonly class StudentRecord
         public array $chains,
         public array $kardex,
         public array $unplaced = [],
+        public array $siiCodes = [],
     ) {}
 
     /**
@@ -56,6 +59,16 @@ final readonly class StudentRecord
     /**
      * @return array<string, string> id de especialidad → su nombre
      */
+    /**
+     * La clave principal y la secundaria con que se pinta una materia en la retícula y el kárdex del alumno (D8-bis).
+     *
+     * @return array{0: string, 1: ?string}
+     */
+    public function codesFor(string $subjectId, string $code): array
+    {
+        return SubjectAliasQuery::display($code, $this->siiCodes[$subjectId] ?? null);
+    }
+
     public function specialtyNames(): array
     {
         return array_column($this->specialties, 'name', 'id');

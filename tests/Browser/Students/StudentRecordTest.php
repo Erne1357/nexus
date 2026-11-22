@@ -4,6 +4,7 @@ use App\Modules\Academic\Models\Career;
 use App\Modules\Academic\Models\Specialty;
 use App\Modules\Academic\Models\StudyPlan;
 use App\Modules\Academic\Models\Subject;
+use App\Modules\Academic\Models\SubjectAlias;
 use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
@@ -22,6 +23,7 @@ beforeEach(function () {
     $calculus = Subject::factory()->create(['code' => 'ACF-0901', 'name' => 'Cálculo Diferencial']);
     $integral = Subject::factory()->create(['code' => 'ACF-0902', 'name' => 'Cálculo Integral']);
     placeInPlan($plan, $calculus);
+    SubjectAlias::create(['subject_id' => $calculus->id, 'study_plan_id' => $plan->id, 'code' => '1EA']);
     placeInPlan($plan, $integral, 2);
     seriate($plan, $integral, $calculus);
     $student = Student::factory()->for($plan)->create(['control_number' => '24111234', 'name' => 'Daniela Ortiz Mendoza', 'campus_id' => $campus->id]);
@@ -41,8 +43,11 @@ it('el coordinador abre la ficha de un alumno desde el listado y pasa al kárdex
         ->click('@show-24111234')
         ->assertSee('Cálculo Integral')
         ->assertSee('Puede seleccionarla')
+        ->assertSee('1EA')
+        ->assertSee('ACF-0901')
         ->click('@tab-kardex')
         ->assertSee('Ago-Dic 2025')
+        ->assertSee('1EA')
         ->assertSee('1 · ordinaria')
         ->assertNoJavaScriptErrors();
 });

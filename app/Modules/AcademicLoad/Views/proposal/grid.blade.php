@@ -97,7 +97,8 @@
                             <x-core::semester-grid.separator :specialty="$specialty" :name="$specialtyNames[$specialty]" wire:key="separator-{{ $semester }}-{{ $specialty }}" />
                         @endif
 
-                        <x-core::semester-grid.tile :row="$layout->rows[$row->subject->code]" :code="$row->subject->code" :name="$row->subject->name" :chain="$chains['of'][$row->id()] ?? null"
+                        @php([$primaryCode, $secondaryCode] = $row->codes())
+                        <x-core::semester-grid.tile :row="$layout->rows[$row->subject->code]" :code="$primaryCode" :secondary-code="$secondaryCode" :name="$row->subject->name" :chain="$chains['of'][$row->id()] ?? null"
                             :class="$classes"
                             wire:click="edit('{{ $row->id() }}')" wire:key="tile-{{ $row->id() }}" :data-item="$row->id()" :data-me="$subjectId === $row->id() ? '' : null"
                             :data-on-chain="isset($highlight['marked'][$row->id()]) ? '' : null"

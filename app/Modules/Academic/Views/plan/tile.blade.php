@@ -12,6 +12,7 @@
 @php
     $seriation = array_column(array_filter($row['requires'], fn (array $requisite): bool => $requisite['kind'] === 'seriacion'), 'code');
     $corequisites = array_column(array_filter($row['requires'], fn (array $requisite): bool => $requisite['kind'] !== 'seriacion'), 'code');
+    [$primaryCode, $secondaryCode] = \App\Modules\Academic\Queries\SubjectAliasQuery::display($row['code'], $row['sii_code'] ?? null);
     $requisites = implode(' · ', array_filter([
         $seriation === [] ? null : 'Pide '.implode(', ', $seriation),
         $corequisites === [] ? null : 'Correq. '.implode(', ', $corequisites),
@@ -20,7 +21,8 @@
 <x-core::semester-grid.tile
     :row="$gridRow"
     :chain="$row['chain']"
-    :code="$row['code']"
+    :code="$primaryCode"
+    :secondary-code="$secondaryCode"
     :name="$row['name']"
     :muted="! $row['is_active']"
     wire:key="tile-{{ $row['placement_id'] }}"

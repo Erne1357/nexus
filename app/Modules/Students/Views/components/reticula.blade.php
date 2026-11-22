@@ -46,7 +46,8 @@
                             <x-core::semester-grid.separator :specialty="$cell->specialtyId" :name="$specialtyNames[$cell->specialtyId]" />
                         @endif
 
-                        <x-core::semester-grid.tile :row="$layout->rows[$cell->code]" :chain="$cell->chain" :code="$cell->code" :name="$cell->name"
+                        @php([$primary, $secondary] = $record->codesFor($cell->subjectId, $cell->code))
+                        <x-core::semester-grid.tile :row="$layout->rows[$cell->code]" :chain="$cell->chain" :code="$primary" :secondary-code="$secondary" :name="$cell->name"
                             :class="$cell->standing->tileClasses()" :title="$cell->standing->label()" :interactive="$interactive" :aria-pressed="$interactive ? 'false' : null" :x-on:click="$interactive ? 'toggleSubject($el)' : null"
                             :data-subject="$cell->code" :data-name="$cell->name" :data-prereqs="implode(' ', $cell->prerequisites)" :data-chain="$cell->chain">
                             <x-slot:icon><x-icon :name="$cell->standing->icon()" class="w-4 h-4 shrink-0" aria-hidden="true" /></x-slot:icon>
@@ -107,7 +108,8 @@
         <h2 id="student-unplaced-title" class="bg-base-200/60 px-5 py-2.5 font-bold">{{ $record->student->studyPlan->is_historical ? 'Sin semestre en el SII' : 'Por validar' }}</h2>
         @foreach ($record->unplaced as $subject)
             <div class="grid grid-cols-[6.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-t border-base-300 px-5 py-2.5 md:grid-cols-[6.5rem_minmax(0,1fr)_4rem_9rem]" wire:key="student-unplaced-{{ $subject['code'] }}">
-                <span class="font-mono font-semibold">{{ $subject['code'] }}</span>
+                @php([$primary, $secondary] = $record->codesFor($subject['id'], $subject['code']))
+                <span class="font-mono font-semibold">{{ $primary }}@if ($secondary !== null)<span class="block text-xs font-normal text-neutral" title="Clave del TecNM">{{ $secondary }}</span>@endif</span>
                 <span>{{ $subject['name'] }}</span>
                 <span class="text-right font-mono tabular-nums">{{ $subject['credits'] }} cr</span>
                 <span class="max-md:col-span-3">

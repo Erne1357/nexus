@@ -34,5 +34,6 @@ final readonly class GridCell
         public ?int $creditShare,
         public bool $beyondReach,
         public ?int $chain,
+        public ?string $siiCode = null,
     ) {}
 }
