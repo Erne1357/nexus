@@ -49,13 +49,13 @@
                         @php([$primary, $secondary] = $record->codesFor($cell->subjectId, $cell->code))
                         <x-core::semester-grid.tile :row="$layout->rows[$cell->code]" :chain="$cell->chain" :code="$primary" :secondary-code="$secondary" :name="$cell->name"
                             :class="$cell->standing->tileClasses()" :title="$cell->standing->label()" :interactive="$interactive" :aria-pressed="$interactive ? 'false' : null" :x-on:click="$interactive ? 'toggleSubject($el)' : null"
-                            :data-subject="$cell->code" :data-name="$cell->name" :data-prereqs="implode(' ', $cell->prerequisites)" :data-chain="$cell->chain">
+                            :data-subject="$cell->code" :data-label="$primary" :data-name="$cell->name" :data-prereqs="implode(' ', $cell->prerequisites)" :data-chain="$cell->chain">
                             <x-slot:icon><x-icon :name="$cell->standing->icon()" class="w-4 h-4 shrink-0" aria-hidden="true" /></x-slot:icon>
                             <span class="sr-only">{{ $cell->standing->label() }}</span>
 
                             @if ($cell->standing === SubjectStanding::NoPermitida)
                                 @if ($cell->missing !== [])
-                                    <x-slot:requisites :title="'Pide '.implode(', ', $cell->missing)">Pide <span class="font-mono font-semibold">{{ implode(', ', $cell->missing) }}</span></x-slot:requisites>
+                                    <x-slot:requisites :title="'Pide '.implode(', ', $cell->missingShown)">Pide <span class="font-mono font-semibold">{{ implode(', ', $cell->missingShown) }}</span></x-slot:requisites>
                                 @elseif ($cell->beyondReach)
                                     <x-slot:requisites title="Fuera de su avance">Fuera de su avance</x-slot:requisites>
                                 @elseif ($cell->creditShare !== null)

@@ -145,11 +145,11 @@ it('dice qué pide cada materia y quién la pide, con su tipo', function () {
     [$integralRow, $numericalRow] = editorGrid($this->plan)['semesters'][2];
 
     expect($integralRow['requires'])->toBe([
-        ['prerequisite_id' => $seriation->id, 'subject_id' => $calculus->id, 'code' => 'ACF-0901', 'name' => 'Cálculo Diferencial', 'semester' => 1, 'kind' => 'seriacion'],
-        ['prerequisite_id' => $corequisite->id, 'subject_id' => $numerical->id, 'code' => 'SCC-1017', 'name' => 'Métodos Numéricos', 'semester' => 2, 'kind' => 'correquisito'],
+        ['prerequisite_id' => $seriation->id, 'subject_id' => $calculus->id, 'code' => 'ACF-0901', 'sii_code' => null, 'name' => 'Cálculo Diferencial', 'semester' => 1, 'kind' => 'seriacion'],
+        ['prerequisite_id' => $corequisite->id, 'subject_id' => $numerical->id, 'code' => 'SCC-1017', 'sii_code' => null, 'name' => 'Métodos Numéricos', 'semester' => 2, 'kind' => 'correquisito'],
     ])
         ->and($numericalRow['required_by'])->toBe([
-            ['prerequisite_id' => $corequisite->id, 'subject_id' => $integral->id, 'code' => 'ACF-0902', 'name' => 'Cálculo Integral', 'semester' => 2, 'kind' => 'correquisito'],
+            ['prerequisite_id' => $corequisite->id, 'subject_id' => $integral->id, 'code' => 'ACF-0902', 'sii_code' => null, 'name' => 'Cálculo Integral', 'semester' => 2, 'kind' => 'correquisito'],
         ])
         ->and(editorGrid($this->plan)['semesters'][1][0]['required_by'][0]['code'])->toBe('ACF-0902');
 });

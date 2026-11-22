@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\DB;
  * materias borradas del catálogo, con la seriación que las toca; una materia inactiva sigue, con
  * `is_active` en false, porque sigue en la retícula hasta que alguien la quite.
  *
- * @phpstan-type Requisite array{prerequisite_id: string, subject_id: string, code: string, name: string, semester: int, kind: string}
+ * @phpstan-type Requisite array{prerequisite_id: string, subject_id: string, code: string, sii_code?: ?string, name: string, semester: int, kind: string}
  * @phpstan-type Row array{placement_id: string, subject_id: string, code: string, sii_code: ?string, name: string, credits: int, theory_hours: int, practice_hours: int, department: ?string, semester: int, specialty_id: ?string, is_required: bool, is_active: bool, chain: ?int, requires: list<Requisite>, required_by: list<Requisite>}
  * @phpstan-type CatalogSubject array{id: string, code: string, name: string, theory_hours: int, practice_hours: int, credits: int, department: ?string, is_active: bool, deleted: bool, semester: ?int, placeable: bool}
  */
@@ -275,6 +275,7 @@ final class PlanGridEditorQuery
             'prerequisite_id' => $row->id,
             'subject_id' => $subject['subject_id'],
             'code' => $subject['code'],
+            'sii_code' => $subject['sii_code'],
             'name' => $subject['name'],
             'semester' => $subject['semester'],
             'kind' => $row->kind,

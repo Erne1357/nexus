@@ -67,7 +67,7 @@ it('al tocar una materia resalta su cadena y la barra de selección dice qué pi
         ->assertScript("document.querySelector('[data-testid=selection-bar]').offsetHeight", 0)
         ->assertScript("document.querySelector('[data-testid=chain-info]').textContent.trim()", '')
         ->click('[data-subject="ACF-0902"]')
-        ->assertSeeIn('[data-testid="selection-bar"]', 'ACF-0902 Cálculo Integral: pide ACF-0901 Cálculo Diferencial · no abre ninguna')
+        ->assertSeeIn('[data-testid="selection-bar"]', 'ACF-0902 Cálculo Integral: pide 1EA Cálculo Diferencial · no abre ninguna')
         ->assertScript($barShown, true)
         ->assertScript($focused, true)
         ->assertScript($onChain('ACF-0901'), true);

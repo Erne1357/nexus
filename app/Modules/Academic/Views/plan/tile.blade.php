@@ -10,8 +10,9 @@
     además no deja que el dedo desplace la página) para cambiar su lugar dentro del semestre.
 --}}
 @php
-    $seriation = array_column(array_filter($row['requires'], fn (array $requisite): bool => $requisite['kind'] === 'seriacion'), 'code');
-    $corequisites = array_column(array_filter($row['requires'], fn (array $requisite): bool => $requisite['kind'] !== 'seriacion'), 'code');
+    $shown = fn (array $requisite): string => $requisite['sii_code'] ?? $requisite['code'];
+    $seriation = array_map($shown, array_filter($row['requires'], fn (array $requisite): bool => $requisite['kind'] === 'seriacion'));
+    $corequisites = array_map($shown, array_filter($row['requires'], fn (array $requisite): bool => $requisite['kind'] !== 'seriacion'));
     [$primaryCode, $secondaryCode] = \App\Modules\Academic\Queries\SubjectAliasQuery::display($row['code'], $row['sii_code'] ?? null);
     $requisites = implode(' · ', array_filter([
         $seriation === [] ? null : 'Pide '.implode(', ', $seriation),

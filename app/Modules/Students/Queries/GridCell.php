@@ -35,5 +35,6 @@ final readonly class GridCell
         public bool $beyondReach,
         public ?int $chain,
         public ?string $siiCode = null,
+        public array $missingShown = [],
     ) {}
 }

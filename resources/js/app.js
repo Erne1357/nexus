@@ -953,7 +953,7 @@ document.addEventListener('alpine:init', () => {
             let text = '';
 
             if (selection?.code) {
-                const name = (code) => `${code} ${this.byCode[code].dataset.name}`;
+                const name = (code) => `${this.byCode[code].dataset.label ?? code} ${this.byCode[code].dataset.name}`;
                 const requires = this.pre[selection.code] ?? [];
                 const opens = this.post[selection.code] ?? [];
                 chain = new Set([selection.code, ...this.walk(this.pre, selection.code), ...this.walk(this.post, selection.code)]);

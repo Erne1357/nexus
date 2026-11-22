@@ -84,6 +84,7 @@ final class StudentRecordQuery
                 beyondReach: $reach !== null && $semester > $reach,
                 chain: $chainOf[$subjectId] ?? null,
                 siiCode: $siiCodes[$subjectId] ?? null,
+                missingShown: array_values(array_map(fn (string $id): string => $siiCodes[$id] ?? $subjects[$id]->code, array_filter($prerequisites, fn (string $id): bool => ! isset($passed[$id])))),
             );
         }
 
