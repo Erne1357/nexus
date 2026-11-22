@@ -71,6 +71,7 @@ it('D8-bis: la ficha del alumno lleva una sola consulta de alias por plan, sin i
 it('D8-bis: la retícula y el kárdex del alumno muestran 1EA principal y ACF-2301 debajo, y su identidad sigue siendo la de Nexus', function () {
     $page = Livewire::actingAs($this->staff)->test('students::pages.student', ['student' => $this->student->id])
         ->assertSeeHtml('data-subject="ACF-2301"')
+        ->assertSeeHtml('shrink-0">1EA</span>')
         ->assertSeeHtml('data-secondary-code>ACF-2301</span>')
         ->assertSee('1EA')
         ->assertSee('ACF-2302');

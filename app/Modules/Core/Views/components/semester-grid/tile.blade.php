@@ -39,7 +39,8 @@
 ]) }} style="--row: {{ $row }}">
     <span class="-mr-0.5 flex h-4 shrink-0 items-center justify-between">
         <span class="flex min-w-0 items-baseline gap-1.5">
-            <span class="truncate font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]">{{ $code }}</span>
+            {{-- Con clave secundaria, la principal nunca se recorta: cede la del TecNM (D8-bis). --}}
+            <span @class(['font-mono text-[12.5px] font-semibold leading-4 tracking-[-0.02em]', 'shrink-0' => $secondaryCode !== null, 'truncate' => $secondaryCode === null])>{{ $code }}</span>
             @if ($secondaryCode !== null)
                 <span class="min-w-0 truncate font-mono text-[10px] leading-4 text-neutral" title="Clave del TecNM" data-secondary-code>{{ $secondaryCode }}</span>
             @endif
