@@ -1,57 +1,51 @@
-<x-core::layouts.guest title="Cambiar contraseña">
-    <x-card title="Cambia tu contraseña" subtitle="Al menos 8 caracteres, con letras y números" shadow separator class="w-full max-w-sm">
-        @if (session('status') === 'password-updated')
-            <x-alert title="Tu contraseña se actualizó." icon="o-check-circle" class="alert-success mb-4" />
-        @endif
+{{--
+    Cambiar la contraseña (tarea 1.30; DESIGN.md, "Pantallas de contraseña"), con la credencial que se imprime con cada
+    requisito (core::password.badge). En el primer acceso cuelga en la escena del login (sin la aplicación, como pide
+    EnsurePasswordIsChanged); en un cambio voluntario, de la banda de la aplicación. Recién guardada, la credencial
+    impresa lleva el acuse (core::password.receipt) y el botón para seguir. Datos de ChangePasswordPage.
+--}}
+@if ($firstAccess)
+    <x-core::layouts.guest title="Cambiar contraseña" bare>
+        <x-core::login.scene>
+            <x-core::password.badge
+                :credential="$credential"
+                :requirements="$requirements"
+                heading="Cambia tu contraseña"
+                lead="Es tu primer acceso: elige una propia."
+            >
+                @include('core::auth.partials.change-password-form')
+            </x-core::password.badge>
+        </x-core::login.scene>
+    </x-core::layouts.guest>
+@else
+    <x-layouts::app title="Cambiar contraseña">
+        <div class="flex justify-center pt-[clamp(28px,5vh,56px)] pb-12 desktop:justify-end desktop:pe-[clamp(0px,3vw,64px)]" style="--hare: url('{{ Vite::asset('resources/images/liebre-512.png') }}')">
+            <x-core::password.lanyard>
+                @if ($receipt)
+                    <x-core::password.badge :credential="$credential" printed heading="Tu contraseña se actualizó." :lead="$continueTo ? 'Ya puedes usar Nexus con ella.' : 'Las demás sesiones abiertas se cerraron.'">
+                        <x-button
+                            :label="$continueTo ? 'Entrar a Nexus' : 'Ir al inicio'"
+                            :link="$continueTo ?? route('home')"
+                            icon-right="o-arrow-right"
+                            class="btn-primary h-12 text-base"
+                            data-testid="password-continue"
+                        />
 
-        @if (auth()->user()->must_change_password)
-            <x-alert
-                title="Es tu primer acceso: elige una contraseña propia para continuar."
-                icon="o-key"
-                class="alert-info mb-4"
-            />
-        @endif
-
-        <form method="POST" action="{{ route('user-password.update') }}" class="flex flex-col gap-4">
-            @csrf
-            @method('PUT')
-
-            <x-password
-                label="Contraseña actual"
-                name="current_password"
-                error-field="current_password"
-                autocomplete="current-password"
-                right
-                required
-            />
-
-            <x-password
-                label="Nueva contraseña"
-                name="password"
-                error-field="password"
-                autocomplete="new-password"
-                right
-                required
-            />
-
-            <x-password
-                label="Confirma la nueva contraseña"
-                name="password_confirmation"
-                error-field="password_confirmation"
-                autocomplete="new-password"
-                right
-                required
-            />
-
-            <x-button label="Guardar contraseña" type="submit" class="btn-primary" />
-        </form>
-
-        <x-slot:actions>
-            <form method="POST" action="{{ route('logout') }}">
-                @csrf
-
-                <x-button label="Cerrar sesión" type="submit" class="btn-ghost btn-sm" />
-            </form>
-        </x-slot:actions>
-    </x-card>
-</x-core::layouts.guest>
+                        <x-slot:receipt>
+                            <x-core::password.receipt :receipt="$receipt" notch="bg-base-200" />
+                        </x-slot:receipt>
+                    </x-core::password.badge>
+                @else
+                    <x-core::password.badge
+                        :credential="$credential"
+                        :requirements="$requirements"
+                        heading="Cambia tu contraseña"
+                        lead="Al guardarla se cierran tus demás sesiones abiertas."
+                    >
+                        @include('core::auth.partials.change-password-form')
+                    </x-core::password.badge>
+                @endif
+            </x-core::password.lanyard>
+        </div>
+    </x-layouts::app>
+@endif

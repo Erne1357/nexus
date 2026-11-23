@@ -50,7 +50,7 @@ it('deja cerrar la sesión sin cambiar la contraseña', function () {
     $this->assertGuest();
 });
 
-it('cambia la contraseña, apaga must_change_password y lleva a la página de inicio', function () {
+it('cambia la contraseña, apaga must_change_password y muestra el acuse con el botón para entrar al inicio', function () {
     $user = firstAccessUser();
 
     $this->actingAs($user)
@@ -60,7 +60,14 @@ it('cambia la contraseña, apaga must_change_password y lleva a la página de in
             'password' => 'Nueva-clave-2027',
             'password_confirmation' => 'Nueva-clave-2027',
         ])
-        ->assertRedirect('/');
+        ->assertRedirect(route('user-password.edit'))
+        ->assertSessionHas('status', 'password-updated');
+
+    $this->get(route('user-password.edit'))
+        ->assertOk()
+        ->assertSee('Tu contraseña se actualizó.')
+        ->assertSee('Entrar a Nexus')
+        ->assertSee('href="'.url('/').'"', false);
 
     $user->refresh();
 
@@ -83,7 +90,9 @@ it('después del cambio lleva a la página que había pedido', function () {
             'password' => 'Nueva-clave-2027',
             'password_confirmation' => 'Nueva-clave-2027',
         ])
-        ->assertRedirect('/carga-de-prueba');
+        ->assertRedirect(route('user-password.edit'));
+
+    $this->get(route('user-password.edit'))->assertSee('href="'.url('/carga-de-prueba').'"', false);
 });
 
 it('rechaza el cambio si la contraseña actual no es correcta', function () {
