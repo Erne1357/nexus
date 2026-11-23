@@ -103,6 +103,18 @@ it('entrega una plantilla de .env de producción sin secretos reales', function 
         ->and($env['ACME_EMAIL'])->not->toBeEmpty();
 });
 
+it('trae el correo de producción por Microsoft Graph con las tres variables de la app de Azure por llenar (tarea 1.29)', function () {
+    $template = file_get_contents(dirname(__DIR__, 3).'/.env.production.example');
+
+    expect($template)->toMatch('/^MAIL_MAILER=microsoft-graph$/m')
+        ->and($template)->toMatch('/^MAIL_FROM_ADDRESS=/m')
+        ->and($template)->toMatch('/^MAIL_FROM_NAME=/m')
+        ->and($template)->toMatch('/^MICROSOFT_GRAPH_TENANT_ID=CAMBIAR$/m')
+        ->and($template)->toMatch('/^MICROSOFT_GRAPH_CLIENT_ID=CAMBIAR$/m')
+        ->and($template)->toMatch('/^MICROSOFT_GRAPH_CLIENT_SECRET=CAMBIAR$/m')
+        ->and($template)->not->toMatch('/^MAIL_MAILER=log$/m');
+});
+
 it('deja apagada por defecto la contraseña previa al sitio del túnel de demostración', function () {
     $caddy = deployServices('compose.prod.yaml')['caddy']['environment'];
     $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');

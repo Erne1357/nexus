@@ -23,6 +23,7 @@ final class ActivityRecordTypes
         'TermStage' => 'Etapa del periodo',
         'LoginNotice' => 'Aviso del login',
         'LoginShortcut' => 'Atajo del login',
+        'MailConnection' => 'Cuenta de envío del correo',
         'Career' => 'Carrera',
         'CareerCampus' => 'Oferta de carrera por campus',
         'Department' => 'Departamento',

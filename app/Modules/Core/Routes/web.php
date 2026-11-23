@@ -2,6 +2,7 @@
 
 use App\Modules\Core\Http\Controllers\AccessInvitationPage;
 use App\Modules\Core\Http\Controllers\ForgotPasswordPage;
+use App\Modules\Core\Http\Controllers\MicrosoftMailCallback;
 use App\Modules\Core\Http\Controllers\ResetPasswordPage;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -62,6 +63,8 @@ Route::middleware('auth')->group(function () {
     Route::livewire('/configuracion/parametros', 'core::pages.settings')->name('core.settings');
     // 1.22-G Correos y colas
     Route::livewire('/configuracion/correos-y-colas', 'core::pages.mail-and-queues')->name('core.mail-and-queues');
+    // 1.29 El regreso de Microsoft al conectar la cuenta de envío (Redirect URI de la app de Azure; ADR-0032).
+    Route::get('/configuracion/correo/microsoft/callback', MicrosoftMailCallback::class)->name('core.mail-connection.callback');
 });
 
 /*

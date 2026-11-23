@@ -63,6 +63,7 @@ Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos co
    | `DB_PASSWORD`, `REDIS_PASSWORD` | `openssl rand -hex 24` (sin `$` ni espacios) |
    | `APP_IMAGE_TAG` | El tag que desplegarás (`v1.0.0`) |
    | `BACKUP_DIR`, `BACKUP_UID`, `BACKUP_GID` | Ver el paso siguiente |
+   | `MAIL_FROM_ADDRESS`, `MICROSOFT_GRAPH_TENANT_ID`, `MICROSOFT_GRAPH_CLIENT_ID`, `MICROSOFT_GRAPH_CLIENT_SECRET` | La cuenta de envío y la app de Azure: ver [«Correo saliente (Microsoft 365)»](#correo-saliente-microsoft-365) |
 
    Guarda una copia del `.env` **fuera del servidor**, en un lugar con acceso restringido: sin `APP_KEY` no se pueden descifrar las sesiones ni los valores cifrados, y las contraseñas no se pueden recuperar.
 
@@ -258,6 +259,55 @@ Si restauras un respaldo anterior a una migración, vuelve también al tag que c
 
 En un servidor nuevo: pasos 1 a 4 del primer despliegue (con el `.env` guardado fuera del servidor), copia el archivo `.dump` más reciente a `BACKUP_DIR/daily/` y aplica el procedimiento B.
 
+## Correo saliente (Microsoft 365)
+
+Nexus manda su correo (invitaciones de acceso, restablecer la contraseña, avisos) por Microsoft 365 con Microsoft Graph y **permisos delegados** ([ADR-0032](../decisiones/0032-correo-por-microsoft-graph.md)): sale como la cuenta que el admin conecta en Nexus, que debe ser la del remitente. Conviene un buzón institucional de servicio (por ejemplo `nexus@cdjuarez.tecnm.mx`) y no la cuenta de una persona: si esa cuenta cambia de contraseña o la dan de baja, hay que reconectar. El servidor necesita salida HTTPS a `login.microsoftonline.com` y `graph.microsoft.com`.
+
+### 1. Registrar la app en Azure
+
+En [portal.azure.com](https://portal.azure.com) → **Microsoft Entra ID** → **App registrations** → **New registration**:
+
+1. **Name:** `Nexus` (o el que prefieras).
+2. **Supported account types:** *Accounts in this organizational directory only* (un solo tenant).
+3. **Redirect URI:** plataforma **Web**, con
+   `https://nexus.cdjuarez.tecnm.mx/configuracion/correo/microsoft/callback`
+   (es `APP_URL` + `/configuracion/correo/microsoft/callback`; Nexus la muestra en la tarjeta «Cuenta de envío». Si pruebas en otro dominio, agrega también esa).
+4. **Register.**
+
+Luego, en la app:
+
+- **Overview:** copia **Directory (tenant) ID** y **Application (client) ID**. El tenant ID es el del ITCJ: Nexus no acepta `common`, `organizations` ni `consumers`.
+- **Certificates & secrets** → **Client secrets** → **New client secret**: elige la duración y copia el **Value** (no el *Secret ID*); solo se muestra una vez. **Anota la fecha en que vence:** antes de esa fecha crea otro, ponlo en `.env` y ejecuta `docker compose up -d`. Si vence, el correo deja de salir y la tarjeta dice que se revise `MICROSOFT_GRAPH_CLIENT_SECRET`.
+- **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**: `Mail.Send`, `User.Read` y `offline_access` (están en *OpenId permissions*). Si la política del tenant no deja que los usuarios den consentimiento, un administrador del tenant pulsa **Grant admin consent for <tenant>**.
+
+### 2. Variables del `.env`
+
+```bash
+MAIL_MAILER=microsoft-graph
+MAIL_FROM_ADDRESS="nexus@cdjuarez.tecnm.mx"     # la misma cuenta que conectarás en Nexus
+MAIL_FROM_NAME="${APP_NAME}"
+MICROSOFT_GRAPH_TENANT_ID=<Directory (tenant) ID>
+MICROSOFT_GRAPH_CLIENT_ID=<Application (client) ID>
+MICROSOFT_GRAPH_CLIENT_SECRET=<Value del client secret>
+```
+
+y `docker compose up -d` para que `app`, `queue` y `scheduler` las tomen. `APP_URL` sale de `APP_DOMAIN` (`compose.prod.yaml`), así que `APP_DOMAIN=nexus.cdjuarez.tecnm.mx` debe coincidir con la Redirect URI. El nombre que ve quien recibe es el del buzón en Microsoft 365, no `MAIL_FROM_NAME`.
+
+### 3. Conectar la cuenta en Nexus
+
+1. Entra como admin → **Configuración** → **Correos y colas**. La tarjeta **Cuenta de envío** dice si falta alguna variable y muestra la dirección de regreso.
+2. **Conectar con Microsoft** e inicia sesión con la **cuenta de envío** (el remitente), no con la tuya si son distintas; acepta los permisos.
+3. De regreso, la tarjeta dice «Conectada» y la cuenta. Pulsa **Enviar correo de prueba**: llega a tu correo (o, si tu usuario no tiene, a la misma cuenta) y queda en la pestaña Correos.
+
+### Mantenimiento
+
+- **Ritmo:** Exchange Online deja mandar unos 30 correos por minuto por buzón. Nexus manda a lo más 5 cada 15 s; un envío grande (invitaciones de la validación, avisos de la publicación) se reparte solo en la cola, y si Microsoft frena (429), la cola espera y reintenta. Desde una pantalla (el correo de prueba, por ejemplo) no se espera: sale el aviso «intenta en un minuto».
+
+- **La conexión venció** (la tarjeta dice «Venció»: Microsoft ya no la renueva porque cambió la contraseña, se revocaron las sesiones o lo pidió una política): **Reconectar con Microsoft** con la misma cuenta. Los correos que fallaron mientras tanto están en la pestaña Colas, con **Reintentar**.
+- **Cambiar de cuenta de envío:** **Desconectar** y **Conectar con Microsoft** con la otra (o conectar directamente: reemplaza la anterior). Cambia también `MAIL_FROM_ADDRESS`.
+- **Cambiar `APP_KEY`** deja ilegibles los tokens guardados: hay que reconectar.
+- **Desconectar** borra la conexión en Nexus, pero no revoca nada en Microsoft: para eso se quita el consentimiento de la app en Microsoft Entra (**Enterprise applications** → la app → **Permissions**) o en «Mis aplicaciones» de la cuenta.
+
 ## Certificados HTTPS
 
 - Caddy obtiene el certificado la primera vez que arranca y lo renueva solo, unos 30 días antes de que venza. No hay nada que programar.
@@ -300,6 +350,7 @@ Cambiar una variable del `.env` y ejecutar `docker compose up -d` recrea los ser
 | `required variable ... is missing a value` al ejecutar compose | Falta `APP_DOMAIN`, `ACME_EMAIL` u otra en `.env` |
 | `backup` aparece `unhealthy` | `docker compose logs backup`. Causas comunes: `BACKUP_DIR` sin permiso de escritura para `BACKUP_UID`, disco lleno o `postgres` caído. Prueba con `docker compose exec backup sh /opt/backup/backup.sh run` |
 | Las tareas en cola no avanzan | `docker compose logs queue`; `docker compose exec app php artisan queue:failed` |
+| No llegan los correos | Configuración → Correos y colas: la tarjeta «Cuenta de envío» dice si faltan variables, si no hay cuenta, si venció o el último error de Microsoft; los correos que fallaron están en la pestaña Colas. Ver «Correo saliente (Microsoft 365)» |
 | Disco lleno | `docker system df`; `docker rmi` de versiones viejas; revisa el tamaño de `BACKUP_DIR` |
 | Sesiones cerradas de repente | Cambió `APP_KEY` o se perdió el volumen `valkey-data` |
 
@@ -390,4 +441,4 @@ Pendientes que no se pueden resolver desde el repositorio (detalle y motivo en e
 6. Salida a internet y, si hay, proxy institucional.
 7. Responsable y frecuencia de la copia de `BACKUP_DIR` fuera del servidor.
 8. Servidor de pruebas: máquina y dominio donde se despliega `develop` (criterio de cierre de la tarea 0.14).
-9. Correo saliente, si algún flujo lo requiere.
+9. ~~Correo saliente~~: resuelto el 22 de noviembre de 2026 con Microsoft 365 por Microsoft Graph y permisos delegados ([ADR-0032](../decisiones/0032-correo-por-microsoft-graph.md)); falta que TI registre la app de Azure y diga qué buzón será el remitente.

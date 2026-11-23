@@ -49,6 +49,7 @@ use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Livewire\BlockViewDataCalls;
+use App\Modules\Core\Mail\MicrosoftGraphTransport;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\LoginNotice;
 use App\Modules\Core\Models\LoginShortcut;
@@ -70,6 +71,7 @@ use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityProtectedProperties;
+use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
 use Illuminate\Auth\Events\Login;
@@ -77,10 +79,14 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationSending;
+use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -128,6 +134,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped` por lo mismo: lee una vez por petición si el admin ocultó la carga académica (MN-05).
         $this->app->scoped(AcademicLoadVisibility::class);
+
+        // `scoped`: si lo que corre es un trabajo del worker de la cola (tarea 1.29); el worker la olvida entre trabajos.
+        $this->app->scoped(QueueJobScope::class);
 
         // `scoped` por lo mismo: lee una vez por petición qué perfiles inician sesión (AC-21).
         $this->app->scoped(RoleAccess::class);
@@ -195,6 +204,19 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
+
+        // El correo por Microsoft Graph con permisos delegados (tarea 1.29, ADR-0032): `MAIL_MAILER=microsoft-graph`. El
+        // transporte no guarda nada entre correos (lee la cuenta de la base en cada uno), así que MailManager lo puede
+        // conservar en el worker.
+        Mail::extend('microsoft-graph', fn (): MicrosoftGraphTransport => $this->app->make(MicrosoftGraphTransport::class));
+
+        // Solo un trabajo del worker de la cola puede esperar a Microsoft (429); la cola `sync` corre dentro de la petición.
+        Event::listen(JobProcessing::class, function (JobProcessing $event): void {
+            if ($event->connectionName !== 'sync') {
+                $this->app->make(QueueJobScope::class)->begin();
+            }
+        });
+        Event::listen([JobProcessed::class, JobExceptionOccurred::class, JobFailed::class], fn (): mixed => $this->app->make(QueueJobScope::class)->end());
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
