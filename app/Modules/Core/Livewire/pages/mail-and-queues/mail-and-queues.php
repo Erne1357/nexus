@@ -1,18 +1,25 @@
 <?php
 
+use App\Modules\Core\Actions\DisconnectMailAccount;
 use App\Modules\Core\Actions\ForgetFailedJob;
 use App\Modules\Core\Actions\InviteUser;
 use App\Modules\Core\Actions\RetryFailedJob;
+use App\Modules\Core\Actions\SendTestMail;
 use App\Modules\Core\Enums\MailStatus;
+use App\Modules\Core\Mail\MicrosoftGraph;
+use App\Modules\Core\Mail\MicrosoftSignIn;
 use App\Modules\Core\Models\FailedJob;
+use App\Modules\Core\Models\MailConnection;
 use App\Modules\Core\Models\MailLog;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\FailedJobsQuery;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\MailConnectionQuery;
 use App\Modules\Core\Queries\MailLogQuery;
 use App\Modules\Core\Queries\PendingInvitationsQuery;
 use App\Modules\Core\Queries\QueueSizesQuery;
 use App\Modules\Core\Support\MailKinds;
+use App\Modules\Core\Support\RedactsSecrets;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
@@ -22,6 +29,7 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Mary\Traits\Toast;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 /**
  * «Correos y colas» (CF-S8), solo del administrador (CF-03): tres pestañas. Correos es el registro de lo que salió
@@ -29,6 +37,11 @@ use Mary\Traits\Toast;
  * acceso, con su vencimiento y «Reenviar» (la invitación del admin, InviteUser, CF-07); Colas, cuántos trabajos hay en cada cola y los
  * fallidos, que se reintentan, se descartan o se leen en un drawer. Cada pestaña y cada acción se autoriza con su
  * policy (MailLogPolicy, FailedJobPolicy), también al llamarla directo.
+ *
+ * Arriba de las pestañas, la tarjeta «Cuenta de envío» (tarea 1.29, ADR-0032, CF-S9): la cuenta de Microsoft 365 con que
+ * sale el correo por Microsoft Graph y su estado, con «Conectar con Microsoft» (lleva al inicio de sesión de Microsoft;
+ * el regreso lo atiende MicrosoftMailCallback), «Desconectar» con confirmación y «Enviar correo de prueba». Sus acciones
+ * son del admin (MailConnectionPolicy::manage).
  */
 new #[Title('Correos y colas')] class extends Component
 {
@@ -58,20 +71,36 @@ new #[Title('Correos y colas')] class extends Component
     #[Locked]
     public ?string $errorUuid = null;
 
+    /**
+     * El aviso del regreso de Microsoft al conectar la cuenta de envío (sesión flash de MicrosoftMailCallback).
+     *
+     * @var array{tone: string, title: string, text: string}|null
+     */
+    #[Locked]
+    public ?array $notice = null;
+
     public function mount(): void
     {
         abort_if($this->tabs() === [], 403);
 
         $this->tab = $this->tabOrFirst($this->tab);
+
+        $notice = session(MicrosoftSignIn::NOTICE_KEY);
+        $this->notice = is_array($notice) && in_array($notice['tone'] ?? null, ['success', 'error'], true) ? $notice : null;
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function with(MailLogQuery $mail, PendingInvitationsQuery $invitations, FailedJobsQuery $failed, QueueSizesQuery $sizes): array
+    public function with(MailLogQuery $mail, PendingInvitationsQuery $invitations, FailedJobsQuery $failed, QueueSizesQuery $sizes, MailConnectionQuery $connections): array
     {
         $tab = $this->tabOrFirst($this->tab);
-        $data = ['tabs' => $this->tabs(), 'activeTab' => $tab];
+        $data = [
+            'tabs' => $this->tabs(),
+            'activeTab' => $tab,
+            'sending' => Gate::allows('viewAny', MailLog::class) ? $connections->card() : null,
+            'canManageSending' => Gate::allows('manage', MailConnection::class),
+        ];
 
         return $data + match ($tab) {
             'mail' => [
@@ -114,6 +143,59 @@ new #[Title('Correos y colas')] class extends Component
             $this->error('No se reenvió la invitación', e(collect($exception->errors())->flatten()->first()));
         } catch (RuntimeException $exception) {
             $this->error('No se reenvió la invitación', e($exception->getMessage()));
+        }
+    }
+
+    /**
+     * «Conectar con Microsoft»: guarda el `state` y el verificador de PKCE en la sesión y lleva al inicio de sesión de
+     * Microsoft. Sin las variables de Azure no sale y dice cuáles faltan.
+     */
+    public function connectMicrosoft(MicrosoftGraph $graph, MicrosoftSignIn $signIn): void
+    {
+        $this->authorizeSending();
+
+        if (($missing = $graph->missingVariables()) !== []) {
+            $this->error('Faltan variables de la app de Azure', e('Pon en el .env '.implode(', ', $missing).' y reinicia Nexus.'));
+
+            return;
+        }
+
+        $this->redirect($signIn->begin(session()->driver(), (string) auth()->id()));
+    }
+
+    public function disconnectAccount(DisconnectMailAccount $disconnect): void
+    {
+        $this->authorizeSending();
+
+        $account = $disconnect->handle(auth()->user());
+        $this->notice = null;
+
+        if ($account === null) {
+            $this->warning('No había una cuenta de envío conectada');
+
+            return;
+        }
+
+        $this->success('Cuenta de envío desconectada', e("Nexus ya no manda correo como {$account}."));
+    }
+
+    public function sendTestMail(MailConnectionQuery $connections, SendTestMail $send): void
+    {
+        $this->authorizeSending();
+
+        $connection = $connections->current();
+
+        if ($connection === null || $connection->expired_at !== null) {
+            $this->warning('Primero conecta la cuenta de envío', 'Usa «Conectar con Microsoft».');
+
+            return;
+        }
+
+        try {
+            $to = $send->handle(auth()->user(), $connection);
+            $this->success('Correo de prueba enviado', e("Revisa la bandeja de {$to}."));
+        } catch (TransportExceptionInterface $exception) {
+            $this->error('No salió el correo de prueba', e(RedactsSecrets::redact($exception->getMessage())), timeout: 10000);
         }
     }
 
@@ -170,6 +252,12 @@ new #[Title('Correos y colas')] class extends Component
         }
 
         return $job;
+    }
+
+    private function authorizeSending(): void
+    {
+        $this->authorize('viewAny', MailLog::class);
+        $this->authorize('manage', MailConnection::class);
     }
 
     private function gone(): void

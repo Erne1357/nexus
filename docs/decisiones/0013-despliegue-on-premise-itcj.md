@@ -91,4 +91,4 @@ Nada de esto bloquea el trabajo de desarrollo, pero todo debe estar resuelto ant
 | 7 | **Salida a internet** hacia Docker Hub, GitHub, Packagist, npm y `acme-v02.api.letsencrypt.org`; si hay proxy institucional, cuál | La construcción de la imagen y la emisión del certificado dependen de ello. |
 | 8 | **Copia de los respaldos fuera del servidor:** quién, con qué herramienta y con qué frecuencia copia `BACKUP_DIR` a otro equipo o almacenamiento | Sin copia externa, perder el disco es perder los datos. Los archivos contienen datos personales. |
 | 9 | **Servidor de pruebas:** si es otra máquina distinta de producción, o el mismo servidor con otro dominio | La tarea 0.14 se cierra con el despliegue de `develop` ahí. |
-| 10 | **Correo saliente** (SMTP institucional), si algún flujo lo requiere | R1 no envía correos; hoy `MAIL_MAILER=log`. |
+| 10 | **Correo saliente** (SMTP institucional), si algún flujo lo requiere | Resuelto el 22 de noviembre de 2026: Microsoft 365 por Microsoft Graph con permisos delegados ([ADR-0032](0032-correo-por-microsoft-graph.md)); falta que TI registre la app de Azure y diga el buzón remitente. |

@@ -46,6 +46,7 @@ use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Livewire\BlockViewDataCalls;
+use App\Modules\Core\Mail\MicrosoftGraphTransport;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\LoginNotice;
 use App\Modules\Core\Models\LoginShortcut;
@@ -78,6 +79,7 @@ use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -187,6 +189,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
+
+        // El correo por Microsoft Graph con permisos delegados (tarea 1.29, ADR-0032): `MAIL_MAILER=microsoft-graph`. El
+        // transporte no guarda nada entre correos (lee la cuenta de la base en cada uno), así que MailManager lo puede
+        // conservar en el worker.
+        Mail::extend('microsoft-graph', fn (): MicrosoftGraphTransport => $this->app->make(MicrosoftGraphTransport::class));
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
