@@ -13,8 +13,8 @@ use SensitiveParameter;
 /**
  * Da la cuenta de envío con un access token que sirve (tarea 1.29, ADR-0032): si al suyo le quedan menos de 5 minutos,
  * o si Graph acaba de rechazar ese mismo token (`$rejectedToken`), lo renueva con el refresh token y guarda el refresh
- * token rotado. Relee la fila con `lockForUpdate()`, así que dos workers que mandan a la vez no renuevan los dos: el
- * segundo espera y encuentra el token nuevo. Si Microsoft ya no renueva la conexión (invalid_grant), la marca vencida
+ * token rotado. Relee la fila con `lockForUpdate()` y la deja bloqueada a propósito durante la llamada a Microsoft (10 s
+ * de tope), así que dos workers que mandan a la vez no renuevan los dos: el segundo espera y encuentra el token nuevo. Si Microsoft ya no renueva la conexión (invalid_grant), la marca vencida
  * (`expired_at`, `last_error`) con bitácora sin tokens y lanza después de guardarlo; con otro error solo anota
  * `last_error` y lanza. La renovación de rutina no deja bitácora (sería una entrada por hora).
  *

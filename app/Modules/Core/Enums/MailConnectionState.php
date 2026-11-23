@@ -3,8 +3,9 @@
 namespace App\Modules\Core\Enums;
 
 /**
- * El estado de la cuenta de envío en la tarjeta de «Correos y colas» (tarea 1.29, CF-S9): faltan variables de Azure en
- * el .env, no hay cuenta conectada, está conectada, o Microsoft ya no la renueva y hay que reconectarla.
+ * El estado de la cuenta de envío en la tarjeta de «Correos y colas» (tarea 1.29, CF-S9): la app de Azure está mal
+ * configurada en el .env (faltan variables o el inquilino es uno común), no hay cuenta conectada, está conectada, o
+ * Microsoft ya no la renueva y hay que reconectarla.
  */
 enum MailConnectionState: string
 {
@@ -16,7 +17,7 @@ enum MailConnectionState: string
     public function label(): string
     {
         return match ($this) {
-            self::Unconfigured => 'Faltan variables',
+            self::Unconfigured => 'Sin configurar',
             self::Disconnected => 'Sin conectar',
             self::Connected => 'Conectada',
             self::Expired => 'Venció',

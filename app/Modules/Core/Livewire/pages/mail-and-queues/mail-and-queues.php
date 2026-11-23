@@ -148,14 +148,14 @@ new #[Title('Correos y colas')] class extends Component
 
     /**
      * «Conectar con Microsoft»: guarda el `state` y el verificador de PKCE en la sesión y lleva al inicio de sesión de
-     * Microsoft. Sin las variables de Azure no sale y dice cuáles faltan.
+     * Microsoft. Mal configurado (faltan variables o MICROSOFT_GRAPH_TENANT_ID es uno común) no sale y dice qué falta.
      */
     public function connectMicrosoft(MicrosoftGraph $graph, MicrosoftSignIn $signIn): void
     {
         $this->authorizeSending();
 
-        if (($missing = $graph->missingVariables()) !== []) {
-            $this->error('Faltan variables de la app de Azure', e('Pon en el .env '.implode(', ', $missing).' y reinicia Nexus.'));
+        if (($problems = $graph->configurationProblems()) !== []) {
+            $this->error('La app de Azure no está configurada', e(implode(' ', $problems).' Corrige el .env y reinicia Nexus.'));
 
             return;
         }

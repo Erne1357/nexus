@@ -17,8 +17,12 @@ final class MicrosoftGraphError extends RuntimeException
     /** Los códigos del endpoint de tokens con los que Microsoft ya no renueva la conexión: hay que volver a conectar. */
     private const array EXPIRED_GRANTS = ['invalid_grant', 'interaction_required', 'consent_required'];
 
-    public function __construct(string $message, public readonly int $status = 0, public readonly string $errorCode = '')
-    {
+    public function __construct(
+        string $message,
+        public readonly int $status = 0,
+        public readonly string $errorCode = '',
+        public readonly ?int $retryAfter = null,
+    ) {
         parent::__construct(Str::limit($message, 900));
     }
 
@@ -50,12 +54,28 @@ final class MicrosoftGraphError extends RuntimeException
         $code = is_string($response->json('error.code')) ? $response->json('error.code') : '';
         $detail = self::firstLine(is_string($response->json('error.message')) ? $response->json('error.message') : '');
 
-        return new self(trim("{$doing} (HTTP {$response->status()}".($code === '' ? '' : ", {$code}")."): {$detail}", ' :'), $response->status(), $code);
+        $retryAfter = trim($response->header('Retry-After'));
+
+        return new self(
+            trim("{$doing} (HTTP {$response->status()}".($code === '' ? '' : ", {$code}")."): {$detail}", ' :'),
+            $response->status(),
+            $code,
+            ctype_digit($retryAfter) ? (int) $retryAfter : null,
+        );
     }
 
     public static function unreachable(string $host): self
     {
         return new self("No se pudo conectar con Microsoft ({$host}); el correo se vuelve a intentar.");
+    }
+
+    /**
+     * Si Microsoft está frenando el envío (límites de Exchange Online): un 429, o un 503 que dice cuándo volver
+     * (Retry-After).
+     */
+    public function throttled(): bool
+    {
+        return $this->status === 429 || ($this->status === 503 && $this->retryAfter !== null);
     }
 
     /**

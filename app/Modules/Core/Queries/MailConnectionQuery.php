@@ -21,27 +21,29 @@ final readonly class MailConnectionQuery
     }
 
     /**
-     * El estado de la tarjeta: faltan variables (cuáles), sin conectar, conectada o vencida; la conexión con quien la
+     * El estado de la tarjeta: sin configurar (las variables que faltan o el inquilino común de Microsoft), sin conectar, conectada o vencida; la conexión con quien la
      * conectó; la dirección de regreso para Azure; si el correo de Nexus ya sale por este transporte (MAIL_MAILER) y el
      * MAIL_FROM_ADDRESS que no es la cuenta conectada, si lo hay.
      *
-     * @return array{state: MailConnectionState, missing: list<string>, connection: ?MailConnection, redirectUri: string, mailer: string, active: bool, fromMismatch: ?string}
+     * @return array{state: MailConnectionState, missing: list<string>, sharedTenant: ?string, connection: ?MailConnection, redirectUri: string, mailer: string, active: bool, fromMismatch: ?string}
      */
     public function card(): array
     {
         $missing = $this->graph->missingVariables();
+        $sharedTenant = $this->graph->sharedTenant();
         $connection = MailConnection::query()->with('connectedBy:id,name,username')->where('provider', MailProvider::Microsoft)->first();
         $from = mb_strtolower(trim((string) config('mail.from.address')));
         $mailer = (string) config('mail.default');
 
         return [
             'state' => match (true) {
-                $missing !== [] => MailConnectionState::Unconfigured,
+                $missing !== [] || $sharedTenant !== null => MailConnectionState::Unconfigured,
                 $connection === null => MailConnectionState::Disconnected,
                 $connection->expired_at !== null => MailConnectionState::Expired,
                 default => MailConnectionState::Connected,
             },
             'missing' => $missing,
+            'sharedTenant' => $sharedTenant,
             'connection' => $connection,
             'redirectUri' => $this->graph->redirectUri(),
             'mailer' => $mailer,

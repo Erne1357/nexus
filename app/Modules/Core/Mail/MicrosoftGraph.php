@@ -26,6 +26,18 @@ final class MicrosoftGraph
 
     private const string LOGIN_URL = 'https://login.microsoftonline.com';
 
+    /**
+     * Topes por petición. Con la espera del transporte (30 s como máximo) caben en el tiempo máximo del worker de la cola
+     * (60 s, `queue:work` sin `--timeout`): renovar el token (10 s), que además se hace con la fila bloqueada, y mandar
+     * (15 s).
+     */
+    private const int TOKEN_TIMEOUT_SECONDS = 10;
+
+    private const int SEND_TIMEOUT_SECONDS = 15;
+
+    /** Los inquilinos «comunes» de Microsoft Entra: con ellos podría conectarse una cuenta personal o de otra organización. */
+    private const array SHARED_TENANTS = ['common', 'organizations', 'consumers'];
+
     /** @var array<string, string> la variable del .env de cada valor de `services.microsoft_graph` */
     private const array VARIABLES = [
         'tenant_id' => 'MICROSOFT_GRAPH_TENANT_ID',
@@ -47,9 +59,37 @@ final class MicrosoftGraph
         ));
     }
 
+    /**
+     * El MICROSOFT_GRAPH_TENANT_ID que no es el del ITCJ sino uno común de Microsoft (`common`, `organizations`,
+     * `consumers`), tal como viene, o null. Con uno común, «Conectar con Microsoft» dejaría elegir una cuenta personal o
+     * de otra organización, así que cuenta como mal configurado.
+     */
+    public function sharedTenant(): ?string
+    {
+        $tenant = $this->value('tenant_id');
+
+        return in_array(mb_strtolower($tenant), self::SHARED_TENANTS, true) ? $tenant : null;
+    }
+
+    /**
+     * Lo que impide hablar con Microsoft, en una frase por problema: las variables que faltan y el inquilino común.
+     *
+     * @return list<string>
+     */
+    public function configurationProblems(): array
+    {
+        $problems = ($missing = $this->missingVariables()) === [] ? [] : ['Faltan variables de la app de Azure en el .env: '.implode(', ', $missing).'.'];
+
+        if (($tenant = $this->sharedTenant()) !== null) {
+            $problems[] = "MICROSOFT_GRAPH_TENANT_ID dice «{$tenant}», que no es el del ITCJ: pon el «Directory (tenant) ID» de la app de Azure.";
+        }
+
+        return $problems;
+    }
+
     public function configured(): bool
     {
-        return $this->missingVariables() === [];
+        return $this->configurationProblems() === [];
     }
 
     /**
@@ -174,7 +214,7 @@ final class MicrosoftGraph
      */
     public function sendMail(#[SensitiveParameter] string $accessToken, array $payload): void
     {
-        $response = $this->send(fn (): Response => $this->graph($accessToken, 30)->post(self::GRAPH_URL.'/me/sendMail', $payload), 'graph.microsoft.com');
+        $response = $this->send(fn (): Response => $this->graph($accessToken, self::SEND_TIMEOUT_SECONDS)->post(self::GRAPH_URL.'/me/sendMail', $payload), 'graph.microsoft.com');
 
         if ($response->failed()) {
             throw MicrosoftGraphError::fromGraphResponse($response, 'Microsoft Graph no aceptó el correo');
@@ -186,7 +226,7 @@ final class MicrosoftGraph
      */
     private function token(#[SensitiveParameter] array $grant): Response
     {
-        return $this->send(fn (): Response => Http::asForm()->acceptJson()->connectTimeout(5)->timeout(15)->post($this->authority().'/token', [
+        return $this->send(fn (): Response => Http::asForm()->acceptJson()->connectTimeout(5)->timeout(self::TOKEN_TIMEOUT_SECONDS)->post($this->authority().'/token', [
             'client_id' => $this->value('client_id'),
             'client_secret' => $this->value('client_secret'),
             'scope' => self::SCOPES,

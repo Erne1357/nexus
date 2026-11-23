@@ -26,13 +26,20 @@
 
         @switch ($state)
             @case ($States::Unconfigured)
-                <p class="max-w-prose text-sm">
-                    Para mandar el correo por Microsoft 365, pon en el .env de Nexus
-                    @foreach ($sending['missing'] as $variable)
-                        <span class="font-mono font-semibold">{{ $variable }}</span>{{ $loop->last ? '' : ',' }}
-                    @endforeach
-                    y reinicia Nexus. Salen de la app registrada en Azure.
-                </p>
+                @if ($sending['missing'] !== [])
+                    <p class="max-w-prose text-sm" data-testid="sending-missing">
+                        Faltan variables en el .env de Nexus:
+                        @foreach ($sending['missing'] as $variable)
+                            <span class="font-mono font-semibold">{{ $variable }}</span>{{ $loop->last ? '.' : ',' }}
+                        @endforeach
+                        Salen de la app registrada en Azure; ponlas y reinicia Nexus.
+                    </p>
+                @endif
+                @if ($sending['sharedTenant'] !== null)
+                    <p class="max-w-prose text-sm" data-testid="sending-shared-tenant">
+                        <span class="font-mono font-semibold">MICROSOFT_GRAPH_TENANT_ID</span> dice «{{ $sending['sharedTenant'] }}», un inquilino común de Microsoft: así podría conectarse una cuenta personal o de otra organización. Pon el «Directory (tenant) ID» de la app de Azure del ITCJ y reinicia Nexus.
+                    </p>
+                @endif
                 @break
 
             @case ($States::Disconnected)
@@ -90,7 +97,7 @@
 
         <div class="flex flex-wrap gap-2 max-sm:flex-col">
             @if ($state === $States::Unconfigured)
-                <span class="tooltip" data-tip="Faltan variables de la app de Azure en el .env.">
+                <span class="tooltip" data-tip="La app de Azure no está bien configurada en el .env.">
                     <x-button label="Conectar con Microsoft" icon="o-link" class="btn-primary max-sm:w-full" disabled />
                 </span>
             @elseif (in_array($state, [$States::Disconnected, $States::Expired], true))

@@ -1,10 +1,17 @@
 <?php
 
 use App\Modules\Core\Models\MailConnection;
+use App\Modules\Core\Support\QueueJobScope;
+use Illuminate\Contracts\Queue\Job;
 use Illuminate\Http\Client\Request;
+use Illuminate\Queue\Events\JobExceptionOccurred;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Sleep;
 use Spatie\Activitylog\Models\Activity;
 use Symfony\Component\Mailer\Exception\TransportException;
 use Symfony\Component\Mime\Email;
@@ -14,6 +21,11 @@ use Symfony\Component\Mime\Email;
 | como la cuenta conectada en «Correos y colas». Antes de mandar renueva el token si le quedan menos de 5 minutos y
 | guarda el refresh token rotado; si Microsoft dice que la conexión venció la marca vencida y lanza. Todo error es una
 | TransportException con el mensaje de Microsoft, sin tokens, para que el trabajo de la cola falle y se reintente.
+|
+| Límites de Exchange Online (unos 30 correos por minuto por buzón): el transporte lleva su propio ritmo (5 cada 15 s,
+| en la caché compartida) y, ante un 429 (o un 503 con Retry-After), espera lo que pide Microsoft y reintenta hasta 2
+| veces, con un tope de 30 s de espera por correo. Solo espera dentro de un trabajo del worker de la cola; en una
+| petición web falla en el acto.
 */
 
 const GRAPH_SEND = 'https://graph.microsoft.com/v1.0/me/sendMail';
@@ -201,6 +213,149 @@ it('sin las variables de Azure lanza y dice cuáles faltan', function () {
 
     Http::assertNothingSent();
 });
+
+it('en un trabajo de la cola, ante un 429 espera lo que dice Retry-After y vuelve a mandar en el mismo envío', function () {
+    Sleep::fake();
+    app(QueueJobScope::class)->begin();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::sequence()
+        ->push(['error' => ['code' => 'ApplicationThrottled', 'message' => 'Too many requests.']], 429, ['Retry-After' => '7'])
+        ->push(null, 202)]);
+
+    sendThroughGraph();
+
+    Http::assertSentCount(2);
+    Sleep::assertSequence([Sleep::for(7)->seconds()]);
+});
+
+it('un 429 sin Retry-After espera 30 s, y un 503 con Retry-After también es freno', function () {
+    Sleep::fake();
+    app(QueueJobScope::class)->begin();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::sequence()
+        ->push(['error' => ['code' => 'ApplicationThrottled', 'message' => 'Too many requests.']], 429)
+        ->push(null, 202)
+        ->push(['error' => ['code' => 'ServiceUnavailable', 'message' => 'Busy.']], 503, ['Retry-After' => '3'])
+        ->push(null, 202)]);
+
+    sendThroughGraph();
+    sendThroughGraph();
+
+    Sleep::assertSequence([Sleep::for(30)->seconds(), Sleep::for(3)->seconds()]);
+});
+
+it('un 503 sin Retry-After es un error normal: no espera', function () {
+    Sleep::fake();
+    app(QueueJobScope::class)->begin();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::response(['error' => ['code' => 'ServiceUnavailable', 'message' => 'Busy.']], 503)]);
+
+    expect(fn () => sendThroughGraph())->toThrow(TransportException::class, 'HTTP 503');
+
+    Http::assertSentCount(1);
+    Sleep::assertNeverSlept();
+});
+
+it('después de 2 reintentos por 429 lanza un error claro para que la cola lo vuelva a intentar', function () {
+    Sleep::fake();
+    app(QueueJobScope::class)->begin();
+    $connection = MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::response(['error' => ['code' => 'ApplicationThrottled', 'message' => 'Too many requests.']], 429, ['Retry-After' => '2'])]);
+
+    expect(fn () => sendThroughGraph())->toThrow(TransportException::class, 'Microsoft siguió frenando el envío');
+
+    Http::assertSentCount(3);
+    Sleep::assertSequence([Sleep::for(2)->seconds(), Sleep::for(2)->seconds()]);
+
+    expect($connection->fresh()->expired_at)->toBeNull();
+});
+
+it('no espera más de 30 s por correo: si Retry-After pide más de lo que queda, lanza y deja el reintento a la cola', function () {
+    Sleep::fake();
+    app(QueueJobScope::class)->begin();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::sequence()
+        ->push(['error' => ['code' => 'ApplicationThrottled', 'message' => 'Too many requests.']], 429, ['Retry-After' => '20'])
+        ->push(['error' => ['code' => 'ApplicationThrottled', 'message' => 'Too many requests.']], 429, ['Retry-After' => '20'])]);
+
+    expect(fn () => sendThroughGraph())->toThrow(TransportException::class, 'Microsoft pidió esperar 20 s');
+
+    Http::assertSentCount(2);
+    Sleep::assertSequence([Sleep::for(20)->seconds()]);
+});
+
+it('en una petición web no espera: ante un 429 falla en el acto', function () {
+    Sleep::fake();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::response(['error' => ['code' => 'ApplicationThrottled', 'message' => 'Too many requests.']], 429, ['Retry-After' => '5'])]);
+
+    expect(fn () => sendThroughGraph())->toThrow(TransportException::class, 'Microsoft está frenando el envío; intenta en un minuto.');
+
+    Http::assertSentCount(1);
+    Sleep::assertNeverSlept();
+});
+
+it('lleva su propio ritmo en la caché compartida (5 correos cada 15 s): en la cola, el sexto espera su lugar', function () {
+    Sleep::fake(syncWithCarbon: true);
+    app(QueueJobScope::class)->begin();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::response(null, 202)]);
+
+    foreach (range(1, 6) as $mail) {
+        sendThroughGraph();
+    }
+
+    Http::assertSentCount(6);
+    Sleep::assertSequence([Sleep::for(15)->seconds()]);
+
+    expect(RateLimiter::attempts('core:mail:graph'))->toBe(1);
+});
+
+it('en una petición web, con el ritmo lleno, falla en el acto sin llamar a Microsoft', function () {
+    Sleep::fake();
+    MailConnection::factory()->create();
+    Http::fake([GRAPH_SEND => Http::response(null, 202)]);
+
+    foreach (range(1, 5) as $mail) {
+        sendThroughGraph();
+    }
+
+    expect(fn () => sendThroughGraph())->toThrow(TransportException::class, 'intenta en un minuto');
+
+    Http::assertSentCount(5);
+    Sleep::assertNeverSlept();
+});
+
+it('sabe que corre en un trabajo de la cola por JobProcessing de una conexión que no es sync, y lo olvida al terminar', function () {
+    $job = Mockery::mock(Job::class);
+    $job->allows('payload')->andReturn([]);
+    $scope = fn (): bool => app(QueueJobScope::class)->inWorkerJob();
+
+    expect($scope())->toBeFalse();
+
+    event(new JobProcessing('sync', $job));
+    expect($scope())->toBeFalse();
+
+    event(new JobProcessing('redis', $job));
+    expect($scope())->toBeTrue();
+
+    event(new JobProcessed('redis', $job));
+    expect($scope())->toBeFalse();
+
+    event(new JobProcessing('redis', $job));
+    event(new JobExceptionOccurred('redis', $job, new RuntimeException('falló')));
+    expect($scope())->toBeFalse();
+});
+
+it('MICROSOFT_GRAPH_TENANT_ID común (common, organizations, consumers) es configuración inválida: no manda', function (string $tenant) {
+    MailConnection::factory()->create();
+    config(['services.microsoft_graph.tenant_id' => $tenant]);
+    Http::fake();
+
+    expect(fn () => sendThroughGraph())->toThrow(TransportException::class, 'MICROSOFT_GRAPH_TENANT_ID');
+
+    Http::assertNothingSent();
+})->with(['common', 'organizations', 'Consumers']);
 
 it('el mailer microsoft-graph está en config/mail.php', function () {
     expect(config('mail.mailers.microsoft-graph'))->toBe(['transport' => 'microsoft-graph'])

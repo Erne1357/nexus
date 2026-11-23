@@ -94,6 +94,21 @@ it('sin las variables de Azure, «Conectar con Microsoft» no sale y dice cuále
     expect(lastToastOf($page)['description'])->toContain('MICROSOFT_GRAPH_CLIENT_ID');
 });
 
+it('con MICROSOFT_GRAPH_TENANT_ID común la tarjeta dice que está mal configurado y no deja conectar', function (string $tenant) {
+    config(['services.microsoft_graph.tenant_id' => $tenant]);
+
+    $page = Livewire::actingAs($this->admin)->test('core::pages.mail-and-queues')
+        ->assertSee('Sin configurar')
+        ->assertSee("«{$tenant}»")
+        ->assertSee('Directory (tenant) ID')
+        ->assertDontSeeHtml('data-testid="sending-connect"')
+        ->call('connectMicrosoft')
+        ->assertNoRedirect();
+
+    expect(lastToastOf($page)['description'])->toContain('MICROSOFT_GRAPH_TENANT_ID')
+        ->and(session()->has(MicrosoftSignIn::SESSION_KEY))->toBeFalse();
+})->with(['common', 'organizations', 'consumers']);
+
 it('el regreso de Microsoft con el state correcto cambia el código por los tokens y guarda la cuenta con los tokens cifrados', function () {
     fakeMicrosoftSignIn();
 

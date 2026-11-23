@@ -276,7 +276,7 @@ En [portal.azure.com](https://portal.azure.com) → **Microsoft Entra ID** → *
 
 Luego, en la app:
 
-- **Overview:** copia **Directory (tenant) ID** y **Application (client) ID**.
+- **Overview:** copia **Directory (tenant) ID** y **Application (client) ID**. El tenant ID es el del ITCJ: Nexus no acepta `common`, `organizations` ni `consumers`.
 - **Certificates & secrets** → **Client secrets** → **New client secret**: elige la duración y copia el **Value** (no el *Secret ID*); solo se muestra una vez. **Anota la fecha en que vence:** antes de esa fecha crea otro, ponlo en `.env` y ejecuta `docker compose up -d`. Si vence, el correo deja de salir y la tarjeta dice que se revise `MICROSOFT_GRAPH_CLIENT_SECRET`.
 - **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**: `Mail.Send`, `User.Read` y `offline_access` (están en *OpenId permissions*). Si la política del tenant no deja que los usuarios den consentimiento, un administrador del tenant pulsa **Grant admin consent for <tenant>**.
 
@@ -300,6 +300,8 @@ y `docker compose up -d` para que `app`, `queue` y `scheduler` las tomen. `APP_U
 3. De regreso, la tarjeta dice «Conectada» y la cuenta. Pulsa **Enviar correo de prueba**: llega a tu correo (o, si tu usuario no tiene, a la misma cuenta) y queda en la pestaña Correos.
 
 ### Mantenimiento
+
+- **Ritmo:** Exchange Online deja mandar unos 30 correos por minuto por buzón. Nexus manda a lo más 5 cada 15 s; un envío grande (invitaciones de la validación, avisos de la publicación) se reparte solo en la cola, y si Microsoft frena (429), la cola espera y reintenta. Desde una pantalla (el correo de prueba, por ejemplo) no se espera: sale el aviso «intenta en un minuto».
 
 - **La conexión venció** (la tarjeta dice «Venció»: Microsoft ya no la renueva porque cambió la contraseña, se revocaron las sesiones o lo pidió una política): **Reconectar con Microsoft** con la misma cuenta. Los correos que fallaron mientras tanto están en la pestaña Colas, con **Reintentar**.
 - **Cambiar de cuenta de envío:** **Desconectar** y **Conectar con Microsoft** con la otra (o conectar directamente: reemplaza la anterior). Cambia también `MAIL_FROM_ADDRESS`.
