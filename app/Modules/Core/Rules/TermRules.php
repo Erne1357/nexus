@@ -28,6 +28,14 @@ final class TermRules
     private const SUFFIXES = ['1' => 'Ene-Jun', '2' => 'Verano', '3' => 'Ago-Dic'];
 
     /**
+     * Fechas por sufijo, como `m-d` (TP-01, supuesto por confirmar): 1 del 22 de enero al 5 de junio, 2 del 22 de
+     * junio al 7 de agosto, 3 del 17 de agosto al 11 de diciembre.
+     *
+     * @var array<string, array{0: string, 1: string}>
+     */
+    private const DATES = ['1' => ['01-22', '06-05'], '2' => ['06-22', '08-07'], '3' => ['08-17', '12-11']];
+
+    /**
      * @throws ValidationException si no tiene la forma `AAAAP`
      */
     public function normalizeCode(string $code): string
@@ -55,6 +63,24 @@ final class TermRules
         }
 
         return self::SUFFIXES[$code[4]].' '.substr($code, 0, 4);
+    }
+
+    /**
+     * Las fechas fijas de un código válido (TP-01); null si el código no tiene la forma.
+     *
+     * @return array{0: string, 1: string}|null `[inicio, fin]` como `Y-m-d`
+     */
+    public function defaultDates(string $code): ?array
+    {
+        $code = trim($code);
+
+        if (preg_match('/^[0-9]{4}[123]$/', $code) !== 1) {
+            return null;
+        }
+
+        $year = substr($code, 0, 4);
+
+        return [$year.'-'.self::DATES[$code[4]][0], $year.'-'.self::DATES[$code[4]][1]];
     }
 
     /**

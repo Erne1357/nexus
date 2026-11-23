@@ -23,15 +23,6 @@ class TermHistorySeeder extends Seeder
 
     public const string LONG_NAME = 'Verano intensivo 2025: cursos de nivelación, recuperación y especiales para alumnos de reingreso';
 
-    /**
-     * @var array<string, array{0: string, 1: string}> periodo => [inicio, fin] como `m-d`
-     */
-    private const array DATES = [
-        '1' => ['01-22', '06-05'],
-        '2' => ['06-22', '08-07'],
-        '3' => ['08-17', '12-11'],
-    ];
-
     public function run(int $fromYear = 2014): void
     {
         $this->refuseProduction();
@@ -46,10 +37,12 @@ class TermHistorySeeder extends Seeder
                     break 2;
                 }
 
+                [$startsOn, $endsOn] = $rules->defaultDates($code);
+
                 Term::query()->firstOrCreate(['code' => $code], [
                     'name' => $code === self::LONG_NAME_CODE ? self::LONG_NAME : $rules->suggestedName($code),
-                    'starts_on' => $year.'-'.self::DATES[$period][0],
-                    'ends_on' => $year.'-'.self::DATES[$period][1],
+                    'starts_on' => $startsOn,
+                    'ends_on' => $endsOn,
                     'is_current' => false,
                 ]);
             }
