@@ -105,6 +105,61 @@ Volúmenes de Docker: `postgres-data`, `valkey-data`, `app-storage` (archivos co
 
    Es idempotente y no toca la contraseña de un `admin` existente. El primer acceso en `https://<APP_DOMAIN>/login` (usuario `admin`) obliga a cambiarla. Después ya no hace falta conservar la variable en `.env`.
 
+## Arrancar con la copia de la demo real (tarea 1.29)
+
+Para empezar las pruebas sin esperar las horas de la migración del SII, el primer servidor carga una copia de la demo real en lugar del paso 6 (decisión del usuario del 22 de noviembre de 2026). La copia es un `.dump` (formato custom de `pg_dump`) que se entrega fuera del repositorio: **tiene datos personales** de alumnos y docentes, y se trata como los respaldos.
+
+### Qué trae la copia
+
+- Todo lo de la demo real: la migración del SII (v2, con el esquema crudo `sii_archivo`, las filas de importación y la verificación; la base va completa, unos 4.4 GB), el mapa del campus, los catálogos normalizados, las sesiones del SII de Ago-Dic 2026, la carga de ISC para Ene-Jun 2027 (50 grupos) y la validación de catálogos abierta.
+- **Periodos:** los 150 que aparecen en los datos (1973 a 2027, con veranos), dados de alta con `core:sync-terms-from-data` (TP-01); Ene-Jun 2027 con el calendario TecNM 2026-2027: del 25 de enero al 28 de mayo.
+- **Cuentas:**
+  - `admin` con una contraseña nueva y cambio obligatorio al entrar.
+  - Los jefes, los directivos y Subdirección (25) sin contraseña: entran por la invitación del admin a su correo institucional (CF-07), que necesita el correo saliente configurado (sección «Correo saliente (Microsoft 365)»).
+  - Las cuentas de prueba `prueba.*` (coordinadores, JPD y administrativo) activas con una contraseña nueva común.
+  - El alumno y el docente ficticios de la demo dados de baja, y la cuenta del egresado activada a mano para probar la credencial, otra vez inactiva.
+  - Los alumnos vigentes entran con su número de control y su NIP del SII, como en la demo.
+- Sin las propuestas de carrera de prueba.
+
+Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en el `.dump` ni en el repositorio.
+
+### Pasos
+
+1. Pasos 1 a 5 del primer despliegue. El paso 6 (`db:seed`) **no** se corre.
+2. Copia el `.dump` al servidor, dentro de `BACKUP_DIR` (es confidencial):
+
+   ```bash
+   scp nexus_prod-AAAAMMDD.dump servidor:/var/backups/nexus/daily/
+   ssh servidor chmod 600 /var/backups/nexus/daily/nexus_prod-AAAAMMDD.dump
+   ```
+
+3. Reemplaza la base recién creada con la copia (es el procedimiento B de «Restaurar un respaldo», con el scheduler también detenido). La copia pesa varios GB: tarda unos minutos.
+
+   ```bash
+   ARCHIVO=nexus_prod-AAAAMMDD.dump
+   docker compose stop app queue scheduler
+   docker compose exec backup sh -c "dropdb --force \"\$PGDATABASE\" && createdb \"\$PGDATABASE\" && pg_restore --no-owner --exit-on-error --single-transaction -d \"\$PGDATABASE\" /backups/daily/$ARCHIVO"
+   docker compose up -d --wait --wait-timeout 300
+   ```
+
+   Al arrancar, `app` aplica las migraciones que la copia no tenga.
+
+4. **Fotos de las credenciales.** No viven en la base. Copia la carpeta de fotos de la demo (`storage/app/fotos`, con la forma `<AAAA>/<número de control>.jpg`) a `/srv/nexus/fotos` (o a `NEXUS_STUDENT_PHOTOS_DIR`), sin los archivos `Zone.Identifier` que deja Windows. `compose.prod.yaml` la monta de solo lectura:
+
+   ```bash
+   sudo install -d -m 755 /srv/nexus/fotos
+   rsync -a --exclude='*Zone.Identifier' fotos/ servidor:/srv/nexus/fotos/
+   ```
+
+5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` no hace falta (el personal entra por invitación). El correo, en «Correo saliente (Microsoft 365)».
+6. **Verificar:**
+   - `curl -fsS https://nexus.cdjuarez.tecnm.mx/up` responde 200.
+   - Entra como `admin` con la contraseña entregada; Nexus pide cambiarla.
+   - En Configuración → Correos y colas, conecta la cuenta de envío y manda el correo de prueba.
+   - Captura el correo institucional de cada jefe en el panel de usuarios y mándale su invitación.
+   - Revisa el mapa del inicio, la credencial de un alumno (foto y QR) y el selector de periodo, que ofrece desde 2020.
+7. Haz un respaldo manual: `docker compose exec backup sh /opt/backup/backup.sh run`.
+
 ## Actualizar a una versión nueva
 
 Cada versión es un tag de git. La aplicación queda sin responder solo mientras `app` se recrea y migra; en la prueba local, las peticiones que llegaron en ese lapso esperaron y respondieron 200.
