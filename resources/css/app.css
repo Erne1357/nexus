@@ -30,6 +30,15 @@
 
     /* Sombra «Flotante» (DESIGN.md, "Elevation & Depth"): solo lo que flota sobre el contenido. */
     --shadow-float: 0 16px 40px rgb(9 45 72 / 0.24), 0 2px 6px rgb(9 45 72 / 0.12);
+
+    /* El talón que se desprende de la credencial al guardar la contraseña (tarea 1.30; DESIGN.md, "Pantallas de contraseña"). */
+    --animate-nexus-tear: nexus-tear 0.7s var(--ease-open) 0.45s both;
+
+    @keyframes nexus-tear {
+        to {
+            transform: translate(10px, 24px) rotate(3deg);
+        }
+    }
 }
 
 /*

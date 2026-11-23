@@ -18,6 +18,10 @@ it('el admin sembrado entra, cambia su contraseña inicial y llega a la página 
         ->fill('password', 'Nueva-clave-2027')
         ->fill('password_confirmation', 'Nueva-clave-2027')
         ->press('Guardar contraseña')
+        ->assertPathIs('/user/password')
+        ->assertSee('Tu contraseña se actualizó.')
+        ->assertSee('Acuse del cambio')
+        ->click('Entrar a Nexus')
         ->assertPathIs('/')
         ->assertSee('Nexus')
         ->assertNoJavaScriptErrors();
