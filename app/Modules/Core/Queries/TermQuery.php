@@ -21,15 +21,23 @@ use Illuminate\Support\Collection;
  */
 final class TermQuery
 {
+    /** El año desde el que el selector ofrece periodos (TP-02, confirmado el 22 de noviembre de 2026). */
+    public const int SELECTABLE_SINCE_YEAR = 2020;
+
     /**
-     * Los periodos que ofrece el selector de la credencial: todos los existentes, del más reciente al
-     * más antiguo.
+     * Los periodos que ofrece el selector de la credencial: los recientes (desde SELECTABLE_SINCE_YEAR) y el actual
+     * aunque sea anterior, del más reciente al más antiguo. Los viejos existen y se siguen usando por código.
      *
      * @return Collection<int, Term>
      */
     public function selectable(): Collection
     {
-        return Term::query()->orderByDesc('starts_on')->get();
+        return Term::query()
+            ->where(fn (Builder $query) => $query
+                ->where('code', '>=', self::SELECTABLE_SINCE_YEAR.'1')
+                ->orWhere('is_current', true))
+            ->orderByDesc('starts_on')
+            ->get();
     }
 
     /**
