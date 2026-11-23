@@ -96,3 +96,18 @@ it('los requisitos del enlace del correo no piden que sea distinta de la actual'
     expect(array_keys(PasswordRequirements::forReset()))->toBe(['length', 'letter', 'number', 'match'])
         ->and(array_keys(PasswordRequirements::forChange()))->toBe(['length', 'letter', 'number', 'different', 'match']);
 });
+
+it('«Volver sin cambiarla» solo regresa a una página de Nexus: con un Referer de otro sitio lleva al inicio', function (string $referer, string $expected) {
+    $user = User::factory()->create(['password' => 'Inicial-2026']);
+
+    $this->actingAs($user)
+        ->withHeader('Referer', $referer === 'propia' ? url('/notifications') : $referer)
+        ->get(route('user-password.edit'))
+        ->assertOk()
+        ->assertSee('href="'.($expected === 'propia' ? url('/notifications') : route('home')).'"', false)
+        ->assertDontSee('href="'.$referer.'"', false);
+})->with([
+    'de otro sitio' => ['https://malicioso.example/robar', 'inicio'],
+    'que imita el dominio' => ['http://localhost.malicioso.example/x', 'inicio'],
+    'de Nexus' => ['propia', 'propia'],
+]);
