@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Http\Controllers\AccessInvitationPage;
+use App\Modules\Core\Http\Controllers\ChangePasswordPage;
 use App\Modules\Core\Http\Controllers\ForgotPasswordPage;
 use App\Modules\Core\Http\Controllers\MicrosoftMailCallback;
 use App\Modules\Core\Http\Controllers\ResetPasswordPage;
@@ -43,7 +44,7 @@ Route::middleware('auth')->group(function () {
     // El Inicio (`/`, nombre `home`) es el mapa del campus y lo registra Scheduling (tarea 1.24.1); lo que era el Inicio
     // —saludo, bloque del puesto, calendario y tarjetas— queda como «Resumen» en Mi espacio.
     Route::livewire('/resumen', 'core::pages.home')->name('core.summary');
-    Route::view('/user/password', 'core::auth.change-password')->name('user-password.edit');
+    Route::get('/user/password', ChangePasswordPage::class)->name('user-password.edit');
     Route::livewire('/campus', 'core::pages.campuses')->name('core.campuses');
     Route::livewire('/modalidades', 'core::pages.modalities')->name('core.modalities');
     Route::livewire('/notifications', 'core::pages.notifications')->name('core.notifications');

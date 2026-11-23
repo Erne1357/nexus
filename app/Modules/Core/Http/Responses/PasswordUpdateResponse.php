@@ -11,12 +11,18 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Respuesta de Fortify después de cambiar la contraseña. La sesión actual sigue activa con un id
- * nuevo (las demás las cierra AuthenticateSession). Si era el cambio obligatorio del primer
- * acceso, el usuario sigue a la página que había pedido (o al inicio); si fue voluntario, vuelve
- * a la pantalla de cambio con el estado `password-updated`.
+ * nuevo (las demás las cierra AuthenticateSession). Vuelve a la pantalla de cambio con el estado
+ * `password-updated`, donde cuelga el acuse (tarea 1.30). Si era el cambio obligatorio del primer
+ * acceso, guarda en la sesión la página que había pedido (o el inicio) para el botón «Entrar a
+ * Nexus» del acuse (CONTINUE_TO).
  */
 final class PasswordUpdateResponse implements PasswordUpdateResponseContract
 {
+    /**
+     * Llave de sesión (flash) de la página a la que sigue quien acaba de hacer el cambio del primer acceso.
+     */
+    public const string CONTINUE_TO = 'core.password.continue_to';
+
     /**
      * @param  Request  $request
      */
@@ -30,9 +36,13 @@ final class PasswordUpdateResponse implements PasswordUpdateResponseContract
             return new JsonResponse('', 200);
         }
 
-        return $this->wasForcedChange($request)
-            ? redirect()->intended(Fortify::redirects('password-update'))
-            : back()->with('status', Fortify::PASSWORD_UPDATED);
+        $response = redirect()->route('user-password.edit')->with('status', Fortify::PASSWORD_UPDATED);
+
+        if ($this->wasForcedChange($request) && $request->hasSession()) {
+            $response->with(self::CONTINUE_TO, $request->session()->pull('url.intended', Fortify::redirects('password-update')));
+        }
+
+        return $response;
     }
 
     /**

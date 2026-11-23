@@ -1828,6 +1828,46 @@ document.addEventListener('alpine:init', () => {
     // se deja enfocar.
     let origin = null;
 
+    /**
+     * Las pantallas de contraseña (tarea 1.30; DESIGN.md, "Pantallas de contraseña"): revisa al escribir los requisitos
+     * de la contraseña nueva (`rules`, de Core\Support\PasswordRequirements) con las mismas reglas del servidor
+     * (Password::defaults(): al menos 8 caracteres contados como el servidor, una letra y un número; distinta de la
+     * actual; las dos iguales). `printed` (de 0 a 1) imprime la cabecera de la credencial; `ready` habilita Guardar. El
+     * servidor sigue validando todo.
+     */
+    window.Alpine.data('nexusPassword', (config) => ({
+        met: {},
+        count: 0,
+        total: config.rules.length,
+        get printed() {
+            return this.total === 0 ? 1 : this.count / this.total;
+        },
+        get ready() {
+            return this.count === this.total;
+        },
+        init() {
+            this.check(this.$root.querySelector('form'));
+        },
+        check(form) {
+            const value = (name) => {
+                const field = form?.elements.namedItem(name);
+
+                return field && 'value' in field ? field.value : '';
+            };
+            const password = value('password');
+            const again = value('password_confirmation');
+            const tests = {
+                length: [...password].length >= 8,
+                letter: /\p{L}/u.test(password),
+                number: /\p{N}/u.test(password),
+                different: password !== '' && password !== value('current_password'),
+                match: password !== '' && password === again,
+            };
+            this.met = Object.fromEntries(config.rules.map((rule) => [rule, Boolean(tests[rule])]));
+            this.count = Object.values(this.met).filter(Boolean).length;
+        },
+    }));
+
     window.Alpine.data('nexusConfirm', () => ({
         open: false,
         title: '',
