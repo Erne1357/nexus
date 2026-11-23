@@ -127,7 +127,7 @@ describe('pedir el enlace', function () {
             ->and($log->description)->toBe('Se generó un enlace para restablecer la contraseña de PEAA800101XX1, que va a ana.perez@cdjuarez.tecnm.mx')
             ->and(json_encode($log->getAttributes()))->not->toContain(resetFormFields($link)['token']);
 
-        $this->get(route('password.request'))->assertSee('te llegará un enlace');
+        $this->get(route('password.request'))->assertSee('te llegará un enlace')->assertSee('Solicitud recibida')->assertSee('data-login-scene', false);
     });
 
     it('AC-16: responde igual y no manda nada a quien no puede restablecer por correo', function (array $attributes, string $username) {
@@ -302,7 +302,11 @@ describe('restablecer', function () {
             ->assertOk()
             ->assertSee('Elige una contraseña nueva')
             ->assertSee('PEAA800101XX1')
-            ->assertSee('name="password_confirmation"', false);
+            ->assertSee('name="password_confirmation"', false)
+            ->assertSee('data-login-scene', false)
+            ->assertSee('Provisional')
+            ->assertSee('Las dos coinciden')
+            ->assertDontSee('Distinta de la actual');
 
         expect($this->staff->fresh()->password)->toBe($before);
 
@@ -391,6 +395,8 @@ describe('restablecer', function () {
         $this->get($link)
             ->assertForbidden()
             ->assertSee('Este enlace ya no sirve')
+            ->assertSee('Sin validez')
+            ->assertSee('Pedir otro enlace')
             ->assertDontSee('PEAA800101XX1');
 
         foreach (['Otra-clave-2028', 'corta'] as $password) {

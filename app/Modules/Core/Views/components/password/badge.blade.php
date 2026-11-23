@@ -3,17 +3,18 @@
     la cabecera en gris polvo, la liebre en un cuadro apagado, la marca punteada y la etiqueta «Provisional · n de N».
     Con cada requisito que se cumple (`$requirements`, que revisa `nexusPassword` en resources/js/app.js) se imprime de
     izquierda a derecha la cabecera oficial (azul espacio, el cuadro rojo con la liebre y la marca llena) y la franja
-    roja; con todos, queda oficial. Con `printed` ya está impresa y no revisa nada (el acuse, el enlace que ya no sirve).
+    roja; con todos, queda oficial. Con `printed` ya está impresa y no revisa nada (el acuse, pedir el enlace); con `void` se
+    queda provisional, con la etiqueta «Sin validez» (el enlace que ya no sirve).
     `$credential` es la ficha de quien la usa (CredentialQuery o solo el usuario); `$heading` es el h1 de la página. El
     slot `receipt` es el talón que cuelga debajo (core::password.receipt). Sin JavaScript se queda provisional y el
     formulario se manda como siempre.
 --}}
-@props(['credential' => null, 'requirements' => [], 'printed' => false, 'heading', 'lead' => null, 'receipt' => null])
+@props(['credential' => null, 'requirements' => [], 'printed' => false, 'void' => false, 'heading', 'lead' => null, 'receipt' => null])
 
 @php($settle = 'transition-[clip-path,scale] duration-[550ms] ease-open motion-reduce:transition-none')
 
 <div
-    @unless ($printed)
+    @unless ($printed || $void)
         x-data="nexusPassword({ rules: @js(array_keys($requirements)) })"
         x-bind:style="{ '--printed': printed }"
     @endunless
@@ -42,11 +43,13 @@
                 </svg>
             </div>
 
-            @unless ($printed)
+            @if ($void)
+                <span data-provisional class="absolute top-[9px] right-3 rounded border-[1.5px] border-dashed border-secondary-muted px-2 py-0.5 text-[11.5px] font-bold tracking-[0.09em] text-secondary-muted uppercase">Sin validez</span>
+            @elseif (! $printed)
                 <span x-show="! ready" data-provisional class="absolute top-[9px] right-3 rounded border-[1.5px] border-dashed border-secondary-muted px-2 py-0.5 text-[11.5px] font-bold tracking-[0.09em] text-secondary-muted uppercase">
                     <span class="max-sm:hidden">Provisional · </span><span x-text="count">0</span> de {{ count($requirements) }}
                 </span>
-            @endunless
+            @endif
 
             {{-- Oficial: se imprime de izquierda a derecha --}}
             <div aria-hidden="true" @class(['absolute inset-0 flex items-center gap-4 bg-primary px-[22px] pt-7 pb-[18px] [clip-path:inset(0_calc((1_-_var(--printed))*100%)_0_0)] max-sm:px-4', $settle])>

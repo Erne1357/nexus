@@ -1,7 +1,8 @@
-{{-- El talón que cuelga bajo la credencial al guardar la contraseña (tarea 1.30; DESIGN.md, "Pantallas de contraseña"):
-unido por una perforación, se desprende y gira (0.7 s) y muestra el folio de la bitácora, la fecha y la hora. No lleva
-la contraseña. `$receipt` sale de PasswordReceiptQuery; `$notch` es el color del fondo, que asoma por las muescas. --}}
-@props(['receipt', 'notch' => 'bg-base-100'])
+{{-- El talón que cuelga bajo la credencial (tarea 1.30; DESIGN.md, "Pantallas de contraseña"): unido por una perforación,
+se desprende y gira (0.7 s). Con `$receipt` (PasswordReceiptQuery) es el acuse del cambio: el folio de la bitácora, la
+fecha y la hora, nunca la contraseña. Sin él, lleva `$title` y el slot (la solicitud del enlace por correo). `$notch` es
+el color del fondo, que asoma por las muescas. --}}
+@props(['receipt' => null, 'title' => 'Acuse del cambio', 'notch' => 'bg-base-100'])
 
 <section
     aria-labelledby="password-receipt-title"
@@ -13,9 +14,15 @@ la contraseña. `$receipt` sale de PasswordReceiptQuery; `$notch` es el color de
     <span aria-hidden="true" @class(['absolute -top-[9px] -right-[9px] h-[18px] w-[18px] rounded-full', $notch])></span>
 
     <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <h2 id="password-receipt-title" class="text-[11.5px] font-bold tracking-[0.09em] text-neutral uppercase">Acuse del cambio</h2>
-        <p class="font-mono text-[13.5px] font-semibold">Folio {{ $receipt['folio'] }}</p>
+        <h2 id="password-receipt-title" class="text-[11.5px] font-bold tracking-[0.09em] text-neutral uppercase">{{ $title }}</h2>
+        @if ($receipt)
+            <p class="font-mono text-[13.5px] font-semibold">Folio {{ $receipt['folio'] }}</p>
+        @endif
     </div>
-    <p class="mt-2 text-[14.5px]">{{ $receipt['at'] }}</p>
-    <p class="mt-1 text-[13.5px] text-pretty text-neutral">Quedó en la bitácora a tu nombre. El acuse no lleva tu contraseña.</p>
+    @if ($receipt)
+        <p class="mt-2 text-[14.5px]">{{ $receipt['at'] }}</p>
+        <p class="mt-1 text-[13.5px] text-pretty text-neutral">Quedó en la bitácora a tu nombre. El acuse no lleva tu contraseña.</p>
+    @else
+        {{ $slot }}
+    @endif
 </section>
