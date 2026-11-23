@@ -17,7 +17,7 @@ use App\Modules\Students\Enums\StudentsPermission;
 
 it('CF-03: los candados son usuarios, roles y permisos, nombramientos, organigrama, bitácora, correos y colas, el interruptor de la carga académica (MN-05), y editar o borrar lo que da el alcance', function () {
     $registry = app(PermissionRegistry::class);
-    $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load'];
+    $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load', 'access'];
     $expected = collect(CorePermission::cases())
         ->filter(fn (CorePermission $permission): bool => in_array(explode('.', $permission->value)[1], $locked, true))
         ->map(fn (CorePermission $permission): string => $permission->value)

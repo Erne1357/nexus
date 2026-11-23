@@ -133,14 +133,23 @@ it('CF-S7: el catálogo real de los módulos se arma y cada valor por omisión e
         ->and(ProposalAnomalies::fromValue($registry->get(ProposalAnomalies::SETTING)->default))->toEqual(new ProposalAnomalies);
 });
 
-it('CF-S7: Core (el interruptor de la carga, MN-05), Asignación docente, Horarios, Proyección de demanda y Motor de horarios declaran sus parámetros', function () {
+it('CF-S7: Core (el interruptor de la carga, MN-05, y quién inicia sesión, AC-21), Asignación docente, Horarios, Proyección de demanda y Motor de horarios declaran sus parámetros', function () {
     expect(array_map(fn (SettingDefinition $d): string => $d->key, app(SettingRegistry::class)->all()))->toEqualCanonicalizing([
-        'core.academic_load_visible',
+        'core.academic_load_visible', 'core.role_access',
         'staffing.weights', 'staffing.history_terms', 'staffing.evaluation_terms', 'staffing.extra_hours_tolerance',
         'staffing.honorarios_max_hours', 'staffing.min_campus_travel_minutes', 'scheduling.weekly_hours_tolerance',
         'demand.history_terms', 'demand.target_group_size', 'demand.min_group_size', 'demand.highlight_threshold', 'solver.time_limits', 'solver.soft_weights',
         'solver.default_engine',
     ]);
+});
+
+it('AC-21: una tabla de sí o no valida cada campo como booleano y se muestra con Sí y No', function () {
+    $table = new SettingDefinition('demo.access', 'demo', 'Demo', 'Acceso', 'Ayuda', SettingType::BooleanTable, ['a' => true, 'b' => true], fields: ['a' => 'Uno', 'b' => 'Dos']);
+
+    expect($table->validated(['a' => '0', 'b' => true]))->toBe(['a' => false, 'b' => true])
+        ->and($table->accepts(['a' => 'tal vez', 'b' => true]))->toBeFalse()
+        ->and($table->accepts(['a' => true]))->toBeFalse()
+        ->and($table->display(['a' => false, 'b' => true]))->toBe('Uno: No, Dos: Sí');
 });
 
 it('CF-S7: un parámetro puede declarar el permiso de su módulo y un aviso al guardarlo, y por omisión no trae ninguno', function () {
