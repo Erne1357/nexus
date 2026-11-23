@@ -10,6 +10,7 @@ use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Authorization\RoleAccess;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\SeedDemo;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
@@ -39,6 +40,7 @@ use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
+use App\Modules\Core\Listeners\ForgetRoleAccess;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Listeners\HoldAcademicLoadMail;
 use App\Modules\Core\Listeners\LogFailedQueuedMail;
@@ -105,6 +107,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->make(OrgTree::class),
             $app->make(AuthorizationSnapshots::class),
             $app->make(GrantTable::class),
+            $app->make(RoleAccess::class),
             $app['session.store'],
         ));
 
@@ -124,6 +127,9 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped` por lo mismo: lee una vez por petición si el admin ocultó la carga académica (MN-05).
         $this->app->scoped(AcademicLoadVisibility::class);
+
+        // `scoped` por lo mismo: lee una vez por petición qué perfiles inician sesión (AC-21).
+        $this->app->scoped(RoleAccess::class);
 
         // Singleton porque es inmutable: las entradas de todos los módulos, sin nada del usuario.
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
@@ -178,6 +184,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
+        Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetRoleAccess::class);
         Event::listen(NotificationSending::class, HoldAcademicLoadMail::class);
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
@@ -290,11 +297,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * El interruptor de la carga académica (MN-05), que solo cambia el admin.
+     * El interruptor de la carga académica (MN-05) y qué perfiles inician sesión (AC-21), que solo cambia el admin.
      */
     public function settings(): array
     {
-        return [AcademicLoadVisibility::definition()];
+        return [AcademicLoadVisibility::definition(), RoleAccess::definition()];
     }
 
     public function grants(): array
@@ -333,7 +340,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
      */
     public function adminOnly(): array
     {
-        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load'];
+        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load', 'access'];
 
         return [
             ...array_values(array_filter(

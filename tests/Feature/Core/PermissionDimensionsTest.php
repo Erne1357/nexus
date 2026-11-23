@@ -70,6 +70,7 @@ function dimensionTables(): array
         'core.navigation' => 'terms',
         // El interruptor de la carga académica (MN-05) es un parámetro global de toda la instalación: no lleva campus.
         'core.academic_load' => 'settings',
+        'core.access' => 'settings',
         'academic.department' => 'departments',
         'academic.career' => 'careers',
         'academic.subject' => 'subjects',

@@ -850,12 +850,12 @@ it('no dispara consultas de más al pintar, elegir, colocar ni abrir un cajón, 
     $openGroup = $queries(fn () => $groupDrawer->call('open', $this->calcGroup->id));
 
     // Cada petición lee una vez las modalidades activas para el alcance del coordinador (Actor, MS8), la versión de las
-    // concesiones (GrantTable, CF-01), y los campus de la modalidad y los grupos del semestre en cada uno para el filtro
-    // de campus (maqueta U2).
+    // concesiones (GrantTable, CF-01), qué perfiles inician sesión (AC-21), y los campus de la modalidad y los grupos del
+    // semestre en cada uno para el filtro de campus (maqueta U2).
     expect($many)->toBe($few)
-        ->and($many)->toBeLessThanOrEqual(35)
-        ->and($pick)->toBeLessThanOrEqual(37)
-        ->and($place)->toBeLessThanOrEqual(103)
-        ->and($openSession)->toBeLessThanOrEqual(39) // con la sección del salón y sus sugerencias (tarea 3.7)
-        ->and($openGroup)->toBeLessThanOrEqual(19); // con el perfil de su modalidad y los campus a los que se puede cambiar (M8)
+        ->and($many)->toBeLessThanOrEqual(36)
+        ->and($pick)->toBeLessThanOrEqual(38)
+        ->and($place)->toBeLessThanOrEqual(104)
+        ->and($openSession)->toBeLessThanOrEqual(40) // con la sección del salón y sus sugerencias (tarea 3.7)
+        ->and($openGroup)->toBeLessThanOrEqual(20); // con el perfil de su modalidad y los campus a los que se puede cambiar (M8)
 });
