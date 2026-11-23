@@ -6,6 +6,8 @@ use App\Modules\Core\Actions\RecordLogin;
 use App\Modules\Core\Actions\RequirePasswordChange;
 use App\Modules\Core\Actions\UpdateUserPassword;
 use App\Modules\Core\Actions\UpgradePasswordHash;
+use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\RoleAccess;
 use App\Modules\Core\Enums\PasswordOrigin;
 use App\Modules\Core\Http\Responses\LoginResponse;
 use App\Modules\Core\Http\Responses\PasswordUpdateResponse;
@@ -128,7 +130,7 @@ final class FortifyServiceProvider extends ServiceProvider
     }
 
     /**
-     * Usuario activo cuyo username y contraseña coinciden, o null. Un usuario inactivo o sin
+     * Usuario activo cuyo username y contraseña coinciden y con algún perfil habilitado (AC-21), o null. Un usuario inactivo o sin
      * contraseña (sin acceso, AC-01) recibe el mismo mensaje genérico (`auth.failed`) que una
      * credencial incorrecta.
      *
@@ -194,6 +196,11 @@ final class FortifyServiceProvider extends ServiceProvider
             }
 
             $throttle->succeeded($username);
+
+            // AC-21: con la contraseña correcta, si ninguno de sus perfiles está habilitado no entra, y se le dice.
+            if (! app(Actor::class)->forUser($user)->canSignIn()) {
+                throw ValidationException::withMessages([Fortify::username() => RoleAccess::DENIED_MESSAGE]);
+            }
 
             if (app(DefaultPassword::class)->matches($typed)) {
                 app(RequirePasswordChange::class)->handle($user);

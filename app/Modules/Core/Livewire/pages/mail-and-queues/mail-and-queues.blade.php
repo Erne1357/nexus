@@ -1,5 +1,5 @@
 {{--
-    «Correos y colas» (CF-S8): encabezado, pestañas y, según la pestaña, el registro de correos con su barra de
+    «Correos y colas» (CF-S8): encabezado, la tarjeta «Cuenta de envío» (tarea 1.29, sending-account), pestañas y, según la pestaña, el registro de correos con su barra de
     filtros estándar, las invitaciones pendientes con «Reenviar», o los tamaños de las colas y los trabajos fallidos con
     «Acciones» (Reintentar, Descartar con confirmación corta y Ver error en un drawer). Solo lectura salvo esas acciones.
     El tipo de correo sale en español (MailKinds). Debajo de 768 px cada tabla cede su lugar a renglones apilados, que no
@@ -8,9 +8,13 @@
 <div>
     <x-header title="Correos y colas" size="text-[1.625rem] md:text-3xl" weight="font-bold" class="mb-6!" use-h1 separator progress-indicator>
         <x-slot:subtitle class="max-w-prose text-sm text-neutral!">
-            Lo que salió por correo (sin su contenido), las invitaciones que siguen sin activarse y el estado de las colas de trabajo.
+            La cuenta con que sale el correo, lo que salió (sin su contenido), las invitaciones que siguen sin activarse y el estado de las colas de trabajo.
         </x-slot:subtitle>
     </x-header>
+
+    @if ($sending)
+        @include('core::mail-and-queues.sending-account')
+    @endif
 
     <div role="tablist" aria-label="Vistas de correos y colas" class="tabs tabs-border mb-4" data-testid="mail-tabs">
         @foreach ($tabs as $key => $label)

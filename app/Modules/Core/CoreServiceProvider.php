@@ -10,8 +10,10 @@ use App\Modules\Core\Authorization\GrantTable;
 use App\Modules\Core\Authorization\OrgTree;
 use App\Modules\Core\Authorization\PermissionGrantRules;
 use App\Modules\Core\Authorization\PermissionRegistry;
+use App\Modules\Core\Authorization\RoleAccess;
 use App\Modules\Core\Authorization\ScopeLabels;
 use App\Modules\Core\Console\SeedDemo;
+use App\Modules\Core\Console\SyncTermsFromData;
 use App\Modules\Core\Database\Seeders\AdminUserSeeder;
 use App\Modules\Core\Database\Seeders\CampusSeeder;
 use App\Modules\Core\Database\Seeders\DemoAdminPasswordSeeder;
@@ -39,6 +41,7 @@ use App\Modules\Core\Events\TermCalendarChanged;
 use App\Modules\Core\Http\Middleware\EnsureAcademicLoadIsVisible;
 use App\Modules\Core\Listeners\ForgetAcademicLoadVisibility;
 use App\Modules\Core\Listeners\ForgetActiveRole;
+use App\Modules\Core\Listeners\ForgetRoleAccess;
 use App\Modules\Core\Listeners\ForgetTermCalendar;
 use App\Modules\Core\Listeners\HoldAcademicLoadMail;
 use App\Modules\Core\Listeners\LogFailedQueuedMail;
@@ -46,6 +49,7 @@ use App\Modules\Core\Listeners\LogSentMail;
 use App\Modules\Core\Listeners\StampActingAs;
 use App\Modules\Core\Livewire\ActiveRoleHook;
 use App\Modules\Core\Livewire\BlockViewDataCalls;
+use App\Modules\Core\Mail\MicrosoftGraphTransport;
 use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\LoginNotice;
 use App\Modules\Core\Models\LoginShortcut;
@@ -67,6 +71,7 @@ use App\Modules\Core\Queries\UnitAdscriptions;
 use App\Modules\Core\Settings\SettingRegistry;
 use App\Modules\Core\Support\ActivityAttributes;
 use App\Modules\Core\Support\ActivityProtectedProperties;
+use App\Modules\Core\Support\QueueJobScope;
 use App\Modules\Core\View\Components\Drawer;
 use App\Modules\Core\View\DrawerIds;
 use Illuminate\Auth\Events\Login;
@@ -74,10 +79,14 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Mail\Events\MessageSent;
 use Illuminate\Notifications\Events\NotificationSending;
+use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Livewire\ComponentHookRegistry;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
@@ -105,6 +114,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
             $app->make(OrgTree::class),
             $app->make(AuthorizationSnapshots::class),
             $app->make(GrantTable::class),
+            $app->make(RoleAccess::class),
             $app['session.store'],
         ));
 
@@ -124,6 +134,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
 
         // `scoped` por lo mismo: lee una vez por petición si el admin ocultó la carga académica (MN-05).
         $this->app->scoped(AcademicLoadVisibility::class);
+
+        // `scoped`: si lo que corre es un trabajo del worker de la cola (tarea 1.29); el worker la olvida entre trabajos.
+        $this->app->scoped(QueueJobScope::class);
+
+        // `scoped` por lo mismo: lee una vez por petición qué perfiles inician sesión (AC-21).
+        $this->app->scoped(RoleAccess::class);
 
         // Singleton porque es inmutable: las entradas de todos los módulos, sin nada del usuario.
         $this->app->singleton(Navigation::class, fn (Application $app): Navigation => Navigation::fromModules(
@@ -173,11 +189,12 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Blade::component(config('mary.prefix').'drawer', Drawer::class);
 
         if ($this->app->runningInConsole()) {
-            $this->commands([SeedDemo::class]);
+            $this->commands([SeedDemo::class, SyncTermsFromData::class]);
         }
 
         Event::listen(TermCalendarChanged::class, ForgetTermCalendar::class);
         Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetAcademicLoadVisibility::class);
+        Event::listen([SettingsUpdated::class, RequestHandled::class], ForgetRoleAccess::class);
         Event::listen(NotificationSending::class, HoldAcademicLoadMail::class);
         Event::listen(Login::class, ForgetActiveRole::class);
         Activity::creating(StampActingAs::class);
@@ -187,6 +204,19 @@ final class CoreServiceProvider extends ModuleServiceProvider
         Livewire::addPersistentMiddleware([EnsureAcademicLoadIsVisible::class]);
         Event::listen(MessageSent::class, LogSentMail::class);
         Event::listen(JobFailed::class, LogFailedQueuedMail::class);
+
+        // El correo por Microsoft Graph con permisos delegados (tarea 1.29, ADR-0032): `MAIL_MAILER=microsoft-graph`. El
+        // transporte no guarda nada entre correos (lee la cuenta de la base en cada uno), así que MailManager lo puede
+        // conservar en el worker.
+        Mail::extend('microsoft-graph', fn (): MicrosoftGraphTransport => $this->app->make(MicrosoftGraphTransport::class));
+
+        // Solo un trabajo del worker de la cola puede esperar a Microsoft (429); la cola `sync` corre dentro de la petición.
+        Event::listen(JobProcessing::class, function (JobProcessing $event): void {
+            if ($event->connectionName !== 'sync') {
+                $this->app->make(QueueJobScope::class)->begin();
+            }
+        });
+        Event::listen([JobProcessed::class, JobExceptionOccurred::class, JobFailed::class], fn (): mixed => $this->app->make(QueueJobScope::class)->end());
 
         // Se arma cuando ya arrancaron todos los módulos y antes de la primera petición, para que
         // Octane lo cree una vez por worker y no en cada petición.
@@ -290,11 +320,11 @@ final class CoreServiceProvider extends ModuleServiceProvider
     }
 
     /**
-     * El interruptor de la carga académica (MN-05), que solo cambia el admin.
+     * El interruptor de la carga académica (MN-05) y qué perfiles inician sesión (AC-21), que solo cambia el admin.
      */
     public function settings(): array
     {
-        return [AcademicLoadVisibility::definition()];
+        return [AcademicLoadVisibility::definition(), RoleAccess::definition()];
     }
 
     public function grants(): array
@@ -333,7 +363,7 @@ final class CoreServiceProvider extends ModuleServiceProvider
      */
     public function adminOnly(): array
     {
-        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load'];
+        $locked = ['user', 'authz', 'assignment', 'activity', 'mail', 'queue', 'org_unit', 'academic_load', 'access'];
 
         return [
             ...array_values(array_filter(

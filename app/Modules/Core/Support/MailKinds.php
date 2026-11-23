@@ -15,6 +15,7 @@ final class MailKinds
         'AccessInvitation' => 'Invitación de acceso',
         'PasswordResetLink' => 'Restablecer contraseña',
         'UserEmailChanged' => 'Aviso de cambio de correo',
+        'MailAccountTest' => 'Correo de prueba de la cuenta de envío',
         'CatalogReviewsPending' => 'Validación de catálogos pendiente',
         'LoadRepublished' => 'Carga republicada',
         'ChangeAlternativeMovesCareerGroup' => 'Grupo movido por una solicitud de cambio',
