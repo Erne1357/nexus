@@ -25,7 +25,6 @@ final class ChangePasswordPage
         $user = $request->user();
         $updated = $request->session()->get('status') === Fortify::PASSWORD_UPDATED;
         $continueTo = $request->session()->get(PasswordUpdateResponse::CONTINUE_TO);
-        $previous = url()->previous();
 
         return view('core::auth.change-password', [
             'firstAccess' => (bool) $user->must_change_password,
@@ -33,7 +32,19 @@ final class ChangePasswordPage
             'requirements' => PasswordRequirements::forChange(),
             'receipt' => $updated ? $receipts->latestFor($user) : null,
             'continueTo' => is_string($continueTo) ? $continueTo : null,
-            'backTo' => $previous !== $request->url() ? $previous : route('home'),
+            'backTo' => $this->backTo($request, url()->previous()),
         ]);
+    }
+
+    /**
+     * A dónde lleva «Volver sin cambiarla»: la página anterior si es de Nexus y no es esta misma; si no (sin anterior, un
+     * Referer de otro sitio o esta página), el inicio. url()->previous() prefiere el Referer, que manda el navegador.
+     */
+    private function backTo(Request $request, string $previous): string
+    {
+        $root = rtrim($request->root(), '/').'/';
+        $own = $previous === rtrim($root, '/') || str_starts_with($previous, $root);
+
+        return $own && $previous !== $request->url() ? $previous : route('home');
     }
 }
