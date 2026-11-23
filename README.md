@@ -19,7 +19,7 @@ Aplicación construida con **Laravel 13** y **Livewire 4**.
 
 | Servicio | Imagen | Rol |
 |---|---|---|
-| `nginx` *(solo dev)* | nginx 1.30.6 (stable) | Reverse proxy en desarrollo (`:80`, sin HTTPS) |
+| `nginx` *(solo dev)* | nginx 1.30.7 (stable) | Reverse proxy en desarrollo (`:80`, sin HTTPS) |
 | `caddy` *(solo prod)* | Caddy 2.11.7 | Reverse proxy público con HTTPS automático (`:80` y `:443`); reemplaza a nginx en producción |
 | `app` | FrankenPHP 1.13.4 · PHP 8.5 + Laravel Octane | App en worker mode (`:8000` interno) |
 | `postgres` | PostgreSQL 18.6 | Base de datos |
