@@ -25,7 +25,9 @@ use LogicException;
  * puesto pide (Role::scopeColumns). Aquí se descartan los de un campus o una modalidad desactivados o borrados (MS8),
  * para todo: no cuentan ni en las dimensiones que un permiso no declara. Se hace en cada petición, no en el snapshot,
  * para que activar o desactivar uno cuente sin esperar a que venza la caché. Un usuario inactivo, o ninguno, no tiene
- * ningún puesto. `admin` (un nombramiento `admin` vigente) no es un alcance: no sale en heldScopes().
+ * ningún puesto. `admin` (un nombramiento `admin` vigente) no es un alcance: no sale en heldScopes(). Un puesto que el
+ * admin apagó en «Parámetros» (AC-21, RoleAccess) tampoco cuenta, para nada: no está en heldRoles() ni aporta
+ * nombramientos; canSignIn() dice si le queda alguno con que entrar.
  *
  * Perfil activo (spec 8.1, AZ-S4): en la sesión de quien entró solo cuenta un puesto, el que eligió, con sus
  * nombramientos. activeRole() es la elección de la sesión (ACTIVE_ROLE) si todavía tiene ese puesto; si no, el último
@@ -95,8 +97,11 @@ final class Actor
     /** @var list<AssignmentScope> los que cuentan: sin el de admin, sin campus o en uno activo, sin modalidad o en una activa */
     private array $assignments = [];
 
-    /** @var list<Role> puestos que tiene, el admin incluido, en el orden del enum */
+    /** @var list<Role> puestos que tiene y están encendidos (AC-21), el admin incluido, en el orden del enum */
     private array $heldRoles = [];
+
+    /** Si no tiene ningún puesto que valga, ni siquiera apagado: es personal sin puesto (AC-21). */
+    private bool $withoutRoles = true;
 
     /** @var Collection<int, RoleAssignment>|null los nombramientos que cuentan, como modelos, para heldScopes() */
     private ?Collection $scopeModels = null;
@@ -137,6 +142,7 @@ final class Actor
         private readonly OrgTree $orgTree,
         private readonly AuthorizationSnapshots $snapshots,
         private readonly GrantTable $grants,
+        private readonly RoleAccess $access,
         private readonly ?Session $session = null,
     ) {}
 
@@ -151,7 +157,7 @@ final class Actor
         }
 
         if (! isset($this->others[$user->getKey()])) {
-            $other = new self(fn (): User => $user, $this->orgTree, $this->snapshots, $this->grants);
+            $other = new self(fn (): User => $user, $this->orgTree, $this->snapshots, $this->grants, $this->access);
             $other->catalogSource = $this;
             $this->others[$user->getKey()] = $other;
         }
@@ -169,7 +175,7 @@ final class Actor
     public function asRole(Role $role): self
     {
         $user = $this->user();
-        $context = new self(fn (): ?User => $user, $this->orgTree, $this->snapshots, $this->grants);
+        $context = new self(fn (): ?User => $user, $this->orgTree, $this->snapshots, $this->grants, $this->access);
         $context->catalogSource = $this;
         $context->pinnedRole = $role;
 
@@ -202,6 +208,33 @@ final class Actor
         foreach ($this->others as $context) {
             $context->refresh();
         }
+    }
+
+    /**
+     * Vuelve a cargar los puestos que cuentan, también los de forUser(), en la siguiente pregunta, sin volver a leer la
+     * `authz_version`: lo llama ForgetRoleAccess cuando cambia qué perfiles inician sesión (AC-21).
+     */
+    public function reload(): void
+    {
+        $this->loaded = false;
+
+        foreach ($this->others as $context) {
+            $context->reload();
+        }
+    }
+
+    /**
+     * Si su acceso a Nexus está habilitado (AC-21): tiene algún puesto que vale y está encendido (el admin siempre lo
+     * está), o no tiene ninguno y el personal sin puesto entra. Falso sin usuario activo. Lo preguntan el login y
+     * EnsureAccessIsEnabled.
+     */
+    public function canSignIn(): bool
+    {
+        if ($this->user() === null) {
+            return false;
+        }
+
+        return $this->heldRoles !== [] || ($this->withoutRoles && $this->access->allowsWithoutRole());
     }
 
     /**
@@ -846,5 +879,12 @@ final class Actor
 
         $held = array_map(fn (AssignmentScope $scope): Role => $scope->role, $this->assignments);
         $this->heldRoles = array_values(array_filter(Role::cases(), fn (Role $role): bool => $role === Role::Admin ? $this->admin : in_array($role, $held, true)));
+        $this->withoutRoles = $this->heldRoles === [];
+
+        // AC-21: un puesto apagado no cuenta para nada (solo se lee el parámetro si tiene alguno que no sea el admin).
+        if (array_any($this->heldRoles, fn (Role $role): bool => $role !== Role::Admin)) {
+            $this->heldRoles = array_values(array_filter($this->heldRoles, $this->access->allows(...)));
+            $this->assignments = array_values(array_filter($this->assignments, fn (AssignmentScope $scope): bool => $this->access->allows($scope->role)));
+        }
     }
 }

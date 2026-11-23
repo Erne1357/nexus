@@ -1,6 +1,6 @@
 {{--
     «Parámetros» (core::pages.settings): una tarjeta por módulo con sus parámetros. Cada parámetro dice qué cambia
-    (etiqueta y ayuda), tiene su campo según el tipo (número, decimal, sí o no, o una tabla de valores o de opciones con nombre) y, debajo,
+    (etiqueta y ayuda), tiene su campo según el tipo (número, decimal, sí o no, o una tabla de valores, de opciones o de interruptores con nombre) y, debajo,
     su valor por omisión y «Volver al valor por omisión» (con confirmación corta, ADR-0023) si se cambió. «Guardar» es
     por tarjeta. Una tarjeta que el puesto no puede cambiar (le falta `core.setting.update` o el permiso propio de algún
     parámetro) se pinta en solo lectura: el valor como texto, sin campos ni botones, con su nota.
@@ -46,7 +46,9 @@
                             @elseif ($isTable)
                                 <div class="grid gap-3 sm:grid-cols-2">
                                     @foreach ($definition->fields as $field => $label)
-                                        @if ($definition->type === \App\Modules\Core\Settings\SettingType::ChoiceTable)
+                                        @if ($definition->type === \App\Modules\Core\Settings\SettingType::BooleanTable)
+                                            <x-toggle :label="$label" wire:model="values.{{ $id }}.{{ $field }}" data-testid="toggle-{{ $definition->key }}-{{ $field }}" />
+                                        @elseif ($definition->type === \App\Modules\Core\Settings\SettingType::ChoiceTable)
                                             <x-select :label="$label" :name="'values.'.$id.'.'.$field" wire:model="values.{{ $id }}.{{ $field }}" :options="$definition->choices()" />
                                         @else
                                             <x-input :label="$label" :name="'values.'.$id.'.'.$field" wire:model="values.{{ $id }}.{{ $field }}" type="number" :step="$step" :suffix="$definition->unit" class="font-mono" />

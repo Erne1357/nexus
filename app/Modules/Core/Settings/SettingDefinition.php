@@ -123,7 +123,7 @@ final readonly class SettingDefinition
         $type = match ($this->type) {
             SettingType::Integer, SettingType::IntegerTable => ['integer'],
             SettingType::Decimal, SettingType::DecimalTable => ['numeric'],
-            SettingType::Boolean => ['boolean'],
+            SettingType::Boolean, SettingType::BooleanTable => ['boolean'],
             SettingType::ChoiceTable => ['string', 'in:'.implode(',', array_keys($this->options))],
         };
 
@@ -158,6 +158,7 @@ final readonly class SettingDefinition
         return match (true) {
             $value === null => 'Sin valor',
             $this->type === SettingType::Boolean => $value ? 'Sí' : 'No',
+            $this->type === SettingType::BooleanTable => collect($this->fields)->map(fn (string $label, string $field): string => $label.': '.(($value[$field] ?? null) === null ? '—' : ($value[$field] ? 'Sí' : 'No')))->implode(', '),
             $this->type === SettingType::ChoiceTable => collect($this->fields)->map(fn (string $label, string $field): string => $label.': '.($this->options[(string) ($value[$field] ?? '')] ?? $value[$field] ?? '—'))->implode(', '),
             $this->type->isTable() => collect($this->fields)->map(fn (string $label, string $field): string => $label.': '.($value[$field] ?? '—'))->implode(', '),
             default => rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.').($this->unit === null ? '' : " {$this->unit}"),
@@ -186,7 +187,7 @@ final readonly class SettingDefinition
         $one = fn (mixed $item): int|float|bool|string => match ($this->type) {
             SettingType::Integer, SettingType::IntegerTable => (int) $item,
             SettingType::Decimal, SettingType::DecimalTable => (float) $item,
-            SettingType::Boolean => filter_var($item, FILTER_VALIDATE_BOOLEAN),
+            SettingType::Boolean, SettingType::BooleanTable => filter_var($item, FILTER_VALIDATE_BOOLEAN),
             SettingType::ChoiceTable => (string) $item,
         };
 
