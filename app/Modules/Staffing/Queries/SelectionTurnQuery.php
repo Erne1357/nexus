@@ -9,6 +9,7 @@ use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 
 /**
  * El turno vigente de una selección (tarea 1.33, diseño 6.3), calculado con las horas guardadas de cada renglón y la
@@ -31,6 +32,17 @@ final class SelectionTurnQuery
     public function isTurnOf(Selection $selection, Teacher $teacher, CarbonImmutable $now): bool
     {
         return $this->inTurn($selection, $now)?->where('teacher_id', $teacher->getKey())->exists() ?? false;
+    }
+
+    /**
+     * Todos los renglones con turno ahora, por lugar y con su docente: los que comparten la media hora (SEL-07) se
+     * nombran juntos en la barra del turno y salen «En turno» en el orden. Una consulta.
+     *
+     * @return Collection<int, SelectionEntry>
+     */
+    public function entriesInTurn(Selection $selection, CarbonImmutable $now): Collection
+    {
+        return $this->inTurn($selection, $now)?->orderBy('position')->orderBy('id')->with('teacher:id,name')->get() ?? new Collection;
     }
 
     /**
