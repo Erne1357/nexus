@@ -15,6 +15,7 @@ Route::middleware('auth')->name('staffing.')->group(function () {
     Route::livewire('/staffing/change-requests', 'staffing::pages.change-requests')->name('change-requests');
     Route::livewire('/staffing/closing', 'staffing::pages.closing')->name('closing');
     Route::livewire('/staffing/closing-board', 'staffing::pages.closing-board')->name('closing-board');
+    Route::livewire('/staffing/orden-de-seleccion', 'staffing::pages.selection-admin')->name('selection.admin');
     Route::livewire('/mi-espacio/oferta', 'staffing::pages.offer')->name('offer');
     Route::livewire('/mi-espacio/mi-carga', 'staffing::pages.my-load')->name('my-load');
 });
