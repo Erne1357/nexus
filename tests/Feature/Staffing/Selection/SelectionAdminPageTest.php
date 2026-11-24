@@ -13,6 +13,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Notifications\SelectionCancelled;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
@@ -196,4 +197,34 @@ it('un seleccion desconocido en la URL arranca de cero', function () {
         ->assertSet('step', 1)
         ->call('goTo', 3)
         ->assertSet('step', 1);
+});
+
+it('SEL-11: el admin cancela desde el monitor una selección publicada que aún no empieza, con un modal, y se avisa a la cola', function () {
+    Notification::fake();
+    $selection = Selection::factory()->create(['status' => SelectionStatus::Published, 'starts_at' => now()->addDay(), 'published_at' => now()]);
+    $user = User::factory()->create();
+    SelectionEntry::factory()->for($selection)->create([
+        'teacher_id' => Teacher::factory()->create(['name' => 'Rosa Medina Soto', 'user_id' => $user->id])->id, 'position' => 1, 'slot_index' => 0,
+        'slot_starts_at' => now()->addDay(), 'slot_ends_at' => now()->addDay()->addMinutes(30),
+    ]);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])
+        ->assertSet('tab', 'monitor')
+        ->assertSeeHtml('data-testid="monitor-cancel"')
+        ->call('$set', 'showCancel', true)
+        ->assertSee('Los docentes de la cola reciben el aviso')
+        ->call('cancel')
+        ->assertHasNoErrors()
+        ->assertSet('selectionId', '');
+
+    expect($selection->fresh()->status)->toBe(SelectionStatus::Cancelled);
+    Notification::assertSentTo($user, SelectionCancelled::class);
+});
+
+it('el monitor no ofrece cancelar una selección que ya empezó', function () {
+    $selection = Selection::factory()->create(['status' => SelectionStatus::Running, 'starts_at' => now()->subHour()]);
+
+    Livewire::actingAs($this->admin)->test('staffing::pages.selection-admin', ['seleccion' => $selection->id])
+        ->assertSee('Avance por docente')
+        ->assertDontSeeHtml('data-testid="monitor-cancel"');
 });

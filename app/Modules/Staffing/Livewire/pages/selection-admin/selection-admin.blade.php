@@ -340,13 +340,6 @@
                     <x-button label="Publicar" class="btn-primary" wire:click="publish" spinner="publish" />
                 </x-slot:actions>
             </x-modal>
-            <x-modal wire:model="showCancel" title="¿Cancelar la selección?" box-class="max-w-lg">
-                <p>Se descarta el borrador y no se avisa a nadie. Puedes abrir otra después.</p>
-                <x-slot:actions>
-                    <x-button label="Volver" wire:click="$set('showCancel', false)" />
-                    <x-button label="Cancelar la selección" class="btn-error" wire:click="cancel" spinner="cancel" />
-                </x-slot:actions>
-            </x-modal>
         @endif
     @endif
 
@@ -362,6 +355,16 @@
                     <div class="p-4"><p class="text-xs text-neutral">Grupos con docente</p><p class="text-2xl font-bold">{{ $monitor['groups_taken'] }}<small class="text-sm font-normal text-neutral"> de {{ $monitor['groups_total'] }}</small></p><p class="text-xs text-neutral">{{ $monitor['hours_taken'] }} de {{ $monitor['hours_total'] }} h</p></div>
                     <div class="p-4"><p class="text-xs text-neutral">Esperando</p><p class="text-2xl font-bold">{{ $monitor['waiting'] }}</p></div>
                 </section>
+
+                @if ($cancellable)
+                    <section class="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-box border border-base-300 bg-base-100 p-4" data-testid="monitor-cancel">
+                        <p class="text-sm">
+                            <b>Empieza el {{ $selection->starts_at->locale('es')->isoFormat('dddd D [de] MMMM [a las] H:mm') }}.</b>
+                            <span class="text-neutral">Hasta entonces puedes cancelarla; después ya no.</span>
+                        </p>
+                        <x-button label="Cancelar la selección" icon="o-x-circle" class="btn-ghost text-error" wire:click="$set('showCancel', true)" />
+                    </section>
+                @endif
 
                 @if ($monitor['current'])
                     <section class="mt-4 rounded-box border border-info/40 bg-info/10 p-4" data-testid="monitor-current">
@@ -409,5 +412,20 @@
                 </div>
             </div>
         @endif
+    @endif
+
+    @if ($cancellable)
+        <x-modal wire:model="showCancel" title="¿Cancelar la selección?" box-class="max-w-lg">
+            @if ($draft)
+                <p>Se descarta el borrador y no se avisa a nadie. Puedes abrir otra después.</p>
+            @else
+                <p>Los turnos ya no corren. Los docentes de la cola reciben el aviso por la campana y por correo.</p>
+                <p class="mt-2 text-sm text-neutral">Las cargas que ya pasaron a asignación se quedan así. Puedes preparar y publicar otra selección después.</p>
+            @endif
+            <x-slot:actions>
+                <x-button label="Volver" wire:click="$set('showCancel', false)" />
+                <x-button label="Cancelar la selección" class="btn-error" wire:click="cancel" spinner="cancel" />
+            </x-slot:actions>
+        </x-modal>
     @endif
 </div>

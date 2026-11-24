@@ -12,6 +12,7 @@ use App\Modules\Staffing\Actions\Selection\PublishSelection;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
+use App\Modules\Staffing\Notifications\SelectionCancelled;
 use App\Modules\Staffing\Notifications\SelectionTurnPublished;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
@@ -139,6 +140,21 @@ it('cancelar antes de la primera hora deja la selección cancelada', function ()
     expect($s['selection']->fresh()->status)->toBe(SelectionStatus::Cancelled)
         ->and($s['selection']->fresh()->cancelled_at)->not->toBeNull();
     expect(Activity::query()->where('event', 'selection_cancelled')->count())->toBe(1);
+});
+
+it('SEL-11: cancelar una selección publicada antes de su primera hora avisa a cada docente de la cola, y un borrador a nadie', function () {
+    Notification::fake();
+    $s = pubScenario();
+    $draft = pubScenario();
+    app(PublishSelection::class)->handle($s['selection'], $this->actor);
+
+    app(CancelSelection::class)->handle($s['selection'], $this->actor);
+    app(CancelSelection::class)->handle($draft['selection'], $this->actor);
+
+    expect($s['selection']->fresh()->status)->toBe(SelectionStatus::Cancelled);
+    Notification::assertSentTo($s['teacherUser'], SelectionCancelled::class, fn (SelectionCancelled $notice): bool => $notice->message($s['teacherUser'])->route === 'staffing.offer');
+    Notification::assertNotSentTo($draft['teacherUser'], SelectionCancelled::class);
+    expect(Activity::query()->where('event', 'selection_cancelled')->where('subject_id', $s['selection']->id)->sole()->properties['notified'])->toBe(1);
 });
 
 it('cancelar después de la primera hora se rechaza', function () {

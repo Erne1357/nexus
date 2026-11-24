@@ -344,7 +344,7 @@ new #[Title('Orden de selección')] class extends Component
         ];
 
         if ($selection === null) {
-            return $data + ['blockers' => [], 'monitor' => null, 'draft' => false];
+            return $data + ['blockers' => [], 'monitor' => null, 'draft' => false, 'cancellable' => false];
         }
 
         $selection->load('term:id,name', 'modality:id,name', 'department:id,code,name');
@@ -352,6 +352,9 @@ new #[Title('Orden de selección')] class extends Component
         $data['selection'] = $selection;
         $data['draft'] = $draft;
         $data['blockers'] = $draft ? $this->blockers($selection, $this->step) : [];
+        // Lo mismo que permite CancelSelection: borrador o publicada, antes de su primera hora.
+        $data['cancellable'] = in_array($selection->status, [SelectionStatus::Draft, SelectionStatus::Published], true)
+            && ($selection->starts_at === null || $selection->starts_at->isFuture());
 
         if ($draft) {
             $data += $this->stepData($selection);

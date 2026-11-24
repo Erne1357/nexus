@@ -17,7 +17,7 @@ final class SelectionCancelled extends SelectionNotice
         private readonly string $termId,
         private readonly string $modalityId,
         private readonly string $department,
-        private readonly CarbonImmutable $startsAt,
+        private readonly ?CarbonImmutable $startsAt,
     ) {}
 
     public static function typeKey(): string
@@ -45,12 +45,13 @@ final class SelectionCancelled extends SelectionNotice
 
     public function toMail(object $notifiable): MailMessage
     {
-        $start = $this->startsAt->setTimezone(SelectionSlots::TIMEZONE)->locale('es');
+        $start = $this->startsAt?->setTimezone(SelectionSlots::TIMEZONE)->locale('es');
+        $when = $start === null ? '' : ', que iba a empezar el '.$start->translatedFormat('l j \d\e F').' a las '.$start->format('G:i');
 
         return (new MailMessage)
             ->subject('Se canceló la selección de carga de '.$this->department)
             ->greeting(self::greetingFor($notifiable))
-            ->line("Se canceló la orden de selección de carga de {$this->department}, que iba a empezar el ".$start->translatedFormat('l j \d\e F').' a las '.$start->format('G:i').'.')
+            ->line("Se canceló la orden de selección de carga de {$this->department}{$when}.")
             ->line('Tu turno ya no corre. Si se vuelve a publicar, te llega por aquí tu nueva hora.')
             ->action('Abrir Oferta', route('staffing.offer'));
     }
