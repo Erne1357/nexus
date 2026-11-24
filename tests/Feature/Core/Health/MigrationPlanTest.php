@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Core\Queries\MigrationPlanQuery;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
 require_once __DIR__.'/HealthTestHelpers.php';
@@ -55,4 +56,22 @@ it('el comando sin --json imprime una tabla en español', function () {
     $this->artisan('nexus:migration-plan')
         ->expectsOutputToContain('Pendiente')
         ->assertSuccessful();
+});
+
+it('con la base sin tabla de migraciones todas son pendientes', function () {
+    // DDL transaccional en PostgreSQL: RefreshDatabase deshace el cambio al terminar la prueba.
+    DB::statement('alter table migrations rename to migrations_health_moved');
+
+    $plan = app(MigrationPlanQuery::class)->run();
+
+    expect($plan->pending)->not->toBeEmpty()
+        ->and($plan->unknown)->toBe([]);
+
+    $exit = Artisan::call('nexus:migration-plan', ['--json' => true]);
+    $json = json_decode(trim(Artisan::output()), true);
+
+    expect($exit)->toBe(0)
+        ->and($json)->toBeArray()
+        ->and($json['pending'])->toBe($plan->pending)
+        ->and($json['unknown'])->toBe([]);
 });

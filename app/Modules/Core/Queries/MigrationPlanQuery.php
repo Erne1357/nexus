@@ -5,6 +5,7 @@ namespace App\Modules\Core\Queries;
 use App\Modules\Core\Database\Contract;
 use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use ReflectionMethod;
 use ReflectionObject;
 
@@ -31,10 +32,13 @@ final class MigrationPlanQuery
             }
         }
 
-        $ran = DB::connection(config('health.database_connection'))
-            ->table((string) config('database.migrations.table', 'migrations'))
-            ->pluck('migration')
-            ->all();
+        $connection = DB::connection(config('health.database_connection'));
+        $table = (string) config('database.migrations.table', 'migrations');
+
+        // La primera vez, en una base vacía, la tabla aún no existe: todo está pendiente.
+        $ran = Schema::connection($connection->getName())->hasTable($table)
+            ? $connection->table($table)->pluck('migration')->all()
+            : [];
 
         $pending = array_values(array_diff(array_keys($files), $ran));
         $unknown = array_values(array_diff($ran, array_keys($files)));
