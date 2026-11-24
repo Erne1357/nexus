@@ -219,11 +219,16 @@ nexus compose exec app-<color> php artisan <comando> --no-interaction
 
 **Datos de producción, nunca en el repositorio** (decisión del usuario, 24 de noviembre de 2026; CLAUDE.md §5). Un cambio a registros reales (insertar, corregir o desactivar) es un comando de Artisan como estos, no una migración ni un seeder. El comando lee sus datos de un archivo que se copia al servidor y que git no rastrea, o de sus argumentos. Para correrlo:
 
-1. Copia el archivo a `storage/app/imports/` del volumen `app-storage`: `docker cp <archivo> nexus-app-<color>-1:/app/storage/app/imports/`.
-2. Saca un respaldo: `nexus compose exec backup sh /opt/backup/backup.sh run`.
-3. Corre el comando con `--dry-run`, que solo cuenta lo que haría.
-4. Corre el comando de verdad.
-5. Borra el archivo del servidor.
+Usa el color activo (`nexus status`). Con `docker exec -i` el archivo queda del usuario `app` de la imagen, y la carpeta se crea si no existe:
+
+```bash
+C=nexus-app-<color>-1
+nexus compose exec backup sh /opt/backup/backup.sh run              # 1. respaldo
+docker exec -i $C sh -c 'mkdir -p storage/app/imports && cat > storage/app/imports/<archivo>' < <archivo>   # 2. subir el archivo
+nexus compose exec app-<color> php artisan <comando> storage/app/imports/<archivo> --dry-run --no-interaction   # 3. solo cuenta
+nexus compose exec app-<color> php artisan <comando> storage/app/imports/<archivo> --no-interaction             # 4. de verdad
+docker exec $C rm storage/app/imports/<archivo>                     # 5. borrar el archivo del servidor
+```
 
 Nada de catálogo ni de bitácora se borra físicamente: se desactiva.
 

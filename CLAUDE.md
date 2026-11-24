@@ -74,9 +74,9 @@ Detalle: `docs/arquitectura/arquitectura.md`.
   - Una migración cambia el esquema. Puede reacomodar datos que ya existen, sin valores escritos a mano; por ejemplo, copiar una columna a otra.
   - Los seeders llevan solo catálogos públicos de referencia: campus, modalidades, permisos.
   - Insertar, corregir o desactivar registros reales de producción se hace con un comando de Artisan del módulo:
-    - pasa por Actions (bitácora), se puede repetir y trae `--dry-run`, que solo cuenta;
+    - pasa por Actions (bitácora), es idempotente y trae `--dry-run`, que solo cuenta;
     - toma sus datos de un archivo puesto en el servidor (`storage/app/imports/`, ignorado por git) o de sus argumentos, nunca del código;
-    - se corre una vez, después de un respaldo, y se anota en «Comandos de una sola vez» de `docs/operacion/despliegue.md`.
+    - en producción se corre una sola vez, después de un respaldo, y se anota en «Comandos de una sola vez» de `docs/operacion/despliegue.md`.
   - Lo que ya hace una pantalla va por la pantalla.
 - **Llaves:** UUIDv7 en todo modelo (`HasUuids`, `foreignUuid`, `default uuidv7()`); los ids del cliente se buscan con `KeyLookup` ([ADR-0014](docs/decisiones/0014-uuidv7-como-llave-primaria.md)).
 - **Enums** PHP respaldados por string. Eventos con `timestamptz`; horas de sesión con `time`. Zona `America/Ciudad_Juarez`.
