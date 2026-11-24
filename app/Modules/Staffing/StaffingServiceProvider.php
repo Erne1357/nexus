@@ -61,9 +61,11 @@ use App\Modules\Staffing\Listeners\RerankOnGroupChange;
 use App\Modules\Staffing\Listeners\RerankOnGroupsCreated;
 use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
+use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\StaffingRanking;
 use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
+use App\Modules\Staffing\Policies\SelectionPolicy;
 use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
@@ -98,6 +100,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      */
     protected array $policies = [
         ChangeRequest::class => ChangeRequestPolicy::class,
+        Selection::class => SelectionPolicy::class,
     ];
 
     /**
@@ -224,22 +227,26 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::OfferView,
                 StaffingPermission::MyLoadView,
                 StaffingPermission::ChangeRequestRequestOwn,
+                StaffingPermission::SelectionPickOwn,
             ],
             Role::Directivo->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
             ],
             Role::Subdireccion->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
             ],
             Role::JefeDepartamento->value => [
                 StaffingPermission::RankingView,
                 StaffingPermission::TeacherAssign,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
                 StaffingPermission::ChangeRequestDecide,
                 StaffingPermission::ChangeRequestApplyRoom,
             ],
@@ -248,6 +255,7 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 StaffingPermission::TeacherAssign,
                 StaffingPermission::TeacherLoadView,
                 StaffingPermission::ChangeRequestView,
+                StaffingPermission::SelectionView,
             ],
             Role::Coordinador->value => [
                 StaffingPermission::ChangeRequestRequest,
