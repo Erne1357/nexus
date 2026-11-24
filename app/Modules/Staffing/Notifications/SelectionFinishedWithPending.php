@@ -2,14 +2,16 @@
 
 namespace App\Modules\Staffing\Notifications;
 
-use App\Modules\Core\Notifications\NexusNotification;
 use App\Modules\Core\Notifications\NotificationMessage;
+use Illuminate\Notifications\Messages\MailMessage;
 
 /**
- * Llega al jefe del departamento y al JPD cuando termina la ronda extra con docentes sin cerrar (diseño 6.3 y 6.9):
- * lleva la lista de pendientes para que les asignen a mano.
+ * Llega al jefe del departamento y al JPD cuando termina la ronda extra con docentes sin cerrar (diseño 6.3 y 6.9;
+ * decisión 8: lo que siga sin resolver lo asignan a mano), por la campana y por correo, con la lista de pendientes. Lleva
+ * al horario de esa selección terminada (`staffing.offer?seleccion=<id>`), que abren con `staffing.selection.view`
+ * aunque no sean docentes y aunque el admin tenga oculta la carga académica; ahí asignan o quitan docentes.
  */
-final class SelectionFinishedWithPending extends NexusNotification
+final class SelectionFinishedWithPending extends SelectionNotice
 {
     /**
      * @param  list<string>  $teachers
@@ -18,6 +20,7 @@ final class SelectionFinishedWithPending extends NexusNotification
         private readonly string $termId,
         private readonly string $modalityId,
         private readonly string $department,
+        private readonly string $selectionId,
         private readonly array $teachers,
     ) {}
 
@@ -38,9 +41,27 @@ final class SelectionFinishedWithPending extends NexusNotification
             body: count($this->teachers).' sin resolver: '.implode(', ', $this->teachers).'.',
             icon: 'o-exclamation-triangle',
             route: 'staffing.offer',
+            parameters: ['seleccion' => $this->selectionId],
             termId: $this->termId,
             tone: 'warning',
             modalityId: $this->modalityId,
         );
+    }
+
+    public function toMail(object $notifiable): MailMessage
+    {
+        $count = count($this->teachers);
+        $mail = (new MailMessage)
+            ->subject("Terminó la selección de {$this->department}: {$count} sin resolver")
+            ->greeting(self::greetingFor($notifiable))
+            ->line("Terminó la orden de selección de carga de {$this->department}, con la ronda extra. ".($count === 1 ? 'Este docente no completó su carga:' : "Estos {$count} docentes no completaron su carga:"));
+
+        foreach ($this->teachers as $teacher) {
+            $mail->line("- {$teacher}");
+        }
+
+        return $mail
+            ->line('Asígnales sus grupos a mano desde el horario de la selección: toca un grupo y usa «Asignar a…».')
+            ->action('Abrir el horario de la selección', route('staffing.offer', ['seleccion' => $this->selectionId]));
     }
 }

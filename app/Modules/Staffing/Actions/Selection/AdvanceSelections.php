@@ -146,7 +146,7 @@ final class AdvanceSelections
                 continue;
             }
 
-            $this->notifyTeacher($user, new SelectionTurnStarting($selection->term_id, $selection->modality_id, $startsAt, $started));
+            $this->notifyTeacher($user, new SelectionTurnStarting($selection->term_id, $selection->modality_id, $startsAt, $started, $entry->{$endColumn}));
             $sent++;
         }
 
@@ -173,8 +173,11 @@ final class AdvanceSelections
         }
 
         $groups = $pending->groupBy('slot_index')->values();
+        // Desde el fin de la primera ronda o desde ahora, lo que sea después: si el reloj corre tarde, la ronda extra no
+        // cae en el pasado y cada pendiente conserva sus 30 minutos de aviso (§6.14).
+        $from = $firstRoundEnd->greaterThan($now) ? $firstRoundEnd : $now;
         $slots = SelectionSlots::layout(
-            SelectionSlots::extraRoundStart($firstRoundEnd, $this->time($selection->window_starts), $this->time($selection->window_ends), $selection->weekdays, $selection->slot_minutes),
+            SelectionSlots::extraRoundStart($from, $this->time($selection->window_starts), $this->time($selection->window_ends), $selection->weekdays, $selection->slot_minutes),
             $this->time($selection->window_starts),
             $this->time($selection->window_ends),
             $selection->weekdays,
@@ -233,7 +236,7 @@ final class AdvanceSelections
         // Quienes asignan docente en el departamento son el jefe y el JPD (el admin no entra por serlo).
         $holders = $this->recipients->holders(StaffingPermission::TeacherAssign, Target::of(modality: $selection->modality_id, unit: $selection->department_id));
         $names = $pending->map(fn (SelectionEntry $entry): string => $entry->teacher?->name ?? $entry->csv_name ?? 'Sin nombre')->all();
-        $notice = new SelectionFinishedWithPending($selection->term_id, $selection->modality_id, $selection->department()->value('name') ?? '', $names);
+        $notice = new SelectionFinishedWithPending($selection->term_id, $selection->modality_id, $selection->department()->value('name') ?? '', (string) $selection->getKey(), $names);
 
         return [$advanced, $this->notifyHolders->handle($holders, $notice)->count()];
     }

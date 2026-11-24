@@ -12,6 +12,8 @@ use App\Modules\Staffing\Notifications\SelectionExtraRoundScheduled;
 use App\Modules\Staffing\Notifications\SelectionFinishedWithPending;
 use App\Modules\Staffing\Notifications\SelectionTurnStarting;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Scheduling\Event;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Notification;
 
 /*
@@ -220,4 +222,51 @@ it('no toca borradores ni canceladas', function () {
 it('el comando corre la Action', function () {
     CarbonImmutable::setTestNow(clockAt('08:00'));
     $this->artisan('staffing:advance-selections')->assertSuccessful();
+});
+
+it('§6.9: los avisos del reloj van por la campana y el correo institucional', function () {
+    Notification::fake();
+    config(['nexus.institutional_email_domain' => 'cdjuarez.tecnm.mx']);
+    [$selection, $rows] = clockSelection(1);
+    $rows[0]->teacher->user->update(['email' => 'docente.uno@cdjuarez.tecnm.mx']);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $selection->department_id])->create(['email' => 'jefe.ficticio@cdjuarez.tecnm.mx']);
+    $mail = fn (object $notice, array $channels): bool => $channels === ['database', 'mail'];
+
+    advance(clockAt('08:50'));
+    Notification::assertSentTo($rows[0]->teacher->user, SelectionTurnStarting::class, $mail);
+
+    advance(clockAt('09:30'));
+    Notification::assertSentTo($rows[0]->teacher->user, SelectionExtraRoundScheduled::class, $mail);
+
+    advance(clockAt('10:30'));
+    Notification::assertSentTo($jefe, SelectionFinishedWithPending::class, fn (SelectionFinishedWithPending $notice, array $channels): bool => $channels === ['database', 'mail']
+        && $notice->toMail($jefe)->actionUrl === route('staffing.offer', ['seleccion' => $selection->id]));
+});
+
+it('SEL-09 y §6.14: si el reloj corre 2 h tarde, la ronda extra empieza al menos 30 minutos después de ahora', function () {
+    Notification::fake();
+    [$selection, $rows] = clockSelection(1);
+    $now = clockAt('11:30');
+
+    advance($now);
+
+    $selection->refresh();
+    $entry = $rows[0]->fresh();
+
+    expect($selection->status)->toBe(SelectionStatus::ExtraRound)
+        ->and($entry->status)->toBe(SelectionEntryStatus::PendingExtra)
+        ->and($entry->extra_slot_starts_at->greaterThanOrEqualTo($now->addMinutes(30)))->toBeTrue()
+        ->and($entry->extra_slot_starts_at->equalTo(clockAt('12:00')))->toBeTrue()
+        ->and($selection->extra_round_ends_at->greaterThan($now))->toBeTrue();
+    Notification::assertSentTo($rows[0]->teacher->user, SelectionExtraRoundScheduled::class);
+});
+
+it('el scheduler lo corre cada minuto sin encimarse, con un candado que vence a los 5 minutos', function () {
+    $events = collect(app(Schedule::class)->events())
+        ->filter(fn (Event $event): bool => str_contains((string) $event->command, 'staffing:advance-selections'));
+
+    expect($events)->toHaveCount(1)
+        ->and($events->first()->expression)->toBe('* * * * *')
+        ->and($events->first()->withoutOverlapping)->toBeTrue()
+        ->and($events->first()->expiresAt)->toBe(5);
 });
