@@ -7,7 +7,9 @@
     - published: cuándo empieza la selección y su turno;
     - idle: nadie en turno ahora y quién sigue;
     - done: ya terminó su carga; extra: cerró con menos y vuelve en la ronda extra;
-    - manager: la jefatura, con quién está en turno, cuántos terminaron y «Asignas cualquier grupo, a cualquier hora.».
+    - manager: la jefatura, con quién está en turno, cuántos terminaron y «Asignas cualquier grupo, a cualquier hora.»;
+    - finished: la selección terminó (decisión 8): el docente solo consulta; la jefatura ve quiénes quedaron sin resolver
+      y asigna o quita a mano.
     Espera $bar, $data, $selection y $assigns.
 --}}
 @php
@@ -36,10 +38,20 @@
                 </p>
             </div>
         @else
-            @php($icon = match ($kind) { 'other' => 'o-eye', 'published' => 'o-calendar-days', 'done' => 'o-check-circle', 'extra' => 'o-arrow-path', default => 'o-clock' })
-            <x-icon :name="$icon" :class="'h-5.5 w-5.5 flex-none '.match ($kind) { 'done' => 'text-success', 'published' => 'text-neutral', default => 'text-info' }" aria-hidden="true" />
+            @php($icon = match ($kind) { 'other' => 'o-eye', 'published' => 'o-calendar-days', 'done', 'finished' => 'o-check-circle', 'extra' => 'o-arrow-path', default => 'o-clock' })
+            <x-icon :name="$icon" :class="'h-5.5 w-5.5 flex-none '.match ($kind) { 'done', 'finished' => 'text-success', 'published' => 'text-neutral', default => 'text-info' }" aria-hidden="true" />
             <div class="min-w-0">
                 @switch ($kind)
+                    @case ('finished')
+                        <p class="leading-tight"><b>La selección terminó</b></p>
+                        @if ($bar['in_queue'])
+                            <p class="text-sm text-neutral">Solo consulta: los cambios los hacen tu jefe de departamento o el JPD.</p>
+                        @elseif ($bar['unresolved'] !== [])
+                            <p class="text-sm text-neutral" data-testid="selection-unresolved"><b class="text-base-content">{{ count($bar['unresolved']) }} sin resolver:</b> {{ implode(', ', $bar['unresolved']) }} · terminaron {{ $bar['done'] }} de {{ $bar['total'] }}</p>
+                        @else
+                            <p class="text-sm text-neutral">Todos terminaron su carga · {{ $bar['done'] }} de {{ $bar['total'] }}</p>
+                        @endif
+                        @break
                     @case ('other')
                         <p class="leading-tight"><b>En turno: {{ $bar['current'] }}</b> <span class="text-neutral">· hasta las {{ $bar['until'] }}</span></p>
                         <p class="text-sm text-neutral max-md:hidden">Solo consulta hasta tu turno.</p>
@@ -89,9 +101,9 @@
         @endif
     </div>
 
-    @if ($kind === 'manager')
+    @if ($kind === 'manager' || ($kind === 'finished' && ! $bar['in_queue']))
         @if ($assigns)
-            <p class="flex items-center gap-1.5 text-sm text-neutral max-desktop:hidden"><x-icon name="o-user-plus" class="h-4 w-4" aria-hidden="true" />Asignas cualquier grupo, a cualquier hora.</p>
+            <p class="flex items-center gap-1.5 text-sm text-neutral max-desktop:hidden"><x-icon name="o-user-plus" class="h-4 w-4" aria-hidden="true" />{{ $kind === 'finished' ? 'Asignas o quitas el docente de cualquier grupo.' : 'Asignas cualquier grupo, a cualquier hora.' }}</p>
         @endif
     @else
         @if (in_array($kind, ['other', 'published', 'idle', 'extra'], true) && $mineSlot !== null)

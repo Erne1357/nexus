@@ -3,7 +3,7 @@
     orden de selección, con su escalón, lo que lleva contra su base, con cuál de sus grupos le choca (no se puede
     elegir) y su estado; para quien asigna salones, el salón sin el filtro de la selección (diseño 6.14): primero los
     recomendados (los elegibles) y luego los demás del campus, del departamento o sin dueño, con su motivo; el motivo
-    opcional.
+    opcional con la selección viva y, ya terminada, el de HC-16 si no es el primer lugar del ranking.
     Espera $card, $candidates, $managerRooms (SelectionRoomOptionsQuery::forManager), $canAssignRoom y $teacherId (el
     elegido; al abrir, el de ahora).
 --}}
@@ -63,5 +63,10 @@
     @else
         <p class="text-sm text-neutral">El salón lo asigna el jefe del departamento.</p>
     @endif
-    <x-textarea label="Motivo (opcional)" wire:model="reason" rows="2" placeholder="Por qué lo asignas a mano" />
+    @if ($selection->status->isLive())
+        <x-textarea label="Motivo (opcional)" wire:model="reason" rows="2" placeholder="Por qué lo asignas a mano" />
+    @else
+        <x-textarea label="Motivo" wire:model="reason" rows="2" placeholder="Por qué lo asignas a mano"
+            hint="La selección terminó: si no es el primer lugar del ranking del grupo, el motivo es obligatorio (HC-16)." />
+    @endif
 </section>

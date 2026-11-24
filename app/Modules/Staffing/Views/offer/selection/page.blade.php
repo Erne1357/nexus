@@ -3,21 +3,23 @@
     con la insignia de la selección y «SC Sistemas y Computación · Presencial · Ene-Jun 2027 · 50 grupos, 21 libres»; la
     barra del turno pegada arriba; la barra de filtros («Materia o clave» y «Todos · Libres · Míos») con la leyenda de
     los tipos de espacio; el horario por hora; el drawer del orden, el modal «Terminar mi carga» y el drawer del grupo.
-    Se refresca cada 5 s mientras la selección está viva.
+    Se refresca cada 5 s mientras la selección está viva; ya terminada (decisión 8) no se refresca. Para la jefatura sin
+    renglón en la cola el título es «Orden de selección», como su entrada del menú.
 --}}
 @php
     [$tone, $icon, $label] = match ($selection->status) {
         \App\Modules\Staffing\Enums\SelectionStatus::Published => ['neutral', 'o-calendar', 'Selección publicada'],
         \App\Modules\Staffing\Enums\SelectionStatus::ExtraRound => ['info', 'o-arrow-path', 'Ronda extra'],
+        \App\Modules\Staffing\Enums\SelectionStatus::Finished => ['success', 'o-check-circle', 'Selección terminada'],
         default => ['info', 'o-clock', 'Selección en curso'],
     };
     $inQueue = $teacher !== null;
     $pickOptions = $inQueue ? ['todos' => 'Todos', 'libres' => 'Libres', 'mios' => 'Míos'] : ['todos' => 'Todos', 'libres' => 'Libres'];
 @endphp
-<div class="space-y-4" wire:poll.5s data-testid="selection-offer">
+<div class="space-y-4" @if ($selection->status->isLive()) wire:poll.5s @endif data-testid="selection-offer">
     <div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-            <h1 class="text-2xl font-bold leading-tight md:text-3xl">Oferta del departamento</h1>
+            <h1 class="text-2xl font-bold leading-tight md:text-3xl">{{ $inQueue ? 'Oferta del departamento' : 'Orden de selección' }}</h1>
             <x-core::status-badge :tone="$tone" :icon="$icon" :label="$label" />
         </div>
         <p class="mt-1.5 flex flex-wrap gap-x-2 gap-y-0.5 text-neutral" data-testid="selection-meta">

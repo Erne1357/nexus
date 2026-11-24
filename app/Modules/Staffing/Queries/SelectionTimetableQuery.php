@@ -57,28 +57,45 @@ final class SelectionTimetableQuery
     ) {}
 
     /**
-     * Las selecciones vivas (publicadas, en curso o en ronda extra), con su departamento, periodo y modalidad. Quién ve
-     * cada una lo decide SelectionPolicy::view.
+     * Las selecciones que se muestran en el horario: las vivas (cualquier periodo) y, de cada departamento y modalidad
+     * sin una viva, la última terminada del periodo de carga `$term` (decisión 8: lo que siga sin resolver lo asignan a
+     * mano el jefe o el JPD, desde este horario). Las vivas van primero. Quién ve cada una lo decide SelectionPolicy::view.
+     * Una consulta.
      *
      * @return Collection<int, Selection>
      */
-    public function live(): Collection
+    public function onScreen(?Term $term): Collection
     {
-        return Selection::query()
-            ->whereIn('status', array_map(fn (SelectionStatus $status): string => $status->value, SelectionStatus::live()))
+        $selections = Selection::query()
+            ->where(fn (Builder $query) => $query
+                ->whereIn('status', array_map(fn (SelectionStatus $status): string => $status->value, SelectionStatus::live()))
+                ->when($term !== null, fn (Builder $query) => $query->orWhere(fn (Builder $finished) => $finished
+                    ->where('status', SelectionStatus::Finished->value)
+                    ->where('term_id', $term->getKey()))))
             ->with(['department:id,code,name', 'term:id,code,name', 'modality:id,code,name'])
             ->orderBy('starts_at')
             ->get();
+
+        [$live, $finished] = $selections->partition(fn (Selection $selection): bool => $selection->status->isLive());
+        $scope = fn (Selection $selection): string => "{$selection->department_id}|{$selection->modality_id}";
+        $liveScopes = $live->map($scope)->all();
+        $finished = $finished
+            ->sortByDesc(fn (Selection $selection): int => $selection->finished_at?->getTimestamp() ?? 0)
+            ->unique($scope)
+            ->reject(fn (Selection $selection): bool => in_array($scope($selection), $liveScopes, true));
+
+        return new Collection([...$live->values()->all(), ...$finished->values()->all()]);
     }
 
     /**
-     * Una selección viva por su id del cliente, o null.
+     * Una selección que el horario puede mostrar (viva o terminada) por su id del cliente, o null: no un borrador ni una
+     * cancelada.
      */
-    public function liveSelection(string $id): ?Selection
+    public function shownSelection(string $id): ?Selection
     {
-        $selection = KeyLookup::find(Selection::query()->with(['department:id,code,name', 'term:id,code,name']), $id);
+        $selection = KeyLookup::find(Selection::query()->with(['department:id,code,name', 'term:id,code,name', 'modality:id,code,name']), $id);
 
-        return $selection?->status->isLive() ? $selection : null;
+        return $selection !== null && ($selection->status->isLive() || $selection->status === SelectionStatus::Finished) ? $selection : null;
     }
 
     /**
@@ -458,7 +475,9 @@ final class SelectionTimetableQuery
      * los que comparten la media hora, SEL-07: «Ana López y Beto Ruiz») y hasta cuándo, su hora (de la ronda en curso y de la extra), su lugar, cuántos terminaron y, si no hay nadie en
      * turno, quién sigue y a qué hora.
      *
-     * @return array{is_mine: bool, current: ?string, ends_at: ?string, my_slot: ?string, my_extra_slot: ?string, my_slot_ends: ?string, position: ?int, total: int, entry_status: ?string, closed: bool, current_position: ?int, done: int, next: ?array{name: string, at: string}}
+     * Con la selección terminada, `unresolved` son los nombres de quienes quedaron sin resolver, en el orden.
+     *
+     * @return array{is_mine: bool, current: ?string, ends_at: ?string, my_slot: ?string, my_extra_slot: ?string, my_slot_ends: ?string, position: ?int, total: int, entry_status: ?string, closed: bool, current_position: ?int, done: int, unresolved: list<string>, next: ?array{name: string, at: string}}
      */
     private function turn(Selection $selection, ?SelectionEntry $entry, CarbonImmutable $now): array
     {
@@ -468,8 +487,16 @@ final class SelectionTimetableQuery
         $current = $inTurn->first();
         $isMine = $entry !== null && $inTurn->contains('id', $entry->getKey());
         $counts = SelectionEntry::query()->where('selection_id', $selection->getKey())
-            ->selectRaw('count(*) as total, count(*) filter (where status = ?) as done', [SelectionEntryStatus::Done->value])
+            ->selectRaw('count(*) as total, count(*) filter (where status = ?) as done, count(*) filter (where status = ?) as unresolved', [SelectionEntryStatus::Done->value, SelectionEntryStatus::Unresolved->value])
             ->toBase()->first();
+        $unresolved = $selection->status !== SelectionStatus::Finished || (int) ($counts->unresolved ?? 0) === 0 ? [] : SelectionEntry::query()
+            ->where('selection_id', $selection->getKey())
+            ->where('status', SelectionEntryStatus::Unresolved->value)
+            ->orderBy('position')
+            ->with('teacher:id,name')
+            ->get()
+            ->map(fn (SelectionEntry $row): string => $row->teacher->name ?? (string) $row->csv_name)
+            ->all();
         $next = $current !== null ? null : SelectionEntry::query()
             ->where('selection_id', $selection->getKey())
             ->where('status', ($extra ? SelectionEntryStatus::PendingExtra : SelectionEntryStatus::Waiting)->value)
@@ -491,6 +518,7 @@ final class SelectionTimetableQuery
             'closed' => $entry?->closed_at !== null,
             'current_position' => $current?->position,
             'done' => (int) ($counts->done ?? 0),
+            'unresolved' => $unresolved,
             'next' => $next === null ? null : ['name' => $next->teacher->name ?? (string) $next->csv_name, 'at' => $next->{$startColumn}->toIso8601String()],
         ];
     }

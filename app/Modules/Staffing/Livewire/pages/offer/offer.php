@@ -47,7 +47,11 @@ use Mary\Traits\Toast;
  * **Orden de selección** (tarea 1.33, diseño 6.4 a 6.7; maqueta A «Franjas por hora» con el orden en un drawer, como la
  * B): con una selección viva (publicada, en curso o en ronda extra) que el usuario ve (SelectionPolicy::view: el docente
  * con renglón en la cola de su departamento, o la jefatura y el JPD con `staffing.selection.view`), la pantalla es el
- * horario de la selección y no la oferta de arriba. El periodo es el de la selección, no el de la credencial. Un
+ * horario de la selección y no la oferta de arriba. El periodo de una viva es el de la selección, no el de la credencial.
+ * Ya terminada (decisión 8), sigue a la vista la última de cada departamento en el periodo de carga, o la de
+ * `?seleccion=` (el aviso de pendientes) en cualquier periodo: de solo lectura para el docente y, para quien asigna,
+ * con «Asignar a…» y «Quitar docente». Quien solo tiene `staffing.selection.view` (el jefe, el JPD) llega por «Mi
+ * espacio › Orden de selección», aunque la carga académica esté oculta (MN-05). Un
  * renglón por hora de 7:00 a 21:00 con los grupos como fichas (SelectionTimetableQuery), la barra del turno pegada
  * arriba con la cuenta regresiva (Alpine, desde `ends_at` del servidor), la cuenta de horas contra la base (SEL-05),
  * «Orden de selección» (SelectionOrderQuery, en un drawer) y «Terminar mi carga» (FinishMyLoad, en un modal con la
@@ -69,6 +73,10 @@ new #[Title('Oferta del departamento')] class extends Component
     /** Código del departamento de la pestaña; '' el primero. */
     #[Url(as: 'depto')]
     public string $department = '';
+
+    /** Una selección en particular (`?seleccion=<id>`, el enlace del aviso de pendientes), viva o terminada; '' ninguna. */
+    #[Url(as: 'seleccion')]
+    public string $selectionKey = '';
 
     #[Url(as: 'q')]
     public string $search = '';
@@ -232,8 +240,10 @@ new #[Title('Oferta del departamento')] class extends Component
     }
 
     /**
-     * La selección viva que ve el usuario (SelectionPolicy::view), o null: primero una donde está en la cola; con
-     * varias, la del departamento de `?depto=` y si no, la primera.
+     * La selección que ve el usuario (SelectionPolicy::view), o null: la de `?seleccion=` si la ve; si no, de las que se
+     * muestran (SelectionTimetableQuery::onScreen: las vivas y la última terminada de su periodo de carga, decisión 8)
+     * primero una donde está en la cola y, con varias, la del departamento de `?depto=` o la primera. Las vivas van antes
+     * que las terminadas.
      */
     private function selection(Actor $context, SelectionTimetableQuery $timetable): ?Selection
     {
@@ -248,12 +258,21 @@ new #[Title('Oferta del departamento')] class extends Component
             return null;
         }
 
-        $visible = $timetable->live()->filter(fn (Selection $selection): bool => Gate::allows('view', $selection))->values();
+        $visible = $timetable->onScreen($context->loadTerm())->filter(fn (Selection $selection): bool => Gate::allows('view', $selection))->values();
+        $explicit = $this->selectionKey === '' ? null : $timetable->shownSelection($this->selectionKey);
+        $explicit = $explicit !== null && Gate::allows('view', $explicit) ? $explicit : null;
+
+        if ($explicit !== null) {
+            $visible = $visible->reject(fn (Selection $selection): bool => $selection->is($explicit))->prepend($explicit)->values();
+        }
+
         $this->teacherMemo = $visible->isEmpty() ? null : $timetable->activeTeacherOf($user);
         $entries = $this->teacherMemo === null ? collect() : $timetable->entriesOf($visible, $this->teacherMemo);
         [$own, $others] = $visible->partition(fn (Selection $selection): bool => $entries->has($selection->getKey()));
         $pool = $own->merge($others);
-        $this->selectionMemo = $pool->first(fn (Selection $selection): bool => $selection->department?->code === $this->department) ?? $pool->first();
+        $this->selectionMemo = $explicit
+            ?? $pool->first(fn (Selection $selection): bool => $selection->department?->code === $this->department)
+            ?? $pool->first();
         $this->entryMemo = $this->selectionMemo === null ? null : $entries->get($this->selectionMemo->getKey());
 
         return $this->selectionMemo;
@@ -306,7 +325,8 @@ new #[Title('Oferta del departamento')] class extends Component
     }
 
     /**
-     * Lo que dice la barra del turno, ya con sus horas en texto. `kind`: `mine` (su turno), `other` (el de otro),
+     * Lo que dice la barra del turno, ya con sus horas en texto. `kind`: `finished` (la selección terminó: solo consulta
+     * para el docente; la jefatura asigna o quita lo que quedó sin resolver), `mine` (su turno), `other` (el de otro),
      * `published` (aún no empieza), `idle` (en curso sin nadie en turno), `done` (ya terminó), `extra` (cerró con menos
      * y espera la ronda extra) o `manager` (la jefatura sin renglón en la cola).
      *
@@ -324,6 +344,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $left = $endsAt === null ? null : max(0, (int) ceil($now->diffInSeconds($endsAt, false)));
 
         $kind = match (true) {
+            $selection->status === SelectionStatus::Finished => 'finished',
             ! $inQueue => 'manager',
             $turn['is_mine'] => 'mine',
             $turn['entry_status'] === SelectionEntryStatus::Done->value || $turn['entry_status'] === SelectionEntryStatus::Unresolved->value => 'done',
@@ -351,6 +372,8 @@ new #[Title('Oferta del departamento')] class extends Component
             'current_position' => $turn['current_position'],
             'total' => $turn['total'],
             'done' => $turn['done'],
+            'unresolved' => $turn['unresolved'],
+            'in_queue' => $inQueue,
             'extra' => $extra,
         ];
     }

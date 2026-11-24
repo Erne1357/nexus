@@ -6,6 +6,7 @@ use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\Selection\PickSelectionGroup;
 use App\Modules\Staffing\Actions\Selection\ReleaseSelectionGroup;
+use App\Modules\Staffing\Actions\UnassignTeacher;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
@@ -37,8 +38,14 @@ use Mary\Traits\Toast;
  * - **Asignar a…** (`mode = assign`), para quien tiene `staffing.teacher.assign` sobre el grupo (el jefe y el JPD), a
  *   cualquier hora: un docente de la cola, con lo que lleva y si le choca, y el salón entre los elegibles para quien
  *   también asigna salones (GroupPolicy::assignRoom); escribe con AssignTeacher y AssignSessionRoom.
+ * - **Quitar docente** (`mode = unassign`, diseño 6.7), para los mismos: pide el motivo y escribe con UnassignTeacher,
+ *   que deja el historial y la bitácora; el grupo queda libre y sus salones no cambian.
  *
- * Al tomar, soltar o asignar avisa `selection-changed` para que la página se vuelva a pintar.
+ * También abre los grupos de una selección ya terminada (decisión 8: lo que siga sin resolver lo asignan a mano el jefe
+ * o el JPD): para el docente es solo consulta; para la jefatura, «Asignar a…» y «Quitar docente» con las reglas de
+ * siempre (sin selección viva, AssignTeacher vuelve a exigir HC-16 y HC-08).
+ *
+ * Al tomar, soltar, asignar o quitar avisa `selection-changed` para que la página se vuelva a pintar.
  */
 new class extends Component
 {
@@ -52,7 +59,7 @@ new class extends Component
 
     public bool $show = false;
 
-    /** `group` (ver, tomar o soltar) o `assign` («Asignar a…» de la jefatura); solo decide qué se pinta. */
+    /** `group` (ver, tomar o soltar), `assign` («Asignar a…» de la jefatura) o `unassign` («Quitar docente»); solo decide qué se pinta. */
     public string $mode = 'group';
 
     /** La pestaña del salón: `lista` o `mapa`. */
@@ -65,6 +72,9 @@ new class extends Component
     public string $teacherSearch = '';
 
     public string $reason = '';
+
+    /** El motivo de «Quitar docente», obligatorio (UnassignTeacher). */
+    public string $unassignReason = '';
 
     public function mount(string $selectionId, SelectionTimetableQuery $timetable): void
     {
@@ -79,7 +89,7 @@ new class extends Component
         $group = $timetable->group($selection, $id) ?? abort(404);
 
         $this->resetValidation();
-        $this->reset('teacherId', 'teacherSearch', 'reason', 'roomTab', 'roomId');
+        $this->reset('teacherId', 'teacherSearch', 'reason', 'unassignReason', 'roomTab', 'roomId');
         $this->groupId = $group->getKey();
         $picking = $this->inTurn($selection, $context, $timetable, $turns) && $group->teacher_id === null;
         $this->mode = ! $picking && Gate::allows('create', [GroupTeacherAssignment::class, $group]) ? 'assign' : 'group';
@@ -224,6 +234,49 @@ new class extends Component
     }
 
     /**
+     * «Quitar docente»: pasa a pedir el motivo, solo para quien asigna y si el grupo tiene docente.
+     */
+    public function confirmUnassign(SelectionTimetableQuery $timetable): void
+    {
+        $group = $this->group($timetable);
+        $this->authorize('create', [GroupTeacherAssignment::class, $group]);
+        $this->resetValidation();
+        $this->reset('unassignReason');
+        $this->mode = $group->teacher_id === null ? 'assign' : 'unassign';
+    }
+
+    /**
+     * Quita al docente del grupo con UnassignTeacher (motivo obligatorio, historial y bitácora). Lo que rechace se dice en
+     * el drawer, que se queda abierto.
+     */
+    public function unassign(Actor $context, SelectionTimetableQuery $timetable, UnassignTeacher $action): void
+    {
+        $user = $context->user() ?? abort(403);
+        $group = $this->group($timetable);
+        $this->authorize('create', [GroupTeacherAssignment::class, $group]);
+        $this->resetValidation();
+        $previous = $group->loadMissing(['teacher' => fn ($teacher) => $teacher->withTrashed()->select(['id', 'name'])])->teacher?->name;
+
+        if (trim($this->unassignReason) === '') {
+            $this->addError('unassignReason', 'Escribe el motivo para quitar al docente.');
+
+            return;
+        }
+
+        try {
+            $action->handle($group, $user, $this->unassignReason);
+        } catch (ValidationException $e) {
+            $this->fail($e, 'No se quitó el docente', 'unassignReason');
+
+            return;
+        }
+
+        $this->show = false;
+        $this->success('Quitaste a '.($previous ?? 'el docente').' de '.self::label($group), 'El grupo queda libre.');
+        $this->dispatch('selection-changed');
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function with(Actor $context, SelectionTimetableQuery $timetable, SelectionTurnQuery $turns, SelectionRoomOptionsQuery $rooms, SelectionOrderQuery $order): array
@@ -243,7 +296,8 @@ new class extends Component
         $pickable = $inTurn && $card['teacher_id'] === null && ! $card['clashes'];
         $releasable = $inTurn && $card['mine'];
         $canAssign = Gate::allows('create', [GroupTeacherAssignment::class, $group]);
-        $assigning = $this->mode === 'assign' && $canAssign;
+        $unassigning = $this->mode === 'unassign' && $canAssign && $card['teacher_id'] !== null;
+        $assigning = ($this->mode === 'assign' || ($this->mode === 'unassign' && ! $unassigning)) && $canAssign;
         $canAssignRoom = $assigning && Gate::allows('assignRoom', $group);
         $options = $pickable ? $rooms->forGroup($selection, $group) : ['eligible' => [], 'rejected' => []];
         $managerRooms = $canAssignRoom ? $rooms->forManager($selection, $group) : ['recommended' => [], 'others' => []];
@@ -263,6 +317,8 @@ new class extends Component
             'releasable' => $releasable,
             'canAssign' => $canAssign,
             'assigning' => $assigning,
+            'unassigning' => $unassigning,
+            'finished' => $selection->status === SelectionStatus::Finished,
             'canAssignRoom' => $canAssignRoom,
             'options' => $options,
             'managerRooms' => $managerRooms,
@@ -300,11 +356,12 @@ new class extends Component
     }
 
     /**
-     * La selección viva del drawer, para quien la ve (SelectionPolicy::view); 404 si ya no está viva, 403 si no la ve.
+     * La selección del drawer, viva o terminada, para quien la ve (SelectionPolicy::view); 404 si ya no se muestra (un
+     * borrador o una cancelada), 403 si no la ve.
      */
     private function selection(SelectionTimetableQuery $timetable): Selection
     {
-        $selection = $timetable->liveSelection($this->selectionId) ?? abort(404);
+        $selection = $timetable->shownSelection($this->selectionId) ?? abort(404);
         $this->authorize('view', $selection);
 
         return $selection;

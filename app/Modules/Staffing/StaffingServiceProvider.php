@@ -70,11 +70,13 @@ use App\Modules\Staffing\Models\TeacherTermLoad;
 use App\Modules\Staffing\Policies\ChangeRequestPolicy;
 use App\Modules\Staffing\Policies\SelectionPolicy;
 use App\Modules\Staffing\Queries\ChosenAlternativePlacementsQuery;
+use App\Modules\Staffing\Queries\SelectionTimetableQuery;
 use App\Modules\Staffing\Queries\TeacherWeeklyLoadQuery;
 use App\Modules\Staffing\Rules\RankingWindowSizes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Módulo Staffing: ranking docente y asignación de docentes a los grupos (docs/dominio/modelo-de-datos.md,
@@ -149,12 +151,25 @@ final class StaffingServiceProvider extends ModuleServiceProvider
      * de la carga» para quienes cierran la carga de algún departamento (`academic_load.load.close`: el jefe y
      * Subdirección) y «Avance del cierre» para quienes la reabren (`academic_load.load.reopen`: Subdirección y el admin).
      *
+     * «Mi espacio › Orden de selección» (decisión 8 de la 1.33) lleva al horario de la selección (`staffing.offer`) a
+     * quien la ve con `staffing.selection.view` sin ser docente (el jefe, el JPD, directivos y Subdirección): no es del
+     * área Carga académica, así que sigue en el menú con la carga oculta (MN-05), y solo sale mientras hay una selección
+     * suya a la vista (viva, o la última terminada de su periodo de carga). El docente llega por «Oferta» y el admin, que
+     * la maneja, por «Administración › Orden de selección».
+     *
      * @return list<NavigationItem>
      */
     public function navigation(): array
     {
         // MN-02: la misma closure en todos los módulos que la usan, así el menú consulta una vez.
         $loadInProgress = LoadProgressQuery::menuCondition();
+        $selectionOnScreen = static function (Actor $context): ?string {
+            $gate = Gate::forUser($context->user());
+
+            return app(SelectionTimetableQuery::class)->onScreen($context->loadTerm())->contains(fn (Selection $selection): bool => $gate->allows('view', $selection))
+                ? null
+                : 'No hay una orden de selección de tu departamento';
+        };
 
         return [
             new NavigationItem('Asignación docente', 'staffing.assign', 'o-user-plus', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
@@ -167,6 +182,10 @@ final class StaffingServiceProvider extends ModuleServiceProvider
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::MyLoadView)),
             new NavigationItem('Oferta', 'staffing.offer', 'o-squares-2x2', NavigationArea::MiEspacio,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::OfferView)),
+            new NavigationItem('Orden de selección', 'staffing.offer', 'o-queue-list', NavigationArea::MiEspacio, whyUnavailable: $selectionOnScreen,
+                visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::SelectionView)
+                    && ! $context->allowsAny(StaffingPermission::OfferView)
+                    && ! $context->allowsAny(StaffingPermission::SelectionManage)),
             new NavigationItem('Solicitudes de cambio', 'staffing.change-requests', 'o-arrow-path-rounded-square', NavigationArea::CargaAcademica, group: NavigationGroup::Asignacion, whyUnavailable: $loadInProgress,
                 visible: static fn (Actor $context): bool => $context->allowsAny(StaffingPermission::ChangeRequestView)
                     || $context->allowsAny(StaffingPermission::ChangeRequestDecide)

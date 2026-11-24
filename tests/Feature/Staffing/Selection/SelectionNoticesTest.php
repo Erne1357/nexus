@@ -1,5 +1,6 @@
 <?php
 
+use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Models\User;
 use App\Modules\Staffing\Notifications\SelectionCancelled;
 use App\Modules\Staffing\Notifications\SelectionExtraRoundScheduled;
@@ -54,7 +55,8 @@ it('§6.9: cada aviso de la selección va por la campana y el correo, por la col
         ->and($notice->mailAddressFor($this->user))->toBe('lucia.prueba@cdjuarez.tecnm.mx')
         ->and($mail->greeting)->toBe('Hola, Lucía Prueba Ficticia')
         ->and($mail->actionUrl)->toBe(route('staffing.offer', $parameters))
-        ->and($notice->message($this->user)->route)->toBe('staffing.offer');
+        ->and($notice->message($this->user)->route)->toBe('staffing.offer')
+        ->and(AcademicLoadVisibility::isLoadRoute($notice->message($this->user)->route))->toBeFalse();
 
     foreach ($lines as $line) {
         expect($text)->toContain($line);
