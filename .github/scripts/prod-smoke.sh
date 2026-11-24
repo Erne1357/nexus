@@ -179,6 +179,7 @@ expect_no_downtime() {
 
 # --- Variantes del release A, para tener versiones distintas sin reconstruir la app ---------------------
 # variant <sha> <Dockerfile de smoke/> [carpeta del repo]: imagen FROM la app de A y su paquete en $home/bundles.
+# Cada paquete pesa cientos de MB (trae todas las imágenes): se borra en cuanto se usa (drop).
 variant() {
     local sha=$1 dockerfile=$2 repo_dir=${3:-$repo}
     docker build -q -t "${app_a%:*}:sha-$sha" --build-arg "BASE=$app_a" --build-arg "RELEASE=$sha" \
@@ -186,6 +187,10 @@ variant() {
     "$repo/docker/deployer/bin/nexus-bundle" --sha "$sha" --app "${app_a%:*}:sha-$sha" --solver "$solver_ref" \
         --deployer "$deployer_ref" --repo "$repo_dir" --out "$home/bundles" 2>/dev/null
     printf '%s\n' "$home/bundles/nexus-$sha.tar"
+}
+drop() {
+    local file
+    for file in "$@"; do rm -f -- "$file" "$file.sha256"; done
 }
 
 # =========================================================================================================
@@ -206,6 +211,7 @@ say "3. Una versión que no arranca no toca producción"
 bundle_broken=$(variant smokex000003 broken.Dockerfile)
 start_traffic
 expect_code 6 "versión rota" -- deploy --bundle "$bundle_broken"
+drop "$bundle_broken"
 expect_no_downtime "versión rota"
 expect_release smokeb000001 "tras la versión rota"
 
@@ -215,6 +221,8 @@ mkdir -p "$env_repo" && tar -C "$repo" -cf - compose.yaml compose.prod.yaml dock
 printf '\n# Variable nueva (smoke)\nNUEVA_VARIABLE=\n' >>"$env_repo/.env.production.example"
 bundle_env=$(variant smokee000004 release.Dockerfile "$env_repo")
 expect_code 5 ".env incompleto" -- deploy --bundle "$bundle_env"
+drop "$bundle_env"
+rm -rf -- "$env_repo"
 expect_release smokeb000001 "tras el .env incompleto"
 
 say "5. Un paquete alterado se rechaza"
@@ -222,6 +230,7 @@ cp "$bundle_b" "$home/bundles/nexus-smokeb000001-alterado.tar"
 sed "s/nexus-smokeb000001.tar/nexus-smokeb000001-alterado.tar/" "$bundle_b.sha256" >"$home/bundles/nexus-smokeb000001-alterado.tar.sha256"
 printf 'X' | dd of="$home/bundles/nexus-smokeb000001-alterado.tar" bs=1 seek=4096 conv=notrunc status=none
 expect_code 4 "paquete alterado" -- deploy --bundle "$home/bundles/nexus-smokeb000001-alterado.tar"
+drop "$home/bundles/nexus-smokeb000001-alterado.tar" "$bundle_b"
 
 say "6. Vuelta atrás sin caídas"
 start_traffic
@@ -232,8 +241,10 @@ expect_release "$sha_a" "rollback a A"
 say "7. Contracción: volver atrás exige restaurar el respaldo"
 bundle_c=$(variant smokec000007 expand.Dockerfile)
 expect_code 0 "deploy C (crea una tabla)" -- deploy --bundle "$bundle_c"
+drop "$bundle_c"
 bundle_d=$(variant smoked000007 contract.Dockerfile)
 expect_code 0 "deploy D (contracción)" -- deploy --bundle "$bundle_d"
+drop "$bundle_d"
 expect_code 7 "rollback a C sin --restore" -- rollback smokec000007
 expect_release smoked000007 "tras el rollback negado"
 expect_code 0 "rollback a C con --restore --yes" -- rollback smokec000007 --restore --yes
@@ -251,9 +262,9 @@ wait_release() {
 
 say "9. El agente despliega lo que llega a la carpeta de entrada"
 bundle_i=$(variant smokei000009 release.Dockerfile)
-cp "$bundle_i" "$home/inbox/nexus-smokei000009.tar.part"
+mv "$bundle_i" "$home/inbox/nexus-smokei000009.tar.part"
 mv "$home/inbox/nexus-smokei000009.tar.part" "$home/inbox/nexus-smokei000009.tar"
-cp "$bundle_i.sha256" "$home/inbox/"
+mv "$bundle_i.sha256" "$home/inbox/"
 if wait_release smokei000009 120 && [ -f "$home/inbox/hechos/nexus-smokei000009.tar" ]; then
     pass "carpeta de entrada: atiende smokei000009 y el paquete quedó en hechos/"
 else
@@ -262,12 +273,15 @@ fi
 bundle_j=$(variant smokej000009 release.Dockerfile)
 sleep 1
 bundle_k=$(variant smokek000009 release.Dockerfile)
-cp "$bundle_j" "$bundle_j.sha256" "$bundle_k" "$bundle_k.sha256" "$home/inbox/"
+rm -f "$home"/inbox/hechos/*.tar
+mv "$bundle_j" "$bundle_j.sha256" "$bundle_k" "$bundle_k.sha256" "$home/inbox/"
 if wait_release smokek000009 120 && [ -f "$home/inbox/omitidos/nexus-smokej000009.tar" ]; then
     pass "dos paquetes a la vez: solo el más nuevo (smokek000009); el otro quedó en omitidos/"
 else
     fail "dos paquetes a la vez: $(public_health | jq -r .release 2>/dev/null); omitidos: $(ls "$home/inbox/omitidos" 2>/dev/null | tr '\n' ' ')"
 fi
+
+rm -f "$home"/inbox/hechos/*.tar "$home"/inbox/omitidos/*.tar
 
 say "10. El agente con GitHub (API falsa)"
 # Tarball de la infraestructura como el de codeload (una carpeta de primer nivel) y la API falsa en la red del stack.
@@ -278,8 +292,7 @@ cp "$home/fixtures/smokef000010.tar.gz" "$home/fixtures/smokeg000010.tar.gz"
 fake="$project-fake-github"
 docker run -d --rm --name "$fake" --network "${project}_backend" -v "$smoke_dir/fake-github.php:/srv/fake-github.php:ro" \
     -v "$home/fixtures:/fixtures:ro" --entrypoint php "$app_a" -S 0.0.0.0:8080 /srv/fake-github.php >/dev/null
-variant smokef000010 release.Dockerfile >/dev/null
-variant smokeg000010 release.Dockerfile >/dev/null
+drop "$(variant smokef000010 release.Dockerfile)" "$(variant smokeg000010 release.Dockerfile)"
 set_env DEPLOY_SOURCE github
 set_env DEPLOY_GITHUB_TOKEN smoke
 set_env DEPLOY_GITHUB_API "http://$fake:8080"
