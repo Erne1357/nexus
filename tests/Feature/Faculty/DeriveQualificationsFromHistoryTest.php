@@ -2,7 +2,10 @@
 
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Models\Term;
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\DeriveQualificationsFromHistory;
+use App\Modules\Faculty\Actions\RemoveQualification;
+use App\Modules\Faculty\Actions\SetQualification;
 use App\Modules\Faculty\Enums\QualificationLevel;
 use App\Modules\Faculty\Enums\QualificationSource;
 use App\Modules\Faculty\Models\Teacher;
@@ -113,4 +116,45 @@ it('D-02: el comando usa el periodo que contiene hoy', function () {
     $this->artisan('faculty:derive-qualifications', ['--no-interaction' => true])->assertSuccessful();
 
     expect(TeacherSubjectQualification::where('source', 'history')->count())->toBe(1);
+});
+
+it('D-02: la ventana son los 6 semestres del calendario aunque el periodo actual no tenga historial', function () {
+    $inside = Subject::factory()->create();
+    $outside = Subject::factory()->create();
+    taught($this->teacher, $inside, '20243');
+    taught($this->teacher, $outside, '20241');
+
+    $this->action->handle('20271');
+
+    expect(TeacherSubjectQualification::pluck('subject_id')->all())->toBe([$inside->id]);
+});
+
+it('D-02: una materia del historial que el jefe edita pasa a manual y la derivación ya no la toca', function () {
+    $subject = Subject::factory()->create();
+    $jefe = User::factory()->create();
+    taught($this->teacher, $subject, '20233');
+    $row = TeacherSubjectQualification::factory()->create([
+        'teacher_id' => $this->teacher->id, 'subject_id' => $subject->id, 'source' => QualificationSource::History,
+    ]);
+
+    (new SetQualification)->handle($this->teacher, $subject, QualificationLevel::Preferente, $jefe);
+    $this->action->handle('20263');
+
+    expect($row->fresh()->source)->toBe(QualificationSource::Manual)
+        ->and($row->fresh()->trashed())->toBeFalse()
+        ->and($row->fresh()->level)->toBe(QualificationLevel::Preferente);
+});
+
+it('D-02: una materia del historial que el jefe quita no vuelve con la siguiente derivación', function () {
+    $subject = Subject::factory()->create();
+    taught($this->teacher, $subject, '20263');
+    $this->action->handle('20263');
+    $row = TeacherSubjectQualification::firstOrFail();
+
+    (new RemoveQualification)->handle($row);
+    $result = $this->action->handle('20263');
+
+    expect($result['created'])->toBe(0)
+        ->and(TeacherSubjectQualification::count())->toBe(0)
+        ->and($row->fresh()->source)->toBe(QualificationSource::Manual);
 });

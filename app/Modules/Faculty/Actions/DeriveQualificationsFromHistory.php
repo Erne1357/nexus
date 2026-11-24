@@ -27,14 +27,7 @@ final class DeriveQualificationsFromHistory
      */
     public function handle(string $currentTermCode, ?User $actor = null): array
     {
-        $terms = TeacherSubjectHistory::query()
-            ->whereRaw("right(term_code, 1) in ('1', '3')")
-            ->where('term_code', '<=', $currentTermCode)
-            ->distinct()
-            ->orderByDesc('term_code')
-            ->limit(self::WINDOW_SEMESTERS)
-            ->pluck('term_code')
-            ->all();
+        $terms = $this->window($currentTermCode);
 
         return DB::transaction(function () use ($terms, $currentTermCode, $actor): array {
             $wanted = [];
@@ -113,5 +106,29 @@ final class DeriveQualificationsFromHistory
 
             return $counts;
         });
+    }
+
+    /**
+     * Los 6 semestres del calendario (periodos 1 y 3) hacia atrás desde el dado, inclusive.
+     *
+     * @return list<string>
+     */
+    private function window(string $currentTermCode): array
+    {
+        $year = (int) substr($currentTermCode, 0, 4);
+        $kind = (int) substr($currentTermCode, -1);
+        $terms = [];
+
+        // El 2 (verano) cuenta como parte del año: se parte del 1 o 3 que lo precede.
+        if ($kind === 2) {
+            $kind = 1;
+        }
+
+        while (count($terms) < self::WINDOW_SEMESTERS) {
+            $terms[] = $year.$kind;
+            [$year, $kind] = $kind === 3 ? [$year, 1] : [$year - 1, 3];
+        }
+
+        return $terms;
     }
 }
