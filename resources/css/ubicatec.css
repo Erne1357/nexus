@@ -1,6 +1,6 @@
 /* El mapa del campus del Inicio (ADR-0030): todo bajo #ubicatec-root y con prefijo ut- en las clases, para no chocar con
    Tailwind ni daisyUI. Hereda la fuente de la app; los tokens son del mapa y viven en la raíz. */
-#ubicatec-root{--g:var(--color-primary,#092d48);--gc:var(--color-primary-content,#fff);--g2:color-mix(in oklab,var(--g) 84%,var(--paper));--red:#B5362C;--grn:#4A8B37;--ink:var(--color-base-content,#092d48);--ink2:var(--color-neutral,#666567);--ink3:var(--color-neutral,#666567);--paper:var(--color-base-100,#fff);--line:var(--color-base-300,#e3e0de);--soft:var(--color-base-200,#f3f4f7);--blue:var(--g);
+#ubicatec-root{--g:var(--color-primary,#092d48);--gc:var(--color-primary-content,#fff);--g2:color-mix(in oklab,var(--g) 84%,var(--paper));--red:#B5362C;--grn:#4A8B37;--ink:var(--color-base-content,#092d48);--ink2:var(--color-neutral,#666567);--ink3:var(--color-neutral,#666567);--paper:var(--color-base-100,#fff);--line:var(--color-base-300,#e3e0de);--soft:var(--color-base-200,#f3f4f7);--blue:var(--g);--stage-ink:#092d48;
   container:ut/inline-size;isolation:isolate;overflow:clip;font-family:inherit;color:var(--ink);background:#E9E4DC;line-height:1.4;font-size:16px}
 #ubicatec-root.ut-night{background:#151821}
 #ubicatec-root *,#ubicatec-root *::before,#ubicatec-root *::after{box-sizing:border-box}
@@ -21,14 +21,15 @@
 #ubicatec-root .ut-lbl.ut-pt .ut-dot{background:#4b4b4b;color:#fff;min-width:20px;height:20px;font-size:11px}
 #ubicatec-root .ut-lbl .ut-nm{font-size:12px;font-weight:600;background:rgba(33,28,26,.86);color:#fff;padding:4px 8px;border-radius:6px;opacity:0;transform:translateX(-4px);transition:opacity .2s,transform .2s}
 #ubicatec-root .ut-lbl.ut-show .ut-nm{opacity:1;transform:none}
-#ubicatec-root .ut-lbl.ut-on .ut-dot{background:var(--c,var(--g));color:var(--on,#fff);transform:scale(1.12)}
+#ubicatec-root .ut-lbl.ut-on .ut-dot{background:var(--c,var(--stage-ink));color:var(--on,#fff);transform:scale(1.12)}
 #ubicatec-root .ut-lbl.ut-dim{opacity:.35}
 #ubicatec-root.ut-night .ut-lbl .ut-dot{box-shadow:0 0 0 1px rgba(255,255,255,.15),0 2px 6px rgba(0,0,0,.5)}
 #ubicatec-root.ut-night #pin{color:#BFE6FF;text-shadow:0 0 4px #000}
 #ubicatec-root .ut-lbl.ut-sel .ut-dot{transform:scale(1.3)}
 #ubicatec-root .ut-lbl .ut-occ{font-size:11px;font-weight:700;background:#fff;color:var(--g);padding:2px 5px;border-radius:4px;display:none}
+#ubicatec-root .ut-lbl .ut-occ{color:var(--stage-ink)}
 #ubicatec-root.ut-occ .ut-lbl .ut-occ{display:block}
-#ubicatec-root #pin{position:absolute;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--blue);text-shadow:0 0 3px #fff,0 0 3px #fff}
+#ubicatec-root #pin{position:absolute;display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--stage-ink);text-shadow:0 0 3px #fff,0 0 3px #fff}
 #ubicatec-root #panel{position:absolute;left:16px;top:16px;bottom:16px;width:min(400px,calc(100% - 32px));background:var(--paper);border-radius:16px;box-shadow:0 12px 40px rgba(9,45,72,.18),0 0 0 1px rgba(0,0,0,.04);display:flex;flex-direction:column;overflow:hidden;z-index:5}
 #ubicatec-root .ut-ph{padding:18px 20px 12px;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid var(--line)}
 #ubicatec-root .ut-brand{display:flex;align-items:center;gap:10px}
@@ -149,9 +150,9 @@
 #ubicatec-root #kindlg i{width:10px;height:10px;border-radius:3px;background:var(--c)}
 #ubicatec-root #pickhint{position:absolute;top:128px;left:50%;margin-left:208px;transform:translateX(-50%);background:var(--blue);color:var(--gc);padding:9px 14px;border-radius:10px;font-size:13px;font-weight:700;z-index:6;display:none}
 #ubicatec-root.ut-picking #pickhint{display:block}
-#ubicatec-root .ut-rl{position:absolute;left:0;top:0;font-size:11px;font-weight:700;color:var(--ink);background:rgba(255,255,255,.88);padding:2px 5px;border-radius:4px;white-space:nowrap;pointer-events:none;transition:opacity .2s;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+#ubicatec-root .ut-rl{position:absolute;left:0;top:0;font-size:11px;font-weight:700;color:var(--stage-ink);background:rgba(255,255,255,.88);padding:2px 5px;border-radius:4px;white-space:nowrap;pointer-events:none;transition:opacity .2s;box-shadow:0 1px 2px rgba(0,0,0,.12)}
 #ubicatec-root .ut-rl.ut-g{background:none;box-shadow:none;color:#3c3c3c;font-size:11px;text-shadow:0 0 2px #fff,0 0 2px #fff}
-#ubicatec-root .ut-rl.ut-sel{background:var(--g);color:var(--gc);transform-origin:center}
+#ubicatec-root .ut-rl.ut-sel{background:var(--stage-ink);color:#fff;transform-origin:center}
 @container ut (max-width:900px){
 #ubicatec-root #panel{top:56px;left:0;right:0;bottom:0;width:auto;border-radius:20px 20px 0 0;transform:translateY(var(--sy,calc(100% - 168px)));transition:transform .35s cubic-bezier(.2,.8,.2,1);box-shadow:0 -6px 30px rgba(9,45,72,.18)}
 #ubicatec-root #panel.ut-drag{transition:none}
