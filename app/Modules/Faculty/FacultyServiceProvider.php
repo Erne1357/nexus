@@ -13,6 +13,7 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\ModuleServiceProvider;
 use App\Modules\Core\Navigation\NavigationItem;
 use App\Modules\Core\Queries\UnitAdscriptions;
+use App\Modules\Faculty\Console\DeriveQualificationsCommand;
 use App\Modules\Faculty\Database\Seeders\FacultyDemoSeeder;
 use App\Modules\Faculty\Database\Seeders\TeacherCaptureDemoSeeder;
 use App\Modules\Faculty\Enums\AvailabilityKind;
@@ -50,6 +51,10 @@ final class FacultyServiceProvider extends ModuleServiceProvider
     public function boot(): void
     {
         parent::boot();
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([DeriveQualificationsCommand::class]);
+        }
 
         Event::listen(DepartmentDeleting::class, BlockDepartmentDeletionWithTeachers::class);
     }
