@@ -8,11 +8,12 @@
 #   4 .env sin una variable nueva (se rechaza)  8 reinicio del daemon de Docker (solo con --restart-daemon)
 #
 # Uso: prod-smoke.sh --bundle <nexus-<sha>.tar> [--project <nombre>] [--home <carpeta>] [--restart-daemon] [--keep]
+#                    [--deployer-src <docker/deployer>]   (solo en local: monta ese código sobre la imagen del deployer)
 # El paquete sale de nexus-bundle (docker/deployer/bin) con las imágenes ya construidas. En local, usa otro nombre
 # de proyecto y deja libres los puertos 18080 y 18443; nunca toca el proyecto `nexus` de desarrollo.
 set -Eeuo pipefail
 
-bundle="" project=nexus-smoke home="" restart_daemon=0 keep=0
+bundle="" project=nexus-smoke home="" restart_daemon=0 keep=0 deployer_src=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --bundle) bundle=$(readlink -f "$2"); shift 2 ;;
@@ -20,6 +21,7 @@ while [ $# -gt 0 ]; do
         --home) home=$2; shift 2 ;;
         --restart-daemon) restart_daemon=1; shift ;;
         --keep) keep=1; shift ;;
+        --deployer-src) deployer_src=$(readlink -f "$2"); shift 2 ;;
         *) echo "opción desconocida: $1" >&2; exit 2 ;;
     esac
 done
@@ -99,8 +101,12 @@ set_env CADDY_GLOBAL_OPTIONS local_certs
 chmod 600 "$home/.env"
 health_token=$(sed -n 's/^HEALTH_TOKEN=//p' "$home/.env")
 
+deployer_mounts=()
+if [ -n "$deployer_src" ]; then
+    deployer_mounts=(-v "$deployer_src/lib:/usr/local/lib/nexus-deploy:ro" -v "$deployer_src/bin/nexus-deploy:/usr/local/bin/nexus-deploy:ro")
+fi
 deployer() {
-    docker run --rm --name "$project-deployer-run-$RANDOM" \
+    docker run --rm --name "$project-deployer-run-$RANDOM" "${deployer_mounts[@]}" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$home:$home" \
         --env-file "$home/.env" -e NEXUS_HOME="$home" -e COMPOSE_PROJECT_NAME="$project" \
         "$deployer_ref" "$@"
