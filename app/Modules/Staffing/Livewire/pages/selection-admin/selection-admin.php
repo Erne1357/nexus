@@ -13,6 +13,8 @@ use App\Modules\Core\Queries\KeyLookup;
 use App\Modules\Facilities\Actions\UpdateRoom;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
+use App\Modules\Faculty\Actions\InviteTeacherAccess;
+use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Actions\Selection\CancelSelection;
 use App\Modules\Staffing\Actions\Selection\CreateSelection;
 use App\Modules\Staffing\Actions\Selection\ImportSelectionCsv;
@@ -389,6 +391,37 @@ new #[Title('Orden de selección')] class extends Component
             : null;
 
         return $data;
+    }
+
+    /**
+     * «Reenviar invitación» del monitor (SEL-13) a un docente de la cola cuya invitación no salió o venció: con correo
+     * institucional, la de siempre (la del admin si la puede mandar, CF-07; si no, la de AC-07); sin él, a su correo
+     * personal (InviteTeacherAccess::resendToPersonal). Quién puede lo decide TeacherPolicy (`inviteAccess`). Un rechazo,
+     * en un toast.
+     */
+    public function resendInvitation(string $teacherId, InviteTeacherAccess $invite): void
+    {
+        $selection = $this->managed();
+        $teacher = KeyLookup::findOrFail(Teacher::query()->whereIn('id', $selection->entries()->select('teacher_id')), $teacherId);
+        $this->authorize('inviteAccess', $teacher);
+        $actor = $this->actor();
+
+        try {
+            if ($teacher->institutional_email === null) {
+                $email = $invite->resendToPersonal($teacher, $actor);
+            } elseif ($teacher->user !== null && Gate::allows('invite', $teacher->user)) {
+                $email = $invite->byAdmin($teacher, $actor);
+            } else {
+                $invite->resend($teacher, $actor);
+                $email = $teacher->institutional_email;
+            }
+        } catch (ValidationException $e) {
+            $this->error('No se reenvió la invitación', e(collect($e->errors())->flatten()->first()));
+
+            return;
+        }
+
+        $this->success('Invitación reenviada', e("{$teacher->name}: a {$email}. El enlace anterior ya no sirve."));
     }
 
     public function setTab(string $tab): void

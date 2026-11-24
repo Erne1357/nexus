@@ -7,6 +7,7 @@ use App\Modules\Core\Actions\SendAccessInvitation;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Queries\InvitationRelease;
+use App\Modules\Faculty\Queries\SelectionQueueMembership;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -34,10 +35,13 @@ final class InviteTeacherAccess
 
     public const string NO_EMAIL = 'Sin correo: no tiene correo institucional ni personal.';
 
+    public const string NO_INSTITUTIONAL = 'Falta su correo institucional: captúralo en «Editar datos».';
+
     public function __construct(
         private readonly SendAccessInvitation $sendAccessInvitation,
         private readonly InvitationRelease $releases,
         private readonly InviteUser $inviteUser,
+        private readonly SelectionQueueMembership $selectionQueues,
     ) {}
 
     /**
@@ -106,7 +110,37 @@ final class InviteTeacherAccess
      */
     public function forSelection(Teacher $teacher, ?User $actor = null): ?string
     {
-        return DB::transaction(function () use ($teacher, $actor): ?string {
+        return $this->inviteForSelection($teacher, $actor, unlessInvited: true);
+    }
+
+    /**
+     * SEL-13 (confirmado el 24 de noviembre de 2026: «El jefe o admin le reenvía la invitación»): «Reenviar al correo
+     * personal» del jefe de su departamento o del admin, para el docente sin correo institucional que está en la cola de
+     * una orden de selección no cancelada (SelectionQueueMembership). Es la de forSelection con su enlace de siempre, y
+     * una nueva deja sin efecto la anterior. Fuera de una selección, o con correo institucional, se rechaza con el motivo
+     * y va la de siempre. Quién puede lo decide TeacherPolicy (`inviteAccess`). Devuelve el correo al que la mandó.
+     *
+     * @throws ValidationException sobre `access`, o la de SendAccessInvitation
+     */
+    public function resendToPersonal(Teacher $teacher, User $actor): string
+    {
+        if (self::usable($teacher->institutional_email) !== null) {
+            throw ValidationException::withMessages(['access' => 'Tiene correo institucional: usa «Reenviar invitación».']);
+        }
+
+        if (! $this->selectionQueues->includes($teacher)) {
+            throw ValidationException::withMessages(['access' => self::NO_INSTITUTIONAL]);
+        }
+
+        return (string) $this->inviteForSelection($teacher, $actor, unlessInvited: false);
+    }
+
+    /**
+     * @throws ValidationException
+     */
+    private function inviteForSelection(Teacher $teacher, ?User $actor, bool $unlessInvited): ?string
+    {
+        return DB::transaction(function () use ($teacher, $actor, $unlessInvited): ?string {
             $locked = Teacher::withTrashed()->lockForUpdate()->findOrFail($teacher->getKey());
             $user = $locked->user_id === null ? null : $locked->user()->first();
             $institutional = self::usable($locked->institutional_email);
@@ -125,7 +159,7 @@ final class InviteTeacherAccess
                 throw ValidationException::withMessages(['access' => $reason]);
             }
 
-            return $this->sendAccessInvitation->handle($user, $email, $actor, unlessInvited: true) ? $email : null;
+            return $this->sendAccessInvitation->handle($user, $email, $actor, $unlessInvited) ? $email : null;
         });
     }
 

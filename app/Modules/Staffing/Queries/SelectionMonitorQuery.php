@@ -21,12 +21,15 @@ use Illuminate\Support\Facades\DB;
  * cosa, sin importar la cola.
  *
  * @phpstan-type Row array{entry: SelectionEntry, name: string, hours: int, groups: list<string>, current: bool, access: string}
- * @phpstan-type Access array{counts: array{access: int, invited: int, pending: int, no_email: int}, missing: list<array{name: string, state: string, reason: string}>}
+ * @phpstan-type Access array{counts: array{access: int, invited: int, pending: int, no_email: int}, missing: list<array{teacher_id: ?string, name: string, state: string, reason: string, resendable: bool}>}
  */
 final class SelectionMonitorQuery
 {
     /** El motivo del monitor para quien no tiene ningún correo (SEL-13). */
     public const string NO_EMAIL = 'Sin acceso: sin correo';
+
+    /** El motivo de quien se puede invitar pero su invitación no salió o venció: el monitor ofrece reenviarla (SEL-13). */
+    public const string NOT_SENT = 'Su invitación todavía no sale o ya venció.';
 
     public function __construct(
         private readonly SelectionTurnQuery $turns,
@@ -62,7 +65,13 @@ final class SelectionMonitorQuery
             ];
         })->values();
         $missing = $rows->filter(fn (array $row): bool => ! in_array($row['access'], ['access', 'invited'], true))
-            ->map(fn (array $row): array => ['name' => (string) $row['name'], 'state' => $row['access'], 'reason' => $access[$row['entry']->teacher_id]['reason'] ?? 'El renglón no tiene docente.'])
+            ->map(fn (array $row): array => [
+                'teacher_id' => $row['entry']->teacher_id,
+                'name' => (string) $row['name'],
+                'state' => $row['access'],
+                'reason' => $access[$row['entry']->teacher_id]['reason'] ?? 'El renglón no tiene docente.',
+                'resendable' => ($access[$row['entry']->teacher_id]['reason'] ?? null) === self::NOT_SENT,
+            ])
             ->values();
 
         $taken = $groups->whereNotNull('teacher_id');
@@ -115,7 +124,7 @@ final class SelectionMonitorQuery
                 $user === null => ['state' => 'pending', 'reason' => 'El docente no tiene usuario.'],
                 ! $user->is_active => ['state' => 'pending', 'reason' => 'Su usuario está inactivo.'],
                 isset($staff[$user->getKey()]) => ['state' => 'pending', 'reason' => SendAccessInvitation::STAFF],
-                default => ['state' => 'pending', 'reason' => 'Su invitación todavía no sale o ya venció.'],
+                default => ['state' => 'pending', 'reason' => self::NOT_SENT],
             }];
         })->all();
     }

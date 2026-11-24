@@ -387,9 +387,14 @@
                     @if ($monitor['access']['missing'] !== [])
                         <ul class="mt-3 divide-y divide-base-300 rounded-box border border-base-300">
                             @foreach ($monitor['access']['missing'] as $row)
-                                <li class="flex flex-wrap items-baseline justify-between gap-x-3 px-4 py-2" wire:key="access-{{ $loop->index }}">
+                                <li class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2" wire:key="access-{{ $loop->index }}">
                                     <b>{{ $row['name'] }}</b>
-                                    <span class="text-sm text-neutral">{{ $row['state'] === 'no_email' ? $row['reason'] : 'Sin acceso: '.mb_lcfirst($row['reason']) }}</span>
+                                    <span class="flex flex-wrap items-center gap-x-3 text-sm text-neutral">
+                                        {{ $row['state'] === 'no_email' ? $row['reason'] : 'Sin acceso: '.mb_lcfirst($row['reason']) }}
+                                        @if ($row['resendable'])
+                                            <x-button label="Reenviar invitación" icon="o-paper-airplane" class="btn-ghost btn-sm" wire:click="resendInvitation('{{ $row['teacher_id'] }}')" spinner="resendInvitation('{{ $row['teacher_id'] }}')" data-testid="monitor-resend-{{ $row['teacher_id'] }}" />
+                                        @endif
+                                    </span>
                                 </li>
                             @endforeach
                         </ul>

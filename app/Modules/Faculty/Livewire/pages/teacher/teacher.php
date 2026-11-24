@@ -450,6 +450,25 @@ new #[Title('Ficha del docente')] class extends Component
     }
 
     /**
+     * «Reenviar al correo personal» (SEL-13): el jefe de su departamento o el admin, al docente sin correo institucional
+     * que está en la cola de una orden de selección (InviteTeacherAccess::resendToPersonal()). Un rechazo, en un toast.
+     */
+    public function resendToPersonal(TeacherQuery $teachers, InviteTeacherAccess $inviteTeacherAccess, Actor $context): void
+    {
+        $teacher = $teachers->findOrFail($this->teacherId);
+        $this->authorize('inviteAccess', $teacher);
+        $email = null;
+
+        $sent = $this->attempt(function () use ($inviteTeacherAccess, $teacher, $context, &$email): void {
+            $email = $inviteTeacherAccess->resendToPersonal($teacher, $context->user());
+        }, 'No se pudo reenviar la invitación');
+
+        if ($sent) {
+            $this->success('Invitación reenviada', e("{$teacher->rfc}: a su correo personal, {$email}. El enlace anterior ya no sirve."));
+        }
+    }
+
+    /**
      * Abre el formulario de «Nombrar jefatura». Solo quien nombra puestos (el administrador).
      */
     public function createHeadship(TeacherQuery $teachers, PeopleQuery $people): void
@@ -955,7 +974,10 @@ new #[Title('Ficha del docente')] class extends Component
      * invitación, y `panelDeactivated`, si el admin dio de baja su cuenta en el panel (CF-09), y entonces no se ofrece
      * ninguno.
      *
-     * @return array{resetReason: ?string, inviteReason: ?string, invited: bool, panelDeactivated: bool}
+     * `personalInvite` es el correo personal al que se le puede reenviar la invitación (SEL-13: sin correo institucional
+     * y en la cola de una orden de selección), o null.
+     *
+     * @return array{resetReason: ?string, inviteReason: ?string, personalInvite: ?string, invited: bool, panelDeactivated: bool}
      */
     private function accessActions(Teacher $teacher, TeacherRecord $record, TeacherAccessQuery $access): array
     {
@@ -969,6 +991,7 @@ new #[Title('Ficha del docente')] class extends Component
                 ? $access->resetBlocker($teacher) ?? ''
                 : 'Solo el administrador restablece contraseñas.'),
             'inviteReason' => $panelDeactivated || $hasPassword ? null : $this->inviteReason($teacher, $access, $invited),
+            'personalInvite' => $panelDeactivated || $hasPassword || ! Gate::allows('inviteAccess', $teacher) ? null : $access->personalInvitationEmail($teacher),
             'invited' => $invited,
             'panelDeactivated' => $panelDeactivated,
         ];

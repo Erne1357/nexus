@@ -22,7 +22,31 @@ final class TeacherAccessQuery
         private readonly RoleAssignmentRules $rules,
         private readonly InvitationRelease $releases,
         private readonly UserAccountRules $accounts,
+        private readonly SelectionQueueMembership $selectionQueues,
     ) {}
+
+    /**
+     * SEL-13: el correo personal al que el jefe o el admin le pueden reenviar la invitación (InviteTeacherAccess::
+     * resendToPersonal()), o null si no se ofrece: sin correo institucional, con un correo personal válido, con usuario
+     * activo sin contraseña y sin otro puesto, y en la cola de una orden de selección no cancelada.
+     */
+    public function personalInvitationEmail(Teacher $teacher): ?string
+    {
+        $personal = mb_strtolower(trim((string) $teacher->email));
+
+        if (trim((string) $teacher->institutional_email) !== '' || $personal === '' || filter_var($personal, FILTER_VALIDATE_EMAIL) === false
+            || ! $teacher->is_active || $teacher->trashed() || $teacher->user_id === null) {
+            return null;
+        }
+
+        $user = $this->userOf($teacher);
+
+        if ($user === null || ! $user->is_active || $user->password !== null || $this->rules->holdsStaffRole($user->getKey())) {
+            return null;
+        }
+
+        return $this->selectionQueues->includes($teacher) ? $personal : null;
+    }
 
     /**
      * Por qué no se le puede mandar ahora la invitación de acceso a un docente desde su ficha (AC-07), o null si se
