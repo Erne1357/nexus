@@ -11,7 +11,7 @@ use Illuminate\Notifications\Messages\MailMessage;
  * Llega al docente cuando se publica la selección de su departamento: le dice el día y la hora de su turno (SEL-11), por
  * la campana y por correo (diseño 6.9). Lleva a «Oferta», donde elige.
  */
-final class SelectionTurnPublished extends SelectionNotice
+final class SelectionTurnPublished extends SelectionTeacherNotice
 {
     public function __construct(
         private readonly string $termId,

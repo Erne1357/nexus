@@ -11,7 +11,7 @@ use Illuminate\Notifications\Messages\MailMessage;
  * Llega al docente que no cerró su turno cuando se arma la ronda extra, con su nueva hora (diseño 6.3 y 6.9), por la
  * campana y por correo.
  */
-final class SelectionExtraRoundScheduled extends SelectionNotice
+final class SelectionExtraRoundScheduled extends SelectionTeacherNotice
 {
     public function __construct(
         private readonly string $termId,

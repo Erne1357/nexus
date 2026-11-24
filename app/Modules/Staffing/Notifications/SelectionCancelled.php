@@ -11,7 +11,7 @@ use Illuminate\Notifications\Messages\MailMessage;
  * Llega a cada docente de la cola cuando el admin cancela una selección ya publicada, antes de su primera hora (SEL-11,
  * diseño 6.3), por la campana y por correo: su turno ya no corre. Lleva a «Oferta», que vuelve a mostrar la oferta.
  */
-final class SelectionCancelled extends SelectionNotice
+final class SelectionCancelled extends SelectionTeacherNotice
 {
     public function __construct(
         private readonly string $termId,

@@ -14,7 +14,8 @@ use Illuminate\Notifications\AnonymousNotifiable;
  * Base de los avisos de la orden de selección (tarea 1.33, diseño 6.9, SEL-09): van por la campana y por el correo
  * institucional, con la regla de ChangeAlternativeNotice (RA-06 y CV11, HeadMailAddressQuery: el institucional de su
  * ficha de docente o, si no tiene, el de su usuario si es institucional; nunca el personal, y a una cuenta dada de baja
- * no le llega correo). Sin dirección, solo la campana.
+ * no le llega correo). Sin dirección, solo la campana. Los avisos al docente de la cola (SelectionTeacherNotice) caen
+ * además a su correo personal si no tiene institucional (SEL-15); el de pendientes al jefe y al JPD, no.
  *
  * Salen de la cola solo después del commit (ShouldQueueAfterCommit): el reloj (AdvanceSelections) y la cancelación avisan
  * dentro de su transacción, y si se revierte no sale nada. La campana se guarda al confirmar (conexión `sync`); el correo

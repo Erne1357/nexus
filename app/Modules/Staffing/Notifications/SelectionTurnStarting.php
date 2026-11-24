@@ -11,7 +11,7 @@ use Illuminate\Notifications\Messages\MailMessage;
  * Llega al docente 10 minutos antes de su turno de selección y otra vez cuando empieza (diseño 6.9, supuesto por
  * confirmar), por la campana y por correo. Lleva a «Oferta», donde elige.
  */
-final class SelectionTurnStarting extends SelectionNotice
+final class SelectionTurnStarting extends SelectionTeacherNotice
 {
     public function __construct(
         private readonly string $termId,

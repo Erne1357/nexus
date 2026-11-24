@@ -2,6 +2,8 @@
 
 use App\Modules\Core\Authorization\AcademicLoadVisibility;
 use App\Modules\Core\Models\User;
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Staffing\Notifications\ChangeRequestMovedTeacherGroups;
 use App\Modules\Staffing\Notifications\SelectionCancelled;
 use App\Modules\Staffing\Notifications\SelectionExtraRoundScheduled;
 use App\Modules\Staffing\Notifications\SelectionFinishedWithPending;
@@ -90,4 +92,48 @@ it('§6.9: con la transacción confirmada sale la campana y el correo; revertida
 
     expect(DatabaseNotification::query()->where('notifiable_id', $this->user->id)->count())->toBe(1)
         ->and($sent())->toBe(1);
+});
+
+describe('SEL-15: los avisos de la selección al docente sin correo institucional van a su correo personal', function () {
+    beforeEach(function () {
+        $this->personal = User::factory()->create(['name' => 'Mario Personal Ficticio', 'email' => 'mario.personal@gmail.com']);
+        Teacher::factory()->create(['user_id' => $this->personal->id, 'email' => 'mario.personal@gmail.com', 'institutional_email' => null]);
+    });
+
+    it('SEL-15: los avisos de su turno, de la ronda extra y de la cancelación salen a su correo personal', function (Closure $make) {
+        $notice = $make();
+
+        expect($notice->via($this->personal))->toBe(['database', 'mail'])
+            ->and($notice->mailAddressFor($this->personal))->toBe('mario.personal@gmail.com');
+    })->with([
+        'su turno al publicar' => [fn () => new SelectionTurnPublished('term', 'modality', 'Sistemas y Computación', CarbonImmutable::now(), CarbonImmutable::now()->addMinutes(30))],
+        '10 minutos antes' => [fn () => new SelectionTurnStarting('term', 'modality', CarbonImmutable::now(), false)],
+        'al empezar' => [fn () => new SelectionTurnStarting('term', 'modality', CarbonImmutable::now(), true)],
+        'la ronda extra' => [fn () => new SelectionExtraRoundScheduled('term', 'modality', CarbonImmutable::now())],
+        'la cancelación' => [fn () => new SelectionCancelled('term', 'modality', 'Sistemas y Computación', CarbonImmutable::now())],
+    ]);
+
+    it('SEL-15: el correo de su turno llega al buzón personal', function () {
+        $this->personal->notify(new SelectionTurnStarting('term', 'modality', $this->at, false, $this->at->addMinutes(30)));
+
+        $to = app('mail.manager')->mailer()->getSymfonyTransport()->messages()
+            ->map(fn (SentMessage $message): string => $message->getOriginalMessage()->getTo()[0]->getAddress())->all();
+
+        expect($to)->toContain('mario.personal@gmail.com');
+    });
+
+    it('SEL-15: con correo institucional usa el institucional, como siempre', function () {
+        Teacher::query()->where('user_id', $this->personal->id)->update(['institutional_email' => 'mario.ficticio@cdjuarez.tecnm.mx']);
+
+        expect((new SelectionExtraRoundScheduled('term', 'modality', $this->at))->mailAddressFor($this->personal))->toBe('mario.ficticio@cdjuarez.tecnm.mx');
+    });
+
+    it('CV11: los demás avisos de Nexus no van al correo personal, ni el de pendientes de la selección', function () {
+        $moved = new ChangeRequestMovedTeacherGroups([['label' => 'SCD-1015 · 5A', 'subject' => null, 'from' => 'L 9:00', 'to' => 'M 9:00']], 'SCD-1015 · 5A', 'term', 'modality');
+        $pending = new SelectionFinishedWithPending('term', 'modality', 'Sistemas y Computación', 'selection-id', ['Docente Uno Ficticio']);
+
+        expect($moved->via($this->personal))->toBe(['database'])
+            ->and($pending->via($this->personal))->toBe(['database'])
+            ->and($pending->mailAddressFor($this->personal))->toBeNull();
+    });
 });
