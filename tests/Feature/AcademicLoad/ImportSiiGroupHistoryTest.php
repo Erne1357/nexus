@@ -21,7 +21,7 @@ beforeEach(function () {
     DB::unprepared('create schema if not exists sii_archivo');
     DB::unprepared('drop table if exists sii_archivo.grupos');
     DB::unprepared('drop table if exists sii_archivo.horarios');
-    DB::unprepared('create table sii_archivo.grupos (_linea serial primary key, periodo text not null, materia text not null, grupo text not null, estatus_grupo text not null default \'\', capacidad_grupo text not null default \'\', alumnos_inscritos text not null default \'\', paralelo_de text not null default \'\', exclusivo_carrera text not null default \'\', exclusivo_reticula text not null default \'\')');
+    DB::unprepared('create table sii_archivo.grupos (_linea serial primary key, periodo text not null, materia text not null, grupo text not null, estatus_grupo text not null default \'\', capacidad_grupo text not null default \'\', alumnos_inscritos text not null default \'\', paralelo_de text not null default \'\', rfc text not null default \'\', exclusivo_carrera text not null default \'\', exclusivo_reticula text not null default \'\')');
     DB::unprepared('drop table if exists sii_archivo.materias_claves_tecnm');
     DB::unprepared('create table sii_archivo.materias_claves_tecnm (_linea serial primary key, carrera text not null default \'\', reticula text not null default \'\', materia text not null, clave_tecnm text not null default \'\')');
     DB::unprepared('create table sii_archivo.horarios (_linea serial primary key, periodo text not null, tipo_horario text not null default \'D\', materia text not null, grupo text not null, aula text not null default \'\', rfc text not null default \'\', dia_semana text not null default \'2\', hora_inicial text not null default \'1900-01-01 07:00:00.0\', hora_final text not null default \'1900-01-01 08:00:00.0\')');
@@ -209,6 +209,18 @@ it('importa las sesiones de clase: día de Nexus = día del SII menos 1, horas, 
         ->and($sessions[0]->day)->toBe(1)->and($sessions[0]->starts_at)->toBe('16:00:00')->and($sessions[0]->ends_at)->toBe('17:30:00')
         ->and($sessions[0]->room_code)->toBe('LABA1')->and($sessions[0]->teacher_rfc)->toBe('ABCD800101XX1')
         ->and($sessions[1]->day)->toBe(6)->and($sessions[1]->room_code)->toBeNull()->and($sessions[1]->teacher_rfc)->toBeNull();
+});
+
+it('D-01: una sesión sin RFC en el horario toma el RFC del grupo', function () {
+    historicalGroupsSiiGroup('20261', 'HGMAT1', 'A', ['rfc' => ' aaaa000101aa1 ']);
+    historicalGroupsSiiSession(['dia_semana' => '2', 'rfc' => '']);
+    historicalGroupsSiiSession(['dia_semana' => '3', 'rfc' => 'BBBB000101BB1']);
+
+    $this->artisan('academic-load:import-sii-groups')->assertSuccessful();
+
+    $sessions = HistoricalGroup::query()->sole()->sessions()->orderBy('day')->get();
+
+    expect($sessions->pluck('teacher_rfc')->all())->toBe(['AAAA000101AA1', 'BBBB000101BB1']);
 });
 
 it('ignora lo que no es clase y los días fuera de lunes a sábado, y lo avisa agregado', function () {
