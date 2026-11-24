@@ -15,6 +15,7 @@ use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\TestResponse;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
@@ -274,4 +275,74 @@ it('MN-05: con la carga académica oculta, el docente en su turno ve el horario 
 
     $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
     $this->actingAs($jefe)->get(route('staffing.offer'))->assertOk()->assertSee('Asignas cualquier grupo, a cualquier hora.');
+});
+
+it('§6.14: el jefe le pone a un grupo tomado sin salón un salón que no es elegible, y solo cambia el salón', function () {
+    $lab = $this->world->group('L', [[2, '09:00', '10:00']], space: RequiredSpace::Laboratorio);
+    selectionDrawer($this->uno->user)->call('open', $lab->id)->call('take')->assertHasNoErrors();
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+
+    selectionDrawer($jefe)
+        ->call('open', $lab->id)
+        ->assertSet('teacherId', $this->uno->id)
+        ->assertSee('Recomendado')
+        ->assertSeeHtml('value="'.$this->room->id.'"')
+        ->set('roomId', $this->room->id)
+        ->assertSee('Solo cambia el salón')
+        ->call('assign')
+        ->assertHasNoErrors()
+        ->assertDispatched('selection-changed');
+
+    expect($lab->fresh()->teacher_id)->toBe($this->uno->id)
+        ->and(GroupSession::query()->where('group_id', $lab->id)->pluck('room_id')->unique()->all())->toBe([$this->room->id])
+        ->and(GroupTeacherAssignment::query()->where('group_id', $lab->id)->count())->toBe(1);
+});
+
+it('HC-02: el jefe no le pone un salón que otro grupo ocupa a esa hora', function () {
+    $busy = $this->world->room('A2');
+    $other = $this->world->group('X', [[1, '09:00', '10:00']]);
+    GroupSession::query()->where('group_id', $other->id)->update(['room_id' => $busy->id]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+
+    selectionDrawer($jefe)
+        ->call('open', $this->group->id)
+        ->assertSeeHtml('value="'.$busy->id.'"')
+        ->set('teacherId', $this->dos->id)
+        ->set('roomId', $busy->id)
+        ->call('assign')
+        ->assertHasErrors('roomId');
+
+    expect(GroupSession::query()->where('group_id', $this->group->id)->whereNotNull('room_id')->count())->toBe(0);
+});
+
+it('SEL-07: con turno compartido nombra a todos los que están en turno', function () {
+    $this->world->entryOf($this->dos)->update(['slot_index' => 0, 'slot_starts_at' => $this->world->entryOf($this->uno)->slot_starts_at, 'slot_ends_at' => $this->world->entryOf($this->uno)->slot_ends_at]);
+    $jefe = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => $this->world->department->id])->create();
+
+    Livewire::actingAs($jefe)->test('staffing::pages.offer')->assertSee('En turno: Docente Uno y Docente Dos');
+});
+
+it('dice «mañana» para un turno del día siguiente y «en N días» para uno más lejano', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-12-07 13:00', config('app.timezone')));
+    $entry = $this->world->entryOf($this->dos);
+
+    $entry->update(['slot_starts_at' => now()->addHours(25), 'slot_ends_at' => now()->addHours(25)->addMinutes(30)]);
+    Livewire::actingAs($this->dos->user)->test('staffing::pages.offer')->assertSee('mañana · lugar 2 de 2')->assertDontSee('días');
+
+    $entry->update(['slot_starts_at' => now()->addDays(3), 'slot_ends_at' => now()->addDays(3)->addMinutes(30)]);
+    Livewire::actingAs($this->dos->user)->test('staffing::pages.offer')->assertSee('en 3 días · lugar 2 de 2');
+});
+
+it('cada refresco busca una sola vez la ficha del docente y su renglón en la cola', function () {
+    $queries = [];
+    DB::listen(function ($query) use (&$queries) {
+        $queries[] = mb_strtolower($query->sql);
+    });
+
+    Livewire::actingAs($this->uno->user)->test('staffing::pages.offer')->assertSee('Es tu turno');
+
+    $teacherLookups = count(array_filter($queries, fn (string $sql): bool => str_contains($sql, 'from "teachers" where "user_id"')));
+    $entryLookups = count(array_filter($queries, fn (string $sql): bool => preg_match('/from "staffing_selection_entries" where "selection_id" (= \?|in \([^)]*\)) and "teacher_id" = \?/', $sql) === 1));
+
+    expect($teacherLookups)->toBe(1)->and($entryLookups)->toBe(1);
 });

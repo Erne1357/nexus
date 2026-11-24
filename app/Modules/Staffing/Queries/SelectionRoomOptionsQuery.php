@@ -27,6 +27,48 @@ use Illuminate\Database\Eloquent\Builder;
 final class SelectionRoomOptionsQuery
 {
     /**
+     * Los salones que el jefe o el JPD pueden ponerle al grupo a mano durante la selección (diseño 6.14): sin el filtro
+     * de SEL-02 a SEL-04, todos los activos del campus del grupo que son del departamento de la selección o no tienen
+     * dueño, de cualquier tipo. `recommended` son los elegibles de forGroup(); `others`, el resto, con el motivo por el
+     * que no se recomiendan si lo hay (ocupado, otro tipo, no cabe…). Las reglas de hoy (HC-02 duro; HC-05, HC-06 y
+     * HC-11 como aviso) las aplica AssignSessionRoom al guardar. Sin sesiones presenciales no hay salón que poner.
+     *
+     * @return array{recommended: list<Option>, others: list<array{id: string, code: string, building: ?string, type: string, capacity: int, map_key: ?string, reason: ?string}>}
+     */
+    public function forManager(Selection $selection, Group $group): array
+    {
+        $options = $this->forGroup($selection, $group);
+
+        if (! GroupSession::query()->where('group_id', $group->id)->where('kind', '!=', SessionKind::Virtual->value)->exists()) {
+            return ['recommended' => [], 'others' => []];
+        }
+
+        $recommended = array_column($options['eligible'], 'id');
+        $reasons = array_column($options['rejected'], 'reason', 'id');
+
+        $others = Room::query()
+            ->where('campus_id', $group->campus_id)
+            ->where('is_active', true)
+            ->whereNotIn('id', $recommended)
+            ->where(fn (Builder $query) => $query->whereNull('department_id')->orWhere('department_id', $selection->department_id))
+            ->with('building')
+            ->orderBy('code')
+            ->get()
+            ->map(fn (Room $room): array => [
+                'id' => $room->id,
+                'code' => $room->code,
+                'building' => $room->building?->code,
+                'type' => $room->type->value,
+                'capacity' => $room->capacity,
+                'map_key' => $room->map_key,
+                'reason' => $reasons[$room->id] ?? null,
+            ])
+            ->all();
+
+        return ['recommended' => $options['eligible'], 'others' => $others];
+    }
+
+    /**
      * Los rechazados traen los mismos datos del salón más su motivo (el mapa los pone en gris por su `map_key`).
      *
      * @return array{eligible: list<Option>, rejected: list<array{id: string, code: string, building: ?string, type: string, capacity: int, map_key: ?string, reason: string}>}

@@ -98,7 +98,7 @@
             <div class="grid leading-tight md:border-s md:border-base-300 md:ps-5" data-testid="selection-my-slot">
                 <span class="text-[11.5px] font-medium uppercase tracking-[0.09em] text-neutral">Tu turno</span>
                 <b>{{ $mineSlot }}</b>
-                <span class="text-[13px] text-neutral">@if ($bar['mine_in']){{ $bar['mine_in'] }} · @endif lugar {{ $bar['position'] }} de {{ $bar['total'] }}</span>
+                <span class="text-[13px] text-neutral">{{ $bar['mine_in'] ? $bar['mine_in'].' · ' : '' }}lugar {{ $bar['position'] }} de {{ $bar['total'] }}</span>
             </div>
         @endif
         @include('staffing::offer.selection.meter', ['hours' => $data['my_hours'], 'base' => $data['base_hours'], 'compact' => $kind !== 'mine'])

@@ -34,7 +34,7 @@ final class SelectionOrderQuery
             ->orderBy('position')
             ->orderBy('id')
             ->get();
-        $inTurn = array_flip($this->turns->entryIdsInTurn($selection, $now ?? CarbonImmutable::now()));
+        $inTurn = $this->turns->entriesInTurn($selection, $now ?? CarbonImmutable::now())->keyBy('id')->all();
         $perSlot = $entries->countBy('slot_index');
 
         return $entries->map(function (SelectionEntry $entry) use ($inTurn, $perSlot): array {

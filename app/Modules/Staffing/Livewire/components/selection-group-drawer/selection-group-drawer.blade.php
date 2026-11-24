@@ -151,19 +151,27 @@
                             <p class="text-sm font-semibold text-error" role="alert">{{ $message }}</p>
                         @enderror
                     @else
-                        @include('staffing::offer.selection.assign', ['card' => $card, 'candidates' => $candidates, 'options' => $options, 'canAssignRoom' => $canAssignRoom, 'teacherId' => $teacherId])
+                        @include('staffing::offer.selection.assign', ['card' => $card, 'candidates' => $candidates, 'managerRooms' => $managerRooms, 'canAssignRoom' => $canAssignRoom, 'teacherId' => $teacherId])
                     @endunless
                 </div>
 
                 <footer class="sticky bottom-0 border-t border-base-300 bg-base-100 px-5 py-3">
                     @if ($assigning)
                         <div class="flex flex-wrap items-center justify-end gap-2">
-                            <p class="me-auto text-sm text-neutral">Queda en la bitácora con tu nombre.</p>
+                            <p class="me-auto text-sm text-neutral" data-testid="selection-assign-hint">
+                                @if (! $changesTeacher && $changesRoom)
+                                    Solo cambia el salón; el docente se queda. Queda en la bitácora con tu nombre.
+                                @else
+                                    Queda en la bitácora con tu nombre.
+                                @endif
+                            </p>
                             @if ($entry !== null && $inTurn)
                                 <x-button label="Ver como docente" class="btn-ghost max-md:h-11" wire:click="$set('mode', 'group')" />
                             @endif
                             <x-button label="Cancelar" class="btn-ghost max-md:h-11" @click="close()" />
-                            <x-button :label="$chosenTeacher ? 'Asignar a '.$chosenTeacher['name'] : 'Asignar'" icon="o-user-plus" class="btn-primary max-md:h-11" wire:click="assign" spinner="assign" :disabled="$chosenTeacher === null" data-testid="selection-assign" />
+                            <x-button :label="match (true) { $changesTeacher && $chosenTeacher !== null => 'Asignar a '.$chosenTeacher['name'], $changesRoom => 'Guardar salón', default => 'Asignar' }"
+                                :icon="! $changesTeacher && $changesRoom ? 'o-map-pin' : 'o-user-plus'" class="btn-primary max-md:h-11" wire:click="assign" spinner="assign"
+                                :disabled="! $changesTeacher && ! $changesRoom" data-testid="selection-assign" />
                         </div>
                     @elseif ($pickable)
                         <p class="mb-2 text-sm text-neutral">Queda a tu nombre; lo puedes soltar mientras dure tu turno.</p>

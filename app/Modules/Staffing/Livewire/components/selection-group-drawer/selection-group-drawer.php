@@ -84,6 +84,7 @@ new class extends Component
         $picking = $this->inTurn($selection, $context, $timetable, $turns) && $group->teacher_id === null;
         $this->mode = ! $picking && Gate::allows('create', [GroupTeacherAssignment::class, $group]) ? 'assign' : 'group';
         $this->roomId = $picking ? ($rooms->forGroup($selection, $group)['eligible'][0]['id'] ?? null) : null;
+        $this->teacherId = $group->teacher_id;
         $this->show = true;
     }
 
@@ -146,8 +147,11 @@ new class extends Component
     }
 
     /**
-     * «Asignar a…»: la jefatura asigna a un docente de la cola y, si también asigna salones, le pone el salón elegido a
-     * todas sus sesiones no virtuales. Si el docente se asignó y el salón no, lo dice y deja el drawer abierto.
+     * «Asignar a…»: la jefatura asigna a un docente de la cola y, si también asigna salones, le pone a todas las sesiones
+     * no virtuales el salón que elija, sin el filtro de la selección (diseño 6.14): cualquiera activo del campus del
+     * grupo, del departamento o sin dueño (SelectionRoomOptionsQuery::forManager). AssignSessionRoom aplica las reglas
+     * de hoy: HC-02 lo rechaza; HC-05, HC-06 y HC-11 lo guardan y se dicen como aviso. Con el mismo docente solo cambia
+     * el salón. Si el docente se asignó y el salón no, lo dice y deja el drawer abierto.
      */
     public function assign(Actor $context, SelectionTimetableQuery $timetable, SelectionRoomOptionsQuery $rooms, AssignTeacher $assignTeacher, AssignSessionRoom $assignRoom): void
     {
@@ -157,9 +161,10 @@ new class extends Component
         $this->authorize('create', [GroupTeacherAssignment::class, $group]);
         $this->resetValidation();
 
-        $teacher = $this->teacherId === null ? null : $timetable->queueTeacher($selection, $this->teacherId);
+        $changesTeacher = $this->teacherId !== null && $this->teacherId !== $group->teacher_id;
+        $teacher = $changesTeacher ? $timetable->queueTeacher($selection, $this->teacherId) : null;
 
-        if ($teacher === null) {
+        if ($changesTeacher && $teacher === null) {
             $this->addError('teacherId', 'Elige un docente del orden de selección.');
 
             return;
@@ -168,38 +173,54 @@ new class extends Component
         $room = null;
 
         if ($this->roomId !== null && $this->roomId !== '' && Gate::allows('assignRoom', $group)) {
-            $eligible = array_column($rooms->forGroup($selection, $group)['eligible'], 'id');
-            $room = in_array($this->roomId, $eligible, true) ? $timetable->room($this->roomId) : null;
+            $manager = $rooms->forManager($selection, $group);
+            $offered = array_column([...$manager['recommended'], ...$manager['others']], 'id');
+            $room = in_array($this->roomId, $offered, true) ? $timetable->room($this->roomId) : null;
 
             if ($room === null) {
-                $this->addError('roomId', 'Ese salón ya no se puede elegir a esa hora.');
+                $this->addError('roomId', 'Ese salón no es del campus del grupo ni del departamento.');
 
                 return;
             }
         }
 
-        try {
-            $assignTeacher->handle($group, $teacher, $user, filled($this->reason) ? $this->reason : null);
-        } catch (ValidationException $e) {
-            $this->fail($e, 'No se asignó el docente');
+        if (! $changesTeacher && $room === null) {
+            $this->addError('teacherId', 'Elige otro docente o un salón.');
 
             return;
         }
 
-        $this->dispatch('selection-changed');
+        if ($changesTeacher) {
+            try {
+                $assignTeacher->handle($group, $teacher, $user, filled($this->reason) ? $this->reason : null);
+            } catch (ValidationException $e) {
+                $this->fail($e, 'No se asignó el docente');
+
+                return;
+            }
+
+            $this->dispatch('selection-changed');
+        }
 
         if ($room !== null) {
             try {
                 $assignRoom->handleMany($group, array_fill_keys($timetable->roomSessionIds($group), $room), $user);
             } catch (ValidationException $e) {
-                $this->fail($e, "Se asignó a {$teacher->name}, pero no el salón", 'roomId');
+                $this->fail($e, $changesTeacher ? "Se asignó a {$teacher->name}, pero no el salón" : 'No se cambió el salón', 'roomId');
 
                 return;
             }
+
+            $this->dispatch('selection-changed');
         }
 
         $this->show = false;
-        $this->success('Asignaste '.self::label($group)." a {$teacher->name}", $room === null ? null : "En el {$room->code}.");
+        $title = $changesTeacher ? 'Asignaste '.self::label($group)." a {$teacher->name}" : 'Cambiaste el salón de '.self::label($group);
+        $warnings = $room === null ? [] : $timetable->roomWarnings($group);
+
+        $warnings === []
+            ? $this->success($title, $room === null ? null : "En el {$room->code}.")
+            : $this->warning($title, e("En el {$room->code}, con aviso: ".implode(' ', $warnings)));
     }
 
     /**
@@ -224,7 +245,10 @@ new class extends Component
         $canAssign = Gate::allows('create', [GroupTeacherAssignment::class, $group]);
         $assigning = $this->mode === 'assign' && $canAssign;
         $canAssignRoom = $assigning && Gate::allows('assignRoom', $group);
-        $options = $pickable || $canAssignRoom ? $rooms->forGroup($selection, $group) : ['eligible' => [], 'rejected' => []];
+        $options = $pickable ? $rooms->forGroup($selection, $group) : ['eligible' => [], 'rejected' => []];
+        $managerRooms = $canAssignRoom ? $rooms->forManager($selection, $group) : ['recommended' => [], 'others' => []];
+        $changesTeacher = $this->teacherId !== null && $this->teacherId !== $card['teacher_id'];
+        $changesRoom = $canAssignRoom && $this->roomId !== null && $this->roomId !== '';
         $candidates = $assigning ? $timetable->candidates($selection, $group, $order->forSelection($selection)) : [];
         $needle = mb_strtolower(trim($this->teacherSearch));
 
@@ -241,6 +265,9 @@ new class extends Component
             'assigning' => $assigning,
             'canAssignRoom' => $canAssignRoom,
             'options' => $options,
+            'managerRooms' => $managerRooms,
+            'changesTeacher' => $changesTeacher,
+            'changesRoom' => $changesRoom,
             'chosen' => collect($options['eligible'])->firstWhere('id', $this->roomId),
             'candidates' => $needle === '' ? $candidates : array_values(array_filter($candidates, fn (array $row): bool => str_contains(mb_strtolower($row['name']), $needle))),
             'chosenTeacher' => collect($candidates)->firstWhere('teacher_id', $this->teacherId),

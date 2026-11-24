@@ -15,6 +15,8 @@ use App\Modules\Scheduling\Enums\SessionKind;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
 use App\Modules\Scheduling\Validation\Minutes;
+use App\Modules\Scheduling\Validation\ScheduleValidator;
+use App\Modules\Scheduling\Validation\Violation;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
@@ -24,6 +26,7 @@ use App\Modules\Staffing\Rules\ScheduleSummary;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection as BaseCollection;
 use Illuminate\Support\Facades\DB;
 
@@ -93,6 +96,22 @@ final class SelectionTimetableQuery
     }
 
     /**
+     * Los renglones del docente en varias selecciones, por id de selección, en una consulta.
+     *
+     * @param  Collection<int, Selection>  $selections
+     * @return BaseCollection<string, SelectionEntry>
+     */
+    public function entriesOf(Collection $selections, Teacher $teacher): BaseCollection
+    {
+        return SelectionEntry::query()
+            ->whereIn('selection_id', $selections->modelKeys())
+            ->where('teacher_id', $teacher->getKey())
+            ->get()
+            ->keyBy('selection_id')
+            ->toBase();
+    }
+
+    /**
      * Un grupo de la selección por su id del cliente, o null si no es de sus cargas incluidas.
      */
     public function group(Selection $selection, string $id): ?Group
@@ -128,6 +147,23 @@ final class SelectionTimetableQuery
     }
 
     /**
+     * Los avisos de salón del grupo con lo que tiene ahora (HC-05 cupo, HC-06 tipo, HC-11 bloqueo): AssignSessionRoom
+     * guarda el salón y los deja marcados; la jefatura los ve al asignar a mano.
+     *
+     * @return list<string>
+     */
+    public function roomWarnings(Group $group): array
+    {
+        $validator = app(ScheduleValidator::class);
+        $validator->forget();
+
+        return array_values(array_unique(array_map(
+            fn (Violation $violation): string => $violation->message,
+            array_filter($validator->validateGroup($group->fresh())->violations(), fn (Violation $violation): bool => in_array($violation->rule, ['HC-05', 'HC-06', 'HC-11'], true)),
+        )));
+    }
+
+    /**
      * Las horas del docente en la selección y su base (SEL-05), para «Con este grupo llevarías…».
      *
      * @return array{hours: int, base: int}
@@ -143,11 +179,14 @@ final class SelectionTimetableQuery
     }
 
     /**
+     * `$entry` es el renglón del docente si quien llama ya lo tiene (la pantalla lo busca una vez por refresco); si no,
+     * se busca aquí.
+     *
      * @return array{days: list<int>, hours: list<string>, cells: array<string, list<Cell>>, my_hours: int, base_hours: int, my_groups: list<array<string, mixed>>, groups: int, free: int, turn: array<string, mixed>}
      */
-    public function forTeacher(Selection $selection, ?Teacher $teacher, CarbonImmutable $now): array
+    public function forTeacher(Selection $selection, ?Teacher $teacher, CarbonImmutable $now, ?SelectionEntry $entry = null): array
     {
-        $entry = $teacher === null ? null : $this->entryOf($selection, $teacher);
+        $entry ??= $teacher === null ? null : $this->entryOf($selection, $teacher);
         $groups = $this->load($this->groups->of($selection));
         $context = $this->teacherContext($selection, $teacher);
         $cells = [];
@@ -415,8 +454,8 @@ final class SelectionTimetableQuery
     }
 
     /**
-     * El turno de ahora visto por el docente (o por la jefatura, sin renglón): si es el suyo, quién está en turno y
-     * hasta cuándo, su hora (de la ronda en curso y de la extra), su lugar, cuántos terminaron y, si no hay nadie en
+     * El turno de ahora visto por el docente (o por la jefatura, sin renglón): si es el suyo, quién está en turno (todos
+     * los que comparten la media hora, SEL-07: «Ana López y Beto Ruiz») y hasta cuándo, su hora (de la ronda en curso y de la extra), su lugar, cuántos terminaron y, si no hay nadie en
      * turno, quién sigue y a qué hora.
      *
      * @return array{is_mine: bool, current: ?string, ends_at: ?string, my_slot: ?string, my_extra_slot: ?string, my_slot_ends: ?string, position: ?int, total: int, entry_status: ?string, closed: bool, current_position: ?int, done: int, next: ?array{name: string, at: string}}
@@ -425,8 +464,9 @@ final class SelectionTimetableQuery
     {
         $extra = $selection->status === SelectionStatus::ExtraRound;
         [$startColumn, $endColumn] = $extra ? ['extra_slot_starts_at', 'extra_slot_ends_at'] : ['slot_starts_at', 'slot_ends_at'];
-        $current = $this->turns->currentEntry($selection, $now)?->load('teacher:id,name');
-        $isMine = $entry !== null && $current !== null && in_array($entry->getKey(), $this->turns->entryIdsInTurn($selection, $now), true);
+        $inTurn = $this->turns->entriesInTurn($selection, $now);
+        $current = $inTurn->first();
+        $isMine = $entry !== null && $inTurn->contains('id', $entry->getKey());
         $counts = SelectionEntry::query()->where('selection_id', $selection->getKey())
             ->selectRaw('count(*) as total, count(*) filter (where status = ?) as done', [SelectionEntryStatus::Done->value])
             ->toBase()->first();
@@ -440,7 +480,7 @@ final class SelectionTimetableQuery
 
         return [
             'is_mine' => $isMine,
-            'current' => $current?->teacher?->name ?? $current?->csv_name,
+            'current' => $inTurn->isEmpty() ? null : Arr::join($inTurn->map(fn (SelectionEntry $row): string => $row->teacher->name ?? (string) $row->csv_name)->all(), ', ', ' y '),
             'ends_at' => ($isMine ? $entry->{$endColumn} : $current?->{$endColumn})?->toIso8601String(),
             'my_slot' => $entry?->slot_starts_at?->toIso8601String(),
             'my_extra_slot' => $entry?->extra_slot_starts_at?->toIso8601String(),

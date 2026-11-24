@@ -1,8 +1,11 @@
 {{--
     «Asignar a…» de la jefatura en el drawer del grupo (maqueta B, «b-asignar»): el docente entre los de la cola en el
     orden de selección, con su escalón, lo que lleva contra su base, con cuál de sus grupos le choca (no se puede
-    elegir) y su estado; el salón entre los elegibles a esa hora para quien asigna salones; el motivo opcional.
-    Espera $card, $candidates, $options, $canAssignRoom y $teacherId (el elegido).
+    elegir) y su estado; para quien asigna salones, el salón sin el filtro de la selección (diseño 6.14): primero los
+    recomendados (los elegibles) y luego los demás del campus, del departamento o sin dueño, con su motivo; el motivo
+    opcional.
+    Espera $card, $candidates, $managerRooms (SelectionRoomOptionsQuery::forManager), $canAssignRoom y $teacherId (el
+    elegido; al abrir, el de ahora).
 --}}
 @use('App\Modules\Facilities\Enums\RoomType')
 <section class="space-y-2" aria-labelledby="assign-teacher-title" data-testid="selection-assign-panel">
@@ -46,9 +49,17 @@
 <section class="space-y-3" aria-labelledby="assign-room-title">
     <h3 id="assign-room-title" class="text-base font-bold">Salón</h3>
     @if ($canAssignRoom)
-        <x-select label="Salón" wire:model="roomId" placeholder="Sin cambiar el salón" placeholder-value=""
-            :options="array_map(fn ($room) => ['id' => $room['id'], 'name' => $room['code'].' · '.(RoomType::tryFrom($room['type'])?->label() ?? $room['type']).' · '.$room['capacity'].' lugares'.($room['capacity'] === $card['capacity'] ? ' · justo' : '')], $options['eligible'])"
-            hint="Los que se pueden elegir a esa hora, con las mismas reglas que en la selección." data-testid="selection-assign-room" />
+        @php
+            $roomLabel = fn (array $room): string => $room['code'].' · '.(RoomType::tryFrom($room['type'])?->label() ?? $room['type']).' · '.$room['capacity'].' lugares'
+                .($room['capacity'] === $card['capacity'] ? ' · justo' : '')
+                .(($room['reason'] ?? null) !== null ? ' — '.$room['reason'] : '');
+            $groups = array_filter([
+                'Recomendado' => array_map(fn ($room) => ['id' => $room['id'], 'name' => $roomLabel($room)], $managerRooms['recommended']),
+                'Otros salones (con aviso o rechazo al guardar)' => array_map(fn ($room) => ['id' => $room['id'], 'name' => $roomLabel($room)], $managerRooms['others']),
+            ]);
+        @endphp
+        <x-select-group label="Salón" wire:model.live="roomId" placeholder="Sin cambiar el salón" placeholder-value="" :options="$groups"
+            hint="Recomendado: los que se pueden elegir en la selección. Los demás se guardan con su aviso (cupo, tipo o bloqueo); uno ocupado a esa hora no se guarda." data-testid="selection-assign-room" />
     @else
         <p class="text-sm text-neutral">El salón lo asigna el jefe del departamento.</p>
     @endif

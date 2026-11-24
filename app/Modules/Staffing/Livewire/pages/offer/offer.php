@@ -11,6 +11,7 @@ use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Enums\StaffingPermission;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Queries\SelectionOrderQuery;
 use App\Modules\Staffing\Queries\SelectionTimetableQuery;
 use App\Modules\Staffing\Queries\TeacherOfferQuery;
@@ -101,6 +102,11 @@ new #[Title('Oferta del departamento')] class extends Component
 
     private bool $selectionResolved = false;
 
+    /** La ficha de docente del usuario y su renglón en la cola de la selección, una vez por petición. */
+    private ?Teacher $teacherMemo = null;
+
+    private ?SelectionEntry $entryMemo = null;
+
     public function mount(Actor $context): void
     {
         abort_unless($context->allowsAny(StaffingPermission::OfferView) || $context->allowsAny(StaffingPermission::SelectionView), 403);
@@ -139,7 +145,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $user = $context->user() ?? abort(403);
         $selection = $this->selection($context, $timetable) ?? abort(404);
         $this->authorize('pickOwn', $selection);
-        $teacher = $timetable->activeTeacherOf($user) ?? abort(403);
+        $teacher = $this->teacherMemo ?? abort(403);
         $this->resetValidation();
 
         try {
@@ -177,7 +183,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $selection = $this->selection($context, $timetable);
 
         if ($selection !== null) {
-            return $this->selectionView($selection, $context, $timetable, $order);
+            return $this->selectionView($selection, $timetable, $order);
         }
 
         $user = $context->user();
@@ -243,11 +249,14 @@ new #[Title('Oferta del departamento')] class extends Component
         }
 
         $visible = $timetable->live()->filter(fn (Selection $selection): bool => Gate::allows('view', $selection))->values();
-        $teacher = $visible->isEmpty() ? null : $timetable->activeTeacherOf($user);
-        [$own, $others] = $visible->partition(fn (Selection $selection): bool => $teacher !== null && $timetable->entryOf($selection, $teacher) !== null);
+        $this->teacherMemo = $visible->isEmpty() ? null : $timetable->activeTeacherOf($user);
+        $entries = $this->teacherMemo === null ? collect() : $timetable->entriesOf($visible, $this->teacherMemo);
+        [$own, $others] = $visible->partition(fn (Selection $selection): bool => $entries->has($selection->getKey()));
         $pool = $own->merge($others);
+        $this->selectionMemo = $pool->first(fn (Selection $selection): bool => $selection->department?->code === $this->department) ?? $pool->first();
+        $this->entryMemo = $this->selectionMemo === null ? null : $entries->get($this->selectionMemo->getKey());
 
-        return $this->selectionMemo = $pool->first(fn (Selection $selection): bool => $selection->department?->code === $this->department) ?? $pool->first();
+        return $this->selectionMemo;
     }
 
     /**
@@ -255,13 +264,12 @@ new #[Title('Oferta del departamento')] class extends Component
      *
      * @return array<string, mixed>
      */
-    private function selectionView(Selection $selection, Actor $context, SelectionTimetableQuery $timetable, SelectionOrderQuery $order): array
+    private function selectionView(Selection $selection, SelectionTimetableQuery $timetable, SelectionOrderQuery $order): array
     {
-        $user = $context->user() ?? abort(403);
         $now = CarbonImmutable::now();
-        $teacher = $timetable->activeTeacherOf($user);
-        $entry = $teacher === null ? null : $timetable->entryOf($selection, $teacher);
-        $data = $timetable->forTeacher($selection, $entry === null ? null : $teacher, $now);
+        $entry = $this->entryMemo;
+        $teacher = $entry === null ? null : $this->teacherMemo;
+        $data = $timetable->forTeacher($selection, $teacher, $now, $entry);
         $assignable = [];
         $canAssign = function (array $card) use (&$assignable): bool {
             $key = "{$card['modality_id']}|{$card['campus_id']}|{$card['department_id']}";
@@ -285,7 +293,7 @@ new #[Title('Oferta del departamento')] class extends Component
 
         return [
             'selection' => $selection,
-            'teacher' => $entry === null ? null : $teacher,
+            'teacher' => $teacher,
             'data' => $data,
             'strips' => $strips,
             'pickCounts' => array_map(fn (Closure $filter): int => $all->filter($filter)->count(), $filters),
@@ -348,17 +356,22 @@ new #[Title('Oferta del departamento')] class extends Component
     }
 
     /**
-     * «en 43 min», «en 2 h 10 min» o «en 3 días».
+     * Cuánto falta para su turno, como se dice: hoy, «en 43 min» o «en 2 h 10 min»; el día siguiente, «mañana» (la hora
+     * va justo arriba); después, «en 3 días», por días de calendario.
      */
     private static function minutesFrom(CarbonImmutable $now, CarbonImmutable $then): string
     {
+        $days = (int) round($now->startOfDay()->diffInDays($then->setTimezone($now->getTimezone())->startOfDay()));
+
+        if ($days >= 1) {
+            return $days === 1 ? 'mañana' : "en {$days} días";
+        }
+
         $minutes = (int) ceil($now->diffInSeconds($then) / 60);
 
-        return match (true) {
-            $minutes < 60 => "en {$minutes} min",
-            $minutes < 24 * 60 => 'en '.intdiv($minutes, 60).' h'.($minutes % 60 === 0 ? '' : ' '.($minutes % 60).' min'),
-            default => 'en '.(int) ceil($minutes / (24 * 60)).' días',
-        };
+        return $minutes < 60
+            ? "en {$minutes} min"
+            : 'en '.intdiv($minutes, 60).' h'.($minutes % 60 === 0 ? '' : ' '.($minutes % 60).' min');
     }
 
     /**
