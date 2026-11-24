@@ -5,6 +5,7 @@ use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Academic\Models\Department;
 use App\Modules\Academic\Models\Subject;
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Authorization\Target;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
@@ -37,6 +38,7 @@ use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
 use Livewire\Component;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 use Mary\Traits\Toast;
 
@@ -45,8 +47,11 @@ use Mary\Traits\Toast;
  * un departamento en siete pasos (alcance, CSV, tipo de espacio de las materias, tipo de los salones, horario de
  * turnos, vista previa del orden y publicar) y, ya publicada, la sigue en un monitor que se refresca cada 10 s.
  *
- * Solo con `staffing.selection.manage` (admin). Todo lo que escribe pasa por una Action; el CSV se lee de la carga
- * temporal y se borra enseguida: nunca se guarda ni se registra (lleva datos personales).
+ * Solo con `staffing.selection.manage` (admin), sobre el departamento y la modalidad de la selección: start() lo revisa
+ * antes de crear el borrador y toda lectura de `selectionId` (que el navegador puede cambiar) también. Todo lo que
+ * escribe pasa por una Action; el CSV se lee de la carga temporal y se borra enseguida, y también si no pasa la
+ * validación, si se sube otro en su lugar o si sale del paso sin importarlo: nunca se guarda ni se registra (lleva datos
+ * personales).
  */
 new #[Title('Orden de selección')] class extends Component
 {
@@ -119,7 +124,6 @@ new #[Title('Orden de selección')] class extends Component
             return;
         }
 
-        $this->authorizeManage($selection);
         $this->fillFrom($selection);
     }
 
@@ -133,6 +137,9 @@ new #[Title('Orden de selección')] class extends Component
             'modalityId' => ['required', 'exists:modalities,id'],
             'departmentId' => ['required', 'exists:departments,id'],
         ], attributes: ['termId' => 'periodo', 'modalityId' => 'modalidad', 'departmentId' => 'departamento']);
+
+        // Antes de crear nada: el permiso sobre el departamento y la modalidad elegidos, no solo el de la página.
+        abort_unless(app(Actor::class)->allows(StaffingPermission::SelectionManage, Target::of(modality: $this->modalityId, unit: $this->departmentId)), 403);
 
         $existing = Selection::query()
             ->where('term_id', $this->termId)
@@ -165,6 +172,10 @@ new #[Title('Orden de selección')] class extends Component
             }
         }
 
+        if ($target !== 2) {
+            $this->discardCsv();
+        }
+
         $this->step = $target;
     }
 
@@ -191,11 +202,16 @@ new #[Title('Orden de selección')] class extends Component
     {
         $selection = $this->managed();
 
-        $this->validate(['csvFile' => ['required', 'file', 'max:2048', 'extensions:csv,txt']], attributes: ['csvFile' => 'archivo']);
+        try {
+            $this->validate(['csvFile' => ['required', 'file', 'max:2048', 'extensions:csv,txt']], attributes: ['csvFile' => 'archivo']);
+        } catch (ValidationException $e) {
+            $this->discardCsv();
+
+            throw $e;
+        }
 
         $contents = (string) file_get_contents($this->csvFile->getRealPath());
-        $this->csvFile->delete();
-        $this->csvFile = null;
+        $this->discardCsv();
 
         $result = app(ImportSelectionCsv::class)->handle($selection, $contents, $this->actor());
 
@@ -208,6 +224,14 @@ new #[Title('Orden de selección')] class extends Component
             $this->candidates[$row['entry_id']] = $row['candidates'][0] ?? '';
             $this->picks[$row['entry_id']] = $row['candidates'][0] ?? '';
         }
+    }
+
+    /**
+     * Otro archivo en lugar del que ya estaba: el anterior se borra de la carga temporal (lleva datos personales).
+     */
+    public function updatingCsvFile(): void
+    {
+        $this->discardCsv();
     }
 
     public function updatedPicks(mixed $value, string $entryId): void
@@ -372,9 +396,32 @@ new #[Title('Orden de selección')] class extends Component
         $this->tab = $tab === 'monitor' ? 'monitor' : 'preparar';
     }
 
+    /**
+     * La selección de `selectionId`, que el navegador puede cambiar (`?seleccion=`): solo si quien la pide la maneja; si
+     * no, 403.
+     */
     private function selection(): ?Selection
     {
-        return $this->selectionId === '' ? null : KeyLookup::find(Selection::query(), $this->selectionId);
+        $selection = $this->selectionId === '' ? null : KeyLookup::find(Selection::query(), $this->selectionId);
+
+        if ($selection !== null) {
+            $this->authorizeManage($selection);
+        }
+
+        return $selection;
+    }
+
+    /**
+     * Borra de la carga temporal el CSV que no se importó (validación fallida, otro archivo, salir del paso) o que ya se
+     * leyó: nunca se queda guardado.
+     */
+    private function discardCsv(): void
+    {
+        if ($this->csvFile instanceof TemporaryUploadedFile) {
+            $this->csvFile->delete();
+        }
+
+        $this->csvFile = null;
     }
 
     private function managed(): Selection
