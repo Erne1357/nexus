@@ -13,9 +13,11 @@ use App\Modules\Facilities\Models\Room;
 use App\Modules\Facilities\Models\RoomBlock;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Faculty\Models\TeacherExternalLoad;
+use App\Modules\Faculty\Models\TeacherHourAllowance;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
@@ -98,6 +100,14 @@ it('cambiar la disponibilidad, las horas externas o las plazas de un docente rec
     event(new AvailabilityChanged($this->teacher, $this->term));
     event(new ExternalLoadChanged(TeacherExternalLoad::factory()->for($this->teacher)->create(['term_id' => $this->term->id])));
     event(new PositionChanged(TeacherPosition::factory()->for($this->teacher)->create()));
+
+    expect(queuedRecomputes())->toEqualCanonicalizing([pairOf($this->group), pairOf($this->elsewhere)]);
+});
+
+it('cambiar las horas autorizadas de un docente recalcula sus modalidades del periodo, una vez por carga (SEL-12)', function () {
+    event(new HourAllowanceChanged(TeacherHourAllowance::query()->create([
+        'teacher_id' => $this->teacher->id, 'term_id' => $this->term->id, 'hours' => 30, 'reason' => 'Cerró su carga', 'granted_at' => now(),
+    ])));
 
     expect(queuedRecomputes())->toEqualCanonicalizing([pairOf($this->group), pairOf($this->elsewhere)]);
 });
