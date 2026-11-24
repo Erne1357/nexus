@@ -128,6 +128,9 @@ FROM base AS prod
 
 ARG UID=1000
 ARG GID=1000
+# El SHA del release: /health dice qué versión atiende.
+ARG NEXUS_RELEASE=dev
+ENV NEXUS_RELEASE=$NEXUS_RELEASE
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
