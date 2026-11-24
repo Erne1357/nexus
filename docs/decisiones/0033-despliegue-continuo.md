@@ -43,7 +43,7 @@ Decidió por AskUserQuestion:
 - Sin internet (hoy), desplegar es descargar el artefacto en una máquina con acceso y copiarlo a la carpeta de entrada del servidor (`/opt/nexus/inbox`).
 - Con internet (`DEPLOY_SOURCE=github`):
   - el job `release` crea un **Deployment de GitHub** en el ambiente `production`, con los digests en el payload;
-  - el deployer lo consulta cada minuto con un token *fine-grained* que solo tiene Deployments, descarga por digest y publica `in_progress` y luego `success` o `failure`;
+  - el deployer lo consulta cada minuto con un token *fine-grained* que solo tiene Deployments (en `deployer.env`, que no lee la app), descarga por digest (solo imágenes `ghcr.io/erne1357/nexus-*`) y publica `in_progress` y luego `success` o `failure`;
   - el workflow espera ese resultado y falla si el despliegue falló, así que GitHub avisa por correo;
   - si nadie lo toma en 30 minutos, solo deja un aviso.
 
@@ -51,11 +51,13 @@ Decidió por AskUserQuestion:
 - `app` se parte en `app-blue` y `app-green`, idénticos salvo el nombre (una prueba lo exige).
 - Caddy los tiene a los dos como upstream con `lb_policy first` y health checks activos a `/health` cada 2 s. Manda todo al primer color sano y nunca reparte entre versiones.
 - El deployer:
-  1. arranca el color inactivo con la versión nueva;
+  1. arranca el color inactivo con la versión nueva, drenado: un archivo hace que su `/health` le responda 503 a la sonda de Caddy (cabecera `X-Health-Probe: lb`), que no le manda tráfico;
   2. espera a que su `/health` responda 200 con el release esperado;
   3. recrea `queue` y `scheduler` con la imagen nueva;
-  4. drena el color viejo: un archivo hace que su `/health` responda 503, y Caddy lo saca de la rotación en un intervalo;
-  5. lo detiene con apagado ordenado. El contenedor queda **detenido, no borrado**: volver al release anterior es encenderlo.
+  4. pone el color nuevo en la rotación y drena el viejo; Caddy cambia todo el tráfico en un intervalo;
+  5. detiene el viejo con apagado ordenado. El contenedor queda **detenido, no borrado**: volver al release anterior es encenderlo.
+
+  Con `lb_policy first`, sin el arranque drenado Caddy le mandaría tráfico a `app-blue` en cuanto respondiera sano, antes de actualizar los workers.
 - Si una conexión falla justo al detener un color, Caddy reintenta en el otro (`lb_try_duration`).
 - **Assets:** una página que sirvió la versión vieja pide `/build/assets/<hash viejo>`. Caddy sirve `/build/*` desde un volumen (`build-assets`) donde el deployer deja los assets de los últimos releases. Las peticiones de Livewire de una página vieja sí pueden llegar al código nuevo: se acepta (Livewire pide recargar si el componente cambió).
 - Caddy y los respaldos montan su configuración desde una carpeta estable (`NEXUS_CONFIG_DIR`). Así Compose no los recrea en cada release. Un Caddyfile nuevo se aplica con `caddy reload`, sin cortar conexiones.
@@ -78,7 +80,8 @@ Decidió por AskUserQuestion:
   3. vacía Valkey;
   4. despliega el destino.
 
-  Se pierde lo escrito después de ese respaldo, y el mensaje lo dice.
+  Se pierde lo escrito después de ese respaldo, y el mensaje lo dice. La restauración se hace en una base aparte que solo reemplaza a la real si salió bien; la de antes queda renombrada.
+- La guardia cuenta toda migración con contracciones que llegó a correr: el deployer la registra antes y después de migrar, así que vale aunque el despliegue fallara después, y también para `deploy --sha` de un release anterior.
 - No se usa `migrate:rollback`: las `down()` de las migraciones con datos no son confiables sobre una base de 4.4 GB.
 
 ### `/health` profundo (Core)

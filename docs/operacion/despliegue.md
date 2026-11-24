@@ -190,17 +190,17 @@ scp nexus-<sha>.tar.sha256 servidor:/opt/nexus/inbox/
 
 En menos de un minuto el deployer lo verifica y lo despliega sin cortar el servicio. Para seguirlo: `docker logs -f nexus-deployer-1`. Al terminar, el paquete queda en `inbox/hechos/` (o en `inbox/fallidos/`, con `<paquete>.log` explicando por qué). Si hay varios paquetes, despliega el más nuevo y aparta los demás en `inbox/omitidos/`. También se puede a mano: `nexus deploy --bundle /opt/nexus/inbox/nexus-<sha>.tar`.
 
-**Con internet** (`DEPLOY_SOURCE=github`, `DEPLOY_GITHUB_TOKEN` con un token *fine-grained* del repositorio con permiso de lectura y escritura solo en *Deployments*): no hay que hacer nada; cada merge a `main` se despliega solo y el resultado se ve en la pestaña *Environments → production* del repositorio.
+**Con internet:** pon `DEPLOY_SOURCE=github` en `.env` y crea `/opt/nexus/deployer.env` (`chmod 600`) con `DEPLOY_GITHUB_TOKEN=<token>`: un token *fine-grained* del repositorio con permiso de lectura y escritura solo en *Deployments*. Va aparte porque el `.env` lo leen también la app y la cola; `deployer.env` solo el deployer. Después, `nexus compose up -d --no-deps deployer`. Desde ahí no hay que hacer nada: cada merge a `main` se despliega solo y el resultado se ve en *Environments → production* del repositorio. El deployer solo acepta imágenes `ghcr.io/erne1357/nexus-*` por digest. Si el servidor sale por el proxy del ITCJ, pon `HTTPS_PROXY` y `NO_PROXY` en `deployer.env` y configura también el proxy del daemon de Docker (`/etc/systemd/system/docker.service.d/http-proxy.conf`), que es quien descarga las imágenes.
 
 Qué hace el deployer, en orden:
 
 1. Verifica el paquete (`sha256`), carga las imágenes y deja la infraestructura del release en `releases/<sha>/`.
 2. Revisa el `.env`: si el release trae variables nuevas en `.env.production.example` que tu `.env` no tiene, **no despliega** y las lista (código 5). Agrégalas y vuelve a copiar el paquete (o `nexus deploy --sha <sha>`).
 3. Si hay migraciones pendientes: respaldo previo en `BACKUP_DIR/predeploy/` y `migrate` con la imagen nueva. La versión vieja sigue atendiendo: las migraciones son compatibles con ella (expand/contract, CLAUDE.md §5).
-4. Arranca el color inactivo con la versión nueva y espera a que `/health` responda sano con ese release (hasta `DEPLOY_HEALTH_TIMEOUT`, 180 s). Si no llega, lo detiene y **producción sigue igual** (código 6).
-5. Recrea la cola y el scheduler con la versión nueva; drena el color viejo y lo detiene con apagado ordenado. El viejo queda detenido para volver atrás al instante.
+4. Arranca el color inactivo con la versión nueva, **drenado** (Caddy todavía no le manda tráfico), y espera a que `/health` responda sano con ese release (hasta `DEPLOY_HEALTH_TIMEOUT`, 180 s). Si no llega, lo detiene y **producción sigue igual** (código 6).
+5. Recrea la cola y el scheduler con la versión nueva; pone el color nuevo en la rotación; drena el viejo y lo detiene con apagado ordenado. El viejo queda detenido para volver atrás al instante.
 6. Verifica por Caddy que atiende la versión nueva; si no, vuelve sola a la anterior (código 8).
-7. Registra el release, limpia lo que pasó de los últimos 5 y, si cambió, se actualiza a sí mismo.
+7. Registra el release. Si el Caddyfile cambió, lo valida con la imagen de Caddy y lo recarga sin cortar conexiones (si no es válido, Caddy sigue con el anterior y queda un aviso). Limpia lo que pasó de los últimos 5 y, si cambió, se actualiza a sí mismo cuando termina cualquier despliegue en curso.
 
 ### Pausar los despliegues
 
@@ -217,7 +217,13 @@ También sin entrar al servidor: un archivo vacío `rollback-previous` o `rollba
 
 - Usa las imágenes exactas de ese release, sin descargar nada, y el mismo cambio de color sin caídas. Si el contenedor detenido ya es esa versión, solo lo enciende.
 - No revierte migraciones: el esquema nuevo es compatible con el código viejo. `/health` dirá `degraded` («la base tiene migraciones que el código no conoce»), que es lo esperado.
-- **Si de por medio hubo una contracción** (un release que borró o renombró columnas o tablas, con `#[Contract]`), el código viejo ya no funcionaría con el esquema y el deployer se niega (código 7) diciendo qué respaldo habría que restaurar. Con `nexus rollback <sha> --restore --yes` pone la app en mantenimiento, restaura el respaldo previo a esa contracción, vacía Valkey (cierra las sesiones y vacía la cola) y despliega el destino. **Se pierde todo lo escrito desde ese respaldo.**
+- **Si de por medio se aplicó una contracción** (una migración con `#[Contract]` que borró o renombró columnas o tablas, aunque el despliegue que la trajo haya fallado después), el código viejo ya no funcionaría con el esquema y el deployer se niega (código 7) diciendo qué respaldo habría que restaurar. Lo mismo con `nexus deploy --sha <un release anterior>`. Con `nexus rollback <sha> --restore --yes`:
+  1. verifica que el respaldo exista y se pueda leer (si no, no toca nada);
+  2. pone la app en mantenimiento y restaura el respaldo en una base aparte;
+  3. solo si salió bien, la cambia por la real; la de antes queda como `nexus_antes_<fecha>` para revisarla (bórrala con `nexus compose exec postgres dropdb -U nexus nexus_antes_<fecha>` cuando ya no la necesites; ocupa lo mismo que la base);
+  4. vacía Valkey (cierra las sesiones y vacía la cola) y despliega el destino.
+
+  **Se pierde todo lo escrito desde ese respaldo.** Hace falta espacio en disco para una segunda copia de la base mientras dura.
 
 ### `/health`
 
@@ -385,7 +391,7 @@ Códigos de salida del deployer (también en `inbox/fallidos/<paquete>.log` y en
 | 6 | La versión nueva no quedó sana; producción sigue con la anterior | `inbox/fallidos/<paquete>.log` trae el último `/health`; `nexus compose logs app-<color nuevo>` |
 | 7 | Volver atrás cruza una contracción | Lee el mensaje: dice qué respaldo restaurar. Repite con `--restore --yes` si aceptas perder lo escrito desde entonces |
 | 8 | Después del cambio Caddy no atendía la versión nueva; se volvió sola a la anterior | `nexus compose logs caddy` |
-| 9 | Una migración falló (o el respaldo previo) | La versión anterior sigue atendiendo. Lee el error en el registro; un `lock_timeout` se resuelve reintentando en un momento con menos uso |
+| 9 | Una migración falló (o el respaldo previo) | La versión anterior sigue atendiendo. Lee el error en el registro; un `lock_timeout` se resuelve reintentando en un momento con menos uso (el reintento reusa el respaldo previo de ese release) |
 | 10 | Otro despliegue seguía en curso | Espera a que termine (`docker logs -f nexus-deployer-1`) |
 
 | Síntoma | Qué revisar |
@@ -431,7 +437,7 @@ docker run --rm --network none -v $PWD/docker/caddy:/etc/caddy:ro -e APP_DOMAIN=
 
 Las dos deben decir «Valid configuration». Caddy prepara `basic_auth` aunque esté apagada; por eso el valor de respaldo del hash es `b2Zm` («off» en base64), y no `off`, que no lo deja arrancar.
 
-Sin credenciales todas las rutas responden 401; con ellas, la aplicación (que además pide su propio inicio de sesión). Para apagarla, comenta las dos líneas y repite `up -d caddy`. El túnel debe apuntar a `https://127.0.0.1:<HTTPS_PORT>` con la verificación del certificado desactivada (CA interna con `local_certs`) y enviando el nombre `APP_DOMAIN` como Host/SNI. Comparte la contraseña por un canal distinto al del enlace y baja el túnel al terminar. En el servidor real déjala apagada.
+Sin credenciales todas las rutas responden 401, salvo `/health` (el deployer lo usa para verificar cada despliegue); con ellas, la aplicación (que además pide su propio inicio de sesión). Para apagarla, comenta las dos líneas y repite `up -d caddy`. El túnel debe apuntar a `https://127.0.0.1:<HTTPS_PORT>` con la verificación del certificado desactivada (CA interna con `local_certs`) y enviando el nombre `APP_DOMAIN` como Host/SNI. Comparte la contraseña por un canal distinto al del enlace y baja el túnel al terminar. En el servidor real déjala apagada.
 
 ## Probar el stack de producción en una máquina de desarrollo
 
