@@ -110,7 +110,8 @@ rollback_release() {
 # Un SHA corto del historial o de la carpeta de releases a su forma completa.
 resolve_sha() {
     local match
-    match=$(find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d -name "$1*" ! -name '.*' -printf '%f\n')
+    # Sin `find -printf`: la imagen usa el find de busybox.
+    match=$(ls -1 "$RELEASES_DIR" | grep -E "^${1//[^A-Za-z0-9]/}" || true)
     [ "$(wc -l <<<"$match")" = 1 ] && [ -n "$match" ] || die "$E_USAGE" "no encuentro un único release que empiece con $1 en $RELEASES_DIR"
     printf '%s\n' "$match"
 }
