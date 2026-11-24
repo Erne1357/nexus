@@ -67,11 +67,22 @@ run_migrations() {
         die "$E_MIGRATE" "las migraciones de $(short "$sha") fallaron; la versión anterior sigue atendiendo (las migraciones son compatibles con ella)"
 }
 
+# Volumen de los assets que sirve Caddy. `compose run -v <nombre>` no le pone el prefijo del proyecto, así que se usa
+# el nombre completo; si todavía no existe, se crea con las etiquetas de Compose para que Caddy lo reconozca como suyo.
+assets_volume() {
+    local volume="${PROJECT}_build-assets"
+    if ! docker volume inspect "$volume" >/dev/null 2>&1; then
+        docker volume create --label "com.docker.compose.project=$PROJECT" \
+            --label com.docker.compose.volume=build-assets "$volume" >/dev/null
+    fi
+    printf '%s\n' "$volume"
+}
+
 # Assets compilados del release al volumen que sirve Caddy. Los nombres llevan hash: los de varios releases
 # conviven. La lista de cada release queda en su carpeta para la limpieza.
 publish_assets() {
     local sha=$1
-    compose "$sha" run --rm --no-deps -T --user 0 --entrypoint sh -v build-assets:/srv/build migrate -c \
+    compose "$sha" run --rm --no-deps -T --user 0 --entrypoint sh -v "$(assets_volume):/srv/build" migrate -c \
         'mkdir -p /srv/build/assets && cp -a /app/public/build/assets/. /srv/build/assets/ && cd /app/public/build/assets && ls -1' \
         >"$RELEASES_DIR/$sha/assets.txt"
 }
@@ -81,7 +92,7 @@ prune_assets() {
     local sha=$1 keep
     keep=$(cat "$RELEASES_DIR"/*/assets.txt 2>/dev/null | sort -u)
     [ -n "$keep" ] || return 0
-    printf '%s\n' "$keep" | compose "$sha" run --rm --no-deps -T --user 0 --entrypoint sh -v build-assets:/srv/build migrate -c \
+    printf '%s\n' "$keep" | compose "$sha" run --rm --no-deps -T --user 0 --entrypoint sh -v "$(assets_volume):/srv/build" migrate -c \
         'cat >/tmp/keep && cd /srv/build/assets && for f in *; do grep -qxF "$f" /tmp/keep || rm -f -- "$f"; done'
 }
 

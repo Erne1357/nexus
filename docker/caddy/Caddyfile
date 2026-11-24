@@ -55,6 +55,11 @@
 			health_interval 2s
 			health_timeout 2s
 			health_status 200
+			# Solo a esta sonda le responde /health «draining» (503) un color que se está apagando; al público le
+			# sigue respondiendo normal hasta que Caddy lo saca de la rotación.
+			health_headers {
+				X-Health-Probe lb
+			}
 		}
 	}
 
