@@ -3,14 +3,17 @@
 namespace App\Modules\Core\Actions;
 
 use App\Modules\Core\Authorization\Actor;
+use App\Modules\Core\Enums\TermSlot;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Navigation\RecentPages;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Contracts\Session\Session;
 
 /**
- * Fija en la sesión el periodo activo del usuario autenticado (selector de la credencial). Cualquier periodo vale;
- * `null` olvida la elección y deja el de omisión, el actual. La credencial ya no elige campus (#415): lo elige cada
+ * Fija en la sesión uno de los dos periodos del usuario autenticado (selectores de la credencial, TP-04): el de carga
+ * (por omisión el vigente, `is_current`) o el de consulta (por omisión el que está en curso, TP-03). Cualquier periodo
+ * vale; `null` olvida la elección y deja el de omisión del `TermSlot`, y quien llama pasa `null` cuando lo elegido es
+ * ese de omisión. La credencial ya no elige campus (#415): lo elige cada
  * pantalla en su URL. También olvida las páginas que el menú recuerda por área (RecentPages): una ficha de otro
  * periodo ya no aplicaría. Solo escribe en la sesión, así que no abre transacción ni deja bitácora.
  */
@@ -25,13 +28,13 @@ final class SetActiveContext
     /**
      * @throws AuthorizationException si no hay usuario
      */
-    public function handle(?Term $term): void
+    public function handle(?Term $term, TermSlot $slot = TermSlot::Load): void
     {
         if ($this->context->user() === null) {
             throw new AuthorizationException('Inicia sesión para elegir el periodo.');
         }
 
-        $this->session->put(Actor::ACTIVE_TERM, $term?->getKey());
+        $this->session->put($slot === TermSlot::View ? Actor::VIEW_TERM : Actor::ACTIVE_TERM, $term?->getKey());
 
         $this->recentPages->forget();
     }

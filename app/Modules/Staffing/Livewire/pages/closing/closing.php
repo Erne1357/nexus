@@ -207,7 +207,7 @@ new #[Title('Cierre de la carga')] class extends Component
         $this->termId = $this->departmentId = null;
         $this->departments = [];
         $this->showLoad(null, $query);
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';

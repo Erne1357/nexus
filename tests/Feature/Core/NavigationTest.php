@@ -872,8 +872,8 @@ describe('iconos de área', function () {
         $this->get(route('academic.subjects', ['search' => 'cal']))->assertOk();
 
         Livewire::test('core::components.context-switcher')
-            ->set('termId', $term->id)
-            ->call('apply')
+            ->set('loadTermId', $term->id)
+            ->call('applyLoad')
             ->assertHasNoErrors();
 
         $page = domOf($this->get(route('students.index'))->assertOk());

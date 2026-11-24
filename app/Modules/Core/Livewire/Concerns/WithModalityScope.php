@@ -84,7 +84,7 @@ trait WithModalityScope
             return $this->defaultModalityOfRequest;
         }
 
-        $termId = app(Actor::class)->activeTerm()?->getKey();
+        $termId = app(Actor::class)->loadTerm()?->getKey();
         $opened = $termId === null ? [] : TermOpening::query()->where('term_id', $termId)->whereIn('modality_id', $sorted->modelKeys())->pluck('modality_id')->all();
 
         return $this->defaultModalityOfRequest = $sorted->first(fn (Modality $modality): bool => in_array($modality->getKey(), $opened, true)) ?? $sorted->first();

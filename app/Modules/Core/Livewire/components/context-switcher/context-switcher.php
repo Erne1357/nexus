@@ -4,9 +4,11 @@ use App\Modules\Core\Actions\SetActiveContext;
 use App\Modules\Core\Actions\SwitchRole;
 use App\Modules\Core\Authorization\Actor;
 use App\Modules\Core\Enums\Role;
+use App\Modules\Core\Enums\TermSlot;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Queries\RoleSummaryQuery;
 use App\Modules\Core\Queries\TermQuery;
+use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
@@ -16,15 +18,17 @@ use Livewire\Livewire;
 use Mary\Traits\Toast;
 
 /**
- * Selector de perfil y periodo activos, en la tarjeta de la credencial de la banda. Quien tiene más de un puesto ve
+ * Selector de perfil y periodos activos, en la tarjeta de la credencial de la banda. Quien tiene más de un puesto ve
  * «Actuando como», un renglón por puesto con su alcance (RoleSummaryQuery, armado una vez al montar: no cambia mientras
  * la página está abierta); elegir uno lo cambia con switchRole() (SwitchRole) y regresa a Inicio. Con un solo puesto no
  * hay selector (la credencial ya dice cuál es). La credencial ya no elige campus (#415): lo elige cada pantalla en su
- * URL. Ofrece todos los periodos, y apply() guarda la elección con SetActiveContext; apply() nunca cambia el perfil.
- * Elegir el periodo actual deja el de omisión, para seguirlo cuando cambie. Sin periodo activo, el selector muestra
- * "Sin periodo". Después lo confirma con un toast y recarga la página, con el campus que la página tenía elegido
- * (`?campus=`), para que todo lo que depende del periodo lo use. Si el periodo no existe, avisa con un toast de error
- * y regresa la selección al periodo vigente.
+ * URL. Lleva dos periodos (TP-04): «Periodo», de consulta, para todos (por omisión el que está en curso, TP-03), y
+ * «Carga», solo para quien trabaja la carga (Actor::worksLoad(); por omisión el vigente que marca el admin). Ofrecen
+ * todos los periodos, y applyView() y applyLoad() guardan la elección con SetActiveContext, cada uno en su ranura; nunca
+ * cambian el perfil. Elegir el de omisión de la ranura la olvida, para seguirlo cuando cambie. Sin periodo, el selector
+ * muestra "Sin periodo". Después lo confirma con un toast y recarga la página, con el campus que la página tenía elegido
+ * (`?campus=`), para que todo lo que depende del periodo lo use. Si el periodo no existe, avisa con un toast de error y
+ * regresa la selección al que rige.
  */
 new class extends Component
 {
@@ -34,6 +38,8 @@ new class extends Component
 
     public ?string $termId = null;
 
+    public ?string $loadTermId = null;
+
     /** @var list<array{id: string, name: string}> un renglón por puesto, con dos o más; si no, ninguno */
     #[Locked]
     public array $roles = [];
@@ -41,19 +47,21 @@ new class extends Component
     public function mount(Actor $context, RoleSummaryQuery $summaries): void
     {
         $this->roleValue = $context->activeRole()?->value;
-        $this->termId = $context->activeTerm()?->getKey();
+        $this->termId = $context->viewTerm()?->getKey();
+        $this->loadTermId = $context->loadTerm()?->getKey();
 
         $rows = count($context->heldRoles()) > 1 ? $summaries->forHeldRoles($context) : [];
         $this->roles = array_map(fn (string $value, string $summary): array => ['id' => $value, 'name' => $summary], array_keys($rows), $rows);
     }
 
     /**
-     * @return array{terms: Collection<int, Term>}
+     * @return array{terms: Collection<int, Term>, worksLoad: bool}
      */
     public function with(Actor $context, TermQuery $terms): array
     {
         return [
             'terms' => $context->user() === null ? new Collection : $terms->selectable(),
+            'worksLoad' => $context->worksLoad(),
         ];
     }
 
@@ -83,14 +91,16 @@ new class extends Component
     }
 
     /**
-     * Guarda el periodo elegido. No toca el perfil: eso es de switchRole().
+     * Guarda el periodo de consulta elegido. El de omisión es el que está en curso. No toca el perfil: eso es de
+     * switchRole().
      */
-    public function apply(SetActiveContext $setActiveContext, Actor $context, TermQuery $terms): void
+    public function applyView(SetActiveContext $setActiveContext, Actor $context, TermQuery $terms): void
     {
         try {
             $term = blank($this->termId) ? null : $terms->findOrFail($this->termId);
+            $default = $terms->inProgress(CarbonImmutable::now('America/Ciudad_Juarez'));
 
-            $setActiveContext->handle($term?->is_current ? null : $term);
+            $setActiveContext->handle($term !== null && $term->is($default) ? null : $term, TermSlot::View);
         } catch (ModelNotFoundException) {
             $this->reject('El periodo elegido ya no existe.', $context);
 
@@ -102,7 +112,35 @@ new class extends Component
         }
 
         // El toast de MaryUI pinta título y descripción con x-html: el nombre va escapado.
-        $this->success('Periodo actualizado', e((string) $context->activeTerm()?->name), redirectTo: $this->pageUrl());
+        $this->success('Periodo actualizado', e((string) $context->viewTerm()?->name), redirectTo: $this->pageUrl());
+    }
+
+    /**
+     * Guarda el periodo de carga elegido; solo quien trabaja la carga (Actor::worksLoad()). El de omisión es el vigente
+     * (`is_current`).
+     */
+    public function applyLoad(SetActiveContext $setActiveContext, Actor $context, TermQuery $terms): void
+    {
+        try {
+            if (! $context->worksLoad()) {
+                throw new AuthorizationException('Tu puesto no trabaja la carga.');
+            }
+
+            $term = blank($this->loadTermId) ? null : $terms->findOrFail($this->loadTermId);
+
+            $setActiveContext->handle($term?->is_current ? null : $term, TermSlot::Load);
+        } catch (ModelNotFoundException) {
+            $this->reject('El periodo elegido ya no existe.', $context);
+
+            return;
+        } catch (AuthorizationException $exception) {
+            $this->reject($exception->getMessage(), $context);
+
+            return;
+        }
+
+        // El toast de MaryUI pinta título y descripción con x-html: el nombre va escapado.
+        $this->success('Periodo de carga actualizado', e((string) $context->loadTerm()?->name), redirectTo: $this->pageUrl());
     }
 
     /**
@@ -123,7 +161,8 @@ new class extends Component
     private function reject(string $reason, Actor $context): void
     {
         $this->roleValue = $context->activeRole()?->value;
-        $this->termId = $context->activeTerm()?->getKey();
+        $this->termId = $context->viewTerm()?->getKey();
+        $this->loadTermId = $context->loadTerm()?->getKey();
 
         $this->error('No se cambió el periodo', e($reason));
     }

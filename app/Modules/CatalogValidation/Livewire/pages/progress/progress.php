@@ -76,7 +76,7 @@ new #[Title('Avance de validación')] class extends Component
     {
         Gate::authorize('viewProgress', CatalogReview::class);
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $open = $term === null ? new Collection : $progress->openCampuses($term);
         $canOpen = Gate::allows('open', CatalogReview::class);
 
@@ -118,7 +118,7 @@ new #[Title('Avance de validación')] class extends Component
     {
         Gate::authorize('open', CatalogReview::class);
 
-        $term = $context->activeTerm() ?? abort(404);
+        $term = $context->loadTerm() ?? abort(404);
         $catalogs = array_values(array_filter(array_map(fn (string $value): ?Catalog => Catalog::tryFrom($value), $this->toOpen)));
 
         if ($catalogs === []) {
@@ -179,7 +179,7 @@ new #[Title('Avance de validación')] class extends Component
     {
         Gate::authorize('remind', CatalogReview::class);
 
-        $term = $context->activeTerm() ?? abort(404);
+        $term = $context->loadTerm() ?? abort(404);
 
         if ($departmentId === null) {
             $ids = collect($progress->board($term, $this->search, $this->status, withSchoolServices: $this->seesSchoolServices($context))['rows'])
