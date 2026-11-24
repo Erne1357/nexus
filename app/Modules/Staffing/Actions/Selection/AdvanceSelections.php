@@ -66,8 +66,8 @@ final class AdvanceSelections
      */
     private function advance(string $id, CarbonImmutable $now): array
     {
-        // Mismo candado que PickSelectionGroup y el cierre de carga: primero el de la selección, luego su fila y sus renglones.
-        DB::select('select pg_advisory_xact_lock(hashtext(?))', [$id]);
+        // Misma llave (`staffing_selection:<id>`) que PickSelectionGroup y el cierre de carga, compartida con ellos: primero el de la selección, luego su fila y sus renglones.
+        DB::select('select pg_advisory_xact_lock(hashtext(?))', ["staffing_selection:{$id}"]);
 
         $selection = Selection::query()->whereKey($id)->lockForUpdate()->first();
         $result = ['advanced' => 0, 'notices' => 0];
