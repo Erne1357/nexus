@@ -221,7 +221,7 @@ new #[Title('Oferta del departamento')] class extends Component
         $selection = $this->selection($context, $timetable);
 
         if ($selection !== null) {
-            return $this->selectionView($selection, $timetable, $order);
+            return $this->selectionView($selection, $timetable, $order, $context);
         }
 
         $user = $context->user();
@@ -313,10 +313,14 @@ new #[Title('Oferta del departamento')] class extends Component
      *
      * @return array<string, mixed>
      */
-    private function selectionView(Selection $selection, SelectionTimetableQuery $timetable, SelectionOrderQuery $order): array
+    private function selectionView(Selection $selection, SelectionTimetableQuery $timetable, SelectionOrderQuery $order, Actor $context): array
     {
         $now = CarbonImmutable::now();
-        $entry = $this->entryMemo;
+        // Ya terminada, quien la ve como jefatura (el jefe o el JPD que también está en la cola) la ve como jefatura y no
+        // como «Solo consulta» (decisión 8): su renglón ya no le deja elegir nada.
+        $managing = $selection->status === SelectionStatus::Finished
+            && $context->allows(StaffingPermission::SelectionView, Target::of(modality: $selection->modality_id, unit: $selection->department_id));
+        $entry = $managing ? null : $this->entryMemo;
         $teacher = $entry === null ? null : $this->teacherMemo;
         $data = $timetable->forTeacher($selection, $teacher, $now, $entry);
         $assignable = [];

@@ -239,3 +239,39 @@ it('SEL-14: en «Oferta», el docente sin resolver confirma su carga con el mism
     expect($this->world->entryOf($this->dos)->status)->toBe(SelectionEntryStatus::Done)
         ->and($this->world->entryOf($this->uno)->status)->toBe(SelectionEntryStatus::Done);
 });
+
+it('«Quitar docente» rechaza un motivo de más de 500 caracteres', function () {
+    $this->group->update(['teacher_id' => $this->dos->id]);
+
+    Livewire::actingAs($this->jefe)->test('staffing::components.selection-group-drawer', ['selectionId' => $this->world->selection->id])
+        ->call('open', $this->group->id)
+        ->call('confirmUnassign')
+        ->set('unassignReason', str_repeat('a', 501))
+        ->call('unassign')
+        ->assertHasErrors(['unassignReason' => 'max']);
+
+    expect($this->group->fresh()->teacher_id)->toBe($this->dos->id);
+});
+
+it('decisión 8: un JPD que también está en la cola ve la selección terminada como jefatura, con «Asignar a…»', function () {
+    $this->world->entryOf($this->uno)->update(['status' => SelectionEntryStatus::Done]);
+    RoleAssignment::factory()->for($this->uno->user)->create(['role' => Role::JefeProyectoDocente, 'org_unit_id' => $this->world->department->id, 'modality_id' => $this->world->selection->modality_id]);
+    $this->uno->user->forceFill(['last_role' => Role::JefeProyectoDocente->value])->save();
+
+    $page = Livewire::actingAs($this->uno->user)->test('staffing::pages.offer');
+
+    $page->assertSee('1 sin resolver')
+        ->assertSee('Asignas o quitas el docente de cualquier grupo.')
+        ->assertDontSee('Solo consulta: los cambios los hacen');
+
+    Livewire::actingAs($this->uno->user)->test('staffing::components.selection-group-drawer', ['selectionId' => $this->world->selection->id])
+        ->call('open', $this->group->id)
+        ->assertSet('mode', 'assign');
+});
+
+it('un jefe de otro departamento que pasa `?seleccion=<id>` no ve nada de esa selección', function () {
+    $otherHead = User::factory()->withRole(Role::JefeDepartamento, ['department_id' => Department::factory()->create()->id])->create();
+
+    $this->actingAs($otherHead)->get(route('staffing.offer', ['seleccion' => $this->world->selection->id]))->assertForbidden();
+    Livewire::withQueryParams(['seleccion' => $this->world->selection->id])->actingAs($otherHead)->test('staffing::pages.offer')->assertForbidden();
+});

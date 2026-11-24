@@ -6,6 +6,8 @@ use App\Modules\Core\Enums\Role;
 use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Notifications\AccessInvitation;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Queries\InvitationRelease;
+use App\Modules\Staffing\Actions\Selection\InviteSelectionTeachers;
 use App\Modules\Staffing\Actions\Selection\PublishSelection;
 use App\Modules\Staffing\Enums\SelectionStatus;
 use App\Modules\Staffing\Jobs\InviteSelectionTeachersJob;
@@ -129,4 +131,25 @@ it('SEL-13: las invitaciones van a la cola después de confirmar la publicación
 
     expect(fn () => app(PublishSelection::class)->handle($draft, $this->world->admin))->toThrow(ValidationException::class);
     Queue::assertPushed(InviteSelectionTeachersJob::class, 1);
+});
+
+it('SEL-13: un error inesperado con un docente no detiene a los demás y queda en la bitácora, como en AC-09', function () {
+    $broken = accessTeacher('Iris Rota Ficticia', ['email' => 'iris@gmail.com']);
+    $fine = accessTeacher('Jorge Bien Ficticio', ['email' => 'jorge@gmail.com']);
+    // Una falla que no es de las reglas (la base se cae, un error de programación) a la mitad de la invitación de Iris.
+    $this->app->bind(InvitationRelease::class, fn () => new class($broken->id) implements InvitationRelease
+    {
+        public function __construct(private readonly string $brokenId) {}
+
+        public function isReleased(Teacher $teacher): bool
+        {
+            return $teacher->getKey() === $this->brokenId ? throw new RuntimeException('Se cayó la conexión.') : false;
+        }
+    });
+
+    $result = app(InviteSelectionTeachers::class)->handle($this->world->selection, $this->world->admin);
+
+    expect($result['invited'])->toBe(1)
+        ->and($result['failed'])->toBe([$broken->rfc => InviteSelectionTeachers::UNEXPECTED])
+        ->and(Activity::query()->where('event', 'selection_teachers_invited')->sole()->properties['failed'])->toBe([$broken->rfc => InviteSelectionTeachers::UNEXPECTED]);
 });

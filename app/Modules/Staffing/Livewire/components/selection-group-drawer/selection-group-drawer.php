@@ -256,12 +256,13 @@ new class extends Component
         $this->authorize('create', [GroupTeacherAssignment::class, $group]);
         $this->resetValidation();
         $previous = $group->loadMissing(['teacher' => fn ($teacher) => $teacher->withTrashed()->select(['id', 'name'])])->teacher?->name;
+        $this->unassignReason = trim($this->unassignReason);
 
-        if (trim($this->unassignReason) === '') {
-            $this->addError('unassignReason', 'Escribe el motivo para quitar al docente.');
-
-            return;
-        }
+        $this->validate(
+            ['unassignReason' => ['required', 'string', 'max:500']],
+            ['unassignReason.required' => 'Escribe el motivo para quitar al docente.'],
+            ['unassignReason' => 'motivo'],
+        );
 
         try {
             $action->handle($group, $user, $this->unassignReason);

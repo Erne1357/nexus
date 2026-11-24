@@ -6,12 +6,14 @@ use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Actions\InviteTeacherAccess;
 use App\Modules\Staffing\Models\Selection;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * SEL-13 (confirmado el 24 de noviembre de 2026): al publicar la selección, invita a activar su acceso a cada docente
  * de la cola que no lo tiene ni tiene una invitación vigente (InviteTeacherAccess::forSelection: al institucional si su
  * departamento ya validó el catálogo de docentes, AC-09; si no, al personal). El correo sale de la cola después del
- * commit de cada invitación (AccessInvitation). Una que no se puede mandar no detiene a las demás.
+ * commit de cada invitación (AccessInvitation). Una que no se puede mandar, por una regla o por un error inesperado (que
+ * se reporta), no detiene a las demás.
  *
  * Deja una entrada `selection_teachers_invited` sobre la selección con cuántas mandó, cuántos ya tenían acceso o una
  * invitación vigente, cuántos no tienen correo y el motivo de cada RFC que no se pudo invitar. El monitor del admin
@@ -19,6 +21,9 @@ use Illuminate\Validation\ValidationException;
  */
 final class InviteSelectionTeachers
 {
+    /** El motivo en la bitácora de una invitación que falló por algo que no es de las reglas. */
+    public const string UNEXPECTED = 'No se pudo invitar por un error inesperado; ya quedó reportado.';
+
     public function __construct(private readonly InviteTeacherAccess $invite) {}
 
     /**
@@ -43,6 +48,10 @@ final class InviteSelectionTeachers
                     InviteTeacherAccess::NO_EMAIL => $result['without_email']++,
                     default => $result['failed'][$entry->teacher->rfc] = $reason,
                 };
+            } catch (Throwable $exception) {
+                // Una falla que no es de las reglas no detiene a los demás: se reporta y queda en la bitácora con su RFC.
+                report($exception);
+                $result['failed'][$entry->teacher->rfc] = self::UNEXPECTED;
             }
         }
 
