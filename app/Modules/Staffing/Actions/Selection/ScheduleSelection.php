@@ -11,7 +11,8 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * SEL-08. Guarda cuándo empieza la selección y su ventana diaria (hora de inicio y fin, días de la semana ISO) y
- * recalcula el turno de cada renglón y el fin de la primera ronda. Solo con la selección en borrador.
+ * recalcula el turno de cada renglón y el fin de la primera ronda. Solo con la selección en borrador. La ventana diaria
+ * debe durar al menos un turno (`slot_minutes`): si no, no cabe ninguno.
  *
  * Toma primero el candado de la selección (`staffing_selection:{id}`) porque recalcula el orden.
  */
@@ -33,8 +34,13 @@ final class ScheduleSelection
             $errors['weekdays'] = 'Elige al menos un día de la semana válido.';
         }
 
+        $slotMinutes = (int) ($selection->slot_minutes ?? 30);
+
         if (preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $windowStarts) !== 1 || preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', $windowEnds) !== 1 || $windowStarts >= $windowEnds) {
             $errors['window_starts'] = 'La ventana debe empezar antes de terminar (formato HH:MM).';
+        } elseif (self::minutes($windowEnds) - self::minutes($windowStarts) < $slotMinutes) {
+            // Sin lugar para un turno completo, SelectionSlots no encontraría ningún turno válido (SEL-08).
+            $errors['window_starts'] = "La ventana diaria debe durar al menos {$slotMinutes} minutos, lo que dura un turno.";
         }
 
         if ($errors !== []) {
@@ -68,5 +74,12 @@ final class ScheduleSelection
 
             return $selection->refresh();
         });
+    }
+
+    private static function minutes(string $clock): int
+    {
+        [$hours, $minutes] = array_map('intval', explode(':', $clock));
+
+        return $hours * 60 + $minutes;
     }
 }

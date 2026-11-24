@@ -170,10 +170,10 @@ it('sin cargas incluidas no se publica y lo dice', function () {
     }
 });
 
-it('el aviso lleva a la oferta y un docente sin turno no frena a los demás', function () {
+it('el aviso lleva a la oferta, y un renglón sin turno recibe el suyo al recalcular la cola al publicar', function () {
     Notification::fake();
     $s = pubScenario();
-    SelectionEntry::factory()->for($s['selection'])->create([
+    $unslotted = SelectionEntry::factory()->for($s['selection'])->create([
         'teacher_id' => Teacher::factory()->create(['user_id' => User::factory()->create()->id])->id, 'position' => 2, 'slot_starts_at' => null, 'slot_ends_at' => null,
     ]);
 
@@ -184,5 +184,22 @@ it('el aviso lleva a la oferta y un docente sin turno no frena a los demás', fu
 
         return $message['route'] === 'staffing.offer' && $message['parameters'] === [] && route($message['route']) !== '';
     });
-    Notification::assertCount(1);
+    expect($unslotted->fresh()->slot_starts_at)->not->toBeNull();
+    Notification::assertCount(2);
+});
+
+it('SEL-10: publicar recalcula la cola dentro del candado: un docente adscrito después del CSV entra al final', function () {
+    Notification::fake();
+    $s = pubScenario();
+    $late = Teacher::factory()->adscribedTo($s['selection']->department)->create(['name' => 'Docente Tardío Ficticio', 'user_id' => User::factory()->create()->id]);
+
+    app(PublishSelection::class)->handle($s['selection'], $this->actor);
+
+    $entry = $s['selection']->entries()->where('teacher_id', $late->id)->first();
+
+    expect($entry)->not->toBeNull()
+        ->and($entry->source->value)->toBe('appended')
+        ->and($entry->slot_starts_at)->not->toBeNull()
+        ->and($entry->position)->toBeGreaterThan($s['entry']->fresh()->position);
+    Notification::assertSentTo($late->user, SelectionTurnPublished::class);
 });
