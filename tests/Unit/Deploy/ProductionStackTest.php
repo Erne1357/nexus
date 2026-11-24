@@ -151,3 +151,11 @@ it('deja las cabeceras de seguridad a la aplicación y en Caddy solo HSTS', func
         ->and($caddyfile)->not->toContain('X-Content-Type-Options')
         ->and($caddyfile)->not->toContain('Referrer-Policy');
 });
+
+it('la imagen prod lleva el release por build-arg', function () {
+    $dockerfile = file_get_contents(dirname(__DIR__, 3).'/Dockerfile');
+    $prod = substr($dockerfile, (int) strpos($dockerfile, 'FROM base AS prod'));
+
+    expect($prod)->toContain('ARG NEXUS_RELEASE')
+        ->and($prod)->toContain('ENV NEXUS_RELEASE=$NEXUS_RELEASE');
+});
