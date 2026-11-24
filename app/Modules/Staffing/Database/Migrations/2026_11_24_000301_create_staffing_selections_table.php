@@ -36,6 +36,7 @@ return new class extends Migration
         });
 
         DB::statement("alter table staffing_selections add constraint staffing_selections_status_check check (status in ('draft','published','running','extra_round','finished','cancelled'))");
+        DB::statement('alter table staffing_selections add constraint staffing_selections_window_check check (window_starts < window_ends)');
         DB::statement('alter table staffing_selections add constraint staffing_selections_slot_minutes_check check (slot_minutes > 0)');
         DB::statement("create unique index staffing_selections_live_unique on staffing_selections (term_id, modality_id, department_id, campus_id) where status <> 'cancelled'");
     }

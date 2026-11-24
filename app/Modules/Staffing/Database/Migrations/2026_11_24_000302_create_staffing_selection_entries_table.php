@@ -43,6 +43,7 @@ return new class extends Migration
             $table->timestampsTz();
 
             $table->unique(['selection_id', 'teacher_id']);
+            $table->index('teacher_id');
             $table->index(['selection_id', 'position']);
         });
 

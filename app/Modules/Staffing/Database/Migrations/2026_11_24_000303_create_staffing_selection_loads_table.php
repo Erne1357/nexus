@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignUuid('academic_load_id')->constrained('academic_loads');
 
             $table->primary(['selection_id', 'academic_load_id']);
+            $table->index('academic_load_id');
         });
     }
 
