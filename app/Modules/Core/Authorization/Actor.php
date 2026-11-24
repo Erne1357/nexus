@@ -9,6 +9,8 @@ use App\Modules\Core\Models\RoleAssignment;
 use App\Modules\Core\Models\Term;
 use App\Modules\Core\Models\User;
 use App\Modules\Core\Queries\KeyLookup;
+use App\Modules\Core\Queries\TermQuery;
+use Carbon\CarbonImmutable;
 use Closure;
 use Illuminate\Contracts\Session\Session;
 use Illuminate\Database\Eloquent\Builder;
@@ -76,9 +78,15 @@ use LogicException;
 final class Actor
 {
     /**
-     * Clave de sesión del periodo elegido en la credencial; la escribe SetActiveContext.
+     * Clave de sesión del periodo de carga elegido en la credencial; la escribe SetActiveContext. Conserva el nombre
+     * de cuando la credencial tenía un solo periodo, para no tirar las elecciones guardadas (TP-04).
      */
     public const string ACTIVE_TERM = 'core.active_term_id';
+
+    /**
+     * Clave de sesión del periodo de consulta elegido en la credencial; la escribe SetActiveContext (TP-04).
+     */
+    public const string VIEW_TERM = 'core.view_term_id';
 
     /**
      * Clave de sesión del perfil activo (el valor de un Role); la escribe el cambio de perfil.
@@ -124,7 +132,7 @@ final class Actor
     /** @var array<string, Collection<int, Modality>> modalities() por perfil activo ('' sin perfil) */
     private array $modalities = [];
 
-    /** @var array<string, Term|null> periodo activo por elección de sesión ('' sin elección) */
+    /** @var array<string, Term|null> periodo por slot y elección de sesión ('load:' o 'view:' más el id elegido, vacío sin elección) */
     private array $terms = [];
 
     /** @var array<int|string, self> contextos de otros usuarios, por id */
@@ -536,22 +544,60 @@ final class Actor
     }
 
     /**
-     * El periodo elegido en la credencial o, por omisión, el actual (`is_current`). Se recuerda por elección.
+     * El periodo de carga (TP-04): el que eligió en «Carga» o, por omisión, el vigente que marca el admin (`is_current`).
+     * Lo siguen demanda, propuestas, asignación, horarios, cierre, motor y validación. Se recuerda por elección.
      */
-    public function activeTerm(): ?Term
+    public function loadTerm(): ?Term
     {
         if ($this->user() === null) {
             return null;
         }
 
-        $selected = $this->session?->get(self::ACTIVE_TERM);
-        $key = (string) $selected;
+        // Quien no trabaja la carga (docente, alumno) no ve «Carga» ni la puede cambiar: siempre el vigente (TP-04), aunque
+        // la sesión traiga una elección de otro puesto o de un aviso.
+        $selected = $this->worksLoad() ? $this->session?->get(self::ACTIVE_TERM) : null;
+        $key = 'load:'.$selected;
 
         if (! array_key_exists($key, $this->terms)) {
             $this->terms[$key] = KeyLookup::find(Term::query(), $selected) ?? Term::current()->first();
         }
 
         return $this->terms[$key];
+    }
+
+    /**
+     * El periodo de consulta (TP-04): el que eligió en «Periodo» o, por omisión, el que está en curso hoy en la zona del
+     * Tec (TP-03, TermQuery::inProgress). Lo siguen el mapa, Inicio, Mi carga (lo en curso) y las fichas. Se recuerda por
+     * elección.
+     */
+    public function viewTerm(): ?Term
+    {
+        if ($this->user() === null) {
+            return null;
+        }
+
+        $selected = $this->session?->get(self::VIEW_TERM);
+        $key = 'view:'.$selected;
+
+        if (! array_key_exists($key, $this->terms)) {
+            $this->terms[$key] = KeyLookup::find(Term::query(), $selected)
+                ?? app(TermQuery::class)->inProgress(CarbonImmutable::now('America/Ciudad_Juarez'));
+        }
+
+        return $this->terms[$key];
+    }
+
+    /**
+     * Si el puesto activo trabaja la carga y por eso ve el selector «Carga» (TP-04): todos menos docente y alumno
+     * (supuesto por confirmar). Sin usuario, no.
+     */
+    public function worksLoad(): bool
+    {
+        $role = $this->activeRole();
+
+        return $this->user() !== null
+            && $role !== null
+            && ! in_array($role, [Role::Docente, Role::Alumno], true);
     }
 
     /**

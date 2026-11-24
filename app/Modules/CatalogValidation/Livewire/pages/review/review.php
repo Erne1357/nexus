@@ -877,7 +877,7 @@ new #[Title('Validación de catálogos')] class extends Component
             $department = $departments->first(fn (ReviewOwner $candidate): bool => CatalogReviewQuery::allowsOn($context, CatalogValidationPermission::ReviewFlag, $candidate->id));
         }
 
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
         $reviews = $department === null || $term === null
             ? new Collection
             : app(CatalogReviewQuery::class)->forOwner($term, $department)->load(['department', 'validator'])

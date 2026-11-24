@@ -982,7 +982,7 @@ new #[Title('Propuesta de carrera')] class extends Component
         $this->careers = [];
 
         $modality = $this->requiredModality();
-        $term = $context->activeTerm();
+        $term = $context->loadTerm();
 
         if ($term === null) {
             $this->message = 'No hay un periodo activo: elige uno en tu credencial.';

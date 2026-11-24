@@ -14,7 +14,6 @@ use App\Modules\Staffing\Models\ChangeRequest;
 use App\Modules\Staffing\Queries\MyChangeRequestsQuery;
 use App\Modules\Staffing\Queries\MyLoadQuery;
 use App\Modules\Staffing\Rules\ChangeRequestRules;
-use Carbon\CarbonImmutable;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Title;
@@ -162,7 +161,7 @@ new #[Title('Mi carga')] class extends Component
         abort_unless($user !== null && $context->allows(StaffingPermission::MyLoadView, Target::ownedBy((string) $user->getKey())), 403);
 
         $teacher = Teacher::query()->where('user_id', $user->getKey())->where('is_active', true)->first();
-        $planning = $context->activeTerm();
+        $planning = $context->loadTerm();
         $offer = $teacher !== null && $this->offersPlanning($context, $teacher, $query);
         $term = $this->selectedTerm($context, $teacher, $query);
         $load = $term === null || $teacher === null ? null : $query->forTeacher($teacher, $term);
@@ -188,12 +187,12 @@ new #[Title('Mi carga')] class extends Component
     }
 
     /**
-     * El periodo en curso (#755, confirmado el 20 de noviembre de 2026): el que contiene hoy por sus fechas, en la zona
-     * del Tec. Si ninguno lo contiene (entre semestres), el activo para capturar carga.
+     * El periodo en curso (#755, confirmado el 20 de noviembre de 2026): el periodo de consulta de la credencial, que por
+     * omisión es el que contiene hoy por sus fechas y, entre semestres, el que acaba de terminar (TP-03, TP-04).
      */
     private function inProgressTerm(Actor $context): ?Term
     {
-        return Term::query()->containing(CarbonImmutable::now(config('app.timezone')))->orderByDesc('code')->first() ?? $context->activeTerm();
+        return $context->viewTerm() ?? $context->loadTerm();
     }
 
     /**
@@ -203,11 +202,13 @@ new #[Title('Mi carga')] class extends Component
      */
     private function offersPlanning(Actor $context, Teacher $teacher, MyLoadQuery $query): bool
     {
-        $planning = $context->activeTerm();
+        $planning = $context->loadTerm();
+        $inProgress = $this->inProgressTerm($context);
 
         return $planning !== null
+            && $inProgress !== null
             && ! app(AcademicLoadVisibility::class)->hiddenFrom($context)
-            && $planning->id !== $this->inProgressTerm($context)?->id
+            && $planning->id !== $inProgress->id
             && $query->hasNexusGroups($teacher, $planning);
     }
 
@@ -216,7 +217,7 @@ new #[Title('Mi carga')] class extends Component
      */
     private function selectedTerm(Actor $context, ?Teacher $teacher, MyLoadQuery $query): ?Term
     {
-        $planning = $context->activeTerm();
+        $planning = $context->loadTerm();
 
         if ($teacher !== null && $this->period !== '' && $planning !== null && $this->period === $planning->id && $this->offersPlanning($context, $teacher, $query)) {
             return $planning;
@@ -233,7 +234,7 @@ new #[Title('Mi carga')] class extends Component
     {
         $term = $this->selectedTerm($context, $teacher, app(MyLoadQuery::class));
 
-        abort_if($term !== null && $term->id !== $context->activeTerm()?->id, 403);
+        abort_if($term !== null && $term->id !== $context->loadTerm()?->id, 403);
 
         return $term;
     }

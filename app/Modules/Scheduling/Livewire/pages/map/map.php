@@ -1,7 +1,7 @@
 <?php
 
+use App\Modules\Core\Authorization\Actor;
 use App\Modules\Scheduling\Queries\CampusMapQuery;
-use Carbon\CarbonImmutable;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Url;
@@ -10,7 +10,7 @@ use Livewire\Component;
 /**
  * Inicio: el mapa del campus (tarea 1.24.1, ADR-0030), para todo el que tiene sesión (D6 del usuario, 20 de noviembre de
  * 2026), dentro de la app con la banda y el menú (D5). El mapa (resources/js/ubicatec) maneja su propio DOM y Livewire no
- * lo vuelve a pintar; sus datos reales (CampusMapQuery: lugares, departamentos y las clases del periodo en curso) van
+ * lo vuelve a pintar; sus datos reales (CampusMapQuery: lugares, departamentos y las clases del periodo de consulta de la credencial, TP-04, por omisión el en curso) van
  * embebidos como JSON, sin API. `?lugar=b:<edificio>` abre un lugar al cargar.
  *
  * Bandera `config('nexus.campus_map_3d')` (env CAMPUS_MAP_3D, por omisión true): con false vive un marcador estático con el
@@ -24,8 +24,8 @@ new #[Layout('layouts::app', ['fullBleed' => true])] #[Title('Inicio')] class ex
     /**
      * @return array{map: array<string, mixed>}
      */
-    public function with(CampusMapQuery $query): array
+    public function with(CampusMapQuery $query, Actor $context): array
     {
-        return ['map' => $query->forDay(CarbonImmutable::now('America/Ciudad_Juarez'))];
+        return ['map' => $query->forTerm($context->viewTerm())];
     }
 };

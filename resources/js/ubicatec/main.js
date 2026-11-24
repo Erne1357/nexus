@@ -11,7 +11,10 @@ function start() {
         .then((api) => {
             if (api) root.__ubicatec = api;
         })
-        .catch((err) => console.error('[UbicaTec]', err));
+        .catch((err) => {
+            root.classList.add('ut-failed');
+            console.error('[UbicaTec]', err);
+        });
 }
 
 function stop() {

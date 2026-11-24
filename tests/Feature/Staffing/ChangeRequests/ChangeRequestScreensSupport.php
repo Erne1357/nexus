@@ -23,7 +23,7 @@ use App\Modules\Staffing\Models\ChangeRequest;
  */
 function crWorld(): object
 {
-    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027']);
+    $term = Term::factory()->current()->create(['code' => '20271', 'name' => 'Ene-Jun 2027', 'starts_on' => '2027-01-25', 'ends_on' => '2027-05-28']);
     $campus = Campus::factory()->create(['code' => 'C2', 'name' => 'Campus II']);
     $sc = Department::factory()->create(['code' => 'SC', 'name' => 'Sistemas y Computación']);
     $cb = Department::factory()->create(['code' => 'CB', 'name' => 'Ciencias Básicas']);

@@ -129,7 +129,7 @@ Para empezar las pruebas sin esperar las horas de la migración del SII, el prim
 
 ### Qué trae la copia
 
-- Todo lo de la demo real: la migración del SII (v2, con el esquema crudo `sii_archivo`, las filas de importación y la verificación; la base va completa, unos 4.4 GB), el mapa del campus, los catálogos normalizados, las sesiones del SII de Ago-Dic 2026, la carga de ISC para Ene-Jun 2027 (50 grupos) y la validación de catálogos abierta.
+- Todo lo de la demo real: la migración del SII (v2, con el esquema crudo `sii_archivo`, las filas de importación y la verificación; la base va completa, unos 4.4 GB), el mapa del campus, los catálogos normalizados, las sesiones del SII de Ago-Dic 2026 (las de los demás periodos las trae el paso 6), la carga de ISC para Ene-Jun 2027 (50 grupos) y la validación de catálogos abierta.
 - **Periodos:** los 150 que aparecen en los datos (1973 a 2027, con veranos), dados de alta con `core:sync-terms-from-data` (TP-01); Ene-Jun 2027 con el calendario TecNM 2026-2027: del 25 de enero al 28 de mayo.
 - **Cuentas:**
   - `admin` con una contraseña nueva y cambio obligatorio al entrar.
@@ -170,13 +170,19 @@ Las contraseñas nuevas se entregan aparte, en un archivo privado; no viajan en 
    ```
 
 5. **Variables.** `APP_URL` sale de `APP_DOMAIN` (`nexus.cdjuarez.tecnm.mx`); `NEXUS_CREDENTIAL_URL` va vacía en producción (el QR usa `APP_URL`; en la demo apuntaba al túnel); `NEXUS_DEFAULT_PASSWORD` no hace falta (el personal entra por invitación). El correo, en «Correo saliente (Microsoft 365)».
-6. **Verificar:**
+6. **Horarios del SII de todos los periodos** (tarea 1.32: el mapa del Inicio sigue el periodo de la credencial y necesita los horarios de cada uno). Una vez, en el color activo; tarda alrededor de un minuto (40 periodos, unas 315 000 sesiones) y se puede repetir:
+
+   ```bash
+   nexus compose exec app-<color> php artisan academic-load:import-sii-groups --no-interaction
+   ```
+
+7. **Verificar:**
    - `nexus status` y `curl -fsS https://nexus.cdjuarez.tecnm.mx/health` responden sano.
    - Entra como `admin` con la contraseña entregada; Nexus pide cambiarla.
    - En Configuración → Correos y colas, conecta la cuenta de envío y manda el correo de prueba.
    - Captura el correo institucional de cada jefe en el panel de usuarios y mándale su invitación.
    - Revisa el mapa del inicio, la credencial de un alumno (foto y QR) y el selector de periodo, que ofrece desde 2020.
-7. Haz un respaldo manual: `nexus compose exec backup sh /opt/backup/backup.sh run`.
+8. Haz un respaldo manual: `nexus compose exec backup sh /opt/backup/backup.sh run`.
 
 ## Actualizar a una versión nueva
 
@@ -215,7 +221,7 @@ Cada riel que traiga uno lo anota aquí: el release (o PR) a partir del cual apl
 
 | Desde | Comando | Orden | ¿Se puede repetir? | Tiempo |
 |---|---|---|---|---|
-| — | (ninguno todavía) | | | |
+| 1.32 (#824) | `php artisan academic-load:import-sii-groups` (todos los periodos; reemplaza el historial de grupos `sii` y sus horarios desde `sii_archivo`) | Después de restaurar una copia de la demo o de reimportar el SII | Sí (idempotente) | ~1 min |
 
 ### Pausar los despliegues
 
