@@ -8,6 +8,7 @@ deploy_release() {
     local active active_sha target plan pending contracts=0 migrated=0 backup=-
 
     prepare_release "$sha"
+    reconcile_state
     active=$(state_get ACTIVE_COLOR)
     active_sha=$(state_get ACTIVE_SHA)
     if [ -n "$active" ] && ! container_running "app-$active"; then
@@ -83,6 +84,24 @@ deploy_release() {
     prune_assets "$sha"
     prune_releases
     self_update "$sha"
+}
+
+# Si el servidor se apagó a mitad de un despliegue, el estado puede no coincidir con lo que corre: con un solo color
+# corriendo y no el registrado, ese es el activo (su /health dice qué release atiende).
+reconcile_state() {
+    local active running=() color release
+    active=$(state_get ACTIVE_COLOR)
+    for color in blue green; do
+        if container_running "app-$color"; then running+=("$color"); fi
+    done
+    if [ "${#running[@]}" = 1 ] && [ "${running[0]}" != "$active" ]; then
+        color=${running[0]}
+        release=$(docker exec "$(container_of "app-$color")" sh -c 'curl -s --max-time 5 http://127.0.0.1:8000/health' 2>/dev/null |
+            jq -r '.release // empty' 2>/dev/null) || release=""
+        log "aviso: el estado decía app-${active:-ninguno}, pero solo corre app-$color (release ${release:-?}); lo tomo como activo"
+        state_set ACTIVE_COLOR "$color"
+        if [ -n "$release" ] && [ -d "$RELEASES_DIR/$release" ]; then state_set ACTIVE_SHA "$release"; fi
+    fi
 }
 
 serving_message() {

@@ -353,6 +353,9 @@ deployer resume >/dev/null 2>&1
 if wait_release smokeg000010 300; then pass "GitHub tras resume: atiende smokeg000010"; else fail "GitHub tras resume: no se desplegó smokeg000010"; fi
 docker rm -f "$fake" >/dev/null 2>&1 || true
 last_release=smokeg000010
+# El agente termina (apaga el color viejo, registra el release) unos segundos después de que Caddy ya atiende el nuevo.
+active_is() { [ "$(deployer status --json 2>/dev/null | jq -r .active_sha)" = "$1" ]; }
+eventually 120 active_is "$last_release" || fail "el agente no registró $last_release como activo"
 
 if [ "$restart_daemon" = 1 ]; then
     say "8. Reinicio del daemon de Docker"
