@@ -13,7 +13,7 @@ require_once __DIR__.'/HealthTestHelpers.php';
 
 beforeEach(function () {
     healthFreshHeartbeats();
-    config(['health.release' => 'abc123', 'health.token' => 'secreto', 'health.drain_file' => sys_get_temp_dir().'/nexus-draining-test-'.bin2hex(random_bytes(4))]);
+    config(['services.solver.url' => null, 'health.release' => 'abc123', 'health.token' => 'secreto', 'health.drain_file' => sys_get_temp_dir().'/nexus-draining-test-'.bin2hex(random_bytes(4))]);
 });
 
 it('responde ok con todo sano y sin cookies', function () {
