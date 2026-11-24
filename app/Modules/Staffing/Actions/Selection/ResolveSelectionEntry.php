@@ -38,6 +38,10 @@ final class ResolveSelectionEntry
                 $event = 'selection_entry_discarded';
                 $log = "Descartó el renglón «{$name}» de la selección";
             } else {
+                if (! RecomputeSelectionOrder::pool($selection)->whereKey($teacher->getKey())->exists()) {
+                    throw ValidationException::withMessages(['teacher_id' => "{$teacher->name} no está activo o no está adscrito al departamento de la selección."]);
+                }
+
                 $other = $selection->entries()->where('teacher_id', $teacher->getKey())->whereKeyNot($entry->getKey())->first();
 
                 if ($other !== null && $other->source === SelectionEntrySource::Csv) {

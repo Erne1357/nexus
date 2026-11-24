@@ -2,10 +2,15 @@
 
 namespace App\Modules\Staffing\Actions\Selection;
 
+use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Staffing\Enums\SelectionEntrySource;
+use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Rules\SelectionOrder;
 use App\Modules\Staffing\Rules\SelectionSlots;
+use App\Modules\Staffing\Rules\TeacherNameMatcher;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 
 /**
  * Recalcula `position` y `slot_index` de la cola de una selección (SEL-07, SEL-10) y, si ya tiene fecha de inicio, la
@@ -14,8 +19,46 @@ use Carbon\CarbonImmutable;
  */
 final class RecomputeSelectionOrder
 {
+    /**
+     * Los docentes que pueden estar en la cola: activos y adscritos al departamento de la selección.
+     *
+     * @return Builder<Teacher>
+     */
+    public static function pool(Selection $selection): Builder
+    {
+        return Teacher::query()
+            ->where('is_active', true)
+            ->whereHas('adscriptions', fn ($query) => $query->where('department_id', $selection->department_id));
+    }
+
+    /**
+     * Agrega al final a cada docente del grupo sin renglón que no sea candidato de un renglón del CSV todavía sin
+     * resolver (SEL-10): si el admin descarta los renglones dudosos, el docente entra como agregado.
+     */
+    private function appendMissing(Selection $selection): void
+    {
+        $present = $selection->entries()->whereNotNull('teacher_id')->pluck('teacher_id')->all();
+        $pool = self::pool($selection)->get(['id', 'name', 'hired_on']);
+        $contested = [];
+
+        foreach ($selection->entries()->whereNull('teacher_id')->whereNotNull('csv_name')->pluck('csv_name') as $name) {
+            array_push($contested, ...TeacherNameMatcher::match($name, $pool)['candidates']);
+        }
+
+        foreach ($pool->reject(fn (Teacher $teacher): bool => in_array($teacher->getKey(), [...$present, ...$contested], true)) as $teacher) {
+            $selection->entries()->create([
+                'teacher_id' => $teacher->getKey(),
+                'source' => SelectionEntrySource::Appended,
+                'hired_on' => $teacher->hired_on,
+                'status' => SelectionEntryStatus::Waiting,
+            ]);
+        }
+    }
+
     public function handle(Selection $selection): void
     {
+        $this->appendMissing($selection);
+
         $entries = $selection->entries()->with('teacher:id,name,hired_on')->get();
 
         $ranked = collect(SelectionOrder::rank($entries->map(fn ($entry): array => [

@@ -3,6 +3,7 @@
 use App\Modules\Academic\Models\Subject;
 use App\Modules\AcademicLoad\Enums\LoadStatus;
 use App\Modules\AcademicLoad\Models\AcademicLoad;
+use App\Modules\Core\Models\Campus;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Scheduling\Models\Group;
@@ -145,4 +146,42 @@ it('cancelar después de la primera hora se rechaza', function () {
 
     expect(fn () => app(CancelSelection::class)->handle($s['selection'], $this->actor))->toThrow(ValidationException::class);
     expect($s['selection']->fresh()->status)->toBe(SelectionStatus::Draft);
+});
+
+it('una materia sin revisar de otro campus no impide publicar', function () {
+    Notification::fake();
+    $s = pubScenario();
+    $other = Subject::factory()->create(['department_id' => $s['selection']->department_id, 'required_space' => null]);
+    Group::factory()->create(['term_id' => $s['selection']->term_id, 'campus_id' => Campus::factory()->create()->id, 'modality_id' => $s['selection']->modality_id, 'subject_id' => $other->id]);
+
+    expect(app(PublishSelection::class)->handle($s['selection'], $this->actor)->status)->toBe(SelectionStatus::Published);
+});
+
+it('sin cargas incluidas no se publica y lo dice', function () {
+    $s = pubScenario();
+    $s['selection']->loads()->detach();
+
+    try {
+        app(PublishSelection::class)->handle($s['selection'], $this->actor);
+        $this->fail('debió rechazar');
+    } catch (ValidationException $e) {
+        expect(implode(' ', $e->errors()['status']))->toContain('La selección no tiene cargas incluidas')->not->toContain('tipo de espacio');
+    }
+});
+
+it('el aviso lleva a la oferta y un docente sin turno no frena a los demás', function () {
+    Notification::fake();
+    $s = pubScenario();
+    SelectionEntry::factory()->for($s['selection'])->create([
+        'teacher_id' => Teacher::factory()->create(['user_id' => User::factory()->create()->id])->id, 'position' => 2, 'slot_starts_at' => null, 'slot_ends_at' => null,
+    ]);
+
+    app(PublishSelection::class)->handle($s['selection'], $this->actor);
+
+    Notification::assertSentTo($s['teacherUser'], SelectionTurnPublished::class, function (SelectionTurnPublished $n) use ($s): bool {
+        $message = $n->message($s['teacherUser'])->toArray();
+
+        return $message['route'] === 'staffing.offer' && $message['parameters'] === [] && route($message['route']) !== '';
+    });
+    Notification::assertCount(1);
 });

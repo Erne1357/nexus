@@ -186,3 +186,42 @@ it('programar guarda la ventana y calcula los turnos de cada renglón', function
         ->and($entries[1]->slot_starts_at->equalTo($start->addMinutes(30)))->toBeTrue()
         ->and($entries[1]->slot_ends_at->equalTo($start->addMinutes(60)))->toBeTrue();
 });
+
+it('un nombre que solo empata con un docente de otro departamento queda sin resolver', function () {
+    $selection = prepSelection();
+    Teacher::factory()->adscribedTo(Department::factory()->create())->create(['name' => 'Persona Ajena']);
+
+    $result = app(ImportSelectionCsv::class)->handle($selection, PREP_HEADER."Persona Ajena;40;si;si;si;si;5\n", $this->actor);
+
+    expect($result['matched'])->toBe(0)
+        ->and($result['unresolved'])->toHaveCount(1)
+        ->and($selection->entries()->whereNotNull('teacher_id')->count())->toBe(0);
+});
+
+it('descartar los dos renglones duplicados agrega al docente al final', function () {
+    $selection = prepSelection();
+    $ana = prepTeacher($selection, 'Ana Pérez');
+    $result = app(ImportSelectionCsv::class)->handle($selection, PREP_HEADER."Ana Pérez;40;si;si;si;si;10\nANA PEREZ;40;si;si;si;si;3\n", $this->actor);
+    expect($selection->entries()->where('teacher_id', $ana->id)->count())->toBe(0);
+
+    foreach ($result['unresolved'] as $row) {
+        app(ResolveSelectionEntry::class)->handle($selection->entries()->findOrFail($row['entry_id']), null, $this->actor);
+    }
+
+    $entry = $selection->entries()->where('teacher_id', $ana->id)->first();
+    expect($entry)->not->toBeNull()
+        ->and($entry->source)->toBe(SelectionEntrySource::Appended);
+});
+
+it('resolver exige un docente activo y adscrito al departamento', function (string $kind) {
+    $selection = prepSelection();
+    app(ImportSelectionCsv::class)->handle($selection, PREP_HEADER."Zulema;40;si;si;si;si;3\n", $this->actor);
+    $entry = $selection->entries()->firstOrFail();
+    $teacher = match ($kind) {
+        'otro departamento' => Teacher::factory()->adscribedTo(Department::factory()->create())->create(),
+        'inactivo' => Teacher::factory()->adscribedTo($selection->department)->inactive()->create(),
+    };
+
+    expect(fn () => app(ResolveSelectionEntry::class)->handle($entry, $teacher, $this->actor))->toThrow(ValidationException::class);
+    expect($entry->fresh()->teacher_id)->toBeNull();
+})->with(['otro departamento', 'inactivo']);

@@ -15,6 +15,7 @@ use App\Modules\Staffing\Notifications\SelectionTurnPublished;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 /**
  * SEL-11. Publica la selección: exige borrador, un docente en cada renglón, hora de inicio futura y que cada materia de
@@ -55,7 +56,15 @@ final class PublishSelection
         });
 
         foreach ($published->entries()->with('teacher.user')->get() as $entry) {
-            $entry->teacher?->user?->notify(new SelectionTurnPublished($published, $entry));
+            if ($entry->slot_starts_at === null || $entry->slot_ends_at === null || $entry->teacher?->user === null) {
+                continue;
+            }
+
+            try {
+                $entry->teacher->user->notify(new SelectionTurnPublished($published, $entry));
+            } catch (Throwable $e) {
+                report($e);
+            }
         }
 
         return $published;
@@ -86,10 +95,10 @@ final class PublishSelection
             $reasons[] = "Hay {$unresolved} nombres sin empatar con un docente: resuélvelos o descártalos.";
         }
 
-        $loads = $selection->loads()->get();
+        $loads = $selection->loads()->with('department')->get();
 
         if ($loads->isEmpty()) {
-            $reasons[] = 'La selección no incluye ninguna carga.';
+            $reasons[] = 'La selección no tiene cargas incluidas.';
         }
 
         foreach ($loads as $load) {
@@ -98,7 +107,7 @@ final class PublishSelection
             }
         }
 
-        $unreviewed = $this->unreviewedSubjects($loads);
+        $unreviewed = $loads->isEmpty() ? [] : $this->unreviewedSubjects($loads, $selection->campus_id);
 
         if ($unreviewed !== []) {
             $reasons[] = 'Falta revisar el tipo de espacio de: '.implode(', ', $unreviewed).'.';
@@ -113,7 +122,7 @@ final class PublishSelection
      * @param  Collection<int, AcademicLoad>  $loads
      * @return list<string> códigos de las materias de los grupos de las cargas con el tipo de espacio sin revisar
      */
-    private function unreviewedSubjects($loads): array
+    private function unreviewedSubjects($loads, string $campusId): array
     {
         $loads->load('department');
 
@@ -121,6 +130,7 @@ final class PublishSelection
             ->whereNull('required_space')
             ->whereIn('id', Group::query()
                 ->where('status', '!=', GroupStatus::Cancelled->value)
+                ->where('campus_id', $campusId)
                 ->where(fn ($query) => $loads->each(fn (AcademicLoad $load) => $query->orWhere(fn ($pair) => $pair
                     ->where('term_id', $load->term_id)
                     ->where('modality_id', $load->modality_id)

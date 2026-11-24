@@ -3,7 +3,6 @@
 namespace App\Modules\Staffing\Actions\Selection;
 
 use App\Modules\Core\Models\User;
-use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\SelectionEntrySource;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
@@ -45,14 +44,13 @@ final class ImportSelectionCsv
 
             $selection->entries()->delete();
 
-            $teachers = Teacher::query()->where('is_active', true)->get(['id', 'name', 'hired_on']);
+            $teachers = RecomputeSelectionOrder::pool($selection)->get(['id', 'name', 'hired_on']);
             $matches = array_map(fn (array $row): array => TeacherNameMatcher::match($row['name'], $teachers), $parsed['rows']);
 
             $counts = array_count_values(array_filter(array_column($matches, 'teacher_id')));
 
             $matched = 0;
             $unresolved = [];
-            $taken = [];
 
             foreach ($parsed['rows'] as $i => $row) {
                 $teacherId = $matches[$i]['teacher_id'];
@@ -88,26 +86,7 @@ final class ImportSelectionCsv
                     $unresolved[] = ['entry_id' => (string) $entry->getKey(), 'line' => $row['line'], 'name' => $row['name'], 'candidates' => $candidates];
                 } else {
                     $matched++;
-                    $taken[] = $teacherId;
                 }
-            }
-
-            $appended = Teacher::query()
-                ->where('is_active', true)
-                ->whereHas('adscriptions', fn ($query) => $query->where('department_id', $selection->department_id))
-                ->whereNotIn('id', $taken)
-                ->get(['id', 'hired_on']);
-
-            // Un docente que el CSV trae sin empate claro (duplicado) también espera su resolución a mano, no se agrega.
-            $contested = array_keys(array_filter($counts, fn (int $count): bool => $count > 1));
-
-            foreach ($appended->reject(fn (Teacher $teacher): bool => in_array($teacher->getKey(), $contested, true)) as $teacher) {
-                $selection->entries()->create([
-                    'teacher_id' => $teacher->getKey(),
-                    'source' => SelectionEntrySource::Appended,
-                    'hired_on' => $teacher->hired_on,
-                    'status' => SelectionEntryStatus::Waiting,
-                ]);
             }
 
             app(RecomputeSelectionOrder::class)->handle($selection);
