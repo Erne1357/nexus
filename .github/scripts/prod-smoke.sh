@@ -62,7 +62,7 @@ deployer_ref=$(manifest .images.deployer.ref)
 
 # --- Entorno: el .env sale de la plantilla de producción con secretos aleatorios -------------------------
 mkdir -p "$home/inbox" "$home/backups" "$home/fotos"
-secret() { openssl rand -hex "${1:-24}"; }
+secret() { head -c "${1:-24}" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 cp "$repo/.env.production.example" "$home/.env"
 set_env() {
     if grep -q "^$1=" "$home/.env"; then
@@ -73,7 +73,7 @@ set_env() {
 }
 set_env APP_DOMAIN "$domain"
 set_env ACME_EMAIL smoke@example.edu.mx
-set_env APP_KEY "base64:$(openssl rand -base64 32)"
+set_env APP_KEY "base64:$(head -c 32 /dev/urandom | base64)"
 set_env DB_PASSWORD "$(secret)"
 set_env REDIS_PASSWORD "$(secret)"
 set_env SOLVER_TOKEN "$(secret 32)"
