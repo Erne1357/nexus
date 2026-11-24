@@ -12,6 +12,8 @@ const camera=stage._camera,controls=stage._controls,scene=stage._scene;
 const $=s=>rootEl.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const MOB=()=>rootEl.clientWidth<=900;
+// Texto sobre un color de departamento: blanco si da 4.5:1 (WCAG), si no, tinta oscura (pulido 1.32).
+const onC=c=>{const m=/^#([0-9a-f]{6})$/i.exec(c||'');if(!m)return'#fff';const v=[0,2,4].map(i=>{const x=parseInt(m[1].slice(i,i+2),16)/255;return x<=.03928?x/12.92:((x+.055)/1.055)**2.4});const L=.2126*v[0]+.7152*v[1]+.0722*v[2];return 1.05/(L+.05)>=4.5?'#fff':'#0b1a26'};
 const FH=6;
 
 // ---------- índices ----------
@@ -163,22 +165,27 @@ controls.maxPolarAngle=Math.PI*.46;controls.minDistance=25;controls.maxDistance=
 const HOME={pos:new THREE.Vector3(Hc[0]-120,330,Hc[1]+360),tgt:new THREE.Vector3(Hc[0]-110,0,Hc[1]+20)};
 const HOME_M={pos:new THREE.Vector3(Hc[0],620,Hc[1]+520),tgt:new THREE.Vector3(Hc[0],0,Hc[1]+90)};
 const home=()=>MOB()?HOME_M:HOME;camera.position.copy(home().pos);controls.target.copy(home().tgt);controls.update();
-{const k=stage._key;k.position.set(Hc[0]+250,500,Hc[1]+200);k.target.position.set(Hc[0],0,Hc[1]);scene.add(k.target);const sp=380;Object.assign(k.shadow.camera,{left:-sp,right:sp,top:sp,bottom:-sp,near:10,far:1500});k.shadow.camera.updateProjectionMatrix();k.shadow.mapSize.set(4096,4096);stage._ground.position.y=-1.2;}
+{const k=stage._key;k.position.set(Hc[0]+250,500,Hc[1]+200);k.target.position.set(Hc[0],0,Hc[1]);scene.add(k.target);const sp=380;Object.assign(k.shadow.camera,{left:-sp,right:sp,top:sp,bottom:-sp,near:10,far:1500});k.shadow.camera.updateProjectionMatrix();k.shadow.mapSize.set(4096,4096);
+  // three.js crea el mapa de sombras una sola vez, con el tamaño del primer cuadro (2048): sin soltarlo, la luz dibuja 4096 sobre una textura de 2048 y la esquina de Rivera Lara y Administración lee sombras que no son suyas.
+  if(k.shadow.map){k.shadow.map.dispose();k.shadow.map=null}
+  // La luz y los edificios no se mueven: las sombras se dibujan una vez y se repiten solo cuando cambia lo que las proyecta (interiores). Dibujar 4096 px en cada cuadro bloqueaba la página en equipos sin GPU y en celulares modestos.
+  stage._renderer.shadowMap.autoUpdate=false;stage._renderer.shadowMap.needsUpdate=true;
+  stage._ground.position.y=-1.2;}
 
 // ---------- extras (no exportados) ----------
 const fx=new THREE.Group();scene.add(fx);
-const pinM=new THREE.MeshStandardMaterial({color:'#1E3A5F',roughness:.4});
+const pinM=new THREE.MeshStandardMaterial({color:'#092d48',roughness:.4});
 const pin=new THREE.Group();{const c=new THREE.Mesh(new THREE.ConeGeometry(2,6,24),pinM);c.rotation.x=Math.PI;c.position.y=4.2;const s=new THREE.Mesh(new THREE.SphereGeometry(2.8,24,16),pinM);s.position.y=8.6;pin.add(c,s)}fx.add(pin);
 const placePin=()=>pin.position.set(S.origin[0],0,S.origin[1]);placePin();
-const ring=new THREE.Mesh(new THREE.RingGeometry(1,1.1,64),new THREE.MeshBasicMaterial({color:'#6E2234',transparent:true,opacity:.8,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.3;ring.visible=false;fx.add(ring);
-const dotM=new THREE.MeshBasicMaterial({color:'#1E3A5F'});const dots=[];for(let i=0;i<140;i++){const d=new THREE.Mesh(new THREE.SphereGeometry(.9,10,8),dotM);d.visible=false;fx.add(d);dots.push(d)}
-const goalM=new THREE.Mesh(new THREE.TorusGeometry(2.4,.4,8,32),new THREE.MeshBasicMaterial({color:'#6E2234'}));goalM.rotation.x=Math.PI/2;goalM.visible=false;fx.add(goalM);
+const ring=new THREE.Mesh(new THREE.RingGeometry(1,1.1,64),new THREE.MeshBasicMaterial({color:'#092d48',transparent:true,opacity:.8,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.3;ring.visible=false;fx.add(ring);
+const dotM=new THREE.MeshBasicMaterial({color:'#092d48'});const dots=[];for(let i=0;i<140;i++){const d=new THREE.Mesh(new THREE.SphereGeometry(.9,10,8),dotM);d.visible=false;fx.add(d);dots.push(d)}
+const goalM=new THREE.Mesh(new THREE.TorusGeometry(2.4,.4,8,32),new THREE.MeshBasicMaterial({color:'#092d48'}));goalM.rotation.x=Math.PI/2;goalM.visible=false;fx.add(goalM);
 
 // interiores
 const INT={};
 function interior(bid){if(INT[bid])return INT[bid];const st=BLD[bid];const out={floors:{},rooms:[]};
-  const ghost=new THREE.Mesh(st.shell.geometry,new THREE.MeshBasicMaterial({color:'#6E2234',transparent:true,opacity:.07,depthWrite:false}));ghost.rotation.x=-Math.PI/2;ghost.visible=false;fx.add(ghost);out.ghost=ghost;
-  const edges=new THREE.LineSegments(new THREE.EdgesGeometry(st.shell.geometry,30),new THREE.LineBasicMaterial({color:'#6E2234',transparent:true,opacity:.35}));edges.rotation.x=-Math.PI/2;edges.visible=false;fx.add(edges);out.edges=edges;
+  const ghost=new THREE.Mesh(st.shell.geometry,new THREE.MeshBasicMaterial({color:'#092d48',transparent:true,opacity:.07,depthWrite:false}));ghost.rotation.x=-Math.PI/2;ghost.visible=false;fx.add(ghost);out.ghost=ghost;
+  const edges=new THREE.LineSegments(new THREE.EdgesGeometry(st.shell.geometry,30),new THREE.LineBasicMaterial({color:'#092d48',transparent:true,opacity:.35}));edges.rotation.x=-Math.PI/2;edges.visible=false;fx.add(edges);out.edges=edges;
   for(const fl of [1,2]){const sp=spacesOf(bid,fl);if(!sp.length)continue;const g=new THREE.Group();g.visible=false;fx.add(g);const y=(fl-1)*FH;
     const slab=new THREE.Mesh(new THREE.ExtrudeGeometry(shapeOf(st.b.poly),{depth:.5,bevelEnabled:false}),new THREE.MeshStandardMaterial({color:'#F3EEE7',roughness:.95}));slab.rotation.x=-Math.PI/2;slab.position.y=y;slab.receiveShadow=true;g.add(slab);
     const wallM=new THREE.MeshStandardMaterial({color:'#FFFFFF',roughness:.9});
@@ -188,16 +195,17 @@ function interior(bid){if(INT[bid])return INT[bid];const st=BLD[bid];const out={
     out.floors[fl]=g;}
   INT[bid]=out;return out;}
 let openSt=null;
-function openInterior(bid,fl){if(openSt&&openSt!==bid)closeInterior(true);S.open=bid;const st=BLD[bid];const it=interior(bid);S.floor=fl&&it.floors[fl]?fl:(it.floors[S.floor]&&openSt===bid?S.floor:1);openSt=bid;
+const reshadow=()=>{stage._renderer.shadowMap.needsUpdate=true};
+function openInterior(bid,fl){reshadow();if(openSt&&openSt!==bid)closeInterior(true);S.open=bid;const st=BLD[bid];const it=interior(bid);S.floor=fl&&it.floors[fl]?fl:(it.floors[S.floor]&&openSt===bid?S.floor:1);openSt=bid;
   if(!Object.keys(it.floors).length){S.open=null;openSt=null;return}
   Object.entries(it.floors).forEach(([f,g])=>g.visible=+f===S.floor);it.ghost.visible=it.edges.visible=true;
   st.g.visible=false;buildRoomLabels();renderFloorUI();}
-function closeInterior(silent){if(!openSt)return;const it=INT[openSt];Object.values(it.floors).forEach(g=>g.visible=false);it.ghost.visible=it.edges.visible=false;BLD[openSt].g.visible=true;openSt=null;S.open=null;S.selRoom=null;buildRoomLabels();if(!silent)renderFloorUI();}
+function closeInterior(silent){if(!openSt)return;reshadow();const it=INT[openSt];Object.values(it.floors).forEach(g=>g.visible=false);it.ghost.visible=it.edges.visible=false;BLD[openSt].g.visible=true;openSt=null;S.open=null;S.selRoom=null;buildRoomLabels();if(!silent)renderFloorUI();}
 function renderFloorUI(){const el=$('#floors');if(!S.open){el.classList.remove('ut-open');$('#kindlg').classList.remove('ut-open');return}
   const it=INT[S.open];$('#fl-name').textContent=B[S.open].name;
   $('#fl-seg').innerHTML=Object.keys(it.floors).map(f=>`<button data-f="${f}" class="${+f===S.floor?'ut-on':''}">P${f}</button>`).join('');el.classList.add('ut-open');
   const kinds=[...new Set(spacesOf(S.open,S.floor).map(s=>s.kind))].filter(k=>k!==4).sort((a,b)=>a-b);
-  $('#kindlg').innerHTML=kinds.map(k=>`<span style="--c:${KIND_COLORS[k]}"><i></i>${KINDS[k]}</span>`).join('');$('#kindlg').classList.add('ut-open');}
+  $('#kindlg').innerHTML=kinds.map(k=>`<span style="--c:${KIND_COLORS[k]};--on:${onC(KIND_COLORS[k])}"><i></i>${KINDS[k]}</span>`).join('');$('#kindlg').classList.add('ut-open');}
 $('#fl-seg').onclick=e=>{const b=e.target.closest('[data-f]');if(!b)return;setFloor(+b.dataset.f)};
 $('#fl-x').onclick=()=>{closeInterior();};
 function setFloor(f){S.floor=f;openInterior(S.open,f);if(S.stack.length&&S.stack[S.stack.length-1].startsWith('b:'))renderDetail(S.stack[S.stack.length-1],true)}
@@ -222,7 +230,7 @@ function indoorPath(bid,fl,from,to,carvePolys){const {C,x0,z0,gw,gh,w}=indoorGri
   const sp=[p[0]];let a=0;for(let k=2;k<p.length;k++)if(!L(p[a],p[k])){sp.push(p[k-1]);a=k-1}sp.push(p[p.length-1]);const pts=[from,...sp.slice(1,-1).map(k=>[x0+(k%gw+.5)*C,z0+(((k/gw)|0)+.5)*C]),to];
   return{pts,len:plen(pts)}}
 let routeCurve=null;S.walk=null;S.steps=null;S.access=false;S.door=null;
-const doorM=[];{const g1=new THREE.BoxGeometry(2.4,.2,1.1);DOORS.forEach(d=>{const m=new THREE.Mesh(g1,new THREE.MeshBasicMaterial({color:d.declared?'#1E3A5F':'#8A96A3'}));m.position.set(d.p[0]+d.out[0]*.6,.22,d.p[1]+d.out[1]*.6);m.rotation.y=Math.atan2(d.out[0],d.out[1]);m.userData.door=d;fx.add(m);doorM.push(m)})}
+const doorM=[];{const g1=new THREE.BoxGeometry(2.4,.2,1.1);DOORS.forEach(d=>{const m=new THREE.Mesh(g1,new THREE.MeshBasicMaterial({color:d.declared?'#092d48':'#8A96A3'}));m.position.set(d.p[0]+d.out[0]*.6,.22,d.p[1]+d.out[1]*.6);m.rotation.y=Math.atan2(d.out[0],d.out[1]);m.userData.door=d;fx.add(m);doorM.push(m)})}
 function computeRoute(bid,sid){S.door=null;S.steps=null;if(!bid||!S.route){routeCurve=null;goalM.visible=false;dots.forEach(d=>d.visible=false);S.walk=null;return}
   const F=fieldFrom();const doors=DOORS_OF[bid]||[];const s=sid?SP[sid]:null;let best=null;
   for(const d of doors){const out=F.g[d.cell];if(!isFinite(out))continue;const plan={d,out:out*CELL,len:out*CELL,in:[]};
@@ -246,7 +254,7 @@ function computeRoute(bid,sid){S.door=null;S.steps=null;if(!bid||!S.route){route
 // ---------- etiquetas ----------
 const labelsEl=$('#labels');const LBL={};
 for(const b of D.BUILDINGS){const el=document.createElement('div');el.className='ut-lbl';el.innerHTML=`<span class="ut-dot">${esc(b.code)}</span><span class="ut-occ"></span><span class="ut-nm">${esc(b.name)}</span>`;labelsEl.appendChild(el);LBL[b.id]=el}
-const pinEl=document.createElement('div');pinEl.id='pin';pinEl.textContent='Usted está aquí';labelsEl.appendChild(pinEl);
+const pinEl=document.createElement('div');pinEl.id='pin';pinEl.textContent='Estás aquí';labelsEl.appendChild(pinEl);
 let RL=[];
 function buildRoomLabels(){RL.forEach(r=>r.el.remove());RL=[];if(!S.open)return;
   for(const s of spacesOf(S.open,S.floor)){if(s.kind===4||s.kind===14)continue;const g=KIND_GLYPH[s.kind];const el=document.createElement('div');el.className='ut-rl'+(g?' ut-g':'');el.textContent=g||(s.kind===3?s.raw:s.name);if(s.id===S.selRoom)el.classList.add('ut-sel');labelsEl.appendChild(el);
@@ -270,7 +278,7 @@ function fly(tgt,dist){const top=S.view==='2d';const dir=top?new THREE.Vector3(0
 function flyTo(bids,close){if(!bids.length)return;const bb=new THREE.Box3();bids.forEach(id=>bb.expandByObject(BLD[id].shell));const c=bb.getCenter(new THREE.Vector3());const s=bb.getSize(new THREE.Vector3());
   const dist=Math.max(close?70:110,Math.max(s.x,s.z)*(close?1.5:1.6)+40)*(MOB()?1.5:1);fly(c.setY(0),dist)}
 $('#vreset').onclick=()=>{const h=home();flyRaw(S.view==='2d'?h.tgt.clone().add(new THREE.Vector3(0,820,.1)):h.pos.clone(),h.tgt.clone())};
-function setView(v){S.view=v;$('#v3').classList.toggle('ut-on',v==='3d');$('#v2').classList.toggle('ut-on',v==='2d');controls.enableRotate=v==='3d';controls.maxPolarAngle=v==='2d'?.001:Math.PI*.46;
+function setView(v){S.view=v;$('#v3').classList.toggle('ut-on',v==='3d');$('#v2').classList.toggle('ut-on',v==='2d');$('#v3').setAttribute('aria-pressed',v==='3d');$('#v2').setAttribute('aria-pressed',v==='2d');controls.enableRotate=v==='3d';controls.maxPolarAngle=v==='2d'?.001:Math.PI*.46;
   const t=controls.target.clone();const d=camera.position.distanceTo(t);flyRaw(v==='2d'?t.clone().add(new THREE.Vector3(0,Math.max(d,200),.1)):t.clone().add(new THREE.Vector3(.3,.75,.85).normalize().multiplyScalar(d)),t,1000)}
 $('#v3').onclick=()=>setView('3d');$('#v2').onclick=()=>setView('2d');
 
@@ -289,9 +297,9 @@ function loop(now){if(!alive)return;rafId=requestAnimationFrame(loop);
   for(const m of doorM){const on=S.door===m.userData.door;const vis=on||S.open===m.userData.door.b||HL.sel===m.userData.door.b;m.visible=vis;m.scale.setScalar(on?1.3+.25*Math.sin(t*5):1)}
   const w=rootEl.clientWidth,h=rootEl.clientHeight;const any=HL.focus.size>0||HL.sel;
   for(const id in BLD){const st=BLD[id],el=LBL[id];v3.copy(st.center);v3.y=st.H+4;v3.project(camera);if(v3.z>1||(S.open===id)){el.style.opacity=0;continue}
-    el.style.transform=`translate(${(v3.x*.5+.5)*w-12}px,${(-v3.y*.5+.5)*h-12}px)`;el.style.opacity='';const f=HL.focus.get(id);el.classList.toggle('ut-on',!!f||HL.sel===id);if(f)el.style.setProperty('--c',f);else el.style.removeProperty('--c');
+    el.style.transform=`translate(${(v3.x*.5+.5)*w-12}px,${(-v3.y*.5+.5)*h-12}px)`;el.style.opacity='';const f=HL.focus.get(id);el.classList.toggle('ut-on',!!f||HL.sel===id);if(f){el.style.setProperty('--c',f);el.style.setProperty('--on',onC(f))}else{el.style.removeProperty('--c');el.style.removeProperty('--on')}
     el.classList.toggle('ut-sel',HL.sel===id);el.classList.toggle('ut-dim',!!any&&!f&&HL.sel!==id&&HL.hover!==id||(!!S.open));el.classList.toggle('ut-show',HL.sel===id||HL.hover===id||!!HL.hoverSet?.has(id))}
-  if(RL.length){const dist=camera.position.distanceTo(controls.target);for(const r of RL){v3.copy(r.v).project(camera);const show=r.s.id===S.selRoom||r.area*(260/Math.max(60,dist))**2>14||dist<70;r.el.style.opacity=show?1:0;r.el.style.transform=`translate(-50%,-50%) translate(${(v3.x*.5+.5)*w}px,${(-v3.y*.5+.5)*h}px)`}}
+  if(RL.length){const dist=camera.position.distanceTo(controls.target);const placed=[];const order=RL.slice().sort((a,b)=>(b.s.id===S.selRoom)-(a.s.id===S.selRoom)||b.area-a.area);for(const r of order){v3.copy(r.v).project(camera);const x=(v3.x*.5+.5)*w,y=(-v3.y*.5+.5)*h;let show=r.s.id===S.selRoom||r.area*(260/Math.max(60,dist))**2>14||dist<70;if(show){r.bw??=r.el.offsetWidth||40;r.bh??=r.el.offsetHeight||16;const bx=[x-r.bw/2-2,y-r.bh/2-2,x+r.bw/2+2,y+r.bh/2+2];if(r.s.id!==S.selRoom&&placed.some(q=>bx[0]<q[2]&&bx[2]>q[0]&&bx[1]<q[3]&&bx[3]>q[1]))show=false;else placed.push(bx)}r.el.style.opacity=show?1:0;r.el.style.transform=`translate(-50%,-50%) translate(${x}px,${y}px)`}}
   v3.copy(pin.position).setY(14).project(camera);pinEl.style.transform=`translate(${(v3.x*.5+.5)*w+8}px,${(-v3.y*.5+.5)*h-8}px)`;
   const az=Math.atan2(camera.position.x-controls.target.x,camera.position.z-controls.target.z);const nd=$('#compass .ut-nd'),nl=$('#compass .ut-nl');nd.style.transform=`rotate(${-az}rad)`;nl.style.transform=`translate(${Math.sin(-az)*11}px,${-Math.cos(-az)*11}px)`;}
 rafId=requestAnimationFrame(loop);
@@ -332,13 +340,13 @@ const colorOf=e=>{if(e.sid&&!SP[e.sid].owner&&!SP[e.sid].sched)return KIND_COLOR
 
 // ---------- UI ----------
 const pb=$('#pb'),qEl=$('#q'),panel=$('#panel');
-$('#chips').innerHTML=Object.entries(AREAS).map(([k,a])=>`<button class="ut-chip" data-a="${k}" style="--c:${a.color}"><i></i>${esc(a.short)}</button>`).join('');
+$('#chips').innerHTML=Object.entries(AREAS).map(([k,a])=>`<button class="ut-chip" data-a="${k}" style="--c:${a.color};--on:${onC(a.color)}"><i></i>${esc(a.short)}</button>`).join('');
 $('#chips').onclick=e=>{const c=e.target.closest('.ut-chip');if(!c)return;const a=c.dataset.a;S.areas.has(a)?S.areas.delete(a):S.areas.add(a);c.classList.toggle('ut-on');S.stack=[];closeDrawer();syncHash();render();snap('half')};
 qEl.oninput=()=>{S.q=qEl.value;$('#sbox').classList.toggle('ut-has',!!S.q);S.stack=[];S.expanded={};closeDrawer();syncHash();render()};
 qEl.onfocus=()=>snap('full');
 $('#clr').onclick=()=>{qEl.value='';qEl.oninput();qEl.focus()};
 addEventListener('keydown',e=>{if(!rootEl.isConnected)return;const ed=e.target?.closest?.('input,textarea,select,[contenteditable]');if(e.key==='/'&&!ed&&document.activeElement!==qEl){e.preventDefault();qEl.focus()}if(e.key==='Escape'&&(!ed||ed===qEl)){if($('#drawer').classList.contains('ut-open'))closeDrawer();else if(S.stack.length)back();else if(S.open)closeInterior();else if(S.q){qEl.value='';qEl.oninput()}}},sig);
-const itemHTML=(e,i,q,tag)=>`<div class="ut-it" data-k="${e.key}" style="--c:${colorOf(e)};animation-delay:${Math.min(i,12)*25}ms"><div class="ut-bd${e.type==='prof'||e.type==='group'?' ut-o':''}">${esc(e.badge)}</div><div class="ut-tx"><div class="ut-t">${hlText(e.title,q)}</div><div class="ut-s">${esc(e.sub)}</div></div>${tag||''}</div>`;
+const itemHTML=(e,i,q,tag)=>`<div class="ut-it" role="button" tabindex="0" data-k="${e.key}" style="--c:${colorOf(e)};--on:${onC(colorOf(e))};animation-delay:${Math.min(i,12)*25}ms"><div class="ut-bd${e.type==='prof'||e.type==='group'?' ut-o':''}">${esc(e.badge)}</div><div class="ut-tx"><div class="ut-t">${hlText(e.title,q)}</div><div class="ut-s">${esc(e.sub)}</div></div>${tag||''}</div>`;
 const liveTag=e=>e.sid&&nowIn(e.sid)?'<span class="ut-tag ut-live">En clase</span>':'';
 
 const LS={get:k=>{try{const v=JSON.parse(localStorage.getItem(k));return Array.isArray(v)?v:[]}catch(e){return[]}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -348,7 +356,7 @@ function open(k){if(!EK[k]||S.stack[S.stack.length-1]===k)return;S.stack.push(k)
 function back(){S.stack.pop();closeDrawer();syncHash();render()}
 function toast(msg){let t=$('#toast');if(!t){t=document.createElement('div');t.id='toast';rootEl.appendChild(t)}t.textContent=msg;t.style.opacity=1;clearTimeout(t._h);t._h=setTimeout(()=>t.style.opacity=0,1800)}
 
-function render(){if(S.stack.length)return renderDetail(S.stack[S.stack.length-1]);
+function render(){panel.classList.toggle('ut-detail',S.stack.length>0);if(S.stack.length)return renderDetail(S.stack[S.stack.length-1]);
   HL.sel=null;S.selRoom=null;S.roomFocus=null;computeRoute(null);if(S.open)closeInterior();
   const res=search(S.q);
   if(!res.length&&!S.q&&!S.areas.size){HL.focus=new Map();return renderHome()}
@@ -357,15 +365,17 @@ function render(){if(S.stack.length)return renderDetail(S.stack[S.stack.length-1
   if(!res.length){pb.innerHTML=`<div class="ut-hint" style="padding:20px 8px">Sin resultados para “${esc(S.q)}”. Prueba con un número de salón, una materia o el nombre de un docente.</div>`;return}
   let h=`<div class="ut-hint" style="padding:8px 8px 0;font-size:12px">${res.length} resultados · ${fm.size} edificios resaltados</div>`;
   for(const [t,label] of TYPES){const items=res.filter(r=>r.e.type===t);if(!items.length)continue;const lim=S.expanded[t]?80:(t==='area'?3:5);
-    h+=`<div class="ut-sec"><h3><span>${label}</span><span>${items.length}</span></h3>${items.slice(0,lim).map((r,i)=>itemHTML(r.e,i,S.q,liveTag(r.e))).join('')}${items.length>lim?`<button class="ut-more" data-x="${t}">Ver los ${items.length} →</button>`:''}</div>`}
+    h+=`<div class="ut-sec"><h2><span>${label}</span><span>${items.length}</span></h2>${items.slice(0,lim).map((r,i)=>itemHTML(r.e,i,S.q,liveTag(r.e))).join('')}${items.length>lim?`<button class="ut-more" data-x="${t}">Ver los ${items.length} →</button>`:''}</div>`}
   pb.innerHTML=h;pb.scrollTop=0}
 function suggestions(){const d=D.DEPTS[0],r=D.SPACES.find(s=>s.sched&&s.kind===3),m=D.SUBJECTS.find(x=>(bySubj[x.id]||[]).length),l=D.SPACES.find(s=>s.sched&&s.kind===12);
-  return[d&&'Departamento de '+d.name,r&&r.raw,m&&m.name,l&&l.name].filter(Boolean)}
+  return[d&&'Departamento de '+d.name,r&&r.name,m&&m.name,l&&l.name].filter(Boolean)}
 function renderHome(){const live=D.CLASSES.filter(liveAt);
-  const mini=(arr,title)=>{const a=arr.filter(k=>EK[k]);return a.length?`<div class="ut-sec"><h3><span>${title}</span><span>${a.length}</span></h3>${a.map((k,i)=>itemHTML(EK[k],i,'')).join('')}</div>`:''};
-  pb.innerHTML=mini(FAV,'Favoritos')+mini(REC.slice(0,5),'Recientes')+`<div class="ut-sec"><h3>Prueba a buscar</h3><div class="ut-sugg">${suggestions().map(s=>`<button data-q="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
-  <div class="ut-sec"><h3><span>En clase ahora · ${D.DAYS_LONG[S.day]} ${S.hour}:00</span><span>${live.length}</span></h3>${live.slice(0,6).map((c,i)=>{const s=SU[c.subject],bb=rBld(c);return `<div class="ut-it" data-k="${c.room?'s:'+c.room:'m:'+c.subject}" style="--c:${AC(s?.area)};animation-delay:${i*25}ms"><div class="ut-bd">${esc(bb?.code||'·')}</div><div class="ut-tx"><div class="ut-t">${esc(sOf(c))}</div><div class="ut-s">${esc(rName(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div><span class="ut-tag ut-live">${hrs(c)}</span></div>`}).join('')}</div>
-  <div class="ut-sec"><h3><span>Edificios</span><span>${D.BUILDINGS.length}</span></h3>${D.BUILDINGS.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((b,i)=>itemHTML(EK['b:'+b.id],i,'')).join('')}</div>`}
+  const mini=(arr,title)=>{const a=arr.filter(k=>EK[k]);return a.length?`<div class="ut-sec"><h2><span>${title}</span><span>${a.length}</span></h2>${a.map((k,i)=>itemHTML(EK[k],i,'')).join('')}</div>`:''};
+  pb.innerHTML=mini(FAV,'Favoritos')+mini(REC.slice(0,5),'Recientes')+`<div class="ut-sec"><h2>Prueba a buscar</h2><div class="ut-sugg">${suggestions().map(s=>`<button data-q="${esc(s)}">${esc(s)}</button>`).join('')}</div></div>
+  ${!D.CLASSES.length?`<div class="ut-empty" role="status"><b>Sin clases publicadas en ${esc(D.SRV.term?.name||'este periodo')}</b><span>El mapa muestra los edificios, las oficinas y los servicios. Para ver las clases de otro semestre, elige su periodo en tu credencial.</span></div>`:`<div class="ut-sec"><h2><span>En clase ahora · ${D.DAYS_LONG[S.day]} ${S.hour}:00</span><span>${live.length}</span></h2>${live.length?'':'<div class="ut-hint">Ninguna clase a esta hora.</div>'}${live.slice(0,6).map((c,i)=>{const s=SU[c.subject],bb=rBld(c);return `<div class="ut-it" role="button" tabindex="0" data-k="${c.room?'s:'+c.room:'m:'+c.subject}" style="--c:${AC(s?.area)};--on:${onC(AC(s?.area))};animation-delay:${i*25}ms"><div class="ut-bd">${esc(bb?.code||'·')}</div><div class="ut-tx"><div class="ut-t">${esc(sOf(c))}</div><div class="ut-s">${esc(rName(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div><span class="ut-tag ut-live">${hrs(c)}</span></div>`}).join('')}</div>`}
+  <div class="ut-sec"><h2><span>Edificios</span><span>${D.BUILDINGS.length}</span></h2>${D.BUILDINGS.slice().sort((a,b)=>a.name.localeCompare(b.name)).map((b,i)=>itemHTML(EK['b:'+b.id],i,'')).join('')}</div>`}
+function kbAct(e){if((e.key==='Enter'||e.key===' ')&&e.target.matches('[role=button]')){e.preventDefault();e.target.click();requestAnimationFrame(()=>pb.querySelector('[data-act="back"]')?.focus({preventScroll:true}))}}
+pb.addEventListener('keydown',kbAct);
 pb.addEventListener('click',e=>{const s=e.target.closest('[data-q]');if(s){qEl.value=s.dataset.q;qEl.oninput();return}const m=e.target.closest('[data-x]');if(m){S.expanded[m.dataset.x]=1;render();return}
   const a=e.target.closest('[data-act]');if(a)return act(a.dataset.act,a);const it=e.target.closest('[data-k]');if(it)open(it.dataset.k)});
 pb.addEventListener('mouseover',e=>{const it=e.target.closest('[data-k]');const en=it&&EK[it.dataset.k];HL.hoverSet=en?new Set(en.bids):null;HL.hoverRoom=en?.sid||null});
@@ -373,14 +383,14 @@ pb.addEventListener('mouseleave',()=>{HL.hoverSet=null;HL.hoverRoom=null});
 
 const fact=(b,s)=>`<div class="ut-fact"><b>${b}</b><span>${s}</span></div>`;
 const backBtn=()=>{const k=S.stack[S.stack.length-1];const f=FAV.includes(k);return `<div style="display:flex;align-items:center;gap:6px"><button class="ut-back" data-act="back" style="flex:1">← ${S.stack.length>1?'Atrás':(S.q||S.areas.size?'Resultados':'Inicio')}</button><button class="ut-btn ut-sec2" data-act="fav" style="padding:7px 10px">${f?'★ Guardado':'☆ Guardar'}</button><button class="ut-btn ut-sec2" data-act="share" style="padding:7px 10px">Compartir</button></div>`};
-const head=(badge,c,kind,title,sub)=>`<div class="ut-dh" style="--c:${c}"><div class="ut-bd">${esc(badge)}</div><div><div class="ut-k">${esc(kind)}</div><h2>${esc(title)}</h2>${sub?`<div style="font-size:13px;color:var(--ink2)">${sub}</div>`:''}</div></div>`;
+const head=(badge,c,kind,title,sub)=>`<div class="ut-dh" style="--c:${c};--on:${onC(c)}"><div class="ut-bd">${esc(badge)}</div><div><div class="ut-k">${esc(kind)}</div><h2>${esc(title)}</h2>${sub?`<div style="font-size:13px;color:var(--ink2)">${sub}</div>`:''}</div></div>`;
 const photo=src=>src?`<img class="ut-photo" src="${src}" alt="" loading="lazy" onerror="this.remove()">`:'';
 const contact=o=>{const r=[];if(o.phone)r.push(`<span><b>Teléfono</b>${esc(o.phone)}</span>`);if(o.email)r.push(`<a href="mailto:${esc(o.email)}"><b>Correo</b>${esc(o.email)}</a>`);if(o.location)r.push(`<span><b>Ubicación</b>${esc(o.location)}</span>`);if(o.web)r.push(`<a href="${esc(o.web)}" target="_blank" rel="noopener"><b>Sitio</b>${esc(o.web.replace(/^https?:\/\//,''))}</a>`);if(o.fb)r.push(`<a href="${o.fb}" target="_blank"><b>Facebook</b>Página del departamento</a>`);return r.length?`<div class="ut-contact">${r.join('')}</div>`:''};
 const routeBtn=()=>`<button class="ut-btn ut-sec2" data-act="route">${S.route?'Ocultar ruta':'Cómo llegar'}</button>${S.route?'<button class="ut-btn ut-sec2" data-act="origin">Cambiar partida</button>':''}`;
 const clsItem=(c,mode,i)=>{const s=SU[c.subject],bb=rBld(c);const days=c.days.map(d=>D.DAYS[d]).join(' ');const live=liveAt(c);const when=`${days} ${hrs(c)}`;
   const t=mode==='subject'?`${gOf(c)} · ${pOf(c)}`:sOf(c);const sub=mode==='room'?`${gOf(c)} · ${pOf(c)} · ${when}`:mode==='subject'?[rName(c),bb?.code,when].filter(Boolean).join(' · '):[rName(c),bb?.code,mode==='prof'?gOf(c):pOf(c),when].filter(Boolean).join(' · ');
   const k=mode==='room'?(c.prof&&PR[c.prof]?'p:'+c.prof:''):(c.room?'s:'+c.room:'m:'+c.subject);
-  return `<div class="ut-it"${k?` data-k="${k}"`:''} style="--c:${AC(s?.area)};animation-delay:${Math.min(i,12)*25}ms"><div class="ut-bd">${esc(bb?.code||'·')}</div><div class="ut-tx"><div class="ut-t">${esc(t)}</div><div class="ut-s">${esc(sub)}</div></div>${live?'<span class="ut-tag ut-live">Ahora</span>':''}</div>`};
+  return `<div class="ut-it" role="button" tabindex="0"${k?` data-k="${k}"`:''} style="--c:${AC(s?.area)};--on:${onC(AC(s?.area))};animation-delay:${Math.min(i,12)*25}ms"><div class="ut-bd">${esc(bb?.code||'·')}</div><div class="ut-tx"><div class="ut-t">${esc(t)}</div><div class="ut-s">${esc(sub)}</div></div>${live?'<span class="ut-tag ut-live">Ahora</span>':''}</div>`};
 
 function renderDetail(k,keepCam){
   const i=k.indexOf(':'),t=k.slice(0,i),id=k.slice(i+1);const e=EK[k];
@@ -391,44 +401,44 @@ function renderDetail(k,keepCam){
     h+=photo(b.img);if(b.desc)h+=`<div class="ut-hint" style="padding:0 0 12px">${esc(b.desc)}</div>`;h+=contact(dept||b);
     h+=`<div class="ut-facts">${fact('Plantas',b.floors)}${fact('Espacios',all.filter(s=>s.kind!==4).length||'—')}${fact('Con horario',rooms.length||'—')}${fact('En clase ahora',rooms.length?`${live.length} de ${rooms.length}`:'—')}</div>`;
     h+=`<div class="ut-acts">${routeBtn()}${rooms.length?`<button class="ut-btn ut-sec2" data-act="bsched">Horario del edificio</button>`:''}</div>`;
-    if(dept)h+=`<div class="ut-sec"><h3>Departamento</h3>${itemHTML(EK['d:'+dept.id],0,'')}</div>`;
-    if(hasInt){h+=`<div class="ut-sec"><h3><span>Espacios por planta</span><span>${all.length}</span></h3><div class="ut-ftabs">${Object.keys(it.floors).map(f=>`<button data-act="floor" data-f="${f}" class="${+f===fl?'ut-on':''}">Planta ${f}</button>`).join('')}</div>`;
+    if(dept)h+=`<div class="ut-sec"><h2>Departamento</h2>${itemHTML(EK['d:'+dept.id],0,'')}</div>`;
+    if(hasInt){h+=`<div class="ut-sec"><h2><span>Espacios por planta</span><span>${all.length}</span></h2><div class="ut-ftabs">${Object.keys(it.floors).map(f=>`<button data-act="floor" data-f="${f}" class="${+f===fl?'ut-on':''}">Planta ${f}</button>`).join('')}</div>`;
       const fs=spacesOf(id,fl).filter(s=>s.kind!==4);const kc={};fs.forEach(s=>kc[s.kind]=(kc[s.kind]||0)+1);
-      h+=`<div class="ut-kgrid">${Object.entries(kc).map(([k2,n])=>`<span style="--c:${KIND_COLORS[k2]}"><i></i>${KINDS[k2]} · ${n}</span>`).join('')}</div>`;
+      h+=`<div class="ut-kgrid">${Object.entries(kc).map(([k2,n])=>`<span style="--c:${KIND_COLORS[k2]};--on:${onC(KIND_COLORS[k2])}"><i></i>${KINDS[k2]} · ${n}</span>`).join('')}</div>`;
       const listed=fs.filter(s=>EK['s:'+s.id]&&![8,9,5,10].includes(s.kind)).sort((a,b)=>a.kind-b.kind||a.name.localeCompare(b.name,'es',{numeric:true}));
       h+=listed.slice(0,S.expanded.bl?200:12).map((s,i)=>itemHTML(EK['s:'+s.id],i,'',liveTag(EK['s:'+s.id]))).join('')+(listed.length>12&&!S.expanded.bl?`<button class="ut-more" data-act="x:bl">Ver los ${listed.length} →</button>`:'')+'</div>'}}
   else if(t==='s'){const s=SP[id];const b=B[s.building];selB=s.building;selS=id;fl=s.floor;close=true;const c=s.sched&&nowIn(id);const cl=byRoom[id]||[];
-    h+=head(s.kind===3&&/^\d+$/.test(s.raw)?s.raw:b.code,s.owner?AC(s.owner):s.sched?'#6E2234':(s.kind===6?'#B5362C':'#8C7B6B'),`${KINDS[s.kind]} · Planta ${s.floor}`,s.name,esc(b.name));
+    h+=head(s.kind===3&&/^\d+$/.test(s.raw)?s.raw:b.code,s.owner?AC(s.owner):s.sched?'#092d48':(s.kind===6?'#B5362C':'#8C7B6B'),`${KINDS[s.kind]} · Planta ${s.floor}`,s.name,esc(b.name));
     h+=photo(s.img);if(s.desc)h+=`<div class="ut-hint" style="padding:0 0 12px">${esc(s.desc)}</div>`;
     if(s.sched){h+=c?`<div class="ut-now ut-busy"><span class="ut-pulse"></span><div><b>En clase ahora:</b> ${esc(sOf(c))} · ${esc(gOf(c))} · ${esc(pOf(c))}</div></div>`:`<div class="ut-now ut-free"><span class="ut-pulse"></span><div><b>Libre</b> · ${D.DAYS_LONG[S.day]} ${S.hour}:00</div></div>`;
       h+=`<div class="ut-facts">${fact('Planta',s.floor)}${fact('Capacidad',s.cap?s.cap+' personas':'—')}${fact('Tipo',s.type==='laboratorio'?'Laboratorio':s.type==='aula'?'Aula':esc(KINDS[s.kind]))}${fact('Uso semanal',`${cl.reduce((a,c)=>a+c.days.length*dur(c),0)} h de ${D.DAYS.length*D.HOURS.length}`)}</div>`;
       h+=`<div class="ut-acts"><button class="ut-btn" data-act="sched">Horario semanal</button>${routeBtn()}</div>`;
-      const profs=[...new Set(cl.map(c=>c.prof))].filter(p=>p&&EK['p:'+p]);if(profs.length)h+=`<div class="ut-sec"><h3><span>Docentes que imparten aquí</span><span>${profs.length}</span></h3>${profs.map((p,i)=>itemHTML(EK['p:'+p],i,'')).join('')}</div>`;
+      const profs=[...new Set(cl.map(c=>c.prof))].filter(p=>p&&EK['p:'+p]);if(profs.length)h+=`<div class="ut-sec"><h2><span>Docentes que imparten aquí</span><span>${profs.length}</span></h2>${profs.map((p,i)=>itemHTML(EK['p:'+p],i,'')).join('')}</div>`;
       openDrawer('room',id)}
     else{h+=`<div class="ut-facts">${fact('Edificio',esc(b.code))}${fact('Planta',s.floor)}</div><div class="ut-acts">${routeBtn()}<button class="ut-btn ut-sec2" data-k2="b:${b.id}">Ver edificio</button></div>`;
-      const near=spacesOf(s.building,s.floor).filter(x=>[8,9,5].includes(x.kind));if(near.length&&![8,9,5].includes(s.kind))h+=`<div class="ut-sec"><h3>Baños en esta planta</h3>${near.map((x,i)=>itemHTML(EK['s:'+x.id],i,'')).join('')}</div>`}
-    h+=`<div class="ut-sec"><h3>Edificio</h3>${itemHTML(EK['b:'+b.id],0,'')}</div>`}
+      const near=spacesOf(s.building,s.floor).filter(x=>[8,9,5].includes(x.kind));if(near.length&&![8,9,5].includes(s.kind))h+=`<div class="ut-sec"><h2>Baños en esta planta</h2>${near.map((x,i)=>itemHTML(EK['s:'+x.id],i,'')).join('')}</div>`}
+    h+=`<div class="ut-sec"><h2>Edificio</h2>${itemHTML(EK['b:'+b.id],0,'')}</div>`}
   else if(t==='d'){const d=DP[id];selB=d.b;selS=d.space;fl=d.space?SP[d.space].floor:null;close=true;
     h+=head(B[d.b].code,AC(d.area),'Departamento académico','Departamento de '+d.name,esc(B[d.b].name)+(d.space?` · Planta ${SP[d.space].floor}`:''));
     h+=photo(d.img)+contact(d);h+=`<div class="ut-acts">${routeBtn()}<button class="ut-btn ut-sec2" data-k2="a:${d.area}">Ver ${esc(AN(d.area))}</button></div>`;
-    const pf=D.PROFS.filter(p=>p.area===d.area);h+=`<div class="ut-sec"><h3><span>Docentes</span><span>${pf.length}</span></h3>${pf.slice(0,S.expanded.dp?99:5).map((p,i)=>itemHTML(EK['p:'+p.id],i,'')).join('')}${pf.length>5&&!S.expanded.dp?`<button class="ut-more" data-act="x:dp">Ver los ${pf.length} →</button>`:''}</div>`}
+    const pf=D.PROFS.filter(p=>p.area===d.area);h+=`<div class="ut-sec"><h2><span>Docentes</span><span>${pf.length}</span></h2>${pf.slice(0,S.expanded.dp?99:5).map((p,i)=>itemHTML(EK['p:'+p.id],i,'')).join('')}${pf.length>5&&!S.expanded.dp?`<button class="ut-more" data-act="x:dp">Ver los ${pf.length} →</button>`:''}</div>`}
   else if(t==='m'){const s=SU[id];const cl=(bySubj[id]||[]).slice().sort((a,b)=>a.hour-b.hour);
     h+=head(AB(s.area),AC(s.area),'Materia · '+s.id,s.name,esc([AREAS[s.area]?.name,s.cred?s.cred+' créditos':null].filter(Boolean).join(' · ')));
-    h+=`<div class="ut-facts">${fact('Horarios',cl.length)}${fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Profesores',new Set(cl.map(c=>c.prof).filter(Boolean)).size)}${fact('En clase ahora',cl.filter(liveAt).length)}</div>`;
-    h+=`<div class="ut-sec"><h3><span>Grupos y horarios</span><span>${cl.length}</span></h3>${cl.map((c,i)=>clsItem(c,'subject',i)).join('')}</div>`;S.roomFocus=new Set(cl.map(c=>c.room).filter(Boolean))}
+    h+=`<div class="ut-facts">${fact('Bloques',cl.length)}${fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Profesores',new Set(cl.map(c=>c.prof).filter(Boolean)).size)}${fact('En clase ahora',cl.filter(liveAt).length)}</div>`;
+    h+=`<div class="ut-sec"><h2><span>Grupos y horarios</span><span>${cl.length}</span></h2>${cl.map((c,i)=>clsItem(c,'subject',i)).join('')}</div>`;S.roomFocus=new Set(cl.map(c=>c.room).filter(Boolean))}
   else if(t==='g'){const g=GR[id];const cl=(byGroup[id]||[]).slice().sort((a,b)=>a.hour-b.hour);
     const gs0=SU[g.subject];h+=head(g.code,AC(g.area),'Grupo'+(g.turno?' · '+g.turno:''),`${gs0?.name||g.subject} · grupo ${g.code}`,esc([AREAS[g.area]?.name,g.career].filter(Boolean).join(' · ')));
-    h+=`<div class="ut-facts">${fact('Horarios',cl.length)}${fact('Horas semana',cl.reduce((a,c)=>a+c.days.length*dur(c),0))}</div><div class="ut-acts"><button class="ut-btn" data-act="sched">Horario del grupo</button></div>`;
-    h+=`<div class="ut-sec"><h3>Horarios</h3>${cl.map((c,i)=>clsItem(c,'group',i)).join('')||'<div class="ut-hint">Sin clases asignadas en este periodo.</div>'}</div>`;S.roomFocus=new Set(cl.map(c=>c.room).filter(Boolean));openDrawer('group',id)}
+    h+=`<div class="ut-facts">${fact('Bloques',cl.length)}${fact('Horas semana',cl.reduce((a,c)=>a+c.days.length*dur(c),0))}</div><div class="ut-acts"><button class="ut-btn" data-act="sched">Horario del grupo</button></div>`;
+    h+=`<div class="ut-sec"><h2>Clases</h2>${cl.map((c,i)=>clsItem(c,'group',i)).join('')||'<div class="ut-hint">Sin clases asignadas en este periodo.</div>'}</div>`;S.roomFocus=new Set(cl.map(c=>c.room).filter(Boolean));openDrawer('group',id)}
   else if(t==='p'){const p=PR[id];const cl=(byProf[id]||[]).slice().sort((a,b)=>a.hour-b.hour);const c=cl.find(liveAt);selB=c&&c.room?bOfRoom(c.room):p.building;selS=c&&c.room?c.room:p.cub;fl=selS?SP[selS].floor:null;
     h+=head(e.badge,AC(p.area),'Docente · '+AN(p.area),pName(p),p.email?`<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>`:esc(AREAS[p.area]?.name||''));
     h+=c?`<div class="ut-now ut-busy"><span class="ut-pulse"></span><div><b>Ahora en ${esc(rName(c))}</b>${rBld(c)?` (${esc(rBld(c).code)})`:''} · ${esc(sOf(c))} con ${esc(gOf(c))}</div></div>`:`<div class="ut-now ut-free"><span class="ut-pulse"></span><div><b>Sin clase ahora</b>${p.building||p.loc?' · '+esc([p.loc,B[p.building]?.name].filter(Boolean).join(', ')):''}</div></div>`;
     h+=`<div class="ut-facts">${fact('Departamento',esc(AN(p.area)))}${fact('Horas frente a grupo',cl.reduce((a,c)=>a+c.days.length*dur(c),0)+' h')}${fact('Grupos',new Set(cl.map(c=>c.group)).size)}${fact('Edificios',bids.length)}</div>`;
     h+=`<div class="ut-acts"><button class="ut-btn" data-act="sched">Horario semanal</button>${routeBtn()}</div>`;
-    h+=`<div class="ut-sec"><h3><span>Clases</span><span>${cl.length}</span></h3>${cl.map((c,i)=>clsItem(c,'prof',i)).join('')}</div>`;openDrawer('prof',id)}
+    h+=`<div class="ut-sec"><h2><span>Clases</span><span>${cl.length}</span></h2>${cl.map((c,i)=>clsItem(c,'prof',i)).join('')}</div>`;openDrawer('prof',id)}
   else if(t==='a'){const a=AREAS[id];const rs=D.SPACES.filter(s=>s.owner===id);const pf=D.PROFS.filter(p=>p.area===id);const sj=D.SUBJECTS.filter(s=>s.area===id);const gs=D.GROUPS.filter(g=>g.area===id);const dp=D.DEPTS.filter(d=>d.area===id);
     h+=head(a.abbr,a.color,'Departamento académico',a.name,'');h+=`<div class="ut-facts">${fact('Edificios',bids.length)}${fact('Grupos',gs.length)}${fact('Docentes',pf.length)}${fact('Materias',sj.length)}</div>`;
-    const sec=(title,arr,key,lim=4)=>arr.length?`<div class="ut-sec"><h3><span>${title}</span><span>${arr.length}</span></h3>${arr.slice(0,S.expanded[key]?99:lim).map((x,i)=>itemHTML(x,i,'',liveTag(x))).join('')}${arr.length>lim&&!S.expanded[key]?`<button class="ut-more" data-act="x:${key}">Ver los ${arr.length} →</button>`:''}</div>`:'';
+    const sec=(title,arr,key,lim=4)=>arr.length?`<div class="ut-sec"><h2><span>${title}</span><span>${arr.length}</span></h2>${arr.slice(0,S.expanded[key]?99:lim).map((x,i)=>itemHTML(x,i,'',liveTag(x))).join('')}${arr.length>lim&&!S.expanded[key]?`<button class="ut-more" data-act="x:${key}">Ver los ${arr.length} →</button>`:''}</div>`:'';
     h+=sec('Oficina del departamento',dp.map(d=>EK['d:'+d.id]).filter(Boolean),'ad',2)+sec('Edificios',bids.map(b=>EK['b:'+b]),'ab')+sec('Salones y laboratorios',rs.map(r=>EK['s:'+r.id]).filter(Boolean),'ar')+sec('Materias',sj.map(s=>EK['m:'+s.id]).filter(Boolean),'as')+sec('Grupos',gs.map(g=>EK['g:'+g.id]).filter(Boolean),'ag')+sec('Docentes',pf.map(p=>EK['p:'+p.id]).filter(Boolean),'ap');S.roomFocus=new Set(rs.map(r=>r.id))}
   if(!['m','g','a'].includes(t))S.roomFocus=null;
   S.selRoom=selS;
@@ -439,7 +449,7 @@ function renderDetail(k,keepCam){
       const steps=`<ol class="ut-steps">${S.steps.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>${acc}`;if(ix>0)h=h.slice(0,end)+steps+h.slice(end)}}
   pb.innerHTML=h;if(!keepCam)pb.scrollTop=0;
   pb.querySelectorAll('[data-k2]').forEach(x=>x.onclick=()=>open(x.dataset.k2));
-  const fm=new Map();if(t!=='b'&&t!=='s'&&t!=='d'){const c=e?colorOf(e):'#6E2234';bids.forEach(b=>fm.set(b,c))}HL.focus=fm;HL.sel=selB;buildRoomLabels();
+  const fm=new Map();if(t!=='b'&&t!=='s'&&t!=='d'){const c=e?colorOf(e):'#092d48';bids.forEach(b=>fm.set(b,c))}HL.focus=fm;HL.sel=selB;buildRoomLabels();
   if(keepCam)return;
   if(selS&&SP[selS]){const s=SP[selS];fly(new THREE.Vector3(s.c[0],(s.floor-1)*FH,s.c[1]),MOB()?190:150)}else flyTo(selB&&!['m','a','g'].includes(t)?[selB]:bids,t==='b')}
 function act(a,el){if(a==='back')return back();
@@ -463,27 +473,30 @@ function openDrawer(mode,id,force){if(rootEl.clientWidth<=1100&&!force)return;le
   if(mode==='prof'){cl=byProf[id]||[];title=`Horario · ${pName(PR[id])}`}
   const rooms=mode==='building'?spacesOf(id).filter(s=>s.sched):null;if(mode==='building'){cl=rooms.flatMap(r=>byRoom[r.id]||[]);title=`${B[id].name} · ${cl.length} clases`}
   dctx={mode,id};const areas=[...new Set(cl.map(c=>SU[c.subject]?.area).filter(a=>AREAS[a]))];$('#dwt').textContent=title;
-  $('#dwl').innerHTML=areas.map(a=>`<span style="--c:${AC(a)}"><i></i>${esc(AREAS[a].short)}</span>`).join('')+(MOB()?'':`<span style="margin-left:auto;color:var(--ink3)">Clic en una clase para ${mode==='room'?'ver al docente':'ver el salón'}</span>`);
-  const DL=MOB()?D.DAYS:D.DAYS_LONG;sched.style.setProperty('--nd',D.DAYS.length);sched.style.setProperty('--nh',D.HOURS.length);const row=hr=>hr-T0+2;let h='<div></div>'+DL.map((d,i)=>`<div class="ut-dh2${i===S.day?' ut-today':''}" style="grid-column:${i+2};grid-row:1">${d}</div>`).join('');
-  D.HOURS.forEach((hr,j)=>{h+=`<div class="ut-hr ut-mono" style="grid-column:1;grid-row:${j+2}">${hr}:00</div>`;for(let d=0;d<D.DAYS.length;d++)h+=`<div class="ut-bg${d===S.day&&hr===S.hour?' ut-nowc':''}" style="grid-column:${d+2};grid-row:${j+2}"></div>`});
-  if(mode==='building'){const cell={};cl.forEach(c=>c.days.forEach(d=>{for(let hh=c.hour;hh<c.end;hh++)(cell[d+'-'+hh]??=[]).push(c)}));for(const key in cell){const [d,hr]=key.split('-').map(Number);if(hr<T0||hr>T1)continue;const arr=cell[key];const n=new Set(arr.map(c=>c.room)).size,tot=rooms.length;h+=`<div class="ut-cls" data-cl="${arr[0].id}" style="--c:${AC(SU[arr[0].subject]?.area)};grid-column:${d+2};grid-row:${row(hr)};opacity:${.45+.55*Math.min(1,n/tot)}"><b>${n} de ${tot} ocupados</b><span>${[...new Set(arr.map(rRaw))].slice(0,2).join(', ')}${n>2?'…':''}</span></div>`}}
+  $('#dwl').innerHTML=areas.map(a=>`<span style="--c:${AC(a)};--on:${onC(AC(a))}"><i></i>${esc(AREAS[a].short)}</span>`).join('')+(MOB()?'':`<span style="margin-left:auto;color:var(--ink3)">Clic en una clase para ${mode==='room'?'ver al docente':'ver el salón'}</span>`);
+  const ndL=Math.max(5,...cl.flatMap(c=>c.days.map(d=>d+1)));const h0=cl.length?Math.max(T0,Math.min(...cl.map(c=>c.hour))):T0,h1=cl.length?Math.min(T1,Math.max(...cl.map(c=>c.end-1))):T1;const HRS=D.HOURS.filter(x=>x>=h0&&x<=h1);const DL=(MOB()?D.DAYS:D.DAYS_LONG).slice(0,ndL);sched.style.setProperty('--nd',ndL);sched.style.setProperty('--nh',HRS.length);const row=hr=>hr-h0+2;let h='<div></div>'+DL.map((d,i)=>`<div class="ut-dh2${i===S.day?' ut-today':''}" style="grid-column:${i+2};grid-row:1">${d}</div>`).join('');
+  HRS.forEach((hr,j)=>{h+=`<div class="ut-hr ut-mono" style="grid-column:1;grid-row:${j+2}">${hr}:00</div>`;for(let d=0;d<ndL;d++)h+=`<div class="ut-bg${d===S.day&&hr===S.hour?' ut-nowc':''}" style="grid-column:${d+2};grid-row:${j+2}"></div>`});
+  if(mode==='building'){const cell={};cl.forEach(c=>c.days.forEach(d=>{for(let hh=c.hour;hh<c.end;hh++)(cell[d+'-'+hh]??=[]).push(c)}));for(const key in cell){const [d,hr]=key.split('-').map(Number);if(hr<h0||hr>h1)continue;const arr=cell[key];const n=new Set(arr.map(c=>c.room)).size,tot=rooms.length;h+=`<div role="button" tabindex="0" class="ut-cls" data-cl="${arr[0].id}" style="--c:${AC(SU[arr[0].subject]?.area)};--on:${onC(AC(SU[arr[0].subject]?.area))};grid-column:${d+2};grid-row:${row(hr)};opacity:${.45+.55*Math.min(1,n/tot)}"><b>${n} de ${tot} ocupados</b><span>${[...new Set(arr.map(rRaw))].slice(0,2).join(', ')}${n>2?'…':''}</span></div>`}}
   else cl.forEach((c,ci)=>{const s=SU[c.subject];c.days.forEach(d=>{const l2=mode==='room'?`${gOf(c)} · ${pOf(c)}`:mode==='prof'?`${rRaw(c)} · ${gOf(c)}`:`${rRaw(c)} · ${pOf(c)}`;
-    h+=`<div class="ut-cls${liveAt(c)&&d===S.day?' ut-live':''}" data-cl="${c.id}" title="${esc(sOf(c))} — ${esc(gOf(c))} — ${esc(pOf(c))} — ${esc(rName(c))}" style="--c:${AC(s?.area)};grid-column:${d+2};grid-row:${row(c.hour)}/${row(Math.min(c.end,T1+1))};animation-delay:${(ci*5+d)*12}ms"><b>${esc(sOf(c))}</b><span>${esc(l2)}</span></div>`})});
+    h+=`<div role="button" tabindex="0" class="ut-cls${liveAt(c)&&d===S.day?' ut-live':''}" data-cl="${c.id}" title="${esc(sOf(c))} — ${esc(gOf(c))} — ${esc(pOf(c))} — ${esc(rName(c))}" style="--c:${AC(s?.area)};--on:${onC(AC(s?.area))};grid-column:${d+2};grid-row:${row(c.hour)}/${row(Math.min(c.end,h1+1))};animation-delay:${(ci*5+d)*12}ms"><b>${esc(sOf(c))}</b><span>${esc(l2)}</span></div>`})});
   sched.innerHTML=h;drawer.classList.add('ut-open')}
 sched.addEventListener('click',e=>{const el=e.target.closest('[data-cl]');if(!el||!dctx)return;const c=D.CLASSES[+el.dataset.cl.slice(1)];const k=dctx.mode==='room'?(c.prof?'p:'+c.prof:''):(c.room?'s:'+c.room:'m:'+c.subject);if(!EK[k])return;if(MOB())closeDrawer();open(k)});
 sched.addEventListener('mouseover',e=>{const el=e.target.closest('[data-cl]');if(!el){HL.hoverSet=null;return}const c=D.CLASSES[+el.dataset.cl.slice(1)];const bb=bOfRoom(c.room);HL.hoverSet=bb?new Set([bb]):null;HL.hoverRoom=c.room});
 sched.addEventListener('mouseleave',()=>{HL.hoverSet=null;HL.hoverRoom=null});
+sched.addEventListener('keydown',kbAct);
 
 // ---------- ocupación / noche ----------
 const oday=$('#oday'),ohour=$('#ohour');ohour.min=T0;ohour.max=T1;oday.innerHTML=D.DAYS_LONG.map((d,i)=>`<option value="${i}">${d}</option>`).join('');oday.value=S.day;ohour.value=S.hour;$('#ohl').textContent=S.hour+':00';
-const updOcc=()=>{for(const id in BLD){const o=occOf(id);LBL[id].querySelector('.ut-occ').textContent=o==null?'':Math.round(o*100)+'%'}};
+const updOcc=()=>{for(const id in BLD){const o=occOf(id);LBL[id].querySelector('.ut-occ').textContent=o==null||o===0?'':Math.round(o*100)+'%'}};
 const updTime=()=>{S.day=+oday.value;S.hour=+ohour.value;$('#ohl').textContent=S.hour+':00';updOcc();if(S.stack.length)renderDetail(S.stack[S.stack.length-1],true);else render()};
 oday.onchange=updTime;ohour.oninput=updTime;
-$('#vocc').onclick=()=>{S.occ=!S.occ;rootEl.classList.toggle('ut-occ',S.occ);$('#vocc').classList.toggle('ut-on',S.occ);updOcc()};
+$('#vocc').onclick=()=>{S.occ=!S.occ;rootEl.classList.toggle('ut-occ',S.occ);$('#vocc').classList.toggle('ut-on',S.occ);$('#vocc').setAttribute('aria-pressed',S.occ);updOcc()};
+if(!D.CLASSES.length){const b=$('#vocc');b.disabled=true;b.title='Sin clases en este periodo'}
+$('#compass').onclick=()=>{const t=controls.target.clone();const d=camera.position.distanceTo(t);const pol=controls.getPolarAngle();flyRaw(new THREE.Vector3(t.x,t.y+d*Math.cos(pol),t.z+d*Math.sin(pol)),t,700)};
 const lights=scene.children.filter(o=>o.isLight);const DAYL=lights.map(l=>l.intensity);
-function setNight(on){S.night=on;$('#vnight').classList.toggle('ut-on',on);rootEl.classList.toggle('ut-night',on);stage.style.setProperty('--stage-bg',on?'#151821':'#E9E4DC');
+function setNight(on){S.night=on;$('#vnight').classList.toggle('ut-on',on);$('#vnight').setAttribute('aria-pressed',on);rootEl.classList.toggle('ut-night',on);stage.style.setProperty('--stage-bg',on?'#151821':'#E9E4DC');
   lights.forEach((l,i)=>{l.intensity=DAYL[i]*(on?(l.isHemisphereLight?.35:.22):1);if(l.isHemisphereLight)l.color.set(on?'#8FA3D9':'#ffffff')});
-  MT.vidrio.emissive.set(on?'#FFC46B':'#000000');MT.vidrio.emissiveIntensity=on?1.1:0;MT.azotea.color.set(on?'#9A9488':'#E2D9CC');dotM.color.set(on?'#7FD3FF':'#1E3A5F');pinM.emissive.set(on?'#2B5C9A':'#000000')}
+  MT.vidrio.emissive.set(on?'#FFC46B':'#000000');MT.vidrio.emissiveIntensity=on?1.1:0;MT.azotea.color.set(on?'#9A9488':'#E2D9CC');dotM.color.set(on?'#7FD3FF':'#092d48');pinM.emissive.set(on?'#2B5C9A':'#000000')}
 $('#vnight').onclick=()=>setNight(!S.night);
 
 // ---------- hoja inferior (móvil) ----------
@@ -510,6 +523,7 @@ stage.addEventListener('ubicatec:stage-dispose',destroy);
 const api={state:S,data:D,open,keys:()=>Object.keys(EK),destroy};
 window.UbicaTec=api;
 addEventListener('ubicatec:focus',e=>{const k=e.detail?.key;if(k&&EK[k])open(k)},sig);
+rootEl.classList.add('ut-ready');
 window.dispatchEvent(new CustomEvent('ubicatec:ready'));
 return api;
 }
