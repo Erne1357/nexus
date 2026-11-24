@@ -133,6 +133,7 @@ jobs:
           ls -lh "$RUNNER_TEMP/bundle"
 
       - name: Smoke del stack de producción
+        shell: bash
         env:
           SHA: ${{ github.sha }}
         run: .github/scripts/prod-smoke.sh --bundle "$RUNNER_TEMP/bundle/nexus-$SHA.tar" --restart-daemon
