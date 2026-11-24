@@ -34,7 +34,7 @@ it('el docente en su turno elige un salón tocándolo en el mapa', function () {
         ->assertPresent('[data-testid="map-picker-stage"]')
         ->wait(4);
 
-    $page->script('window.__picked = []; window.addEventListener("room-picked", e => window.__picked.push(e.detail.key)); window.UbicaTec.probe("Edificio Rivera Lara|105")');
+    $page->script('if (!window.__picked) { window.__picked = []; window.addEventListener("room-picked", e => window.__picked.push(e.detail.key)); } window.UbicaTec.probe("Edificio Rivera Lara|105")');
     $page->wait(2);
 
     $tap = <<<'JS'
