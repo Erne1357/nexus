@@ -4,13 +4,16 @@ use App\Modules\Academic\Enums\RequiredSpace;
 use App\Modules\Facilities\Enums\RoomType;
 use App\Modules\Facilities\Models\Room;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
+use App\Modules\Staffing\Actions\AssignTeacher;
 use App\Modules\Staffing\Actions\Selection\FinishMyLoad;
 use App\Modules\Staffing\Actions\Selection\PickSelectionGroup;
 use App\Modules\Staffing\Actions\Selection\ReleaseSelectionGroup;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Spatie\Activitylog\Models\Activity;
@@ -171,4 +174,57 @@ it('después de terminar ya no puede tomar ni soltar', function () {
         ->and($release['group'])->toBe(['Ya terminaste tu carga: solo tu jefe de departamento o el JPD la cambian.'])
         ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id)
         ->and($other->fresh()->teacher_id)->toBeNull();
+});
+
+it('un docente no puede elegir, soltar ni terminar por otro', function () {
+    $peer = $this->world->teacher(base: 5, position: 2, name: 'Docente Par');
+    $selection = $this->world->selection;
+
+    expect(fn () => app(PickSelectionGroup::class)->handle($selection, $this->teacher, $this->group, $this->room, $peer->user))->toThrow(AuthorizationException::class)
+        ->and(fn () => app(PickSelectionGroup::class)->handle($selection, $this->teacher, $this->group, $this->room, $this->world->admin))->toThrow(AuthorizationException::class)
+        ->and($this->group->fresh()->teacher_id)->toBeNull();
+
+    pickSelectionGroupFor($this->teacher, $this->group, $this->room);
+
+    expect(fn () => app(ReleaseSelectionGroup::class)->handle($selection, $this->teacher, $this->group, $peer->user))->toThrow(AuthorizationException::class)
+        ->and(fn () => app(FinishMyLoad::class)->handle($selection, $this->teacher, false, $peer->user))->toThrow(AuthorizationException::class)
+        ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id)
+        ->and($this->world->entryOf($this->teacher)->closed_at)->toBeNull();
+});
+
+it('un docente sin cuenta no elige', function () {
+    $noAccount = $this->world->teacher(base: 5, position: 2, name: 'Docente Sin Cuenta');
+    $noAccount->update(['user_id' => null]);
+
+    expect(fn () => app(PickSelectionGroup::class)->handle($this->world->selection, $noAccount, $this->group, $this->room, $this->world->admin))->toThrow(AuthorizationException::class);
+});
+
+it('HC-09: no puede tomar un grupo a una hora en que no está disponible', function () {
+    TeacherAvailability::factory()->create(['teacher_id' => $this->teacher->id, 'term_id' => $this->world->term->id, 'day' => 3, 'starts_at' => '09:00', 'ends_at' => '10:00']);
+
+    $errors = pickSelectionErrors(fn () => pickSelectionGroupFor($this->teacher, $this->group, $this->room));
+
+    expect($errors)->toHaveKey('teacher')
+        ->and($this->group->fresh()->teacher_id)->toBeNull()
+        ->and(GroupTeacherAssignment::query()->count())->toBe(0);
+});
+
+it('fuera de su turno no suelta su grupo', function () {
+    pickSelectionGroupFor($this->teacher, $this->group, $this->room);
+    $this->travel(31)->minutes();
+
+    $errors = pickSelectionErrors(fn () => app(ReleaseSelectionGroup::class)->handle($this->world->selection, $this->teacher, $this->group, $this->teacher->user));
+
+    expect($errors['group'])->toBe(['No es tu turno.'])
+        ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id)
+        ->and(GroupSession::query()->where('group_id', $this->group->id)->whereNotNull('room_id')->count())->toBe(2);
+});
+
+it('no suelta un grupo que le asignó el jefe', function () {
+    app(AssignTeacher::class)->handle($this->group, $this->teacher, $this->world->admin);
+
+    $errors = pickSelectionErrors(fn () => app(ReleaseSelectionGroup::class)->handle($this->world->selection, $this->teacher, $this->group, $this->teacher->user));
+
+    expect($errors['group'])->toBe(['Solo puedes soltar los grupos que tomaste en la orden de selección.'])
+        ->and($this->group->fresh()->teacher_id)->toBe($this->teacher->id);
 });

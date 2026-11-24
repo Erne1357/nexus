@@ -53,7 +53,7 @@ final class FinishMyLoad
     {
         return DB::transaction(function () use ($selection, $teacher, $acknowledged, $actor): SelectionEntry {
             $selection = $this->lockSelection($selection);
-            $entry = $this->entryInTurn($selection, $teacher);
+            $entry = $this->entryInTurn($selection, $teacher, $actor);
             $term = Term::query()->findOrFail($selection->term_id);
 
             $hours = (int) $this->groups->of($selection)
@@ -107,6 +107,7 @@ final class FinishMyLoad
 
         if ($total > 0) {
             $this->grantHours->handle($teacher, $term, $total, "Cerró su carga con {$total} h de HC-08 (asignadas y externas) y base de {$base} h en la orden de selección (SEL-05).", $actor);
+            $this->validator->forget();
         }
     }
 }

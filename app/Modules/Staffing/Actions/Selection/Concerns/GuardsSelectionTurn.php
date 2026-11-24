@@ -2,6 +2,7 @@
 
 namespace App\Modules\Staffing\Actions\Selection\Concerns;
 
+use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
 use App\Modules\Staffing\Enums\SelectionEntryStatus;
 use App\Modules\Staffing\Enums\SelectionStatus;
@@ -9,6 +10,7 @@ use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Queries\SelectionTurnQuery;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -34,12 +36,19 @@ trait GuardsSelectionTurn
     }
 
     /**
-     * El renglón del docente, bloqueado, si ahora es su turno.
+     * El renglón del docente, bloqueado, si quien actúa es el propio docente y ahora es su turno. SelectionPolicy::pickOwn
+     * solo prueba que el usuario tiene un renglón; aquí se exige que el docente sea el suyo, para que una pantalla que
+     * reciba el docente del cliente no deje actuar por otro.
      *
+     * @throws AuthorizationException si el docente no es el del usuario (o no tiene cuenta)
      * @throws ValidationException
      */
-    private function entryInTurn(Selection $selection, Teacher $teacher): SelectionEntry
+    private function entryInTurn(Selection $selection, Teacher $teacher, User $actor): SelectionEntry
     {
+        if ($teacher->user_id === null || $teacher->user_id !== $actor->getKey()) {
+            throw new AuthorizationException('Solo el propio docente elige, suelta o termina su carga.');
+        }
+
         $entry = SelectionEntry::query()
             ->where('selection_id', $selection->getKey())
             ->where('teacher_id', $teacher->getKey())

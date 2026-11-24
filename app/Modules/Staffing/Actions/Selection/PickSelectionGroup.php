@@ -19,6 +19,7 @@ use App\Modules\Staffing\Actions\RecordTeacherAssignment;
 use App\Modules\Staffing\Actions\Selection\Concerns\GuardsSelectionTurn;
 use App\Modules\Staffing\Models\GroupTeacherAssignment;
 use App\Modules\Staffing\Models\Selection;
+use App\Modules\Staffing\Models\SelectionEntry;
 use App\Modules\Staffing\Queries\SelectionGroupsQuery;
 use App\Modules\Staffing\Queries\SelectionRoomOptionsQuery;
 use Illuminate\Support\Facades\DB;
@@ -59,7 +60,7 @@ final class PickSelectionGroup
     {
         return $this->editability->guard(fn (): GroupTeacherAssignment => DB::transaction(function () use ($selection, $teacher, $group, $room, $actor): GroupTeacherAssignment {
             $selection = $this->lockSelection($selection);
-            $entry = $this->entryInTurn($selection, $teacher);
+            $entry = $this->entryInTurn($selection, $teacher, $actor);
 
             $load = $this->editability->lockLoad($group);
             $group->setRawAttributes($group->newQuery()->lockForUpdate()->findOrFail($group->getKey())->getAttributes(), sync: true);
@@ -74,7 +75,7 @@ final class PickSelectionGroup
             $this->ensureRoom($selection, $group, $room);
 
             [$position, $size] = $this->record->rankingPosition($group, $teacher);
-            $assignment = $this->record->handle($group, $teacher, $actor, "Orden de selección, turno {$entry->position}", $position, $size);
+            $assignment = $this->record->handle($group, $teacher, $actor, self::reasonFor($entry), $position, $size);
 
             if ($room !== null) {
                 $sessions = GroupSession::query()->where('group_id', $group->id)->where('kind', '!=', SessionKind::Virtual->value)->pluck('id');
@@ -83,6 +84,15 @@ final class PickSelectionGroup
 
             return $assignment;
         }), 'group', 'Otra persona está cambiando este grupo; intenta de nuevo.');
+    }
+
+    /**
+     * El motivo del historial de lo que el docente toma en su turno; ReleaseSelectionGroup lo usa para saber que el grupo
+     * lo tomó él.
+     */
+    public static function reasonFor(SelectionEntry $entry): string
+    {
+        return "Orden de selección, turno {$entry->position}";
     }
 
     /**

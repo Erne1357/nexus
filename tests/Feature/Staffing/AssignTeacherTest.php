@@ -5,6 +5,7 @@ use App\Modules\AcademicLoad\Models\AcademicLoad;
 use App\Modules\Core\Models\Modality;
 use App\Modules\Core\Models\User;
 use App\Modules\Faculty\Models\Teacher;
+use App\Modules\Faculty\Models\TeacherAvailability;
 use App\Modules\Faculty\Models\TeacherPosition;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Scheduling\Models\GroupSession;
@@ -231,6 +232,17 @@ it('con selección viva HC-01 sigue siendo duro para el jefe', function () {
 
     expect($errors)->toHaveKey('teacher')
         ->and($this->group->fresh()->teacher_id)->toBeNull();
+});
+
+it('con selección viva HC-09 sigue siendo duro para el jefe', function () {
+    assignTeacherSelection($this->load, SelectionStatus::Running);
+    TeacherAvailability::factory()->create(['teacher_id' => $this->teachers[0]->id, 'term_id' => $this->group->term_id, 'day' => 1, 'starts_at' => '10:00', 'ends_at' => '11:00']);
+
+    $errors = assignmentErrors(fn () => assignTeacher($this->group, $this->teachers[0], $this->actor));
+
+    expect($errors)->toHaveKey('teacher')
+        ->and($this->group->fresh()->teacher_id)->toBeNull()
+        ->and(GroupTeacherAssignment::query()->count())->toBe(0);
 });
 
 it('sin selección viva HC-16 y HC-08 se exigen como antes', function (SelectionStatus $status) {
