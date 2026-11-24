@@ -27,7 +27,7 @@ beforeEach(function () {
     $this->dept = Department::factory()->create();
     $this->building = Building::factory()->create(['campus_id' => $this->campus->id]);
     $this->selection = Selection::factory()->create([
-        'term_id' => $this->term->id, 'campus_id' => $this->campus->id, 'modality_id' => $this->modality->id, 'department_id' => $this->dept->id,
+        'term_id' => $this->term->id, 'modality_id' => $this->modality->id, 'department_id' => $this->dept->id,
     ]);
     $this->load = AcademicLoad::factory()->create(['term_id' => $this->term->id, 'modality_id' => $this->modality->id, 'department_id' => $this->dept->id]);
     $this->selection->loads()->attach($this->load->id);
