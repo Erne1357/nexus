@@ -351,7 +351,8 @@ describe('MN-05: las rutas', function () {
     it('la lista nombra rutas que existen y cubre las del área Carga académica y todas las de sus módulos; ninguna otra área lleva a ellas', function () {
         $items = collect(app(Navigation::class)->items());
         $routesOf = fn (NavigationItem $item): array => [$item->route, ...$item->childRoutes];
-        $alwaysVisible = ['staffing.my-load', 'staffing.offer'];
+        // La orden de selección corre aunque la carga esté oculta, 1.33.
+        $alwaysVisible = ['staffing.my-load', 'staffing.offer', 'staffing.selection.admin'];
         $inArea = $items->filter(fn (NavigationItem $item): bool => $item->area === NavigationArea::CargaAcademica)->flatMap($routesOf)->unique();
         $elsewhere = $items->reject(fn (NavigationItem $item): bool => $item->area === NavigationArea::CargaAcademica)->flatMap($routesOf)->unique();
         $ofLoadModules = collect(array_keys(Route::getRoutes()->getRoutesByName()))
