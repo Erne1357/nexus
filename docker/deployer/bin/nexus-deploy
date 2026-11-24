@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Deployer de Nexus (ADR-0033). Uso: nexus-deploy <comando> [opciones]. Runbook: docs/operacion/despliegue.md.
+set -Eeuo pipefail
+
+here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+if [ -d "$here/../lib/nexus-deploy" ]; then lib="$here/../lib/nexus-deploy"; else lib="$here/../lib"; fi
+NEXUS_DEPLOY_BIN="$here/$(basename "$0")"
+export NEXUS_DEPLOY_BIN
+
+# shellcheck source=../lib/common.sh
+. "$lib/common.sh"
+# shellcheck source=../lib/state.sh
+. "$lib/state.sh"
+# shellcheck source=../lib/release.sh
+. "$lib/release.sh"
+# shellcheck source=../lib/stack.sh
+. "$lib/stack.sh"
+# shellcheck source=../lib/switch.sh
+. "$lib/switch.sh"
+# shellcheck source=../lib/agent.sh
+. "$lib/agent.sh"
+
+usage() {
+    cat >&2 <<'EOF'
+Uso: nexus-deploy <comando>
+
+  deploy --bundle <paquete.tar> [--force]   despliega un paquete (verifica su .sha256)
+  deploy --sha <sha> [--force]              vuelve a desplegar un release que ya está en el servidor
+  rollback [<sha>|previous] [--restore --yes]
+                                            vuelve a un release anterior; --restore restaura el respaldo previo
+                                            cuando hay contracciones de por medio (se pierde lo escrito después)
+  status [--json]                           color activo, release, /health y últimos despliegues
+  pause [motivo] | resume                   congela o reanuda los despliegues automáticos
+  agent                                     bucle del servicio: carpeta de entrada (o GitHub)
+  compose <argumentos>                      docker compose del release activo (ps, logs, exec…)
+
+--force despliega aunque haya pausa. Códigos de salida: 2 uso, 3 en pausa, 4 paquete inválido, 5 .env
+incompleto, 6 la versión nueva no quedó sana, 7 rollback negado por contracción, 8 verificación por Caddy
+fallida (se volvió atrás), 9 migraciones fallidas, 10 otro despliegue en curso.
+EOF
+}
+
+cmd_deploy() {
+    local bundle="" sha="" force=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --bundle) bundle=${2:?falta el paquete}; shift 2 ;;
+            --sha) sha=${2:?falta el sha}; shift 2 ;;
+            --force) force=1; shift ;;
+            *) usage; exit "$E_USAGE" ;;
+        esac
+    done
+    [ -n "$bundle$sha" ] || { usage; exit "$E_USAGE"; }
+    state_init
+    take_lock
+    if is_paused && [ "$force" != 1 ]; then
+        die "$E_PAUSED" "los despliegues están en pausa ($(cat "$STATE_DIR/paused")); usa --force o «resume»"
+    fi
+    if [ -n "$bundle" ]; then
+        sha=$(release_from_bundle "$bundle")
+    else
+        sha=$(resolve_sha "$sha")
+    fi
+    deploy_release "$sha" 1 deploy
+}
+
+cmd_rollback() {
+    local target=previous restore=0 yes=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --restore) restore=1; shift ;;
+            --yes) yes=1; shift ;;
+            -*) usage; exit "$E_USAGE" ;;
+            *) target=$1; shift ;;
+        esac
+    done
+    if [ "$restore" = 1 ] && [ "$yes" != 1 ]; then
+        die "$E_USAGE" "--restore reemplaza la base de datos por un respaldo: confírmalo con --yes"
+    fi
+    state_init
+    take_lock
+    rollback_release "$target" "$restore"
+}
+
+cmd_status() {
+    local json=0 color sha container health=null
+    [ "${1:-}" = --json ] && json=1
+    state_init
+    color=$(state_get ACTIVE_COLOR)
+    sha=$(state_get ACTIVE_SHA)
+    container=$(container_of "app-${color:-none}")
+    if [ -n "$container" ]; then
+        health=$(docker exec "$container" curl -s --max-time 5 -H "X-Health-Token: ${HEALTH_TOKEN:-}" \
+            http://127.0.0.1:8000/health 2>/dev/null | jq -c . 2>/dev/null) || health=null
+        [ -n "$health" ] || health=null
+    fi
+    if [ "$json" = 1 ]; then
+        jq -n --arg color "$color" --arg sha "$sha" --argjson health "$health" \
+            --arg paused "$(cat "$STATE_DIR/paused" 2>/dev/null || true)" \
+            --rawfile log "$STATE_DIR/releases.log" \
+            '{active_color: $color, active_sha: $sha, paused: ($paused | rtrimstr("\n") | if . == "" then null else . end),
+              health: $health, releases: ($log | split("\n") | map(select(. != "") | split("\t")
+                | {at: .[0], action: .[1], sha: .[2], color: .[3], migrated: (.[4] == "1"),
+                   contracts: (.[5] == "1"), backup: .[6], result: .[7]}) | .[-10:])}'
+        return
+    fi
+    printf 'Release activo: %s en app-%s\n' "${sha:-ninguno}" "${color:-?}"
+    if is_paused; then printf 'Despliegues en pausa: %s\n' "$(cat "$STATE_DIR/paused")"; fi
+    printf '/health: %s\n' "$(jq -r 'if . == null then "sin respuesta" else .status + " (release " + .release + ")" end' <<<"$health")"
+    printf '\nÚltimos despliegues (fecha, acción, sha, color, migró, contracciones, respaldo, resultado):\n'
+    tail -n 10 "$STATE_DIR/releases.log"
+}
+
+cmd_self_update() {
+    local sha=${1:?falta el sha}
+    sleep 10
+    compose "$sha" up -d --no-deps deployer
+}
+
+main() {
+    local cmd=${1:-}
+    [ $# -gt 0 ] && shift
+    case "$cmd" in
+        deploy) cmd_deploy "$@" ;;
+        rollback) cmd_rollback "$@" ;;
+        status) cmd_status "$@" ;;
+        pause) state_init; pause_deploys "$@" ;;
+        resume) state_init; resume_deploys ;;
+        agent) agent_loop ;;
+        self-update) cmd_self_update "$@" ;;
+        compose)
+            state_init
+            [ -n "$(state_get ACTIVE_SHA)" ] || die "$E_USAGE" "no hay ningún release activo"
+            compose "$(state_get ACTIVE_SHA)" "$@"
+            ;;
+        -h | --help | help) usage ;;
+        *) usage; exit "$E_USAGE" ;;
+    esac
+}
+
+main "$@"

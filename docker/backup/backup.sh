@@ -5,6 +5,9 @@
 #   backup.sh daemon   bucle: un respaldo al día a BACKUP_TIME (hora de TZ)
 #   backup.sh run      un respaldo ahora, más rotación (también para respaldar antes de actualizar)
 #   backup.sh check    healthcheck: sale 0 si el último respaldo diario es reciente
+#   backup.sh predeploy <etiqueta>
+#                      respaldo previo a un despliegue con migraciones (ADR-0033): va a predeploy/, conserva
+#                      los últimos BACKUP_KEEP_PREDEPLOY e imprime PREDEPLOY_FILE=<archivo> para el deployer
 #
 # La conexión usa las variables estándar PGHOST, PGUSER, PGPASSWORD y PGDATABASE.
 # Formato custom (-Fc): se restaura con pg_restore, a una base nueva o a la misma.
@@ -15,6 +18,7 @@ BACKUP_DIR=${BACKUP_DIR:-/backups}
 BACKUP_TIME=${BACKUP_TIME:-03:00}
 KEEP_DAILY=${BACKUP_KEEP_DAILY:-14}
 KEEP_WEEKLY=${BACKUP_KEEP_WEEKLY:-8}
+KEEP_PREDEPLOY=${BACKUP_KEEP_PREDEPLOY:-5}
 # Un respaldo diario más viejo que esto (minutos, 26 h) pone el servicio en unhealthy.
 MAX_AGE_MIN=${BACKUP_MAX_AGE_MIN:-1560}
 
@@ -44,13 +48,14 @@ prune() {
     done
 }
 
-run_backup() {
-    mkdir -p "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly"
+# Escribe un pg_dump validado en $1/$2: primero como parcial y solo si pg_restore lo lee toma su nombre final.
+dump_to() {
+    dir=$1
+    name=$2
+    partial="$dir/.${name}.partial"
+    mkdir -p "$dir"
 
-    name="${PGDATABASE}-$(date +%Y%m%d-%H%M%S).dump"
-    partial="$BACKUP_DIR/daily/.${name}.partial"
-
-    log "respaldando ${PGDATABASE}@${PGHOST} -> daily/${name}"
+    log "respaldando ${PGDATABASE}@${PGHOST} -> ${dir#"$BACKUP_DIR"/}/${name}"
 
     if ! pg_dump --format=custom --compress=6 --file="$partial"; then
         rm -f -- "$partial"
@@ -65,8 +70,15 @@ run_backup() {
         return 1
     fi
 
-    mv -- "$partial" "$BACKUP_DIR/daily/$name"
-    log "listo: daily/${name} ($(du -h "$BACKUP_DIR/daily/$name" | cut -f1))"
+    mv -- "$partial" "$dir/$name"
+    log "listo: ${dir#"$BACKUP_DIR"/}/${name} ($(du -h "$dir/$name" | cut -f1))"
+}
+
+run_backup() {
+    mkdir -p "$BACKUP_DIR/daily" "$BACKUP_DIR/weekly"
+
+    name="${PGDATABASE}-$(date +%Y%m%d-%H%M%S).dump"
+    dump_to "$BACKUP_DIR/daily" "$name" || return 1
 
     # Los domingos queda además una copia semanal (una por semana ISO).
     if [ "$(date +%u)" = "7" ]; then
@@ -77,6 +89,22 @@ run_backup() {
 
     prune "$BACKUP_DIR/daily" "$KEEP_DAILY"
     prune "$BACKUP_DIR/weekly" "$KEEP_WEEKLY"
+}
+
+# Respaldo previo a migrar: el nombre lleva la etiqueta (el SHA corto del release) y no entra en la rotación
+# diaria, porque volver atrás de una contracción puede necesitarlo días después.
+predeploy_backup() {
+    label=$1
+    case "$label" in
+        "" | *[!A-Za-z0-9._-]*)
+            log "ERROR: la etiqueta del respaldo previo solo admite letras, números, punto, guion y guion bajo"
+            return 2
+            ;;
+    esac
+    name="${PGDATABASE}-$(date +%Y%m%d-%H%M%S)-${label}.dump"
+    dump_to "$BACKUP_DIR/predeploy" "$name" || return 1
+    prune "$BACKUP_DIR/predeploy" "$KEEP_PREDEPLOY"
+    echo "PREDEPLOY_FILE=$name"
 }
 
 has_recent_backup() {
@@ -134,8 +162,9 @@ case "${1:-daemon}" in
     daemon) daemon ;;
     run) require_connection_env && run_backup ;;
     check) has_recent_backup ;;
+    predeploy) require_connection_env && predeploy_backup "${2:-}" ;;
     *)
-        echo "uso: backup.sh [daemon|run|check]" >&2
+        echo "uso: backup.sh [daemon|run|check|predeploy <etiqueta>]" >&2
         exit 2
         ;;
 esac

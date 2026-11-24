@@ -1,7 +1,14 @@
-# Producción on-premise (ADR-0013). Se combina con el stack base; NO se usa
-# compose.override.yaml (es solo de desarrollo):
+# Producción on-premise (ADR-0013, ADR-0033). Se combina con el stack base; NO se usa
+# compose.override.yaml (es solo de desarrollo). En el servidor no se ejecuta a mano: el deployer
+# (docker/deployer) lo corre desde la carpeta de cada release con un tercer archivo que generó,
+# compose.release.yaml, que fija la imagen exacta de cada servicio:
 #
-#   docker compose -f compose.yaml -f compose.prod.yaml up -d
+#   docker compose -p nexus --project-directory $NEXUS_HOME/releases/<sha> \
+#     -f compose.yaml -f compose.prod.yaml -f compose.release.yaml ...
+#
+# Cero caídas: `app` se parte en dos colores (`app-blue`, `app-green`) detrás de Caddy; el deployer
+# arranca el inactivo con la versión nueva, espera su /health y apaga el viejo, que queda detenido
+# para volver atrás al instante. Las migraciones las corre el servicio `migrate`, de un solo uso.
 #
 # Requiere un .env con permisos 600 (plantilla: .env.production.example).
 # Runbook: docs/operacion/despliegue.md
@@ -26,6 +33,36 @@ x-app-environment: &app-environment
   SOLVER_URL: ${SOLVER_URL:?Define SOLVER_URL en .env (http://solver:8000, el servicio del motor en la red backend)}
   SOLVER_TOKEN: ${SOLVER_TOKEN:?Define SOLVER_TOKEN en .env (token compartido con el servicio del motor de horarios)}
 
+# Cada color de la app. Los dos son idénticos salvo el nombre (una prueba lo exige) y nunca migran.
+x-app-color: &app-color
+  image: ${APP_IMAGE:-nexus-app}:${APP_IMAGE_TAG:-latest}
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    valkey:
+      condition: service_healthy
+  environment:
+    <<: *app-environment
+    RUN_MIGRATIONS: "false"
+    OCTANE_WORKERS: ${OCTANE_WORKERS:-auto}
+  volumes:
+    - app-storage:/app/storage/app
+    # Fotos de los alumnos para la credencial (AC-20): <AAAA>/<número de control>.jpg, solo lectura.
+    - ${NEXUS_STUDENT_PHOTOS_DIR:-/srv/nexus/fotos}:/app/storage/app/fotos:ro
+  # Liveness para Docker. La preparación (BD, caché, migraciones…) la miran el deployer y Caddy en /health.
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
+    interval: 10s
+    timeout: 3s
+    retries: 5
+    start_period: ${APP_START_PERIOD:-60s}
+  # Octane termina las peticiones en curso al recibir SIGTERM antes de salir.
+  stop_grace_period: 30s
+  logging: *logging
+  networks: [backend]
+
 services:
   # El proxy nginx del stack base es solo para desarrollo: en producción lo
   # reemplaza Caddy. El perfil evita que arranque sin tocar compose.yaml.
@@ -47,39 +84,47 @@ services:
       BASIC_AUTH_USER: ${BASIC_AUTH_USER:-}
       BASIC_AUTH_HASH: ${BASIC_AUTH_HASH:-}
     volumes:
-      # Carpeta, no archivo: un archivo montado solo se queda con la versión anterior
-      # cuando `git checkout` lo reemplaza al actualizar.
-      - ./docker/caddy:/etc/caddy:ro
+      # Carpeta, no archivo: un archivo montado se queda con la versión anterior cuando se reemplaza.
+      # NEXUS_CONFIG_DIR es una carpeta estable del servidor que el deployer actualiza en cada release:
+      # si la ruta cambiara con cada release, Compose recrearía Caddy (y cortaría las conexiones).
+      - ${NEXUS_CONFIG_DIR:-./docker}/caddy:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
+      # Assets compilados de los últimos releases: una página que sirvió la versión vieja sigue
+      # encontrando sus archivos después del cambio de color.
+      - build-assets:/srv/build:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
       interval: 15s
       timeout: 3s
       retries: 5
       start_period: 15s
-    depends_on:
-      app:
-        condition: service_healthy
     logging: *logging
     networks: [frontend, backend]
 
+  # El `app` del stack base es solo para desarrollo; en producción atienden los dos colores.
   app:
+    profiles: [dev-only]
+
+  app-blue: *app-color
+
+  app-green: *app-color
+
+  # Migraciones, de un solo uso: `docker compose run --rm migrate` con la imagen nueva, antes de arrancar su
+  # color. El perfil evita que `up` lo levante. lock_timeout: si una migración no consigue su candado en ese
+  # tiempo, falla y el despliegue se aborta sin bloquear a la versión que sigue atendiendo (libpq aplica
+  # PGOPTIONS a la sesión de PDO).
+  migrate:
+    <<: *app-color
+    profiles: [deploy]
+    restart: "no"
+    command: ["php", "artisan", "migrate", "--force", "--isolated", "--no-interaction"]
     environment:
       <<: *app-environment
-      RUN_MIGRATIONS: "true"
-    volumes:
-      - app-storage:/app/storage/app
-      # Fotos de los alumnos para la credencial (AC-20): <AAAA>/<número de control>.jpg, solo lectura.
-      - ${NEXUS_STUDENT_PHOTOS_DIR:-/srv/nexus/fotos}:/app/storage/app/fotos:ro
-    # Las migraciones corren en el entrypoint antes de servir: start_period amplio.
+      RUN_MIGRATIONS: "false"
+      PGOPTIONS: "-c lock_timeout=${MIGRATE_LOCK_TIMEOUT:-10s}"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/up"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-      start_period: ${APP_START_PERIOD:-120s}
-    logging: *logging
+      disable: true
 
   queue:
     environment:
@@ -87,9 +132,6 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       - app-storage:/app/storage/app
-    depends_on:
-      app:
-        condition: service_healthy
     logging: *logging
 
   # Corre lo programado (schedule:work); compose.yaml lo deja fuera del desarrollo con un perfil.
@@ -100,9 +142,6 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       - app-storage:/app/storage/app
-    depends_on:
-      app:
-        condition: service_healthy
     logging: *logging
 
   postgres:
@@ -134,9 +173,10 @@ services:
       BACKUP_TIME: ${BACKUP_TIME:-03:00}
       BACKUP_KEEP_DAILY: ${BACKUP_KEEP_DAILY:-14}
       BACKUP_KEEP_WEEKLY: ${BACKUP_KEEP_WEEKLY:-8}
+      BACKUP_KEEP_PREDEPLOY: ${BACKUP_KEEP_PREDEPLOY:-5}
     volumes:
       - ${BACKUP_DIR:-/var/backups/nexus}:/backups
-      - ./docker/backup:/opt/backup:ro
+      - ${NEXUS_CONFIG_DIR:-./docker}/backup:/opt/backup:ro
     healthcheck:
       test: ["CMD", "/bin/sh", "/opt/backup/backup.sh", "check"]
       interval: 10m
@@ -149,8 +189,28 @@ services:
     logging: *logging
     networks: [backend]
 
+  # Consigue cada release (paquete en la carpeta de entrada o, con internet, GitHub) y lo despliega sin caída;
+  # también vuelve atrás, pausa y reporta (runbook, docs/operacion/despliegue.md). Sin puertos. Montar el socket de
+  # Docker equivale a administrar el servidor, igual que el grupo `docker` (ADR-0013). NEXUS_HOME se monta en la
+  # misma ruta que en el servidor: Compose resuelve ahí las rutas relativas y el daemon las lee del host.
+  deployer:
+    image: ${DEPLOYER_IMAGE:-nexus-deployer}:${DEPLOYER_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["agent"]
+    env_file: .env
+    environment:
+      NEXUS_HOME: ${NEXUS_HOME:-/opt/nexus}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:-nexus}
+      TZ: America/Ciudad_Juarez
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${NEXUS_HOME:-/opt/nexus}:${NEXUS_HOME:-/opt/nexus}
+    logging: *logging
+    networks: [backend]
+
 volumes:
-  # Archivos que comparten app y queue (importaciones y exportes en proceso).
+  # Archivos que comparten los colores, queue y scheduler (importaciones y exportes en proceso).
   app-storage:
   caddy-data:
   caddy-config:
+  build-assets:

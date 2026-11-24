@@ -25,8 +25,9 @@ it('fija por tag y digest toda imagen de terceros del stack de producción', fun
     foreach (deployServices($file) as $name => $service) {
         $image = $service['image'] ?? null;
 
-        // Las imágenes propias (la app y el servicio del motor, ADR-0027) se construyen del repositorio: no son de terceros.
-        if ($image === null || str_starts_with($image, '${APP_IMAGE') || str_starts_with($image, '${SOLVER_IMAGE')) {
+        // Las imágenes propias (la app, el servicio del motor, ADR-0027, y el deployer, ADR-0033) se construyen del
+        // repositorio: no son de terceros. El deployer fija por release la imagen exacta de cada una.
+        if ($image === null || preg_match('/^\$\{(APP|SOLVER|DEPLOYER)_IMAGE/', $image) === 1) {
             continue;
         }
 
@@ -60,14 +61,68 @@ it('fuerza valores seguros de producción aunque el .env traiga los de desarroll
         ->and($environment['APP_DEBUG'])->toBe('false')
         ->and($environment['SESSION_SECURE_COOKIE'])->toBe('true')
         ->and($environment['APP_URL'])->toStartWith('https://');
-})->with(['app', 'queue', 'scheduler']);
+})->with(['app-blue', 'app-green', 'queue', 'scheduler', 'migrate']);
 
-it('ejecuta las migraciones solo en el contenedor app y hace esperar a queue', function () {
+it('migra solo con el servicio migrate, de un solo uso y con lock_timeout', function () {
     $prod = deployServices('compose.prod.yaml');
 
-    expect($prod['app']['environment']['RUN_MIGRATIONS'])->toBe('true')
-        ->and($prod['queue']['environment']['RUN_MIGRATIONS'])->toBe('false')
-        ->and($prod['queue']['depends_on']['app']['condition'])->toBe('service_healthy');
+    expect($prod['migrate']['profiles'])->toBe(['deploy'])
+        ->and($prod['migrate']['command'])->toBe(['php', 'artisan', 'migrate', '--force', '--isolated', '--no-interaction'])
+        ->and($prod['migrate']['environment']['PGOPTIONS'])->toBe('-c lock_timeout=${MIGRATE_LOCK_TIMEOUT:-10s}');
+
+    foreach (['app-blue', 'app-green', 'queue', 'scheduler'] as $name) {
+        expect($prod[$name]['environment']['RUN_MIGRATIONS'])->toBe('false', "{$name} no debe migrar");
+    }
+});
+
+it('tiene dos colores idénticos salvo el nombre y deja app solo para desarrollo', function () {
+    $prod = deployServices('compose.prod.yaml');
+
+    expect($prod['app']['profiles'])->toBe(['dev-only'])
+        ->and($prod['app-blue'])->toEqual($prod['app-green'])
+        ->and($prod['app-blue']['healthcheck']['test'])->toBe(['CMD', 'curl', '-fsS', 'http://127.0.0.1:8000/up']);
+});
+
+it('no hace esperar a la cola, al scheduler ni a Caddy por app: el deployer ordena los pasos', function () {
+    $prod = deployServices('compose.prod.yaml');
+
+    foreach (['queue', 'scheduler', 'caddy'] as $name) {
+        expect($prod[$name]['depends_on'] ?? [])->not->toHaveKey('app', "{$name} depende de app");
+    }
+});
+
+it('reparte a un solo color sano en Caddy y sirve los assets compartidos', function () {
+    $caddyfile = file_get_contents(dirname(__DIR__, 3).'/docker/caddy/Caddyfile');
+    $caddy = deployServices('compose.prod.yaml')['caddy'];
+
+    expect($caddyfile)->toContain('reverse_proxy app-blue:8000 app-green:8000')
+        ->and($caddyfile)->toContain('lb_policy first')
+        ->and($caddyfile)->toContain('health_uri /health')
+        ->and($caddyfile)->toContain('handle /build/*')
+        ->and($caddy['volumes'])->toContain('build-assets:/srv/build:ro')
+        ->and($caddy['volumes'])->toContain('${NEXUS_CONFIG_DIR:-./docker}/caddy:/etc/caddy:ro');
+});
+
+it('monta la configuración de Caddy y de los respaldos desde una carpeta estable', function () {
+    $prod = deployServices('compose.prod.yaml');
+
+    // Una ruta que cambia con cada release recrearía Caddy (y cortaría las conexiones) en cada despliegue.
+    expect($prod['backup']['volumes'])->toContain('${NEXUS_CONFIG_DIR:-./docker}/backup:/opt/backup:ro');
+});
+
+it('corre el deployer sin puertos, con el socket de Docker y la carpeta de releases en la misma ruta', function () {
+    $deployer = deployServices('compose.prod.yaml')['deployer'];
+
+    expect($deployer)->not->toHaveKey('ports')
+        ->and($deployer['restart'])->toBe('unless-stopped')
+        ->and($deployer['volumes'])->toContain('/var/run/docker.sock:/var/run/docker.sock')
+        ->and($deployer['volumes'])->toContain('${NEXUS_HOME:-/opt/nexus}:${NEXUS_HOME:-/opt/nexus}');
+});
+
+it('fija por digest la imagen base del deployer', function () {
+    $dockerfile = file_get_contents(dirname(__DIR__, 3).'/docker/deployer/Dockerfile');
+
+    expect($dockerfile)->toMatch('/^FROM docker:[0-9.]+-cli@sha256:[0-9a-f]{64}$/m');
 });
 
 it('reinicia solo todo servicio que corre en producción', function () {
@@ -78,7 +133,8 @@ it('reinicia solo todo servicio que corre en producción', function () {
         expect($service['restart'] ?? $prod[$name]['restart'] ?? null)->toBe('unless-stopped', "{$name} sin restart");
     }
 
-    foreach (['caddy', 'backup'] as $name) {
+    // Un color detenido por el deployer sigue detenido tras reiniciar el servidor; el activo vuelve solo.
+    foreach (['caddy', 'backup', 'app-blue', 'app-green', 'deployer'] as $name) {
         expect($prod[$name]['restart'])->toBe('unless-stopped');
     }
 });
@@ -130,7 +186,7 @@ it('deja apagada por defecto la contraseña previa al sitio del túnel de demost
         ->and($template)->not->toMatch('/^BASIC_AUTH_/m');
 });
 
-it('corre lo programado solo en producción, sin migrar y después de app', function () {
+it('corre lo programado solo en producción y sin migrar', function () {
     $base = deployServices('compose.yaml')['scheduler'];
     $prod = deployServices('compose.prod.yaml')['scheduler'];
 
@@ -139,7 +195,6 @@ it('corre lo programado solo en producción, sin migrar y después de app', func
         ->and($prod['profiles'])->toBeInstanceOf(TaggedValue::class)
         ->and($prod['profiles']->getTag())->toBe('reset')
         ->and($prod['environment']['RUN_MIGRATIONS'])->toBe('false')
-        ->and($prod['depends_on']['app']['condition'])->toBe('service_healthy')
         ->and($prod['volumes'])->toContain('app-storage:/app/storage/app');
 });
 

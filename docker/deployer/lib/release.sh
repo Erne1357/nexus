@@ -1,0 +1,111 @@
+# shellcheck shell=bash
+# Conseguir un release y dejarlo listo en $RELEASES_DIR/<sha> (ADR-0033).
+#
+# Un paquete (nexus-bundle) es un .tar con:
+#   manifest.json   {"sha", "created_at", "images": {"app"|"solver"|"deployer": {"ref", "file"}},
+#                    "third_party": [{"ref", "local", "file"}]}
+#   images/*        cada imagen de `docker save` (zstd, salvo la del deployer, que va sin comprimir para poder
+#                   cargarla en el primer arranque con solo `tar` y `docker`)
+#   infra.tar       compose.yaml, compose.prod.yaml, docker/ y .env.production.example de ese SHA
+# y junto a él, <paquete>.sha256 (salida de sha256sum).
+
+# Verifica, carga y materializa un paquete. Imprime el SHA del release.
+release_from_bundle() {
+    local bundle=$1 dir name work sha
+    [ -f "$bundle" ] || die "$E_BUNDLE" "no existe el paquete $bundle"
+    dir=$(cd "$(dirname "$bundle")" && pwd)
+    name=$(basename "$bundle")
+    [ -f "$dir/$name.sha256" ] || die "$E_BUNDLE" "falta $name.sha256 junto al paquete (se descarga con él)"
+
+    log "verificando $name"
+    (cd "$dir" && sha256sum --quiet -c "$name.sha256") ||
+        die "$E_BUNDLE" "el paquete $name no coincide con su sha256: está incompleto o alterado; no se despliega"
+
+    work=$(mktemp -d "$RELEASES_DIR/.incoming.XXXXXX")
+    tar -xf "$bundle" -C "$work" || {
+        rm -rf -- "$work"
+        die "$E_BUNDLE" "no se pudo abrir $name"
+    }
+    sha=$(jq -er '.sha' "$work/manifest.json") || {
+        rm -rf -- "$work"
+        die "$E_BUNDLE" "$name no trae un manifest.json válido"
+    }
+
+    log "cargando las imágenes de $(short "$sha")"
+    local file ref
+    while IFS=$'\t' read -r file ref; do
+        load_image "$work/$file" || {
+            rm -rf -- "$work"
+            die "$E_BUNDLE" "no se pudo cargar $file"
+        }
+        docker image inspect "$ref" >/dev/null 2>&1 || {
+            rm -rf -- "$work"
+            die "$E_BUNDLE" "después de cargar $file no aparece la imagen $ref"
+        }
+    done < <(jq -r '(.images[] | [.file, .ref]), (.third_party[] | [.file, .local]) | @tsv' "$work/manifest.json")
+
+    materialize_release "$sha" "$work/infra.tar" "$work/manifest.json" bundle
+    rm -rf -- "$work"
+    printf '%s\n' "$sha"
+}
+
+load_image() {
+    case "$1" in
+        *.zst) zstd -dcq "$1" | docker load -q >/dev/null ;;
+        *) docker load -q -i "$1" >/dev/null ;;
+    esac
+}
+
+# materialize_release <sha> <infra.tar> <manifest.json> <bundle|github>
+materialize_release() {
+    local sha=$1 infra=$2 manifest=$3 source=$4 dir="$RELEASES_DIR/$1"
+    rm -rf -- "$dir"
+    mkdir -p "$dir"
+    tar -xf "$infra" -C "$dir"
+    cp "$manifest" "$dir/manifest.json"
+    # El .env vive fuera de los releases; Compose lo busca en la carpeta del proyecto.
+    ln -s "$NEXUS_HOME/.env" "$dir/.env"
+    printf '%s\n' "$source" >"$dir/source"
+}
+
+# Revisa el .env contra la plantilla del release, genera compose.release.yaml y valida el stack completo.
+prepare_release() {
+    local sha=$1
+    [ -d "$RELEASES_DIR/$sha" ] || die "$E_USAGE" "el release $(short "$sha") no está en el servidor ($RELEASES_DIR)"
+    check_env_keys "$sha"
+    write_release_compose "$sha" "$(cat "$RELEASES_DIR/$sha/source")"
+    compose "$sha" config -q || die "$E_ENV" "docker compose config falló con el .env del servidor"
+}
+
+# compose.release.yaml (JSON, que también es YAML): la imagen exacta de cada servicio. Con un paquete, nada se
+# descarga (`pull_policy: never`) y las imágenes de terceros usan la etiqueta local con que viajaron.
+write_release_compose() {
+    local sha=$1 source=$2 dir="$RELEASES_DIR/$1" services
+    services=$(compose_base "$sha" config --format json | jq -c '.services | map_values(.image)') ||
+        die "$E_ENV" "docker compose config falló con el .env del servidor (¿falta una variable obligatoria?)"
+    jq -n --argjson services "$services" --slurpfile manifest "$dir/manifest.json" --arg source "$source" '
+        ($manifest[0]) as $m
+        | ($m.third_party | map({key: .ref, value: .local}) | from_entries) as $local
+        | {services: ($services | to_entries | map(
+              .key as $name
+              | (if ($name | test("^(app|app-blue|app-green|migrate|queue|scheduler)$")) then $m.images.app.ref
+                 elif $name == "solver" then $m.images.solver.ref
+                 elif $name == "deployer" then $m.images.deployer.ref
+                 elif ($source == "bundle") then ($local[.value] // .value)
+                 else .value end) as $image
+              | {key: $name, value: ({image: $image} + (if $source == "bundle" then {pull_policy: "never"} else {} end))}
+          ) | from_entries)}' >"$dir/compose.release.yaml"
+}
+
+# El .env del servidor debe traer toda llave que la plantilla del release define (sin contar las comentadas), y
+# Compose debe poder interpolar los archivos. Si no, nada se toca.
+check_env_keys() {
+    local sha=$1 dir="$RELEASES_DIR/$1" missing
+    [ -f "$NEXUS_HOME/.env" ] || die "$E_ENV" "falta $NEXUS_HOME/.env (se crea desde .env.production.example)"
+    missing=$(comm -23 \
+        <(sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' "$dir/.env.production.example" | sort -u) \
+        <(sed -n 's/^\([A-Z][A-Z0-9_]*\)=.*/\1/p' "$NEXUS_HOME/.env" | sort -u))
+    if [ -n "$missing" ]; then
+        die "$E_ENV" "el release $(short "$sha") pide variables que el .env del servidor no tiene: $(echo "$missing" | tr '\n' ' ')(cópialas de releases/$sha/.env.production.example y vuelve a desplegar)"
+    fi
+}
