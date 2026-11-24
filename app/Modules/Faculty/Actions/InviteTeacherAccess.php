@@ -30,6 +30,10 @@ final class InviteTeacherAccess
 {
     public const string NOT_INVITED = 'Sale cuando su departamento valida el catálogo de docentes.';
 
+    public const string HAS_ACCESS = 'Ya tiene acceso.';
+
+    public const string NO_EMAIL = 'Sin correo: no tiene correo institucional ni personal.';
+
     public function __construct(
         private readonly SendAccessInvitation $sendAccessInvitation,
         private readonly InvitationRelease $releases,
@@ -86,6 +90,53 @@ final class InviteTeacherAccess
 
             return $this->inviteUser->handle($user, $actor, $locked->institutional_email);
         });
+    }
+
+    /**
+     * SEL-13 (confirmado el 24 de noviembre de 2026: «Lo ideal sería que el Jefe valide el catálogo, pero si no lo hace,
+     * sí invitación personal»): la invitación al publicar una orden de selección, a un docente de la cola sin acceso. Si
+     * un departamento suyo ya validó su catálogo de docentes (InvitationRelease, AC-09) va a su correo institucional,
+     * como siempre, y si no lo tiene, al personal; si no lo validó, a su correo personal (`teachers.email`) y, si no lo
+     * tiene, al institucional. Es la automática de SendAccessInvitation (a quien tiene otro puesto le da acceso el
+     * admin) y no manda otra a quien tiene una vigente. Devuelve el correo al que la mandó, o null si ya tenía una
+     * vigente.
+     *
+     * @throws ValidationException sobre `access` (inactivo, sin usuario, ya tiene acceso, sin correo) o la de
+     *                             SendAccessInvitation
+     */
+    public function forSelection(Teacher $teacher, ?User $actor = null): ?string
+    {
+        return DB::transaction(function () use ($teacher, $actor): ?string {
+            $locked = Teacher::withTrashed()->lockForUpdate()->findOrFail($teacher->getKey());
+            $user = $locked->user_id === null ? null : $locked->user()->first();
+            $institutional = self::usable($locked->institutional_email);
+            $personal = self::usable($locked->email);
+            $email = $this->releases->isReleased($locked) ? ($institutional ?? $personal) : ($personal ?? $institutional);
+
+            $reason = match (true) {
+                ! $locked->is_active || $locked->trashed() => 'El docente está inactivo.',
+                $user === null => 'El docente no tiene usuario.',
+                $user->password !== null => self::HAS_ACCESS,
+                $email === null => self::NO_EMAIL,
+                default => null,
+            };
+
+            if ($reason !== null) {
+                throw ValidationException::withMessages(['access' => $reason]);
+            }
+
+            return $this->sendAccessInvitation->handle($user, $email, $actor, unlessInvited: true) ? $email : null;
+        });
+    }
+
+    /**
+     * Un correo con forma de correo, o null.
+     */
+    private static function usable(?string $email): ?string
+    {
+        $email = trim((string) $email);
+
+        return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false ? $email : null;
     }
 
     /**

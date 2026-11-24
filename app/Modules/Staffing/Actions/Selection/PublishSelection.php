@@ -10,6 +10,7 @@ use App\Modules\Core\Models\User;
 use App\Modules\Scheduling\Enums\GroupStatus;
 use App\Modules\Scheduling\Models\Group;
 use App\Modules\Staffing\Enums\SelectionStatus;
+use App\Modules\Staffing\Jobs\InviteSelectionTeachersJob;
 use App\Modules\Staffing\Models\Selection;
 use App\Modules\Staffing\Notifications\SelectionTurnPublished;
 use Illuminate\Support\Collection;
@@ -26,6 +27,7 @@ use Throwable;
  * Toma primero el candado de la selección (pg_advisory_xact_lock sobre `staffing_selection:{id}`), el mismo que usan
  * los turnos de los docentes y el reloj, antes de cualquier bloqueo de fila. Ya con el candado recalcula la cola
  * (RecomputeSelectionOrder): así entra al final quien se adscribió al departamento después del último CSV (SEL-10).
+ * Ya confirmada, encola las invitaciones de acceso de la cola (InviteSelectionTeachersJob, SEL-13).
  */
 final class PublishSelection
 {
@@ -71,6 +73,9 @@ final class PublishSelection
 
             return $selection;
         });
+
+        // SEL-13: los docentes de la cola sin acceso reciben su invitación, en la cola y ya confirmada la publicación.
+        InviteSelectionTeachersJob::dispatch((string) $published->getKey(), (string) $actor->getKey());
 
         $department = (string) $published->department()->value('name');
 

@@ -374,10 +374,32 @@
                     </section>
                 @endif
 
+                @php
+                    $accessLabels = ['access' => 'Con acceso', 'invited' => 'Invitado', 'pending' => 'Pendiente', 'no_email' => 'Sin correo'];
+                @endphp
+                <x-card title="Acceso a Nexus" shadow class="mt-4" data-testid="monitor-access">
+                    <p class="text-sm text-neutral">Al publicar se invita a quien no tiene acceso: a su correo institucional si su departamento validó el catálogo de docentes y, si no, al personal.</p>
+                    <dl class="mt-3 grid grid-cols-2 overflow-hidden rounded-box border border-base-300 text-center sm:grid-cols-4">
+                        @foreach ($accessLabels as $state => $label)
+                            <div class="p-3"><dt class="text-xs text-neutral">{{ $label }}</dt><dd @class(['text-xl font-bold', 'text-warning' => in_array($state, ['pending', 'no_email'], true) && $monitor['access']['counts'][$state] > 0])>{{ $monitor['access']['counts'][$state] }}</dd></div>
+                        @endforeach
+                    </dl>
+                    @if ($monitor['access']['missing'] !== [])
+                        <ul class="mt-3 divide-y divide-base-300 rounded-box border border-base-300">
+                            @foreach ($monitor['access']['missing'] as $row)
+                                <li class="flex flex-wrap items-baseline justify-between gap-x-3 px-4 py-2" wire:key="access-{{ $loop->index }}">
+                                    <b>{{ $row['name'] }}</b>
+                                    <span class="text-sm text-neutral">{{ $row['state'] === 'no_email' ? $row['reason'] : 'Sin acceso: '.mb_lcfirst($row['reason']) }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    @endif
+                </x-card>
+
                 <x-card title="Avance por docente" shadow class="mt-4">
                     <div class="overflow-x-auto">
                         <table class="table table-sm">
-                            <thead><tr><th>#</th><th>Docente</th><th>Turno</th><th>Estado</th><th>Horas</th><th>Grupos</th></tr></thead>
+                            <thead><tr><th>#</th><th>Docente</th><th>Turno</th><th>Estado</th><th>Horas</th><th>Grupos</th><th>Acceso</th></tr></thead>
                             <tbody>
                                 @foreach ($monitor['rows'] as $row)
                                     <tr wire:key="mon-{{ $row['entry']->id }}" @class(['bg-info/10' => $row['current']])>
@@ -387,6 +409,7 @@
                                         <td>{{ $row['current'] ? 'En turno' : $row['entry']->status->label() }}</td>
                                         <td><span class="font-mono">{{ $row['hours'] }}</span> <span class="text-neutral">de {{ $row['entry']->base_hours }} h</span></td>
                                         <td class="font-mono text-xs">{{ $row['groups'] === [] ? '—' : implode(', ', $row['groups']) }}</td>
+                                        <td @class(['text-xs', 'font-semibold text-warning' => in_array($row['access'], ['pending', 'no_email'], true)])>{{ $accessLabels[$row['access']] }}</td>
                                     </tr>
                                 @endforeach
                             </tbody>

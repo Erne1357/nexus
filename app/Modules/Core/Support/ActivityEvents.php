@@ -22,6 +22,7 @@ final class ActivityEvents
         'selection_published' => 'Selección publicada',
         'selection_cancelled' => 'Selección cancelada',
         'selection_loads_set' => 'Cargas de la selección ajustadas',
+        'selection_teachers_invited' => 'Docentes de la selección invitados a Nexus',
         'updated' => 'Cambio',
         'deleted' => 'Borrado',
         'restored' => 'Restaurado',
