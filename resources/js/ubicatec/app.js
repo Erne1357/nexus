@@ -163,7 +163,10 @@ controls.maxPolarAngle=Math.PI*.46;controls.minDistance=25;controls.maxDistance=
 const HOME={pos:new THREE.Vector3(Hc[0]-120,330,Hc[1]+360),tgt:new THREE.Vector3(Hc[0]-110,0,Hc[1]+20)};
 const HOME_M={pos:new THREE.Vector3(Hc[0],620,Hc[1]+520),tgt:new THREE.Vector3(Hc[0],0,Hc[1]+90)};
 const home=()=>MOB()?HOME_M:HOME;camera.position.copy(home().pos);controls.target.copy(home().tgt);controls.update();
-{const k=stage._key;k.position.set(Hc[0]+250,500,Hc[1]+200);k.target.position.set(Hc[0],0,Hc[1]);scene.add(k.target);const sp=380;Object.assign(k.shadow.camera,{left:-sp,right:sp,top:sp,bottom:-sp,near:10,far:1500});k.shadow.camera.updateProjectionMatrix();k.shadow.mapSize.set(4096,4096);stage._ground.position.y=-1.2;}
+{const k=stage._key;k.position.set(Hc[0]+250,500,Hc[1]+200);k.target.position.set(Hc[0],0,Hc[1]);scene.add(k.target);const sp=380;Object.assign(k.shadow.camera,{left:-sp,right:sp,top:sp,bottom:-sp,near:10,far:1500});k.shadow.camera.updateProjectionMatrix();k.shadow.mapSize.set(4096,4096);
+  // three.js crea el mapa de sombras una sola vez, con el tamaño del primer cuadro (2048): sin soltarlo, la luz dibuja 4096 sobre una textura de 2048 y la esquina de Rivera Lara y Administración lee sombras que no son suyas.
+  if(k.shadow.map){k.shadow.map.dispose();k.shadow.map=null}
+  stage._ground.position.y=-1.2;}
 
 // ---------- extras (no exportados) ----------
 const fx=new THREE.Group();scene.add(fx);
