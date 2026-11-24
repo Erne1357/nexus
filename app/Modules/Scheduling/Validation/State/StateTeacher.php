@@ -3,8 +3,8 @@
 namespace App\Modules\Scheduling\Validation\State;
 
 /**
- * Un docente en el estado del validador: horas base y externas del periodo (HC-08) y sus bloques no disponibles
- * (HC-09), cada uno como [día, inicio, fin] en minutos.
+ * Un docente en el estado del validador: horas base y externas del periodo (HC-08), sus bloques no disponibles
+ * (HC-09), cada uno como [día, inicio, fin] en minutos, y sus horas autorizadas del periodo (SEL-12; null si no tiene).
  */
 final readonly class StateTeacher
 {
@@ -18,5 +18,6 @@ final readonly class StateTeacher
         public int $externalHours = 0,
         public array $unavailable = [],
         public bool $isHonorarios = false,
+        public ?int $allowanceHours = null,
     ) {}
 }

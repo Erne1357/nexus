@@ -8,6 +8,7 @@ use App\Modules\Facilities\Events\RoomBlockRemoved;
 use App\Modules\Facilities\Events\RoomUpdated;
 use App\Modules\Faculty\Events\AvailabilityChanged;
 use App\Modules\Faculty\Events\ExternalLoadChanged;
+use App\Modules\Faculty\Events\HourAllowanceChanged;
 use App\Modules\Faculty\Events\PositionChanged;
 use App\Modules\Scheduling\Events\GroupCancelled;
 use App\Modules\Scheduling\Events\GroupScheduleChanged;
@@ -37,6 +38,7 @@ final class QueueConflictRecompute
             $event instanceof RoomBlockAdded, $event instanceof RoomBlockRemoved => $this->targets->forRoom($event->block->room, $event->block->term_id),
             $event instanceof AvailabilityChanged => $this->targets->forTeacher($event->teacher->id, $event->term->id),
             $event instanceof ExternalLoadChanged => $this->targets->forTeacher($event->load->teacher_id, $event->load->term_id),
+            $event instanceof HourAllowanceChanged => $this->targets->forTeacher($event->allowance->teacher_id, $event->allowance->term_id),
             $event instanceof PositionChanged => $this->targets->forTeacher($event->position->teacher_id),
             $event instanceof ModalityUpdated => in_array('settings', $event->changed, true) ? $this->targets->forModality($event->modality) : [],
             default => [],
